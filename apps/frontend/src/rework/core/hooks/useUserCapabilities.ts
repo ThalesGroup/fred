@@ -31,7 +31,7 @@ import type { UserCapabilities } from "../../types/conversation.ts";
  * an admin surface.
  */
 export function useUserCapabilities(): UserCapabilities {
-  const { bootstrap } = useFrontendBootstrap();
+  const { bootstrap, isLoading } = useFrontendBootstrap();
   const canDebug = KeyCloakService.GetUserRoles().includes("admin");
   return {
     canDebug,
@@ -39,5 +39,6 @@ export function useUserCapabilities(): UserCapabilities {
     canObservePlatform: bootstrap?.permissions?.is_platform_observer ?? false,
     canEditSessions: true,
     canDeleteSessions: true,
+    isLoading,
   };
 }

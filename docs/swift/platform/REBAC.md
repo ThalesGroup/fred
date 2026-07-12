@@ -2,6 +2,10 @@
 
 Fred supports relationship-aware authorization so users can keep resources private, share them with teams, or publish them broadly.
 
+> Frontend counterpart: [`FRONTEND-AUTHZ-PATTERN.md`](./FRONTEND-AUTHZ-PATTERN.md) —
+> how the two hooks (`useUserCapabilities`, `useTeamCapabilities`) consume the
+> model described below, and how that layer is tested.
+
 > [!IMPORTANT]
 > **Frequent deployment pitfall:**
 > Keycloak app roles (`admin`/`editor`/`viewer`) no longer exist as of AUTHZ-05 review
@@ -62,6 +66,22 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > already-existing, already-live Keycloak-group-backed teams onto this model is a
 > distinct, separately tracked operational concern (RFC §29) — out of scope for a
 > fresh deployment with zero pre-existing teams.
+
+> [!IMPORTANT]
+> **AUTHZ-05 review item 16 (2026-07-11): `can_read_kpi_global` retired, folded into
+> `can_observe_platform`.** Item 8a's admin-tier list above included
+> `can_read_kpi_global` (platform_admin-only) as a separate relation from
+> `can_observe_platform` (platform_observer, unions in platform_admin) — the RFC's
+> target vocabulary (§6.1) only ever defined one relation for cross-user /
+> platform-wide KPI observation. `can_read_kpi_global` was legacy carryover
+> (`Action.READ_GLOBAL`) never actually asked for by the RFC; keeping it separate
+> meant `platform_observer` alone couldn't reach the control-plane Analytics presets
+> (`/admin/analytics`), even though product intent is for `platform_admin` and
+> `platform_observer` to see the same platform-wide recap today. `can_read_kpi_global`
+> is removed from `schema.fga`; the 10 Analytics preset endpoints and the standalone
+> KPI dashboard (`/monitoring/kpis`) now both check `can_observe_platform`. When the
+> Analytics dashboard grows admin-only technical panels, gate those specific widgets
+> on a new, narrower capability — don't reintroduce this split for the whole page.
 
 ## Business View In 90 Seconds
 

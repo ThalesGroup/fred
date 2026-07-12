@@ -227,3 +227,24 @@ export const makeSelectSucceededTargetsOfType = (type: string) =>
       .filter((vm) => vm.state === "succeeded" && vm.target?.type === type && !!vm.target?.id)
       .map((vm) => ({ taskId: vm.taskId, targetId: vm.target!.id })),
   );
+
+/**
+ * Every distinct target id of a given type currently in the store, in ANY
+ * state (including `pending` — a task is registered with its target set from
+ * creation, see `taskRegistered`). Backs `useNotifyOnNewTaskTarget`: a list page
+ * (document folders today, others later) uses this to notice a target it has
+ * never seen before — typically a document that was just uploaded and has no
+ * row yet — and refetch, instead of waiting for that task to reach `succeeded`
+ * (which `makeSelectSucceededTargetsOfType` requires and a brand-new row never
+ * satisfies, since it never existed pre-task to refresh in place).
+ *
+ * Factory (one memoized selector per `type`); memoize the call with `useMemo`.
+ */
+export const makeSelectTaskTargetsOfType = (type: string) =>
+  createSelector(selectById, (byId): string[] => [
+    ...new Set(
+      Object.values(byId)
+        .filter((vm) => vm.target?.type === type && !!vm.target?.id)
+        .map((vm) => vm.target!.id),
+    ),
+  ]);

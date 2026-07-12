@@ -147,7 +147,29 @@ items:
       until `fredlab-authz-migrate-swift.py` has run against real production
       data (verbally confirmed scheduled, but code changes on this specific
       item require re-confirmation at execution time, not just a standing
-      go-ahead). PR #1957 open, awaiting human review before merge; status
+      go-ahead).
+      Live-campaign findings (2026-07-11, found while standing up the
+      fred-deployment-factory validation campaign, tracked in
+      `NOTES-AUTHZ05-REVIEW.md` items 10-11, not the RFC itself). Item 10:
+      `promote_prompt` checked `CAN_UPDATE_RESOURCES` on the source team only
+      — the target team was never resolved or permission-checked, letting a
+      team_editor copy a prompt's text into any team_id, including one they
+      held no relation to. Fixed by resolving the target team under the same
+      capability as the source. Item 11: the frontend had a second, dead
+      permission system (`usePermissions`/`PermissionSummary.items`, Keycloak-
+      role-derived) sitting alongside the correct OpenFGA-derived one — since
+      AUTHZ-05 removed Keycloak app roles, it had gone permanently empty,
+      silently disabling 6 routes and 3 in-page controls for everyone,
+      including platform_admin. Replaced with a single two-tier hook pattern
+      (`useUserCapabilities`/`useTeamCapabilities`) documented in the new
+      `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`; `PermissionSummary`
+      shrunk to its two OpenFGA-derived booleans (frozen-contract note:
+      `CONTROL-PLANE-PRODUCT-CONTRACT.md` §14). Also added a live
+      "authorization self-test" to `/admin/self-test`, runnable against the
+      current admin's own session or any other account (Keycloak
+      direct-grant, dev/test realms only), so "does the UI honor the
+      authorization model" has a self-service, in-browser answer going
+      forward. PR #1957 open, awaiting human review before merge; status
       stays `in_progress` until 8b closes and the review lands.
 
   # ── FILES ─────────────────────────────────────────────────────────────
@@ -354,12 +376,11 @@ items:
     notes: >
       Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
       MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
-      No signed URLs needed — Keycloak auth handles the knowledge-flow API calls.
-      Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
-      (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
-      Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
-      MermaidBlock + hr suppression. Rendering spec RFC created: CHAT-RENDERING-SPEC.md.
-      Manual end-to-end verification pending live pod.
+      Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the RFC — not repeated
+      here. Manual end-to-end verification pending live pod (one unchecked item in
+      CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's confirmed. Native PDF
+      rendering and an assistant panel deferred to FRONT-13
+      (docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md).
 
   - id: CHAT-09
     title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
@@ -800,6 +821,21 @@ items:
       rework code, and backend browse contracts that remain fast for users with
       hundreds of files.
 
+  - id: FRONT-13
+    title: "Unified document viewer — native PDF rendering + AI assistant side panel"
+    status: draft
+    owner: TBD
+    refs:
+      rfc: "docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §19"
+    notes: >
+      Consolidates the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
+      (FRONT-09) document preview flows into one DocumentViewer component. Restores
+      native PDF rendering (PdfStreamingDocumentViewer exists but is currently unwired
+      from both entry points — a UX regression from kea, tracked on GitHub issue #1956).
+      Adds an assistant side panel reusing the existing selected_document_uids
+      chat-scoping mechanism (no new backend endpoint). RFC-proposed, not started.
+
   # ── INGEST ────────────────────────────────────────────────────────────
 
   - id: INGEST-01
@@ -985,8 +1021,17 @@ items:
       journal, and a central table owned by control-plane (producers record via RemoteTaskClient
       → single-source frontend). Folds in EVAL-02 (→ tombstone) and the CTRLP-13 display half;
       reverses the erasure-widget-in-settings anti-pattern → /admin/activity + /team/:id/activity
-      via one component. Shipped (branch fixes): the shared TaskActivity UI. Pending: the
-      central-table/RemoteTaskClient backend consolidation (deferred to after finalization).
+      via one component. Shipped (branch fixes): the shared TaskActivity UI. Shipped (2026-07-12,
+      §OPS-04 P4): the ingestion live-feedback wiring found missing via live testing — TaskTray
+      was never mounted, the upload drawer waited for full per-file completion instead of
+      scheduling, and a brand-new document had no refetch trigger (see BACKLOG.md §OPS-04 P4).
+      Same-day live verification of P4 surfaced two further gaps, both fixed: the progress
+      ring froze at a fixed 30% (no interim telemetry between scheduling and completion —
+      simplified to stay indeterminate instead of instrumenting sub-steps), and team admins
+      saw an empty Activity page because ingestion tasks were created with team_id=NULL
+      (tag→team resolution existed for quota checks but was never reused to tag the task).
+      Pending: the central-table/RemoteTaskClient backend consolidation (deferred to after
+      finalization).
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"

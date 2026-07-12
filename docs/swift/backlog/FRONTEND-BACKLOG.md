@@ -59,6 +59,7 @@ Frozen frontend invariants:
 | FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | issue #1840 |
 | FRONT-08 | Simon | In progress, implemented on branch and pending review | §14 | GitHub issue #1748 / branch `1748-front-08-frontend-auth-config` |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
+| FRONT-13 | TBD | RFC proposed | §19 | TBD |
 
 Recommended order:
 
@@ -67,6 +68,8 @@ Recommended order:
    deprecated surfaces.
 3. Start FRONT-09 with a v2 route and backend browse hardening; keep old
    resource/library pages until parity.
+4. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
+   no hard ordering constraint otherwise.
 
 ## 3 Explicit Non-Goals
 
@@ -300,7 +303,10 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 #### FRONT-09.E — Detail Drawer And UX Polish
 
 - [ ] Add a document detail drawer with metadata, tags/folder, processing status,
-      source/download/open actions, and destructive actions.
+      source/download/open actions, and destructive actions. Native PDF rendering and
+      an assistant side panel for the "open"/preview action are tracked separately as
+      `FRONT-13` (§19) — do not duplicate that scope here, wire the drawer's preview
+      action to the shared `DocumentViewer` component once it lands.
 - [ ] Verify keyboard navigation for rows, drawer close, pagination, search, and
       primary actions.
 - [ ] Check responsive behavior for mobile and desktop.
@@ -416,7 +422,37 @@ so there is nothing to generate from yet.
       keep `AnyTaskEvent`, `taskEventsBasePath`, and `taskKinds` in sync via the generated kinds.
 - [ ] Decide whether `TaskLogEvent` is surfaced in the UI; if not, keep it excluded explicitly.
 
-## 19 Progress Snapshot
+## 19 Phase FRONT-13 — Unified Document Viewer With AI Assistant Panel
+
+**ID:** FRONT-13  **Owner:** TBD  **Status:** RFC proposed
+**RFC:** `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`
+**Depends on:** CHAT-08 (`/documents/:uid` route), FRONT-09.C/D (corpus preview drawer)
+
+Consolidate the two independent document-viewing flows (chat-citation
+`DocumentViewerPage` and the corpus workspace preview drawer) into one shared
+`DocumentViewer` component, restore native PDF rendering (the code already exists —
+`PdfStreamingDocumentViewer`/`usePdfDocumentViewer`/`commands.previewPdf` — but is
+unwired from both current entry points), and add a collapsible "ask the assistant"
+side panel that scopes a managed-chat turn to the open document via the existing
+`selected_document_uids` mechanism. Full rationale and alternatives: see the RFC.
+
+Checklist:
+
+- [ ] Introduce a shared `DocumentViewer` component with two render strategies:
+      native (`PdfStreamingDocumentViewer`) for `.pdf`, markdown (existing
+      `GET /knowledge-flow/v1/markdown/{uid}` path) for every other format.
+- [ ] Replace `DocumentViewerPage`'s direct `MarkdownRenderer` usage with
+      `DocumentViewer`.
+- [ ] Replace the corpus workspace preview drawer's `MarkdownDocumentViewer` usage
+      with `DocumentViewer`; wire `commands.previewPdf` (currently dead code) through
+      it instead of leaving it uncalled.
+- [ ] Add the assistant side panel: quick actions ("Summarize", "List key points")
+      plus free-text follow-up, opening a managed-chat turn with
+      `selected_document_uids: [uid]` — no new backend endpoint.
+- [ ] Update `COMPONENT-UX.md` with the new `DocumentViewer` component and its states.
+- [ ] Update GitHub issue #1956's "PDF viewer parity" checklist item to point here.
+
+## 20 Progress Snapshot
 
 | Area | Status | Next useful action |
 | --- | --- | --- |

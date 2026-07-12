@@ -1222,13 +1222,6 @@ export type FrontendFeatureFlags = {
   enableElecWarfare?: boolean;
 };
 export type PermissionSummary = {
-  items?: string[];
-  can_view_team_agents?: boolean;
-  can_manage_team_agents?: boolean;
-  can_manage_mcp_servers?: boolean;
-  can_view_feedback?: boolean;
-  can_submit_feedback?: boolean;
-  can_create_sessions?: boolean;
   /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
   is_platform_admin?: boolean;
   /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */

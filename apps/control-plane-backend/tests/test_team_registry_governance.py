@@ -33,6 +33,7 @@ from unittest.mock import MagicMock
 import pytest
 from control_plane_backend.teams.schemas import (
     CreateTeamRequest,
+    Team,
     TeamAlreadyExistsError,
     TeamNotFoundError,
     TeamRescueNotOrphanedError,
@@ -50,6 +51,7 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
+    TeamPermission,
 )
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
@@ -62,6 +64,7 @@ class _FakeRebac:
 
     def __init__(self, *, team_admin_ids: set[str] | None = None) -> None:
         self.permission_checks: list[OrganizationPermission] = []
+        self.team_permission_checks: list[tuple[str, tuple[TeamPermission, ...]]] = []
         self.team_admin_ids = team_admin_ids or set()
         self.added_relations: list[Relation] = []
         self.deleted_references: list[RebacReference] = []
@@ -70,6 +73,12 @@ class _FakeRebac:
         self, user, permission, resource_id, **kwargs
     ) -> None:
         self.permission_checks.append(permission)
+
+    async def check_user_team_permissions_or_raise(
+        self, *, user, team_id, permissions
+    ) -> str | None:
+        self.team_permission_checks.append((str(team_id), tuple(permissions)))
+        return "consistency-token"
 
     async def lookup_subjects(self, resource, relation, subject_type, **kwargs):
         if relation == RelationType.TEAM_ADMIN:
@@ -132,6 +141,10 @@ def _user() -> KeycloakUser:
     )
 
 
+async def _no_users_by_ids(*_a, **_k) -> dict:
+    return {}
+
+
 def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -146,7 +159,7 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
-        get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
+        get_users_by_ids=cast(Any, _no_users_by_ids),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 
@@ -292,6 +305,70 @@ async def test_list_all_teams_for_registry_checks_permission_before_delegating(
     assert result == []
     assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
     assert len(captured) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_all_teams_for_registry_excludes_the_caller_personal_space(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 review item 12 (found live, 2026-07-11): `list_all_teams_unfiltered`
+    mixes in the caller's own personal space (`stats.py` filters this same way for
+    the same reason — see its module docstring). The registry (RFC §32) is
+    `team_metadata_store` rows only; a personal space never had a row there, so
+    it must never appear in `GET /teams/all`. Without this filter, the frontend
+    authz self-test's foreign-team-isolation check flagged a platform_admin's own
+    personal space as a "team she doesn't belong to" and failed on a false
+    positive — not an actual cross-tenant leak."""
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore({})
+
+    async def _fake_list_all_teams_unfiltered(user, deps):
+        return [
+            Team(id=TeamId("personal-platform-admin-1"), name="Equipe personnelle"),
+            Team(id=TeamId("fredlab"), name="Fredlab"),
+            Team(id=TeamId("northbridge"), name="Northbridge"),
+        ]
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.list_all_teams_unfiltered",
+        _fake_list_all_teams_unfiltered,
+    )
+
+    result = await list_all_teams_for_registry(_user(), _deps(rebac, store))
+
+    assert {str(team.id) for team in result} == {"fredlab", "northbridge"}
+
+
+@pytest.mark.asyncio
+async def test_list_team_members_unfiltered_skips_the_per_team_permission_check() -> (
+    None
+):
+    """AUTHZ-05 review item 14 (found live, 2026-07-11): `compute_platform_stats`
+    (item 3) called the permission-checked `list_team_members` with the calling
+    platform_admin's own identity, which 403s on every real team the admin isn't
+    personally a member of — the common case, since `platform_admin` carries no
+    standing team relation (RFC "zero implicit access"). Result: every per-team
+    member/admin count on the platform data admin page silently showed 0.
+    `list_team_members_unfiltered` must skip the per-team `CAN_READ_MEMEBERS`
+    check the same way `list_all_teams_unfiltered` skips `CAN_READ` (item 3)."""
+    from control_plane_backend.teams.service import (
+        list_team_members,
+        list_team_members_unfiltered,
+    )
+
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore(
+        {"fredlab": TeamMetadata(id=TeamId("fredlab"), name="Fredlab")}
+    )
+    deps = _deps(rebac, store)
+
+    await list_team_members_unfiltered(_user(), TeamId("fredlab"), deps)
+    assert rebac.team_permission_checks == []
+
+    await list_team_members(_user(), TeamId("fredlab"), deps)
+    assert rebac.team_permission_checks == [
+        ("fredlab", (TeamPermission.CAN_READ_MEMEBERS,))
+    ]
 
 
 @pytest.mark.asyncio

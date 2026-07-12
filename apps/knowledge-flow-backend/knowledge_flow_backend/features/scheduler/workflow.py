@@ -415,9 +415,13 @@ class ProcessPullFile:
             )
 
             if task_id:
+                # progress stays None (indeterminate) through this step: neither
+                # PullInputProcess nor OutputProcess reports intermediate progress,
+                # so a fixed fraction here would freeze the UI's progress ring for
+                # however long the real work takes instead of honestly spinning.
                 await workflow.execute_activity(
                     "emit_ingestion_task_event",
-                    args=[task_id, "running", "processing", 0.3, None, 0, 1, 0, document_uid, display_name],
+                    args=[task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name],
                     schedule_to_close_timeout=timedelta(hours=1),
                     retry_policy=RetryPolicy(maximum_attempts=1),
                 )
@@ -502,9 +506,13 @@ class ProcessPushFile:
             )
 
             if task_id:
+                # progress stays None (indeterminate) through this step: neither
+                # PushInputProcess nor OutputProcess reports intermediate progress,
+                # so a fixed fraction here would freeze the UI's progress ring for
+                # however long the real work takes instead of honestly spinning.
                 await workflow.execute_activity(
                     "emit_ingestion_task_event",
-                    args=[task_id, "running", "processing", 0.3, None, 0, 1, 0, document_uid, display_name],
+                    args=[task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name],
                     schedule_to_close_timeout=timedelta(hours=1),
                     retry_policy=RetryPolicy(maximum_attempts=1),
                 )

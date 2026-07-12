@@ -30,6 +30,7 @@ import {
   useRemoveTeamMemberMutation,
   useUpdateTeamMemberMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 
 const TEAM_ROLES: UserTeamRelation[] = ["team_admin", "team_editor", "team_analyst", "team_member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
@@ -59,10 +60,12 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const [updateTeamMember] = useUpdateTeamMemberMutation();
   const [removeTeamMember] = useRemoveTeamMemberMutation();
 
-  const can_administer_members = team.permissions?.includes("can_administer_members");
-  const can_administer_editors = team.permissions?.includes("can_administer_editors");
-  const can_administer_analysts = team.permissions?.includes("can_administer_analysts");
-  const can_administer_admins = team.permissions?.includes("can_administer_admins");
+  const {
+    canAdministerMembers: can_administer_members,
+    canAdministerEditors: can_administer_editors,
+    canAdministerAnalysts: can_administer_analysts,
+    canAdministerAdmins: can_administer_admins,
+  } = useTeamCapabilities(team);
 
   const can_administer_anyone =
     can_administer_members || can_administer_editors || can_administer_analysts || can_administer_admins;

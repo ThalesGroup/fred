@@ -20,6 +20,7 @@ import { PERSONAL_TEAM_COLOR, teamColor, type TeamColor } from "@shared/atoms/Te
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { useFrontendBootstrap } from "./useFrontendBootstrap.ts";
 import { useFrontendProperties } from "./useFrontendProperties.ts";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 
 export interface SelectedTeamState {
   /** The `:teamId` route param, verbatim (may be the `personal` alias). */
@@ -58,10 +59,7 @@ export function useSelectedTeam(): SelectedTeamState {
   const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
   const selectedTeam = isPersonalTeam ? activeTeam : (team ?? bootstrapTeam);
 
-  const canOpenTeamSettings =
-    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
-      ? selectedTeam.permissions.includes("can_administer_admins")
-      : false;
+  const { canAdministerAdmins: canOpenTeamSettings } = useTeamCapabilities(selectedTeam);
 
   // Banner hue is derived from the team name. Prefer the bootstrap-cached name
   // (present app-wide on the first paint) over the slower per-team fetch, and

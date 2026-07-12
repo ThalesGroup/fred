@@ -16,11 +16,11 @@
 
 `POST /kpi/query`'s `view_global=true` branch (the standalone KPI dashboard,
 `/monitoring/kpis`) must require `CAN_OBSERVE_PLATFORM` — platform_observer's
-own capability — not `CAN_READ_KPI_GLOBAL`, which also gates the separate
-control-plane Analytics presets (`/admin/analytics`) and must stay
-platform_admin-only so granting `platform_observer` never implicitly widens
-into that admin-only surface. The non-global branch requires authentication
-only (AUTHZ-05 review item 8a).
+own capability for cross-user / platform-wide KPI observation. Also gates the
+control-plane Analytics presets (`/admin/analytics`, AUTHZ-05 review item 16)
+— one relation, same platform-wide recap for both platform_admin and
+platform_observer. The non-global branch requires authentication only
+(AUTHZ-05 review item 8a).
 """
 
 from __future__ import annotations

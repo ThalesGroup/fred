@@ -474,7 +474,15 @@ def _print_bootstrap_summary(
     """Render a compact human-readable frontend bootstrap summary."""
 
     _print_section("Frontend Bootstrap", color_enabled=color_enabled)
-    permissions = ", ".join(bootstrap.permissions.items) or "none"
+    permission_flags = [
+        name
+        for name, held in (
+            ("platform_admin", bootstrap.permissions.is_platform_admin),
+            ("platform_observer", bootstrap.permissions.is_platform_observer),
+        )
+        if held
+    ]
+    permissions = ", ".join(permission_flags) or "none"
     print(
         "  User:      "
         + colorize(

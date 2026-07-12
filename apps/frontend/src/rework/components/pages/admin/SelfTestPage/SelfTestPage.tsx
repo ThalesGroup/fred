@@ -12,74 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
-import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge.tsx";
-import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.tsx";
-import type { TaskState } from "../../../../features/tasks/taskTypes";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
+import type { OptionModel } from "@models/Option.model.ts";
 import { usePipelineRun } from "../../../../features/pipeline/usePipelineRun";
 import { selfTestScenario } from "../../../../features/pipeline/scenarios/selfTestScenario";
-import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
+import { useAuthzProbeRun } from "../../../../features/pipeline/useAuthzProbeRun";
+import { useListUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { StepReportPanel } from "./StepReportPanel";
 import styles from "./SelfTestPage.module.css";
 
-// The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
-// step verdicts onto it so we can reuse the badge and progress bar as-is.
-const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
-  pending: "pending",
-  running: "running",
-  passed: "succeeded",
-  failed: "failed",
-  skipped: "cancelled",
-};
-
-function overallState(steps: StepReport[], isRunning: boolean): TaskState {
-  if (isRunning || steps.length === 0) return "running";
-  if (steps.some((s) => s.status === "failed")) return "failed";
-  // A skipped REQUIRED step means a validation never ran (e.g. the self-test agent
-  // was missing), so the run did not succeed — only teardown steps may skip freely.
-  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "failed";
-  return "succeeded";
-}
-
-function buildReport(steps: StepReport[]): string {
-  const passed = steps.filter((s) => s.status === "passed").length;
-  const failed = steps.filter((s) => s.status === "failed").length;
-  const skipped = steps.filter((s) => s.status === "skipped").length;
-  const lines = steps.map((step, i) => {
-    const dur = step.durationMs != null ? ` (${step.durationMs} ms)` : "";
-    const info = step.error ? ` — ERROR: ${step.error}` : step.detail ? ` — ${step.detail}` : "";
-    return `${i + 1}. [${step.status.toUpperCase()}] ${step.title}${info}${dur}`;
-  });
-  return [
-    `Self-test: ${passed} passed, ${failed} failed, ${skipped} skipped, ${steps.length} steps`,
-    "",
-    ...lines,
-  ].join("\n");
-}
-
-export default function SelfTestPage() {
+function FunctionalSelfTestSection() {
   const { t } = useTranslation();
   const { steps, isRunning, start } = usePipelineRun(selfTestScenario);
-  const [copied, setCopied] = useState(false);
-
-  const passed = steps.filter((s) => s.status === "passed").length;
-  const failed = steps.filter((s) => s.status === "failed").length;
-  const skipped = steps.filter((s) => s.status === "skipped").length;
-  const total = steps.length;
-  const completed = steps.filter((s) => s.status !== "running").length;
-  const progress = total > 0 ? completed / total : null;
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(buildReport(steps));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
 
   return (
-    <div className={styles.page}>
+    <section className={styles.testSection}>
       <div className={styles.header}>
-        <h1 className={styles.title}>{t("rework.selftest.page.title")}</h1>
+        <h2 className={styles.title}>{t("rework.selftest.functional.title")}</h2>
         <Button
           color="primary"
           variant="filled"
@@ -88,52 +42,104 @@ export default function SelfTestPage() {
           onClick={start}
           disabled={isRunning}
         >
-          {isRunning ? t("rework.selftest.page.running") : t("rework.selftest.page.run")}
+          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.functional.run")}
         </Button>
       </div>
+      <p className={styles.subtitle}>{t("rework.selftest.functional.subtitle")}</p>
+      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
+    </section>
+  );
+}
 
-      <p className={styles.subtitle}>{t("rework.selftest.page.subtitle")}</p>
+function AuthzSelfTestSection() {
+  const { t } = useTranslation();
+  const { steps, isRunning, runForMyself, runForProfile } = useAuthzProbeRun();
+  const { data: users } = useListUsersQuery();
+  const [username, setUsername] = useState<string | undefined>(undefined);
+  const [password, setPassword] = useState("");
 
-      {total > 0 && (
-        <section className={styles.section}>
-          <div className={styles.summary}>
-            <TaskStateBadge state={overallState(steps, isRunning)} size="md" />
-            <span className={styles.counts}>
-              {t("rework.selftest.page.counts", { passed, failed, skipped, total })}
-            </span>
-            <Button
-              color="secondary"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "content_copy", filled: false }}
-              onClick={handleCopy}
-              className={styles.copyBtn}
-            >
-              {copied ? t("rework.selftest.page.copied") : t("rework.selftest.page.copy")}
-            </Button>
-          </div>
-          <TaskProgressBar state={overallState(steps, isRunning)} progress={progress} />
+  const realmConfig = useMemo(() => KeyCloakService.GetKeycloakRealmConfig(), []);
 
-          <ul className={styles.steps}>
-            {steps.map((step) => (
-              <li key={step.id} className={styles.step}>
-                <TaskStateBadge state={STEP_TO_TASK_STATE[step.status]} showLabel={false} size="md" />
-                <div className={styles.stepBody}>
-                  <span className={styles.stepTitle}>{step.title}</span>
-                  {(step.error || step.detail) && (
-                    <span className={step.error ? styles.stepError : styles.stepDetail}>
-                      {step.error ?? step.detail}
-                    </span>
-                  )}
-                </div>
-                {step.durationMs != null && <span className={styles.duration}>{step.durationMs} ms</span>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+  const userOptions: OptionModel<string>[] = useMemo(
+    () =>
+      (users ?? [])
+        .filter((u) => u.username)
+        .map((u) => ({ key: u.id, value: u.username as string, label: u.username as string })),
+    [users],
+  );
 
-      {total === 0 && <div className={styles.empty}>{t("rework.selftest.page.empty")}</div>}
+  const handleRunForProfile = () => {
+    if (!username || !password) return;
+    runForProfile(username, password);
+    setPassword("");
+  };
+
+  return (
+    <section className={styles.testSection}>
+      <div className={styles.header}>
+        <h2 className={styles.title}>{t("rework.selftest.authz.title")}</h2>
+        <Button
+          color="primary"
+          variant="filled"
+          size="medium"
+          icon={{ category: "outlined", type: "admin_panel_settings", filled: false }}
+          onClick={runForMyself}
+          disabled={isRunning}
+        >
+          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.authz.runSelf")}
+        </Button>
+      </div>
+      <p className={styles.subtitle}>{t("rework.selftest.authz.subtitle")}</p>
+
+      <div className={styles.testProfilePanel}>
+        <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.testProfile.title")}</h3>
+        {realmConfig ? (
+          <>
+            <div className={styles.testProfileFields}>
+              <Select
+                size="medium"
+                options={userOptions}
+                value={username}
+                onChange={setUsername}
+                label={t("rework.selftest.authz.testProfile.usernameLabel")}
+                placeholder={t("rework.selftest.authz.testProfile.usernamePlaceholder")}
+              />
+              <TextInput
+                type="password"
+                label={t("rework.selftest.authz.testProfile.passwordLabel")}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Button
+                color="secondary"
+                variant="outlined"
+                size="medium"
+                onClick={handleRunForProfile}
+                disabled={isRunning || !username || !password}
+              >
+                {t("rework.selftest.authz.testProfile.run")}
+              </Button>
+            </div>
+            <p className={styles.testProfileCaption}>{t("rework.selftest.authz.testProfile.caption")}</p>
+          </>
+        ) : (
+          <p className={styles.testProfileCaption}>{t("rework.selftest.authz.testProfile.disabledInsecure")}</p>
+        )}
+      </div>
+
+      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
+    </section>
+  );
+}
+
+export default function SelfTestPage() {
+  const { t } = useTranslation();
+
+  return (
+    <div className={styles.page}>
+      <h1 className={styles.pageTitle}>{t("rework.selftest.page.title")}</h1>
+      <FunctionalSelfTestSection />
+      <AuthzSelfTestSection />
     </div>
   );
 }

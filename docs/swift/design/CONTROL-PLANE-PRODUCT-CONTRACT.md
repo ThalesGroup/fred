@@ -127,14 +127,23 @@ branding channel in control-plane.
 Permissions are exposed via:
 
 - `PermissionSummary`
-  - `items`
-  - flattened booleans such as `can_manage_team_agents`
+  - `is_platform_admin`, `is_platform_observer` — the only fields, both
+    OpenFGA-derived (organization `platform_admin`/`platform_observer`
+    relations). See Contract Note §14 (AUTHZ-05 review item 11): the former
+    `items` flattened-permission list and six unwired `can_*` booleans were
+    removed — they were Keycloak-role-derived and had gone permanently empty
+    once AUTHZ-05 removed Keycloak app roles.
   - no raw RBAC/REBAC graph internals
 
-Permission booleans must reflect the product actor model defined in
-`docs/swift/platform/REBAC.md §Product authorization model`. In particular:
-the owner/manager split is orthogonal — a flag that is true for owner must not
-imply it is also true for manager, and vice versa.
+Org-level gating stops at these two booleans. Team-scoped gating (agents,
+resources, member administration, evaluation, …) does not belong on
+`PermissionSummary` at all — it is exposed per team on
+`TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
+by every team-fetching endpoint. Permission booleans/lists must reflect the
+product actor model defined in `docs/swift/platform/REBAC.md §Product
+authorization model`. In particular: `team_admin` and `team_editor` are
+orthogonal — a flag true for one must not imply it is also true for the
+other.
 
 Keep this contract small and frontend-oriented. If it becomes insufficient,
 extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
@@ -932,3 +941,29 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
 `UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
+
+## 14. Contract Notes — AUTHZ-05 review item 11 (2026-07-11)
+
+### `PermissionSummary` shrunk to its two OpenFGA-derived booleans
+
+**2026-07-11 — Decision (AUTHZ-05 post-implementation review, item 11):**
+`PermissionSummary` dropped `items: list[str]` and six always-empty booleans
+(`can_view_team_agents`, `can_manage_team_agents`, `can_manage_mcp_servers`,
+`can_view_feedback`, `can_submit_feedback`, `can_create_sessions`). Both were
+populated by `list_display_permissions()` (`fred_core/security/permission_catalog.py`,
+now deleted), which iterated **Keycloak app roles** — removed platform-wide by
+AUTHZ-05 review item 8a, so every seeded user had `app_roles: []` and these
+fields were permanently empty/`false` for everyone, including `platform_admin`.
+Live impact before the fix: 6 frontend routes and 3 in-page controls were
+unreachable/disabled for all users (full writeup: `NOTES-AUTHZ05-REVIEW.md`
+item 11).
+
+`PermissionSummary` now carries exactly `is_platform_admin` and
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item
+4. Team-scoped gating was never this field's job; it goes through
+`TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
+by every team-fetching endpoint and unaffected by this change.
+
+`controlPlaneOpenApi.ts` was regenerated (`PermissionSummary` loses the 7
+removed fields; no other change). Frontend consumption pattern documented in
+[`docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`](../platform/FRONTEND-AUTHZ-PATTERN.md).

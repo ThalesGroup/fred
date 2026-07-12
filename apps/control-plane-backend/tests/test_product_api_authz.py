@@ -147,6 +147,39 @@ async def test_prompt_mutation_endpoints_require_can_update_resources(
 
 
 @pytest.mark.asyncio
+async def test_promote_prompt_requires_can_update_resources_on_target_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 post-implementation review finding (2026-07-11): promoting only
+    resolved/checked the source team. The target team was never resolved or
+    permission-checked, so a team_editor could copy a prompt's text into any
+    team_id they held no relation to (or that did not exist). Both the source
+    and the target team must now be resolved under CAN_UPDATE_RESOURCES."""
+    get_team = AsyncMock(return_value=_FakeTeam())
+    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    await product_api.post_promote_prompt(
+        TeamId("source-team"),
+        "p",
+        PromptPromoteRequest(target_team_id="target-team"),
+        deps,
+        _user(),
+    )
+
+    assert get_team.await_count == 2
+    source_call, target_call = get_team.await_args_list
+    assert source_call.args[1] == TeamId("source-team")
+    assert source_call.kwargs["required_permissions"] == [
+        TeamPermission.CAN_UPDATE_RESOURCES
+    ]
+    assert target_call.args[1] == TeamId("target-team")
+    assert target_call.kwargs["required_permissions"] == [
+        TeamPermission.CAN_UPDATE_RESOURCES
+    ]
+
+
+@pytest.mark.asyncio
 async def test_get_agent_templates_requires_can_use_team_agents(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

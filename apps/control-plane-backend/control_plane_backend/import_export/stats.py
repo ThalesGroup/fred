@@ -33,7 +33,7 @@ from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import (
     list_all_teams_unfiltered,
-    list_team_members,
+    list_team_members_unfiltered,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,10 +102,15 @@ async def compute_platform_stats(
 
     for team in real_teams:
         try:
-            members = await list_team_members(user, team.id, team_deps)
+            # `_unfiltered`: the caller already verified `CAN_MANAGE_PLATFORM`
+            # above `compute_platform_stats`. The per-team `CAN_READ_MEMEBERS`
+            # check would 403 on every real team the admin isn't personally a
+            # member of — the common case, since platform_admin carries no
+            # standing team relation (AUTHZ-05 review item 14).
+            members = await list_team_members_unfiltered(user, team.id, team_deps)
         except Exception as exc:
-            # A team the operator cannot read members of must not break the whole
-            # summary — degrade that row's member counts to zero and carry on.
+            # A genuinely broken team (e.g. deleted mid-computation) must not
+            # break the whole summary — degrade that row's counts to zero.
             logger.warning(
                 "[import-export] stats: cannot read members of team %s: %s",
                 team.id,

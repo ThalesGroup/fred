@@ -997,14 +997,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
-        "run": "Run campaign",
+        "title": "Self-test"
+      },
+      "report": {
         "running": "Running…",
-        "empty": "No run yet. Press “Run campaign” to validate the live stack.",
+        "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
         "copy": "Copy report",
         "copied": "Copied"
+      },
+      "functional": {
+        "title": "Functional self-test",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "run": "Run campaign"
+      },
+      "authz": {
+        "title": "Authorization self-test",
+        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
+        "runSelf": "Run for myself",
+        "testProfile": {
+          "title": "Test another profile",
+          "usernameLabel": "Account",
+          "usernamePlaceholder": "Select an account",
+          "passwordLabel": "Password",
+          "run": "Run",
+          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
+          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+        }
       }
     },
     "tasks": {
@@ -1107,6 +1126,14 @@
       }
     },
     "adminTeams": {
+      "existingTeams": {
+        "title": "Existing teams",
+        "empty": "No teams yet.",
+        "table": {
+          "name": "Team",
+          "admins": "Admin(s)"
+        }
+      },
       "createTeam": {
         "title": "Create team",
         "nameLabel": "Team name",

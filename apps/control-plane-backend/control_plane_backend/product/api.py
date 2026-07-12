@@ -653,6 +653,15 @@ async def post_promote_prompt(
     Returns 409 if a prompt with the same name already exists in the target team —
     the caller must rename first.
 
+    AUTHZ-05 post-implementation review finding (2026-07-11): promoting only
+    checked `CAN_UPDATE_RESOURCES` on the source team. The target team was never
+    resolved or permission-checked, so any team_editor could copy a prompt's
+    text into an arbitrary team_id — including teams they hold no relation to —
+    as long as the name didn't collide there. Resolving the target team here,
+    under the same `CAN_UPDATE_RESOURCES` requirement as the source, closes that
+    cross-team write and also turns an unknown target into a 404 instead of a
+    silent orphan row.
+
     Example:
     - ``POST /control-plane/v1/teams/personal/prompts/abc-123/promote``
       ``{ "target_team_id": "bid-and-capture" }``
@@ -661,6 +670,12 @@ async def post_promote_prompt(
     team = await get_team_by_id_from_service(
         user,
         team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    await get_team_by_id_from_service(
+        user,
+        TeamId(body.target_team_id),
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )

@@ -13,7 +13,6 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
-    list_display_permissions,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
@@ -196,19 +195,22 @@ async def _build_permission_summary(
 ) -> PermissionSummary:
     """Build the frontend permission projection.
 
-    `items`/`can_*` display flags below stay Keycloak-role-derived (display-only,
-    see `list_display_permissions` docstring) — they drive non-gating UI hints,
-    not admin-surface access. `is_platform_admin`/`is_platform_observer` are the
-    only fields backed by real enforcement: they are derived from OpenFGA via
-    the same `RebacEngine.has_user_permission` used to gate the platform-level
+    `is_platform_admin`/`is_platform_observer` are derived from OpenFGA via the
+    same `RebacEngine.has_user_permission` used to gate the platform-level
     endpoints themselves, so the frontend never re-derives admin access from
     Keycloak roles independently (AUTHZ-05 review item 4). `is_platform_observer`
     checks the raw `platform_observer` relation directly (`IS_PLATFORM_OBSERVER`)
     rather than a capability, since the "any connected user" capability tier it
     used to piggyback on (`can_read_kpi`) was removed entirely in review item 8a.
+
+    Team-scoped gating (agents, resources, MCP servers, feedback, sessions...)
+    does not belong here at all — it goes through
+    `TeamWithPermissions.permissions` (`_get_team_permissions_for_user`), which
+    is already OpenFGA-derived per team. This function used to also carry a
+    Keycloak-role-derived `items` list plus six always-empty `can_*` booleans
+    computed from it; both were removed in review item 11 once Keycloak app
+    roles disappeared platform-wide and left them permanently unpopulated.
     """
-    items = list_display_permissions(user)
-    allowed = set(items)
     is_platform_admin, is_platform_observer = await asyncio.gather(
         rebac.has_user_permission(
             user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
@@ -218,22 +220,6 @@ async def _build_permission_summary(
         ),
     )
     return PermissionSummary(
-        items=items,
-        can_view_team_agents="agents:read" in allowed,
-        can_manage_team_agents=bool(
-            {"agents:create", "agents:update", "agents:delete"} & allowed
-        ),
-        can_manage_mcp_servers=bool(
-            {
-                "mcp_servers:create",
-                "mcp_servers:update",
-                "mcp_servers:delete",
-            }
-            & allowed
-        ),
-        can_view_feedback="feedback:read" in allowed,
-        can_submit_feedback="feedback:create" in allowed,
-        can_create_sessions="sessions:create" in allowed,
         is_platform_admin=is_platform_admin,
         is_platform_observer=is_platform_observer,
     )

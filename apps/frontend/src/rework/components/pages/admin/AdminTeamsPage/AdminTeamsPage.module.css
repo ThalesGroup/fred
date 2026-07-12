@@ -1,17 +1,26 @@
 .adminTeamsPage {
   display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xl);
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
   max-width: 760px;
 }
 
+.existingTeamsSection,
 .createTeamSection {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
   width: 100%;
+}
+
+.emptyTeamsMessage {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .sectionTitle {

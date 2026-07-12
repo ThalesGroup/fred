@@ -23,6 +23,7 @@ import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 
 /**
@@ -43,6 +44,7 @@ export default function TeamContentNavbar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
+  const { canUpdateAgents, canReadMembers } = useTeamCapabilities(selectedTeam);
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
@@ -71,17 +73,11 @@ export default function TeamContentNavbar() {
   // Launching and cancelling evaluation campaigns requires agent-update rights
   // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations
   // section is gated separately from the settings entry point itself.
-  const canManageEvaluations =
-    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
-      ? selectedTeam.permissions.includes("can_update_agents")
-      : false;
+  const canManageEvaluations = canUpdateAgents;
 
   // The team Activity view calls the team-scoped GET /tasks, which the backend
   // gates on CAN_READ_MEMBERS — mirror that here rather than surface a load error.
-  const canSeeActivity =
-    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
-      ? selectedTeam.permissions.includes("can_read_members")
-      : false;
+  const canSeeActivity = canReadMembers;
 
   const settingsItems: NavigationMenuItemProps[] = [
     {

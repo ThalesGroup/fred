@@ -1273,6 +1273,45 @@ Execution: waived GitHub issue for local session
 - [ ] Sweeper: Temporal scheduled workflow per task-owning worker calls `reconcile_stale(grace, limit)`; optional read-time reconcile on SSE subscribe
 - [ ] Tests: reconcile decision matrix (failed / timed_out / completed / running / None) + integration (stuck task → terminal without the original worker)
 
+**P4 — Ingestion live-feedback wiring (found via live testing 2026-07-12, `NOTES-INGESTION-TASK-TRACKING-FIX.md`)**
+
+The SSE/task-store infrastructure above was already correct; three integration gaps kept
+it from ever reaching the screen for a fresh document upload — the tray component existed
+but was never mounted, the upload modal waited for full per-file completion instead of
+just scheduling, and a brand-new document had no refetch trigger until the whole batch
+was done.
+
+- [x] Mount `<TaskTray />` in `Sidebar.tsx` — built (SSE-backed, eviction timers) since
+      commit `f2fba807` but never rendered anywhere in the app
+- [x] `DocumentUploadDrawer` closes once every file is scheduled (task_id known), not
+      once each file's full ingestion pipeline finishes — background request still runs
+      to completion; a failure after scheduling is the failed task's job to report (tray),
+      not the drawer's
+- [x] New shared hook `useNotifyOnNewTaskTarget` (`features/tasks/`) + backing selector
+      `makeSelectTaskTargetsOfType` — refetches a document list the instant a task appears
+      for a target not seen before (any state, not just `succeeded`), since
+      `useRefetchOnTaskSuccess` can never fire for a document that never had a row to
+      refresh in the first place
+- [x] Minor hardening (not the root cause of the above): bound `TemporalClientProvider.get_client()`
+      and `TemporalScheduler.start_document_processing`'s `start_workflow` with a configurable
+      `rpc_timeout_seconds` (new `TemporalSchedulerConfig` field), consistent with the
+      reconciliation sweeper's own concern about stuck executions
+
+Two further findings surfaced during the live verification of the above (same day):
+
+- [x] Ingestion progress ring froze at a fixed 30% for the whole "processing" step
+      (no telemetry between scheduling and completion in `PushInputProcess`/`OutputProcess`).
+      Simpler than instrumenting sub-steps: `ProcessPullFile`/`ProcessPushFile` in
+      `workflow.py` now keep `progress=None` (indeterminate spinner) through that step
+      instead of a fake `0.3` — requires a **Temporal worker restart** to take effect
+- [x] Team admins saw an empty Activité page for ingestion tasks while platform admins
+      saw everything — `task_svc.start(...)` in `_stream_upload_process` never passed
+      `team_id`, so every ingestion task_run row was created with `team_id=NULL`, which
+      never matches a team-scoped `WHERE team_id = :team_id` query. Extracted the
+      existing tag→team resolution out of `_check_quota_before_upload` into a shared
+      `_resolve_tag_owners`, reused to tag the task with its destination team_id
+      (left `None`, unchanged, when ambiguous or personal-space)
+
 #### OPS-05 Object storage naming cleanup
 
 RFC ref: `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`

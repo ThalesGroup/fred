@@ -23,6 +23,20 @@
   max-width: 760px;
 }
 
+.pageTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.testSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-l);
+}
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -33,13 +47,42 @@
 .title {
   margin: 0;
   color: var(--on-surface);
-  font: var(--font-title-large);
+  font: var(--font-title-medium);
 }
 
 .subtitle {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.testProfilePanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+}
+
+.testProfileTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-large-emphasized);
+}
+
+.testProfileFields {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-m);
+  flex-wrap: wrap;
+}
+
+.testProfileCaption {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
 }
 
 .error {

@@ -15,23 +15,28 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
+import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import {
   useCreateTeamMutation,
+  useListAllTeamsQuery,
   useListUsersQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
 
 // AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
 // bootstrap action — there is no other way to give a freshly created team its
-// first team_admin. This is deliberately minimal: name + initial admin
-// picker, nothing else.
+// first team_admin. The existing-teams list below is read-only (registry
+// governance view, item 9's `can_list_all_teams`) — this page still has no
+// edit/delete affordance for a team, only creation and registry visibility.
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
@@ -43,7 +48,27 @@ export default function AdminTeamsPage() {
   const [adminQuery, setAdminQuery] = useState("");
 
   const { data: allUsers } = useListUsersQuery();
+  const { data: allTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
+
+  const teamColumns = useMemo(
+    (): DataTableColumn<Team>[] => [
+      {
+        label: t("rework.adminTeams.existingTeams.table.name"),
+        size: "2fr",
+        cellRenderer: (team) => <span>{team.name}</span>,
+      },
+      {
+        label: t("rework.adminTeams.existingTeams.table.admins"),
+        cellRenderer: (team) => (
+          <AvatarGroup
+            avatars={(team.admins ?? []).map((admin) => ({ name: `${admin.first_name} ${admin.last_name}` }))}
+          />
+        ),
+      },
+    ],
+    [t],
+  );
 
   const suggestions = useMemo(() => {
     if (!allUsers) return [];
@@ -92,6 +117,15 @@ export default function AdminTeamsPage() {
 
   return (
     <div className={styles.adminTeamsPage}>
+      <section className={styles.existingTeamsSection}>
+        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
+        {allTeams && allTeams.length > 0 ? (
+          <DataTable columns={teamColumns} data={allTeams} />
+        ) : (
+          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
+        )}
+      </section>
+      <Separator />
       <section className={styles.createTeamSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.createTeam.title")}</h2>
         <TextInput

@@ -25,7 +25,7 @@ from fred_core import (
     TeamPermission,
     is_service_agent,
 )
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 
@@ -210,7 +210,12 @@ async def list_all_teams_for_registry(
     await deps.rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_LIST_ALL_TEAMS, ORGANIZATION_ID
     )
-    return await list_all_teams_unfiltered(user, deps)
+    teams = await list_all_teams_unfiltered(user, deps)
+    # `list_all_teams_unfiltered` mixes in the caller's own personal space
+    # (see `_list_teams` below — `stats.py` filters the same way for the same
+    # reason). The registry is `team_metadata_store` rows only (RFC §32);
+    # a personal space never had a row there, so it isn't "in the registry".
+    return [team for team in teams if not is_personal_team_id(str(team.id))]
 
 
 async def delete_team(
@@ -677,19 +682,52 @@ async def list_team_members(
     How to use it:
     - call from `/teams/{team_id}/members`
     - pass request-scoped dependencies when available
+    - for a platform-admin-privileged caller that must read every real team's
+      members regardless of personal membership, use
+      `list_team_members_unfiltered` instead (same list-vs-unfiltered split as
+      `list_teams`/`list_all_teams_unfiltered`)
 
     Example:
     - `members = await list_team_members(user, TeamId("fredlab"), deps)`
     """
+    return await _list_team_members(user, team_id, deps, check_permission=True)
+
+
+async def list_team_members_unfiltered(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> list[TeamMember]:
+    """Same as `list_team_members` but without the per-team `CAN_READ_MEMEBERS` check —
+    callers MUST already have verified `OrganizationPermission.CAN_MANAGE_PLATFORM`
+    (e.g. `compute_platform_stats`). `platform_admin` carries no standing team
+    relation (RFC "zero implicit access"), so the normal per-team check 403s on
+    every real team the admin isn't personally a member of."""
+    return await _list_team_members(user, team_id, deps, check_permission=False)
+
+
+async def _list_team_members(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+    *,
+    check_permission: bool,
+) -> list[TeamMember]:
     rebac = deps.rebac
 
-    await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        [TeamPermission.CAN_READ_MEMEBERS],
-        deps,
-    )
+    if check_permission:
+        await _validate_team_and_check_permission(
+            user,
+            team_id,
+            rebac,
+            [TeamPermission.CAN_READ_MEMEBERS],
+            deps,
+        )
+    else:
+        metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+        if metadata is None:
+            raise TeamNotFoundError(team_id)
+
     admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),

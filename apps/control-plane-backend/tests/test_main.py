@@ -718,8 +718,10 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
     assert "ui_settings" not in payload
-    assert "agents:read" in payload["permissions"]["items"]
-    assert payload["permissions"]["can_manage_team_agents"] is True
+    # AUTHZ-05 review item 11: `permissions` only ever carries the two
+    # OpenFGA-derived flags now — the Keycloak-role-derived `items` list and
+    # its six always-empty `can_*` booleans were removed as dead weight.
+    assert set(payload["permissions"]) == {"is_platform_admin", "is_platform_observer"}
     # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
     assert payload["permissions"]["is_platform_admin"] is True
     assert payload["permissions"]["is_platform_observer"] is True
@@ -7221,7 +7223,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
         _fake_list_teams_can_read_filtered,
     )
     monkeypatch.setattr(
-        "control_plane_backend.import_export.stats.list_team_members",
+        "control_plane_backend.import_export.stats.list_team_members_unfiltered",
         _fake_list_team_members,
     )
     monkeypatch.setattr(

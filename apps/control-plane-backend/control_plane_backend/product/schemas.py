@@ -19,15 +19,21 @@ from control_plane_backend.users.schemas import UserSummary
 
 
 class PermissionSummary(BaseModel):
-    """Frontend-friendly permission projection for product bootstrap flows."""
+    """Frontend-friendly permission projection for product bootstrap flows.
 
-    items: list[str] = Field(default_factory=list)
-    can_view_team_agents: bool = False
-    can_manage_team_agents: bool = False
-    can_manage_mcp_servers: bool = False
-    can_view_feedback: bool = False
-    can_submit_feedback: bool = False
-    can_create_sessions: bool = False
+    AUTHZ-05 review item 11: this used to also carry `items` (a flattened
+    `resource:action` list from `list_display_permissions()`, itself derived
+    from Keycloak app roles) plus six always-`False` placeholder booleans
+    (`can_view_team_agents`, `can_manage_team_agents`, `can_manage_mcp_servers`,
+    `can_view_feedback`, `can_submit_feedback`, `can_create_sessions`). Both
+    were dead: Keycloak app roles were removed platform-wide in item 8a, so
+    `items` was permanently `[]` for every user, and the six booleans were
+    never populated by anything. Org-scoped gating is exactly the two fields
+    below; team-scoped gating goes through `TeamWithPermissions.permissions`
+    (already OpenFGA-derived, see `teams/service.py::_get_team_permissions_for_user`)
+    instead of a bespoke org-level flag per feature.
+    """
+
     is_platform_admin: bool = Field(
         default=False,
         description=(

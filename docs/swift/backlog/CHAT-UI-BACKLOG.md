@@ -1268,13 +1268,11 @@ This phase registers that route and adds the "Open document" link.
 
 ---
 
-### 9.2 Background — why no signed URLs are needed
+### 9.2 Background
 
-The document viewer (`MarkdownDocumentViewer`) authenticates via the Keycloak session
-token present in all RTK Query calls. It calls `GET /knowledge-flow/v1/markdown/{uid}`,
-which the backend serves by fetching from MinIO and injecting presigned MinIO URLs for
-embedded images (1-minute TTL, transparent to the frontend). No signed URL is needed
-for the navigation layer itself.
+Full rationale (why a route rather than a drawer callback, why no signed URLs are
+needed) lives in `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` §2.3 — not repeated here to
+avoid the two copies drifting apart.
 
 ---
 
@@ -1310,7 +1308,9 @@ for the navigation layer itself.
 - No backend changes.
 - No SSE contract changes.
 - Chunk highlight via `#chunk=...` fragment deferred (out of scope for CHAT-08).
-- PDF viewer route deferred (markdown only for now).
+- Native PDF rendering and an assistant side panel deferred to `FRONT-13`
+  (`docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`) — this route serves markdown only,
+  for every format, until that phase lands.
 
 ---
 

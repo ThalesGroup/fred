@@ -997,14 +997,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Auto-test",
-        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
-        "run": "Lancer la campagne",
+        "title": "Auto-test"
+      },
+      "report": {
         "running": "En cours…",
-        "empty": "Aucune exécution. Cliquez sur « Lancer la campagne » pour valider la stack.",
+        "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
+      },
+      "functional": {
+        "title": "Auto-test fonctionnel",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
+        "run": "Lancer la campagne"
+      },
+      "authz": {
+        "title": "Auto-test d'autorisation",
+        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
+        "runSelf": "Lancer pour moi-même",
+        "testProfile": {
+          "title": "Tester un autre profil",
+          "usernameLabel": "Compte",
+          "usernamePlaceholder": "Choisir un compte",
+          "passwordLabel": "Mot de passe",
+          "run": "Lancer",
+          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm — déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau — ça rapporte simplement ce que ce compte peut déjà faire.",
+          "disabledInsecure": "Non disponible sur ce déploiement — aucun vrai realm Keycloak à interroger."
+        }
       }
     },
     "tasks": {
@@ -1107,6 +1126,14 @@
       }
     },
     "adminTeams": {
+      "existingTeams": {
+        "title": "Équipes existantes",
+        "empty": "Aucune équipe pour l'instant.",
+        "table": {
+          "name": "Équipe",
+          "admins": "Administrateur(s)"
+        }
+      },
       "createTeam": {
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",

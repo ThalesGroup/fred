@@ -28,13 +28,13 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
-import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
-import { ProtectedRoute } from "../components/ProtectedRoute";
+import { Protected } from "../components/Protected";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
@@ -47,6 +47,20 @@ const basename = getConfig().frontend_basename;
 const ManagedChatPageRoute = () => {
   const { agentInstanceId } = useParams<{ agentInstanceId: string }>();
   return <ManagedChatPage key={agentInstanceId} />;
+};
+
+// Bare `/admin` has no page of its own — land on the first page the caller
+// can actually see: `/admin/teams` for a platform_admin, or `/admin/analytics`
+// (`can_observe_platform`, item 16 — the one `/admin` page an observer may
+// see) otherwise. `Protected requires="admin"` on a hardcoded `/admin/teams`
+// redirect would bounce every observer to `/unauthorized` before they ever
+// reach analytics.
+const AdminIndexRoute = () => {
+  const { canAdmin, canObservePlatform, isLoading } = useUserCapabilities();
+  if (isLoading) return null;
+  if (canAdmin) return <Navigate to="/admin/teams" replace />;
+  if (canObservePlatform) return <Navigate to="/admin/analytics" replace />;
+  return <Navigate to="/unauthorized" replace />;
 };
 
 // Lazy loaded monitoring pages
@@ -63,27 +77,6 @@ const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
 );
-
-const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { canAdmin } = useUserCapabilities();
-  if (!canAdmin) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  return <>{children}</>;
-};
-
-// Narrower than AdminProtectedRoute: platform_observer's own OpenFGA-derived
-// capability, distinct from admin. Gates only the standalone KPI dashboard
-// (/monitoring/kpis) — every other /admin/* and /monitoring/* route stays
-// canAdmin-only (AdminProtectedRoute) or its own existing guard, so an
-// observer never reaches anything beyond this one page.
-const KpiObserverProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { canAdmin, canObservePlatform } = useUserCapabilities();
-  if (!canAdmin && !canObservePlatform) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  return <>{children}</>;
-};
 
 export const routes: RouteObject[] = [
   {
@@ -133,124 +126,116 @@ export const routes: RouteObject[] = [
       },
       {
         path: "admin",
-        element: (
-          <AdminProtectedRoute>
-            <Navigate to="/admin/teams" replace />
-          </AdminProtectedRoute>
-        ),
+        element: <AdminIndexRoute />,
       },
       {
         path: "admin/teams",
         element: (
-          <AdminProtectedRoute>
+          <Protected requires="admin">
             <AdminTeamsPage />
-          </AdminProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "admin/tasks",
         element: (
-          <AdminProtectedRoute>
+          <Protected requires="admin">
             <TasksPage />
-          </AdminProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "admin/analytics",
         element: (
-          <AdminProtectedRoute>
+          <Protected requires="observer">
             <AnalyticsPage />
-          </AdminProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "admin/self-test",
         element: (
-          <AdminProtectedRoute>
+          <Protected requires="admin">
             <SelfTestPage />
-          </AdminProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "admin/migration",
         element: (
-          <AdminProtectedRoute>
+          <Protected requires="admin">
             <MigrationPage />
-          </AdminProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/kpis",
         element: (
-          <KpiObserverProtectedRoute>
+          <Protected requires="observer">
             <SuspenseWrapper>
               <Kpis />
             </SuspenseWrapper>
-          </KpiObserverProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/runtime",
         element: (
-          <ProtectedRoute resource="kpi" action="create">
+          <Protected requires="admin">
             <SuspenseWrapper>
               <Runtime />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/data",
         element: (
-          <ProtectedRoute resource="kpi" action="create">
+          <Protected requires="admin">
             <SuspenseWrapper>
               <DataHub />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/logs",
         element: (
-          <ProtectedRoute
-            resource={["opensearch", "logs"]}
-            action="create"
-            anyResource // means that any of the permissions is enough so the user can have opensearch:create || logs:create and it would let the user pass.
-          >
+          <Protected requires="admin">
             <SuspenseWrapper>
               <Logs />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/rebac-backfill",
         element: (
-          <ProtectedRoute resource="tag" action="update">
+          <Protected requires="admin">
             <SuspenseWrapper>
               <RebacBackfill />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/processors",
         element: (
-          <ProtectedRoute resource="kpi" action="create">
+          <Protected requires="admin">
             <SuspenseWrapper>
               <ProcessorBench />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {
         path: "monitoring/processors/runs/:runId",
         element: (
-          <ProtectedRoute resource="kpi" action="create">
+          <Protected requires="admin">
             <SuspenseWrapper>
               <ProcessorRunDetail />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </Protected>
         ),
       },
       {

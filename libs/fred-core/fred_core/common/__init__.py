@@ -38,7 +38,7 @@ from .structures import (
     StoreConfig,
     TemporalSchedulerConfig,
 )
-from .team_id import TeamId, personal_team_id
+from .team_id import TeamId, is_personal_team_id, personal_team_id
 from .utils import raise_internal_error
 
 __all__ = [
@@ -58,6 +58,7 @@ __all__ = [
     "PostgresTableConfig",
     "StoreConfig",
     "TeamId",
+    "is_personal_team_id",
     "personal_team_id",
     "TemporalSchedulerConfig",
     "ThreadSafeLRUCache",

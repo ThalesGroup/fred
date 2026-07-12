@@ -22,6 +22,7 @@ import {
   useListTeamMembersQuery,
   useListUsersQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
@@ -31,7 +32,7 @@ interface TeamSettingsMembersProps {
 export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) {
   const { t } = useTranslation();
 
-  const can_administer_members = team.permissions?.includes("can_administer_members");
+  const { canAdministerMembers: can_administer_members } = useTeamCapabilities(team);
 
   const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
   const { data: allApplicationUsers } = useListUsersQuery();
