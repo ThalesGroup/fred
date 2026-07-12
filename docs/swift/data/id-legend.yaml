@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-07-09"
+  last_updated: "2026-07-12"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -171,6 +171,58 @@ items:
       authorization model" has a self-service, in-browser answer going
       forward. PR #1957 open, awaiting human review before merge; status
       stays `in_progress` until 8b closes and the review lands.
+      Live-campaign findings continued (2026-07-11/12, `NOTES-AUTHZ05-REVIEW.md`
+      items 12-17): item 12, `GET /teams/all` leaked the caller's own personal
+      space into the registry (false positive in the self-test, not a
+      cross-tenant leak) — filtered out. Item 13, the frontend route guard
+      `Protected` decided before `/frontend/bootstrap` had loaded, redirecting
+      every reload to `/unauthorized` with no way back — now waits on
+      `isLoading`. Item 14, `compute_platform_stats` 403'd reading team
+      members as the calling `platform_admin` (who holds no team relation on
+      most real teams) — new `list_team_members_unfiltered`. Items 15-16,
+      `platform_observer` had no reachable KPI dashboard: after a first,
+      wrong attempt (widening `/admin/analytics`'s route guard alone, which
+      still 403'd server-side), found `can_read_kpi_global` was a legacy,
+      platform_admin-only duplicate of `can_observe_platform` never actually
+      asked for by this RFC (`§6.1`) — retired, `/admin/analytics` and
+      `/monitoring/kpis` both now gate on `can_observe_platform`, so
+      `platform_admin` and `platform_observer` see the same platform-wide
+      recap. Item 17, enriched the browser authorization self-test
+      (`/admin/self-test`) with a real, cleaned-up write probe
+      (`team-write-access`) so it verifies a granted `can_update_resources`
+      actually works, not just that denials are denied.
+
+  - id: AUTHZ-06
+    title: "Cumulative team roles (team_admin + team_editor + team_analyst on one team)"
+    status: in_progress
+    owner: Dimitri
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 7 (§33-39)"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      design: "docs/swift/platform/REBAC.md"
+      notes: "NOTES-AUTHZ05-REVIEW.md"
+      pr: "https://github.com/ThalesGroup/fred/pull/1957"
+    notes: >
+      Found live (2026-07-12): the small-team shape — one person who is
+      simultaneously governance authority, content editor, and evaluation
+      operator, plus a few plain members — is structurally unreachable today.
+      `update_team_member` enforces exactly one role per user per team
+      (remove-all-then-add-one), compounded by item 7's orthogonal
+      `team_admin`/`team_editor` split (full governance, zero content
+      authority, and the reverse). OpenFGA itself needs zero schema changes
+      — nothing prevents one user holding multiple relation tuples on the
+      same team object; the exclusivity is a service-layer convention, not a
+      model constraint. Decision (developer-confirmed): additive roles,
+      granted/revoked one at a time (never a bulk replace), same
+      per-role permission checks as today
+      (`can_administer_{admins,editors,analysts}` unchanged). Explicitly not
+      in scope: any cap on how many people hold a role, any change to which
+      capabilities each role carries. Contract change: `TeamMember.relation`
+      (singular) -> `relations` (list) — frozen-contract entry in
+      `CONTROL-PLANE-PRODUCT-CONTRACT.md` §15. Code-complete 2026-07-12
+      (backend + frontend, tests green); validation campaign against the
+      live stack not yet run — see `NOTES-AUTHZ05-REVIEW.md`.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

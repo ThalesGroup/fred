@@ -5,9 +5,13 @@ branch `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenf
 PR #1957, still awaiting human review before merge). Code-complete except item `8b`
 (`NOTES-AUTHZ05-REVIEW.md`) — the Keycloak-`groups`-claim-derived `team_member` fallback, which is
 blocked on the real production data migration (`fredlab-authz-migrate-swift.py`) having run, not on
-any open design question.
+any open design question. **Part 7 (2026-07-12, `AUTHZ-06`) code-complete, awaiting the
+validation campaign** — cumulative team roles (one user may hold
+`team_admin`+`team_editor`+`team_analyst` simultaneously on the same team). Current
+design state: `docs/swift/platform/REBAC.md`. Outstanding follow-ups:
+`NOTES-AUTHZ05-REVIEW.md`.
 **Date:** 2026-07-04
-**Task ID:** `AUTHZ-05`
+**Task ID:** `AUTHZ-05` (Part 7: `AUTHZ-06`)
 **Audience:** Product governance, CVSSI, platform owners, then implementers
 **Related work:** `AUTHZ-01` (`RBAC-TO-REBAC-MIGRATION-RFC.md`), `platform/REBAC.md`
 
@@ -1168,6 +1172,158 @@ type organization
   only ever act on a genuinely orphaned team. Do not generalize it into "platform_admin
   can reassign any team's admin at any time" — that is the exact shape of the rejected
   escalation, just renamed.
+
+---
+
+# Part 7 - Cumulative Team Roles (2026-07-12)
+
+## 33. Why this part exists
+
+`§26`'s "hard cross-write rule" (`REBAC.md`, `schema.fga` lines 61-67) made `team_admin`
+and `team_editor` **orthogonal, not hierarchical**: `team_admin` has full governance
+authority (membership, settings) and zero content authority (prompts, agents);
+`team_editor` is the reverse. This is a genuine security property — it caps the blast
+radius of one compromised account — but it was never actually mandated by this RFC's
+own text. `§6.2`'s original target vocabulary (line 344) wrote
+`define can_update_agents: team_admin` — i.e. the admin role originally *did* carry
+content authority. The orthogonal split was introduced during implementation (item 7,
+`NOTES-AUTHZ05-REVIEW.md`, 2026-07-09) without a dedicated RFC section arguing for it;
+`§26` is a pure renaming section (`owner`→`team_admin`, `manager`→`team_editor`) and
+says nothing about hierarchy.
+
+The practical consequence, surfaced 2026-07-12 while validating the live stack
+persona-by-persona: the product's own write path (`update_team_member`) enforces
+**exactly one role per user per team** — it deletes every existing team relation for
+that user before writing the requested one
+(`teams/service.py::_remove_all_team_member_relations` then `_add_team_member_relation`).
+Combined with the orthogonal split, this makes the common small-team shape —
+one person who is simultaneously the team's governance authority, its content editor,
+and its evaluation operator, plus a handful of plain members — structurally
+unreachable. A solo `team_admin` cannot update a prompt or an agent in their own team.
+
+## 34. Decision: additive roles, not a schema change
+
+**OpenFGA already supports this. `schema.fga` needs zero changes.** Nothing in the
+schema enforces exclusivity — `team_admin: [user]`, `team_editor: [user]`,
+`team_analyst: [user]` are three independent relations; a user can already hold
+multiple simultaneous tuples on the same `team:<id>` object today, at the ReBAC layer.
+The exclusivity is a **service-layer convention** (`update_team_member`'s
+remove-then-add-one), not a model constraint. `can_run_evaluations`/
+`can_manage_evaluation_corpus` (`§6.2`) already union `team_analyst or team_admin` —
+proof the schema was never actually opposed to a `team_admin` holding overlapping
+capabilities.
+
+**Decision:** a user may hold any combination of `team_admin`, `team_editor`,
+`team_analyst` on the same team simultaneously, each granted and revoked as an
+independent, explicit action — never a bulk "replace the role set" operation. This
+preserves the RFC's constant theme (explicit relations, no implicit escalation) at
+finer grain: granting `team_editor` to an existing `team_admin` requires
+`can_administer_editors` exactly as it would for anyone else; nothing about already
+holding `team_admin` implicitly grants or simplifies acquiring another role.
+
+**Explicitly out of scope:** any cap on how many people may hold a given role on one
+team, and any change to the orthogonal *capability* definitions themselves
+(`can_update_resources`/`can_update_agents` stay `team_editor`-only;
+`can_manage_team_governance`-equivalent capabilities stay `team_admin`-only). This part
+only removes the **one-role-per-user** restriction — it does not touch which
+capabilities each role carries, and does not reopen `§26`'s renaming or `§32`'s
+registry-governance capabilities.
+
+## 35. Service-layer changes (`teams/service.py`)
+
+- `_get_user_role_in_team` (singular, priority-resolved `UserTeamRelation`) becomes
+  `_get_user_roles_in_team` (`set[UserTeamRelation]`) — the priority-fallback logic is
+  retired at the source of truth, kept only where a single "primary role" is still the
+  right display (`§37`).
+- `_remove_all_team_member_relations` is unchanged, still used for full member removal
+  (`remove_team_member`). A new sibling, `_remove_team_member_relation` (one relation,
+  mirrors the existing `_add_team_member_relation`), supports revoking a single role
+  without touching the others.
+- `update_team_member` ("replace the one role") is retired, replaced by two explicit
+  functions — `grant_team_member_role` / `revoke_team_member_role` — each independently
+  permission-checked via the existing, unchanged
+  `_get_administer_permission_for_team_role_relation` (granting `team_admin` still
+  requires `can_administer_admins`, etc. — this function does not change).
+  `revoke_team_member_role` additionally refuses (`TeamMemberRoleNotHeldError`,
+  `TeamMemberLastRoleError`) a revoke of a role not held, or a member's only remaining
+  role.
+- `_ensure_team_keeps_at_least_one_admin` generalizes from "role transition" to "would
+  this revoke the team's last `team_admin`" — same invariant, checked on a single-role
+  revocation instead of a from/to pair.
+- `add_team_member` (first role granted when adding a brand-new member) is unaffected —
+  a new member still starts with exactly one role; additional roles are granted
+  afterward through the same granular action as for existing members.
+
+## 36. Contract change (frozen — `CONTROL-PLANE-PRODUCT-CONTRACT.md`)
+
+`TeamMember.relation: UserTeamRelation` (singular) becomes
+`TeamMember.relations: list[UserTeamRelation]` (the full set the member currently
+holds). Requires an OpenAPI regeneration and a dated entry in
+`CONTROL-PLANE-PRODUCT-CONTRACT.md`, same discipline as `§14`'s `PermissionSummary`
+change (item 11).
+
+`PATCH /teams/{team_id}/members/{user_id}` ("set the one role") is retired — its
+"replace" semantics no longer make sense once a member can hold several roles.
+Replaced by two granular endpoints, implemented as their own routes rather than an
+action-flag body param, so grant and revoke are distinguishable at the HTTP-method
+level, not just by payload shape:
+
+- `POST /teams/{team_id}/members/{user_id}/roles` (`GrantTeamMemberRoleRequest`,
+  replaces `UpdateTeamMemberRequest`) — grants one additional role.
+- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` — revokes one role,
+  refusing (`409`) a revoke that would leave the member with none (that is a removal,
+  not a role change — use `DELETE /teams/{team_id}/members/{user_id}` instead).
+
+`AddTeamMemberRequest` (`POST /teams/{team_id}/members`, first role for a brand-new
+member) is unchanged.
+
+## 37. Consumers audited, decision locked per consumer (2026-07-12, developer-confirmed)
+
+- **`useTeamCapabilities`/`teamCapabilities.ts` (frontend, and everywhere in the app
+  that gates a button/route on "can I do X on this team")**: reads
+  `TeamWithPermissions.permissions` (`_get_team_permissions_for_user`), a resolved
+  capability list already computed by unioning `has_permission` across every relation
+  the caller holds. **Zero change** — this was already multi-role-safe by construction.
+- **`import_export/stats.py`'s platform-wide per-team admin/editor/analyst/member
+  counts**: stays a strict partition, one column per member, using the same
+  priority-fallback (`admin` > `editor` > `analyst` > `member`) `_get_user_role_in_team`
+  used to compute today, so the columns keep summing to `total_members` and the
+  platform-data admin page's meaning does not change. The full, cumulative role set
+  per member remains visible in the team's own member-management table (`§37` next
+  bullet) — the platform-wide aggregate deliberately stays a simplified one-row-per-
+  person view.
+- **`TeamSettingsMembersTable.tsx` (team member management UI)**: the single-select
+  role dropdown per row becomes a set of independently togglable roles (one control per
+  `team_admin`/`team_editor`/`team_analyst`, each gated by its own
+  `can_administer_{admins,editors,analysts}` exactly as today), plus the implicit
+  `team_member` baseline. Roster sort order uses the highest-priority role held (same
+  `ROLE_PRIORITY` table, applied to the max over the held set instead of a single
+  value).
+- **`cli/main.py`'s member-listing table**: cosmetic — the `relation` column becomes a
+  joined list of held roles.
+
+## 38. Non-goals (explicit, to prevent scope creep during implementation)
+
+- No cap or warning on how many people hold a given role on one team.
+- No change to `can_update_resources`/`can_update_agents`/`can_manage_team_governance`
+  -equivalent capability definitions — the orthogonal *capability* split from `§26`
+  stands; only the one-role-per-user restriction is lifted.
+- No change to `§32`'s registry-governance capabilities
+  (`can_list_all_teams`/`can_delete_team`/`can_rescue_team_admin`) or their guards.
+- No bulk "set my roles to [...]" endpoint — grant/revoke stays one explicit role at a
+  time, so every change remains individually permission-checked and logged.
+
+## 39. Validation plan for this part
+
+Full regression, not incremental: `make clean` / `make test` / `make code-quality` in
+every touched project (`libs/fred-core`, `apps/control-plane-backend`,
+`apps/frontend`), then `fred-deployment-factory`'s `make validation-report` against the
+live stack, then a manual/self-test UI pass per persona — including two new
+deployment-factory test profiles seeded with combined `team_admin`+`team_editor`+
+`team_analyst` roles in `fredlab`, specifically to exercise this part. Results recorded
+in `docs/swift/platform/authz-endpoint-matrix.yaml` (endpoint-level) and a new,
+dedicated test-campaign registry (persona/scenario-level OK/KO), not only in
+`NOTES-AUTHZ05-REVIEW.md` prose.
 
 ---
 

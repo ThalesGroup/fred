@@ -7,113 +7,49 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > model described below, and how that layer is tested.
 
 > [!IMPORTANT]
-> **Frequent deployment pitfall:**
-> Keycloak app roles (`admin`/`editor`/`viewer`) no longer exist as of AUTHZ-05 review
-> item 8a — Keycloak is identity-only. Team rights (`team_admin`/`team_editor`/
-> `team_analyst`/`team_member`) and platform roles (`platform_admin`/`platform_observer`)
-> are ReBAC relations stored in OpenFGA, never derived from Keycloak roles or groups.
-> Team resource updates require team relations (`team_editor` or `team_admin`) and are
-> not automatically granted by any platform role.
-> In production, bootstrap team roles through the platform-admin-gated team-bootstrap endpoint (see below), not a Keycloak role.
-
-> [!IMPORTANT]
-> **AUTHZ-05 update (2026-07-09, two passes):** `team.owner` used to silently include
-> `admin from organization` — any Keycloak `admin` was an implicit owner of every
-> team. That was a live escalation bug; it has been removed (see
-> [FRED-AUTHORIZATION-TARGET-MODEL-RFC §24.2](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md#242-escalation-fix-21--new-item-not-in-the-original-six)).
-> A first attempt at a "deliberate exception" (platform_admin reaching
-> `can_administer_owners`/`can_administer_managers`) was tried and **reverted the
-> same day** — PR #1957 review found it was the same escalation through a
-> different door, since OpenFGA cannot express "only if this team has no owner
-> yet" (RFC §24.7). **`platform_admin` carries no team relation of any kind,
-> full stop** — not even for team creation. Team creation and the first
-> `team_admin` grant are instead a distinct, one-shot, platform-admin-gated
-> **bootstrap action** (`POST /teams`, RFC §28), not an implicit relation.
-> Team roles were also renamed in the second pass: `owner`→`team_admin`,
-> `manager`→`team_editor`, plus a new `team_analyst` role — see RFC §26.
-> The organization-level content bypass found in the first pass
-> (`can_read_content`/`can_process_content` were organization-scoped, not
-> team-scoped, across most of knowledge-flow-backend) is now fixed for every
-> call site where team-scoping is mechanically meaningful — RFC §27.
-
-> [!IMPORTANT]
-> **AUTHZ-05 review item 8a (2026-07-10):** the legacy Keycloak `admin`/`editor`/
-> `viewer` organization relations are removed from `schema.fga` entirely — Keycloak
-> is now identity-only, with no role bridge of any kind. The five admin-tier
-> capabilities they used to satisfy (`can_administer_users`, `can_manage_platform`,
-> `can_run_benchmark`, `can_edit_agent_class_path`, `can_read_kpi_global`) are
-> `platform_admin`-only now. The seven "any connected user" capabilities they used
-> to satisfy (`can_read_content`, `can_process_content`, `can_create_agent`,
-> `can_read_kpi`, `can_read_logs`, `can_read_metrics`, `can_read_opensearch`) never
-> protected anything specific — they are removed outright, not replaced by another
-> relation; the corresponding endpoints rely on authentication alone (see RFC Part 6
-> §29-32).
-
-> [!IMPORTANT]
-> **AUTHZ-05 review item 9 (2026-07-10): teams are no longer Keycloak groups.**
-> A team is now purely a `team_metadata` row (id, name) plus its OpenFGA relations.
-> Keycloak manages user accounts (login, JWT, stable `sub`) and nothing about teams
-> — no root group, no group membership, no group CRUD. `POST /teams` generates a
-> fresh `uuid4().hex` id and writes the metadata row directly; membership reads go
-> through `team_member` (already covering `team_admin`/`team_editor`/`team_analyst`
-> via the schema's union relation) instead of a Keycloak group-member fetch. Three
-> new platform-admin-gated, registry-only capabilities exist alongside
-> `can_create_team` (RFC Part 6 §32): `can_list_all_teams` (`GET /teams/all`),
-> `can_delete_team` (`DELETE /teams/{team_id}`), and `can_rescue_team_admin`
-> (`POST /teams/{team_id}/rescue-admin`) — the last one writes a `team_admin` tuple
-> **only if the team currently has zero `team_admin`**, the guard that keeps it from
-> being the same escalation as the reverted `§24.7` attempt. Translating
-> already-existing, already-live Keycloak-group-backed teams onto this model is a
-> distinct, separately tracked operational concern (RFC §29) — out of scope for a
-> fresh deployment with zero pre-existing teams.
-
-> [!IMPORTANT]
-> **AUTHZ-05 review item 16 (2026-07-11): `can_read_kpi_global` retired, folded into
-> `can_observe_platform`.** Item 8a's admin-tier list above included
-> `can_read_kpi_global` (platform_admin-only) as a separate relation from
-> `can_observe_platform` (platform_observer, unions in platform_admin) — the RFC's
-> target vocabulary (§6.1) only ever defined one relation for cross-user /
-> platform-wide KPI observation. `can_read_kpi_global` was legacy carryover
-> (`Action.READ_GLOBAL`) never actually asked for by the RFC; keeping it separate
-> meant `platform_observer` alone couldn't reach the control-plane Analytics presets
-> (`/admin/analytics`), even though product intent is for `platform_admin` and
-> `platform_observer` to see the same platform-wide recap today. `can_read_kpi_global`
-> is removed from `schema.fga`; the 10 Analytics preset endpoints and the standalone
-> KPI dashboard (`/monitoring/kpis`) now both check `can_observe_platform`. When the
-> Analytics dashboard grows admin-only technical panels, gate those specific widgets
-> on a new, narrower capability — don't reintroduce this split for the whole page.
+> **Keycloak authenticates, Fred/OpenFGA authorizes — no exceptions.** Keycloak
+> app roles (`admin`/`editor`/`viewer`) do not exist. Keycloak manages only user
+> accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
+> Every platform role (`platform_admin`/`platform_observer`) and every team role
+> (`team_admin`/`team_editor`/`team_analyst`/`team_member`) is a stored OpenFGA
+> relation, granted through config-seeded bootstrap or an explicit in-product
+> action — never derived from a Keycloak role, group, or claim. A `platform_admin`
+> carries no team relation of any kind, ever, for any purpose — not even to
+> create a team's first admin, which goes through the one-shot bootstrap
+> endpoint below, not an implicit relation.
 
 ## Business View In 90 Seconds
 
 Use this mental model first:
 
-1. Every authenticated user can use the platform (there is no separate "global role" gating basic use — see item 8a).
-2. Each person also has a **team role** inside each team.
-3. To create, edit, or delete team content (for example a library), the **team role** is what matters.
-4. A `platform_admin` can still be blocked in a team if they are not team editor or team admin there — platform roles carry no team access.
-5. Every team's first `team_admin` is granted through the platform-admin-gated bootstrap endpoint at team creation; there is no automatic assignment after that.
+1. Every authenticated user can use the platform — there is no separate "global role" gating basic use.
+2. Each person also has zero or more **team roles**, per team — a person may hold several roles on the same team at once (e.g. a small team's sole admin who is also its editor and evaluator).
+3. To create, edit, or delete team content (for example a library), the **team role** is what matters — a platform role never substitutes for it.
+4. A `platform_admin` can still be blocked in a team if they hold no team role there.
+5. Every team's first `team_admin` is granted through the platform-admin-gated bootstrap endpoint at team creation; there is no automatic assignment after that, and no path to a team with zero admins.
 
 Concrete examples:
 
-1. Alice is `platform_admin` but only team member in Thales: she can access the app, but cannot create a library in Thales.
+1. Alice is `platform_admin` but only a team member in Thales: she can access the app, but cannot create a library in Thales.
 2. Bob is team editor in Northbridge: he can create/update libraries in Northbridge.
 3. Phil is team member in Swiftpost: he can consult shared content but cannot manage team content.
-4. A newly created team always has at least one `team_admin`, set at creation time by the bootstrap endpoint — there is no path to a team with zero admins.
+4. Sophia is both `team_admin` and `team_editor` of Fredlab (a small team, one person wearing both hats): she governs membership **and** edits content there — each role was granted to her independently.
 
 ## Technical Summary In 90 Seconds
 
 1. **Identity source**: Keycloak manages user accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
-2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations in OpenFGA, stored tuples only, granted via config-seeded bootstrap or explicit admin action — never derived from Keycloak roles or groups.
-3. **Team/resource rights (ReBAC)**: `team_admin` / `team_editor` / `team_analyst` / `team_member` are relations in OpenFGA and control team-scoped operations.
-4. **Bridge object**: Fred uses one organization object (`organization:fred`) for global role context, without implicit team privilege escalation.
-5. **Deployment rule**: a team's first `team_admin` comes from the bootstrap endpoint at team creation, not from Keycloak roles or post-install scripts guessing at ownership.
+2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations on `organization:fred`, stored tuples only, granted via config-seeded bootstrap or explicit admin action.
+3. **Team roles (ReBAC)**: `team_admin` / `team_editor` / `team_analyst` / `team_member` are relations on each `team:<id>`. A person may hold more than one simultaneously — each is granted/revoked as its own independent action, never a bulk replace.
+4. **Team registry**: a team is a `team_metadata` row (id, name) plus its OpenFGA relations — nothing about a team lives in Keycloak.
+5. **Bridge object**: Fred uses one organization object (`organization:fred`) for platform-wide context, without implicit team privilege escalation.
+6. **Deployment rule**: a team's first `team_admin` comes from the bootstrap endpoint at team creation, never from Keycloak roles or a post-install script guessing at ownership.
 
 Enabling it allows to;
 
 - Enforce private libraries by default and explicitly share with collaborators.
-- Express more than role checks (e.g.,a user or group “owner”/“member”/“viewer” on a specific library).
+- Express more than role checks (e.g., a user or group "owner"/"member"/"viewer" on a specific library).
 
-Without ReBAC, all resources (like librairies and documents) are public (all users can view, edit, delete... them).
+Without ReBAC, all resources (like libraries and documents) are public (all users can view, edit, delete... them).
 
 ---
 
@@ -126,12 +62,24 @@ mechanism is described in the sections that follow.
 ### Team bootstrap — platform admin, one-shot only
 
 Team creation is not a team relation at all — it is a distinct, one-shot,
-platform-admin-gated action, `POST /teams { name, initial_team_admin_ids }`
-(RFC §28). `platform_admin` does not become a team relation of any kind by
-performing this action; it writes explicit `team_admin` tuples for exactly the
-subjects named in the request. The endpoint 409s if the team already exists,
-so it cannot be reused to change an existing team's admins — that path stays
-gated on the team's own `team_admin`(s), never on `platform_admin`.
+platform-admin-gated action, `POST /teams { name, initial_team_admin_ids }`.
+`platform_admin` does not become a team relation of any kind by performing this
+action; it writes explicit `team_admin` tuples for exactly the subjects named
+in the request. The endpoint 409s if the team already exists, so it cannot be
+reused to change an existing team's admins — that path stays gated on the
+team's own `team_admin`(s), never on `platform_admin`.
+
+### Team roles are cumulative, not exclusive
+
+A person may hold `team_admin`, `team_editor`, and `team_analyst` on the same
+team at the same time — common on small teams where one person governs, edits
+content, and evaluates. Nothing in the OpenFGA schema enforces exclusivity;
+each role is an independent stored relation. Each grant and each revoke is its
+own explicit, individually permission-checked action (`POST
+/teams/{team_id}/members/{user_id}/roles`, `DELETE
+/teams/{team_id}/members/{user_id}/roles/{relation}`) — never a bulk "replace
+the role set" call. Revoking a member's only remaining role is refused (use
+`DELETE /teams/{team_id}/members/{user_id}` to remove them entirely instead).
 
 ### Team admin — team `team_admin`
 
@@ -145,7 +93,8 @@ Can:
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
 
-Cannot:
+Cannot (unless also separately granted `team_editor`/`team_analyst` — see
+above):
 
 - create, edit, or delete agent instances
 - create, edit, or delete shared or personal prompts
@@ -164,7 +113,7 @@ Can:
 - add, update, move, and remove team corpus resources
 - read `TeamPlatformPolicy` as a constraint — not editable
 
-Cannot:
+Cannot (unless also separately granted `team_admin`):
 
 - modify `TeamPlatformPolicy`
 - create teams or assign team roles
@@ -179,12 +128,15 @@ Can:
 - create and run evaluation campaigns; manage evaluation corpora
 - access the limited conversation slices required for evaluation datasets
 
-Cannot:
+Cannot (unless also separately granted `team_admin`/`team_editor`):
 
 - manage all corpus resources, change governance settings, or administer team
   membership
 
 ### Team member — team `team_member`
+
+The implicit baseline: automatic for anyone holding any role above, or
+granted directly to someone with no elevated role.
 
 Can:
 
@@ -195,6 +147,31 @@ Can:
 Cannot:
 
 - configure any team-wide setting, policy, or shared resource
+
+### Team registry governance — platform admin, existence only
+
+Three narrow, `platform_admin`-only capabilities govern the team *registry*
+(which teams exist) — none of them grant access to a team's data:
+
+- **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
+  regardless of the caller's own membership.
+- **`can_delete_team`** → `DELETE /teams/{team_id}`: deletes the registry row
+  and every relation referencing that team.
+- **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants
+  `team_admin` to a named user, **only if the team currently has zero
+  `team_admin`** — mechanically inert against any team with an active admin.
+  Never generalize this into "platform_admin can reassign any team's admin at
+  any time" — that is a live escalation, not a rescue.
+
+### Platform observability — `can_observe_platform`
+
+The one relation for cross-user / platform-wide KPI observation — granted to
+`platform_observer` (which unions in `platform_admin`). Gates both the
+standalone KPI dashboard and the control-plane Analytics presets: today
+`platform_admin` and `platform_observer` see the same platform-wide recap.
+When the Analytics surface grows admin-only technical panels, gate those
+specific widgets on a new, narrower capability — don't split platform-wide
+observation into two relations again.
 
 ### Deployment admin
 
@@ -207,14 +184,18 @@ write must pass explicit team-scoped authorization.
 
 ### Hard cross-write rule
 
-The `team_admin` and `team_editor` roles are **orthogonal on the business
-surface**, not hierarchical.
+`team_admin` and `team_editor` grant **orthogonal capabilities**, not
+hierarchical ones — holding one does not imply the other's authority.
 
-- A `team_admin` has full authority over governance and zero authority over
-  agents, prompts, and routing policy.
-- A `team_editor` has full authority over agents, prompts, routing policy, and
-  corpus content, and zero authority over platform guardrails.
-- Neither role grants implicit access to the other's surfaces.
+- The `team_admin` role's authority covers governance only: zero authority
+  over agents, prompts, and routing policy unless `team_editor` is also
+  separately held.
+- The `team_editor` role's authority covers agents, prompts, routing policy,
+  and corpus content only: zero authority over platform guardrails unless
+  `team_admin` is also separately held.
+- A person may hold both (see "Team roles are cumulative" above) — but each
+  role's authority still only reaches its own surface. Holding both is two
+  separate grants, not a merged super-role.
 
 There is no exception for team creation or first-admin assignment: that is the
 bootstrap endpoint above, not a relation any role holds.
@@ -249,7 +230,7 @@ Fred uses a singleton organization node in ReBAC:
 
 How it works:
 
-1. Platform roles are explicit stored tuples on `organization:fred`, granted via config-seeded bootstrap (`platform_admin_subjects`) or explicit admin action — never derived from the Keycloak token (AUTHZ-05 review item 8a removed the last Keycloak-role-derived contextual relation).
+1. Platform roles are explicit stored tuples on `organization:fred`, granted via config-seeded bootstrap (`platform_admin_subjects`/`platform_observer_subjects`) or explicit admin action — never derived from the Keycloak token.
 2. Team checks rely on persistent tuples linking teams to the organization:
    - `organization:fred#organization@team:<team_id>`
 3. Team permissions still require explicit team relations (`team_admin`/`team_editor`/`team_analyst`/`team_member`) for the target team.
@@ -293,6 +274,6 @@ security:
     headers:
       # Optional static headers sent to OpenFGA
       X-Custom-Header: "value"
-    platform_admin_subjects: [] # AUTHZ-05: Keycloak `sub` values granted `platform_admin` at startup, idempotently
-    platform_observer_subjects: [] # AUTHZ-05: Keycloak `sub` values granted `platform_observer` at startup
+    platform_admin_subjects: [] # Keycloak `sub` values granted `platform_admin` at startup, idempotently
+    platform_observer_subjects: [] # Keycloak `sub` values granted `platform_observer` at startup
 ```

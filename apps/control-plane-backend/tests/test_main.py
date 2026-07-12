@@ -4424,17 +4424,17 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     fake_rebac = _FakeRebac()
     fake_queue = _FakeQueueStore()
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
         from control_plane_backend.teams.schemas import UserTeamRelation
 
-        return UserTeamRelation.TEAM_MEMBER
+        return {UserTeamRelation.TEAM_MEMBER}
 
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         return TeamMetadata(id=TeamId("swiftpost"), name="SwiftPost"), None
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
@@ -4525,10 +4525,10 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     fake_session_store = _FakeSessionStore()
     fake_queue_store = _FakeQueueStore()
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
         from control_plane_backend.teams.schemas import UserTeamRelation
 
-        return UserTeamRelation.TEAM_MEMBER
+        return {UserTeamRelation.TEAM_MEMBER}
 
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         return TeamMetadata(id=TeamId("temp-lab"), name="Temp Lab"), None
@@ -4570,8 +4570,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         lambda *_args, **_kwargs: fake_team_deps,
     )
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
@@ -4641,13 +4641,15 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
 
 
 @pytest.mark.asyncio
-async def test_update_team_member_blocks_last_admin_demotion(
+async def test_revoke_team_member_role_blocks_last_admin_demotion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """AUTHZ-06 (RFC Part 7 §35): revoking `team_admin` from the sole admin is
+    blocked the same way the old single-role PATCH used to be."""
     from control_plane_backend.teams.schemas import UserTeamRelation
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
-        return UserTeamRelation.TEAM_ADMIN
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
+        return {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.TEAM_EDITOR}
 
     async def _fake_get_team_users_by_relation(
         _rebac,
@@ -4659,8 +4661,8 @@ async def test_update_team_member_blocks_last_admin_demotion(
         return set()
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
@@ -4671,9 +4673,8 @@ async def test_update_team_member_blocks_last_admin_demotion(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.patch(
-            "/control-plane/v1/teams/thales/members/user-001",
-            json={"relation": "team_editor"},
+        resp = await client.delete(
+            "/control-plane/v1/teams/thales/members/user-001/roles/team_admin",
         )
 
     assert resp.status_code == 409
@@ -4689,8 +4690,8 @@ async def test_remove_team_member_blocks_removing_last_admin(
 ) -> None:
     from control_plane_backend.teams.schemas import UserTeamRelation
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
-        return UserTeamRelation.TEAM_ADMIN
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
+        return {UserTeamRelation.TEAM_ADMIN}
 
     async def _fake_get_team_users_by_relation(
         _rebac,
@@ -4702,8 +4703,8 @@ async def test_remove_team_member_blocks_removing_last_admin(
         return set()
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
@@ -7205,7 +7206,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
         return [
             TeamMember(
                 user=UserSummary(id=f"admin-of-{team_id}"),
-                relation=UserTeamRelation.TEAM_ADMIN,
+                relations=[UserTeamRelation.TEAM_ADMIN],
             )
         ]
 

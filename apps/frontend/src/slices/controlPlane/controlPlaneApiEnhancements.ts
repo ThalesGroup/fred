@@ -113,7 +113,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
-    updateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatch: {
+    grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
@@ -140,7 +147,9 @@ export const {
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
-  useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation: useUpdateTeamMemberMutation,
+  useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation: useGrantTeamMemberRoleMutation,
+  useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation:
+    useRevokeTeamMemberRoleMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation: useRemoveTeamMemberMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,

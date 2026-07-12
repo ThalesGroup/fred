@@ -13,6 +13,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
     CreateTeamRequest,
+    GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
     RetentionUpdateError,
@@ -20,11 +21,13 @@ from control_plane_backend.teams.schemas import (
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
+    TeamMemberLastRoleError,
+    TeamMemberRoleNotHeldError,
     TeamNotFoundError,
     TeamRescueNotOrphanedError,
     TeamWithPermissions,
-    UpdateTeamMemberRequest,
     UpdateTeamRequest,
+    UserTeamRelation,
 )
 from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
@@ -33,6 +36,9 @@ from control_plane_backend.teams.service import create_team as create_team_from_
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
+)
+from control_plane_backend.teams.service import (
+    grant_team_member_role as grant_team_member_role_from_service,
 )
 from control_plane_backend.teams.service import (
     list_all_teams_for_registry as list_all_teams_from_service,
@@ -47,10 +53,10 @@ from control_plane_backend.teams.service import (
 from control_plane_backend.teams.service import (
     rescue_team_admin as rescue_team_admin_from_service,
 )
-from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
-    update_team_member as update_team_member_from_service,
+    revoke_team_member_role as revoke_team_member_role_from_service,
 )
+from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
     upload_team_banner as upload_team_banner_from_service,
 )
@@ -108,6 +114,20 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: RetentionUpdateError,
     ) -> JSONResponse:
         return JSONResponse(status_code=exc.http_status, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamMemberRoleNotHeldError)
+    async def team_member_role_not_held_handler(
+        _request,
+        exc: TeamMemberRoleNotHeldError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamMemberLastRoleError)
+    async def team_member_last_role_handler(
+        _request,
+        exc: TeamMemberLastRoleError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @router.get(
@@ -268,16 +288,39 @@ async def remove_team_member(
     return await remove_team_member_from_service(user, team_id, user_id, deps)
 
 
-@router.patch(
-    "/teams/{team_id}/members/{user_id}",
+@router.post(
+    "/teams/{team_id}/members/{user_id}/roles",
     status_code=204,
-    summary="Update a team member role",
+    summary="Grant one additional team role to an existing member",
 )
-async def update_team_member(
+async def grant_team_member_role(
     team_id: Annotated[TeamId, Path()],
     user_id: Annotated[str, Path(min_length=1)],
-    request: UpdateTeamMemberRequest,
+    request: GrantTeamMemberRoleRequest,
     deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await update_team_member_from_service(user, team_id, user_id, request, deps)
+    """AUTHZ-06 (RFC Part 7 §34): a member may hold `team_admin`, `team_editor`,
+    and `team_analyst` simultaneously on the same team — each role is granted
+    as its own explicit, independently permission-checked action, never a
+    bulk role-set replace."""
+    await grant_team_member_role_from_service(user, team_id, user_id, request, deps)
+
+
+@router.delete(
+    "/teams/{team_id}/members/{user_id}/roles/{relation}",
+    status_code=204,
+    summary="Revoke one team role from an existing member",
+)
+async def revoke_team_member_role(
+    team_id: Annotated[TeamId, Path()],
+    user_id: Annotated[str, Path(min_length=1)],
+    relation: Annotated[UserTeamRelation, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """AUTHZ-06 (RFC Part 7 §34-35): revokes exactly one role, leaving any
+    other role the member holds untouched. Revoking a member's only
+    remaining role is refused (`TeamMemberLastRoleError`, 409) — use
+    `DELETE /teams/{team_id}/members/{user_id}` to remove a member entirely."""
+    await revoke_team_member_role_from_service(user, team_id, user_id, relation, deps)

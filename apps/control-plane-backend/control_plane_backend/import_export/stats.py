@@ -118,12 +118,22 @@ async def compute_platform_stats(
             )
             members = []
 
-        admins = sum(1 for m in members if m.relation == UserTeamRelation.TEAM_ADMIN)
-        editors = sum(1 for m in members if m.relation == UserTeamRelation.TEAM_EDITOR)
-        analysts = sum(
-            1 for m in members if m.relation == UserTeamRelation.TEAM_ANALYST
+        # AUTHZ-06 (RFC Part 7 §37): a member may hold several roles at once —
+        # this platform-wide aggregate stays a strict partition (one column
+        # per member, summing to total_members) by counting each member under
+        # their primary role only (`relations[0]`, already priority-ordered
+        # admin > editor > analyst > member by `_list_team_members`). The full
+        # set of roles a member holds remains visible in the team's own
+        # member-management table, not diluted here.
+        primary_roles = [m.relations[0] for m in members]
+        admins = sum(1 for role in primary_roles if role == UserTeamRelation.TEAM_ADMIN)
+        editors = sum(
+            1 for role in primary_roles if role == UserTeamRelation.TEAM_EDITOR
         )
-        plain = sum(1 for m in members if m.relation == UserTeamRelation.TEAM_MEMBER)
+        analysts = sum(
+            1 for role in primary_roles if role == UserTeamRelation.TEAM_ANALYST
+        )
+        plain = sum(1 for role in primary_roles if role == UserTeamRelation.TEAM_MEMBER)
         for m in members:
             distinct_users.add(m.user.id)
 

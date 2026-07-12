@@ -37,6 +37,37 @@ class TeamAdminConstraintError(Exception):
         super().__init__(detail)
 
 
+class TeamMemberRoleNotHeldError(Exception):
+    """AUTHZ-06 (RFC Part 7 §35): raised when revoking a role the member does
+    not currently hold — nothing to revoke."""
+
+    def __init__(self, team_id: TeamId, user_id: str, relation: UserTeamRelation):
+        self.team_id = team_id
+        self.user_id = user_id
+        self.relation = relation
+        super().__init__(
+            f"User '{user_id}' does not hold '{relation.value}' on team "
+            f"'{team_id}'; nothing to revoke."
+        )
+
+
+class TeamMemberLastRoleError(Exception):
+    """AUTHZ-06 (RFC Part 7 §35): raised when revoking a role would leave the
+    member with none. Revoking a role is a distinct, deliberately narrower
+    action than removing a member — silently emptying someone's last role
+    would be a removal in disguise. Use `remove_team_member` instead."""
+
+    def __init__(self, team_id: TeamId, user_id: str, relation: UserTeamRelation):
+        self.team_id = team_id
+        self.user_id = user_id
+        self.relation = relation
+        super().__init__(
+            f"'{relation.value}' is the only role user '{user_id}' holds on "
+            f"team '{team_id}'; revoking it would silently remove them from "
+            "the team. Use remove_team_member instead."
+        )
+
+
 class TeamAlreadyExistsError(Exception):
     """Raised when team creation collides with an existing Keycloak group name."""
 
@@ -143,7 +174,10 @@ class UserTeamRelation(str, Enum):
 
 class TeamMember(BaseModel):
     type: Literal["user"] = "user"
-    relation: UserTeamRelation
+    # AUTHZ-06 (RFC Part 7 §36): a member may hold more than one team role
+    # simultaneously (e.g. team_admin + team_editor + team_analyst on a small
+    # team) — this is the full set currently held, not a single "primary" role.
+    relations: list[UserTeamRelation]
     user: UserSummary
 
 
@@ -174,7 +208,11 @@ class AddTeamMemberRequest(BaseModel):
     relation: UserTeamRelation
 
 
-class UpdateTeamMemberRequest(BaseModel):
+class GrantTeamMemberRoleRequest(BaseModel):
+    """AUTHZ-06 (RFC Part 7 §34): grants exactly one additional role to an
+    existing member — never a bulk role-set replace. See
+    `POST /teams/{team_id}/members/{user_id}/roles`."""
+
     relation: UserTeamRelation
 
 

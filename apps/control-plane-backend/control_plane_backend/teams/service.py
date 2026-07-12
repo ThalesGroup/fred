@@ -46,6 +46,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
     CreateTeamRequest,
+    GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RetentionFieldView,
     RetentionUpdateError,
@@ -53,11 +54,12 @@ from control_plane_backend.teams.schemas import (
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
+    TeamMemberLastRoleError,
+    TeamMemberRoleNotHeldError,
     TeamNotFoundError,
     TeamRescueNotOrphanedError,
     TeamRetentionView,
     TeamWithPermissions,
-    UpdateTeamMemberRequest,
     UpdateTeamRequest,
     UserTeamRelation,
 )
@@ -739,15 +741,20 @@ async def _list_team_members(
     team_members: list[TeamMember] = []
     for member_id in member_ids:
         user_summary = user_summaries.get(member_id) or UserSummary(id=member_id)
-        if member_id in admin_ids:
-            relation = UserTeamRelation.TEAM_ADMIN
-        elif member_id in editor_ids:
-            relation = UserTeamRelation.TEAM_EDITOR
-        elif member_id in analyst_ids:
-            relation = UserTeamRelation.TEAM_ANALYST
-        else:
-            relation = UserTeamRelation.TEAM_MEMBER
-        team_members.append(TeamMember(user=user_summary, relation=relation))
+        # AUTHZ-06 (RFC Part 7 §37): the full set of roles this member holds,
+        # not a single "primary" one — a member may hold several at once.
+        relations = [
+            relation
+            for relation, ids in (
+                (UserTeamRelation.TEAM_ADMIN, admin_ids),
+                (UserTeamRelation.TEAM_EDITOR, editor_ids),
+                (UserTeamRelation.TEAM_ANALYST, analyst_ids),
+            )
+            if member_id in ids
+        ]
+        if not relations:
+            relations = [UserTeamRelation.TEAM_MEMBER]
+        team_members.append(TeamMember(user=user_summary, relations=relations))
 
     return team_members
 
@@ -816,21 +823,28 @@ async def remove_team_member(
     """
     rebac = deps.rebac
 
-    target_role = await _get_user_role_in_team(rebac, team_id, user_id)
-    await _ensure_team_keeps_at_least_one_admin(
-        rebac=rebac,
-        team_id=team_id,
-        user_id=user_id,
-        current_role=target_role,
-        wanted_role=None,
-    )
-    permission_to_check = _get_administer_permission_for_team_role_relation(target_role)
+    # AUTHZ-06 (RFC Part 7 §35): a member may hold several roles at once — a
+    # full removal must be checked against every one of them, not just a
+    # single "primary" role, and the last-admin guard applies whenever
+    # team_admin is among them.
+    target_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+    if UserTeamRelation.TEAM_ADMIN in target_roles:
+        await _ensure_team_keeps_at_least_one_admin(
+            rebac=rebac,
+            team_id=team_id,
+            user_id=user_id,
+            revoked_role=UserTeamRelation.TEAM_ADMIN,
+        )
+    permissions_to_check = [
+        _get_administer_permission_for_team_role_relation(role)
+        for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
+    ]
 
     await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
-        [permission_to_check],
+        permissions_to_check,
         deps,
     )
     await _remove_all_team_member_relations(rebac, team_id, user_id)
@@ -895,57 +909,105 @@ async def _run_lifecycle_if_in_memory_scheduler(
     )
 
 
-async def update_team_member(
+async def grant_team_member_role(
     user: KeycloakUser,
     team_id: TeamId,
     user_id: str,
-    request: UpdateTeamMemberRequest,
+    request: GrantTeamMemberRoleRequest,
     deps: TeamServiceDependencies,
 ) -> None:
     """
-    Change one team member role while enforcing admin-safety constraints.
+    Grant one additional team role to an existing member (AUTHZ-06, RFC Part 7 §34).
 
     Why this function exists:
-    - role updates must check both the current and target permissions while
-      preserving the invariant that a team always keeps at least one team_admin
+    - a member may hold more than one team role simultaneously (e.g. a small
+      team's sole team_admin who is also its team_editor and team_analyst) —
+      granting is always one explicit, independently permission-checked role
+      at a time, never a bulk role-set replace, so every change stays
+      individually auditable
 
     How to use it:
-    - call from the team-membership PATCH route
+    - call from the team-membership role-grant route
     - pass request-scoped dependencies when available
 
     Example:
-    - `await update_team_member(user, TeamId("fredlab"), "user-1", request, deps)`
+    - `await grant_team_member_role(user, TeamId("fredlab"), "user-1", request, deps)`
     """
     rebac = deps.rebac
 
-    target_current_role = await _get_user_role_in_team(rebac, team_id, user_id)
-    target_wanted_role = request.relation
-    await _ensure_team_keeps_at_least_one_admin(
-        rebac=rebac,
-        team_id=team_id,
-        user_id=user_id,
-        current_role=target_current_role,
-        wanted_role=target_wanted_role,
+    permission_to_check = _get_administer_permission_for_team_role_relation(
+        request.relation
     )
-    permissions_to_check = [
-        _get_administer_permission_for_team_role_relation(target_current_role),
-        _get_administer_permission_for_team_role_relation(target_wanted_role),
-    ]
-
     await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
-        permissions_to_check,
+        [permission_to_check],
         deps,
     )
-    await _remove_all_team_member_relations(rebac, team_id, user_id)
     await _add_team_member_relation(rebac, team_id, user_id, request.relation)
 
     logger.info(
-        "Updated user %s relation to %s in team %s",
-        user_id,
+        "Granted role %s to user %s on team %s",
         request.relation.value,
+        user_id,
+        team_id,
+    )
+
+
+async def revoke_team_member_role(
+    user: KeycloakUser,
+    team_id: TeamId,
+    user_id: str,
+    relation: UserTeamRelation,
+    deps: TeamServiceDependencies,
+) -> None:
+    """
+    Revoke one team role from an existing member, leaving any other roles they
+    hold untouched (AUTHZ-06, RFC Part 7 §34-35).
+
+    Why this function exists:
+    - the inverse of `grant_team_member_role`; revoking a member's only
+      remaining role is refused (`TeamMemberLastRoleError`) — that is a
+      removal, not a role change, and must go through `remove_team_member` so
+      the two stay distinct, explicit, auditable actions
+
+    How to use it:
+    - call from the team-membership role-revoke route
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `await revoke_team_member_role(user, TeamId("fredlab"), "user-1", UserTeamRelation.TEAM_EDITOR, deps)`
+    """
+    rebac = deps.rebac
+
+    current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+    if relation not in current_roles:
+        raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
+    if current_roles == {relation}:
+        raise TeamMemberLastRoleError(team_id, user_id, relation)
+
+    if relation == UserTeamRelation.TEAM_ADMIN:
+        await _ensure_team_keeps_at_least_one_admin(
+            rebac=rebac,
+            team_id=team_id,
+            user_id=user_id,
+            revoked_role=relation,
+        )
+    permission_to_check = _get_administer_permission_for_team_role_relation(relation)
+    await _validate_team_and_check_permission(
+        user,
+        team_id,
+        rebac,
+        [permission_to_check],
+        deps,
+    )
+    await _remove_team_member_relation(rebac, team_id, user_id, relation)
+
+    logger.info(
+        "Revoked role %s from user %s on team %s",
+        relation.value,
+        user_id,
         team_id,
     )
 
@@ -1206,23 +1268,55 @@ def _get_administer_permission_for_team_role_relation(
     return TeamPermission.CAN_ADMINISTER_MEMBERS
 
 
-async def _get_user_role_in_team(
+async def _get_user_roles_in_team(
     rebac: RebacEngine,
     team_id: TeamId,
     user_id: str,
-) -> UserTeamRelation:
-    admin_ids, editor_ids, analyst_ids = await asyncio.gather(
+) -> set[UserTeamRelation]:
+    """AUTHZ-06 (RFC Part 7 §35): the full set of roles `user_id` currently
+    holds on `team_id` — a member may hold several simultaneously (e.g.
+    `team_admin` and `team_editor` at once). Falls back to `{TEAM_MEMBER}`
+    when none of the three elevated roles apply but the user is still a
+    team member through the base relation."""
+    admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
+        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER),
     )
-    if user_id in admin_ids:
-        return UserTeamRelation.TEAM_ADMIN
-    if user_id in editor_ids:
-        return UserTeamRelation.TEAM_EDITOR
-    if user_id in analyst_ids:
-        return UserTeamRelation.TEAM_ANALYST
-    return UserTeamRelation.TEAM_MEMBER
+    roles = {
+        relation
+        for relation, ids in (
+            (UserTeamRelation.TEAM_ADMIN, admin_ids),
+            (UserTeamRelation.TEAM_EDITOR, editor_ids),
+            (UserTeamRelation.TEAM_ANALYST, analyst_ids),
+        )
+        if user_id in ids
+    }
+    if not roles and user_id in member_ids:
+        roles.add(UserTeamRelation.TEAM_MEMBER)
+    return roles
+
+
+async def _remove_team_member_relation(
+    rebac: RebacEngine,
+    team_id: TeamId,
+    user_id: str,
+    relation: UserTeamRelation,
+) -> None:
+    """AUTHZ-06 (RFC Part 7 §35): revoke exactly one role, mirroring
+    `_add_team_member_relation` — leaves any other role the member holds
+    untouched. Unlike `_remove_all_team_member_relations`, this is not a full
+    member removal."""
+    await rebac.delete_relations(
+        [
+            Relation(
+                subject=RebacReference(Resource.USER, user_id),
+                relation=relation.to_relation(),
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        ]
+    )
 
 
 async def _remove_all_team_member_relations(
@@ -1261,13 +1355,13 @@ async def _ensure_team_keeps_at_least_one_admin(
     rebac: RebacEngine,
     team_id: TeamId,
     user_id: str,
-    current_role: UserTeamRelation,
-    wanted_role: UserTeamRelation | None,
+    revoked_role: UserTeamRelation,
 ) -> None:
-    is_admin_demotion_or_removal = current_role == UserTeamRelation.TEAM_ADMIN and (
-        wanted_role is None or wanted_role != UserTeamRelation.TEAM_ADMIN
-    )
-    if not is_admin_demotion_or_removal:
+    """AUTHZ-06 (RFC Part 7 §35): checked whenever `revoked_role` is being
+    taken away from `user_id`, whether by a full member removal or a single
+    -role revoke. A team must never end up with zero `team_admin` — callers
+    only need to invoke this when `revoked_role` is `TEAM_ADMIN`."""
+    if revoked_role != UserTeamRelation.TEAM_ADMIN:
         return
 
     admin_ids = await _get_team_users_by_relation(

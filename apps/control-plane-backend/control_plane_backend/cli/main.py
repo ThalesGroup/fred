@@ -743,7 +743,11 @@ def _print_members_table(members: list[TeamMember], *, color_enabled: bool) -> N
         "Members",
         members,
         [
-            ColumnSpec("relation", 12, lambda m: m.relation.value),
+            ColumnSpec(
+                "roles",
+                34,
+                lambda m: ", ".join(relation.value for relation in m.relations),
+            ),
             ColumnSpec(
                 "username", 28, lambda m: m.user.username or "", color=ANSI_GREEN
             ),
