@@ -795,6 +795,23 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "Ma consommation de tokens",
+      "tokensOverTime": {
+        "title": "Consommation de tokens dans le temps",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "Aucune consommation d'agent sur cette période.",
+        "title": "Consommation par agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "Aucune consommation de modèle sur cette période.",
+        "title": "Consommation par modèle",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Retour",
     "cancel": "Annuler",
     "collapse": "Réduire",

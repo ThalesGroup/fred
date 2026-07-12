@@ -795,6 +795,23 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "My token usage",
+      "tokensOverTime": {
+        "title": "Token usage over time",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "No agent usage in this period.",
+        "title": "Usage by agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "No model usage in this period.",
+        "title": "Usage by model",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Back",
     "cancel": "Cancel",
     "collapse": "Collapse",

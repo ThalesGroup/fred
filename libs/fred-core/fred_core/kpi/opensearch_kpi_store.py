@@ -120,6 +120,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "bytes_out": {"type": "long"},
                     "chunks": {"type": "integer"},
                     "vectors": {"type": "integer"},
+                    "input_tokens": {"type": "long"},
+                    "output_tokens": {"type": "long"},
                 }
             },
             "labels": {"type": "keyword"},
@@ -191,6 +193,11 @@ class OpenSearchKPIStore(BaseKPIStore):
                 self._ensure_dim_mapping("template_id", {"type": "keyword"})
                 self._ensure_dim_mapping("source_runtime_id", {"type": "keyword"})
                 self._ensure_dim_mapping("groups", {"type": "keyword"})
+                # OBSERV-02: quantities.input_tokens/output_tokens were written by
+                # agent.turn_completed since Phase 7 but never mapped, so they were
+                # unaggregatable. Added additively for existing indices.
+                self._ensure_quantities_mapping("input_tokens", {"type": "long"})
+                self._ensure_quantities_mapping("output_tokens", {"type": "long"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
@@ -216,6 +223,27 @@ class OpenSearchKPIStore(BaseKPIStore):
         except OpenSearchException as e:
             logger.warning(
                 "[OPENSEARCH][KPI] failed to add dims.%s mapping: %s", name, e
+            )
+
+    def _ensure_quantities_mapping(self, name: str, mapping: Dict[str, Any]) -> None:
+        try:
+            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
+            current_mapping = current_mapping_resp.get(self.index, {}).get(
+                "mappings", {}
+            )
+            quantities_props = (
+                current_mapping.get("properties", {})
+                .get("quantities", {})
+                .get("properties", {})
+            )
+            if name in quantities_props:
+                return
+            body = {"properties": {"quantities": {"properties": {name: mapping}}}}
+            self.client.indices.put_mapping(index=self.index, body=body)
+            logger.info("[OPENSEARCH][KPI] added quantities.%s mapping", name)
+        except OpenSearchException as e:
+            logger.warning(
+                "[OPENSEARCH][KPI] failed to add quantities.%s mapping: %s", name, e
             )
 
     # -- writes ----------------------------------------------------------------

@@ -25,6 +25,7 @@ import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/Mar
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
@@ -102,6 +103,10 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/usage",
+        element: <TeamUsagePage />,
       },
       {
         // Team settings render in the main content area while the sidebar shell

@@ -49,6 +49,14 @@ export default function TeamContentNavbar() {
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
 
+  // The personal space has no team-admin permission to gate a settings icon on
+  // (`canOpenTeamSettings` is always false there — OBSERV-02 / BACKLOG.md §7b),
+  // so it reuses the same banner icon slot to open the personal usage
+  // dashboard instead. The two conditions are mutually exclusive by
+  // construction: a personal space is never `canOpenTeamSettings`.
+  const usageBase = `/team/${teamId}/usage`;
+  const inUsage = !!teamId && pathname.startsWith(usageBase);
+
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
@@ -128,6 +136,20 @@ export default function TeamContentNavbar() {
                 icon={{ category: "outlined", type: "settings", filled: true }}
                 style={{ color: bannerColor?.onSolid }}
                 onClick={() => navigate(settingsBase)}
+                title={t("rework.teamSettings.navigation.settings")}
+              />
+            </span>
+          )}
+          {isPersonalTeam && !inUsage && (
+            <span className={styles["user-settings-button-container"]}>
+              <IconButton
+                size={"small"}
+                color={"on-surface"}
+                variant={"icon"}
+                icon={{ category: "outlined", type: "settings", filled: true }}
+                style={{ color: bannerColor?.onSolid }}
+                onClick={() => navigate(usageBase)}
+                title={t("rework.teamUsage.title")}
               />
             </span>
           )}
@@ -149,6 +171,23 @@ export default function TeamContentNavbar() {
             </span>
             <NavigationMenu items={settingsItems} />
           </>
+        ) : inUsage ? (
+          // Same focused-view treatment as settings: the usage dashboard
+          // replaces team browsing, so the agents/resources/prompts nav and
+          // chat list step aside for a single Back action (OBSERV-02 /
+          // BACKLOG.md §7b — keeps the experience consistent for everyone,
+          // whether reached from the admin/observer rail or here).
+          <span className={styles["settings-back-container"]}>
+            <Button
+              color={"primary"}
+              variant={"text"}
+              size={"medium"}
+              onClick={() => navigate(`/team/${teamId}/agents`)}
+              icon={{ category: "outlined", type: "arrow_back", filled: true }}
+            >
+              {t("rework.back")}
+            </Button>
+          </span>
         ) : (
           <>
             <NavigationMenu items={navigationItems} />

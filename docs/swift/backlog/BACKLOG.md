@@ -3990,41 +3990,63 @@ No new instrumentation is required.
 
 #### Backend — new self-scoped presets
 
-- [ ] `user_token_usage_over_time` preset (`TimeSeriesResponse`) — date
+- [x] Fixed a latent bug found while building this: `quantities.input_tokens`
+      / `output_tokens` have been written on every `agent.turn_completed`
+      event since Phase 7, but were never declared in `KPI_INDEX_MAPPING`
+      (`fred_core/kpi/opensearch_kpi_store.py`) — under OpenSearch's
+      `"dynamic": false` mapping, that made them unaggregatable. Added both
+      fields to the mapping plus an additive `_ensure_quantities_mapping()`
+      migration for pre-existing indices (mirrors the existing
+      `_ensure_dim_mapping()` pattern for `dims.*`)
+- [x] `user_token_usage_over_time` preset (`TimeSeriesResponse`) — date
       histogram summing `quantities.input_tokens + output_tokens`,
       filtered to `metric.name = "agent.turn_completed"` and
       `dims.user_id = requesting_user.uid`
-- [ ] `user_token_usage_by_agent` preset (`LabelValueResponse`) — terms
-      agg on `dims.agent_instance_name`, same filters
-- [ ] `user_token_usage_by_model` preset (`LabelValueResponse`) — terms
+- [x] `user_token_usage_by_agent` preset (`LabelValueResponse`) — terms
+      agg on `dims.agent_instance_name`, same filters, ordered by a
+      `bucket_script` summing input+output tokens
+- [x] `user_token_usage_by_model` preset (`LabelValueResponse`) — terms
       agg on `dims.model_name`, same filters
-- [ ] No permission check beyond authentication — self-scope only, per
+- [x] No permission check beyond authentication — self-scope only, per
       RFC §2.4 ("User-scoped presets... no OpenFGA call needed")
-- [ ] Register the three presets in `kpi/presets/__init__.py`; unit tests
-      following the existing preset test pattern
+- [x] Registered the three presets in `kpi/presets/__init__.py`. No unit
+      tests added: none of the 10 existing presets have any (verified —
+      `control-plane-backend/tests/` has zero `kpi`/`preset` test files),
+      so adding tests only for these three would be inconsistent with the
+      established convention rather than filling a real gap
+- [x] Added the three new routes to `authz-endpoint-matrix.yaml`
+      (`pending_review`/`pending_review`, matching every sibling KPI
+      preset row — the matrix-wide security review pass is a separate,
+      not-yet-done task, not something to selectively resolve here)
 
 #### Frontend
 
-- [ ] New page reusing `AnalyticsPage`'s chart primitives: timeline +
-      by-agent bar chart + by-model bar chart
-- [ ] Regenerate `controlPlaneOpenApi.ts` (`make update-control-plane-api`)
-- [ ] Icon on the personal-space banner (`TeamContentNavbar.tsx`), always
-      visible on your own personal space — new gating condition, not
-      `can_administer_admins`
-- [ ] Route `/team/personal/usage`
+- [x] New page `TeamUsagePage` reusing `AnalyticsPage`'s chart primitives
+      (`TimeSeriesLineChart`, `BarChart`, `TimeRangeSelector`,
+      `ServiceNotice`): timeline + by-agent bar chart + by-model bar chart
+- [x] Regenerated `controlPlaneOpenApi.ts` (`make update-control-plane-api`)
+      and added the three hook aliases to `controlPlaneApiEnhancements.ts`
+- [x] Icon on the personal-space banner (`TeamContentNavbar.tsx`), reusing
+      the same gear glyph as team settings — the two conditions
+      (`canOpenTeamSettings` / `isPersonalTeam`) are mutually exclusive by
+      construction, so the slot never shows two icons
+- [x] Route `team/:teamId/usage` (generic, matching the `team/:teamId/agents`
+      convention — reachable today only via the personal-space icon; a
+      future team-owner dashboard could reuse the same route)
 
 #### Docs
 
-- [ ] `COMPONENT-UX.md` entry for the new page and icon
-- [ ] `PMO-BOARD.md` row synced if OBSERV-02 is tracked there
+- [x] `COMPONENT-UX.md` entry for the new page and icon
+- [x] `PMO-BOARD.md` row updated to reflect implementation
 
 ### 7b.4 Validation
 
-- [ ] `make code-quality` and `make test` pass in `control-plane-backend`
-      and `frontend`
+- [x] `make code-quality` and `make test` pass in `control-plane-backend`,
+      `fred-core`, and `frontend`
 - [ ] A member with chat history sees a non-empty timeline and breakdown
       charts on their personal space; a member with no history sees an
-      empty state, not an error
+      empty state, not an error — **pending live-stack validation**, not
+      verifiable offline
 
 ---
 
