@@ -952,7 +952,7 @@ items:
     owner: fmuller
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
-      backlog: "docs/swift/backlog/BACKLOG.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §7b"
 
   # ── OPS ───────────────────────────────────────────────────────────────
 

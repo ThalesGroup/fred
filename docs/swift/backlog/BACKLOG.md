@@ -3960,6 +3960,74 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 
 ---
 
+## Phase 7b — KPI Analytics Dashboards: Personal Usage — **OBSERV-02**
+
+### 7b.1 Goal
+
+Close the gap between `docs/swift/rfc/KPI-ANALYTICS-RFC.md` §2.5 and what
+is shipped. Page 1 (platform dashboard) exists as `AnalyticsPage`
+(`/admin/analytics`); Page 2 (team dashboard) and Page 3 (personal
+dashboard) were never built. This phase delivers Page 3 only — each
+member's own token consumption, with a breakdown by agent and by model —
+reusing the `agent.turn_completed` event Phase 7 already emits (§7.4).
+No new instrumentation is required.
+
+### 7b.2 Status Note
+
+- Page 1 shipped under different preset names than the RFC specified
+  (`active_users_over_time`, not `active_users_by_day`, etc.) and with
+  per-preset `CAN_OBSERVE_PLATFORM` checks inline (`kpi/presets/*.py`)
+  rather than the router-level OpenFGA scope described in RFC §2.4.
+- Page 2 (team dashboard) and Page 3 (personal dashboard) are unbuilt.
+  Per product decision (Dimitri, 2026-07-12), this phase covers Page 3
+  only; the team dashboard is deferred.
+- The personal-space banner (`TeamContentNavbar.tsx`) shows no icon
+  today — `canOpenTeamSettings` requires `can_administer_admins`, a
+  permission the synthetic personal team never grants
+  (`teams/system.py:56-60`).
+
+### 7b.3 Tasks
+
+#### Backend — new self-scoped presets
+
+- [ ] `user_token_usage_over_time` preset (`TimeSeriesResponse`) — date
+      histogram summing `quantities.input_tokens + output_tokens`,
+      filtered to `metric.name = "agent.turn_completed"` and
+      `dims.user_id = requesting_user.uid`
+- [ ] `user_token_usage_by_agent` preset (`LabelValueResponse`) — terms
+      agg on `dims.agent_instance_name`, same filters
+- [ ] `user_token_usage_by_model` preset (`LabelValueResponse`) — terms
+      agg on `dims.model_name`, same filters
+- [ ] No permission check beyond authentication — self-scope only, per
+      RFC §2.4 ("User-scoped presets... no OpenFGA call needed")
+- [ ] Register the three presets in `kpi/presets/__init__.py`; unit tests
+      following the existing preset test pattern
+
+#### Frontend
+
+- [ ] New page reusing `AnalyticsPage`'s chart primitives: timeline +
+      by-agent bar chart + by-model bar chart
+- [ ] Regenerate `controlPlaneOpenApi.ts` (`make update-control-plane-api`)
+- [ ] Icon on the personal-space banner (`TeamContentNavbar.tsx`), always
+      visible on your own personal space — new gating condition, not
+      `can_administer_admins`
+- [ ] Route `/team/personal/usage`
+
+#### Docs
+
+- [ ] `COMPONENT-UX.md` entry for the new page and icon
+- [ ] `PMO-BOARD.md` row synced if OBSERV-02 is tracked there
+
+### 7b.4 Validation
+
+- [ ] `make code-quality` and `make test` pass in `control-plane-backend`
+      and `frontend`
+- [ ] A member with chat history sees a non-empty timeline and breakdown
+      charts on their personal space; a member with no history sees an
+      empty state, not an error
+
+---
+
 ## Phase UX — UI/UX Consolidation
 
 ### UX-1 Full visual audit and design review — **UX-01**
