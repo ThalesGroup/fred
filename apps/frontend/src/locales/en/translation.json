@@ -1426,6 +1426,19 @@
         "timeout": {
           "label": "Case timeout (s)"
         },
+        "metrics": {
+          "label": "Custom metrics",
+          "help": "Natural-language criteria, judged alongside the built-in metrics",
+          "add": "Add a criterion",
+          "remove": "Remove criterion",
+          "n": "Criterion {{n}}",
+          "name": "Name",
+          "namePlaceholder": "e.g. cites_source",
+          "criteria": "Criterion to evaluate",
+          "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
+          "parameters": "Fields the judge may read",
+          "threshold": "Pass threshold"
+        },
         "recap": {
           "title": "Summary",
           "campaign": "Campaign",
@@ -1440,6 +1453,7 @@
           "judge": "Judge",
           "concurrency": "Concurrency",
           "timeout": "Timeout",
+          "customMetrics": "Custom metrics",
           "profile": "Profile",
           "profileAuto": "Automatic"
         },

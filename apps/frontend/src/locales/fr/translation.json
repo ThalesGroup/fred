@@ -1426,6 +1426,19 @@
         "timeout": {
           "label": "Délai par cas (s)"
         },
+        "metrics": {
+          "label": "Métriques personnalisées",
+          "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
+          "add": "Ajouter un critère",
+          "remove": "Retirer le critère",
+          "n": "Critère {{n}}",
+          "name": "Nom",
+          "namePlaceholder": "ex. ancrage_source",
+          "criteria": "Critère à évaluer",
+          "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
+          "parameters": "Champs évalués par le juge",
+          "threshold": "Seuil de réussite"
+        },
         "recap": {
           "title": "Récapitulatif",
           "campaign": "Campagne",
@@ -1440,6 +1453,7 @@
           "judge": "Juge",
           "concurrency": "Concurrence",
           "timeout": "Délai",
+          "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
           "profileAuto": "Automatique"
         },
