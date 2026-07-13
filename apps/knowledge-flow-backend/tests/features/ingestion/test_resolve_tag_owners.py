@@ -91,7 +91,7 @@ def _controller() -> IngestionController:
 
 
 def _user(uid: str = "bob") -> KeycloakUser:
-    return KeycloakUser(uid=uid, username=uid, email=None, roles=[], groups=[])
+    return KeycloakUser(uid=uid, username=uid, email=None, roles=[])
 
 
 @pytest.mark.asyncio

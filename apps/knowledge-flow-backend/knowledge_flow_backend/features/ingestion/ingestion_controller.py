@@ -799,7 +799,7 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
-            kpi_actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+            kpi_actor = KPIActor(type="human", user_id=user.uid)
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},

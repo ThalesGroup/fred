@@ -103,7 +103,6 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "system_prompt_chars": {"type": "keyword"},
                     "template_id": {"type": "keyword"},
                     "source_runtime_id": {"type": "keyword"},
-                    "groups": {"type": "keyword"},
                 }
             },
             "cost": {
@@ -192,7 +191,6 @@ class OpenSearchKPIStore(BaseKPIStore):
                 self._ensure_dim_mapping("system_prompt_chars", {"type": "keyword"})
                 self._ensure_dim_mapping("template_id", {"type": "keyword"})
                 self._ensure_dim_mapping("source_runtime_id", {"type": "keyword"})
-                self._ensure_dim_mapping("groups", {"type": "keyword"})
                 # OBSERV-02: quantities.input_tokens/output_tokens were written by
                 # agent.turn_completed since Phase 7 but never mapped, so they were
                 # unaggregatable. Added additively for existing indices.

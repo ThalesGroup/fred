@@ -118,9 +118,7 @@ class _FakeMetadataStore:
 
 
 def _user() -> KeycloakUser:
-    return KeycloakUser(
-        uid="caller", username="caller", roles=[], email=None, groups=[]
-    )
+    return KeycloakUser(uid="caller", username="caller", roles=[], email=None)
 
 
 async def _no_users_by_ids(*_a, **_k) -> dict:

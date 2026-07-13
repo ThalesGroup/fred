@@ -27,6 +27,7 @@ from pydantic import AnyHttpUrl, ValidationError
 
 from fred_core import (
     AgentPermission,
+    AuthorizationError,
     DocumentPermission,
     OpenFgaRebacConfig,
     OpenFgaRebacEngine,
@@ -40,7 +41,7 @@ from fred_core import (
     TagPermission,
     TeamPermission,
 )
-from fred_core.security.structure import M2MSecurity
+from fred_core.security.structure import KeycloakUser, M2MSecurity
 
 MAX_STARTUP_ATTEMPTS = 40
 STARTUP_BACKOFF_SECONDS = 0.5
@@ -57,6 +58,14 @@ def _unique_id(prefix: str) -> str:
 def _make_reference(resource: Resource, *, prefix: str | None = None) -> RebacReference:
     identifier = prefix or resource.value
     return RebacReference(type=resource, id=_unique_id(identifier))
+
+
+def _make_keycloak_user() -> KeycloakUser:
+    """Build a plain `KeycloakUser`. `KeycloakUser` no longer carries a
+    `groups` field at all (AUTHZ-05 final sweep) — permissions can only ever
+    come from persisted OpenFGA tuples."""
+    uid = _unique_id("user")
+    return KeycloakUser(uid=uid, username=uid, roles=[], email=f"{uid}@example.com")
 
 
 async def _load_openfga_engine() -> RebacEngine:
@@ -91,7 +100,7 @@ async def _load_openfga_engine() -> RebacEngine:
     os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
 
     try:
-        engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
+        engine = OpenFgaRebacEngine(config, token=store)
     except Exception as exc:
         pytest.skip(f"Failed to create OpenFGA engine: {exc}")
 
@@ -299,55 +308,6 @@ async def test_lookup_subjects_returns_users_by_relation(
     assert {ref.id for ref in owners} == {owner.id}
     assert {ref.id for ref in editors} == {editor.id}
     assert {ref.id for ref in viewers} == {viewer.id}
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_list_relations_filters_by_subject_type(
-    rebac_engine: RebacEngine,
-) -> None:
-    if not rebac_engine.need_keycloak_sync:
-        pytest.skip(
-            "Keycloak sync not needed for this backend, list_relations not needed and not implemented"
-        )
-
-    team = _make_reference(Resource.TEAM, prefix="team")
-    child_team = _make_reference(Resource.TEAM, prefix="team")
-    member = _make_reference(Resource.USER, prefix="member")
-
-    token = await rebac_engine.add_relations(
-        [
-            Relation(subject=member, relation=RelationType.TEAM_MEMBER, resource=team),
-            Relation(
-                subject=team, relation=RelationType.TEAM_MEMBER, resource=child_team
-            ),
-        ]
-    )
-
-    user_memberships = await rebac_engine.list_relations(
-        resource_type=Resource.TEAM,
-        relation=RelationType.TEAM_MEMBER,
-        subject_type=Resource.USER,
-        consistency_token=token,
-    )
-    group_memberships = await rebac_engine.list_relations(
-        resource_type=Resource.TEAM,
-        relation=RelationType.TEAM_MEMBER,
-        subject_type=Resource.TEAM,
-        consistency_token=token,
-    )
-
-    assert not isinstance(user_memberships, RebacDisabledResult)
-    assert not isinstance(group_memberships, RebacDisabledResult)
-
-    assert {
-        (relation.subject.type, relation.subject.id, relation.resource.id)
-        for relation in user_memberships
-    } == {(Resource.USER, member.id, team.id)}
-    assert {
-        (relation.subject.type, relation.subject.id, relation.resource.id)
-        for relation in group_memberships
-    } == {(Resource.TEAM, team.id, child_team.id)}
 
 
 @pytest.mark.integration
@@ -677,7 +637,7 @@ async def test_bootstrap_seeds_platform_admin_from_config() -> None:
     os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
 
     try:
-        engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
+        engine = OpenFgaRebacEngine(config, token=store)
     except Exception as exc:
         pytest.skip(f"Failed to create OpenFGA engine: {exc}")
 
@@ -694,7 +654,7 @@ async def test_bootstrap_seeds_platform_admin_from_config() -> None:
     ), "Config-seeded subject should be granted platform_admin at startup"
 
     # Re-initializing (fresh engine, same store) must not fail or duplicate writes.
-    engine_again = OpenFgaRebacEngine(config, mock_m2m, token=store)
+    engine_again = OpenFgaRebacEngine(config, token=store)
     await engine_again.get_client()
     assert await engine_again.has_permission(
         seeded_user,
@@ -1262,3 +1222,50 @@ async def test_team_analyst_evaluation_capabilities(
     assert not await rebac_engine.has_permission(
         analyst, TeamPermission.CAN_ADMINISTER_MEMBERS, team, consistency_token=token
     ), "team_analyst should not be able to administer members"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_no_permission_without_persisted_tuple(
+    rebac_engine: RebacEngine,
+) -> None:
+    """AUTHZ-05 item 8b (final sweep): `KeycloakUser` no longer carries a
+    `groups` field at all, so there is no claim-derived fallback left to test
+    against — a user with no persisted OpenFGA tuple must have no permission
+    on the team, full stop. The `groups_list_to_relations`/
+    `_user_contextual_relations` fallback that used to derive `team_member`
+    from a JWT `groups` claim has been removed outright.
+    """
+    team = _make_reference(Resource.TEAM, prefix="no-tuple")
+    user = _make_keycloak_user()
+
+    assert not await rebac_engine.has_user_permission(
+        user, TeamPermission.CAN_READ, team.id
+    ), "No persisted tuple must not grant team_member-derived access"
+
+    with pytest.raises(AuthorizationError):
+        await rebac_engine.check_user_permission_or_raise(
+            user, TeamPermission.CAN_READ, team.id
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_persisted_team_member_tuple_grants_permission(
+    rebac_engine: RebacEngine,
+) -> None:
+    """The same user/team pair as the negative test above, but this time the
+    `team_member` relation is written as a real OpenFGA tuple — permission
+    must now be granted, proving OpenFGA tuples are the only source of truth.
+    """
+    team = _make_reference(Resource.TEAM, prefix="with-tuple")
+    user = _make_keycloak_user()
+    user_ref = RebacReference(Resource.USER, user.uid)
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=user_ref, relation=RelationType.TEAM_MEMBER, resource=team)
+    )
+
+    assert await rebac_engine.has_user_permission(
+        user, TeamPermission.CAN_READ, team.id, consistency_token=token
+    ), "A persisted team_member tuple must grant access on its own"

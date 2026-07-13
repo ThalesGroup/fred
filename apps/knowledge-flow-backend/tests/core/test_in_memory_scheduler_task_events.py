@@ -13,7 +13,6 @@ def _build_user() -> KeycloakUser:
         username="testuser",
         email="testuser@localhost",
         roles=["admin"],
-        groups=["admins"],
     )
 
 

@@ -678,8 +678,9 @@ async def list_team_members(
     Resolve one team member list with role decoration for the current operator.
 
     Why this function exists:
-    - the frontend and CLI need one rendered member list that merges Keycloak
-      group membership with ReBAC role relations
+    - the frontend and CLI need one rendered member list resolved entirely
+      from persisted ReBAC role relations (AUTHZ-05 review item 9 — no
+      Keycloak group involved)
 
     How to use it:
     - call from `/teams/{team_id}/members`
@@ -769,8 +770,8 @@ async def add_team_member(
     Add one user to a team and persist the requested team role relation.
 
     Why this function exists:
-    - team administration needs one business path that keeps Keycloak group
-      membership and ReBAC role relations in sync
+    - team administration needs one business path that writes the requested
+      team role as a persisted ReBAC relation (no Keycloak group involved)
 
     How to use it:
     - call from the team-membership POST route
@@ -811,8 +812,9 @@ async def remove_team_member(
     Remove one team member and enqueue any matching session lifecycle cleanup.
 
     Why this function exists:
-    - membership removal must keep Keycloak/ReBAC state consistent and trigger
-      the configured session-retention policy for the removed user
+    - membership removal must revoke every persisted ReBAC role relation the
+      user holds on the team (no Keycloak group involved) and trigger the
+      configured session-retention policy for the removed user
 
     How to use it:
     - call from the team-membership DELETE route
@@ -1144,7 +1146,6 @@ async def _get_team_permissions_for_user(
     consistency_token: str | None = None,
 ) -> list[TeamPermission]:
     permissions_to_check = list(TeamPermission)
-    contextual_relations = await rebac.groups_list_to_relations(user)
 
     checks = await asyncio.gather(
         *[
@@ -1152,7 +1153,6 @@ async def _get_team_permissions_for_user(
                 RebacReference(Resource.USER, user.uid),
                 permission,
                 RebacReference(Resource.TEAM, team_id),
-                contextual_relations=contextual_relations,
                 consistency_token=consistency_token,
             )
             for permission in permissions_to_check

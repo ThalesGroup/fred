@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import Dims, KPIActor
 
-PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
+PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None)
 
 
 def record_phase_metric(

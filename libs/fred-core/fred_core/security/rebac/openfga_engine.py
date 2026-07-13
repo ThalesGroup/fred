@@ -35,7 +35,7 @@ from fred_core.security.rebac.rebac_engine import (
     Relation,
     RelationType,
 )
-from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
+from fred_core.security.structure import OpenFgaRebacConfig
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -73,13 +73,10 @@ class OpenFgaRebacEngine(RebacEngine):
     def __init__(
         self,
         config: OpenFgaRebacConfig,
-        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
-        super().__init__(m2m_security)
-
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
@@ -194,8 +191,12 @@ class OpenFgaRebacEngine(RebacEngine):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # Only used to sync Keycloakc groups with the rebac engine. Not needed
-        # with OpenFGA as we handle this with contextual tuples.
+        # No current caller needs a bulk tuple read: every authorization
+        # decision goes through `has_permission`, `lookup_resources`, or
+        # `lookup_subjects` instead, each backed by a persisted OpenFGA tuple
+        # (never Keycloak-derived). Implemented by 2 other engines and
+        # exercised elsewhere; this OpenFGA-backed stub stays a stub until a
+        # real caller needs it.
         raise NotImplementedError(
             "OpenFGA relation listing is not implemented as it is not needed"
         )

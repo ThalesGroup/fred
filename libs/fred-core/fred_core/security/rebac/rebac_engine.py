@@ -21,13 +21,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from fred_core.common import personal_team_id
-from fred_core.security.keycloak.keycloack_admin_client import (
-    KeycloackDisabled,
-    create_keycloak_admin,
-)
 from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.structure import KeycloakUser, M2MSecurity
+from fred_core.security.structure import KeycloakUser
 
 ORGANIZATION_ID = "fred"
 logger = logging.getLogger(__name__)
@@ -277,19 +272,10 @@ class RebacEngine(ABC):
     resources?") while each concrete engine (OpenFGA, noop) handles storage.
     """
 
-    def __init__(self, m2m_security: M2MSecurity) -> None:
-        """Initialize engine dependencies used for contextual relations."""
-        self.keycloak_client = create_keycloak_admin(m2m_security)
-
     @property
     def enabled(self) -> bool:
         """Tell whether relationship authorization checks are active."""
         return True
-
-    @property
-    def need_keycloak_sync(self) -> bool:
-        """Tell whether this backend requires periodic Keycloak graph sync."""
-        return False
 
     async def close(self) -> None:
         """Release any held connections or sessions. No-op by default."""
@@ -495,7 +481,6 @@ class RebacEngine(ABC):
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -525,7 +510,6 @@ class RebacEngine(ABC):
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -579,7 +563,6 @@ class RebacEngine(ABC):
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -631,43 +614,3 @@ class RebacEngine(ABC):
             return_exceptions=False,
         )
         return consistency_token
-
-    async def _user_contextual_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Build contextual statements derived from the current user identity.
-
-        Example:
-        - user group memberships -> `member` links
-        """
-        return await self.groups_list_to_relations(user)
-
-    async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Convert token group paths into team membership statements.
-
-        Example:
-        - group `/thales` becomes `user -> member -> team:thales`.
-        """
-        if isinstance(self.keycloak_client, KeycloackDisabled):
-            return set()
-
-        # Each user is a member of its own personal team
-        # TODO 1501 Remove when teams are not based on keycloak anymore
-        relation: set[Relation] = {
-            Relation(
-                subject=RebacReference(Resource.USER, user.uid),
-                relation=RelationType.TEAM_MEMBER,
-                resource=RebacReference(Resource.TEAM, personal_team_id(user.uid)),
-            )
-        }
-        for group in user.groups:
-            relation.add(
-                Relation(
-                    subject=RebacReference(Resource.USER, user.uid),
-                    relation=RelationType.TEAM_MEMBER,
-                    resource=RebacReference(
-                        Resource.TEAM,
-                        (await self.keycloak_client.a_get_group_by_path(group))["id"],
-                    ),
-                )
-            )
-
-        return relation

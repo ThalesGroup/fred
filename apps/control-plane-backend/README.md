@@ -209,7 +209,7 @@ You can override it in `config/configuration.yaml`.
 
 Behavior:
 
-- Removes user membership from Keycloak group.
-- Removes team member/manager/owner relations from ReBAC.
+- Removes every persisted team role relation the user holds (ReBAC/OpenFGA
+  only — no Keycloak group involved).
 - Resolves purge policy for `member_removed`.
 - Enqueues matching session IDs in the purge queue with computed due date.

@@ -142,12 +142,25 @@ items:
       platform-admin-only team-registry-governance capabilities
       (`can_list_all_teams`, `can_delete_team`, `can_rescue_team_admin` — the
       last one guarded to only ever act on a team with zero `team_admin`, never
-      a standing grant). Item 8b remains blocked: `groups_list_to_relations`'s
-      Keycloak-`groups`-claim-derived `team_member` fallback cannot be removed
-      until `fredlab-authz-migrate-swift.py` has run against real production
-      data (verbally confirmed scheduled, but code changes on this specific
-      item require re-confirmation at execution time, not just a standing
-      go-ahead).
+      a standing grant). Item 8b closed 2026-07-13: removed
+      `groups_list_to_relations`/`_user_contextual_relations` (the
+      Keycloak-`groups`-claim-derived `team_member` fallback) entirely from
+      `RebacEngine`, and the direct call from
+      `teams/service.py::_get_team_permissions_for_user`. Closed on an
+      explicit waiver from Dimitri, not a confirmed production-data
+      migration: `fred-deployment-factory` is being rebuilt clean, with no
+      production membership data to preserve, and the migration itself is
+      tracked separately there. `RebacEngine.__init__`/`keycloak_client`
+      (only used to build this fallback) removed too, along with the
+      now-unused `m2m_security` parameter on `OpenFgaRebacEngine`/
+      `rebac_factory.py`. Every team_member relation must now be a persisted
+      OpenFGA tuple. Known scope note: the same method also carried a
+      non-`groups`-derived personal-team self-membership contextual relation
+      (`user.uid` → `team:personal-<uid>`, never persisted) — removed too on
+      explicit instruction to follow the literal scope; traced call sites
+      suggest this is low-risk (personal-space resources are user-owned
+      directly, and `build_personal_team` never calls ReBAC) but was not
+      exhaustively proven safe — flagged as a live-validation watch item.
       Live-campaign findings (2026-07-11, found while standing up the
       fred-deployment-factory validation campaign, tracked in
       `NOTES-AUTHZ05-REVIEW.md` items 10-11, not the RFC itself). Item 10:
@@ -191,6 +204,37 @@ items:
       (`/admin/self-test`) with a real, cleaned-up write probe
       (`team-write-access`) so it verifies a granted `can_update_resources`
       actually works, not just that denials are denied.
+      Cleanup (2026-07-13): removed the obsolete 15-minute periodic Keycloak
+      groups→ReBAC reconciliation task from knowledge-flow-backend's lifespan
+      (`security/keycloak_rebac_sync.py` deleted) and the now-unused
+      `RebacEngine.need_keycloak_sync` property — with OpenFGA, that property
+      was already hardcoded `False`, so the task ran every 15 minutes and
+      always no-opped. Mechanical deletion of a dead path already contrary to
+      the AUTHZ-05 target model (Keycloak identity-only); no RFC change, same
+      PR #1957 / branch. `RebacEngine.list_relations` kept (still abstract,
+      implemented by 2 engines, tested elsewhere) — its OpenFGA stub still
+      raises `NotImplementedError`; the misleading "OpenFGA resolves group
+      membership through contextual tuples" comment on it was NOT actually
+      fixed as this note claimed — corrected for real 2026-07-13 (see below).
+      Final mechanical sweep (2026-07-13, same PR/branch, no new ID):
+      deleted `KeycloakUser.groups`, the `payload.get("groups", [])` read in
+      `oidc.py::decode_jwt`, `KPIActor.groups` and its OpenSearch mapping, the
+      `MetricsProvider.timer(groups=...)` parameter across
+      `fred_core/portable/observability.py` and fred-runtime's
+      `_MetricsTimerAdapter`, and `RuntimeContext.user_groups`
+      (`fred-sdk/contracts/context.py`) after confirming it had zero real
+      producer (only `ctx.get("user_groups")`, a dict key nothing ever set).
+      Regenerated `fred-runtime/openapi.json` and
+      `apps/frontend/src/slices/runtime/runtimeOpenApi.ts` for the
+      `RuntimeContext` field removal; documented in
+      `RUNTIME-EXECUTION-CONTRACT.md` §8.13. Fixed the `openfga_engine.py`
+      comment above, plus stale "Keycloak group membership" docstrings/README
+      text in `control-plane-backend` and the `KeycloakAdmin` method/file
+      counts in `COPYLEFT-DEPENDENCIES.md`. `KEYCLOAK.md`/`REBAC.md`/
+      `FEATURES.html` updated to stop asking for or claiming Keycloak-groups
+      config. Verified offline: fred-core 256, fred-sdk 186, fred-runtime
+      417, knowledge-flow-backend 356, control-plane-backend 277 all passed;
+      `make code-quality` clean on all five; frontend `tsc --noEmit` clean.
 
   - id: AUTHZ-06
     title: "Cumulative team roles (team_admin + team_editor + team_analyst on one team)"

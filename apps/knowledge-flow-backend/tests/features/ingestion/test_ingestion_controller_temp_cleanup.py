@@ -57,7 +57,6 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
         username="user1",
         email="user1@localhost",
         roles=["admin"],
-        groups=["admins"],
     )
 
     async def _fake_push_input_process(*args, **kwargs):

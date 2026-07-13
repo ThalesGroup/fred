@@ -26,9 +26,7 @@ from fred_core.security.structure import (
 
 
 def _user(roles: list[str]) -> KeycloakUser:
-    return KeycloakUser(
-        uid="u-1", username="u", roles=roles, email="u@t.com", groups=[]
-    )
+    return KeycloakUser(uid="u-1", username="u", roles=roles, email="u@t.com")
 
 
 def test_service_agent_detected() -> None:

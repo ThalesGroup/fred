@@ -48,7 +48,7 @@ def report_client(monkeypatch, app_context: ApplicationContext):
 
     app = FastAPI()
     app.include_router(report_module.router)
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[], groups=[])
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[])
     with TestClient(app) as client:
         yield client, fake_rebac
 

@@ -39,7 +39,7 @@ from fred_core.common import TeamId
 
 
 def _user() -> KeycloakUser:
-    return KeycloakUser(uid="u", username="u", roles=["viewer"], email=None, groups=[])
+    return KeycloakUser(uid="u", username="u", roles=["viewer"], email=None)
 
 
 class _FakeTeam:
@@ -276,9 +276,7 @@ async def test_include_non_public_requires_real_openfga_platform_admin(
     deps_denied = cast(
         Any, SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac_denied))
     )
-    admin_user = KeycloakUser(
-        uid="u", username="u", roles=["admin"], email=None, groups=[]
-    )
+    admin_user = KeycloakUser(uid="u", username="u", roles=["admin"], email=None)
     await product_api.get_team_agent_templates(
         TeamId("t"), deps_denied, admin_user, include_non_public=True
     )

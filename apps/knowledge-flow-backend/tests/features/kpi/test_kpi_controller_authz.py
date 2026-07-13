@@ -67,7 +67,7 @@ def _build_app(monkeypatch, rebac: _FakeRebac, store: _FakeKpiStore) -> TestClie
     app = FastAPI()
     register_exception_handlers(app)
     app.include_router(router)
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", roles=[], email=None, groups=[])
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", roles=[], email=None)
     return TestClient(app)
 
 

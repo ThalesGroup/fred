@@ -78,9 +78,6 @@ from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
-from knowledge_flow_backend.security.keycloak_rebac_sync import (
-    reconcile_keycloak_groups_with_rebac,
-)
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -140,16 +137,6 @@ def create_app() -> FastAPI:
         async with application_context.get_pg_async_engine().begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
 
-        async def periodic_reconciliation() -> None:
-            while True:
-                try:
-                    await reconcile_keycloak_groups_with_rebac()
-                except Exception:  # noqa: BLE001
-                    logger.exception("%s Scheduled Keycloak→Rebac reconciliation failed.", LOG_PREFIX)
-                await asyncio.sleep(15 * 60)
-
-        # Reconcile Keycloak groups with ReBAC every 15 minutes
-        background_task = asyncio.create_task(periodic_reconciliation())
         process_kpi_task = None
         db_pool_kpi_task = None
         interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
@@ -192,9 +179,6 @@ def create_app() -> FastAPI:
                 db_pool_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await db_pool_kpi_task
-            background_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await background_task
             await application_context.shutdown()
 
     app = FastAPI(

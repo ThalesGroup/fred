@@ -23,7 +23,6 @@ def _user() -> KeycloakUser:
         username="tester",
         email="tester@example.com",
         roles=["admin"],
-        groups=["admins"],
     )
 
 

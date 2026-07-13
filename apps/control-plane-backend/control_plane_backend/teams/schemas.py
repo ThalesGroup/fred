@@ -69,7 +69,8 @@ class TeamMemberLastRoleError(Exception):
 
 
 class TeamAlreadyExistsError(Exception):
-    """Raised when team creation collides with an existing Keycloak group name."""
+    """Raised when team creation collides with an existing `team_metadata.name`
+    (no Keycloak group involved — teams are `team_metadata` rows)."""
 
     def __init__(self, name: str):
         self.name = name

@@ -831,6 +831,33 @@ filesystem suffix. `build_global_base_prompt_suffix()` lives in
 
 ---
 
+### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
+
+**What changed.** `RuntimeContext.user_groups` (`fred_sdk.contracts.context`,
+Group D) is removed. It was a confirmed dead Keycloak-groups vestige: its only
+producer was `agent_app.py::_iterate_runtime_event_payloads` reading
+`ctx.get("user_groups")`, a `RuntimeExecuteRequest.context` dict key that no
+backend ever set and no `apps/frontend/src` code (only the generated OpenAPI
+type) ever populated. Its only 2 consumers (`ReActRuntime`, `graph_runtime.py`)
+fed it straight into `KPIActor.groups` (also removed the same session, see
+`docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md` §AUTHZ-05) via a
+`MetricsProvider.timer(groups=...)` parameter — that parameter is removed too,
+from `fred_core.portable.observability.MetricsProvider` and its 2
+implementations, and from fred-runtime's `_MetricsTimerAdapter`.
+
+**Wire impact.** `user_groups` was a field on the `RuntimeExecuteRequest`
+schema exposed by both `libs/fred-runtime` and (via a separate, seemingly
+unregenerated generated client) `apps/frontend/src/slices/agentic/`. Since no
+caller ever set it, removal is behavior-preserving. Regenerated
+`libs/fred-runtime/openapi.json` (`make generate-openapi`, gitignored
+artifact) and `apps/frontend/src/slices/runtime/runtimeOpenApi.ts` (`make
+update-runtime-api`, 1-line diff); frontend `tsc --noEmit` clean.
+`apps/frontend/src/slices/agentic/agenticOpenApi.ts` still carries a stale
+`user_groups` field — no Makefile target regenerates it (looks like a
+dead/legacy generated client, out of scope for this sweep).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

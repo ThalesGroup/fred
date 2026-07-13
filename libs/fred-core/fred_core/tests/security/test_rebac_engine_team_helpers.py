@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import Iterable
 
 import pytest
-from pydantic import AnyUrl
 
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -28,18 +27,11 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
     TeamPermission,
 )
-from fred_core.security.structure import KeycloakUser, M2MSecurity
+from fred_core.security.structure import KeycloakUser
 
 
 class _RecordingRebacEngine(RebacEngine):
     def __init__(self) -> None:
-        super().__init__(
-            M2MSecurity(
-                enabled=False,
-                realm_url=AnyUrl("http://localhost:8080/realms/app"),
-                client_id="test-client",
-            )
-        )
         self.added_relations: list[Relation] = []
         self.checked_permissions: list[tuple[RebacPermission, str, str | None]] = []
 
@@ -116,8 +108,105 @@ def _user() -> KeycloakUser:
         username="alice",
         roles=["admin"],
         email="alice@example.com",
-        groups=[],
     )
+
+
+class _ContextualRelationsSpyEngine(RebacEngine):
+    """Records the `contextual_relations` argument received by the low-level
+    OpenFGA-facing methods, so tests can prove the removed Keycloak-groups
+    fallback (AUTHZ-05 item 8b) no longer injects anything automatically.
+    `KeycloakUser` no longer carries a `groups` field at all (AUTHZ-05 final
+    sweep), so this is now a plain regression guard against any future
+    contextual-relations auto-injection, not a groups-specific proof."""
+
+    def __init__(self) -> None:
+        self.received_contextual_relations: list[object] = []
+
+    async def add_relation(self, relation: Relation) -> str | None:
+        return None
+
+    async def delete_relation(self, relation: Relation) -> str | None:
+        return None
+
+    async def delete_all_relations_of_reference(
+        self,
+        reference: RebacReference,
+    ) -> str | None:
+        return None
+
+    async def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject_type: Resource | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        return []
+
+    async def lookup_resources(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        self.received_contextual_relations.append(contextual_relations)
+        return []
+
+    async def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def has_permission(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> bool:
+        self.received_contextual_relations.append(contextual_relations)
+        return True
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_sends_no_contextual_relations() -> None:
+    engine = _ContextualRelationsSpyEngine()
+
+    await engine.lookup_user_resources(_user(), TeamPermission.CAN_READ)
+
+    assert engine.received_contextual_relations == [None]
+
+
+@pytest.mark.asyncio
+async def test_has_user_permission_sends_no_contextual_relations() -> None:
+    engine = _ContextualRelationsSpyEngine()
+
+    await engine.has_user_permission(_user(), TeamPermission.CAN_READ, "team-a")
+
+    assert engine.received_contextual_relations == [None]
+
+
+@pytest.mark.asyncio
+async def test_check_user_permission_or_raise_sends_no_contextual_relations() -> None:
+    engine = _ContextualRelationsSpyEngine()
+
+    await engine.check_user_permission_or_raise(
+        _user(), TeamPermission.CAN_READ, "team-a"
+    )
+
+    assert engine.received_contextual_relations == [None]
 
 
 @pytest.mark.asyncio

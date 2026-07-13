@@ -308,7 +308,6 @@ def decode_jwt(token: str) -> KeycloakUser:
             username=username,
             roles=["admin"],
             email=f"{username}@localhost",
-            groups=["admins"],
         )
 
     cached_user = _get_cached_user(token)
@@ -434,7 +433,6 @@ def decode_jwt(token: str) -> KeycloakUser:
         username=payload.get("preferred_username", ""),
         roles=client_roles,
         email=payload.get("email"),
-        groups=payload.get("groups", []),
     )
     logger.debug("KeycloakUser built: %s", user)
     _cache_user(token, payload, user)
@@ -498,7 +496,6 @@ async def get_current_user_without_gcu(
             username="admin",
             roles=["admin"],
             email="admin@mail.com",
-            groups=["admins"],
         )
 
     if not token:

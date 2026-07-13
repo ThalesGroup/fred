@@ -342,10 +342,11 @@
       <code>team_analyst</code>/<code>team_member</code>) — swift's own membership endpoints
       write these tuples directly and make no Keycloak calls. Chapter 2's team migration must
       therefore write <code>user→team</code> tuples explicitly for every migrated member, not
-      assume they follow from an imported Keycloak group. (A transitional fallback that derives
-      base <code>team_member</code> from the Keycloak <code>groups</code> claim still exists in
-      swift today — <code>groups_list_to_relations</code> — but it is scheduled for removal once
-      the real tuple migration has run; do not design this migration's target state around it.)
+      assume they follow from an imported Keycloak group. (The transitional fallback that used to
+      derive base <code>team_member</code> from the Keycloak <code>groups</code> claim —
+      <code>groups_list_to_relations</code> — was removed 2026-07-13, AUTHZ-05 review item 8b:
+      every <code>team_member</code> tuple must now be written explicitly by this migration, with
+      no runtime fallback of any kind.)
     </div>
   </section>
 

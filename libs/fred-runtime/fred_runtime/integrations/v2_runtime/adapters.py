@@ -1903,11 +1903,10 @@ class KPIWriterMetricsAdapter(MetricsProvider):
         name: str,
         *,
         dims: dict[str, str | None] | None = None,
-        groups: list[str] | None = None,
     ) -> Generator[dict[str, str | None], None, None]:
         with self._kpi.timer(
             name,
             dims=dims,
-            actor=KPIActor(type="system", groups=groups),
+            actor=KPIActor(type="system"),
         ) as recorded_dims:
             yield recorded_dims

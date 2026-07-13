@@ -44,7 +44,7 @@ class _FakeRebac:
 
 
 def _user(roles: list[str]) -> KeycloakUser:
-    return KeycloakUser(uid="u", username="u", roles=roles, email=None, groups=[])
+    return KeycloakUser(uid="u", username="u", roles=roles, email=None)
 
 
 def _deps(rebac: _FakeRebac):

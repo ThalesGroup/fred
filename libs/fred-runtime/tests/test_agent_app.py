@@ -1694,7 +1694,7 @@ def _wire_engine(
     )
 
 
-_ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None, groups=[])
+_ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
 
 
 @pytest.mark.asyncio
@@ -1825,7 +1825,6 @@ _WORKER = KeycloakUser(
     username="service-account-fred-evaluation-worker",
     roles=["service_agent"],
     email=None,
-    groups=[],
 )
 
 

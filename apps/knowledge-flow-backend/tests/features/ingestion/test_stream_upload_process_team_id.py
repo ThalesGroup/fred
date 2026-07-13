@@ -93,7 +93,7 @@ def _controller(resolved_team_ids: set[str]) -> IngestionController:
 
 
 def _user() -> KeycloakUser:
-    return KeycloakUser(uid="bob", username="bob", email=None, roles=[], groups=[])
+    return KeycloakUser(uid="bob", username="bob", email=None, roles=[])
 
 
 async def _drain(controller: IngestionController, monkeypatch: pytest.MonkeyPatch, tmp_path, task_service: _FakeTaskService, tags: list[str]) -> None:

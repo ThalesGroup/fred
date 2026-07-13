@@ -41,7 +41,7 @@ from knowledge_flow_backend.features.ingestion.ingestion_controller import (
 
 
 def _user(uid: str = "svc-control-plane") -> KeycloakUser:
-    return KeycloakUser(uid=uid, username=uid, email=None, roles=[], groups=[])
+    return KeycloakUser(uid=uid, username=uid, email=None, roles=[])
 
 
 class _FakeRebac:

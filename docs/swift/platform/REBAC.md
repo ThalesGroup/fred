@@ -217,9 +217,19 @@ Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
 
 Keycloak options (see [KEYCLOAK.md](./KEYCLOAK.md) for more details):
 
-- The `knowledge-flow` and `agentic`client needs `realm-management: query-users, query-groups, view-users` and `account: view-groups` to be able to list users and groups from Keycloak
-- `knowledge-flow` needs in addition `realm-management: manage-users` client roles to be able to add/remove users from groups
-- Keycloak must send the `groups` claim in access tokens (see `groups-scope` client scope in [KEYCLOAK.md](./KEYCLOAK.md)).
+- The `knowledge-flow` and `agentic` client needs `realm-management: query-users, view-users` to list users from Keycloak (directory/identity lookups only — team membership and roles are never derived from Keycloak).
+
+**No group-derived authorization.** AUTHZ-05 removed every Keycloak-groups
+consumer: the periodic Keycloak→ReBAC group reconciliation task, the
+per-request JWT `groups`-claim-derived `team_member` contextual relation
+(`groups_list_to_relations`/`_user_contextual_relations`, RFC §18/24.1, review
+item 8b), the `groups` field on `KeycloakUser`, and the `groups` KPI
+dimension. `decode_jwt` no longer reads a `groups` claim at all — a JWT that
+still carries one is accepted (no unknown-claim error) but the claim is
+silently ignored end to end. No JWT `groups` claim, no Keycloak group
+membership, and no `realm-management: query-groups`/`view-groups`/
+`manage-users`-for-groups/`groups-scope` client scope are required or read.
+Every team membership, at every scope, must be a persisted OpenFGA tuple.
 
 ## Organization concept (`organization:fred`)
 

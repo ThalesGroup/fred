@@ -55,7 +55,7 @@ def corpus_client(monkeypatch):
     router = APIRouter(prefix="/knowledge-flow/v1")
     CorpusManagerController(router)
     app.include_router(router)
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[], groups=[])
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[])
     with TestClient(app) as client:
         yield client, fake_rebac
 

@@ -2054,7 +2054,6 @@ async def _iterate_runtime_event_payloads(
         checkpoint_id=resolved_checkpoint_id,
         user_id=ctx.get("user_id"),
         team_id=resolved_team_id,
-        user_groups=ctx.get("user_groups"),
         language=ctx.get("language"),
         access_token=access_token,
         refresh_token=ctx.get("refresh_token"),
