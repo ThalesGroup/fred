@@ -235,6 +235,25 @@ items:
       config. Verified offline: fred-core 256, fred-sdk 186, fred-runtime
       417, knowledge-flow-backend 356, control-plane-backend 277 all passed;
       `make code-quality` clean on all five; frontend `tsc --noEmit` clean.
+      Item 8b watch item materialized and closed (2026-07-13): the browser
+      self-test (item 17) reproduced the flagged risk exactly — personal-space
+      setup passed (14 steps) but all 4 direct runtime executions 403'd.
+      Root cause: the removed contextual `team:personal-<uid>` relation had
+      been the only thing OpenFGA's `CAN_READ` check on a personal space ever
+      passed. Fix (runtime-local, no Keycloak fallback restored):
+      `agent_app.py::_authorize_execution_or_raise` now authorizes a personal
+      space by exact identity match against `personal_team_id(authenticated_
+      user.uid)` before the OpenFGA branch (audited
+      `personal_space_owner_authorized`), and explicitly denies any other
+      `personal-*` id or the bare `"personal"` alias (audited
+      `personal_space_denied`, 403, never reaching OpenFGA). Collaborative
+      teams unchanged. `service_agent` execution unchanged. New tests in
+      `libs/fred-runtime/tests/test_agent_app.py`. Verified offline:
+      fred-runtime 420 passed, `make code-quality` clean. Documented in
+      `RUNTIME-EXECUTION-CONTRACT.md` §2.2 + new dated entry;
+      `AUTHZ-MIGRATION-BACKLOG.md`. Live re-validation
+      (`make validation-report`, UI self-test) still pending, tracked in
+      `NOTES-AUTHZ05-REVIEW.md`.
 
   - id: AUTHZ-06
     title: "Cumulative team roles (team_admin + team_editor + team_analyst on one team)"

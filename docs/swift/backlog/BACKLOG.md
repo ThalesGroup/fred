@@ -1283,6 +1283,15 @@ was done.
 
 - [x] Mount `<TaskTray />` in `Sidebar.tsx` — built (SSE-backed, eviction timers) since
       commit `f2fba807` but never rendered anywhere in the app
+      **Reverted 2026-07-13** (explicit product decision, live UI review): unmounted again —
+      the always-present tray trigger read as a stray/empty sidebar item next to the user
+      profile. `<TaskTray />`/`<TaskTrayTrigger />` and their SSE/eviction wiring are
+      untouched and still importable; only the `Sidebar.tsx` render call was removed. Net
+      effect: a fresh document upload or evaluation-campaign run again has no in-app popover
+      for live progress/failure — `useNotifyOnNewTaskTarget`'s silent list refetch still
+      works (wired in `MainLayout.tsx`, not the tray), so the item still eventually appears,
+      just without interim feedback. Remounting behind a "hide when empty" condition was
+      considered and declined.
 - [x] `DocumentUploadDrawer` closes once every file is scheduled (task_id known), not
       once each file's full ingestion pipeline finishes — background request still runs
       to completion; a failure after scheduling is the failed task's job to report (tray),

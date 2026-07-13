@@ -166,7 +166,8 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
         },
       }).unwrap();
       // Register the launched run into the shared task store so it streams via
-      // useTaskSseManager and surfaces in the global TaskTray immediately.
+      // useTaskSseManager. (TaskTray is currently unmounted from Sidebar.tsx, see
+      // BACKLOG.md P4 — this store registration is otherwise unaffected.)
       if (result.task_id) {
         dispatch(
           taskRegistered({

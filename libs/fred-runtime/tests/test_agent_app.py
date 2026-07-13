@@ -32,6 +32,7 @@ from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
+from fred_core.common.team_id import personal_team_id
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
@@ -1866,6 +1867,72 @@ async def test_authorize_service_agent_still_requires_team(
     assert exc.value.status_code == 403
     assert engine.calls == []
 
+    assert engine.calls == []
+
+
+_BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_personal_space_owner_without_openfga(
+    monkeypatch, minimal_config
+) -> None:
+    """A human caller acting on their own canonical personal_team_id is authorized
+    as intrinsic ownership — no OpenFGA call (AUTHZ-05 item 8b watch item)."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)  # would deny if consulted
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(team_id=personal_team_id(_ALICE.uid)), _ALICE, container
+    )
+
+    assert engine.calls == []
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "personal_space_owner_authorized"
+    assert events[-1].get("team_id") == personal_team_id(_ALICE.uid)
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_other_users_personal_space(
+    monkeypatch, minimal_config
+) -> None:
+    """Alice requesting Bob's personal space is denied outright — a permissive
+    (or residual) OpenFGA tuple must never be able to rescue this."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)  # would allow if consulted
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id=personal_team_id(_BOB.uid)), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
+    assert engine.calls == []
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "personal_space_denied"
+    assert events[-1].get("user_id") == "alice"
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_ambiguous_personal_alias(
+    monkeypatch, minimal_config
+) -> None:
+    """The bare "personal" alias is ambiguous once ReBAC is active — reject it
+    rather than resolving it as if it meant the caller's own space."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id="personal"), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
     assert engine.calls == []
 
 
