@@ -7,11 +7,15 @@ PR #1957, still awaiting human review before merge). Code-complete except item `
 blocked on the real production data migration (`fredlab-authz-migrate-swift.py`) having run, not on
 any open design question. **Part 7 (2026-07-12, `AUTHZ-06`) code-complete, awaiting the
 validation campaign** — cumulative team roles (one user may hold
-`team_admin`+`team_editor`+`team_analyst` simultaneously on the same team). Current
+`team_admin`+`team_editor`+`team_analyst` simultaneously on the same team). **Part 8 (2026-07-13,
+`AUTHZ-07`) proposed, not yet implemented** — replaces config-embedded Keycloak `sub` bootstrap
+with a k8s-style secret-gated bootstrap endpoint, plus a single declarative platform-provisioning
+operation likely built by generalizing `PLATFORM-IMPORT-RFC.md` rather than a new endpoint.
+Current
 design state: `docs/swift/platform/REBAC.md`. Outstanding follow-ups:
 `NOTES-AUTHZ05-REVIEW.md`.
 **Date:** 2026-07-04
-**Task ID:** `AUTHZ-05` (Part 7: `AUTHZ-06`)
+**Task ID:** `AUTHZ-05` (Part 7: `AUTHZ-06`; Part 8: `AUTHZ-07`)
 **Audience:** Product governance, CVSSI, platform owners, then implementers
 **Related work:** `AUTHZ-01` (`RBAC-TO-REBAC-MIGRATION-RFC.md`), `platform/REBAC.md`
 
@@ -1324,6 +1328,42 @@ deployment-factory test profiles seeded with combined `team_admin`+`team_editor`
 in `docs/swift/platform/authz-endpoint-matrix.yaml` (endpoint-level) and a new,
 dedicated test-campaign registry (persona/scenario-level OK/KO), not only in
 `NOTES-AUTHZ05-REVIEW.md` prose.
+
+---
+
+# Part 8 - Root Bootstrap and Platform Provisioning (2026-07-13)
+
+## 40. Target
+
+`§24.3`'s config-seeded `platform_admin_subjects` is superseded: declaring a Keycloak `sub` in
+deployment config couples application config to an identity-provider implementation detail, and
+is fragile across realm re-imports. Two problems, two mechanisms — no CRUD, no identity ever
+stored in deployment config:
+
+1. **Root bootstrap.** A fresh deployment has no `platform_admin` yet, and the UI/API cannot
+   authorize its own bootstrap. Fred adopts the same shape every access-controlled system uses for
+   this — Kubernetes' cluster-admin bootstrap via kubeconfig, ArgoCD's
+   `argocd-initial-admin-secret`, Rancher's bootstrap password: deployment tooling generates a
+   one-time secret out-of-band (a Kubernetes Secret for GKE/AKS; an equivalent generated file for
+   the local dev stack), and a single endpoint resolves the intended admin's identity
+   (email/username) at call time and grants `platform_admin` — permanently refusing once any
+   `platform_admin` already exists (a live OpenFGA check, not a flag, same discipline as
+   `can_rescue_team_admin`, `§32`). No Keycloak `sub` is ever declared in config.
+2. **Platform provisioning.** Populating a fresh platform with teams, roles, and users is not a
+   sequence of CRUD calls — it is one declarative operation: hand Fred a description of the target
+   state, Fred reconciles it. This is not a new capability to invent: `PLATFORM-IMPORT-RFC.md`
+   already does almost exactly this — a `platform_admin`-gated import that repopulates an empty
+   instance's teams, users, and OpenFGA tuples from a bundle, refusing to run against a non-empty
+   target (`§2`, "fresh target only"). The likely right move is to harden and generalize that
+   mechanism's input contract (today scoped to a kea-snapshot bundle) rather than build a second,
+   parallel bulk-provisioning endpoint — to be confirmed with whoever owns that RFC before any
+   implementation.
+
+## 41. Non-goals
+
+No option catalogue, no CRUD-style team/role provisioning API, no identity ever declared in
+deployment config or values files. `§9`'s bootstrap options and `§24.3`'s config-seeded-subjects
+decision are superseded by this part for any deployment created after it lands.
 
 ---
 

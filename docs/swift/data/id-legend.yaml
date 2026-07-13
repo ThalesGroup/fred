@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-07-12"
+  last_updated: "2026-07-13"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -286,6 +286,31 @@ items:
       `CONTROL-PLANE-PRODUCT-CONTRACT.md` §15. Code-complete 2026-07-12
       (backend + frontend, tests green); validation campaign against the
       live stack not yet run — see `NOTES-AUTHZ05-REVIEW.md`.
+
+  - id: AUTHZ-07
+    title: "Root bootstrap and declarative platform provisioning"
+    status: open
+    owner: Dimitri
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 8 (§40-41)"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      design: "docs/swift/platform/REBAC.md"
+      execution: "TBD"
+    notes: >
+      Proposed 2026-07-13. Supersedes §24.3's config-seeded
+      platform_admin_subjects. Two mechanisms, no CRUD, no identity ever in
+      deployment config: (1) a k8s-style secret-gated POST
+      /bootstrap/platform-admin — deploy tooling generates a one-time token
+      out-of-band, the endpoint resolves an email/username to a Keycloak sub
+      at call time and grants platform_admin, then is permanently inert once
+      any platform_admin exists (live OpenFGA check). Same shape as
+      Kubernetes' cluster-admin bootstrap, ArgoCD's
+      argocd-initial-admin-secret, Rancher's bootstrap password. (2) one
+      declarative platform-provisioning operation for teams/roles/users —
+      likely a hardened, generalized PLATFORM-IMPORT-RFC.md rather than a new
+      bulk endpoint; to confirm with that RFC's owner. Plan: de-risk on
+      docker up, then GCP/GKE, then AKS (Prism).
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

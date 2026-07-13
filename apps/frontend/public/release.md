@@ -1,3 +1,27 @@
+**v2.1.0** — 2026-07-13
+
+- **Summary**
+
+  Authorization milestone. Fred's authorization model is now fully self-owned: Keycloak
+  authenticates identity only (login, JWT, stable `sub`), and every platform and team
+  permission — `platform_admin`/`platform_observer`, `team_admin`/`team_editor`/`team_analyst`/
+  `team_member` — is a stored OpenFGA relation, never derived from a Keycloak role or group.
+  Team roles are now cumulative (one person can hold several roles on the same team at once),
+  and teams are no longer backed by Keycloak groups at all — a team is purely an
+  OpenFGA-governed registry entry. (AUTHZ-05, AUTHZ-06, #1957)
+
+- **Features**
+
+  - Keycloak is identity-only; Fred/OpenFGA owns all platform and team authorization, with no legacy role/group bridge remaining (AUTHZ-05, #1957)
+  - Team roles are cumulative — a user may hold `team_admin`, `team_editor`, and `team_analyst` on the same team at once, each granted and revoked independently (AUTHZ-06, #1957)
+  - Teams fully decoupled from Keycloak — team creation, membership, and role management are pure OpenFGA operations (AUTHZ-05, #1957)
+  - Platform-admin-gated team registry governance: list every team, delete a team, rescue an orphaned team left with no admin (AUTHZ-05, #1957)
+
+- **Security**
+
+  - Closed a live escalation where any Keycloak `admin` role holder implicitly became `owner` of every team (AUTHZ-05, #1957)
+  - Closed an organization-level content bypass that let any global `editor` role holder read or process any team's content (AUTHZ-05, #1957)
+
 **v2.0.2** — 2026-07-06
 
 - **Summary**
