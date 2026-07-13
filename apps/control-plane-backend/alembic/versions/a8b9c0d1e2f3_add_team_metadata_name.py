@@ -61,10 +61,14 @@ def upgrade() -> None:
         "teammetadata",
         sa.Column("name", sa.String(length=180), nullable=False),
     )
-    op.create_unique_constraint(_NAME_UNIQUE_CONSTRAINT, "teammetadata", ["name"])
+    # batch_alter_table is required for SQLite: it has no ALTER TABLE ADD
+    # CONSTRAINT and Alembic emulates it via copy-and-move. Safe on Postgres too.
+    with op.batch_alter_table("teammetadata") as batch_op:
+        batch_op.create_unique_constraint(_NAME_UNIQUE_CONSTRAINT, ["name"])
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint(_NAME_UNIQUE_CONSTRAINT, "teammetadata", type_="unique")
+    with op.batch_alter_table("teammetadata") as batch_op:
+        batch_op.drop_constraint(_NAME_UNIQUE_CONSTRAINT, type_="unique")
     op.drop_column("teammetadata", "name")
