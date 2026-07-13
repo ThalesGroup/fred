@@ -66,7 +66,7 @@ def test_capabilities_requires_team_id_and_checks_team_permission(corpus_client)
     response = client.get("/knowledge-flow/v1/corpus/capabilities", params={"team_id": "team-a"})
 
     assert response.status_code == 200
-    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-a")]
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, "team-a")]
 
 
 def test_capabilities_rejects_missing_team_id(corpus_client) -> None:
@@ -88,7 +88,7 @@ def test_build_toc_checks_tag_permission_for_each_scoped_tag(corpus_client) -> N
 
     assert response.status_code == 200
     assert fake_rebac.calls == [
-        (TeamPermission.CAN_READ, "team-a"),
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
         (TagPermission.UPDATE, "tag-1"),
         (TagPermission.UPDATE, "tag-2"),
     ]
@@ -104,7 +104,7 @@ def test_build_toc_checks_document_permission_for_scoped_documents(corpus_client
 
     assert response.status_code == 200
     assert fake_rebac.calls == [
-        (TeamPermission.CAN_READ, "team-a"),
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
         (DocumentPermission.PROCESS, "doc-1"),
     ]
 
@@ -120,7 +120,7 @@ def test_build_toc_rejects_library_id_only_scope_as_unauthorizable(corpus_client
     )
 
     assert response.status_code == 400
-    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-a")]
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, "team-a")]
 
 
 def test_build_toc_rejects_missing_team_id(corpus_client) -> None:
@@ -143,7 +143,7 @@ def test_tasks_list_requires_team_id_and_checks_team_permission(corpus_client) -
     response = client.post("/knowledge-flow/v1/corpus/tasks/list", json={"team_id": "team-b"})
 
     assert response.status_code == 200
-    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-b")]
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, "team-b")]
 
 
 def test_tasks_get_denies_task_from_a_different_team(corpus_client) -> None:
@@ -168,7 +168,7 @@ def test_tasks_get_denies_task_from_a_different_team(corpus_client) -> None:
 
     assert cross_team.status_code == 200
     assert cross_team.json()["operation"] == "unknown"
-    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-b")]
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, "team-b")]
 
     same_team = client.post(
         "/knowledge-flow/v1/corpus/tasks/get",

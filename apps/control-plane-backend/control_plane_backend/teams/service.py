@@ -1274,14 +1274,30 @@ async def _get_user_roles_in_team(
 ) -> set[UserTeamRelation]:
     """AUTHZ-06 (RFC Part 7 §35): the full set of roles `user_id` currently
     holds on `team_id` — a member may hold several simultaneously (e.g.
-    `team_admin` and `team_editor` at once). Falls back to `{TEAM_MEMBER}`
-    when none of the three elevated roles apply but the user is still a
-    team member through the base relation."""
-    admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
+    `team_admin` and `team_editor` at once, or `team_editor` on top of a base
+    `team_member` tuple).
+
+    PR #1957 review finding: `team_member` is a *computed* relation in
+    schema.fga (`[user] or team_admin or team_editor or team_analyst`), so a
+    `lookup_subjects(..., TEAM_MEMBER)` scan returns every elevated-role
+    holder too — it cannot tell a direct base-member tuple apart from one
+    derived purely from an elevated role. Basing TEAM_MEMBER membership on
+    that scan silently drops the base role for anyone who also holds an
+    elevated role, which made `revoke_team_member_role` treat a genuine
+    `member + editor` combination as "editor only" and refuse the
+    editor-to-member demotion as a last-role revoke. `has_direct_relation`
+    reads the literal persisted tuple instead, bypassing the computed
+    rewrite, so the base role is preserved exactly when it was actually
+    granted — never inferred from the computed relation."""
+    admin_ids, editor_ids, analyst_ids, has_direct_member = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
-        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER),
+        rebac.has_direct_relation(
+            RebacReference(Resource.USER, user_id),
+            RelationType.TEAM_MEMBER,
+            RebacReference(Resource.TEAM, team_id),
+        ),
     )
     roles = {
         relation
@@ -1292,7 +1308,7 @@ async def _get_user_roles_in_team(
         )
         if user_id in ids
     }
-    if not roles and user_id in member_ids:
+    if has_direct_member:
         roles.add(UserTeamRelation.TEAM_MEMBER)
     return roles
 

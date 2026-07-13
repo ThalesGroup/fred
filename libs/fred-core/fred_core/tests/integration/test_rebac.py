@@ -807,6 +807,35 @@ async def test_public_team_read_access(
         consistency_token=token,
     ), "Stranger should not be able to read private team info"
 
+    # AUTHZ-05 review finding (PR #1957): CAN_READ = `team_member or public` —
+    # a stranger passes it on a public team without ever being a real member.
+    # CAN_READ_MEMEBERS = `team_member` alone (no `public` fallback), so it
+    # must stay denied for the same stranger on the same public team. This is
+    # the exact public-vs-membership distinction that member-only endpoints
+    # (e.g. corpus_manager) must gate on instead of CAN_READ.
+    assert await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_READ,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should still pass CAN_READ on a public team (sanity check)"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_READ_MEMEBERS,
+        public_team,
+        consistency_token=token,
+    ), (
+        "Stranger should NOT pass CAN_READ_MEMEBERS on a public team — public visibility is not membership"
+    )
+
+    assert await rebac_engine.has_permission(
+        team_admin,
+        TeamPermission.CAN_READ_MEMEBERS,
+        public_team,
+        consistency_token=token,
+    ), "A real team member (team_admin) should pass CAN_READ_MEMEBERS on a public team"
+
     # ~~~~~~~~~~~~~~~~~~~~
     # Public team resources remain private
 
@@ -1269,3 +1298,54 @@ async def test_persisted_team_member_tuple_grants_permission(
     assert await rebac_engine.has_user_permission(
         user, TeamPermission.CAN_READ, team.id, consistency_token=token
     ), "A persisted team_member tuple must grant access on its own"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_has_direct_relation_ignores_computed_team_member_rewrite(
+    rebac_engine: RebacEngine,
+) -> None:
+    """PR #1957 review finding (discussion_r3568344074): `team_member` is a
+    computed relation in schema.fga (`[user] or team_admin or team_editor or
+    team_analyst`), so `has_permission`/`lookup_subjects` cannot tell a direct
+    base-member tuple apart from one derived purely from an elevated role.
+    `has_direct_relation` must answer only from the literal tuple store."""
+    team = _make_reference(Resource.TEAM, prefix="direct-relation")
+    editor_only = _make_reference(Resource.USER, prefix="editor-only")
+    member_and_editor = _make_reference(Resource.USER, prefix="member-and-editor")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=editor_only, relation=RelationType.TEAM_EDITOR, resource=team
+            ),
+            Relation(
+                subject=member_and_editor,
+                relation=RelationType.TEAM_MEMBER,
+                resource=team,
+            ),
+            Relation(
+                subject=member_and_editor,
+                relation=RelationType.TEAM_EDITOR,
+                resource=team,
+            ),
+        ]
+    )
+
+    # Both users satisfy the *computed* team_member relation (team_editor
+    # implies it) — this is the union-rewrite behavior has_direct_relation
+    # must NOT reproduce.
+    assert await rebac_engine.has_permission(
+        editor_only, TeamPermission.CAN_READ, team, consistency_token=token
+    ), (
+        "team_editor should satisfy the computed team_member-gated CAN_READ (sanity check)"
+    )
+
+    # But only member_and_editor holds a literal team_member tuple.
+    assert not await rebac_engine.has_direct_relation(
+        editor_only, RelationType.TEAM_MEMBER, team, consistency_token=token
+    ), "editor-only user must not read as holding a direct team_member tuple"
+
+    assert await rebac_engine.has_direct_relation(
+        member_and_editor, RelationType.TEAM_MEMBER, team, consistency_token=token
+    ), "member_and_editor must read as holding a direct team_member tuple"

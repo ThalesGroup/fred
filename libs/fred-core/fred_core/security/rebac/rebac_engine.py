@@ -469,6 +469,35 @@ class RebacEngine(ABC):
         - List all owners of one team.
         """
 
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        """Return `True` when a *literal* tuple is persisted for this triple.
+
+        Unlike `has_permission` (Check) or `lookup_subjects` (ListUsers), this
+        must not resolve computed/union relations (e.g. schema.fga's
+        `team_member: [user] or team_admin or team_editor or team_analyst`).
+        A `team_admin`-only user must read as `False` here even though they
+        satisfy the computed `team_member` relation everywhere else.
+
+        Example:
+        - Distinguish "this user holds a direct `team_member` tuple" from
+          "this user is a `team_member` only because they are `team_admin`" —
+          needed to preserve a member's base role when a single elevated role
+          is later revoked (AUTHZ-06).
+
+        Not implemented by default; override in engines that can answer a
+        direct-tuple read without expanding usersets.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support direct relation reads"
+        )
+
     async def lookup_user_resources(
         self,
         user: KeycloakUser,

@@ -38,7 +38,13 @@ class CorpusManagerController:
         # AUTHZ-05 §27: team-scoped — replaces the previous org-level
         # CAN_READ_CONTENT gate, which any global Keycloak viewer satisfied
         # regardless of team membership.
-        await get_rebac_engine().check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+        #
+        # AUTHZ-05 review finding (PR #1957): CAN_READ is `team_member or
+        # public` in schema.fga — a non-member of a *public* team would pass
+        # this check without ever being a real member. Corpus operations are
+        # member-only, so this must use CAN_READ_MEMEBERS (`team_member`
+        # alone, no `public`) instead.
+        await get_rebac_engine().check_user_team_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id)
 
     async def _authorize_scope(self, user: KeycloakUser, scope: CorpusScopeV1) -> None:
         # AUTHZ-05 §27: team-scoped via the concrete tags/documents named in

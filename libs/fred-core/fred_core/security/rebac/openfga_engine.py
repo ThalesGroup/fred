@@ -258,6 +258,30 @@ class OpenFgaRebacEngine(RebacEngine):
             for user in response.users
         ]
 
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # A fully-specified tuple key (user + relation + object) queried via
+        # the raw `Read` API returns only literally-persisted tuples — unlike
+        # `Check`/`ListUsers`, it does not expand userset rewrites (e.g.
+        # schema.fga's `team_member: [user] or team_admin or team_editor or
+        # team_analyst`). This is the same primitive already used by
+        # `delete_all_relations_of_reference` for a bulk tuple read.
+        client = await self.get_client()
+        body = ReadRequestTupleKey(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+            relation=relation.value,
+            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+        )
+        options = self._build_options(consistency=consistency_token)
+        response = await client.read(body, options)
+        return len(response.tuples) > 0
+
     async def has_permission(
         self,
         subject: RebacReference,

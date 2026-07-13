@@ -83,6 +83,17 @@ class NoopRebacEngine(RebacEngine):
     ) -> list[RebacReference] | RebacDisabledResult:
         return RebacDisabledResult()
 
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # Nothing is ever persisted under the no-op engine.
+        return False
+
     async def has_permission(
         self,
         subject: RebacReference,
