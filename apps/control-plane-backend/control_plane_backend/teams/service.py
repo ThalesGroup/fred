@@ -8,8 +8,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
-from sqlalchemy.exc import IntegrityError
-
 from fred_core import (
     ORGANIZATION_ID,
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
@@ -28,6 +26,7 @@ from fred_core import (
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
+from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,

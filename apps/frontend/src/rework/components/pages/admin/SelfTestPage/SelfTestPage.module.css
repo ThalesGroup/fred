@@ -74,9 +74,9 @@
 
 .testProfileFields {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--spacing-m);
-  flex-wrap: wrap;
 }
 
 .testProfileCaption {

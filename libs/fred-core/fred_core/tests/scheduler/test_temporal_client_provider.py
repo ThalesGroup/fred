@@ -16,7 +16,6 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from fred_core.common import TemporalSchedulerConfig
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
