@@ -56,7 +56,7 @@ def _deps(rebac: _FakeRebac):
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
-        get_team_metadata_store=cast(Any, lambda: _FakeMetadataStore()),
+        get_team_metadata_store=cast(Any, _FakeMetadataStore),
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),

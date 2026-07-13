@@ -79,7 +79,7 @@ class CorpusManagerController:
             try:
                 return self.service.capabilities()
             except Exception as e:
-                self._handle_exception(e, "capabilities")
+                return self._handle_exception(e, "capabilities")
 
         @router.post(
             "/corpus/build-toc",

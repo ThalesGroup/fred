@@ -55,11 +55,11 @@ class _FakeRebac:
 
 
 def _build_app(monkeypatch, rebac: _FakeRebac, store: _FakeKpiStore) -> TestClient:
-    monkeypatch.setattr(
-        kpi_controller_module,
-        "get_app_context",
-        lambda: type("FakeAppContext", (), {"get_kpi_store": staticmethod(lambda: store)})(),
-    )
+    class _FakeAppContext:
+        def get_kpi_store(self) -> _FakeKpiStore:
+            return store
+
+    monkeypatch.setattr(kpi_controller_module, "get_app_context", lambda: _FakeAppContext())
     monkeypatch.setattr(kpi_controller_module, "get_rebac_engine", lambda: rebac)
 
     router = APIRouter()
