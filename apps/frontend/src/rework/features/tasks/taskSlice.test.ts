@@ -28,6 +28,7 @@ import {
   selectUnacknowledgedFailures,
   selectActiveTaskForTarget,
   makeSelectSucceededTargetsOfType,
+  makeSelectTaskTargetsOfType,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
@@ -489,6 +490,48 @@ describe("makeSelectSucceededTargetsOfType", () => {
   it("returns an empty array when nothing has succeeded", () => {
     const s = { byId: { t1: vm({ taskId: "t1", state: "running", target: target() }) } };
     expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
+  });
+});
+
+// ── makeSelectTaskTargetsOfType ───────────────────────────────────────────────
+
+describe("makeSelectTaskTargetsOfType", () => {
+  it("returns a target id regardless of task state (including pending)", () => {
+    const s = {
+      byId: {
+        t1: vm({ taskId: "t1", state: "pending", target: target({ type: "document", id: "doc-1" }) }),
+      },
+    };
+    expect(makeSelectTaskTargetsOfType("document")(root(s))).toEqual(["doc-1"]);
+  });
+
+  it("dedupes when several tasks (e.g. reprocess) share the same target", () => {
+    const s = {
+      byId: {
+        t1: vm({ taskId: "t1", state: "succeeded", target: target({ type: "document", id: "doc-1" }) }),
+        t2: vm({ taskId: "t2", state: "running", target: target({ type: "document", id: "doc-1" }) }),
+      },
+    };
+    expect(makeSelectTaskTargetsOfType("document")(root(s))).toEqual(["doc-1"]);
+  });
+
+  it("excludes targets whose type does not match", () => {
+    const s = {
+      byId: {
+        doc: vm({ taskId: "doc", target: target({ type: "document", id: "doc-1" }) }),
+        conv: vm({ taskId: "conv", target: target({ type: "conversation", id: "s-1" }) }),
+      },
+    };
+    expect(makeSelectTaskTargetsOfType("document")(root(s))).toEqual(["doc-1"]);
+  });
+
+  it("excludes tasks with a null target", () => {
+    const s = { byId: { t1: vm({ taskId: "t1", target: null }) } };
+    expect(makeSelectTaskTargetsOfType("document")(root(s))).toEqual([]);
+  });
+
+  it("returns an empty array when the store is empty", () => {
+    expect(makeSelectTaskTargetsOfType("document")(root(empty()))).toEqual([]);
   });
 });
 

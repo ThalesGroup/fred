@@ -461,10 +461,6 @@
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)",
         "name": "MCP local (stdio)"
       },
-      "neo4j": {
-        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j",
-        "name": "Accès Neo4j"
-      },
       "prometheus": {
         "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
         "name": "Accès à Prometheus"
@@ -799,6 +795,23 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "Ma consommation de tokens",
+      "tokensOverTime": {
+        "title": "Consommation de tokens dans le temps",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "Aucune consommation d'agent sur cette période.",
+        "title": "Consommation par agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "Aucune consommation de modèle sur cette période.",
+        "title": "Consommation par modèle",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Retour",
     "cancel": "Annuler",
     "collapse": "Réduire",
@@ -1001,14 +1014,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Auto-test",
-        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
-        "run": "Lancer la campagne",
+        "title": "Auto-test"
+      },
+      "report": {
         "running": "En cours…",
-        "empty": "Aucune exécution. Cliquez sur « Lancer la campagne » pour valider la stack.",
+        "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
+      },
+      "functional": {
+        "title": "Auto-test fonctionnel",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
+        "run": "Lancer la campagne"
+      },
+      "authz": {
+        "title": "Auto-test d'autorisation",
+        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
+        "runSelf": "Lancer pour moi-même",
+        "testProfile": {
+          "title": "Tester un autre profil",
+          "usernameLabel": "Compte",
+          "usernamePlaceholder": "Choisir un compte",
+          "passwordLabel": "Mot de passe",
+          "run": "Lancer",
+          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm — déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau — ça rapporte simplement ce que ce compte peut déjà faire.",
+          "disabledInsecure": "Non disponible sur ce déploiement — aucun vrai realm Keycloak à interroger."
+        }
       }
     },
     "tasks": {
@@ -1059,9 +1091,10 @@
           "prompts": "Prompts",
           "col": {
             "team": "Équipe",
-            "owners": "Owners",
-            "managers": "Managers",
-            "members": "Members",
+            "admins": "Administrateurs",
+            "editors": "Éditeurs",
+            "analysts": "Analystes",
+            "members": "Membres",
             "agents": "Agents",
             "prompts": "Prompts"
           }
@@ -1109,14 +1142,40 @@
         "inDays": "dans {{count}} j"
       }
     },
+    "adminTeams": {
+      "existingTeams": {
+        "title": "Équipes existantes",
+        "empty": "Aucune équipe pour l'instant.",
+        "table": {
+          "name": "Équipe",
+          "admins": "Administrateur(s)"
+        }
+      },
+      "createTeam": {
+        "title": "Créer une équipe",
+        "nameLabel": "Nom de l'équipe",
+        "namePlaceholder": "ex. swiftpost",
+        "adminsLabel": "Administrateur(s) initial(aux)",
+        "adminsPlaceholder": "Rechercher des utilisateurs...",
+        "submit": "Créer l'équipe",
+        "successSummary": "Équipe créée",
+        "errors": {
+          "summary": "Échec de la création de l'équipe",
+          "fallbackDetail": "Impossible de créer l'équipe. Veuillez réessayer.",
+          "conflictDetail": "Une équipe portant ce nom existe déjà.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour créer des équipes."
+        }
+      }
+    },
     "teamCard": {
       "join": "Rejoindre",
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "manager": "Editeur",
-      "member": "Membre",
-      "owner": "Propriétaire"
+      "team_admin": "Administrateur",
+      "team_editor": "Editeur",
+      "team_analyst": "Analyste",
+      "team_member": "Membre"
     },
     "teamSettings": {
       "members": {
@@ -1125,7 +1184,7 @@
         },
         "errors": {
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
-          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "removeMemberSummary": "Échec de la suppression du membre",
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",

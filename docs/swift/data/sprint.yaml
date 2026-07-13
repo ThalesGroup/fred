@@ -284,18 +284,6 @@ in_progress:
       ownership hardening). BACKLOG §6.4.F ownership enforcement is now
       implemented for control-plane session PATCH/DELETE.
 
-  - id: CTRLP-11
-    title: "Suppression Keycloak admin pour CRUD users et listing teams"
-    owner: Thomas
-    blocked: false
-    rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
-    notes: >
-      Thomas commence à traiter le sujet (2026-06-11). RFC rédigé.
-      Source de vérité PostgreSQL pour list/create/delete users et listing teams.
-      Auth JWT/OIDC et relation users↔teams (OpenFA) hors périmètre.
-      Phases : (1) migration Alembic, (2) modèles SQLAlchemy, (3) service users,
-      (4) service teams listing, (5) knowledge-flow-backend via HTTP.
-
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:

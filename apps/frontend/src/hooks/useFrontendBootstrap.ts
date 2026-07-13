@@ -9,7 +9,6 @@ export type FrontendBootstrapState = {
   bootstrap?: FrontendBootstrap;
   activeTeam?: TeamWithPermissions;
   availableTeams: Team[];
-  permissionItems: string[];
   isLoading: boolean;
   refetch: () => void;
 };
@@ -26,8 +25,10 @@ export type FrontendBootstrapState = {
  * - call the hook in shell or page components that need bootstrap-owned state
  * - use `activeTeam` for the current personal/team context during the Phase 5
  *   convergence work
- * - use `availableTeams` for team navigation and `permissionItems` for route/UI
- *   gates when a boolean summary is not enough
+ * - use `availableTeams` for team navigation; use `useUserCapabilities()` for
+ *   org-level gates and `useTeamCapabilities(team)` for team-level gates
+ *   instead of reading `bootstrap.permissions` directly (see
+ *   `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`)
  *
  * Example:
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
@@ -44,7 +45,6 @@ export function useFrontendBootstrap(): FrontendBootstrapState {
     bootstrap: data,
     activeTeam: data?.active_team,
     availableTeams: data?.available_teams ?? [],
-    permissionItems: data?.permissions?.items ?? [],
     isLoading: isLoading || (isFetching && !data),
     refetch,
   };

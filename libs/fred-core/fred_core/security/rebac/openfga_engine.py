@@ -28,13 +28,14 @@ from fred_core.security.rebac.openfga_schema import (
     DEFAULT_SCHEMA,
 )
 from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
     RebacEngine,
     RebacPermission,
     RebacReference,
     Relation,
     RelationType,
 )
-from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
+from fred_core.security.structure import OpenFgaRebacConfig
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -72,13 +73,10 @@ class OpenFgaRebacEngine(RebacEngine):
     def __init__(
         self,
         config: OpenFgaRebacConfig,
-        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
-        super().__init__(m2m_security)
-
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
@@ -193,8 +191,12 @@ class OpenFgaRebacEngine(RebacEngine):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # Only used to sync Keycloakc groups with the rebac engine. Not needed
-        # with OpenFGA as we handle this with contextual tuples.
+        # No current caller needs a bulk tuple read: every authorization
+        # decision goes through `has_permission`, `lookup_resources`, or
+        # `lookup_subjects` instead, each backed by a persisted OpenFGA tuple
+        # (never Keycloak-derived). Implemented by 2 other engines and
+        # exercised elsewhere; this OpenFGA-backed stub stays a stub until a
+        # real caller needs it.
         raise NotImplementedError(
             "OpenFGA relation listing is not implemented as it is not needed"
         )
@@ -255,6 +257,30 @@ class OpenFgaRebacEngine(RebacEngine):
             OpenFgaRebacEngine._openfga_user_to_reference(user)
             for user in response.users
         ]
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # A fully-specified tuple key (user + relation + object) queried via
+        # the raw `Read` API returns only literally-persisted tuples — unlike
+        # `Check`/`ListUsers`, it does not expand userset rewrites (e.g.
+        # schema.fga's `team_member: [user] or team_admin or team_editor or
+        # team_analyst`). This is the same primitive already used by
+        # `delete_all_relations_of_reference` for a bulk tuple read.
+        client = await self.get_client()
+        body = ReadRequestTupleKey(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+            relation=relation.value,
+            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+        )
+        options = self._build_options(consistency=consistency_token)
+        response = await client.read(body, options)
+        return len(response.tuples) > 0
 
     async def has_permission(
         self,
@@ -375,11 +401,50 @@ class OpenFgaRebacEngine(RebacEngine):
         if self._config.sync_schema_on_init:
             await self.sync_schema(client)
 
+        # AUTHZ-05 bootstrap (RFC §24.3): config-seeded platform_admin/platform_observer.
+        await self._bootstrap_platform_roles(client)
+
         logger.info(
             "[REBAC] OpenFGA engine initialized in %dms",
             int((time.monotonic() - started) * 1000),
         )
         return client
+
+    async def _bootstrap_platform_roles(self, client: OpenFgaClient) -> None:
+        """Write config-seeded platform_admin/platform_observer tuples once.
+
+        Called with the client already resolved (not `self.get_client()`) because
+        this runs from inside `_initialize_client_and_store`, which itself holds
+        the client-initialization lock — going through `add_relation` here would
+        deadlock on that lock. Writes are idempotent (`_build_options` sets
+        `on_duplicate_writes=IGNORE`) and never remove an existing grant.
+        """
+        relations = [
+            Relation(
+                subject=RebacReference(Resource.USER, sub),
+                relation=RelationType.PLATFORM_ADMIN,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            )
+            for sub in self._config.platform_admin_subjects
+        ] + [
+            Relation(
+                subject=RebacReference(Resource.USER, sub),
+                relation=RelationType.PLATFORM_OBSERVER,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            )
+            for sub in self._config.platform_observer_subjects
+        ]
+        if not relations:
+            return
+
+        logger.info(
+            "[REBAC] Bootstrapping %d config-seeded platform-role tuple(s)",
+            len(relations),
+        )
+        body = ClientWriteRequest(
+            writes=[OpenFgaRebacEngine._relation_to_tuple(r) for r in relations]
+        )
+        _ = await client.write(body, self._build_options())
 
     async def get_client(self) -> OpenFgaClient:
         """Lazily initialize and cache an OpenFGA client with store ID."""

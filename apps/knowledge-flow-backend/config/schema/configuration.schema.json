@@ -944,12 +944,6 @@
           "title": "Prometheus Ops Enabled",
           "type": "boolean"
         },
-        "neo4j_enabled": {
-          "default": false,
-          "description": "Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
-          "title": "Neo4J Enabled",
-          "type": "boolean"
-        },
         "filesystem_enabled": {
           "default": false,
           "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
@@ -1352,6 +1346,22 @@
           "default": null,
           "description": "Static HTTP headers to send with each OpenFGA API request",
           "title": "Headers"
+        },
+        "platform_admin_subjects": {
+          "description": "AUTHZ-05 bootstrap (RFC FRED-AUTHORIZATION-TARGET-MODEL \u00a724.3): Keycloak `sub` values to grant the target `platform_admin` relation to at startup. Idempotent; never removes an existing grant. Empty by default (no behavior change until explicitly configured).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Platform Admin Subjects",
+          "type": "array"
+        },
+        "platform_observer_subjects": {
+          "description": "AUTHZ-05 bootstrap: Keycloak `sub` values to grant the target `platform_observer` relation to at startup. Idempotent.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Platform Observer Subjects",
+          "type": "array"
         }
       },
       "required": [
@@ -2479,6 +2489,19 @@
           ],
           "default": 5,
           "title": "Connect Timeout Seconds"
+        },
+        "rpc_timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 10,
+          "description": "Deadline applied to individual Temporal RPC calls (start_workflow, describe) so a stuck Temporal frontend cannot hang the caller indefinitely.",
+          "title": "Rpc Timeout Seconds"
         },
         "ingestion_workflow_parallelism": {
           "default": 3,

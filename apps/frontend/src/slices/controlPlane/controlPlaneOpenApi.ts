@@ -74,6 +74,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/teams` }),
     }),
+    createTeamControlPlaneV1TeamsPost: build.mutation<
+      CreateTeamControlPlaneV1TeamsPostApiResponse,
+      CreateTeamControlPlaneV1TeamsPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams`, method: "POST", body: queryArg.createTeamRequest }),
+    }),
+    listAllTeamsControlPlaneV1TeamsAllGet: build.query<
+      ListAllTeamsControlPlaneV1TeamsAllGetApiResponse,
+      ListAllTeamsControlPlaneV1TeamsAllGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/teams/all` }),
+    }),
     getTeamControlPlaneV1TeamsTeamIdGet: build.query<
       GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
       GetTeamControlPlaneV1TeamsTeamIdGetApiArg
@@ -88,6 +100,22 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/teams/${queryArg.teamId}`,
         method: "PATCH",
         body: queryArg.updateTeamRequest,
+      }),
+    }),
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: build.mutation<
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse,
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
+    }),
+    rescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPost: build.mutation<
+      RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse,
+      RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/rescue-admin`,
+        method: "POST",
+        body: queryArg.rescueTeamAdminRequest,
       }),
     }),
     uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: build.mutation<
@@ -125,14 +153,23 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    updateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatch: build.mutation<
-      UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiResponse,
-      UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg
+    grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: build.mutation<
+      GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiResponse,
+      GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
-        method: "PATCH",
-        body: queryArg.updateTeamMemberRequest,
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}/roles`,
+        method: "POST",
+        body: queryArg.grantTeamMemberRoleRequest,
+      }),
+    }),
+    revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: build.mutation<
+      RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiResponse,
+      RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}/roles/${queryArg.relation}`,
+        method: "DELETE",
       }),
     }),
     getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: build.query<
@@ -530,6 +567,42 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_by_agent`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageByModelGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_by_model`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
     createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
@@ -642,6 +715,12 @@ export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Success
 export type ValidateGcuControlPlaneV1GcuPostApiArg = void;
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
+export type CreateTeamControlPlaneV1TeamsPostApiResponse = /** status 201 Successful Response */ TeamWithPermissions;
+export type CreateTeamControlPlaneV1TeamsPostApiArg = {
+  createTeamRequest: CreateTeamRequest;
+};
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
@@ -651,6 +730,15 @@ export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiResponse =
 export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg = {
   teamId: string;
   updateTeamRequest: UpdateTeamRequest;
+};
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
+  teamId: string;
+};
+export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse = unknown;
+export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
+  teamId: string;
+  rescueTeamAdminRequest: RescueTeamAdminRequest;
 };
 export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse = unknown;
 export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg = {
@@ -673,11 +761,17 @@ export type RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiArg =
   teamId: string;
   userId: string;
 };
-export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiResponse = unknown;
-export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg = {
+export type GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiResponse = unknown;
+export type GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiArg = {
   teamId: string;
   userId: string;
-  updateTeamMemberRequest: UpdateTeamMemberRequest;
+  grantTeamMemberRoleRequest: GrantTeamMemberRoleRequest;
+};
+export type RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiResponse = unknown;
+export type RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiArg = {
+  teamId: string;
+  userId: string;
+  relation: UserTeamRelation;
 };
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
   /** status 200 Successful Response */ FrontendBootstrap;
@@ -953,6 +1047,30 @@ export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
 };
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg = {
@@ -1083,9 +1201,14 @@ export type TeamPermission =
   | "can_update_agents"
   | "can_read_members"
   | "can_administer_members"
-  | "can_administer_managers"
-  | "can_administer_owners"
-  | "can_read_conversations";
+  | "can_administer_editors"
+  | "can_administer_analysts"
+  | "can_administer_admins"
+  | "can_read_conversations"
+  | "can_use_team_agents"
+  | "can_run_evaluations"
+  | "can_manage_evaluation_corpus"
+  | "can_read_conversations_for_evaluation";
 export type RetentionFieldView = {
   platform_max?: string | null;
   team_value?: string | null;
@@ -1101,7 +1224,7 @@ export type TeamWithPermissions = {
   id: string;
   name: string;
   member_count?: number | null;
-  owners?: UserSummary[];
+  admins?: UserSummary[];
   is_member?: boolean;
   description?: string | null;
   is_private?: boolean;
@@ -1120,13 +1243,17 @@ export type Team = {
   id: string;
   name: string;
   member_count?: number | null;
-  owners?: UserSummary[];
+  admins?: UserSummary[];
   is_member?: boolean;
   description?: string | null;
   is_private?: boolean;
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
+};
+export type CreateTeamRequest = {
+  name: string;
+  initial_team_admin_ids: string[];
 };
 export type UpdateTeamRequest = {
   description?: string | null;
@@ -1135,14 +1262,17 @@ export type UpdateTeamRequest = {
   team_delete_grace?: string | null;
   max_idle?: string | null;
 };
+export type RescueTeamAdminRequest = {
+  user_id: string;
+};
 export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
   /** Banner image file (max 5MB, JPEG/PNG/WebP) */
   file: string;
 };
-export type UserTeamRelation = "owner" | "manager" | "member";
+export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type TeamMember = {
   type?: "user";
-  relation: UserTeamRelation;
+  relations: UserTeamRelation[];
   user: UserSummary;
 };
 export type AddTeamMemberRequest = {
@@ -1159,7 +1289,7 @@ export type RemoveTeamMemberResponse = {
   retention_seconds: number;
   matched_rule_id?: string | null;
 };
-export type UpdateTeamMemberRequest = {
+export type GrantTeamMemberRoleRequest = {
   relation: UserTeamRelation;
 };
 export type FrontendFeatureFlags = {
@@ -1167,13 +1297,10 @@ export type FrontendFeatureFlags = {
   enableElecWarfare?: boolean;
 };
 export type PermissionSummary = {
-  items?: string[];
-  can_view_team_agents?: boolean;
-  can_manage_team_agents?: boolean;
-  can_manage_mcp_servers?: boolean;
-  can_view_feedback?: boolean;
-  can_submit_feedback?: boolean;
-  can_create_sessions?: boolean;
+  /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
+  is_platform_admin?: boolean;
+  /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
+  is_platform_observer?: boolean;
 };
 export type FrontendBootstrap = {
   current_user: UserSummary;
@@ -1775,8 +1902,9 @@ export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
 export type TeamStats = {
   team_id: string;
   name: string;
-  owners: number;
-  managers: number;
+  admins: number;
+  editors: number;
+  analysts: number;
   members: number;
   total_members: number;
   agents: number;
@@ -1810,15 +1938,21 @@ export const {
   useValidateGcuControlPlaneV1GcuPostMutation,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation,
+  useListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
+  useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
+  useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
-  useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation,
+  useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation,
+  useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation,
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
@@ -1883,6 +2017,12 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,

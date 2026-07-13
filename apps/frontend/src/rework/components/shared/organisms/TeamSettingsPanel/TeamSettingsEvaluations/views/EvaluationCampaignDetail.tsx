@@ -170,8 +170,9 @@ export default function EvaluationCampaignDetail({
   const isLive = campaign?.operational_state === "running" || campaign?.operational_state === "pending";
 
   // The campaign run is a task in the shared task store. Register it (live only,
-  // dedup-safe) so useTaskSseManager streams /evaluation/v1/tasks/{task_id}/events
-  // and it surfaces in the global TaskTray; the badge/bar below read from the store.
+  // dedup-safe) so useTaskSseManager streams /evaluation/v1/tasks/{task_id}/events;
+  // the badge/bar below read from the store. (TaskTray is currently unmounted from
+  // Sidebar.tsx, see BACKLOG.md P4 — this store registration is otherwise unaffected.)
   const dispatch = useDispatch();
   const taskVm = useSelector(selectTask(campaign?.task_id ?? ""));
   useEffect(() => {

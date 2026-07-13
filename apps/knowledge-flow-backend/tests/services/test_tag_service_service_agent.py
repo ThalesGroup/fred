@@ -49,7 +49,7 @@ def _svc(rebac: _FakeRebac) -> TagService:
 
 
 def _user(roles: list[str]) -> KeycloakUser:
-    return KeycloakUser(uid="u", username="u", roles=roles, email=None, groups=[])
+    return KeycloakUser(uid="u", username="u", roles=roles, email=None)
 
 
 @pytest.mark.asyncio

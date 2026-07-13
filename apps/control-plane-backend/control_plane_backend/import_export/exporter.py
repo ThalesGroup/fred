@@ -91,6 +91,7 @@ def _metadata_to_dict(row: DocumentMetadataRow) -> dict:
 def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
     return {
         "id": row.id,
+        "name": row.name,
         "description": row.description,
         "is_private": row.is_private,
         "banner_object_storage_key": row.banner_object_storage_key,

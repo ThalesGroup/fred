@@ -20,11 +20,14 @@ from unittest.mock import MagicMock
 import pytest
 from fred_core import KeycloakUser, TeamPermission
 from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamMetadata
 
 
-class _FakeAdmin:
-    async def a_get_group(self, team_id: str) -> dict[str, Any]:
-        return {"id": team_id, "name": "fredlab"}
+class _FakeMetadataStore:
+    """AUTHZ-05 review item 9: team existence now comes from team_metadata_store."""
+
+    async def get_by_team_id(self, team_id: TeamId) -> TeamMetadata | None:
+        return TeamMetadata(id=team_id, name="fredlab")
 
 
 class _FakeRebac:
@@ -41,7 +44,7 @@ class _FakeRebac:
 
 
 def _user(roles: list[str]) -> KeycloakUser:
-    return KeycloakUser(uid="u", username="u", roles=roles, email=None, groups=[])
+    return KeycloakUser(uid="u", username="u", roles=roles, email=None)
 
 
 def _deps(rebac: _FakeRebac):
@@ -53,8 +56,7 @@ def _deps(rebac: _FakeRebac):
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
-        create_keycloak_admin_client=cast(Any, _FakeAdmin),
-        get_team_metadata_store=cast(Any, object),
+        get_team_metadata_store=cast(Any, _FakeMetadataStore),
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
@@ -72,7 +74,7 @@ async def test_service_agent_read_bypasses_openfga() -> None:
     )
 
     rebac = _FakeRebac()
-    admin, group, token = await _validate_team_and_check_permission(
+    metadata, token = await _validate_team_and_check_permission(
         _user(["service_agent"]),
         TeamId("fredlab"),
         cast(Any, rebac),
@@ -82,7 +84,7 @@ async def test_service_agent_read_bypasses_openfga() -> None:
 
     assert rebac.calls == []  # OpenFGA never consulted for the service identity
     assert token is None
-    assert group["id"] == "fredlab"
+    assert metadata.id == "fredlab"
 
 
 @pytest.mark.asyncio

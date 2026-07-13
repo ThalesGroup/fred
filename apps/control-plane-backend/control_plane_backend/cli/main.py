@@ -474,7 +474,15 @@ def _print_bootstrap_summary(
     """Render a compact human-readable frontend bootstrap summary."""
 
     _print_section("Frontend Bootstrap", color_enabled=color_enabled)
-    permissions = ", ".join(bootstrap.permissions.items) or "none"
+    permission_flags = [
+        name
+        for name, held in (
+            ("platform_admin", bootstrap.permissions.is_platform_admin),
+            ("platform_observer", bootstrap.permissions.is_platform_observer),
+        )
+        if held
+    ]
+    permissions = ", ".join(permission_flags) or "none"
     print(
         "  User:      "
         + colorize(
@@ -719,8 +727,8 @@ def _print_team_details(team: TeamWithPermissions, *, color_enabled: bool) -> No
     print(f"  private:    {team.is_private}")
     print(f"  members:    {team.member_count or 0}")
     print(
-        "  owners:     "
-        + (", ".join((owner.username or owner.id) for owner in team.owners) or "none")
+        "  admins:     "
+        + (", ".join((admin.username or admin.id) for admin in team.admins) or "none")
     )
     print(
         "  permissions:"
@@ -735,7 +743,11 @@ def _print_members_table(members: list[TeamMember], *, color_enabled: bool) -> N
         "Members",
         members,
         [
-            ColumnSpec("relation", 12, lambda m: m.relation.value),
+            ColumnSpec(
+                "roles",
+                34,
+                lambda m: ", ".join(relation.value for relation in m.relations),
+            ),
             ColumnSpec(
                 "username", 28, lambda m: m.user.username or "", color=ANSI_GREEN
             ),

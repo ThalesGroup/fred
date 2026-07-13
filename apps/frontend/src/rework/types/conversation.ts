@@ -73,8 +73,13 @@ export interface Conversation {
 export interface UserCapabilities {
   canDebug: boolean;
   canAdmin: boolean;
+  canObservePlatform: boolean;
   canEditSessions: boolean;
   canDeleteSessions: boolean;
+  /** True until `/frontend/bootstrap` has resolved at least once. `canAdmin`/
+   * `canObservePlatform` default to `false` while this is true — callers that
+   * gate access (e.g. `Protected`) must not treat that default as a denial. */
+  isLoading: boolean;
 }
 
 export interface ConversationSettings {

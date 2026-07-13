@@ -29,6 +29,13 @@ class TaskRefV1(BaseModel):
 
     operation: str
 
+    # AUTHZ-05 review finding: the team this task was created under (see
+    # `_create_task`). `tasks_get`/`tasks_result` check this against the
+    # caller-supplied `team_id` instead of trusting it blindly — otherwise
+    # any team member who learns/guesses another team's task_id could read
+    # its status/result by simply naming their own team_id.
+    team_id: str
+
     # Correlation (agentic-backend can provide it)
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None
@@ -98,6 +105,12 @@ class BuildCorpusTocRequestV1(BaseModel):
 
     title: Optional[str] = Field(default=None, max_length=120)
 
+    # AUTHZ-05 review finding: the created task must record which team it
+    # belongs to (see TaskRefV1.team_id) so tasks_get/tasks_result/tasks_list
+    # can scope reads to it instead of trusting the caller-supplied team_id
+    # blindly (IDOR — see those methods' docstrings).
+    team_id: str
+
     # Optional correlation (agentic-backend can provide it)
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None
@@ -118,6 +131,9 @@ class RevectorizeCorpusRequestV1(BaseModel):
     scope: CorpusScopeV1
     options: RevectorizeOptionsV1 = Field(default_factory=RevectorizeOptionsV1)
 
+    # AUTHZ-05 review finding: see BuildCorpusTocRequestV1.team_id.
+    team_id: str
+
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None
 
@@ -136,6 +152,9 @@ class PurgeVectorsRequestV1(BaseModel):
     scope: CorpusScopeV1
     options: PurgeVectorsOptionsV1 = Field(default_factory=PurgeVectorsOptionsV1)
 
+    # AUTHZ-05 review finding: see BuildCorpusTocRequestV1.team_id.
+    team_id: str
+
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None
 
@@ -144,12 +163,19 @@ class TaskGetRequestV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str
+    # AUTHZ-05 §27: the caller must name the team they expect to read this
+    # task under; the controller checks TeamPermission.CAN_READ on it, and
+    # the service additionally checks it against the task's own stored
+    # `team_id` (see TaskRefV1.team_id) so naming a team you belong to isn't
+    # enough to read a task filed under a different one.
+    team_id: str
 
 
 class TaskResultRequestV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str
+    team_id: str
 
 
 class TaskListRequestV1(BaseModel):
@@ -160,6 +186,7 @@ class TaskListRequestV1(BaseModel):
     operation: Optional[str] = None
     status: Optional[TaskStatus] = None
     limit: int = Field(default=20, ge=1, le=200)
+    team_id: str
 
 
 class ToolSpecV1(BaseModel):
@@ -230,7 +257,13 @@ class CorpusManagerService:
             "result": f"tasks/result?task_id={task_id}",
         }
 
-    def _create_task(self, operation: str, thread_id: Optional[str], exchange_id: Optional[str]) -> TaskRefV1:
+    def _create_task(
+        self,
+        operation: str,
+        thread_id: Optional[str],
+        exchange_id: Optional[str],
+        team_id: str,
+    ) -> TaskRefV1:
         tid = str(uuid.uuid4())
         t = TaskRefV1(
             task_id=tid,
@@ -238,6 +271,7 @@ class CorpusManagerService:
             created_at=_now(),
             updated_at=_now(),
             operation=operation,
+            team_id=team_id,
             thread_id=thread_id,
             exchange_id=exchange_id,
             poll_interval_s=5,
@@ -274,31 +308,43 @@ class CorpusManagerService:
     # ---- Business methods ----
 
     def build_corpus_toc(self, req: BuildCorpusTocRequestV1) -> TaskRefV1:
-        return self._create_task("build_corpus_toc", req.thread_id, req.exchange_id)
+        return self._create_task("build_corpus_toc", req.thread_id, req.exchange_id, req.team_id)
 
     def revectorize_corpus(self, req: RevectorizeCorpusRequestV1) -> TaskRefV1:
-        return self._create_task("revectorize_corpus", req.thread_id, req.exchange_id)
+        return self._create_task("revectorize_corpus", req.thread_id, req.exchange_id, req.team_id)
 
     def purge_vectors(self, req: PurgeVectorsRequestV1) -> TaskRefV1:
-        return self._create_task("purge_vectors", req.thread_id, req.exchange_id)
+        return self._create_task("purge_vectors", req.thread_id, req.exchange_id, req.team_id)
+
+    def _unknown_task_ref(self, req: TaskGetRequestV1) -> TaskRefV1:
+        return TaskRefV1(
+            task_id=req.task_id,
+            status="failed",
+            created_at=_now(),
+            updated_at=_now(),
+            operation="unknown",
+            team_id=req.team_id,
+            message="Unknown task_id (mock store).",
+            poll_interval_s=5,
+            links={},
+        )
 
     def tasks_get(self, req: TaskGetRequestV1) -> TaskRefV1:
-        if req.task_id not in self._tasks:
-            return TaskRefV1(
-                task_id=req.task_id,
-                status="failed",
-                created_at=_now(),
-                updated_at=_now(),
-                operation="unknown",
-                message="Unknown task_id (mock store).",
-                poll_interval_s=5,
-                links={},
-            )
+        # AUTHZ-05 review finding: the controller only checks the caller is a
+        # member of the NAMED team_id, not that this task actually belongs to
+        # it — the in-memory store has no team scoping of its own otherwise.
+        # Report "unknown task" for both a truly unknown task_id and a task
+        # that belongs to a different team, so a caller cannot use this
+        # endpoint as an oracle to learn that another team's task_id exists.
+        if req.task_id not in self._tasks or self._tasks[req.task_id].team_id != req.team_id:
+            return self._unknown_task_ref(req)
         self._advance_mock(req.task_id)
         return self._tasks[req.task_id]
 
     def tasks_result(self, req: TaskResultRequestV1) -> dict:
-        if req.task_id not in self._tasks:
+        # AUTHZ-05 review finding: same cross-team ownership check as
+        # tasks_get, for the same reason.
+        if req.task_id not in self._tasks or self._tasks[req.task_id].team_id != req.team_id:
             return {
                 "version": "v1",
                 "task_id": req.task_id,
@@ -327,7 +373,11 @@ class CorpusManagerService:
         }
 
     def tasks_list(self, req: TaskListRequestV1) -> dict:
-        items = list(self._tasks.values())
+        # AUTHZ-05 review finding: previously listed every task in the pod's
+        # shared store regardless of `req.team_id` — the controller's
+        # team-membership check gated nothing since the data itself was never
+        # scoped. Filter by ownership first, same as tasks_get/tasks_result.
+        items = [t for t in self._tasks.values() if t.team_id == req.team_id]
         if req.thread_id:
             items = [t for t in items if t.thread_id == req.thread_id]
         if req.exchange_id:

@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fred_core import DocumentPermission, KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import get_rebac_engine
@@ -41,8 +41,21 @@ class StatisticController:
 
         self.service = StatisticService()
         self.tabular_service = TabularService()
+        # AUTHZ-05 §27: the loaded dataset lives in shared, per-worker service
+        # state (`self.service.df`), not per-request. `set_dataset` authorizes
+        # `DocumentPermission` on the specific `document_uid`; every dependent
+        # read/process endpoint below re-checks THAT document against the
+        # CURRENT caller instead of trusting the org-level CAN_READ_CONTENT/
+        # CAN_PROCESS_CONTENT gate, which any global Keycloak viewer/editor
+        # satisfied regardless of team membership.
+        self._loaded_document_uid: str | None = None
 
         self._register_routes(router)
+
+    async def _authorize_loaded_dataset(self, user: KeycloakUser, permission: DocumentPermission) -> None:
+        if self._loaded_document_uid is None:
+            raise HTTPException(400, "No dataset loaded. Call /stat/set_dataset first.")
+        await get_rebac_engine().check_user_permission_or_raise(user, permission, self._loaded_document_uid)
 
     def _register_routes(self, router: APIRouter):
         @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets", operation_id="list_datasets")
@@ -77,7 +90,10 @@ class StatisticController:
               endpoint when the caller is bound to one active area.
             """
 
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: no org-level gate here — `tabular_service.list_datasets`
+            # already filters to datasets the caller holds `DocumentPermission.READ`
+            # on, which is team-scoped. A coarse org-level check would be both
+            # redundant and less precise than the per-document filtering below.
             try:
                 datasets = await self.tabular_service.list_datasets(
                     user,
@@ -107,7 +123,11 @@ class StatisticController:
             - Send the dataset `document_uid` returned by `/stat/list_datasets`.
             """
 
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: team-scoped via the target document (preserves the
+            # original CAN_PROCESS_CONTENT/editor-level strictness). The
+            # service call below also checks DocumentPermission.READ
+            # internally, so this is belt-and-suspenders, not a duplicate gate.
+            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.PROCESS, request.document_uid)
             try:
                 dataset = await self.tabular_service.read_dataset_frame(
                     user,
@@ -117,6 +137,7 @@ class StatisticController:
                     team_id=request.team_id,
                 )
                 self.service.set_dataset(dataset)
+                self._loaded_document_uid = request.document_uid
                 return f"{request.document_uid} is loaded."
             except MissingTeamIdError as e:
                 raise HTTPException(400, str(e))
@@ -126,7 +147,7 @@ class StatisticController:
 
         @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset", operation_id="head")
         async def head(n: int = 5, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.head(n))
             except Exception as e:
@@ -135,7 +156,7 @@ class StatisticController:
 
         @router.get("/stat/describe", tags=["Statistic"], summary="Describe the dataset", operation_id="describe")
         async def describe(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.describe_data())
             except Exception as e:
@@ -144,7 +165,7 @@ class StatisticController:
 
         @router.post("/stat/detect_outliers", tags=["Statistic"], summary="Detect outliers values in numeric columns", operation_id="detect_outliers")
         async def detect_outliers(request: DetectOutliersRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.detect_outliers(method=request.method, threshold=request.threshold))
             except Exception as e:
@@ -153,7 +174,7 @@ class StatisticController:
 
         @router.get("/stat/correlations", tags=["Statistic"], summary="Get top correlations in the dataset", operation_id="correlations")
         async def correlations(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.correlation_analysis())
             except Exception as e:
@@ -162,7 +183,7 @@ class StatisticController:
 
         @router.post("/stat/plot/histogram", tags=["Statistic"], summary="Plot histogram for a column", operation_id="plot_histogram")
         async def plot_histogram(request: PlotHistogramRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 path = self.service.plot_histogram(column=request.column, bins=request.bins)
                 return clean_json({"status": "success", "path": path})
@@ -171,7 +192,7 @@ class StatisticController:
 
         @router.post("/stat/plot/scatter", tags=["Statistic"], summary="Plot scatter plot", operation_id="plot_scatter")
         async def plot_scatter(request: PlotScatterRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 path = self.service.plot_scatter(request.x_col, request.y_col)
                 return clean_json({"status": "success", "path": path})
@@ -180,7 +201,7 @@ class StatisticController:
 
         @router.post("/stat/train", tags=["Statistic"], summary="Train a model", operation_id="train_model")
         async def train_model(request: TrainModelRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.PROCESS)
             try:
                 training_results = self.service.train_model(request.target, request.features, model_type=request.model_type)
                 return clean_json({"status": "success", "message": training_results})
@@ -190,7 +211,7 @@ class StatisticController:
 
         @router.get("/stat/evaluate", tags=["Statistic"], summary="Evaluate last trained model", operation_id="evaluate_model")
         async def evaluate_model(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.evaluate_model())
             except Exception as e:
@@ -199,7 +220,7 @@ class StatisticController:
 
         @router.post("/stat/predict_row", tags=["Statistic"], summary="Predict a single row of data", operation_id="predict_row")
         async def predict_row(request: PredictRowRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.PROCESS)
             try:
                 prediction = self.service.predict_from_row(request.row)
                 return clean_json({"prediction": prediction})
@@ -209,7 +230,7 @@ class StatisticController:
 
         @router.post("/stat/save_model", tags=["Statistic"], summary="Save trained model", operation_id="save_model")
         async def save_model(request: SaveModelRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.PROCESS)
             try:
                 self.service.save_model(request.name)
                 return {"status": "success", "message": f"Model saved as '{request.name}'."}
@@ -219,7 +240,7 @@ class StatisticController:
 
         @router.get("/stat/list_models", tags=["Statistic"], summary="List saved models", operation_id="list_models")
         async def list_models(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json({"models": self.service.list_models()})
             except Exception as e:
@@ -228,7 +249,7 @@ class StatisticController:
 
         @router.post("/stat/load_model", tags=["Statistic"], summary="Load a previously saved model", operation_id="load_model")
         async def load_model(request: LoadModelRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.PROCESS)
             try:
                 self.service.load_model(request.name)
                 return clean_json({"status": "success", "message": f"Model '{request.name}' loaded."})
@@ -238,7 +259,7 @@ class StatisticController:
 
         @router.get("/stat/test_distribution", tags=["Statistic"], summary="Test if column fits normal, uniform or exponential distribution", operation_id="test_distribution")
         async def test_distribution(column: str, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 return clean_json(self.service.test_distribution(column))
             except Exception as e:
@@ -247,7 +268,7 @@ class StatisticController:
 
         @router.post("/stat/detect_outliers_ml", tags=["Statistic"], summary="Detect outliers using ML method", operation_id="detect_outliers_ml")
         async def detect_outliers_ml(request: DetectOutliersMLRequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.READ)
             try:
                 outliers = self.service.detect_outliers_ml(features=request.features, method=request.method)
                 return clean_json({"outliers": outliers})
@@ -257,7 +278,7 @@ class StatisticController:
 
         @router.post("/stat/pca", tags=["Statistic"], summary="Run PCA on selected features", operation_id="run_pca")
         async def run_pca(request: PCARequest, user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            await self._authorize_loaded_dataset(user, DocumentPermission.PROCESS)
             try:
                 result = self.service.run_pca(request.features, request.n_components)
                 return clean_json(result)

@@ -1273,6 +1273,54 @@ Execution: waived GitHub issue for local session
 - [ ] Sweeper: Temporal scheduled workflow per task-owning worker calls `reconcile_stale(grace, limit)`; optional read-time reconcile on SSE subscribe
 - [ ] Tests: reconcile decision matrix (failed / timed_out / completed / running / None) + integration (stuck task → terminal without the original worker)
 
+**P4 — Ingestion live-feedback wiring (found via live testing 2026-07-12, `NOTES-INGESTION-TASK-TRACKING-FIX.md`)**
+
+The SSE/task-store infrastructure above was already correct; three integration gaps kept
+it from ever reaching the screen for a fresh document upload — the tray component existed
+but was never mounted, the upload modal waited for full per-file completion instead of
+just scheduling, and a brand-new document had no refetch trigger until the whole batch
+was done.
+
+- [x] Mount `<TaskTray />` in `Sidebar.tsx` — built (SSE-backed, eviction timers) since
+      commit `f2fba807` but never rendered anywhere in the app
+      **Reverted 2026-07-13** (explicit product decision, live UI review): unmounted again —
+      the always-present tray trigger read as a stray/empty sidebar item next to the user
+      profile. `<TaskTray />`/`<TaskTrayTrigger />` and their SSE/eviction wiring are
+      untouched and still importable; only the `Sidebar.tsx` render call was removed. Net
+      effect: a fresh document upload or evaluation-campaign run again has no in-app popover
+      for live progress/failure — `useNotifyOnNewTaskTarget`'s silent list refetch still
+      works (wired in `MainLayout.tsx`, not the tray), so the item still eventually appears,
+      just without interim feedback. Remounting behind a "hide when empty" condition was
+      considered and declined.
+- [x] `DocumentUploadDrawer` closes once every file is scheduled (task_id known), not
+      once each file's full ingestion pipeline finishes — background request still runs
+      to completion; a failure after scheduling is the failed task's job to report (tray),
+      not the drawer's
+- [x] New shared hook `useNotifyOnNewTaskTarget` (`features/tasks/`) + backing selector
+      `makeSelectTaskTargetsOfType` — refetches a document list the instant a task appears
+      for a target not seen before (any state, not just `succeeded`), since
+      `useRefetchOnTaskSuccess` can never fire for a document that never had a row to
+      refresh in the first place
+- [x] Minor hardening (not the root cause of the above): bound `TemporalClientProvider.get_client()`
+      and `TemporalScheduler.start_document_processing`'s `start_workflow` with a configurable
+      `rpc_timeout_seconds` (new `TemporalSchedulerConfig` field), consistent with the
+      reconciliation sweeper's own concern about stuck executions
+
+Two further findings surfaced during the live verification of the above (same day):
+
+- [x] Ingestion progress ring froze at a fixed 30% for the whole "processing" step
+      (no telemetry between scheduling and completion in `PushInputProcess`/`OutputProcess`).
+      Simpler than instrumenting sub-steps: `ProcessPullFile`/`ProcessPushFile` in
+      `workflow.py` now keep `progress=None` (indeterminate spinner) through that step
+      instead of a fake `0.3` — requires a **Temporal worker restart** to take effect
+- [x] Team admins saw an empty Activité page for ingestion tasks while platform admins
+      saw everything — `task_svc.start(...)` in `_stream_upload_process` never passed
+      `team_id`, so every ingestion task_run row was created with `team_id=NULL`, which
+      never matches a team-scoped `WHERE team_id = :team_id` query. Extracted the
+      existing tag→team resolution out of `_check_quota_before_upload` into a shared
+      `_resolve_tag_owners`, reused to tag the task with its destination team_id
+      (left `None`, unchanged, when ambiguous or personal-space)
+
 #### OPS-05 Object storage naming cleanup
 
 RFC ref: `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`
@@ -2764,8 +2812,9 @@ configuration UI and policy writes on top.
       prompt promotion
 - [ ] Require explicit team authorization on session list/detail routes
 - [ ] Remove unscoped personal-prompt lookups from auth-sensitive paths
-- [ ] Add owner / manager / member / public-team tests for the corrected
-      behavior
+- [ ] Add team_admin / team_editor / team_member / public-team tests for the
+      corrected behavior (AUTHZ-05 renamed `owner`/`manager`/`member` to
+      `team_admin`/`team_editor`/`team_member`, RFC §26)
 
 #### TEAM-03 — Team platform policy product surface
 
@@ -2786,7 +2835,11 @@ object. Full model specified in `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`.
 - [ ] Reject policy writes that would invalidate already stored team
       configuration without remediation
 - [ ] `POST /control-plane/v1/teams` — create team, assign team admin, write
-      initial platform policy (atomic: Keycloak group + DB row + ReBAC relations)
+      initial platform policy (atomic: DB row + ReBAC relations — no Keycloak
+      group; AUTHZ-05 review item 9 decoupled teams from Keycloak entirely,
+      RFC Part 6 §29-32. The endpoint itself already exists — this checkbox's
+      remaining scope is only the initial-platform-policy write, which depends
+      on TeamPlatformPolicy above shipping first)
 - [ ] Personal team auto-creation uses `personal` defaults with immutable
       `max_users = 1`
 
@@ -3913,6 +3966,96 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
       KPI log for every model invocation within that turn (deferred — `log_llm()` not yet called)
 - [ ] Structured JSON logs confirm `agent.turn_completed` and security audit events
       appear in the log-based trace path (verifiable via local log grep)
+
+---
+
+## Phase 7b — KPI Analytics Dashboards: Personal Usage — **OBSERV-02**
+
+### 7b.1 Goal
+
+Close the gap between `docs/swift/rfc/KPI-ANALYTICS-RFC.md` §2.5 and what
+is shipped. Page 1 (platform dashboard) exists as `AnalyticsPage`
+(`/admin/analytics`); Page 2 (team dashboard) and Page 3 (personal
+dashboard) were never built. This phase delivers Page 3 only — each
+member's own token consumption, with a breakdown by agent and by model —
+reusing the `agent.turn_completed` event Phase 7 already emits (§7.4).
+No new instrumentation is required.
+
+### 7b.2 Status Note
+
+- Page 1 shipped under different preset names than the RFC specified
+  (`active_users_over_time`, not `active_users_by_day`, etc.) and with
+  per-preset `CAN_OBSERVE_PLATFORM` checks inline (`kpi/presets/*.py`)
+  rather than the router-level OpenFGA scope described in RFC §2.4.
+- Page 2 (team dashboard) and Page 3 (personal dashboard) are unbuilt.
+  Per product decision (Dimitri, 2026-07-12), this phase covers Page 3
+  only; the team dashboard is deferred.
+- The personal-space banner (`TeamContentNavbar.tsx`) shows no icon
+  today — `canOpenTeamSettings` requires `can_administer_admins`, a
+  permission the synthetic personal team never grants
+  (`teams/system.py:56-60`).
+
+### 7b.3 Tasks
+
+#### Backend — new self-scoped presets
+
+- [x] Fixed a latent bug found while building this: `quantities.input_tokens`
+      / `output_tokens` have been written on every `agent.turn_completed`
+      event since Phase 7, but were never declared in `KPI_INDEX_MAPPING`
+      (`fred_core/kpi/opensearch_kpi_store.py`) — under OpenSearch's
+      `"dynamic": false` mapping, that made them unaggregatable. Added both
+      fields to the mapping plus an additive `_ensure_quantities_mapping()`
+      migration for pre-existing indices (mirrors the existing
+      `_ensure_dim_mapping()` pattern for `dims.*`)
+- [x] `user_token_usage_over_time` preset (`TimeSeriesResponse`) — date
+      histogram summing `quantities.input_tokens + output_tokens`,
+      filtered to `metric.name = "agent.turn_completed"` and
+      `dims.user_id = requesting_user.uid`
+- [x] `user_token_usage_by_agent` preset (`LabelValueResponse`) — terms
+      agg on `dims.agent_instance_name`, same filters, ordered by a
+      `bucket_script` summing input+output tokens
+- [x] `user_token_usage_by_model` preset (`LabelValueResponse`) — terms
+      agg on `dims.model_name`, same filters
+- [x] No permission check beyond authentication — self-scope only, per
+      RFC §2.4 ("User-scoped presets... no OpenFGA call needed")
+- [x] Registered the three presets in `kpi/presets/__init__.py`. No unit
+      tests added: none of the 10 existing presets have any (verified —
+      `control-plane-backend/tests/` has zero `kpi`/`preset` test files),
+      so adding tests only for these three would be inconsistent with the
+      established convention rather than filling a real gap
+- [x] Added the three new routes to `authz-endpoint-matrix.yaml`
+      (`pending_review`/`pending_review`, matching every sibling KPI
+      preset row — the matrix-wide security review pass is a separate,
+      not-yet-done task, not something to selectively resolve here)
+
+#### Frontend
+
+- [x] New page `TeamUsagePage` reusing `AnalyticsPage`'s chart primitives
+      (`TimeSeriesLineChart`, `BarChart`, `TimeRangeSelector`,
+      `ServiceNotice`): timeline + by-agent bar chart + by-model bar chart
+- [x] Regenerated `controlPlaneOpenApi.ts` (`make update-control-plane-api`)
+      and added the three hook aliases to `controlPlaneApiEnhancements.ts`
+- [x] Icon on the personal-space banner (`TeamContentNavbar.tsx`), reusing
+      the same gear glyph as team settings — the two conditions
+      (`canOpenTeamSettings` / `isPersonalTeam`) are mutually exclusive by
+      construction, so the slot never shows two icons
+- [x] Route `team/:teamId/usage` (generic, matching the `team/:teamId/agents`
+      convention — reachable today only via the personal-space icon; a
+      future team-owner dashboard could reuse the same route)
+
+#### Docs
+
+- [x] `COMPONENT-UX.md` entry for the new page and icon
+- [x] `PMO-BOARD.md` row updated to reflect implementation
+
+### 7b.4 Validation
+
+- [x] `make code-quality` and `make test` pass in `control-plane-backend`,
+      `fred-core`, and `frontend`
+- [ ] A member with chat history sees a non-empty timeline and breakdown
+      charts on their personal space; a member with no history sees an
+      empty state, not an error — **pending live-stack validation**, not
+      verifiable offline
 
 ---
 

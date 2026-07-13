@@ -15,6 +15,7 @@ Start here, then follow the links to the relevant section.
 | **A developer** working on the chat UI                     | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)         |
 | **A UX designer** reviewing component rendering            | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
 | **A product manager** tracking progress                    | [`STATUS.md`](STATUS.md) → [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md)               |
+| **Anyone** validating a checkout or a release candidate    | [`TESTING.md`](TESTING.md) — four steps, each ending in a clear pass/fail answer                                   |
 | **An architect** reviewing or proposing a change           | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts)                                 |
 | **Writing an agent** with the SDK                          | [`authoring/`](#authoring--agent-sdk)                                                                              |
 | **Choosing how to run Fred** (standalone vs teams)         | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md)                                                       |
@@ -222,6 +223,7 @@ Runbooks and operational guides for the platform.
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | [`STATUS.md`](STATUS.md)                   | **Daily snapshot** — who owns what, what was done this week, feature→test map. Start here for quick status. |
 | [`WORKPLAN.md`](WORKPLAN.md)               | **Current sprint** — who does what, in what order, what is parallel                                         |
+| [`TESTING.md`](TESTING.md)                 | **Release-candidate check** — four steps (offline tests → backing services → apps → auth validation suite), each with a pass/fail signal; linked from the repo root `README.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)       | Contribution guidelines                                                                                     |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Code of conduct                                                                                             |
 

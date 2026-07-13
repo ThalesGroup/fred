@@ -333,11 +333,20 @@
       tag/team comes 100% from metadata, never from the path.
     </div>
 
-    <div class="callout warn">
-      <strong>Open — to reconcile during the identity track.</strong> The exact split between team
-      role/membership derived from Keycloak group claims vs. stored as OpenFGA tuples is still being
-      pinned down (the settled assumption is that <em>membership travels with the realm</em>, so there
-      are no <code>user→team</code> tuples to import). Confirm this empirically before relying on it.
+    <div class="callout info">
+      <strong>Resolved — migration note (2026-07-10).</strong> This split is now settled by
+      AUTHZ-05 review item 9 (<code>FRED-AUTHORIZATION-TARGET-MODEL-RFC.md</code> Part 6,
+      <code>platform/REBAC.md</code>), and the earlier "membership travels with the realm"
+      assumption no longer holds for the swift target: a team is a <code>team_metadata</code>
+      row plus explicit OpenFGA relation tuples (<code>team_admin</code>/<code>team_editor</code>/
+      <code>team_analyst</code>/<code>team_member</code>) — swift's own membership endpoints
+      write these tuples directly and make no Keycloak calls. Chapter 2's team migration must
+      therefore write <code>user→team</code> tuples explicitly for every migrated member, not
+      assume they follow from an imported Keycloak group. (The transitional fallback that used to
+      derive base <code>team_member</code> from the Keycloak <code>groups</code> claim —
+      <code>groups_list_to_relations</code> — was removed 2026-07-13, AUTHZ-05 review item 8b:
+      every <code>team_member</code> tuple must now be written explicitly by this migration, with
+      no runtime fallback of any kind.)
     </div>
   </section>
 
@@ -492,11 +501,30 @@
       <div class="check-item done">
         <span class="check-box">[✓]</span>
         <div>
-          <strong>Team ID stability</strong> — team IDs are Keycloak group UUIDs, used
-          consistently in OpenFGA tuples and Postgres <code>session.team_id</code>.
-          A realm export with ID preservation keeps them stable across platforms.
-          The <code>teammetadata</code> Postgres table is effectively empty in kea —
+          <strong>Team ID stability (kea side, Chapter 1)</strong> — team IDs are Keycloak
+          group UUIDs, used consistently in OpenFGA tuples and Postgres
+          <code>session.team_id</code>. A realm export with ID preservation keeps them
+          stable between Source Cluster and Target Cluster kea. The
+          <code>teammetadata</code> Postgres table is effectively empty in kea —
           teams live in Keycloak and OpenFGA only.
+        </div>
+      </div>
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>Migration note — swift teams are not Keycloak groups (2026-07-10)</strong> —
+          the ID-stability finding above is a Chapter 1 (kea↔kea) property only. Swift
+          (Chapter 2 target) decoupled teams from Keycloak entirely: AUTHZ-05 review item 9
+          (<code>FRED-AUTHORIZATION-TARGET-MODEL-RFC.md</code> Part 6, <code>platform/REBAC.md</code>)
+          made a team a <code>team_metadata</code> row plus explicit OpenFGA membership
+          tuples (<code>team_admin</code>/<code>team_editor</code>/<code>team_analyst</code>/
+          <code>team_member</code>) — no Keycloak group backs it, and swift's own team-creation
+          endpoint now generates a fresh <code>uuid4().hex</code> id rather than reusing a group
+          id. Reusing kea's existing team id string when copying <code>teammetadata</code> rows
+          in §2.1 is still fine (the id is just an opaque string to swift), but §2.1's transform
+          must also populate the new required <code>name</code> column (from the source Keycloak
+          group's name), and membership tuples must be written explicitly rather than assumed to
+          travel with the imported Keycloak groups — see the note in § Migration model above.
         </div>
       </div>
       <div class="check-item done">
@@ -1031,8 +1059,12 @@
         <tr>
           <td><code>teammetadata</code></td>
           <td><code>teammetadata</code></td>
-          <td><span class="badge br">copy + drop columns</span></td>
-          <td>Exclude kea's storage-size fields; <code>banner_object_storage_key</code> is unchanged</td>
+          <td><span class="badge br">copy + drop columns + add name</span></td>
+          <td>Exclude kea's storage-size fields; <code>banner_object_storage_key</code> is unchanged.
+          Swift's <code>teammetadata</code> gained a required <code>name</code> column (AUTHZ-05
+          review item 9) — populate it from the source Keycloak group's name. Team id itself can
+          be reused as-is (opaque string to swift), but membership must be written as explicit
+          OpenFGA tuples — see the migration note in § Migration model.</td>
         </tr>
         <tr>
           <td><code>agent</code> (UUID ids only)</td>
@@ -1293,13 +1325,13 @@
         <tr><th>Store / table</th><th>Chapter 1</th><th>Chapter 2</th><th>Notes</th></tr>
       </thead>
       <tbody>
-        <tr><td>Keycloak realm</td><td><span class="badge bc">export / import</span></td><td>—</td><td>Preserve group UUIDs — they are team IDs everywhere</td></tr>
+        <tr><td>Keycloak realm</td><td><span class="badge bc">export / import</span></td><td>—</td><td>Preserve group UUIDs for the Chapter 1 kea↔kea move only — swift (Chapter 2) does not treat group IDs as team IDs, see § Migration model</td></tr>
         <tr><td>OpenFGA tuples</td><td><span class="badge bc">copy (UUID format only)</span></td><td>—</td><td>Deduplicate username vs UUID format</td></tr>
         <tr><td><code>agent</code> (UUID ids)</td><td><span class="badge bc">copy</span></td><td><span class="badge br">→ agent_instance (§2.3)</span></td><td>Short-string ids are platform-seeded — skip those</td></tr>
         <tr><td><code>tag</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy (identical schema)</span></td><td></td></tr>
         <tr><td><code>metadata</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
         <tr><td><code>resource</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
-        <tr><td><code>teammetadata</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">drop storage_size fields</span></td><td>Often empty in practice</td></tr>
+        <tr><td><code>teammetadata</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">drop storage_size fields, add name</span></td><td>Often empty in practice; swift requires a <code>name</code> column now (AUTHZ-05 review item 9)</td></tr>
         <tr><td><code>users</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">add storage_size default</span></td><td>Only non-empty if GCU was accepted on Source Cluster</td></tr>
         <tr><td>Personal teams</td><td>—</td><td><span class="badge br">create 1 per user (§2.2)</span></td><td>kea: shared literal "personal" · swift: per-user UUID-derived</td></tr>
         <tr><td><code>prompt</code>, <code>default_prompt_usage</code></td><td>—</td><td><span class="badge bs">start empty</span></td><td>No kea equivalent</td></tr>

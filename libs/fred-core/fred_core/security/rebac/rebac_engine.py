@@ -21,13 +21,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from fred_core.common import personal_team_id
-from fred_core.security.keycloak.keycloack_admin_client import (
-    KeycloackDisabled,
-    create_keycloak_admin,
-)
 from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.structure import KeycloakUser, M2MSecurity
+from fred_core.security.structure import KeycloakUser
 
 ORGANIZATION_ID = "fred"
 logger = logging.getLogger(__name__)
@@ -50,20 +45,32 @@ class RelationType(str, Enum):
     """Named links used to describe who can do what.
 
     Example:
-    - `owner`: full control on an entity.
-    - `manager`: can manage team content.
-    - `member`: can access team-scoped reads.
+    - `owner`: full control on a resource (agent/tag ownership — unrelated to
+      team roles below).
+    - `team_admin`: team governance authority.
+    - `team_member`: can access team-scoped reads.
     """
 
     OWNER = "owner"
-    MANAGER = "manager"
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
-    MEMBER = "member"
     ORGANIZATION = "organization"
-    ADMIN = "admin"
     PUBLIC = "public"
+
+    # AUTHZ-05 target platform roles (RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1).
+    # Stored tuples only, granted by config-seeded bootstrap or explicit admin
+    # action — never derived from Keycloak roles or groups.
+    PLATFORM_ADMIN = "platform_admin"
+    PLATFORM_OBSERVER = "platform_observer"
+
+    # AUTHZ-05 target team roles (RFC §26 — renamed from owner/manager/member
+    # during the second implementation pass). team_admin and team_editor are
+    # orthogonal, not hierarchical (REBAC.md "hard cross-write rule").
+    TEAM_ADMIN = "team_admin"
+    TEAM_EDITOR = "team_editor"
+    TEAM_ANALYST = "team_analyst"
+    TEAM_MEMBER = "team_member"
 
 
 class TagPermission(str, Enum):
@@ -121,9 +128,19 @@ class TeamPermission(str, Enum):
     CAN_UPDATE_AGENTS = "can_update_agents"
     CAN_READ_MEMEBERS = "can_read_members"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
-    CAN_ADMINISTER_MANAGERS = "can_administer_managers"
-    CAN_ADMINISTER_OWNERS = "can_administer_owners"
+    # AUTHZ-05 (RFC §26): renamed from CAN_ADMINISTER_MANAGERS/CAN_ADMINISTER_OWNERS.
+    CAN_ADMINISTER_EDITORS = "can_administer_editors"
+    CAN_ADMINISTER_ANALYSTS = "can_administer_analysts"
+    CAN_ADMINISTER_ADMINS = "can_administer_admins"
     CAN_READ_CONVERSATIONS = "can_read_conversations"
+    # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
+    # also admits `public`) — gates seeing/using the team's agents.
+    CAN_USE_TEAM_AGENTS = "can_use_team_agents"
+
+    # Team-scoped evaluation capabilities (RFC §6.2/§3.2).
+    CAN_RUN_EVALUATIONS = "can_run_evaluations"
+    CAN_MANAGE_EVALUATION_CORPUS = "can_manage_evaluation_corpus"
+    CAN_READ_CONVERSATIONS_FOR_EVALUATION = "can_read_conversations_for_evaluation"
 
 
 # Team permissions a `service_agent` caller is allowed to satisfy without an OpenFGA
@@ -151,32 +168,47 @@ class OrganizationPermission(str, Enum):
 
     These gate endpoints that act on global / infrastructure surfaces with no
     resource instance to scope on (observability, platform administration).
-    The check target is always the singleton ``organization:fred``.
+    The check target is always the singleton ``organization:fred``. AUTHZ-05
+    review item 8a removed the "any connected user" tier entirely (it never
+    protected anything specific) — only platform_admin-gated capabilities and
+    the raw `platform_observer` relation check remain.
     """
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
 
     # Already-defined organization relations, now exposed to Python callers.
     CAN_CREATE_TEAM = "can_create_team"
-    CAN_CREATE_AGENT = "can_create_agent"
 
-    # Global observability / infrastructure reads (viewer level).
-    CAN_READ_KPI = "can_read_kpi"
-    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — admin level.
-    CAN_READ_KPI_GLOBAL = "can_read_kpi_global"
-    CAN_READ_LOGS = "can_read_logs"
-    CAN_READ_METRICS = "can_read_metrics"
-    CAN_READ_OPENSEARCH = "can_read_opensearch"
-    CAN_READ_KNOWLEDGE_GRAPH = "can_read_knowledge_graph"
+    # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance —
+    # existence of teams only, never their data.
+    CAN_LIST_ALL_TEAMS = "can_list_all_teams"
+    CAN_DELETE_TEAM = "can_delete_team"
+    CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
 
-    # Member-level content utilities with no specific resource instance.
-    CAN_READ_CONTENT = "can_read_content"
-    CAN_PROCESS_CONTENT = "can_process_content"
+    # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
+    # capability (platform_admin included via the platform_observer union) —
+    # the one relation for cross-user / platform-wide KPI observation. Gates
+    # both the standalone KPI dashboard (`/monitoring/kpis`) and the
+    # control-plane Analytics presets (`/admin/analytics`). AUTHZ-05 review
+    # item 16: previously split into a second, platform_admin-only
+    # `CAN_READ_KPI_GLOBAL` (legacy READ_GLOBAL) for the Analytics presets —
+    # retired as a duplicate of this relation the RFC never asked for; today
+    # `/admin/analytics` and `/monitoring/kpis` show the same platform-wide
+    # recap to both platform_admin and platform_observer. When the Analytics
+    # dashboard grows admin-only technical panels, gate those specific
+    # widgets on a new, narrower capability — don't resurrect this split.
+    CAN_OBSERVE_PLATFORM = "can_observe_platform"
 
-    # Platform administration (admin level).
+    # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
     CAN_RUN_BENCHMARK = "can_run_benchmark"
+
+    # Direct check against the raw `platform_observer` relation — not a
+    # computed capability. Used to derive display-only frontend flags
+    # (`PermissionSummary.is_platform_observer`, AUTHZ-05 review item 4/8a)
+    # where no gated action exists to piggyback on.
+    IS_PLATFORM_OBSERVER = "platform_observer"
 
 
 RebacPermission = (
@@ -240,19 +272,10 @@ class RebacEngine(ABC):
     resources?") while each concrete engine (OpenFGA, noop) handles storage.
     """
 
-    def __init__(self, m2m_security: M2MSecurity) -> None:
-        """Initialize engine dependencies used for contextual relations."""
-        self.keycloak_client = create_keycloak_admin(m2m_security)
-
     @property
     def enabled(self) -> bool:
         """Tell whether relationship authorization checks are active."""
         return True
-
-    @property
-    def need_keycloak_sync(self) -> bool:
-        """Tell whether this backend requires periodic Keycloak graph sync."""
-        return False
 
     async def close(self) -> None:
         """Release any held connections or sessions. No-op by default."""
@@ -446,6 +469,35 @@ class RebacEngine(ABC):
         - List all owners of one team.
         """
 
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        """Return `True` when a *literal* tuple is persisted for this triple.
+
+        Unlike `has_permission` (Check) or `lookup_subjects` (ListUsers), this
+        must not resolve computed/union relations (e.g. schema.fga's
+        `team_member: [user] or team_admin or team_editor or team_analyst`).
+        A `team_admin`-only user must read as `False` here even though they
+        satisfy the computed `team_member` relation everywhere else.
+
+        Example:
+        - Distinguish "this user holds a direct `team_member` tuple" from
+          "this user is a `team_member` only because they are `team_admin`" —
+          needed to preserve a member's base role when a single elevated role
+          is later revoked (AUTHZ-06).
+
+        Not implemented by default; override in engines that can answer a
+        direct-tuple read without expanding usersets.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support direct relation reads"
+        )
+
     async def lookup_user_resources(
         self,
         user: KeycloakUser,
@@ -458,7 +510,6 @@ class RebacEngine(ABC):
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -488,7 +539,6 @@ class RebacEngine(ABC):
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -542,7 +592,6 @@ class RebacEngine(ABC):
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -594,85 +643,3 @@ class RebacEngine(ABC):
             return_exceptions=False,
         )
         return consistency_token
-
-    async def _user_contextual_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Build contextual statements derived from the current user identity.
-
-        Example:
-        - user group memberships -> `member` links
-        - global app role -> organization role link
-        """
-        group_relations, org_relations = await asyncio.gather(
-            self.groups_list_to_relations(user),
-            self.user_role_to_organization_relation(user),
-        )
-        return group_relations | org_relations
-
-    async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Convert token group paths into team membership statements.
-
-        Example:
-        - group `/thales` becomes `user -> member -> team:thales`.
-        """
-        if isinstance(self.keycloak_client, KeycloackDisabled):
-            return set()
-
-        # Each user is a member of its own personal team
-        # TODO 1501 Remove when teams are not based on keycloak anymore
-        relation: set[Relation] = {
-            Relation(
-                subject=RebacReference(Resource.USER, user.uid),
-                relation=RelationType.MEMBER,
-                resource=RebacReference(Resource.TEAM, personal_team_id(user.uid)),
-            )
-        }
-        for group in user.groups:
-            relation.add(
-                Relation(
-                    subject=RebacReference(Resource.USER, user.uid),
-                    relation=RelationType.MEMBER,
-                    resource=RebacReference(
-                        Resource.TEAM,
-                        (await self.keycloak_client.a_get_group_by_path(group))["id"],
-                    ),
-                )
-            )
-
-        return relation
-
-    async def user_role_to_organization_relation(
-        self, user: KeycloakUser
-    ) -> set[Relation]:
-        """Convert app roles into organization-level statements.
-
-        Creates a relation between the user and the singleton 'fred' organization
-        based on the user's Keycloak role (admin, editor, or viewer).
-
-        Example:
-        - role `admin` becomes `user -> admin -> organization:fred`.
-        """
-        relations: set[Relation] = set()
-
-        # Map Keycloak roles to organization relations based on the schema
-        for role in user.roles:
-            try:
-                relation_type = RelationType(role)
-                if relation_type in (
-                    RelationType.ADMIN,
-                    RelationType.EDITOR,
-                    RelationType.VIEWER,
-                ):
-                    relations.add(
-                        Relation(
-                            subject=RebacReference(Resource.USER, user.uid),
-                            relation=relation_type,
-                            resource=RebacReference(
-                                Resource.ORGANIZATION, ORGANIZATION_ID
-                            ),
-                        )
-                    )
-            except ValueError:
-                # Role is not a valid RelationType, skip it
-                continue
-
-        return relations

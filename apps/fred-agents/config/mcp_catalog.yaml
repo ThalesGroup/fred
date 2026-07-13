@@ -185,15 +185,6 @@ servers:
         enum: ["corpus_only", "hybrid", "general_only"]
         default: "hybrid"
 
-  - id: "mcp-neo4j-graph-db"
-    name: "mcp.servers.neo4j.name"
-    description: "mcp.servers.neo4j.description"
-    transport: "streamable_http"
-    url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
-    sse_read_timeout: 2000
-    enabled: true
-    auth_mode: "user_token"
-
   - id: "mcp-postal-business-demo"
     name: "LaPoste Demo Postal Business MCP"
     description: "Local demo MCP server for postal business actions (tracking, reroute, notifications, claims)"

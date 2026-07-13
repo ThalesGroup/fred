@@ -33,6 +33,14 @@ class TeamMetadataRow(Base):
     __tablename__ = "teammetadata"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    # AUTHZ-05 review item 9 (RFC Part 6 §29-32): a team's identity lives here
+    # now — no Keycloak group backs it. No backfill on this column: it lands
+    # on a fresh deployment with zero pre-existing teams.
+    # `unique=True`: AUTHZ-05 post-implementation review finding — without a
+    # DB-level constraint, `create_team`'s `get_by_name` check-then-act was a
+    # TOCTOU race allowing two concurrent creates to land the same name (see
+    # migration a8b9c0d1e2f3's docstring for the full rationale).
+    name: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(String(180), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     banner_object_storage_key: Mapped[str | None] = mapped_column(

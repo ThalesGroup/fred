@@ -402,6 +402,11 @@ async def run_import(
                 s.add(
                     TeamMetadataRow(
                         id=team_id,
+                        # AUTHZ-05 review item 9: `name` was added after this
+                        # bundle format existed. Fall back to the id so an
+                        # older export (pre-item-9) still imports cleanly
+                        # instead of violating the NOT NULL constraint.
+                        name=row.get("name") or team_id,
                         description=row.get("description"),
                         is_private=bool(row.get("is_private", True)),
                         banner_object_storage_key=row.get("banner_object_storage_key"),

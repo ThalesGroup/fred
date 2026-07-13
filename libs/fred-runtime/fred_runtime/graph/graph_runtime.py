@@ -1906,7 +1906,6 @@ def _graph_phase_timer(
     return metrics.timer(
         "app.phase_latency_ms",
         dims=dims,
-        groups=binding.runtime_context.user_groups,
     )
 
 

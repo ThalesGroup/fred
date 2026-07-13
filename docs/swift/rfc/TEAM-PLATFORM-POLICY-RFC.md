@@ -227,17 +227,22 @@ This means:
 
 Read:
 
-- team owner
-- team manager
+- team_admin
+- team_editor
 
 Write:
 
-- team owner only
+- team_admin only
 
 Business rule:
 
-- platform policy is owner-owned because it defines team safety guardrails
-- managers may inspect those guardrails but may not relax them
+- platform policy is `team_admin`-owned because it defines team safety guardrails
+- `team_editor`s may inspect those guardrails but may not relax them
+
+(Terminology note: this RFC predates the AUTHZ-05 team-role rename —
+`owner`/`manager`/`member` are now `team_admin`/`team_editor`/`team_member`,
+RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §26. Updated here for consistency,
+2026-07-10.)
 
 ---
 
@@ -437,48 +442,55 @@ block, not the `regular` block. Key differences:
 
 ## 13. Team creation and initial policy assignment
 
-Team creation is a platform-admin-only action. It atomically:
-
-1. Creates the Keycloak group for the team.
-2. Creates the `teammetadata` row.
-3. Writes the initial `team_platform_policy` row (from the request body or the
-   `regular` default if omitted).
-4. Adds the designated team admin as `owner` in ReBAC.
-5. Adds the team admin to the Keycloak group.
+**Updated 2026-07-10 for consistency with the shipped implementation** (RFC
+`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §28, revised by Part 6 §29-32 /
+AUTHZ-05 review item 9). Team creation already exists and works differently
+from the original draft below: there is no Keycloak group — a team is a
+`team_metadata` row plus OpenFGA relations, full stop.
 
 ```
 POST /control-plane/v1/teams
-Auth: platform admin (owner-level)
+Auth: platform_admin (can_create_team)
 Body: {
-  name:          str,
-  admin_user_id: str,          // Keycloak user id — must exist
-  platform_policy?: TeamPlatformPolicy  // optional; regular defaults apply if absent
+  name: str,
+  initial_team_admin_ids: list[str]   // Keycloak user sub(s) — min 1
 }
-→ 201 { team_id: str, name: str }
+→ 201 TeamWithPermissions
 → 409 if a team with this name already exists
-→ 422 if platform_policy violates invariants (§3.2)
-→ 404 if admin_user_id is not a known Keycloak user
-→ 503 if Keycloak M2M is not configured
 ```
 
-All five steps are performed in order. If any step fails, the endpoint returns
-an error and the partial state must be cleaned up. Steps 1–5 are not wrapped in
-a single DB transaction (Keycloak is external), so cleanup is best-effort:
-control-plane rolls back DB rows if the Keycloak call fails, and logs a warning
-if the DB rollback itself fails for manual remediation.
+Team creation atomically:
+
+1. Checks name uniqueness against `team_metadata_store`.
+2. Generates a fresh `uuid4().hex` team id and creates the `team_metadata` row.
+3. Writes `team_admin` OpenFGA relations for each `initial_team_admin_ids`
+   entry. On failure, rolls back the `team_metadata` row (one-shot by
+   construction — no Keycloak group to roll back).
+
+**Not yet implemented** (this RFC's own scope, tracked separately in
+`BACKLOG.md` §TEAM-03, blocked on `TeamPlatformPolicy` shipping first): step 3
+above — writing the initial `team_platform_policy` row from the request body
+or the `regular` default. The endpoint contract shown above does not yet
+accept a `platform_policy` field; when it's added, follow the same
+one-shot/rollback shape as the two steps above, not a Keycloak-era three-way
+best-effort cleanup (there is no external system in the loop anymore).
 
 ### 13.1 What the team settings page exposes
 
-The team settings page has two panels, driven by the caller's role:
+The team settings page has two panels, driven by the caller's role. (Renamed
+for consistency, 2026-07-10 — the original draft's "Platform admin view
+(owner)" label was ambiguous with the unrelated org-level `platform_admin`
+role; both panels below are team-scoped views, gated on `team_admin`/
+`team_editor` respectively, per REBAC.md's "hard cross-write rule.")
 
-**Platform admin view (owner):**
+**`team_admin` view:**
 
 | Panel | Contents | Editable |
 |---|---|---|
 | Platform limits | Full `TeamPlatformPolicy` — all fields | Yes (`PATCH /platform-policy`) |
-| Routing policy | `TeamRoutingPolicy` | No (manager-owned) |
+| Routing policy | `TeamRoutingPolicy` | No (`team_editor`-owned) |
 
-**Team admin view (manager):**
+**`team_editor` view:**
 
 | Panel | Contents | Editable |
 |---|---|---|
@@ -491,8 +503,7 @@ is needed in V1 — the full resolved values are enough.
 
 ### 13.2 Keycloak requirement
 
-Team creation requires the M2M Keycloak client to have the `manage-groups`
-realm role. The same client already calls `a_group_user_remove` for team
-membership removal; `a_create_group` and `a_group_user_add` require the same
-role. Operators must verify this role is assigned in the Keycloak client
-configuration before enabling the team creation endpoint.
+**Removed 2026-07-10 (no longer applies).** Team creation and membership no
+longer call Keycloak at all — no M2M client role is required. Keycloak is
+identity-only (login, JWT, stable `sub`); teams are `team_metadata` rows plus
+OpenFGA relations (AUTHZ-05 review item 9).

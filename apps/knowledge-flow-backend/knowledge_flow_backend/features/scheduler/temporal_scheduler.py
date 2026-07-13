@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Optional
 from uuid import uuid4
 
@@ -30,6 +31,13 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import Pipel
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush
 
 logger = logging.getLogger(__name__)
+
+
+def _rpc_timeout(seconds: Optional[int]) -> Optional[timedelta]:
+    """Converts the configured per-RPC deadline to the `timedelta` the Temporal SDK
+    expects, so a stuck Temporal frontend fails a single call instead of hanging
+    the caller (and, for `start_workflow`, the whole upload HTTP stream) forever."""
+    return timedelta(seconds=seconds) if seconds else None
 
 
 class TemporalScheduler(BaseScheduler):
@@ -72,6 +80,7 @@ class TemporalScheduler(BaseScheduler):
             definition,
             id=handle.workflow_id,
             task_queue=self._scheduler_config.temporal.task_queue,
+            rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
         )
 
         logger.info("🛠️ started temporal workflow=%s", workflow_handle.id)

@@ -31,6 +31,17 @@
 > Convergence side effect: the Deep runtime previously never appended the
 > attachment suffix and now does. See [`PROMPTS.md`](./PROMPTS.md) §5.
 
+> ✅ **Personal-space regression fix — 2026-07-13 (AUTHZ-05 item 8b watch item,
+> issue #1912).** `_authorize_execution_or_raise` now authorizes a **personal
+> space** (`personal-<uid>`) as intrinsic ownership by exact identity comparison
+> against `fred_core.common.personal_team_id(authenticated_user.uid)` — **never**
+> via OpenFGA, which never held a tuple for it. This restores what the removed
+> `groups_list_to_relations`/`_user_contextual_relations` contextual relation used
+> to grant, without reintroducing any Keycloak-groups dependency. Any other
+> `personal-*` id, or the bare `"personal"` alias, is explicitly denied (403),
+> never routed to OpenFGA. Collaborative teams are unchanged: still OpenFGA
+> `CAN_READ`, still fail-closed. See §2.2.
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.
@@ -261,10 +272,12 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   (`fred_core.security.oidc`). Under the `c3` profile it validates issuer and
   audience strictly (`verify_aud=True`), and each pod validates `aud == its own
   client_id` (per-agent audience — anti-confused-deputy, decision D5c).
-- **Authorization** — the pod runs a per-request OpenFGA check that the caller
-  holds `CAN_READ` on `runtime_context.team_id` (the same relation the
-  control-plane required before it would mint a grant). This is the model already
-  homologated on `main`'s agentic-backend, re-instantiated per pod.
+- **Authorization** — for a **collaborative** `runtime_context.team_id` (anything
+  not a personal space), the pod runs a per-request OpenFGA check that the caller
+  holds `CAN_READ` on that team (the same relation the control-plane required
+  before it would mint a grant). This is the model already homologated on
+  `main`'s agentic-backend, re-instantiated per pod. A **personal space**
+  (`personal-<uid>`) is never checked against OpenFGA — see below.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -272,6 +285,38 @@ The team in `runtime_context.team_id` is caller-supplied but safe: OpenFGA only
 authorizes teams the user actually has a relation to. A missing team on a managed
 request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
 survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
+
+**Personal spaces are intrinsic ownership, not an OpenFGA relation (AUTHZ-05 item
+8b, 2026-07-13).** A personal space is a synthetic, system-recognized team
+(`fred_core.common.personal_team_id(uid)`) with no `team_metadata` row and no
+stored OpenFGA tuple of any kind — it is not a collaborative team and was never
+meant to route through `CAN_READ`. `_authorize_execution_or_raise` therefore
+special-cases it, before the OpenFGA branch, purely by identity comparison:
+
+- `team_id == personal_team_id(authenticated_user.uid)` (the caller's own
+  canonical personal space) → authorized as intrinsic ownership, audited
+  `personal_space_owner_authorized`, **no OpenFGA call**.
+- any other `personal-*` id (another user's personal space) → denied outright,
+  audited `personal_space_denied`, HTTP 403. This is a hard identity check, not
+  an OpenFGA lookup — a stray or residual OpenFGA tuple naming that id can never
+  grant access here.
+- the bare `"personal"` alias → also denied under this same rule once ReBAC is
+  active, rather than resolved as if it meant the caller's own space; it stays a
+  dev/CLI-only shorthand (see `fred_runtime/cli/entrypoint.py`).
+- any non-personal `team_id` (a real collaborative team) → unchanged, always the
+  OpenFGA `CAN_READ` check described above.
+- `service_agent` callers are unaffected: their team-scoped, OpenFGA-free
+  authorization (§ below, RFC EVAL-AUTH Solution A) is checked first and returns
+  before the personal-space branch is reached.
+- `platform_admin`/`platform_observer` confer no implicit access here, personal
+  or collaborative — this carve-out is identity-only (JWT subject vs. the
+  requested personal id), never role-based.
+
+No Keycloak group, claim, or role feeds this decision anywhere — the removal of
+`groups_list_to_relations`/`_user_contextual_relations` (item 8b) is unaffected;
+this carve-out replaces the contextual (never-persisted) `team_member` relation
+that helper used to grant for personal spaces, with an explicit, narrower check
+local to the runtime.
 
 **Architectural constraint (unchanged):**
 
@@ -828,6 +873,33 @@ filesystem suffix. `build_global_base_prompt_suffix()` lives in
   baked contract frozen in their persisted `tuning.values["prompts.system"]`;
   the editor still shows it for those until the operator clears the field. Only
   newly created instances get the clean default. (Decision: new agents only.)
+
+---
+
+### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
+
+**What changed.** `RuntimeContext.user_groups` (`fred_sdk.contracts.context`,
+Group D) is removed. It was a confirmed dead Keycloak-groups vestige: its only
+producer was `agent_app.py::_iterate_runtime_event_payloads` reading
+`ctx.get("user_groups")`, a `RuntimeExecuteRequest.context` dict key that no
+backend ever set and no `apps/frontend/src` code (only the generated OpenAPI
+type) ever populated. Its only 2 consumers (`ReActRuntime`, `graph_runtime.py`)
+fed it straight into `KPIActor.groups` (also removed the same session, see
+`docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md` §AUTHZ-05) via a
+`MetricsProvider.timer(groups=...)` parameter — that parameter is removed too,
+from `fred_core.portable.observability.MetricsProvider` and its 2
+implementations, and from fred-runtime's `_MetricsTimerAdapter`.
+
+**Wire impact.** `user_groups` was a field on the `RuntimeExecuteRequest`
+schema exposed by both `libs/fred-runtime` and (via a separate, seemingly
+unregenerated generated client) `apps/frontend/src/slices/agentic/`. Since no
+caller ever set it, removal is behavior-preserving. Regenerated
+`libs/fred-runtime/openapi.json` (`make generate-openapi`, gitignored
+artifact) and `apps/frontend/src/slices/runtime/runtimeOpenApi.ts` (`make
+update-runtime-api`, 1-line diff); frontend `tsc --noEmit` clean.
+`apps/frontend/src/slices/agentic/agenticOpenApi.ts` still carries a stale
+`user_groups` field — no Makefile target regenerates it (looks like a
+dead/legacy generated client, out of scope for this sweep).
 
 ---
 

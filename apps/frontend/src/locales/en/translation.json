@@ -461,10 +461,6 @@
         "description": "Run a local MCP server over stdio (process-based tools)",
         "name": "Local stdio MCP"
       },
-      "neo4j": {
-        "description": "Allow your agent to interact with Neo4j graph databases",
-        "name": "Neo4j access"
-      },
       "prometheus": {
         "description": "Allow your agent to query Prometheus metrics and execute PromQL requests",
         "name": "Prometheus access"
@@ -799,6 +795,23 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "My token usage",
+      "tokensOverTime": {
+        "title": "Token usage over time",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "No agent usage in this period.",
+        "title": "Usage by agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "No model usage in this period.",
+        "title": "Usage by model",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Back",
     "cancel": "Cancel",
     "collapse": "Collapse",
@@ -1001,14 +1014,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
-        "run": "Run campaign",
+        "title": "Self-test"
+      },
+      "report": {
         "running": "Running…",
-        "empty": "No run yet. Press “Run campaign” to validate the live stack.",
+        "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
         "copy": "Copy report",
         "copied": "Copied"
+      },
+      "functional": {
+        "title": "Functional self-test",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "run": "Run campaign"
+      },
+      "authz": {
+        "title": "Authorization self-test",
+        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
+        "runSelf": "Run for myself",
+        "testProfile": {
+          "title": "Test another profile",
+          "usernameLabel": "Account",
+          "usernamePlaceholder": "Select an account",
+          "passwordLabel": "Password",
+          "run": "Run",
+          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
+          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+        }
       }
     },
     "tasks": {
@@ -1059,8 +1091,9 @@
           "prompts": "Prompts",
           "col": {
             "team": "Team",
-            "owners": "Owners",
-            "managers": "Managers",
+            "admins": "Admins",
+            "editors": "Editors",
+            "analysts": "Analysts",
             "members": "Members",
             "agents": "Agents",
             "prompts": "Prompts"
@@ -1109,14 +1142,40 @@
         "inDays": "in {{count}}d"
       }
     },
+    "adminTeams": {
+      "existingTeams": {
+        "title": "Existing teams",
+        "empty": "No teams yet.",
+        "table": {
+          "name": "Team",
+          "admins": "Admin(s)"
+        }
+      },
+      "createTeam": {
+        "title": "Create team",
+        "nameLabel": "Team name",
+        "namePlaceholder": "e.g. swiftpost",
+        "adminsLabel": "Initial team admin(s)",
+        "adminsPlaceholder": "Search users...",
+        "submit": "Create team",
+        "successSummary": "Team created",
+        "errors": {
+          "summary": "Failed to create team",
+          "fallbackDetail": "Could not create the team. Please try again.",
+          "conflictDetail": "A team with this name already exists.",
+          "forbiddenDetail": "You are not allowed to create teams."
+        }
+      }
+    },
     "teamCard": {
       "join": "Apply to join",
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
-      "manager": "Editor",
-      "member": "Member",
-      "owner": "Owner"
+      "team_admin": "Admin",
+      "team_editor": "Editor",
+      "team_analyst": "Analyst",
+      "team_member": "Member"
     },
     "teamSettings": {
       "members": {
@@ -1125,7 +1184,7 @@
         },
         "errors": {
           "forbiddenDetail": "You are not allowed to perform this action.",
-          "lastOwnerDetail": "A team must keep at least one owner.",
+          "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",
           "removeMemberSummary": "Failed to remove member",
           "updateRoleDetail": "Could not update member role.",

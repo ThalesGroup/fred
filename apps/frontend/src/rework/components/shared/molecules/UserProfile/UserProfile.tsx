@@ -27,13 +27,15 @@ import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 /**
  * Bottom-of-rail user entry. Clicking the row opens a popover above it grouping
  * everything user-scoped: Profile (the existing settings page), the platform
- * admin console (only for platform admins — migrated here from the rail), and
+ * admin/observability console (migrated here from the rail — visible to
+ * platform_admin and platform_observer; `AdminIndexRoute` in router.tsx sends
+ * each to the first `/admin` page they can actually see, item 16), and
  * Logout. Team admin stays on the team banner gear; this menu is global only.
  */
 export default function UserProfile() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { canAdmin } = useUserCapabilities();
+  const { canAdmin, canObservePlatform } = useUserCapabilities();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +82,7 @@ export default function UserProfile() {
                   onClick={() => goTo("/settings")}
                 />,
               ],
-              canAdmin
+              canAdmin || canObservePlatform
                 ? [
                     <MenuPopoverItem
                       key="admin"

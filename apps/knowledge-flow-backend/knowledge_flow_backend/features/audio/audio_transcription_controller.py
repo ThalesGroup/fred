@@ -18,10 +18,9 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel, Field
 
-from knowledge_flow_backend.application_context import get_rebac_engine
 from knowledge_flow_backend.features.audio.audio_transcription_service import AudioTranscriptionService
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,9 @@ class AudioTranscriptionController:
             language: Optional[str] = Form(None, description="Optional language hint for Whisper"),
             user: KeycloakUser = Depends(get_current_user),
         ) -> AudioTranscriptionResponse:
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: stateless dictation utility, nothing persisted or
+            # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
+            # removed (item 8a); authentication alone is sufficient.
             try:
                 text = await self.service.transcribe_upload(file, language=language)
             except ValueError as exc:

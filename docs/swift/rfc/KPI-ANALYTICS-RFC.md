@@ -224,11 +224,36 @@ Charts:
 - Token consumption over time — preset `team_token_usage`
 - Agent usage within the team — preset `team_agent_usage`
 
-**Page 3 — Personal dashboard (all authenticated users)**
-Each user can see their own consumption.
+**Page 3 — Personal dashboard (all authenticated users)** — *in progress,
+see `docs/swift/backlog/BACKLOG.md` §7b (OBSERV-02)*
+Each user can see their own consumption: how much they're using the
+platform, and which agents/models are driving that usage. Reachable from
+a new icon on the personal-space banner (the banner never shows an icon
+today — the existing gear/settings icon is gated on a team-admin
+permission the personal space never grants).
 
 Charts:
-- My token usage over time — preset `user_token_usage`
+- My token usage over time — preset `user_token_usage_over_time`
+- My token usage by agent — preset `user_token_usage_by_agent`
+- My token usage by model — preset `user_token_usage_by_model`
+
+All three reuse the `agent.turn_completed` KPI event (§7.4 of
+`BACKLOG.md`'s Phase 7), already emitted per turn with `dims.user_id`,
+`dims.agent_instance_name`, `dims.model_name`, and
+`quantities.input_tokens`/`output_tokens` — no new instrumentation is
+required. Preset names were split one-per-widget instead of the single
+`user_token_usage` originally sketched here, to match the convention
+already used by the implemented Page 1 presets (`sessions_over_time`,
+`top_agents_by_conversations`, etc.).
+
+**Implementation note (2026-07-12):** Page 1 shipped as `AnalyticsPage`
+(`/admin/analytics`, gated on `can_observe_platform` per
+`docs/swift/platform/REBAC.md` AUTHZ-05 item 16) but diverges from this
+RFC in two ways not yet reconciled here: preset names differ from §2.3's
+table (e.g. `active_users_over_time` not `active_users_by_day`), and
+authorization is enforced per-preset inside each handler
+(`kpi/presets/*.py`) rather than via the router-level OpenFGA scope
+resolution described in §2.4. Page 2 (team dashboard) remains unbuilt.
 
 **Future (out of scope for this RFC):** if agents become publishable to a
 marketplace, a per-agent publisher dashboard would reuse the same preset

@@ -1,0 +1,50 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Bento grid: the timeline is the hero chart (full width); the two
+   breakdowns share the row below it. */
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-m);
+}
+
+.chartGrid > * {
+  min-width: 0;
+}
+
+.cellFull {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .chartGrid {
+    grid-template-columns: 1fr;
+  }
+  .cellFull {
+    grid-column: auto;
+  }
+}

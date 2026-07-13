@@ -44,7 +44,6 @@ from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
 from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.embeddings import Embeddings
-from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sentence_transformers import CrossEncoder
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -290,7 +289,6 @@ class ApplicationContext:
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
-    _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
     _pg_async_engine: Optional[AsyncEngine] = None
     _task_service_instance: Optional[Any] = None
@@ -850,29 +848,6 @@ class ApplicationContext:
 
         return self._pg_async_engine
 
-    def get_neo4j_driver(self) -> Driver:
-        """
-        Lazily create and return a shared Neo4j driver.
-
-        Configuration:
-        - NEO4J_URI: bolt URI, e.g. bolt://app-neo4j:7687 (default: bolt://localhost:7687)
-        - NEO4J_USERNAME: username (default: neo4j)
-        - NEO4J_PASSWORD: password (required)
-        """
-        if self._neo4j_driver is not None:
-            return self._neo4j_driver
-
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        username = os.getenv("NEO4J_USERNAME", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD")
-
-        if not password:
-            raise ValueError("Missing Neo4j credentials: NEO4J_PASSWORD must be set")
-
-        logger.info("🔌 Initializing Neo4j driver uri=%s user=%s", uri, username)
-        self._neo4j_driver = GraphDatabase.driver(uri, auth=(username, password))
-        return self._neo4j_driver
-
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:
             return self._kpi_writer
@@ -1310,12 +1285,3 @@ class ApplicationContext:
                 logger.debug("[OS] Error closing OpenSearch client", exc_info=True)
             finally:
                 self._opensearch_client = None
-
-        # Neo4j driver
-        if self._neo4j_driver is not None:
-            try:
-                self._neo4j_driver.close()
-            except Exception:
-                logger.debug("[NEO4J] Error closing driver", exc_info=True)
-            finally:
-                self._neo4j_driver = None

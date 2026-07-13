@@ -28,7 +28,7 @@ import { useConfirmationDialog } from "../components/ConfirmationDialogProvider"
 import { McpServerCard } from "../components/mcpHub/McpServerCard";
 import { McpServerForm } from "../components/mcpHub/McpServerForm";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { usePermissions } from "../security/usePermissions";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import {
   McpServerConfiguration,
   useCreateMcpServerAgenticV1McpServersPostMutation,
@@ -47,12 +47,15 @@ const sourceKindForServer = (server: McpServerConfiguration) =>
 export const McpHub = () => {
   const { t } = useTranslation();
   const theme = useTheme();
-  const { can } = usePermissions();
+  const { canAdmin } = useUserCapabilities();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { showError, showSuccess } = useToast();
 
-  const canEdit = can("agents", "update");
-  const canDelete = can("agents", "delete");
+  // MCP servers are a platform-wide registry (the `agentic` service call
+  // above takes no team_id), not team-scoped content, so this is the org
+  // tier, not `useTeamCapabilities` — see FRONTEND-AUTHZ-PATTERN.md.
+  const canEdit = canAdmin;
+  const canDelete = canAdmin;
 
   const { data: servers, isFetching, refetch } = useListMcpServersAgenticV1McpServersGetQuery();
   const [createServer] = useCreateMcpServerAgenticV1McpServersPostMutation();

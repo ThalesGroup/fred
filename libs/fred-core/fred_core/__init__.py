@@ -88,7 +88,6 @@ from fred_core.security.oidc import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
-from fred_core.security.permission_catalog import list_display_permissions
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -165,7 +164,6 @@ __all__ = [
     "FilesystemResourceInfo",
     "is_service_agent",
     "SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS",
-    "list_display_permissions",
     "Action",
     "Resource",
     "AuthorizationError",

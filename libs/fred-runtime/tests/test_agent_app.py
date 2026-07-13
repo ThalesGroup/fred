@@ -29,8 +29,10 @@ from typing import cast
 
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
+from fred_core.common.team_id import personal_team_id
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
@@ -1693,7 +1695,7 @@ def _wire_engine(
     )
 
 
-_ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None, groups=[])
+_ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
 
 
 @pytest.mark.asyncio
@@ -1824,7 +1826,6 @@ _WORKER = KeycloakUser(
     username="service-account-fred-evaluation-worker",
     roles=["service_agent"],
     email=None,
-    groups=[],
 )
 
 
@@ -1866,6 +1867,72 @@ async def test_authorize_service_agent_still_requires_team(
     assert exc.value.status_code == 403
     assert engine.calls == []
 
+    assert engine.calls == []
+
+
+_BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_personal_space_owner_without_openfga(
+    monkeypatch, minimal_config
+) -> None:
+    """A human caller acting on their own canonical personal_team_id is authorized
+    as intrinsic ownership — no OpenFGA call (AUTHZ-05 item 8b watch item)."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)  # would deny if consulted
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(team_id=personal_team_id(_ALICE.uid)), _ALICE, container
+    )
+
+    assert engine.calls == []
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "personal_space_owner_authorized"
+    assert events[-1].get("team_id") == personal_team_id(_ALICE.uid)
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_other_users_personal_space(
+    monkeypatch, minimal_config
+) -> None:
+    """Alice requesting Bob's personal space is denied outright — a permissive
+    (or residual) OpenFGA tuple must never be able to rescue this."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)  # would allow if consulted
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id=personal_team_id(_BOB.uid)), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
+    assert engine.calls == []
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "personal_space_denied"
+    assert events[-1].get("user_id") == "alice"
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_ambiguous_personal_alias(
+    monkeypatch, minimal_config
+) -> None:
+    """The bare "personal" alias is ambiguous once ReBAC is active — reject it
+    rather than resolving it as if it meant the caller's own space."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id="personal"), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
     assert engine.calls == []
 
 
@@ -1964,7 +2031,9 @@ async def test_session_ownership_skipped_when_security_disabled(
 
 
 class _FakePlatformRebacEngine:
-    """RebacEngine stand-in exposing has_user_permission for the C1 admin branch."""
+    """RebacEngine stand-in exposing has_user_permission for the C1 admin branch,
+    plus check_user_permission_or_raise for the /kpi-turns and /audit-events
+    ring-buffer endpoints' CAN_MANAGE_PLATFORM gate."""
 
     def __init__(self, *, enabled: bool, grant: bool) -> None:
         self._enabled = enabled
@@ -1980,6 +2049,13 @@ class _FakePlatformRebacEngine:
     ) -> bool:
         self.calls.append((user.uid, permission, resource_id))
         return self._grant
+
+    async def check_user_permission_or_raise(
+        self, user: KeycloakUser, permission: object, resource_id: str, **_kw: object
+    ) -> None:
+        self.calls.append((user.uid, permission, resource_id))
+        if not self._grant:
+            raise AuthorizationError(user.uid, str(permission), Resource.RESOURCES)
 
 
 @pytest.mark.asyncio
@@ -2025,6 +2101,59 @@ async def test_caller_can_manage_platform_false_when_no_caller(monkeypatch) -> N
 
     assert await agent_app_module._caller_can_manage_platform(None) is False
     assert engine.calls == []
+
+
+def _get_kpi_turns_endpoint():
+    """Grab the `/kpi-turns` route's raw endpoint function, bypassing FastAPI's
+    dependency-injection layer so it can be called directly with explicit args."""
+    router = agent_app_module._build_agent_router(registry={}, security_enabled=True)
+    return next(
+        route.endpoint
+        for route in router.routes
+        if isinstance(route, APIRoute) and route.endpoint.__name__ == "get_kpi_turns"
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_kpi_turns_requires_can_manage_platform_when_enforcing(
+    monkeypatch, minimal_config
+) -> None:
+    """AUTHZ-05 review finding: item 8a's blanket removal of the org-level
+    CAN_READ_METRICS check does not apply to this ring buffer — it exposes
+    cross-user/cross-team session_id/user_id/team_id/token data for every
+    caller that has hit this pod, unlike the tier-2 capabilities item 8a
+    correctly deleted elsewhere. Gated on CAN_MANAGE_PLATFORM, same as the
+    sibling `get_audit_events`, when ReBAC is actually enforcing."""
+    endpoint = _get_kpi_turns_endpoint()
+    container = PodApplicationContext(minimal_config)
+
+    denying_engine = _FakePlatformRebacEngine(enabled=True, grant=False)
+    _wire_engine(monkeypatch, denying_engine)
+    with pytest.raises(AuthorizationError):
+        await endpoint(limit=10, container=container, caller=_ALICE)
+    assert denying_engine.calls == [
+        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+    ]
+
+    granting_engine = _FakePlatformRebacEngine(enabled=True, grant=True)
+    _wire_engine(monkeypatch, granting_engine)
+    assert await endpoint(limit=10, container=container, caller=_ALICE) == []
+
+
+@pytest.mark.asyncio
+async def test_get_kpi_turns_unchanged_in_dev_mode(monkeypatch, minimal_config) -> None:
+    """Dev/no-security mode (no caller, or ReBAC disabled) stays exactly as
+    before this fix: the diagnostic buffer remains reachable without a grant."""
+    endpoint = _get_kpi_turns_endpoint()
+    container = PodApplicationContext(minimal_config)
+
+    _wire_engine(monkeypatch, None)
+    assert await endpoint(limit=10, container=container, caller=None) == []
+
+    disabled_engine = _FakePlatformRebacEngine(enabled=False, grant=False)
+    _wire_engine(monkeypatch, disabled_engine)
+    assert await endpoint(limit=10, container=container, caller=_ALICE) == []
+    assert disabled_engine.calls == []  # a disabled engine is never consulted
 
 
 @pytest.mark.asyncio

@@ -4,9 +4,9 @@ This page is the operational contract for developers working on Fred backends.
 
 > [!IMPORTANT]
 > **Access-control convention for all backends:**
-> Keep the distinction explicit between global app RBAC roles (`admin`/`editor`/`viewer`) and team ReBAC relations (`owner`/`manager`/`member`).
+> Keep the distinction explicit between global app RBAC roles (`admin`/`editor`/`viewer`) and team ReBAC relations (`team_admin`/`team_editor`/`team_analyst`/`team_member`).
 > Team-level write operations must rely on team relations, not on app role shortcuts.
-> Initial `owner`/`manager` team assignments must be provisioned by deployment post-install automation.
+> A team's first `team_admin` is granted by the platform-admin-gated team-bootstrap action (`POST /teams`, RFC §28), not by post-install automation guessing at ownership.
 
 It answers two practical questions:
 

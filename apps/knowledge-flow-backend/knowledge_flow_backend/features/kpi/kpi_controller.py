@@ -41,10 +41,16 @@ class KPIController:
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
         async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
             if body.view_global:
-                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
+                # CAN_OBSERVE_PLATFORM: platform_observer's own capability for
+                # cross-user / platform-wide KPI observation. Also gates the
+                # control-plane Analytics presets (`/admin/analytics`, AUTHZ-05
+                # review item 16) — one relation, same platform-wide recap for
+                # both platform_admin and platform_observer.
+                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
                 logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
             else:
-                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI, ORGANIZATION_ID)
+                # AUTHZ-05 review item 8a: the org-level CAN_READ_KPI capability
+                # was removed — any authenticated user may query their own KPIs.
                 logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
                 body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 

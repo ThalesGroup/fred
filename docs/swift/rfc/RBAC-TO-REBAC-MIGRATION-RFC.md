@@ -39,7 +39,7 @@ adding *only* `check_user_permission_or_raise` / `check_user_team_permission_or_
 ## 2. Root cause of the schema gap
 
 ReBAC types in `schema.fga` are `user, organization, team, agent, tag, document, resource`. The RBAC
-`Resource` enum is much wider (KPIS, LOGS, METRICS, OPENSEARCH, NEO4J, FILES, FEEDBACK, SESSIONS, …). The
+`Resource` enum is much wider (KPIS, LOGS, METRICS, OPENSEARCH, FILES, FEEDBACK, SESSIONS, …). The
 content/collaboration resources map onto existing ReBAC types; the **global infrastructure / admin** resources
 have **no ReBAC type and no resource instance** to check. Their natural scope is the **singleton
 `organization:fred`**, whose `admin/editor/viewer` relations are already populated from Keycloak roles
@@ -68,7 +68,6 @@ type organization
     define can_read_logs: viewer
     define can_read_metrics: viewer
     define can_read_opensearch: viewer
-    define can_read_knowledge_graph: viewer   # Neo4j (explicitly NOT admin-only)
 
     # NEW — platform administration (admin)
     define can_administer_users: admin
@@ -79,7 +78,7 @@ type organization
 ### 3.2 Python enum additions (`rebac_engine.py`) — `.fga` relations already exist
 - `DocumentPermission.PROCESS = "process"` (relation `document#process` already in schema).
 - `OrganizationPermission`: add `CAN_READ_KPI`, `CAN_READ_LOGS`, `CAN_READ_METRICS`, `CAN_READ_OPENSEARCH`,
-  `CAN_READ_KNOWLEDGE_GRAPH`, `CAN_ADMINISTER_USERS`, `CAN_MANAGE_PLATFORM`, `CAN_RUN_BENCHMARK` (and, for
+  `CAN_ADMINISTER_USERS`, `CAN_MANAGE_PLATFORM`, `CAN_RUN_BENCHMARK` (and, for
   completeness, the already-defined `CAN_CREATE_TEAM`, `CAN_CREATE_AGENT`).
 
 `check_user_permission_or_raise(user, OrganizationPermission.X, ORGANIZATION_ID)` (`ORGANIZATION_ID = "fred"`)
@@ -95,7 +94,7 @@ then gates global endpoints; `require_admin` sites map to the matching `admin`-l
 - **B — collections/search** via existing `lookup_user_resources`: most are **already** ReBAC at the service
   layer (`metadata`, `tabular`, `vector_search.search`, `tag list_all_tags`) → just drop the residual
   `@authorize`. To wire: `resources list_resources_by_kind`, runtime `list_agents`, `statistic /stat/*`.
-- **C — org-level** (uses §3.1): neo4j, opensearch, prometheus/metrics, kpi (kf + cp), logs, users CRUD,
+- **C — org-level** (uses §3.1): opensearch, prometheus/metrics, kpi (kf + cp), logs, users CRUD,
   import/export, policies/lifecycle, store audit/fix, rebac backfill, benchmark.
 - **D — already ReBAC / ownership / public** (no change): filesystem (team-scoped; drop redundant
   `authorize_or_raise(FILES)`), runtime execute/evaluate/stream, `tasks` (ReBAC + ownership), `product`;
@@ -110,7 +109,7 @@ its now-unused members in a follow-up. **Keep** `require_task_access` and owners
 
 ## 4. Alternatives considered
 - **Keep RBAC for global/admin endpoints (hybrid).** Rejected by product decision: the goal is a single model.
-- **New ReBAC types per global resource** (`type kpi`, `type neo4j`, …). Rejected: no instances exist; it would
+- **New ReBAC types per global resource** (`type kpi`, …). Rejected: no instances exist; it would
   invent a heavier scheme for what is fundamentally an organization-wide capability. Org-level permissions are
   the minimal, idiomatic fit.
 - **One coarse `can_administer` / `can_read_global`.** Rejected (default): loses least-privilege; fine-grained

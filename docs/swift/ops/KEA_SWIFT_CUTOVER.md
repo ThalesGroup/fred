@@ -28,15 +28,19 @@ metadata plus mirrored `output/` artifacts.
 
 | Topic | Tracked as | Owner | Rule |
 | --- | --- | --- | --- |
-| identity | MIGR-04 | platform/ops | Preserve Keycloak user `sub` and group IDs before any application import. |
+| identity | MIGR-04 | platform/ops | Preserve Keycloak user `sub` before any application import. Team IDs are no longer Keycloak group IDs — see the migration note below. |
 | data | MIGR-06 | application migration | Mirror MinIO buckets key-for-key; never rewrite `document_uid` paths. |
 | metadata | MIGR-02 + MIGR-05 | application migration | Restore the config graph from the export zip into a fresh target only. |
 | products | MIGR-07 | application migration | Rebuild embeddings and other derived artifacts on the target. |
 
 ## Non-Negotiables
 
-- Keycloak user IDs and group IDs are preserved, not remapped.
-- Team membership travels with Keycloak group claims, not OpenFGA tuples.
+- Keycloak user IDs (`sub`) are preserved, not remapped.
+- Teams are not Keycloak groups (AUTHZ-05 review item 9, `platform/REBAC.md`,
+  `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6): a team is a `team_metadata`
+  row plus explicit OpenFGA relation tuples (`team_admin`/`team_editor`/
+  `team_analyst`/`team_member`). See the migration note below — the previous
+  "preserve the Keycloak group ID as the team ID" rule no longer applies.
 - `document_uid` is the only join between object storage, metadata rows, and
   OpenFGA document tuples.
 - The data mirror runs before metadata import and mirrors both `input/` and
@@ -47,6 +51,21 @@ metadata plus mirrored `output/` artifacts.
   MIGR-07 completes.
 - Conversations and message history are out of scope unless a separate confirmed
   migration item is created.
+
+## Migration Note — Teams Are No Longer Keycloak Groups
+
+AUTHZ-05 review item 9 (2026-07-10, `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6,
+`platform/REBAC.md`) decoupled teams from Keycloak entirely: a team is now a
+`team_metadata` row (independently generated `uuid4().hex` id, plus `name`) with
+membership as explicit OpenFGA relation tuples (`team_admin`/`team_editor`/
+`team_analyst`/`team_member`) — no Keycloak group backs it, and there is no group ID to
+preserve as the team ID. This revamps how MIGR-04/MIGR-02 must handle teams: user
+identity migration (`sub` preservation) is unaffected, but team migration is now "create
+a `team_metadata` row per source team, then write the equivalent membership tuples
+directly" rather than "preserve the group ID." The concrete import mechanics for this
+(source team enumeration, id/name mapping, tuple-writing order) are not yet designed —
+track as a follow-up before this document's team-related steps are treated as
+actionable.
 
 ## Current Implementation State
 
@@ -72,7 +91,7 @@ metadata plus mirrored `output/` artifacts.
 
 Stop the cutover if any of these are true:
 
-- a target Keycloak user or group gets a new UUID;
+- a target Keycloak user gets a new UUID;
 - metadata import sees identities, teams, documents, or agent templates it cannot
   validate or map;
 - the target already contains data that violates the fresh-target import policy;

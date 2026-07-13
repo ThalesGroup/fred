@@ -40,7 +40,6 @@ def audio_client() -> TestClient:
         username="testuser",
         email="testuser@example.com",
         roles=["admin"],
-        groups=["admins"],
     )
     with TestClient(app) as client:
         yield client

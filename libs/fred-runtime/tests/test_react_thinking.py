@@ -332,7 +332,7 @@ class _FakePortable:
 
 
 class _FakeRuntimeContext:
-    user_groups: tuple[str, ...] = ()
+    pass
 
 
 class _FakeBinding:

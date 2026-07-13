@@ -22,11 +22,12 @@ from fred_core.security.models import AuthorizationError, Resource
 logger = logging.getLogger(__name__)
 
 _TEAM_PERMISSION_MESSAGES: dict[str, str] = {
-    "can_update_resources": "You are not allowed to manage resources in this team. Ask a team owner or manager.",
-    "can_update_agents": "You are not allowed to manage agents in this team. Ask a team owner or manager.",
+    "can_update_resources": "You are not allowed to manage resources in this team. Ask a team admin or editor.",
+    "can_update_agents": "You are not allowed to manage agents in this team. Ask a team admin or editor.",
     "can_administer_members": "You are not allowed to manage members in this team.",
-    "can_administer_managers": "You are not allowed to manage managers in this team.",
-    "can_administer_owners": "You are not allowed to manage owners in this team.",
+    "can_administer_editors": "You are not allowed to manage editors in this team.",
+    "can_administer_analysts": "You are not allowed to manage analysts in this team.",
+    "can_administer_admins": "You are not allowed to manage admins in this team.",
     "can_read_members": "You are not allowed to view team members.",
     "can_update_info": "You are not allowed to update this team.",
 }

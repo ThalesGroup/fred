@@ -724,6 +724,26 @@ Create mode: template browser → display name → description → tuning fields
 
 ---
 
+### `TeamUsagePage`
+
+**Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
+**Status:** `Functional`
+
+Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b). Reuses `AnalyticsPage`'s chart
+primitives (`TimeSeriesLineChart`, `BarChart`, `TimeRangeSelector`, `ServiceNotice`) at
+`team/:teamId/usage`: a timeline of the requesting user's own token consumption plus
+breakdowns by agent and by model, all self-scoped server-side (no team/agent picker). Entry
+point is a new gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same
+slot team settings uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the
+two are mutually exclusive.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
+  `AnalyticsPage` but haven't been checked against a live stack with real token data.
+
+---
+
 ---
 
 ## CHAT-05 atoms (Wave 1 + additions)

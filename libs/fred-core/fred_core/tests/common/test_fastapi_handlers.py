@@ -41,7 +41,7 @@ def test_authorization_error_handler_returns_team_specific_detail(
 
     assert response.status_code == 403
     assert response.json() == {
-        "detail": "You are not allowed to manage agents in this team. Ask a team owner or manager."
+        "detail": "You are not allowed to manage agents in this team. Ask a team admin or editor."
     }
     assert "Authorization denied for user alice" in caplog.text
 

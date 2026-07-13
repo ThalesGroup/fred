@@ -58,8 +58,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
     },
+    listAllTeamsControlPlaneV1TeamsAllGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((team) => ({ type: "ControlPlaneTeam" as const, id: team.id })),
+              { type: "ControlPlaneTeam" as const, id: "LIST" },
+            ]
+          : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
     getTeamControlPlaneV1TeamsTeamIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
+    },
+    createTeamControlPlaneV1TeamsPost: {
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
     },
     updateTeamControlPlaneV1TeamsTeamIdPatch: {
       invalidatesTags: (_, __, arg) => [
@@ -101,7 +113,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
-    updateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatch: {
+    grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
@@ -121,12 +140,16 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
+  useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
-  useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation: useUpdateTeamMemberMutation,
+  useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation: useGrantTeamMemberRoleMutation,
+  useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation:
+    useRevokeTeamMemberRoleMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation: useRemoveTeamMemberMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
@@ -138,6 +161,9 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
 } = enhancedControlPlaneApi;

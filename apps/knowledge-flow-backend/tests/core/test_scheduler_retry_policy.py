@@ -44,7 +44,6 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
         username="testuser",
         email="testuser@localhost",
         roles=["admin"],
-        groups=["admins"],
     )
     files = [
         FileToProcessWithoutUser(

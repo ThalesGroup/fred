@@ -99,3 +99,30 @@ def test_strict_rejects_issuer_prefix_attack(_rsa_keypair):
             _token(priv_pem, iss=_REALM + ".evil.com", aud=_CLIENT, sub="u-3")
         )
     assert exc.value.status_code == 401
+
+
+def test_groups_claim_is_accepted_but_ignored(_rsa_keypair):
+    """AUTHZ-05 final sweep: `KeycloakUser` no longer carries a `groups` field.
+
+    A JWT still carrying a legacy `groups` claim (e.g. from an older Keycloak
+    client scope) must decode successfully — the unknown claim is silently
+    ignored, never raises, and never surfaces on the returned user.
+    """
+    priv_pem, _ = _rsa_keypair
+    token = pyjwt.encode(
+        {
+            "iss": _REALM,
+            "aud": _CLIENT,
+            "sub": "u-4",
+            "preferred_username": "alice",
+            "exp": int(time.time()) + 3600,
+            "groups": ["/thales", "/admins"],
+        },
+        priv_pem,
+        algorithm="RS256",
+    )
+
+    user = oidc.decode_jwt(token)
+
+    assert user.uid == "u-4"
+    assert not hasattr(user, "groups")

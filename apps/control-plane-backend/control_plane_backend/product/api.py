@@ -4,7 +4,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import Response
-from fred_core import KeycloakUser, TeamPermission, get_current_user
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    TeamPermission,
+    get_current_user,
+)
 from fred_core.common import TeamId
 
 from control_plane_backend.product.dependencies import (
@@ -157,14 +163,27 @@ async def get_team_agent_templates(
       do not appear in "create agent" (see AGENT-VISIBILITY-RFC)
 
     Internal agents are an admin concern: `include_non_public` is honored only for
-    platform admins and silently ignored for everyone else, so a non-admin team
-    member cannot enumerate hidden agents.
+    OpenFGA `platform_admin`/`platform_observer` subjects (checked via
+    `CAN_MANAGE_PLATFORM`) and silently ignored for everyone else, so a non-admin
+    team member cannot enumerate hidden agents, and a Keycloak `admin` role alone
+    is no longer sufficient.
 
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    effective_include_non_public = include_non_public and "admin" in user.roles
+    await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    rebac = deps.team_dependencies.rebac
+    effective_include_non_public = (
+        include_non_public
+        and await rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
     return await list_agent_templates(
         team_id, deps, include_non_public=effective_include_non_public
     )
@@ -194,7 +213,12 @@ async def get_team_agent_instances(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-instances`
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     return await list_managed_agent_instances(team.id, deps)
 
 
@@ -397,7 +421,12 @@ async def post_team_prompt(
     - `POST /control-plane/v1/teams/personal/prompts`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         return await create_prompt(user=user, team_id=team.id, request=body, deps=deps)
     except PromptRequestError as exc:
@@ -493,11 +522,26 @@ async def post_record_prompt_use(
     - fire-and-forget after the user confirms a prompt selection in any picker
     - works for both DB prompts (UUID ids) and default prompts ("default:<category>" ids)
 
+    AUTHZ-05 post-implementation review finding: this write (it increments a
+    persistent counter) used to fall back to the default `CAN_READ`, which
+    also admits `public` — any authenticated user who could merely view a
+    public team, without being a member, could repeatedly call this to skew
+    the "most-used" prompt ranking. Gated on `CAN_USE_TEAM_AGENTS` instead —
+    the existing team_member-only (excludes `public`) capability already used
+    for the sibling agent-template/agent-instance listing endpoints; prompt
+    selection happens from the same chat/agent-form pickers this capability
+    already gates, so no new capability is introduced for this one call site.
+
     Example:
     - ``POST /control-plane/v1/teams/personal/prompts/default:doc-assist/use``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     await record_prompt_use(prompt_id, team.id, user, deps)
     return Response(status_code=204)
 
@@ -529,7 +573,12 @@ async def put_team_prompt(
     - `PUT /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         result = await update_prompt(team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
@@ -568,7 +617,12 @@ async def delete_team_prompt(
     - `DELETE /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     deleted = await delete_prompt(team.id, prompt_id, deps)
     if not deleted:
         raise HTTPException(
@@ -599,12 +653,32 @@ async def post_promote_prompt(
     Returns 409 if a prompt with the same name already exists in the target team —
     the caller must rename first.
 
+    AUTHZ-05 post-implementation review finding (2026-07-11): promoting only
+    checked `CAN_UPDATE_RESOURCES` on the source team. The target team was never
+    resolved or permission-checked, so any team_editor could copy a prompt's
+    text into an arbitrary team_id — including teams they hold no relation to —
+    as long as the name didn't collide there. Resolving the target team here,
+    under the same `CAN_UPDATE_RESOURCES` requirement as the source, closes that
+    cross-team write and also turns an unknown target into a 404 instead of a
+    silent orphan row.
+
     Example:
     - ``POST /control-plane/v1/teams/personal/prompts/abc-123/promote``
       ``{ "target_team_id": "bid-and-capture" }``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    await get_team_by_id_from_service(
+        user,
+        TeamId(body.target_team_id),
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         return await promote_prompt(user, team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
@@ -634,7 +708,12 @@ async def patch_team_prompt(
       ``{ "score": 4.5 }``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     result = await update_prompt_score(team.id, prompt_id, body, deps)
     if result is None:
         raise HTTPException(
@@ -1021,8 +1100,23 @@ async def post_prepare_execution(
 
     HITL resume needs no special preparation — the runtime derives the resume action
     from the request's ``resume_payload``.
+
+    AUTHZ-05 post-implementation review finding: this used to fall back to the
+    default ``CAN_READ`` (team_member or ``public``). Unlike the sibling
+    ``get_team_agent_instance_runtime`` (deliberately kept on ``CAN_READ`` — it
+    returns config only, never prompt content, real enforcement happens at the
+    pod), this endpoint can return ``context_prompt_text`` — real prompt
+    library content — directly from control-plane, before the pod is ever
+    reached. Gated on ``CAN_USE_TEAM_AGENTS`` instead, the same team_member-only
+    capability already required to list this team's agent instances in the
+    first place (the natural next step in the same flow).
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
 
     try:
         return await prepare_execution(

@@ -30,9 +30,11 @@ import {
 import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
+import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
-import { usePermissions } from "../../../../../security/usePermissions";
+import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import { deriveDocStatus } from "./deriveDocStatus.ts";
 import { ResourcePagination } from "./ResourcePagination/ResourcePagination.tsx";
@@ -73,12 +75,12 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   ref,
 ) {
   const { t } = useTranslation();
-  const { can } = usePermissions();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
-  const canCreateFolder = can("tag", "create");
+  const { data: team } = useGetTeamQuery({ teamId });
+  const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
 
   const ownerFilter: OwnerFilter = isPersonalTeam ? "personal" : "team";
   const {
@@ -169,6 +171,21 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     }
   });
 
+  // A brand-new document (just registered by the upload drawer) has no row
+  // anywhere yet, so `useRefetchOnTaskSuccess` above can never trigger its first
+  // refetch — its check requires the document to already be in a loaded page.
+  // Fire on first sighting of the task instead (any state, not just succeeded):
+  // the document's metadata is already persisted server-side by then, so
+  // refreshing now surfaces the row immediately, live-progressing via the
+  // existing per-row task wiring in `DocRow`. Every currently loaded folder page
+  // is refreshed since the task's target carries no tag id to narrow which one.
+  useNotifyOnNewTaskTarget("document", () => {
+    void refetchTags();
+    for (const [tagId, page] of Object.entries(perTag)) {
+      void loadTagPage(tagId, page.offset);
+    }
+  });
+
   const toggleFolder = useCallback(
     (node: TagNode) => {
       const tag = node.tagsHere[0];
@@ -213,26 +230,34 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   );
 
   const moreActionsFor = useCallback(
-    (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => [
-      {
-        id: "searchable",
-        label: t("rework.resources.action.searchable"),
-        onSelect: () => void commands.toggleRetrievable(doc),
-      },
-      {
-        id: "delete",
-        label: t("rework.resources.action.delete"),
-        onSelect: () =>
-          showConfirmationDialog({
-            title: t("rework.resources.confirm.deleteTitle"),
-            message: t("rework.resources.confirm.deleteMessage", {
-              name: doc.identity.title || doc.identity.document_name,
+    (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => {
+      // Both actions below write to the tag/document (toggle-retrievable, delete),
+      // gated backend-side by CAN_UPDATE_RESOURCES via TagPermission.UPDATE — same
+      // capability as folder creation. Omitting them (rather than showing a
+      // guaranteed-403) also lets DocRow hide the "…" button entirely when the
+      // resulting list is empty.
+      if (!canCreateFolder) return [];
+      return [
+        {
+          id: "searchable",
+          label: t("rework.resources.action.searchable"),
+          onSelect: () => void commands.toggleRetrievable(doc),
+        },
+        {
+          id: "delete",
+          label: t("rework.resources.action.delete"),
+          onSelect: () =>
+            showConfirmationDialog({
+              title: t("rework.resources.confirm.deleteTitle"),
+              message: t("rework.resources.confirm.deleteMessage", {
+                name: doc.identity.title || doc.identity.document_name,
+              }),
+              onConfirm: () => void commands.removeFromLibrary(doc, tag as unknown as TagWithItemsId),
             }),
-            onConfirm: () => void commands.removeFromLibrary(doc, tag as unknown as TagWithItemsId),
-          }),
-      },
-    ],
-    [t, commands, showConfirmationDialog],
+        },
+      ];
+    },
+    [t, commands, showConfirmationDialog, canCreateFolder],
   );
 
   const runningDocIds = useMemo(
@@ -277,7 +302,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
             onToggle={() => toggleFolder(node)}
             aggregate={aggregateFor(node)}
             onUpload={
-              tag
+              tag && canCreateFolder
                 ? () => {
                     setSelectedFolderFull(node.full);
                     setUploadOpen(true);
@@ -314,7 +339,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                       onSelect={() => setSelectedDocId(doc.identity.document_uid)}
                       onPreview={() => commands.preview(doc)}
                       onDownload={() => void commands.download(doc)}
-                      onProcess={() => void reprocess(doc, tag.id)}
+                      onProcess={canCreateFolder ? () => void reprocess(doc, tag.id) : undefined}
                       moreActions={moreActionsFor(doc, tag)}
                     />
                   </div>

@@ -82,6 +82,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
             source,
             TeamMetadataRow(
                 id="team-alpha",
+                name="Alpha",
                 description="Alpha team space",
                 is_private=False,
                 banner_object_storage_key="teams/team-alpha/banner.png",
@@ -110,6 +111,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
                 )
             ).scalar_one()
 
+        assert imported.name == "Alpha"
         assert imported.description == "Alpha team space"
         assert imported.is_private is False
         assert imported.banner_object_storage_key == "teams/team-alpha/banner.png"
@@ -139,6 +141,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
             source,
             TeamMetadataRow(
                 id="team-beta",
+                name="Beta",
                 description="Exported description",
                 is_private=True,
                 team_delete_grace="P7D",
@@ -149,6 +152,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
             dest,
             TeamMetadataRow(
                 id="team-beta",
+                name="Beta",
                 description="Live description",
                 is_private=False,
                 team_delete_grace="P365D",

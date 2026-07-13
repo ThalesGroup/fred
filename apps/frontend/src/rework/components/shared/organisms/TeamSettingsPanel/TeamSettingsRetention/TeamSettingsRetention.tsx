@@ -34,6 +34,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useUpdateTeamMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 
 interface TeamSettingsRetentionProps {
   team: TeamWithPermissions;
@@ -67,7 +68,7 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
   // Editing the per-team value is owner-only, matching the backend gate
   // (CAN_UPDATE_INFO). Non-owners see both columns read-only. The platform cap is
   // always read-only regardless of permission.
-  const canEdit = team.permissions?.includes("can_update_info") ?? false;
+  const { canUpdateInfo: canEdit } = useTeamCapabilities(team);
 
   const { register, getValues, reset, setError, clearErrors, formState } = useForm<RetentionForm>({
     defaultValues: { team_delete_grace: "", max_idle: "" },

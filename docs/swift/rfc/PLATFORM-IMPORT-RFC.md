@@ -57,7 +57,14 @@ large multi-store restores enter scope, revisit the Temporal design in §5.
 - **OpenFGA tuple restore** (MIGR-05.04) — handled out-of-band by ops bulk-copy (cutover Option A);
   `reset` deliberately leaves tuples intact so team ownership survives a re-test.
 - **Stage reconciliation** (MIGR-05.07) + **re-vectorize trigger** (MIGR-07).
-- **users / teammetadata / MCP** restore — re-seeded by deployment / identity bootstrap (MIGR-04).
+- **users / MCP** restore — re-seeded by deployment / identity bootstrap (MIGR-04).
+- ~~**teammetadata** restore — re-seeded by deployment / identity bootstrap~~ **superseded
+  (2026-07-10):** this assumed team metadata was Keycloak-identity-derived, which was true only
+  while teams were Keycloak groups. AUTHZ-05 review item 9 decoupled teams from Keycloak entirely
+  — `import_export/importer.py::_import_team_metadata` already restores `teammetadata` rows
+  (including the now-required `name` column, with an id-fallback for older bundles) as part of
+  the same import transaction as agents/tags/document metadata, not a separate identity-bootstrap
+  step. Update this line's status if that changed since.
 - **Fresh-target preflight guard / verify step** — superseded by idempotent-by-PK import + `reset`.
 
 **Known incompleteness on the kea side:** verify the real bundle against §3 (an early test bundle had
@@ -144,9 +151,13 @@ store already contain relevant data. No upsert, no overwrite, no merge.
   to metadata by `document_uid` (MIGR-06). This import only restores their **metadata rows**.
 - **products** — **vector embeddings** (OpenSearch) are **rebuilt on the target** by re-vectorize
   (MIGR-07), not transported.
-- **identity** — the **Keycloak realm** is bootstrapped first with identical users + groups,
+- **identity** — the **Keycloak realm** is bootstrapped first with identical users,
   **IDs preserved** (MIGR-04). This import **validates** referenced identities exist; it does not
-  create them. (Team membership is not in the tuples — it derives from group claims.)
+  create them. Team membership is **not** derived from Keycloak groups (AUTHZ-05 review item 9,
+  `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6) — a team is a `team_metadata` row (which this
+  import already restores, including the now-required `name` column) plus explicit OpenFGA
+  membership tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`), which **are** part
+  of the imported tuple set like any other relation.
 - **Conversations / sessions / message history.**
 
 ## 3. Bundle contract (observed from `kea-snapshot-*.zip`, format_version 1)
@@ -176,7 +187,7 @@ One JSON object per line; last line may lack a trailing newline (manifest counts
 | `metadata` | `metadata` — `.../metadata/metadata_models.py` | same timestamp note |
 | `agent` | **`agent_instance`** — `control-plane-backend/.../models/agent_instance_models.py` | **decompose** `payload_json` → `template_id`, `source_runtime_id`, `source_agent_id`, `tuning_json`, `prompt_refs_json`; inject `team_id`, `created_by`; map kea `class_path`/`definition_ref` via an **agent catalog mapping** (see §7 risk) |
 | `mcp-server` | none (MCP refs live inline in agent tuning) | fold into agent restore / dedupe; no standalone table |
-| `teammetadata` | `teammetadata` — `fred-core/.../team_metatada_models.py` | map; default swift-only cols (`is_private`, storage sizes, banner) |
+| `teammetadata` | `teammetadata` — `fred-core/.../team_metatada_models.py` | map; default swift-only cols (`is_private`, storage sizes, banner); `name` is now required (AUTHZ-05 review item 9) — fall back to the id if the source bundle predates it |
 | `users` | `users` — `fred-core/.../users/user_models.py` | map `id`; default GCU/storage |
 | `openfga/tuples.json` | swift `fred` OpenFGA store | write tuples; **validate** user/team/object existence; conform to `schema.fga`; reconcile `team:personal*` with `personal_team_id(uid)` |
 
