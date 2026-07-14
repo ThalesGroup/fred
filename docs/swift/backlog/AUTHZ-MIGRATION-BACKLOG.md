@@ -154,6 +154,92 @@ service-principal authorization. Platform roles do not grant team data visibilit
   - **Still not done** (unchanged from the row above): manual end-to-end re-validation on `docker-up`, Kubernetes Secret templating for GKE/GCP then AKS, and part (2) of the original AUTHZ-07 scope (declarative platform-provisioning for teams/roles/users).
 - [x] **AUTHZ-07 Part (2) closed, 2026-07-14 — declarative team/platform role provisioning via `import_export`.** Implements `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 §40.2's "harden and generalize `PLATFORM-IMPORT-RFC.md`'s input contract" recommendation; full design in `PLATFORM-IMPORT-RFC.md` §10. A new top-level `users.json` bundle entry names already-existing Keycloak identities by username and describes the team/platform roles they should hold; resolution is read-only (`users/service.py::find_user_sub_by_username`, never creates a Keycloak identity — an unresolved username is skipped and reported). Platform-role grants to a third party are the one genuinely new capability, kept to a single private helper (`importer.py::_grant_platform_role`) reachable only through the already `CAN_MANAGE_PLATFORM`-gated import route — no new endpoint. Team-scoped grants stay bounded by the existing, deliberately non-escalating permission model (`schema.fga`: `team_admin`-only, never derived from a platform role, per the reverted `§24.7` precedent): a brand-new team's initial `team_admin`(s) can be seeded at creation (`teams.service.create_team`'s own bootstrap capability), but any other team-scoped grant requires the importing `platform_admin` to already hold `team_admin` there — otherwise it is skipped and reported (`report.team_roles_skipped`), never forced through. Verified offline only: `tests/test_import_export_users.py` (8 tests: resolved-user success path, graceful skip of a grant the caller can't make, unresolved-username skip, re-run idempotency, and `find_user_sub_by_username` never calling a Keycloak write method), full control-plane-backend suite 314 passed. Frontend `controlPlaneOpenApi.ts` regenerated (no fields changed by this work; the diff picked up was pre-existing, unrelated bootstrap-endpoint drift) and `tsc --noEmit` clean. `make code-quality` not run this session (developer's own gate).
 - [x] **`fred`/`fred-deployment-factory` boundary split, Part A closed, 2026-07-14 — typed bundle + 2-phase import (identity then role).** `fred` (`control_plane_backend/import_export/`) becomes the sole, complete owner of platform provisioning — identities *and* authorization state — closing the design smell found while testing AUTHZ-07's bootstrap live (demo identity/authz data mixed into `fred-deployment-factory` config; `openfga-post-install.sh` unconditionally seeding `platform_admin` tuples in both authz modes). New `import_export/schemas.py::BundleUserEntry` (Pydantic) retypes `KBundle.demo_users()` from `list[dict[str, Any]]` to `list[BundleUserEntry]`, validated per entry (`bundle.py`); carries the pre-existing role fields (`teams`/`team_roles`/`platform_roles`) plus new optional identity fields (`email`/`first_name`/`last_name`/`password`). New `importer.py::_provision_bundle_identities` (phase 1, runs before the unchanged role phase in `_run_users_phase`) creates a Keycloak user via the existing `users/service.py::create_user` only when both no identity resolves yet and the entry carries a `password` — never force-created, never overwrites an existing identity; `KeycloakM2MUserOperationDisabledError` propagates uncaught if M2M isn't configured. New `MigrationReport.identities_created` field. New checked-in fixture `apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/{manifest.json,users.json}` — the 15 demo users (retyped from `fred-deployment-factory/config/configuration.yaml`'s `users:` list, dropping `enabled`/`app_roles`/`_purpose`, keeping the `Azerty123_` convention), now the *only* place this data exists; `make build-demo-bundle` (new Makefile target) zips it to `target/demo-provisioning-bundle.zip` for upload via Admin → Migration. `PLATFORM-IMPORT-RFC.md` §10 extended (not rewritten) with the identity phase, `BundleUserEntry`'s full shape, the M2M precondition, and the fixture's new content/location (new §10.1). Verified offline: `tests/test_import_export_users.py` — the success-path test now reads the checked-in fixture end-to-end (all 15 identities created, 3 teams provisioned, 4 free team_admin grants, 10 correctly-skipped team-scoped grants, 2 platform-role grants) instead of a hand-rolled single-entry dict; every other test in that file keeps its hand-rolled dict on purpose (edge cases that must not match the real fixture); one new dedicated unit test on `_provision_bundle_identities` asserting the exact `a_create_user` payload and that an already-resolved or password-less entry is never created — 9 tests total (was 8), full control-plane-backend suite 315 passed (was 314). Fixture round-trips through `BundleUserEntry.model_validate` (confirmed 15 entries). `make build-demo-bundle` confirmed to produce a zip containing exactly `manifest.json`+`users.json`. This is Part A of a 3-part plan (Part B: strip `fred-deployment-factory` to pure infrastructure; Part C: relocate `validation/` into `fred/validation/`) — Parts B/C tracked separately, out of scope for this bullet.
+
+### AUTHZ-07 candidate hardening workplan — recorded 2026-07-14
+
+This is the durable execution plan for the candidate review. It extends AUTHZ-07
+and the existing RFCs; it does not introduce a new feature or architecture.
+
+Candidate baselines:
+
+- `fred`: `98ae82b6` (`#1986 add root admin bootstrap and declarative platform provisioning`)
+- `fred-deployment-factory`: `e6c82fa` (`#1986 remove business configuration and leave only infrastructure setup`)
+- Development bootstrap proven live from scratch: register `alice` in Keycloak,
+  authenticate, submit the one-time token, become the first `platform_admin`,
+  continue into Fred.
+
+Execution protocol:
+
+1. Work strictly one step at a time; do not mix steps in one implementation.
+2. Observation comes before correction. Retain evidence before changing behavior.
+3. Before each implementation step, Codex writes a precise Claude prompt from
+   the evidence collected in the previous step; Dimitri confirms it before
+   Claude starts.
+4. Each Claude invocation must re-derive the finding from the current code,
+   obey `CLAUDE.md`, stay inside the named step, run the required checks, and
+   produce one logical commit. Do not push unless explicitly requested.
+5. Record the final prompt and resulting commit under the matching step here,
+   so that the handoff remains reproducible outside the chat history.
+
+- [ ] **Step 1 — live import observation, no product-code change.** Build
+      `apps/control-plane-backend/target/demo-provisioning-bundle.zip`, upload it
+      through Admin → Migration, retain the visible task state/report and backend
+      warnings, then run root `make validation-report`. Capture: import task id,
+      terminal status, created identities/teams, granted/skipped roles, UI
+      warnings, failed validation scenario names, and relevant logs. Do not fix
+      failures during this step.
+  - Exit gate: the complete command/UI evidence is returned to Codex.
+  - Claude prompt: none; this is a human-driven observation step.
+  - Result/commit: pending.
+
+- [ ] **Step 2 — make declarative import converge completely.** Using Step 1's
+      evidence, reconcile every valid identity, team membership, team role and
+      platform role requested by the bundle; define the `teams` fallback
+      semantics explicitly; reject or fail incomplete/invalid reconciliation
+      instead of reporting success after silent skips. Preserve the invariant
+      that ordinary team APIs remain team-admin bounded: any exceptional
+      provisioning authority must be private to the existing platform-admin
+      import operation, narrow, tested, and documented in the existing RFC.
+  - Exit gate: the real demo bundle imports with zero unintended skips; targeted
+    tests and the affected live validation scenarios pass; rerun is idempotent.
+  - Claude prompt/result/commit: to be written after Step 1 evidence.
+
+- [ ] **Step 3 — make import outcome observable and truthful.** Retain the
+      structured migration report, expose it through the existing task/event
+      contract, and make the UI show actionable failures/warnings. A partial
+      reconciliation must not be indistinguishable from full success.
+  - Exit gate: backend contract/event tests plus UI tests prove success, failure
+    and warning rendering without a parallel task-status model.
+  - Claude prompt/result/commit: pending Step 2.
+
+- [ ] **Step 4 — finish the pure-infrastructure factory boundary.** In
+      `fred-deployment-factory`, remove nominative/demo users and legacy app
+      roles from realm templates; make preflight/tests assert zero users; remove
+      stale factory validation targets and links now owned by `fred/validation`;
+      explicitly delete or time-bound the direct OpenFGA migration script.
+  - Exit gate: factory starts identity/authz infrastructure with no Fred business
+    population; registration → bootstrap → Fred import is the only tested path.
+  - Claude prompt/result/commit: pending Step 3.
+
+- [ ] **Step 5 — package bootstrap for deployed environments and upgrades.** Wire
+      the bootstrap secret through the existing Helm/Kubernetes secret mechanism
+      for k3d/GKE/AKS, without committing or logging it; define and test the
+      upgrade behavior for a platform that already owns `platform_admin` tuples
+      but has no completion marker.
+  - Exit gate: rendered charts carry only a secret reference; fresh-install and
+    existing-install paths are both documented and tested fail-closed.
+  - Claude prompt/result/commit: pending Step 4.
+
+- [ ] **Step 6 — final convergence and UX hardening.** Remove the superseded
+      config-seeded platform-role path and any remaining parallel vocabulary;
+      decide and implement durable/recoverable execution for the canonical
+      import; close bootstrap-page responsive, truncation, semantic-form and
+      accessibility gaps; align RFCs, generated contracts, backlog and PMO.
+  - Exit gate: one owner per bootstrap/provisioning concept, full root quality
+    and offline tests green, live `make validation-report` green, manual UI pass
+    recorded, and no stale factory/script/documented alternative remains.
+  - Claude prompt/result/commit: pending Step 5.
+
 - [ ] Swift launch: build readiness-report endpoint reading live OpenFGA tuples (RFC §24.8 — no durable audit-log store exists yet; follow-up, not a launch blocker).
 - [x] **Item 8b watch item materialized live and closed (2026-07-13, same PR #1957 / issue #1912, mechanical regression fix, no new ID).** The item-8b know scope note above ("believed low-risk but not exhaustively proven") turned out to matter: the browser self-test (item 17, run by Alice) reproduced the regression exactly as flagged — 14 steps passed (personal folder creation, document indexing, self-test agent enrollment, prompt/session creation), then all four direct runtime execution calls failed HTTP 403 (`Ask the agent (ALPHA)`, `Ask the agent (BETA)`, `Verify the system prompt`, `Verify the marketplace prompt`); fixture teardown still succeeded. Root cause confirmed: removing `groups_list_to_relations`/`_user_contextual_relations` (this item) correctly dropped the Keycloak-groups-derived `team_member` relation, but the same helper also carried the *other*, non-Keycloak contextual relation it built — `user:<uid> team_member team:personal-<uid>` — which the runtime's OpenFGA `CAN_READ` check on `personal-<uid>` had always silently depended on, since that relation was never a persisted tuple. Fix: `libs/fred-runtime/fred_runtime/app/agent_app.py::_authorize_execution_or_raise` now special-cases a personal space (`is_personal_team_id`/bare `"personal"`) **before** the OpenFGA branch — authorized by exact identity comparison against `fred_core.common.personal_team_id(authenticated_user.uid)` (audited `personal_space_owner_authorized`), any other personal-space id or the bare alias explicitly denied (audited `personal_space_denied`, HTTP 403, never reaching OpenFGA). Collaborative teams are untouched: still the same OpenFGA `CAN_READ` check, still fail-closed. `service_agent` execution is untouched (checked first, returns before the personal-space branch). **No Keycloak-groups fallback of any kind was restored** — this is a runtime-local identity check, not a relation derived from `groups`, a JWT claim, or a role. New tests in `libs/fred-runtime/tests/test_agent_app.py`: owner-authorized-without-OpenFGA, other-user's-personal-space-denied-even-when-OpenFGA-would-allow, bare-`"personal"`-alias-denied — all alongside the pre-existing collaborative-allow/deny and `service_agent` coverage. Verified offline: fred-runtime 420 passed (12 in the authorization block), `make code-quality` clean (ruff, bandit, basedpyright). Documented in `RUNTIME-EXECUTION-CONTRACT.md` §2.2 and a new dated entry at the top of that file. Not yet re-run live: `fred-deployment-factory` `make validation-report` and the UI self-test, both tracked as the next step in `NOTES-AUTHZ05-REVIEW.md`.
 - [x] Developer confirmation on this addendum (2026-07-09, second pass — naming decision, §25a scope, and bootstrap-endpoint shape all explicitly confirmed before implementation); continuing under existing GitHub issue #1912 / PR #1957 (CLAUDE.md Step 3/3.5 — no new issue needed).
