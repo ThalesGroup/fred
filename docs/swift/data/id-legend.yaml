@@ -390,6 +390,33 @@ items:
       offline: tests/test_import_export_users.py (8 tests), full
       control-plane-backend suite 314 passed, frontend tsc --noEmit clean.
 
+      Step 1 (live observation, 2026-07-14): the real demo bundle import on a
+      fresh platform produced 3 teams, 4 team_admin grants, 10 team roles
+      ignored, terminal state succeeded anyway; root make validation-report
+      came back 0 passed / 227 error, all cascading from that one missing
+      relation. Root cause: every non-admin team-scoped grant was routed
+      through the ordinary team_admin-gated grant_team_member_role, which the
+      importing platform_admin can never satisfy by design — so the
+      "skipped and reported, never forced through" design above was, in
+      practice, every non-admin grant in any real bundle. Step 2 fix (same
+      day, this PR): new private _grant_team_role_via_import primitive
+      (importer.py) writes these grants directly via RebacEngine.add_relation,
+      mirroring the pre-existing _grant_platform_role — no schema.fga change,
+      ordinary team APIs unchanged and still team_admin-gated (regression
+      test proves grant_team_member_role still refuses the same importer).
+      teams/team_roles fallback semantics formalized
+      (_effective_team_relations): explicit roles win and are cumulative;
+      teams with no explicit role fall back to one direct team_member tuple,
+      suppressed when an explicit role exists. Reconciliation is now
+      fail-closed (BundleProvisioningError aborts the users phase) on an
+      unknown role name, an unresolved identity, or an unprovisionable team,
+      instead of warn-then-succeed. Verified offline: 17 tests in
+      tests/test_import_export_users.py (was 8), full control-plane-backend
+      suite green, make code-quality clean; PLATFORM-IMPORT-RFC.md §10
+      updated in the same change. Not yet live-verified — the live stack
+      still carries Step 1's partial state; next step is re-importing the
+      same bundle onto it and re-running make validation-report.
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01

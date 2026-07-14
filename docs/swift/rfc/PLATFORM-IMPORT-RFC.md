@@ -52,8 +52,13 @@ large multi-store restores enter scope, revisit the Temporal design in §5.
 - Admin page (renamed **Platform data**) — import / export / reset + the live stats dashboard.
 - `import_export/importer.py::_run_users_phase` (+ `bundle.py::demo_users`,
   `users/service.py::find_user_sub_by_username`) — declarative team/platform role provisioning from
-  the new `users.json` bundle entry (§10, AUTHZ-07 Part 8 §40.2). Offline-tested only
-  (`tests/test_import_export_users.py`), **not yet live-tested** against a real Keycloak/OpenFGA stack.
+  the new `users.json` bundle entry (§10, AUTHZ-07 Part 8 §40.2), **team-role reconciliation fixed
+  2026-07-14 (AUTHZ-07 Step 2 — see §10's "Team-scoped roles" subsection)** after the first pass's live
+  validation run surfaced a design gap: non-admin team-scoped grants were unconditionally refused by the
+  `team_admin`-gated ordinary API and downgraded to warnings while the import still reported
+  `succeeded`. Offline-tested only (`tests/test_import_export_users.py`), **not yet live-tested** against
+  a real Keycloak/OpenFGA stack since the fix — the next operator step is re-importing the same demo
+  bundle onto the already-partially-provisioned live stack and re-running `make validation-report`.
 
 **Deferred (not done — tracked in backlog §0bis):**
 - **Prompts/resources** — agents import with default tuning only; kea agent prompt → swift agent
@@ -387,37 +392,70 @@ call mirrors `bootstrap_platform_admin`'s own direct `rebac.add_relation(...)` �
 idempotent (`on_duplicate_writes=IGNORE`), so re-running the same bundle never errors on an
 already-granted role.
 
-**Team-scoped roles — bounded by the existing permission model, not bypassed.** `schema.fga`'s `type
-team` comment is explicit and was tested in review (§24.2/§24.7): team-scoped relations
-(`team_admin`/`team_editor`/`team_analyst`/`team_member`) are **never** derived from a platform role —
-"a `platform_admin from organization` exception was tried for team bootstrap and reverted the same
-day." This importer does not reopen that door. Two consequences, both implemented and covered by
+**Team-scoped roles — bounded by the existing permission model, not bypassed. Revised 2026-07-14
+(AUTHZ-07 Step 2 — reconciliation fix).** `schema.fga`'s `type team` comment is still explicit and was
+tested in review (§24.2/§24.7): team-scoped relations (`team_admin`/`team_editor`/`team_analyst`/
+`team_member`) are **never** derived from a platform role — "a `platform_admin from organization`
+exception was tried for team bootstrap and reverted the same day." This importer does not reopen that
+door; `schema.fga` is untouched by this fix. Two consequences, both implemented and covered by
 `tests/test_import_export_users.py`:
-- A **brand-new** team's initial `team_admin`(s) can be seeded at creation time
+- A **brand-new** team's initial `team_admin`(s) is seeded at creation time
   (`teams.service.create_team`'s own one-shot, `CAN_CREATE_TEAM`-gated bootstrap capability —
   `CreateTeamRequest.initial_team_admin_ids`), by collecting every `team_admin` the bundle declares for
   that team before creating it. `CAN_CREATE_TEAM` is org-wide (`platform_admin`), so this needs no
   team-scoped permission from the importing caller.
 - **Every other team-scoped grant** — `team_editor`/`team_analyst`/`team_member` on any team, or any
-  role at all on a team that already existed before this import — goes through the existing
-  `teams.service.grant_team_member_role`, unmodified, which requires the importing `platform_admin` to
-  already hold `team_admin` on that specific team. When it doesn't, the grant is **skipped and
-  reported** (`report.team_roles_skipped`, `report.warnings`) — never silently dropped, and never
-  forced through by reaching past `grant_team_member_role`'s own permission check. This is a real,
-  known scope boundary of this phase, not an oversight: closing it would mean either (a) a schema.fga
-  change granting this specific admin-gated import flow a team-scoped bypass — a genuine new
-  capability, not just "reuse `grant_team_member_role`", and worth its own RFC discussion given the
-  reverted `§24.7` precedent — or (b) authoring bundles so every team a bundle touches either seeds its
-  `team_admin`(s) at creation in the same run, or names a `team_admin` the operator already holds
-  elsewhere. Left open for a future item rather than decided unilaterally here.
+  role at all on a team that already existed before this import — is now written through
+  `importer.py::_grant_team_role_via_import`, a **private, import-only reconciliation primitive** that
+  calls `RebacEngine.add_relation` directly, mirroring `_grant_platform_role`'s own direct-write shape.
+  This is the fix: the first implementation (2026-07-14, superseded by this revision the same day) routed
+  every such grant through the existing `teams.service.grant_team_member_role`, which requires the
+  importing `platform_admin` to already hold `team_admin` on that specific team — a condition the
+  importer deliberately never satisfies (RFC Part 8 §24.2/§24.7, "zero implicit access"). That made
+  every non-admin team-scoped grant in a real bundle unconditionally refused and downgraded to a
+  warning while the import still reported `succeeded` — confirmed live: importing the 15-identity demo
+  bundle produced exactly 10 skipped grants (bob/phil/zoe/liam/elena/derek/priya's non-`team_admin`
+  roles) out of 14 declared, which then cascaded into 227 setup errors in `validation/report.md` (every
+  scenario's fixture setup depends on the full role matrix being present). `_grant_team_role_via_import`
+  closes this without weakening the *ordinary* permission model: `grant_team_member_role`/
+  `add_team_member`/etc. are completely unchanged and still require `team_admin`, proven by a dedicated
+  regression test (`test_grant_team_member_role_still_requires_team_admin_for_the_importer`) that calls
+  the ordinary API with the same importer identity and asserts it still raises `AuthorizationError`. The
+  new primitive is reachable only from `POST /import-export/import` (already `CAN_MANAGE_PLATFORM`-gated,
+  no second check added) and is never exposed as a second public team-membership service — same shape
+  and same safety argument as `_grant_platform_role`.
+
+**`teams`/`team_roles` semantics (`importer.py::_effective_team_relations`, formalized 2026-07-14).**
+Per bundle entry, per team: if the team name is a value anywhere in that entry's `team_roles`, the
+requested state is **exactly** the named relation(s) on that team — multiple roles on the same team are
+**cumulative** (e.g. priya: `team_admin` + `team_editor` + `team_analyst` on `fredlab`, all three
+persisted as direct tuples). If the team name appears in `entry.teams` but is **never** a `team_roles`
+value for that same entry, the requested state is a single direct `team_member` tuple — the only
+fallback. A team with an explicit role never *also* gets the direct `team_member` tuple: `schema.fga`
+already derives `team_member` as a union over `team_admin`/`team_editor`/`team_analyst`, so writing it
+directly on top would be redundant, not additive.
+
+**Fail-closed, not warn-and-succeed (AUTHZ-07 Step 2).** A declared-valid bundle must never produce a
+silently incomplete `succeeded` import. `importer.py::BundleProvisioningError` is raised — aborting the
+whole users phase, which `import_export/api.py`'s background-task wrapper turns into
+`task_service.fail_task` — for every one of: an unknown `team_roles` key or `platform_roles` value
+(validated upfront, before any write); a username still unresolved after the identity phase; a team
+referenced by the bundle (via `teams` or `team_roles`) that does not already exist and has no
+`team_admin` declared for it anywhere in the bundle (so `create_team` cannot seed it). None of these are
+downgraded to a warning anymore. **Idempotence is preserved**: `add_relation`'s
+`on_duplicate_writes=IGNORE` means re-running an already-fully-reconciled bundle re-writes the same
+tuples with no error and no duplicate — `report.team_roles_granted` counts every declared grant on every
+run, whether or not the underlying write was a no-op.
 
 **Report fields** (`importer.py::MigrationReport`, folded into the existing task-event summary string,
 same as every other phase — no new HTTP response field, since the report was never returned over HTTP
 to begin with, only surfaced via the `MigrationTaskEvent.step` string and server logs):
 `identities_created` (see the addendum below), `users_processed`, `users_skipped` (list of unresolved
-usernames), `teams_provisioned` (distinct name from the pre-existing `teams_imported`/`teams_skipped`,
-which count `team_metadata` Postgres rows, not teams created via this phase), `team_roles_granted`,
-`team_roles_skipped`, `platform_roles_granted`.
+usernames — now vestigial, always `[]` on a report that made it back to the caller, since an unresolved
+username raises instead; kept on the dataclass for API stability and for AUTHZ-07 Step 3), `teams_provisioned`
+(distinct name from the pre-existing `teams_imported`/`teams_skipped`, which count `team_metadata`
+Postgres rows, not teams created via this phase), `team_roles_granted`, `team_roles_skipped` (same
+vestigial note as `users_skipped` — always `0` now), `platform_roles_granted`.
 
 ### 10.1 Identity phase — bundle-driven Keycloak user creation (2026-07-14)
 

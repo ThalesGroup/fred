@@ -12,26 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AUTHZ-07 Part 8 §40.2: declarative platform provisioning for identities/teams/roles/users.
+"""AUTHZ-07 Part 8 §40.2 / Step 2: declarative platform provisioning for
+identities/teams/roles/users.
 
 The `users.json` bundle entry names a Keycloak identity by username and
 describes the Fred-side authorization state it should end up with (team
 membership, team roles, platform roles). This importer
 (`import_export/importer.py::_run_users_phase`) is two-phase: phase 1
 (`_provision_bundle_identities`) creates a Keycloak identity for any entry
-that has no existing match AND carries a `password`; phase 2 (unchanged from
-this session's earlier work) resolves username → sub and grants roles. An
-entry with no `password` is assumed to already exist — it is never
-force-created, only skipped and reported if it still doesn't resolve.
+that has no existing match AND carries a `password`; phase 2 resolves
+username → sub and grants every declared role. An entry with no `password`
+is assumed to already exist — it is never force-created.
 
-It also never bypasses the team permission model: `schema.fga`'s `type team`
-comment is explicit that team-scoped roles (`team_admin`/`team_editor`/
-`team_analyst`/`team_member`) are never derived from a platform role. A
-brand-new team's *initial* `team_admin`(s) can be seeded at creation
-(`teams.service.create_team`'s own one-shot bootstrap capability), but any
-other team-scoped grant requires the importing `platform_admin` to already
-hold `team_admin` on that team — otherwise it is skipped and reported, never
-forced through.
+AUTHZ-07 Step 2 (this file's main subject) fixed the original design gap:
+every team-scoped grant used to go through the ordinary, `team_admin`-gated
+`teams.service.grant_team_member_role`, which the importing `platform_admin`
+can never satisfy by design (RFC Part 8 §24.2/§24.7 — "zero implicit
+access"), so every non-admin team-scoped grant in a real bundle was silently
+downgraded to a skipped-and-reported warning while the import still reported
+`succeeded`. The fix routes every team-scoped grant through
+`_grant_team_role_via_import` — a private primitive that writes the relation
+directly via `RebacEngine.add_relation`, exactly like `_grant_platform_role`
+already does for org-level roles — and makes every unrecoverable bundle
+problem (unknown role name, unresolved identity, unprovisionable team) raise
+`BundleProvisioningError` instead of being downgraded to a warning. The
+*ordinary* team-membership APIs (`grant_team_member_role`, `add_team_member`,
+etc.) are completely unchanged and stay `team_admin`-bounded — proven by a
+dedicated test below that calls `grant_team_member_role` directly with the
+same importer identity and expects it to still refuse.
 
 Real SQLite-backed `TeamMetadataStore` + a hand-rolled ReBAC fake that
 actually enforces the `team_admin`-only permission model (unlike a fake that
@@ -48,12 +56,15 @@ import zipfile
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.importer import (
+    BundleProvisioningError,
     MigrationReport,
+    _effective_team_relations,
     _provision_bundle_identities,
     run_import,
 )
@@ -63,6 +74,11 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.schemas import (
+    GrantTeamMemberRoleRequest,
+    UserTeamRelation,
+)
+from control_plane_backend.teams.service import grant_team_member_role
 from control_plane_backend.users.dependencies import (
     KeycloakAdminFactory,
     UserServiceDependencies,
@@ -70,6 +86,7 @@ from control_plane_backend.users.dependencies import (
 from control_plane_backend.users.service import find_user_sub_by_username
 from fred_core import (
     ORGANIZATION_ID,
+    AuthorizationError,
     KeycloackDisabled,
     KeycloakUser,
     RebacReference,
@@ -77,6 +94,7 @@ from fred_core import (
     RelationType,
     Resource,
 )
+from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
@@ -363,22 +381,26 @@ async def _run(
 
 
 @pytest.mark.asyncio
-async def test_users_phase_full_fixture_creates_identities_teams_and_roles(
+async def test_users_phase_full_fixture_reconciles_all_identities_teams_and_roles(
     tmp_path: Path,
 ) -> None:
-    """The success path, now end-to-end through the checked-in demo fixture
+    """The success path, end-to-end through the checked-in demo fixture
     (`tests/fixtures/import_export/demo_provisioning/` — the same fixture
     `make build-demo-bundle` packages). None of its 15 entries has an existing
     Keycloak identity, and every entry carries a password, so the identity
-    phase (phase 1) creates all 15 first; the role phase (phase 2, unchanged)
-    then resolves every one of them and provisions teams/roles exactly as
-    before. `northbridge`/`fredlab`/`swiftpost` each get created because the
-    fixture declares at least one `team_admin` for each (sophia, marc+priya,
-    nadia respectively — seeded for free at team-creation time); every other
-    team-scoped grant in the fixture is skipped because the importing
-    `platform_admin` (a caller distinct from every bundle identity) holds no
-    `team_admin` anywhere — proving the fixture round-trips through the full
-    two-phase import without weakening the team-permission boundary."""
+    phase (phase 1) creates all 15 first; the role phase (phase 2) then
+    resolves every one of them and provisions every declared team/role.
+    `northbridge`/`fredlab`/`swiftpost` each get created because the fixture
+    declares at least one `team_admin` for each (sophia, marc+priya, nadia
+    respectively — seeded for free at team-creation time). AUTHZ-07 Step 2
+    (this test's load-bearing assertion): every *other* team-scoped grant in
+    the fixture (bob's/derek's `team_editor`, phil's/zoe's/liam's
+    `team_member`, elena's `team_analyst`, priya's extra `team_editor`+
+    `team_analyst`) is now granted too, via the private
+    `_grant_team_role_via_import` primitive — none of them skipped, even
+    though the importing `platform_admin` (a caller distinct from every
+    bundle identity) holds no `team_admin` anywhere. Before the fix, exactly
+    these 10 grants were the ones silently downgraded to warnings."""
     engine = await _make_engine(tmp_path, "users-fixture.sqlite3")
     try:
         rebac = _FakeTeamRebac()
@@ -401,15 +423,14 @@ async def test_users_phase_full_fixture_creates_identities_teams_and_roles(
         assert report.users_processed == 15
         assert report.users_skipped == []
         assert report.teams_provisioned == 3
-        # Free grants at team-creation time: sophia (northbridge), marc +
-        # priya (fredlab), nadia (swiftpost).
-        assert report.team_roles_granted == 4
-        # Every other team-scoped grant in the fixture (team_editor/
-        # team_member/team_analyst, or a repeated role the platform_admin
-        # doesn't hold team_admin for) is skipped, not silently dropped.
-        assert report.team_roles_skipped == 10
+        # 2 (sophia team_admin) + 2 (marc, priya team_admin) + 1 (nadia
+        # team_admin) seeded at creation, plus bob(x2)/phil(x2)/zoe/liam/
+        # elena/derek/priya(x2 more) granted via the fix = 14 total.
+        assert report.team_roles_granted == 14
+        assert report.team_roles_skipped == 0
         # alice -> platform_admin, gabriel -> platform_observer.
         assert report.platform_roles_granted == 2
+        assert report.warnings == []
 
         metadata_store = team_deps.get_team_metadata_store()
         northbridge = await metadata_store.get_by_name("northbridge")
@@ -434,19 +455,49 @@ async def test_users_phase_full_fixture_creates_identities_teams_and_roles(
             and r.resource == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
             for r in rebac.org_relations
         )
+
+        def _has(subject_sub: str, relation: RelationType, team_id: TeamId) -> bool:
+            return any(
+                r.subject == RebacReference(Resource.USER, subject_sub)
+                and r.relation == relation
+                and r.resource == RebacReference(Resource.TEAM, team_id)
+                for r in rebac.team_relations
+            )
+
+        # bob's team_editor on both northbridge and fredlab — refused before
+        # the fix, granted now.
+        assert _has("created-bob-sub", RelationType.TEAM_EDITOR, northbridge.id)
+        assert _has("created-bob-sub", RelationType.TEAM_EDITOR, fredlab.id)
+        # phil's/zoe's/liam's explicit team_member.
+        assert _has("created-phil-sub", RelationType.TEAM_MEMBER, northbridge.id)
+        assert _has("created-phil-sub", RelationType.TEAM_MEMBER, swiftpost.id)
+        assert _has("created-zoe-sub", RelationType.TEAM_MEMBER, fredlab.id)
+        assert _has("created-liam-sub", RelationType.TEAM_MEMBER, swiftpost.id)
+        # elena's team_analyst, derek's team_editor.
+        assert _has("created-elena-sub", RelationType.TEAM_ANALYST, fredlab.id)
+        assert _has("created-derek-sub", RelationType.TEAM_EDITOR, northbridge.id)
+        # priya's cumulative roles: team_admin (seeded) + team_editor +
+        # team_analyst, all three persisted, and no redundant direct
+        # team_member tuple (schema.fga derives it from the three above).
+        assert _has("created-priya-sub", RelationType.TEAM_ADMIN, fredlab.id)
+        assert _has("created-priya-sub", RelationType.TEAM_EDITOR, fredlab.id)
+        assert _has("created-priya-sub", RelationType.TEAM_ANALYST, fredlab.id)
+        assert not _has("created-priya-sub", RelationType.TEAM_MEMBER, fredlab.id)
     finally:
         await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_users_phase_skips_team_role_grant_platform_admin_cannot_make(
+async def test_users_phase_grants_non_admin_role_on_fresh_team(
     tmp_path: Path,
 ) -> None:
-    """bob's `team_editor` grant requires the platform_admin caller to
-    already hold `team_admin` on `fredlab` — only alice (seeded at team
-    creation) holds it. The grant is skipped and reported; it must not raise
-    and must not fail the rest of the import."""
-    engine = await _make_engine(tmp_path, "users-b.sqlite3")
+    """AUTHZ-07 Step 2 — the regression this fix closes: bob's `team_editor`
+    grant on the brand-new `fredlab` team (created in the same run because
+    alice's entry seeds its `team_admin`) is granted directly, even though
+    the importing `platform_admin` never holds `team_admin` on `fredlab`
+    anywhere. Before the fix, this exact bundle produced `team_roles_skipped
+    == 1` and a warning; it must now produce zero skips."""
+    engine = await _make_engine(tmp_path, "users-fresh-nonadmin.sqlite3")
     try:
         rebac = _FakeTeamRebac()
         team_deps = _team_deps(engine, rebac)
@@ -477,24 +528,148 @@ async def test_users_phase_skips_team_role_grant_platform_admin_cannot_make(
         )
 
         assert report.teams_provisioned == 1
-        assert report.team_roles_granted == 1  # alice's team_admin, at creation
-        assert report.team_roles_skipped == 1  # bob's team_editor, skipped
+        assert report.team_roles_granted == 2  # alice's team_admin + bob's team_editor
+        assert report.team_roles_skipped == 0
         assert report.users_processed == 2
+        assert report.warnings == []
+
+        metadata_store = team_deps.get_team_metadata_store()
+        fredlab = await metadata_store.get_by_name("fredlab")
+        assert fredlab is not None
         assert any(
-            "bob" in w and "team_editor" in w and "fredlab" in w
-            for w in report.warnings
+            r.subject == RebacReference(Resource.USER, "bob-sub")
+            and r.relation == RelationType.TEAM_EDITOR
+            and r.resource == RebacReference(Resource.TEAM, fredlab.id)
+            for r in rebac.team_relations
         )
     finally:
         await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_users_phase_skips_and_reports_unresolved_username(
+async def test_users_phase_reconciles_role_on_preexisting_team_without_importer_team_admin(
     tmp_path: Path,
 ) -> None:
-    """A username with no matching Keycloak identity is skipped and reported
-    — never created, and never fails the rest of the import."""
-    engine = await _make_engine(tmp_path, "users-c.sqlite3")
+    """The load-bearing regression test for AUTHZ-07 Step 2: a team that
+    already existed *before* this import (so it is never (re-)created, and no
+    team_admin needs seeding for it) still gets its declared team-scoped role
+    granted, even though the importing `platform_admin` holds no `team_admin`
+    on it anywhere. Before the fix, this exact scenario was refused by
+    `grant_team_member_role` and silently downgraded to a skip+warning."""
+    engine = await _make_engine(tmp_path, "users-preexisting-team.sqlite3")
+    try:
+        rebac = _FakeTeamRebac()
+        team_deps = _team_deps(engine, rebac)
+        metadata_store = team_deps.get_team_metadata_store()
+        team_id = TeamId(uuid4().hex)
+        await metadata_store.create(team_id, "fredlab")
+
+        user_deps, _admin = _user_deps({"bob": "bob-sub"})
+        platform_admin = _admin_user()
+
+        bundle_bytes = _build_bundle_bytes(
+            [
+                {
+                    "username": "bob",
+                    "team_roles": {"team_editor": ["fredlab"]},
+                    "platform_roles": [],
+                }
+            ]
+        )
+
+        report = await _run(
+            bundle_bytes,
+            engine,
+            platform_admin=platform_admin,
+            user_deps=user_deps,
+            team_deps=team_deps,
+        )
+
+        assert report.teams_provisioned == 0  # pre-existing, never (re-)created
+        assert report.team_roles_granted == 1
+        assert report.team_roles_skipped == 0
+        assert any(
+            r.subject == RebacReference(Resource.USER, "bob-sub")
+            and r.relation == RelationType.TEAM_EDITOR
+            and r.resource == RebacReference(Resource.TEAM, team_id)
+            for r in rebac.team_relations
+        )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_users_phase_fails_on_unknown_team_role(tmp_path: Path) -> None:
+    """AUTHZ-07 Step 2: an unknown team-role name is a fail-closed validation
+    error, not a warning — the whole import aborts before any write, proven
+    here by asserting zero relations were ever written."""
+    engine = await _make_engine(tmp_path, "users-unknown-role.sqlite3")
+    try:
+        rebac = _FakeTeamRebac()
+        team_deps = _team_deps(engine, rebac)
+        user_deps, _admin = _user_deps({"alice": "alice-sub"})
+        platform_admin = _admin_user()
+
+        bundle_bytes = _build_bundle_bytes(
+            [
+                {
+                    "username": "alice",
+                    "team_roles": {"team_superadmin": ["fredlab"]},
+                    "platform_roles": [],
+                }
+            ]
+        )
+
+        with pytest.raises(BundleProvisioningError, match="unknown team role"):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        assert rebac.team_relations == []
+        assert rebac.org_relations == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_users_phase_fails_on_unknown_platform_role(tmp_path: Path) -> None:
+    """AUTHZ-07 Step 2: same fail-closed rule for an unknown `platform_roles`
+    value."""
+    engine = await _make_engine(tmp_path, "users-unknown-platform-role.sqlite3")
+    try:
+        rebac = _FakeTeamRebac()
+        team_deps = _team_deps(engine, rebac)
+        user_deps, _admin = _user_deps({"alice": "alice-sub"})
+        platform_admin = _admin_user()
+
+        bundle_bytes = _build_bundle_bytes(
+            [{"username": "alice", "team_roles": {}, "platform_roles": ["superuser"]}]
+        )
+
+        with pytest.raises(BundleProvisioningError, match="unknown platform role"):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        assert rebac.org_relations == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_users_phase_fails_on_unresolved_username(tmp_path: Path) -> None:
+    """AUTHZ-07 Step 2: a username with no matching Keycloak identity after
+    the identity phase is now a fail-closed condition — the import aborts
+    instead of silently skipping the entry and still reaching `succeeded`."""
+    engine = await _make_engine(tmp_path, "users-unresolved.sqlite3")
     try:
         rebac = _FakeTeamRebac()
         team_deps = _team_deps(engine, rebac)
@@ -511,20 +686,56 @@ async def test_users_phase_skips_and_reports_unresolved_username(
             ]
         )
 
-        report = await _run(
-            bundle_bytes,
-            engine,
-            platform_admin=platform_admin,
-            user_deps=user_deps,
-            team_deps=team_deps,
+        with pytest.raises(BundleProvisioningError, match="ghost"):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        assert rebac.org_relations == []
+        assert rebac.team_relations == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_users_phase_fails_when_team_cannot_be_provisioned(
+    tmp_path: Path,
+) -> None:
+    """AUTHZ-07 Step 2: a team referenced only via a non-admin role, with no
+    `team_admin` declared anywhere in the bundle for it, cannot be created
+    (`create_team` requires at least one initial `team_admin`) — this is now
+    a fail-closed condition, not a silent skip."""
+    engine = await _make_engine(tmp_path, "users-team-unprovisionable.sqlite3")
+    try:
+        rebac = _FakeTeamRebac()
+        team_deps = _team_deps(engine, rebac)
+        user_deps, _admin = _user_deps({"bob": "bob-sub"})
+        platform_admin = _admin_user()
+
+        bundle_bytes = _build_bundle_bytes(
+            [
+                {
+                    "username": "bob",
+                    "team_roles": {"team_editor": ["fredlab"]},
+                    "platform_roles": [],
+                }
+            ]
         )
 
-        assert report.users_processed == 0
-        assert report.users_skipped == ["ghost"]
-        assert report.teams_provisioned == 0  # no resolved team_admin to seed it
-        assert report.platform_roles_granted == 0
-        assert rebac.org_relations == []
-        assert any("ghost" in w for w in report.warnings)
+        with pytest.raises(BundleProvisioningError, match="fredlab"):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        assert rebac.team_relations == []
     finally:
         await engine.dispose()
 
@@ -533,7 +744,8 @@ async def test_users_phase_skips_and_reports_unresolved_username(
 async def test_users_phase_rerun_is_idempotent(tmp_path: Path) -> None:
     """Re-running the same bundle twice: no duplicate team, no error
     re-granting the already-seeded team_admin, no error re-granting the
-    already-held platform role."""
+    already-held platform role, and — AUTHZ-07 Step 2 — zero skips on either
+    run."""
     engine = await _make_engine(tmp_path, "users-d.sqlite3")
     try:
         rebac = _FakeTeamRebac()
@@ -560,6 +772,7 @@ async def test_users_phase_rerun_is_idempotent(tmp_path: Path) -> None:
         )
         assert first.teams_provisioned == 1
         assert first.team_roles_granted == 1
+        assert first.team_roles_skipped == 0
         assert first.platform_roles_granted == 1
 
         second = await _run(
@@ -576,6 +789,93 @@ async def test_users_phase_rerun_is_idempotent(tmp_path: Path) -> None:
         assert second.warnings == []
     finally:
         await engine.dispose()
+
+
+# ── ordinary team API boundary unchanged ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_grant_team_member_role_still_requires_team_admin_for_the_importer(
+    tmp_path: Path,
+) -> None:
+    """AUTHZ-07 Step 2 fixed the *import* path only. The ordinary
+    team-membership API's permission boundary is completely unchanged:
+    `teams.service.grant_team_member_role` still refuses a caller (here, the
+    same platform_admin identity the import flow uses) that holds no
+    `team_admin` on the target team — proving the fix is a narrow, private,
+    import-only primitive, not a relaxation of the ordinary permission
+    model."""
+    engine = await _make_engine(tmp_path, "grant-ordinary-still-gated.sqlite3")
+    try:
+        rebac = _FakeTeamRebac()
+        team_deps = _team_deps(engine, rebac)
+        metadata_store = team_deps.get_team_metadata_store()
+        team_id = TeamId(uuid4().hex)
+        await metadata_store.create(team_id, "fredlab")
+        platform_admin = _admin_user()
+
+        with pytest.raises(AuthorizationError):
+            await grant_team_member_role(
+                platform_admin,
+                team_id,
+                "bob-sub",
+                GrantTeamMemberRoleRequest(relation=UserTeamRelation.TEAM_EDITOR),
+                team_deps,
+            )
+    finally:
+        await engine.dispose()
+
+
+# ── _effective_team_relations: unit tests (teams/team_roles semantics) ──────
+
+
+def test_effective_team_relations_teams_without_role_falls_back_to_team_member() -> (
+    None
+):
+    """`PLATFORM-IMPORT-RFC.md` §10: a team named in `teams` with no explicit
+    role for this entry requests a single direct `team_member` tuple."""
+    entry = BundleUserEntry(username="alice", teams=["fredlab"])
+    assert _effective_team_relations(entry) == {
+        "fredlab": {UserTeamRelation.TEAM_MEMBER}
+    }
+
+
+def test_effective_team_relations_explicit_role_suppresses_team_member_fallback() -> (
+    None
+):
+    """A team with an explicit role never also gets the direct `team_member`
+    fallback tuple — schema.fga already derives `team_member` from
+    `team_admin`/`team_editor`/`team_analyst`."""
+    entry = BundleUserEntry(
+        username="bob",
+        teams=["fredlab"],
+        team_roles={"team_editor": ["fredlab"]},
+    )
+    assert _effective_team_relations(entry) == {
+        "fredlab": {UserTeamRelation.TEAM_EDITOR}
+    }
+
+
+def test_effective_team_relations_cumulative_roles_on_same_team() -> None:
+    """Multiple explicit roles on the same team are cumulative — all
+    persisted, matching priya's `team_admin`+`team_editor`+`team_analyst` on
+    `fredlab` in the demo fixture."""
+    entry = BundleUserEntry(
+        username="priya",
+        teams=["fredlab"],
+        team_roles={
+            "team_admin": ["fredlab"],
+            "team_editor": ["fredlab"],
+            "team_analyst": ["fredlab"],
+        },
+    )
+    assert _effective_team_relations(entry) == {
+        "fredlab": {
+            UserTeamRelation.TEAM_ADMIN,
+            UserTeamRelation.TEAM_EDITOR,
+            UserTeamRelation.TEAM_ANALYST,
+        }
+    }
 
 
 # ── _provision_bundle_identities: unit tests ────────────────────────────────

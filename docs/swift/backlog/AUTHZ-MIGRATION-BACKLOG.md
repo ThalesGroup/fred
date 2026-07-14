@@ -181,16 +181,36 @@ Execution protocol:
 5. Record the final prompt and resulting commit under the matching step here,
    so that the handoff remains reproducible outside the chat history.
 
-- [ ] **Step 1 — live import observation, no product-code change.** Build
-      `apps/control-plane-backend/target/demo-provisioning-bundle.zip`, upload it
-      through Admin → Migration, retain the visible task state/report and backend
-      warnings, then run root `make validation-report`. Capture: import task id,
+- [x] **Step 1 — live import observation, no product-code change. Done 2026-07-14.**
+      Built `apps/control-plane-backend/target/demo-provisioning-bundle.zip`, uploaded it
+      through Admin → Migration, retained the visible task state/report and backend
+      warnings, then ran root `make validation-report`. Captured: import task id,
       terminal status, created identities/teams, granted/skipped roles, UI
-      warnings, failed validation scenario names, and relevant logs. Do not fix
-      failures during this step.
-  - Exit gate: the complete command/UI evidence is returned to Codex.
-  - Claude prompt: none; this is a human-driven observation step.
-  - Result/commit: pending.
+      warnings, failed validation scenario names, and relevant logs. No fix
+      applied during this step.
+  - Exit gate: the complete command/UI evidence is returned to Codex. **Met.**
+  - Claude prompt: none; this was a human-driven observation step.
+  - Result: development bootstrap proven live from a fresh platform (Keycloak
+    self-registration → authenticated one-time bootstrap → first `platform_admin`
+    → Fred). The real demo bundle import then produced: `task_id
+    b9f88fac-e03b-4309-bcf7-ff48fea6601b`, `import_id
+    c77689e0-3c32-48a9-8212-f65b478ade9f`, 3 teams created, 4 initial `team_admin`
+    grants, **10 team roles ignored**, task terminal state `succeeded` (the bug:
+    a silently incomplete success). The 10 ignored roles: bob (`team_editor` on
+    `northbridge`+`fredlab`), phil (`team_member` on `northbridge`+`swiftpost`),
+    zoe (`team_member` on `fredlab`), liam (`team_member` on `swiftpost`), elena
+    (`team_analyst` on `fredlab`), derek (`team_editor` on `northbridge`), priya
+    (`team_editor`+`team_analyst` on `fredlab`). Root cause confirmed from code:
+    `importer.py::_apply_bundle_user_roles` called
+    `teams.service.grant_team_member_role` with the importing `platform_admin` as
+    actor; that ordinary API requires the caller to already hold `team_admin` on
+    the target team, which the importer deliberately never does (RFC Part 8
+    §24.2/§24.7, "zero implicit access") — so every non-admin grant was refused
+    and downgraded to a warning. `validation/report.md` at this point: **Result:
+    NOT READY — 0 passed, 0 failed, 227 error**, every failure a setup error on
+    the same missing relation (e.g. `"'bob' is missing relation(s)
+    ['team_editor'] on team 'fredlab'; currently holds []"`) — one design gap
+    blocking the platform's common test setup, not 227 independent defects.
 
 - [ ] **Step 2 — make declarative import converge completely.** Using Step 1's
       evidence, reconcile every valid identity, team membership, team role and
@@ -202,7 +222,47 @@ Execution protocol:
       import operation, narrow, tested, and documented in the existing RFC.
   - Exit gate: the real demo bundle imports with zero unintended skips; targeted
     tests and the affected live validation scenarios pass; rerun is idempotent.
-  - Claude prompt/result/commit: to be written after Step 1 evidence.
+    **Code-complete, offline-verified; live-validation half of the gate still
+    open (see Result below) — checkbox stays unticked until that re-run.**
+  - Scope confirmed 2026-07-14 (developer prompt, reusing this same issue/PR —
+    no new task ID): fix `importer.py::_apply_bundle_user_roles` so every
+    `team_roles`/`teams` grant the bundle declares is actually written, without
+    relaxing the ordinary team-membership permission model or touching
+    `schema.fga`. Constraints: no team relation for the importing user itself;
+    the exceptional write authority stays private to `POST /import-export/import`
+    (already `CAN_MANAGE_PLATFORM`-gated); reuse `RebacEngine`/`Relation`/
+    `RebacReference`/`RelationType`, no second public membership service; fail
+    closed (raise, abort the users phase) on an unknown role name, an unresolved
+    identity after the identity phase, or an unprovisionable team — never
+    downgrade to a warning-then-`succeeded` again.
+  - Claude prompt/result/commit: implemented 2026-07-14. New private primitive
+    `importer.py::_grant_team_role_via_import` (mirrors the pre-existing
+    `_grant_platform_role`) writes every team-scoped grant directly via
+    `RebacEngine.add_relation`, bypassing the `team_admin`-gated
+    `grant_team_member_role` for this import-only path (that ordinary API is
+    unchanged and still refuses the same importer — regression-tested). New
+    `_effective_team_relations` formalizes the `teams`/`team_roles` fallback:
+    an explicit role list wins outright; `teams` with no explicit role for that
+    team falls back to a single direct `team_member` tuple; multiple explicit
+    roles on one team are cumulative. New `BundleProvisioningError` makes an
+    unknown team/platform role name, an unresolved username, or an
+    unprovisionable team abort the users phase (`task_service.fail_task`)
+    instead of a warning. `PLATFORM-IMPORT-RFC.md` §10 updated in the same
+    change. Tests: `tests/test_import_export_users.py` rewritten — the fixture
+    end-to-end test now asserts `identities_created=15`, `teams_provisioned=3`,
+    `team_roles_granted=14`, `team_roles_skipped=0`, `platform_roles_granted=2`,
+    zero warnings; new tests cover non-admin grant on a fresh team, reconciling
+    a role on a **pre-existing** team the importer holds no `team_admin` on,
+    the ordinary API still refusing the same importer, cumulative roles, the
+    `team_member` fallback and its suppression by an explicit role, idempotent
+    re-run, and each fail-closed case — 17 tests total, `control-plane-backend`
+    full suite green, `make code-quality` clean. **Not yet live-verified**: the
+    live stack still carries Step 1's partial state (10 missing relations); the
+    operator re-imports the same bundle onto it, then re-runs `make
+    validation-report` — tracked as the remaining half of this step's exit gate.
+    Commit: see `git log` for `fix(AUTHZ-07): make platform import reconcile
+    team roles` on branch
+    `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
 
 - [ ] **Step 3 — make import outcome observable and truthful.** Retain the
       structured migration report, expose it through the existing task/event
