@@ -26,6 +26,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.loader import get_loaded_config_file_path
 from control_plane_backend.config.models import (
     Configuration,
@@ -58,6 +59,7 @@ class ApplicationContext:
         self._session_store: BaseSessionStore | None = None
         self._purge_queue_store: PurgeQueueStore | None = None
         self._team_metadata_store: TeamMetadataStore | None = None
+        self._platform_bootstrap_store: PlatformBootstrapStore | None = None
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
@@ -174,6 +176,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._team_metadata_store
+
+    def get_platform_bootstrap_store(self) -> PlatformBootstrapStore:
+        if self._platform_bootstrap_store is None:
+            self._platform_bootstrap_store = PlatformBootstrapStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_bootstrap_store
 
     def get_content_store(self) -> ContentStore:
         if self._content_store is None:

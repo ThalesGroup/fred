@@ -38,6 +38,15 @@ export interface AppConfig {
    * itself GCU-gated and cannot carry this value (chicken-and-egg).
    */
   gcu_version: string | null;
+  /**
+   * Whether `POST /bootstrap/platform-admin` (AUTHZ-07) has ever succeeded on
+   * this deployment. `false` until anyone bootstraps, permanently `true` after.
+   * Sourced from the public pre-auth `/frontend/config` so `BootstrapGuard` can
+   * decide before authentication — the authenticated bootstrap surface itself
+   * requires this flag to already be resolved (same chicken-and-egg as
+   * `gcu_version`).
+   */
+  root_bootstrap_completed: boolean;
 }
 
 type RawAppConfig = {
@@ -78,7 +87,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_completed } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -86,6 +95,7 @@ export const loadConfig = async () => {
     properties: base.properties ?? {},
     user_auth,
     gcu_version,
+    root_bootstrap_completed,
   };
 
   if (config.user_auth?.enabled) {
@@ -113,7 +123,11 @@ export const loadConfig = async () => {
  * - called by `loadConfig()` at Stage 0; failures abort startup like a missing
  *   `/config.json`, since the control-plane is required to run the app
  */
-const loadPublicConfig = async (): Promise<{ user_auth: UserAuthConfig; gcu_version: string | null }> => {
+const loadPublicConfig = async (): Promise<{
+  user_auth: UserAuthConfig;
+  gcu_version: string | null;
+  root_bootstrap_completed: boolean;
+}> => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
     throw new Error(`Cannot load ${FRONTEND_CONFIG_URL}: ${res.status} ${res.statusText}`);
@@ -126,6 +140,7 @@ const loadPublicConfig = async (): Promise<{ user_auth: UserAuthConfig; gcu_vers
       client_id: payload.user_auth.client_id ?? undefined,
     },
     gcu_version: payload.gcu_version ?? null,
+    root_bootstrap_completed: payload.root_bootstrap_completed ?? false,
   };
 };
 
@@ -190,3 +205,16 @@ export const getProperty = (key: string): string => getConfig().properties?.[key
  * - call after `loadConfig()`; `null` means no acceptance screen is shown
  */
 export const getGcuVersion = (): string | null => getConfig().gcu_version;
+
+/**
+ * Return whether root platform-admin bootstrap (AUTHZ-07) has ever completed
+ * on this deployment.
+ *
+ * Why this function exists:
+ * - `BootstrapGuard` must know this *before* authentication has produced any
+ *   per-user state; the value is a durable, global marker, not a per-user one
+ *
+ * How to use it:
+ * - call after `loadConfig()`; `false` means the bootstrap screen must be shown
+ */
+export const getRootBootstrapCompleted = (): boolean => getConfig().root_bootstrap_completed;

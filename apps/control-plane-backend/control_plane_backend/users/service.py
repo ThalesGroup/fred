@@ -278,6 +278,52 @@ async def find_user_details_by_id(
     return await user_store.find_user_by_id(user_id)
 
 
+async def find_user_sub_by_username(
+    username: str,
+    deps: UserServiceDependencies,
+) -> Optional[str]:
+    """
+    Resolve one Keycloak username to its `sub`, read-only, never creates a user.
+
+    Why this function exists:
+    - declarative platform provisioning (AUTHZ-07 Part 8 §40.2,
+      `PLATFORM-IMPORT-RFC.md`'s users.json bundle entry) grants team/platform
+      roles to identities named by username; it must resolve an
+      already-existing Keycloak identity to its `sub` without ever creating
+      one — Keycloak stays the sole source of identity (AUTHZ-05), this
+      importer only ever writes Fred-side authorization state
+    - deliberately narrower than `create_user`: it only needs the same
+      read-only Keycloak admin client `list_users`/`get_users_by_ids` already
+      use, never the write-gated `_get_keycloak_admin_for_user_operations`
+
+    How to use it:
+    - pass the exact username to resolve and request-scoped
+      `UserServiceDependencies`
+    - returns `None` when Keycloak M2M is disabled, the username has no exact
+      match, or (defensively) more than one match comes back
+
+    Example:
+    - `sub = await find_user_sub_by_username("alice", user_deps)`
+    """
+    admin = _get_keycloak_admin(deps)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot resolve username.")
+        return None
+
+    matches = await admin.a_get_users({"username": username, "exact": True})
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning(
+            "Multiple Keycloak users matched username=%r; treating as unresolved.",
+            username,
+        )
+        return None
+
+    user_id = matches[0].get("id")
+    return user_id if isinstance(user_id, str) else None
+
+
 async def update_gcu_validation(
     user_id: UUID,
     user_store: BaseUserStore,

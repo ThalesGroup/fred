@@ -9,6 +9,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from control_plane_backend.import_export.schemas import BundleUserEntry
+
 
 @dataclass(frozen=True)
 class SnapshotManifest:
@@ -53,6 +55,23 @@ class KBundle:
             return json.loads(self._zf.read("openfga/tuples.json"))
         except KeyError:
             return []
+
+    def demo_users(self) -> list[BundleUserEntry]:
+        """Return the typed users.json provisioning list, empty list if absent.
+
+        AUTHZ-07 Part 8 §40.2 / PLATFORM-IMPORT-RFC.md §10: declarative platform
+        provisioning for identities/teams/roles/users. Unlike `postgres/<table>.jsonl`
+        rows, these entries are not Postgres rows — each one describes an optional
+        Keycloak identity to create (email/first_name/last_name/password) plus the
+        desired Fred-side authorization state (team membership, team roles, platform
+        roles) for that identity. See `importer.py`'s users phase (identity creation,
+        then role provisioning) for how each entry is applied.
+        """
+        try:
+            raw = json.loads(self._zf.read("users.json"))
+        except KeyError:
+            return []
+        return [BundleUserEntry.model_validate(entry) for entry in raw]
 
     def close(self) -> None:
         self._zf.close()

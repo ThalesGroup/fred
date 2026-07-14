@@ -260,7 +260,7 @@ async def build_frontend_bootstrap(
     )
 
 
-def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
+async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     """Build the public pre-auth frontend config from `security.user`.
 
     Why this function exists:
@@ -272,7 +272,7 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     - call from the public `/frontend/config` endpoint at Stage 0 of startup
 
     Example:
-    - `config = build_frontend_config(deps)`
+    - `config = await build_frontend_config(deps)`
     """
     user_security = deps.configuration.security.user
     # Mirror the enforcement predicate in `fred_core` `get_current_user`: CGU
@@ -281,6 +281,7 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     # frontend guard from showing an acceptance screen the backend never
     # enforces (e.g. standalone / dev deployments without Keycloak).
     gcu_version = deps.configuration.app.gcu_version if user_security.enabled else None
+    root_bootstrap_completed = await deps.get_platform_bootstrap_store().is_completed()
     if user_security.enabled:
         return FrontendConfig(
             user_auth=FrontendUserAuthConfig(
@@ -289,10 +290,12 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
                 client_id=user_security.client_id,
             ),
             gcu_version=gcu_version,
+            root_bootstrap_completed=root_bootstrap_completed,
         )
     return FrontendConfig(
         user_auth=FrontendUserAuthConfig(enabled=False),
         gcu_version=gcu_version,
+        root_bootstrap_completed=root_bootstrap_completed,
     )
 
 

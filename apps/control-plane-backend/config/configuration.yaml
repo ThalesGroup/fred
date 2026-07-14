@@ -8,6 +8,7 @@ app:
   gcu_version: "v1"
   default_team_max_resources_storage_size: 5368709120
   personal_max_resources_storage_size: 5368709120
+  bootstrap_token_file: target/bootstrap-token # AUTHZ-07 root-admin bootstrap (dev only); run `make bootstrap-token` to create it — Fred never generates this itself
 
 observability:
   kpi:

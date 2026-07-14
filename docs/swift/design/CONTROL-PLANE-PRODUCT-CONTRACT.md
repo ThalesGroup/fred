@@ -190,6 +190,44 @@ CLI display) and must **not** be used to gate the UI. See
 `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
 
+#### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-14)
+
+- `POST /control-plane/v1/bootstrap/platform-admin` → `BootstrapPlatformAdminResponse`
+  - Request: `{ token: str }`, `min_length=16` (422 below the floor) — no
+    `identifier` field. The grant always targets the calling JWT's own
+    `sub`; this endpoint cannot promote a third party under any input.
+  - Response: `{ user_id: str, username: str }` — the caller's own identity,
+    now `platform_admin`.
+
+**Requires authentication** (`get_current_user` — a valid Keycloak JWT) **and**
+the deploy-time secret. Neither alone is sufficient: the JWT proves a real
+identity in this realm, the secret proves legitimate deploy-time access. This
+does not reopen the bootstrap chicken-and-egg — Keycloak authentication
+depends on nothing Fred/OpenFGA owns, only *authorization* did, and there is
+none here. The secret is never generated or logged by Fred, in any
+environment: it is supplied externally, via `bootstrap_token_env_var` (an
+environment variable sourced from a Kubernetes Secret — the deployment's
+existing secrets pipeline, RFC-0001 §6) or `bootstrap_token_file` (local dev
+only, created explicitly with `make bootstrap-token`).
+
+Permanently refuses (409) once root bootstrap has ever completed — a durably
+persisted marker (`PlatformBootstrapStore`), **not** a live count of
+`platform_admin` relations. Removing every `platform_admin` later must not
+silently reopen this endpoint; that is a separate, deliberate break-glass
+recovery procedure, not a side effect of bootstrap. Refuses (503) if ReBAC is
+disabled in this deployment — checked before the durable marker is written,
+since granting would otherwise be a silent no-op that still burns the
+one-time completion. Also refuses (503) if authentication (Keycloak/OIDC) is
+disabled in this deployment — checked even before the ReBAC guard, since a
+mocked identity would make the JWT proof meaningless. See
+`docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
+the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
+ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
+Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — supersedes the
+config-seeded `platform_admin_subjects` path as the default.
+Endpoint authorization matrix entry:
+`docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
+
 ### 3.2 Managed agent discovery
 
 Two distinct concepts:

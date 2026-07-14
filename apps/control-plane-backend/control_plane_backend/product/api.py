@@ -134,7 +134,7 @@ async def get_frontend_config(deps: ProductDependencies) -> FrontendConfig:
     Example:
     - `GET /control-plane/v1/frontend/config`
     """
-    return build_frontend_config(deps)
+    return await build_frontend_config(deps)
 
 
 @router.get(

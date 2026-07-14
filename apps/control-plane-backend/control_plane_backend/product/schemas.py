@@ -97,6 +97,20 @@ class FrontendConfig(BaseModel):
     value is `None` whenever gating is effectively disabled (user auth off, per
     `security.user.enabled`, or `app.gcu_version` unset), so deployments without
     CGU are never routed to the acceptance screen."""
+    root_bootstrap_completed: bool = Field(
+        ...,
+        description=(
+            "Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever "
+            "succeeded on this deployment. True once the durable "
+            "PlatformBootstrapStore marker is set, permanently — never "
+            "re-derived from live OpenFGA state, so removing every "
+            "platform_admin relation later does not flip this back to False "
+            "(same rationale as BootstrapAlreadyCompletedError). Not "
+            "sensitive: it reveals only 'has anyone ever bootstrapped this "
+            "instance', never who, never the secret, never any identity — "
+            "safe on this public/unauthenticated surface, same as gcu_version."
+        ),
+    )
 
 
 class AgentTemplateSummary(BaseModel):

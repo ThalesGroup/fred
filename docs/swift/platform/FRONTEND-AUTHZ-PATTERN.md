@@ -99,7 +99,7 @@ to check, instead of grepping the repo:
 | Guard decision logic               | `admin`/`observer` requirement resolves correctly                 | `apps/frontend/src/components/Protected.test.ts`                                                                        |
 | Backend derivation (unit)          | `is_platform_admin`/`is_platform_observer` come from OpenFGA, not Keycloak | `apps/control-plane-backend/tests/test_main.py::test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac` |
 | Live, self-service, in-browser      | Isolation (registry/users/foreign-team access match the account's own flags) **and** a real team-scoped write (create+delete a prompt) match the account's own `can_update_resources` — for the running admin or any other account (`/admin/self-test`, "Test another profile") | `apps/frontend/src/rework/features/pipeline/scenarios/authzProbeScenario.ts` + `useAuthzProbeRun.ts` (deps), unit-tested in `authzProbeScenario.test.ts` |
-| Live, black-box, real running stack | The whole chain end-to-end, real JWT + real OpenFGA               | `fred-deployment-factory/validation/scenarios/test_platform_admin_capabilities.py`, `test_team_registry_authz.py`, `test_prompt_authz.py` |
+| Live, black-box, real running stack | The whole chain end-to-end, real JWT + real OpenFGA               | `validation/scenarios/test_platform_admin_capabilities.py`, `test_team_registry_authz.py`, `test_prompt_authz.py` |
 | Manual / visual                    | The UI actually hides/shows what the data says it should          | The AUTHZ-05 campaign checklist artifact                                                                                |
 
 **Known gap, not yet closed:** there is no component-render test harness in

@@ -813,6 +813,22 @@
       }
     },
     "back": "Retour",
+    "bootstrap": {
+      "continue": "Continuer",
+      "description": "Ce déploiement n'a pas encore d'administrateur de plateforme. Saisissez le secret de démarrage défini au déploiement pour devenir le premier administrateur.",
+      "errors": {
+        "alreadyCompleted": "Le démarrage racine a déjà été effectué pour ce déploiement.",
+        "forbidden": "Ce secret de démarrage n'est pas valide. Veuillez réessayer.",
+        "generic": "Une erreur est survenue. Veuillez réessayer."
+      },
+      "reload": "Recharger",
+      "submit": "Devenir administrateur de la plateforme",
+      "successMessage": "Vous êtes maintenant administrateur de la plateforme, {{username}}.",
+      "title": "Configuration de l'administrateur de la plateforme",
+      "tokenExplanation": "Le secret de démarrage défini au déploiement, fourni par la personne ayant déployé cette plateforme.",
+      "tokenLabel": "Secret de démarrage",
+      "tokenPlaceholder": "Saisissez le secret de démarrage"
+    },
     "cancel": "Annuler",
     "collapse": "Réduire",
     "create": "Créer",

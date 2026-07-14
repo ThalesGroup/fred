@@ -813,6 +813,22 @@
       }
     },
     "back": "Back",
+    "bootstrap": {
+      "continue": "Continue",
+      "description": "This deployment has no platform administrator yet. Enter the deploy-time bootstrap secret to become the first one.",
+      "errors": {
+        "alreadyCompleted": "Root bootstrap has already been completed for this deployment.",
+        "forbidden": "This bootstrap secret is not valid. Please try again.",
+        "generic": "Something went wrong. Please try again."
+      },
+      "reload": "Reload",
+      "submit": "Become platform administrator",
+      "successMessage": "You are now the platform administrator, {{username}}.",
+      "title": "Platform administrator setup",
+      "tokenExplanation": "The deploy-time bootstrap secret, provided by whoever deployed this platform.",
+      "tokenLabel": "Bootstrap secret",
+      "tokenPlaceholder": "Enter the bootstrap secret"
+    },
     "cancel": "Cancel",
     "collapse": "Collapse",
     "create": "Create",

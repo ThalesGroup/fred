@@ -59,6 +59,10 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +107,11 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             "**Accepted formats:**\n"
             "- Kea snapshot v1 (produced by kea `/admin/migration` export)\n\n"
             "**What is imported:**\n"
-            "- Agent instances (kea agents mapped to their swift template equivalent)\n\n"
+            "- Agent instances (kea agents mapped to their swift template equivalent)\n"
+            "- Declarative team/platform role provisioning from a top-level `users.json` "
+            "entry (AUTHZ-07 Part 8 §40.2) — never creates a Keycloak identity; an "
+            "unresolved username, or a team-role grant the calling platform admin "
+            "cannot make, is skipped and reported, not silently dropped\n\n"
             "**What is skipped with a warning:**\n"
             "- Document metadata (content/vectors not in the zip — mirror separately)\n"
             "- Tags (knowledge-flow import path not yet implemented)\n"
@@ -122,6 +130,12 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             AgentInstanceStore, Depends(_get_agent_instance_store)
         ],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+        team_deps: Annotated[
+            TeamServiceDependencies, Depends(get_team_service_dependencies)
+        ],
+        user_deps: Annotated[
+            UserServiceDependencies, Depends(get_user_service_dependencies)
+        ],
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
@@ -157,6 +171,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                     task_service=task_service,
                     engine=engine,
                     agent_instance_store=agent_instance_store,
+                    platform_admin=user,
+                    user_deps=user_deps,
+                    team_deps=team_deps,
                 )
                 await task_service.record(
                     MigrationTaskEvent(

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -59,6 +60,7 @@ class ProductServiceDependencies:
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
     get_purge_queue_store: Callable[[], PurgeQueueStore]
     get_task_service: Callable[[], TaskService]
+    get_platform_bootstrap_store: Callable[[], PlatformBootstrapStore]
 
 
 def build_product_service_dependencies(
@@ -92,6 +94,7 @@ def build_product_service_dependencies(
         get_policy_catalog=container.get_policy_catalog,
         get_purge_queue_store=container.get_purge_queue_store,
         get_task_service=container.get_task_service,
+        get_platform_bootstrap_store=container.get_platform_bootstrap_store,
     )
 
 

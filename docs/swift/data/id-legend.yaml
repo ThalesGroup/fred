@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-07-13"
+  last_updated: "2026-07-14"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -124,9 +124,9 @@ items:
       site where team-scoping is mechanically meaningful; resolved the
       previously-open team-bootstrap problem with a one-shot, platform-admin-
       gated `POST /teams` endpoint (RFC §28). Verified end-to-end against a
-      live stack via fred-deployment-factory's validation suite and against a
+      live stack via fred's own validation/ suite and against a
       live OpenFGA instance (fred-core integration tests) — see
-      validation/report.md there.
+      validation/report.md.
       Post-review pass (2026-07-09/10, `NOTES-AUTHZ05-REVIEW.md`, triggered by
       human review of PR #1957): all findings closed except item 8b. Cut
       `can_create_team` to `platform_admin`-only (item 5, no other caller
@@ -289,28 +289,106 @@ items:
 
   - id: AUTHZ-07
     title: "Root bootstrap and declarative platform provisioning"
-    status: open
+    status: in_progress
     owner: Dimitri
     parent: AUTHZ-05
     refs:
-      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 8 (§40-41)"
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 8 (§40-42)"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
       design: "docs/swift/platform/REBAC.md"
-      execution: "TBD"
+      execution: "branch 1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning"
     notes: >
-      Proposed 2026-07-13. Supersedes §24.3's config-seeded
-      platform_admin_subjects. Two mechanisms, no CRUD, no identity ever in
-      deployment config: (1) a k8s-style secret-gated POST
-      /bootstrap/platform-admin — deploy tooling generates a one-time token
-      out-of-band, the endpoint resolves an email/username to a Keycloak sub
-      at call time and grants platform_admin, then is permanently inert once
-      any platform_admin exists (live OpenFGA check). Same shape as
-      Kubernetes' cluster-admin bootstrap, ArgoCD's
-      argocd-initial-admin-secret, Rancher's bootstrap password. (2) one
-      declarative platform-provisioning operation for teams/roles/users —
-      likely a hardened, generalized PLATFORM-IMPORT-RFC.md rather than a new
-      bulk endpoint; to confirm with that RFC's owner. Plan: de-risk on
-      docker up, then GCP/GKE, then AKS (Prism).
+      Supersedes §24.3's config-seeded platform_admin_subjects. Two
+      mechanisms, no CRUD, no identity ever in deployment config: (1) a
+      secret-gated POST /bootstrap/platform-admin, revised 2026-07-14 (§42)
+      after a review pass found two gaps in the first pass before any K8s
+      templating: an attacker holding only the deploy secret could name any
+      Keycloak user as identifier and grant them platform_admin without
+      consent, and the live lookup_subjects zero-admin check was the same bug
+      shape as the reverted §24.7 escalation (true only "for now", not a
+      durable guarantee). Corrected: request now carries only {token}, no
+      identifier — the grant always targets the calling JWT's own sub
+      (get_current_user now required, in addition to the secret; two
+      independent proofs, does not reopen the bootstrap chicken-and-egg since
+      Keycloak auth depends on nothing Fred/OpenFGA owns). Guard is now a
+      durably persisted marker (new PlatformBootstrapStore, fred-core,
+      table platformbootstrap, migration 6e4149d46705), written before the
+      OpenFGA tuple under the same advisory-lock primitive as
+      rescue_team_admin — surviving even a later loss of every
+      platform_admin (explicit non-goal: recovery from total admin loss is a
+      separate break-glass procedure, §41). Secret read via
+      bootstrap_token_env_var (Kubernetes Secret, checked first) or
+      bootstrap_token_file (local dev only, created explicitly via `make
+      bootstrap-token` — Fred never generates or logs it, in any
+      environment). Keycloak Admin client dependency dropped entirely from
+      this endpoint. Registered in authz-endpoint-matrix.yaml
+      (external_or_public); documented in CONTROL-PLANE-PRODUCT-CONTRACT.md
+      §3.1.2 and REBAC.md. Verified offline: fred-core 256 passed,
+      control-plane-backend 290 passed (9 in test_bootstrap_platform_admin.py,
+      incl. the load-bearing regression proving the durable marker blocks
+      reuse after simulated total platform_admin loss), make code-quality
+      clean on both. Same shape as Kubernetes' cluster-admin bootstrap,
+      ArgoCD's argocd-initial-admin-secret, Rancher's bootstrap password,
+      Keycloak's own KC_BOOTSTRAP_ADMIN_* variables. Pre-existing, unrelated
+      finding flagged (not fixed here): alembic/env.py's
+      fred_core.documents.document_models import registers metadata/tag
+      tables with no migration in this app's own chain (introduced
+      2026-07-07, 565d884f) — make db-check-sqlite/db-check-postgres fail on
+      this independent of AUTHZ-07. (2) one declarative
+      platform-provisioning operation for teams/roles/users — likely a
+      hardened, generalized PLATFORM-IMPORT-RFC.md rather than a new bulk
+      endpoint — remains open, to confirm with that RFC's owner.
+
+      Hardening pass, same day (2026-07-14), before the first local-docker
+      test: 9 findings fixed one at a time with developer sign-off (5 from an
+      independent review, re-derived against the code before being accepted;
+      4 found while implementing/testing the first 5). Empty/trivial
+      configured secret no longer accepted (secrets.compare_digest("","")
+      is True — min_length=16 on the request schema, and any configured
+      secret under that floor now treated as unconfigured). make
+      bootstrap-token rewritten atomic + fail-closed (was fail-open on
+      openssl failure). Write order swapped — OpenFGA tuple before the
+      durable marker, not after — since a transient OpenFGA failure under
+      the old order permanently bricked bootstrap with no admin ever
+      granted and no recovery path; safe because add_relation is already
+      idempotent (on_duplicate_writes=IGNORE). Env-var-configured-but-absent
+      no longer falls back to the file. New fail-closed guards for ReBAC
+      disabled and for Keycloak/OIDC disabled (the latter found while
+      testing the former, not in the original review — a mocked identity
+      would otherwise degrade "two independent proofs" to one).
+      PlatformBootstrapStore/PlatformBootstrapRow moved out of fred-core
+      (zero consumers outside control-plane-backend, unlike
+      TeamMetadataStore) into control_plane_backend/bootstrap/store.py +
+      control_plane_backend/models/bootstrap_models.py, switched to the
+      local Base — zero Alembic drift, verified. Test coverage gaps closed:
+      a real-SQLite PlatformBootstrapStore test, route-level 401/503/200
+      tests through the real ASGI app, and a genuine concurrency test
+      proving the advisory lock serializes two racing callers. OpenAPI
+      client regenerated, plus explicit 403/409/503 responses declared on
+      the route. Verified offline: control-plane-backend 304 passed (full
+      suite), fred-core 256 passed offline (17 pre-existing OpenFGA-live
+      integration failures, unrelated, no local OpenFGA in this
+      environment), frontend tsc --noEmit clean. make code-quality not run
+      this session — outstanding before merge. Not yet done (unchanged):
+      manual end-to-end re-validation on fred-deployment-factory's
+      docker-up, Kubernetes Secret templating for GKE/GCP then AKS, and
+      part (2) above.
+
+      Part (2) closed 2026-07-14: declarative team/platform role
+      provisioning for already-existing Keycloak identities, implemented as
+      a new users.json bundle entry in import_export (PLATFORM-IMPORT-RFC.md
+      §10), not a new bulk endpoint — the option flagged above. Read-only
+      username-to-sub resolution (find_user_sub_by_username, never creates a
+      Keycloak identity); a single new private helper grants platform roles
+      to a third party, reachable only through the existing
+      CAN_MANAGE_PLATFORM-gated import route; team-scoped role grants stay
+      bounded by the existing team_admin-only permission model (no
+      schema.fga change, no reopening of the reverted §24.7 escalation) — a
+      brand-new team's initial team_admin(s) can be seeded at creation, any
+      other team-scoped grant is skipped and reported if the importing
+      platform_admin does not already hold team_admin there. Verified
+      offline: tests/test_import_export_users.py (8 tests), full
+      control-plane-backend suite 314 passed, frontend tsc --noEmit clean.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

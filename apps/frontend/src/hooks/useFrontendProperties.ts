@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { getGcuVersion, getProperty } from "../common/config";
+import { getGcuVersion, getProperty, getRootBootstrapCompleted } from "../common/config";
 
 export interface FrontendProperties {
   agentIconName: string;
@@ -29,6 +29,7 @@ export interface FrontendProperties {
   gcuVersion: string | null;
   logoName: string;
   logoNameDark: string;
+  rootBootstrapCompleted: boolean;
   siteDisplayName: string;
   siteSubtitle: string;
   siteTitle: string;
@@ -71,6 +72,11 @@ export function useFrontendProperties(): FrontendProperties {
       gcuVersion: getGcuVersion() ?? (getProperty("gcuVersion") || null),
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
+      // Sourced from the public pre-auth `/frontend/config` (via
+      // `getRootBootstrapCompleted`) — `BootstrapGuard` must know this before
+      // any per-user state exists, and it is a durable, global marker rather
+      // than something derivable from the authenticated session (AUTHZ-07).
+      rootBootstrapCompleted: getRootBootstrapCompleted(),
       siteDisplayName: getProperty("siteDisplayName") || "Fred",
       siteSubtitle: getProperty("siteSubtitle") || "",
       siteTitle: getProperty("siteTitle") || "Fred",

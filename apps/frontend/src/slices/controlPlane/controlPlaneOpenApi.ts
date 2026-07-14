@@ -415,6 +415,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    bootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPost: build.mutation<
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse,
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/bootstrap/platform-admin`,
+        method: "POST",
+        body: queryArg.bootstrapPlatformAdminRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -934,6 +944,11 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   sessionId?: string | null;
   lang?: string;
 };
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
+  /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
+  bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1318,6 +1333,8 @@ export type FrontendUserAuthConfig = {
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
+  /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
+  root_bootstrap_completed: boolean;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -1700,6 +1717,15 @@ export type ExecutionPreparation = {
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
 };
+export type BootstrapPlatformAdminResponse = {
+  /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
+  user_id: string;
+  username: string;
+};
+export type BootstrapPlatformAdminRequest = {
+  /** The one-time root-bootstrap secret. */
+  token: string;
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -1991,6 +2017,7 @@ export const {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

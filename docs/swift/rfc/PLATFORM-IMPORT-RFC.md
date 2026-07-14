@@ -50,6 +50,10 @@ large multi-store restores enter scope, revisit the Temporal design in §5.
 - `MigrationTaskEvent` populated with `step` + `progress`; control-plane added to frontend task
   rehydration + SSE sources, so migration tasks survive reload.
 - Admin page (renamed **Platform data**) — import / export / reset + the live stats dashboard.
+- `import_export/importer.py::_run_users_phase` (+ `bundle.py::demo_users`,
+  `users/service.py::find_user_sub_by_username`) — declarative team/platform role provisioning from
+  the new `users.json` bundle entry (§10, AUTHZ-07 Part 8 §40.2). Offline-tested only
+  (`tests/test_import_export_users.py`), **not yet live-tested** against a real Keycloak/OpenFGA stack.
 
 **Deferred (not done — tracked in backlog §0bis):**
 - **Prompts/resources** — agents import with default tuning only; kea agent prompt → swift agent
@@ -57,7 +61,12 @@ large multi-store restores enter scope, revisit the Temporal design in §5.
 - **OpenFGA tuple restore** (MIGR-05.04) — handled out-of-band by ops bulk-copy (cutover Option A);
   `reset` deliberately leaves tuples intact so team ownership survives a re-test.
 - **Stage reconciliation** (MIGR-05.07) + **re-vectorize trigger** (MIGR-07).
-- **users / MCP** restore — re-seeded by deployment / identity bootstrap (MIGR-04).
+- ~~**users / MCP** restore — re-seeded by deployment / identity bootstrap (MIGR-04)~~ **partially
+  superseded (2026-07-14, §10):** this line meant the kea `postgres/users.jsonl` table (Keycloak
+  identity rows) — still correctly out of scope, identity stays MIGR-04's job. A *different*,
+  top-level `users.json` bundle entry (not a `postgres/` table) now exists for a separate concern:
+  declarative Fred-side authorization provisioning (team roles, platform roles) for identities that
+  already exist. See §10. **MCP** restore is still fully deferred (unchanged).
 - ~~**teammetadata** restore — re-seeded by deployment / identity bootstrap~~ **superseded
   (2026-07-10):** this assumed team metadata was Keycloak-identity-derived, which was true only
   while teams were Keycloak groups. AUTHZ-05 review item 9 decoupled teams from Keycloak entirely
@@ -322,3 +331,128 @@ checklist. (`preflight` may run report-only during iteration; it blocks at cutov
 Approve scope (§2) + architecture (§5) + agent mapping (§7) + the dumb-export/smart-import contract
 (stage reconciliation) so this can become MIGR-05 implementation work (control-plane import service +
 Temporal workflow + admin UI), tracked in `KEA-MIGRATION-BACKLOG.md`.
+
+## 10. Declarative team/platform role provisioning — `users.json` (2026-07-14)
+
+This is the confirmation/implementation `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 §40.2
+("Platform provisioning") asked for: *"the likely right move is to harden and generalize
+[`PLATFORM-IMPORT-RFC.md`]'s input contract... to be confirmed with whoever owns that RFC before any
+implementation."* Part (2) of `AUTHZ-07`'s original scope (declarative platform provisioning for
+teams/roles/users, tracked open in `AUTHZ-MIGRATION-BACKLOG.md`'s AUTHZ-07 rows) is closed by this
+section.
+
+**Bundle addition.** A new top-level `users.json` entry (sibling of `manifest.json`/`openfga/`, **not**
+under `postgres/` — these are not Postgres rows, they are a typed (`import_export/schemas.py::BundleUserEntry`)
+description of the Keycloak identity and the Fred-side authorization state a user should end up with):
+
+```json
+[
+  {"username": "alice", "email": "alice@app.com", "first_name": "Alice", "last_name": "Watson",
+   "password": "Azerty123_", "teams": [], "team_roles": {"team_admin": ["fredlab"]}, "platform_roles": ["admin"]},
+  {"username": "bob", "teams": ["fredlab"], "team_roles": {"team_editor": ["fredlab"]}, "platform_roles": []}
+]
+```
+
+`BundleUserEntry`'s full shape: `username: str` (required); `email`/`first_name`/`last_name`/`password:
+str | None = None` (identity-phase fields, all optional — see the 2026-07-14 addendum below);
+`teams: list[str] = []`, `team_roles: dict[str, list[str]] = {}`, `platform_roles: list[str] = []`
+(role-phase fields, unchanged). One format, because it's one file: each phase reads what it needs from
+the same entry and ignores the rest — `bob` above has no identity fields and is treated exactly as
+before (assumed to already exist). `KBundle.demo_users()` reads and validates it
+(`BundleUserEntry.model_validate` per entry), mirroring `openfga_tuples()`'s try/except-`KeyError`-
+return-`[]` pattern around the zip read itself (`bundle.py`). `teams` names every team a user should be
+provisioned into; `team_roles` maps a relation (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
+to the team names it should be granted on; `platform_roles` (`"admin"` → `platform_admin`, `"observer"`
+→ `platform_observer`) grants org-level roles.
+
+**Design principle — the role phase never creates an identity; the identity phase creates one only when
+explicitly asked.** Consistent with AUTHZ-05's Keycloak-is-identity-only model, the role phase resolves
+`username` → Keycloak `sub` via **read-only** `users/service.py::find_user_sub_by_username` (the same
+read-only admin client `list_users`/`get_users_by_ids` already use — never the write-gated M2M path
+`create_user` requires). A username still unresolved after the identity phase (below) is **skipped and
+reported** (`report.users_skipped`, `report.warnings`), never created by this phase and never failing
+the rest of the import.
+
+**The new capability — granting a platform role to a third party.** Before this change, the only path
+to `platform_admin`/`platform_observer` was `bootstrap/service.py::bootstrap_platform_admin`'s
+self-promotion-only endpoint (RFC Part 8 §42.2: "the grant always targets the calling JWT's own
+`sub`"). `users.json`'s `platform_roles` is the first path that can name a **third party**. It is
+deliberately **not** a new public service function or endpoint: `importer.py::_grant_platform_role` is
+a small private helper, reachable only through `POST /import-export/import`, which already requires
+`OrganizationPermission.CAN_MANAGE_PLATFORM` as the first line of the route handler (`api.py`,
+unchanged by this work — the new phase rides the same existing gate, no second check added). This is
+not a privilege-escalation path: granting `platform_admin` to someone else already requires being a
+`platform_admin` yourself, exactly the same shape as any other admin capability in this system. The
+call mirrors `bootstrap_platform_admin`'s own direct `rebac.add_relation(...)` — `add_relation` is
+idempotent (`on_duplicate_writes=IGNORE`), so re-running the same bundle never errors on an
+already-granted role.
+
+**Team-scoped roles — bounded by the existing permission model, not bypassed.** `schema.fga`'s `type
+team` comment is explicit and was tested in review (§24.2/§24.7): team-scoped relations
+(`team_admin`/`team_editor`/`team_analyst`/`team_member`) are **never** derived from a platform role —
+"a `platform_admin from organization` exception was tried for team bootstrap and reverted the same
+day." This importer does not reopen that door. Two consequences, both implemented and covered by
+`tests/test_import_export_users.py`:
+- A **brand-new** team's initial `team_admin`(s) can be seeded at creation time
+  (`teams.service.create_team`'s own one-shot, `CAN_CREATE_TEAM`-gated bootstrap capability —
+  `CreateTeamRequest.initial_team_admin_ids`), by collecting every `team_admin` the bundle declares for
+  that team before creating it. `CAN_CREATE_TEAM` is org-wide (`platform_admin`), so this needs no
+  team-scoped permission from the importing caller.
+- **Every other team-scoped grant** — `team_editor`/`team_analyst`/`team_member` on any team, or any
+  role at all on a team that already existed before this import — goes through the existing
+  `teams.service.grant_team_member_role`, unmodified, which requires the importing `platform_admin` to
+  already hold `team_admin` on that specific team. When it doesn't, the grant is **skipped and
+  reported** (`report.team_roles_skipped`, `report.warnings`) — never silently dropped, and never
+  forced through by reaching past `grant_team_member_role`'s own permission check. This is a real,
+  known scope boundary of this phase, not an oversight: closing it would mean either (a) a schema.fga
+  change granting this specific admin-gated import flow a team-scoped bypass — a genuine new
+  capability, not just "reuse `grant_team_member_role`", and worth its own RFC discussion given the
+  reverted `§24.7` precedent — or (b) authoring bundles so every team a bundle touches either seeds its
+  `team_admin`(s) at creation in the same run, or names a `team_admin` the operator already holds
+  elsewhere. Left open for a future item rather than decided unilaterally here.
+
+**Report fields** (`importer.py::MigrationReport`, folded into the existing task-event summary string,
+same as every other phase — no new HTTP response field, since the report was never returned over HTTP
+to begin with, only surfaced via the `MigrationTaskEvent.step` string and server logs):
+`identities_created` (see the addendum below), `users_processed`, `users_skipped` (list of unresolved
+usernames), `teams_provisioned` (distinct name from the pre-existing `teams_imported`/`teams_skipped`,
+which count `team_metadata` Postgres rows, not teams created via this phase), `team_roles_granted`,
+`team_roles_skipped`, `platform_roles_granted`.
+
+### 10.1 Identity phase — bundle-driven Keycloak user creation (2026-07-14)
+
+Closes the remaining part of the `fred`/`fred-deployment-factory` boundary split: `fred`
+(`control_plane_backend/import_export/`) is now the sole, complete owner of platform provisioning — both
+the Keycloak identities and the Fred authorization state — in the one typed, versioned, git-committed
+`users.json` format described above. `fred-deployment-factory` carries no user/team data of its own.
+
+**What runs, and in what order** (`importer.py::_run_users_phase`): phase 1
+(`_provision_bundle_identities`) runs first, then phase 2 is the role-provisioning logic described
+above, unchanged. For each bundle entry, phase 1 creates a Keycloak user via the existing
+`users/service.py::create_user` (already Keycloak-Admin-M2M-gated — no new Keycloak capability, just a
+new caller) **only if both** conditions hold: (a) `find_user_sub_by_username` finds no existing match,
+and (b) the entry carries a `password`. An entry with no `password` is assumed to already exist and is
+never force-created — it falls through to phase 2's read-only resolution exactly as before, and is
+skipped/reported there if it still doesn't resolve. Phase 1 never overwrites an already-existing
+identity. Running phase 1 before phase 2 means a bundle that creates *and* grants roles to the same
+identity, in the same entry, works in a single import call — not two separate uploads.
+
+**Precondition.** Any bundle that creates identities requires Keycloak Admin M2M credentials to be
+configured (the same precondition `create_user`/`delete_user` already have via
+`_get_keycloak_admin_for_user_operations`). If they are not configured, `create_user` raises
+`KeycloakM2MUserOperationDisabledError`, which this phase lets propagate rather than swallowing — the
+import fails loudly with a clear cause instead of silently skipping every identity-creation entry. A
+bundle whose entries carry no `password` (already-existing identities only) has no such precondition —
+phase 1 is then a no-op for every entry, same as before this addendum.
+
+**Report field.** `report.identities_created` counts Keycloak users created by phase 1, folded into the
+same task-event summary string as every other phase field.
+
+**The fixture.** `apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/`
+(`manifest.json` + `users.json`) is the single, checked-in, git-committed source of truth for every demo
+identity *and* every team/platform role — the data that used to live in
+`fred-deployment-factory/config/configuration.yaml`'s `users:` list now lives here exclusively, typed
+through `BundleUserEntry`. `make build-demo-bundle` (`apps/control-plane-backend/Makefile`) zips the two
+fixture files into `target/demo-provisioning-bundle.zip` for upload via Admin → Migration. No top-level
+`teams:` list is needed in the fixture — every team name is derivable by unioning `entry.teams` and
+`entry.team_roles.values()` across all entries.

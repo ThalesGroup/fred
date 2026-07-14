@@ -26,6 +26,7 @@ import { AuthProvider } from "../security/AuthContext";
 import { createDarkTheme, createLightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
+import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 
 const pulse = keyframes`
   0% { transform: scale(1); opacity: 0.9; }
@@ -166,14 +167,16 @@ function FredUiContent() {
     >
       <AuthProvider>
         <GcuGuard>
-          {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
-          <ConfirmationDialogProvider>
-            <ToastProvider>
-              <DrawerProvider>
-                <RouterProvider router={router} />
-              </DrawerProvider>
-            </ToastProvider>
-          </ConfirmationDialogProvider>
+          <BootstrapGuard>
+            {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
+            <ConfirmationDialogProvider>
+              <ToastProvider>
+                <DrawerProvider>
+                  <RouterProvider router={router} />
+                </DrawerProvider>
+              </ToastProvider>
+            </ConfirmationDialogProvider>
+          </BootstrapGuard>
         </GcuGuard>
       </AuthProvider>
     </React.Suspense>
