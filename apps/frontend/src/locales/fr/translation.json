@@ -1562,7 +1562,23 @@
       "failedOn": "Échec {{when}}",
       "cancelledOn": "Annulée {{when}}",
       "stalled": "Bloqué",
-      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention."
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
+      "withWarnings": "Avec avertissements",
+      "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "migration": {
+        "detailsTitle": "Détail de l'import",
+        "warningsTitle": "Avertissements ({{count}})",
+        "counter": {
+          "identities_created": "Identités créées",
+          "teams_provisioned": "Équipes créées",
+          "team_roles_granted": "Rôles d'équipe accordés",
+          "platform_roles_granted": "Rôles plateforme accordés",
+          "agents_imported": "Agents importés",
+          "agents_gap": "Agents sans modèle correspondant",
+          "tags_imported": "Tags importés",
+          "docs_imported": "Documents importés"
+        }
+      }
     }
   },
   "runtime": {

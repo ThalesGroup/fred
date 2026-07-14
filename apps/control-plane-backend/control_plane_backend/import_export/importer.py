@@ -78,7 +78,12 @@ from fred_core.common import TeamId
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
-from fred_core.tasks.models import MigrationDetail, MigrationTaskEvent, TaskState
+from fred_core.tasks.models import (
+    MigrationDetail,
+    MigrationResult,
+    MigrationTaskEvent,
+    TaskState,
+)
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -174,6 +179,34 @@ class MigrationReport:
     team_roles_skipped: int = 0
     platform_roles_granted: int = 0
     warnings: list[str] = field(default_factory=list)
+
+
+def to_migration_result(report: MigrationReport) -> MigrationResult:
+    """Project the internal `MigrationReport` onto the public `MigrationResult`
+    contract (AUTHZ-07 Step 3) — a field-for-field mapping, never a re-derivation:
+    `MigrationReport` stays the single place that computes these counters.
+    """
+    return MigrationResult(
+        import_id=report.import_id,
+        source_platform=report.source_platform,
+        identities_created=report.identities_created,
+        users_processed=report.users_processed,
+        users_skipped=list(report.users_skipped),
+        teams_imported=report.teams_imported,
+        teams_skipped=report.teams_skipped,
+        teams_provisioned=report.teams_provisioned,
+        team_roles_granted=report.team_roles_granted,
+        team_roles_skipped=report.team_roles_skipped,
+        platform_roles_granted=report.platform_roles_granted,
+        agents_imported=report.agents_imported,
+        agents_skipped=report.agents_skipped,
+        agents_gap=report.agents_gap,
+        tags_imported=report.tags_imported,
+        tags_skipped=report.tags_skipped,
+        docs_imported=report.docs_imported,
+        docs_skipped=report.docs_skipped,
+        warnings=list(report.warnings),
+    )
 
 
 def _utcnow() -> datetime:

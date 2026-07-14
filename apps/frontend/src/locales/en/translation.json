@@ -1562,7 +1562,23 @@
       "failedOn": "Failed {{when}}",
       "cancelledOn": "Cancelled {{when}}",
       "stalled": "Stalled",
-      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention."
+      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
+      "withWarnings": "With warnings",
+      "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "migration": {
+        "detailsTitle": "Import details",
+        "warningsTitle": "Warnings ({{count}})",
+        "counter": {
+          "identities_created": "Identities created",
+          "teams_provisioned": "Teams created",
+          "team_roles_granted": "Team roles granted",
+          "platform_roles_granted": "Platform roles granted",
+          "agents_imported": "Agents imported",
+          "agents_gap": "Agents needing a template",
+          "tags_imported": "Tags imported",
+          "docs_imported": "Documents imported"
+        }
+      }
     }
   },
   "runtime": {

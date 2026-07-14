@@ -212,7 +212,7 @@ Execution protocol:
     ['team_editor'] on team 'fredlab'; currently holds []"`) — one design gap
     blocking the platform's common test setup, not 227 independent defects.
 
-- [ ] **Step 2 — make declarative import converge completely.** Using Step 1's
+- [x] **Step 2 — make declarative import converge completely.** Using Step 1's
       evidence, reconcile every valid identity, team membership, team role and
       platform role requested by the bundle; define the `teams` fallback
       semantics explicitly; reject or fail incomplete/invalid reconciliation
@@ -222,8 +222,11 @@ Execution protocol:
       import operation, narrow, tested, and documented in the existing RFC.
   - Exit gate: the real demo bundle imports with zero unintended skips; targeted
     tests and the affected live validation scenarios pass; rerun is idempotent.
-    **Code-complete, offline-verified; live-validation half of the gate still
-    open (see Result below) — checkbox stays unticked until that re-run.**
+    **Met — live-validated 2026-07-14.** The operator re-imported the same demo
+    bundle onto the already-partially-provisioned live stack, then re-ran root
+    `make validation-report`: **225 passed, 0 failed, 0 errors, 2 skipped
+    (expected)** — the 227-error cascade from Step 1's evidence is gone, and
+    the fix holds end to end, not just offline.
   - Scope confirmed 2026-07-14 (developer prompt, reusing this same issue/PR —
     no new task ID): fix `importer.py::_apply_bundle_user_roles` so every
     `team_roles`/`teams` grant the bundle declares is actually written, without
@@ -264,13 +267,101 @@ Execution protocol:
     team roles` on branch
     `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
 
-- [ ] **Step 3 — make import outcome observable and truthful.** Retain the
+- [x] **Step 3 — make import outcome observable and truthful.** Retain the
       structured migration report, expose it through the existing task/event
       contract, and make the UI show actionable failures/warnings. A partial
       reconciliation must not be indistinguishable from full success.
   - Exit gate: backend contract/event tests plus UI tests prove success, failure
-    and warning rendering without a parallel task-status model.
-  - Claude prompt/result/commit: pending Step 2.
+    and warning rendering without a parallel task-status model. **Met.**
+  - Claude prompt/result/commit: implemented 2026-07-14, same issue/PR/branch
+    (no new task ID). Root cause re-confirmed from the current code: the import
+    task was started with no `target` (`task_service.start(StartMigrationRequest(),
+    created_by=user.uid)` — no `target=` kwarg despite `TaskTarget` already
+    existing on the contract), so `GET /tasks` fell back to the raw `task_id`
+    UUID; `import_export/api.py`'s `_run()` discarded `run_import()`'s returned
+    `MigrationReport` and emitted an empty terminal `MigrationTaskEvent`; the
+    already-present `label` `Form()` field on `POST /import-export/import` was
+    accepted but never read; `TaskSummary` had no `detail` field, so even a
+    populated `TaskRunRow.detail` (already retained by `TaskStore.record_event`'s
+    pre-existing "keep the last non-null detail" rule) never reached `GET /tasks`.
+    Design: one canonical pipeline, no parallel one —
+    `MigrationReport` → `to_migration_result()` → `MigrationTaskEvent.detail.result`
+    → `TaskStore` (existing retention) → `TaskSummary.detail` → the existing shared
+    `TaskActivity` component; no new table, endpoint, Redux store, or import-only
+    page. Full rationale in `PLATFORM-IMPORT-RFC.md` §11.
+    Backend: `fred_core.tasks.models` — new `MigrationResult` (typed projection of
+    `MigrationReport`, every field named in the exit gate); `MigrationDetail.result:
+    MigrationResult | None = None` (terminal-only); `TaskSummary.detail` (union of
+    the existing per-kind Detail models, typed per `kind` like `TaskEvent`, `None`
+    for legacy/undetailed tasks). `fred_core.tasks.store` —
+    `TaskStore.list_tasks` now projects the persisted detail into the right typed
+    model per `kind` (`_parse_task_detail`). `import_export/importer.py` —
+    `to_migration_result()` (field-for-field `MigrationReport` → `MigrationResult`,
+    no re-derivation). `import_export/api.py` — `_import_target()` builds the
+    canonical `TaskTarget` (`type="platform_import"`, `id=import_id`,
+    `label=` trimmed operator label → uploaded filename → `"Platform import"`
+    fallback), passed to `task_service.start(..., target=...)`; the terminal
+    `succeeded` event now carries `progress=1.0`, the canonical `target`, and
+    `MigrationDetail(step_id="done", result=to_migration_result(report))`.
+    Frontend: `launchPlatformImport.ts::buildImportTarget` reproduces the exact
+    same precedence for the optimistic registration (was previously
+    `type: "platform"` + `label: file.name` unconditionally, ignoring the operator
+    label — fixed to match the backend, not a second source of truth);
+    `taskTypes.ts` gained the hand-maintained `MigrationResult` mirror + `detail.result`
+    on `MigrationTaskEvent`; `TaskActivity.tsx`/`.module.css` — a `succeeded`
+    migration with `result.warnings.length > 0` shows an explicit "with warnings"
+    flag next to the state badge (state itself stays `succeeded`, no new
+    `TaskState`); a `failed` task now renders `task.error` (was previously never
+    shown in this shared component — a real, generic gap, fixed for every kind,
+    not just migration); a per-row `Disclosure` (existing design-system atom, not
+    a new control) shows the principal non-zero counters and the full warnings
+    list, defaulting open when warnings are present so they are not hidden behind
+    an extra click. Non-migration kinds unaffected (`detail`/`result` narrowed on
+    `task.kind === "migration"` before use).
+    Behaviour: success without warnings → plain "Completed" row, no flag, no
+    disclosure noise (only shown if there is something to show); success with
+    warnings → same "Completed" wording plus an explicit "With warnings" flag and
+    an open-by-default disclosure listing counters + every warning string; failed
+    → "Failed" row with the `error` message rendered, never the success wording,
+    target still resolved to its canonical label (set at creation, survives the
+    exception path unchanged).
+    Tests: backend — `libs/fred-core/fred_core/tests/tasks/test_models.py` (4 new:
+    `MigrationDetail.result` defaults `None` and stays backward compatible,
+    terminal round-trip with warnings, `TaskSummary` accepts a typed
+    `MigrationDetail`/defaults `detail=None`); `apps/control-plane-backend/tests/test_task_store.py`
+    (4 new: typed migration detail incl. nested result projects through
+    `list_tasks`, legacy task with no detail reads back `None`, a non-migration
+    kind — ingestion — still projects correctly, `ErasureDetail` still parses via
+    the generic kind→model mapping); new
+    `apps/control-plane-backend/tests/test_import_export_task_observability.py`
+    (13 tests: `_import_target` precedence incl. the no-label/no-filename
+    fallback, `to_migration_result` maps every field and defensively copies
+    lists, and — through the real ASGI route (`create_app()` + `httpx`
+    `ASGITransport`, `run_import`/`open_bundle` monkeypatched at the call site so
+    only the API layer's own responsibility is exercised) — target set with an
+    explicit label, target falls back to the filename, a clean success produces
+    the full structured result via `GET /tasks`, a result with warnings survives
+    the same round trip and stays `succeeded`, and an exception produces `failed`
+    with the error message and the canonical target, never `succeeded`). Frontend
+    — `TaskActivity.test.tsx` (8 new: clean success shows no flag, warnings
+    trigger the explicit flag, counters/warnings are present in the (open-by-default)
+    disclosure, a still-running migration shows no result markup yet, a failed
+    task shows its error and never the success text, the backend label is used
+    over the raw task id, a non-migration task is unaffected, the disclosure
+    toggle is a native `<button aria-expanded>` with a visible accessible name).
+    Verified offline: fred-core 260 passed, control-plane-backend 336 passed,
+    `make code-quality` clean on both (ruff, bandit, basedpyright); frontend
+    `tsc --noEmit` clean, `prettier --check` clean, `vitest run` 353 passed (30
+    files). `make update-control-plane-api` regenerated
+    `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts` from the new
+    `openapi.json` (new `MigrationResult`/`ErasureDetail`/etc. schemas plus
+    `TaskSummary.detail`) — no hand-written type duplicates it. **Not run this
+    session, explicitly out of scope per the confirmed prompt:** root
+    `make validation-report` — this step changes observability/contract and its
+    tests only, not provisioning behaviour.
+    Commit: see `git log` for `feat(AUTHZ-07): expose platform import outcomes
+    in activity` on branch
+    `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
 
 - [ ] **Step 4 — finish the pure-infrastructure factory boundary.** In
       `fred-deployment-factory`, remove nominative/demo users and legacy app

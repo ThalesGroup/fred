@@ -13,11 +13,28 @@
 // limitations under the License.
 
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ImportLaunchResponse } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ImportLaunchResponse, TaskTarget } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 export interface PlatformImportLaunch {
   taskId: string;
   importId: string;
+}
+
+// Must match `control_plane_backend/import_export/api.py::IMPORT_TARGET_TYPE` —
+// the backend creates the task's canonical TaskTarget with this same `type`
+// (AUTHZ-07 Step 3). The frontend's optimistic registration below reproduces
+// it so the row never flickers between two different targets before the next
+// GET /tasks / SSE event replaces it with the backend's own value.
+export const IMPORT_TARGET_TYPE = "platform_import";
+
+// Same precedence as `api.py::_import_target`: trimmed operator label → the
+// uploaded file's name → a safe fallback. Kept in lockstep by hand (no shared
+// contract type crosses the Python/TypeScript boundary here) — the backend
+// value always wins once it arrives, this is only the optimistic placeholder.
+export function buildImportTarget(importId: string, label: string, filename: string): TaskTarget {
+  const trimmedLabel = label.trim();
+  const trimmedFilename = filename.trim();
+  return { type: IMPORT_TARGET_TYPE, id: importId, label: trimmedLabel || trimmedFilename || "Platform import" };
 }
 
 // Uploads a kea export .zip to the control-plane migration import endpoint and

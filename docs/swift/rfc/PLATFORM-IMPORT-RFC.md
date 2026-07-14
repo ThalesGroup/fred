@@ -56,9 +56,14 @@ large multi-store restores enter scope, revisit the Temporal design in §5.
   2026-07-14 (AUTHZ-07 Step 2 — see §10's "Team-scoped roles" subsection)** after the first pass's live
   validation run surfaced a design gap: non-admin team-scoped grants were unconditionally refused by the
   `team_admin`-gated ordinary API and downgraded to warnings while the import still reported
-  `succeeded`. Offline-tested only (`tests/test_import_export_users.py`), **not yet live-tested** against
-  a real Keycloak/OpenFGA stack since the fix — the next operator step is re-importing the same demo
-  bundle onto the already-partially-provisioned live stack and re-running `make validation-report`.
+  `succeeded`. **Live-validated 2026-07-14**: re-imported the same demo bundle onto the
+  already-partially-provisioned live stack, then re-ran root `make validation-report` —
+  **225 passed, 0 failed, 0 errors, 2 skipped (expected)**, confirming the fix closes the gap end to end,
+  not just offline.
+- `import_export/api.py` (§11, AUTHZ-07 Step 3) — the import task now carries a canonical, durable
+  `TaskTarget` and its terminal `succeeded` event carries the full structured `MigrationReport` (via
+  `fred_core.tasks.models.MigrationDetail.result`), so a partial reconciliation (warnings) is never
+  indistinguishable from full success after a reload. See §11.
 
 **Deferred (not done — tracked in backlog §0bis):**
 - **Prompts/resources** — agents import with default tuning only; kea agent prompt → swift agent
@@ -494,3 +499,59 @@ through `BundleUserEntry`. `make build-demo-bundle` (`apps/control-plane-backend
 fixture files into `target/demo-provisioning-bundle.zip` for upload via Admin → Migration. No top-level
 `teams:` list is needed in the fixture — every team name is derivable by unioning `entry.teams` and
 `entry.team_roles.values()` across all entries.
+
+## 11. Observable, durable, truthful import outcome (AUTHZ-07 Step 3, 2026-07-14)
+
+Step 2 (§10, above) made reconciliation *complete* — a declared-valid bundle either fully provisions or
+fails closed. It did not make the result *observable*: `import_export/api.py` discarded the
+`MigrationReport` `run_import()` returned and emitted an empty terminal `succeeded` event with no target
+beyond the raw `import_id` UUID. A live import (Step 1's evidence, §"Step 1" above) showed the operator
+only a bare UUID and the word "Terminé" — a partial reconciliation (silently-skipped grants, before the
+Step 2 fix) was indistinguishable from full success once the task list reloaded.
+
+**Truth rule.** A `succeeded` platform-import task is not always a *clean* success — it may have produced
+warnings during a phase that does not itself fail closed (e.g. an agent classified `GAP`, §7). The
+terminal event and `GET /tasks` must let an admin tell the two apart without guessing. **No new
+`TaskState` is introduced** (`succeeded` stays `succeeded`, matching `TASK-EVENT-STREAM-RFC.md`'s state
+machine) — the tell is a non-empty `result.warnings` list in the structured detail below, which the UI
+renders as an explicit "with warnings" flag distinct from a silent success.
+
+**Canonical target.** `import_export/api.py::_import_target` builds the task's `TaskTarget` once, at
+launch, before the background import runs: `type="platform_import"`, `id=import_id`, `label=` the
+operator-supplied label (trimmed) if non-empty, else the uploaded file's name, else a safe fallback
+(`"Platform import"`). This is passed to `task_service.start(..., target=...)`, so it is durable from the
+first `GET /tasks` — including if the import fails before any progress event is ever emitted. The
+frontend's optimistic registration (`launchPlatformImport.ts::buildImportTarget`) reproduces the exact
+same precedence so the row never flickers between two different targets before the backend's own value
+arrives; it is not a second source of truth.
+
+**Structured terminal result.** `fred_core.tasks.models.MigrationResult` (a new Pydantic model, sibling of
+`MigrationDetail`) is a typed public projection of the internal `MigrationReport`
+(`import_export/importer.py`), converted field-for-field by `importer.py::to_migration_result` — the
+report's own field computation is not duplicated, only mapped. `MigrationDetail` gained an optional
+`result: MigrationResult | None` field (`None` on every intermediate progress event, exactly as before;
+populated only on the terminal `succeeded` event). Carries: `import_id`, `source_platform`,
+`identities_created`, `users_processed`, `users_skipped`, `teams_imported`/`teams_skipped`,
+`teams_provisioned`, `team_roles_granted`/`team_roles_skipped`, `platform_roles_granted`,
+`agents_imported`/`agents_skipped`/`agents_gap`, `tags_imported`/`tags_skipped`,
+`docs_imported`/`docs_skipped`, `warnings`. Same content-boundary rule as every other task detail
+(`TASK-EVENT-STREAM-RFC.md` §3.3): operational counters and warning strings only, never bundle content.
+
+**Durable across reload.** `TaskSummary` (the `GET /tasks` response shape) gained an optional `detail`
+field, typed per `kind` exactly like `TaskEvent.detail` (a plain, non-discriminated union of the existing
+per-kind Detail models — the frontend narrows on the sibling `kind` field, the same pattern already used
+for `TaskEvent`). `TaskStore.list_tasks` projects the last-persisted `TaskRunRow.detail` (already written
+by the pre-existing `record_event` "keep the last non-null detail" rule) into the correctly-typed model
+for the row's `kind`. Backward compatible: a task with no persisted detail (every kind before this change,
+and `log`, which has no summary detail model) reads back `detail: null`.
+
+**Honest failure, unchanged path.** An exception during `run_import()` still drives the task `failed` via
+the pre-existing `task_service.fail_task`, unchanged by this step — it already reads the canonical target
+from `TaskRunRow.target` (set at creation, per above), so the failure event carries the same target and a
+usable `error` message. Never `succeeded` on an exception.
+
+**No parallel model.** This is presentation of the existing canonical pipeline, not a new one:
+`MigrationReport` → (`to_migration_result`) → `MigrationTaskEvent.detail.result` → `TaskStore`
+("keep the last detail") → `TaskSummary.detail` → the shared `TaskActivity` component. No new table, no
+new endpoint, no new Redux store, no import-specific activity page — `GET /tasks` and the existing task
+system remain the single source of truth (`TASK-EVENT-STREAM-RFC.md` §3.4).

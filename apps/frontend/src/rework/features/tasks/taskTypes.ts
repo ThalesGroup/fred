@@ -55,6 +55,33 @@ export interface IngestionTaskEvent {
   } | null;
 }
 
+// Structured platform-import outcome (AUTHZ-07 Step 3) — mirrors
+// `fred_core.tasks.models.MigrationResult`. Carried only on the terminal
+// event's `detail.result`; intermediate progress events leave it null. A
+// non-empty `warnings` list is what distinguishes a partial reconciliation
+// from full success — the task state itself stays `succeeded` either way.
+export interface MigrationResult {
+  import_id: string;
+  source_platform: string;
+  identities_created: number;
+  users_processed: number;
+  users_skipped: string[];
+  teams_imported: number;
+  teams_skipped: number;
+  teams_provisioned: number;
+  team_roles_granted: number;
+  team_roles_skipped: number;
+  platform_roles_granted: number;
+  agents_imported: number;
+  agents_skipped: number;
+  agents_gap: number;
+  tags_imported: number;
+  tags_skipped: number;
+  docs_imported: number;
+  docs_skipped: number;
+  warnings: string[];
+}
+
 export interface MigrationTaskEvent {
   kind: "migration";
   task_id: string;
@@ -71,6 +98,7 @@ export interface MigrationTaskEvent {
     processed: number;
     total: number;
     failed: number;
+    result?: MigrationResult | null;
   } | null;
 }
 

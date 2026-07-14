@@ -25,15 +25,92 @@
 // shared task atoms (`TaskStateBadge`, `TaskProgressBar`); polling covers the
 // scheduled→running→done transitions the client is not SSE-subscribed to.
 
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
+import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import { dueRelative, relativeTime } from "@rework/features/tasks/taskLabels";
 import {
   useListTasksControlPlaneV1TasksGetQuery,
+  type MigrationDetail,
+  type MigrationResult,
   type TaskSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./TaskActivity.module.css";
+
+// Principal counters shown in the migration result disclosure, in display
+// order. Zero-valued counters are omitted (kept to the counters that
+// actually happened, same filtering spirit as the backend's own step
+// summary string in `importer.py::run_import`, applied independently here
+// for display — not a shared implementation).
+const MIGRATION_COUNTER_KEYS = [
+  "identities_created",
+  "teams_provisioned",
+  "team_roles_granted",
+  "platform_roles_granted",
+  "agents_imported",
+  "agents_gap",
+  "tags_imported",
+  "docs_imported",
+] as const satisfies readonly (keyof MigrationResult)[];
+
+/** Narrow a generic `TaskSummary.detail` to `MigrationDetail` — only valid
+ *  when `task.kind === "migration"`; the field carries a different shape per
+ *  kind, distinguished by the sibling `kind`, same pattern as `TaskEvent`. */
+function migrationDetail(task: TaskSummary): MigrationDetail | null {
+  if (task.kind !== "migration" || task.detail == null) return null;
+  return task.detail as MigrationDetail;
+}
+
+/** The structured outcome is only present on the terminal event; intermediate
+ *  progress details never carry it. */
+function migrationResult(task: TaskSummary): MigrationResult | null {
+  return migrationDetail(task)?.result ?? null;
+}
+
+/** A `succeeded` migration with at least one warning is a partial
+ *  reconciliation — it must never read as a silent, unqualified success. */
+function hasMigrationWarnings(task: TaskSummary): boolean {
+  const result = migrationResult(task);
+  return !!result && result.warnings.length > 0;
+}
+
+function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFunction }) {
+  const counters = MIGRATION_COUNTER_KEYS.map((key) => [key, result[key]] as const).filter(
+    ([, value]) => typeof value === "number" && value > 0,
+  );
+
+  return (
+    // Warnings default the disclosure open — a partial reconciliation must be
+    // seen without an extra click, not hidden behind a collapsed summary that
+    // would itself read as "nothing to see here".
+    <Disclosure title={t("rework.taskActivity.migration.detailsTitle")} defaultOpen={result.warnings.length > 0}>
+      {counters.length > 0 && (
+        <dl className={styles.counterList}>
+          {counters.map(([key, value]) => (
+            <div key={key} className={styles.counterRow}>
+              <dt className={styles.counterLabel}>{t(`rework.taskActivity.migration.counter.${key}`)}</dt>
+              <dd className={styles.counterValue}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {result.warnings.length > 0 && (
+        <div className={styles.warningsBlock}>
+          <span className={styles.warningsTitle}>
+            {t("rework.taskActivity.migration.warningsTitle", { count: result.warnings.length })}
+          </span>
+          <ul className={styles.warningsList}>
+            {result.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Disclosure>
+  );
+}
 
 interface TaskActivityProps {
   /** Server-side scope. "platform" needs can_manage_platform; "team" needs
@@ -86,15 +163,36 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
     return t("rework.taskActivity.completedOn", { when });
   };
 
-  const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => (
-    <li key={task.task_id} className={styles.row}>
-      <span className={styles.name} title={label(task)}>
-        {label(task)}
-      </span>
-      <TaskStateBadge state={task.state} showLabel={showBadgeLabel} size="sm" />
-      <span className={styles.meta}>{meta}</span>
-    </li>
-  );
+  const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => {
+    const result = migrationResult(task);
+    const withWarnings = hasMigrationWarnings(task);
+    return (
+      <li key={task.task_id} className={styles.row}>
+        <div className={styles.rowMain}>
+          <span className={styles.name} title={label(task)}>
+            {label(task)}
+          </span>
+          <span className={styles.stateCell}>
+            <TaskStateBadge state={task.state} showLabel={showBadgeLabel} size="sm" />
+            {withWarnings && (
+              <span className={styles.warningFlag} title={t("rework.taskActivity.withWarningsHint")}>
+                {t("rework.taskActivity.withWarnings")}
+              </span>
+            )}
+          </span>
+          <span className={styles.meta}>{meta}</span>
+        </div>
+        {/* A failed task must show *why*, not just that it failed — never rendered
+            alongside a success reading, and never for a task that has no error. */}
+        {task.state === "failed" && task.error && <p className={styles.rowError}>{task.error}</p>}
+        {result && (
+          <div className={styles.rowDisclosure}>
+            <MigrationResultDetails result={result} t={t} />
+          </div>
+        )}
+      </li>
+    );
+  };
 
   const group = (titleKey: string, count: number, children: React.ReactNode) => (
     <div className={styles.group}>

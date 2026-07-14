@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 from fred_core.models import Base as CoreBase
 from fred_core.tasks.models import (
+    ErasureDetail,
+    IngestionDetail,
     IngestionTaskEvent,
+    MigrationDetail,
+    MigrationResult,
+    MigrationTaskEvent,
     TaskState,
     TaskTarget,
 )
@@ -185,3 +190,130 @@ async def test_task_store_replay_preserves_target_and_owner(tmp_path: Path) -> N
         assert replayed[0].owner == "user-42"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_task_store_list_tasks_projects_typed_migration_detail_with_result(
+    tmp_path: Path,
+) -> None:
+    """AUTHZ-07 Step 3: GET /tasks (TaskStore.list_tasks) must not lose the last
+    persisted detail — including the nested structured `MigrationResult` — so a
+    partial reconciliation is never indistinguishable from full success after a
+    reload."""
+    engine = await _make_engine(tmp_path, "store_migration_detail.sqlite3")
+    try:
+        store = TaskStore(engine)
+        await store.create(
+            task_id="m1",
+            kind="migration",
+            created_by="admin-1",
+            target=TaskTarget(type="platform_import", id="imp-1", label="demo.zip"),
+        )
+        await store.record_event(
+            MigrationTaskEvent(
+                task_id="m1",
+                state=TaskState.succeeded,
+                seq=0,
+                timestamp=_NOW,
+                progress=1.0,
+                detail=MigrationDetail(
+                    step_id="done",
+                    processed=1,
+                    total=1,
+                    failed=0,
+                    result=MigrationResult(
+                        import_id="imp-1",
+                        source_platform="swift",
+                        agents_imported=3,
+                        warnings=["agent x: gap"],
+                    ),
+                ),
+            )
+        )
+
+        tasks = await store.list_tasks(kind="migration")
+        assert len(tasks) == 1
+        detail = tasks[0].detail
+        assert isinstance(detail, MigrationDetail)
+        assert detail.step_id == "done"
+        assert detail.result is not None
+        assert detail.result.import_id == "imp-1"
+        assert detail.result.agents_imported == 3
+        assert detail.result.warnings == ["agent x: gap"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_task_store_list_tasks_detail_is_none_for_legacy_task(
+    tmp_path: Path,
+) -> None:
+    """A task that never had an event with `detail` (or was created before this
+    field existed) must still list cleanly — `detail=None`, no crash — proving
+    the addition is backward compatible (AUTHZ-07 Step 3)."""
+    engine = await _make_engine(tmp_path, "store_legacy_detail.sqlite3")
+    try:
+        store = TaskStore(engine)
+        await store.create(task_id="legacy1", kind="ingestion", created_by="u1")
+        await store.record_event(
+            IngestionTaskEvent(
+                task_id="legacy1", state=TaskState.running, seq=0, timestamp=_NOW
+            )
+        )
+
+        tasks = await store.list_tasks(kind="ingestion")
+        assert len(tasks) == 1
+        assert tasks[0].detail is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_task_store_list_tasks_projects_other_kinds_without_regression(
+    tmp_path: Path,
+) -> None:
+    """Non-migration TaskSummary variants keep parsing their own detail shape
+    correctly after the union field was added (AUTHZ-07 Step 3)."""
+    engine = await _make_engine(tmp_path, "store_other_kinds_detail.sqlite3")
+    try:
+        store = TaskStore(engine)
+        await store.create(task_id="i1", kind="ingestion", created_by="u1")
+        await store.record_event(
+            IngestionTaskEvent(
+                task_id="i1",
+                state=TaskState.running,
+                seq=0,
+                timestamp=_NOW,
+                detail=IngestionDetail(
+                    processed=2,
+                    total=5,
+                    failed=0,
+                    preview=2,
+                    vectorized=1,
+                    sql_indexed=0,
+                ),
+            )
+        )
+
+        tasks = await store.list_tasks(kind="ingestion")
+        assert len(tasks) == 1
+        detail = tasks[0].detail
+        assert isinstance(detail, IngestionDetail)
+        assert detail.processed == 2
+        assert detail.total == 5
+    finally:
+        await engine.dispose()
+
+
+def test_erasure_detail_still_parses_via_generic_projection() -> None:
+    """`ErasureDetail`'s all-defaulted fields must still round-trip through the
+    same kind→model mapping `_parse_task_detail` uses (AUTHZ-07 Step 3) — a
+    sanity check independent of the DB round-trip above."""
+    from fred_core.tasks.store import _parse_task_detail
+
+    parsed = _parse_task_detail(
+        "erasure",
+        {"reason": "user_deleted", "stores_ok": 2, "stores_total": 2, "attempts": 1},
+    )
+    assert isinstance(parsed, ErasureDetail)
+    assert parsed.stores_ok == 2
