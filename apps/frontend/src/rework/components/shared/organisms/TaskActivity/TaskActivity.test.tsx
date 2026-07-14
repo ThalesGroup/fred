@@ -182,6 +182,33 @@ describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
     expect(html).toContain("15");
   });
 
+  it("shows a non-zero *_skipped counter and users_processed, not just the granted/imported ones", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m3b",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: {
+            ...CLEAN_RESULT,
+            team_roles_skipped: 2,
+            agents_skipped: 1,
+            // Non-empty warnings default the disclosure open, so its content is
+            // present without simulating a click (static-markup test harness).
+            warnings: ["team fredlab: 2 roles skipped"],
+          },
+        },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.migration.counter.team_roles_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.agents_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.users_processed");
+  });
+
   it("never shows counters/warnings for a task with no result yet (e.g. still running)", () => {
     h.tasks = [migrationTask({ task_id: "m4", state: "running", progress: 0.4 })];
     const html = render();

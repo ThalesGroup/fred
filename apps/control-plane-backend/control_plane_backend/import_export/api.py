@@ -103,6 +103,7 @@ def _import_target(
 class ImportLaunchResponse(BaseModel):
     task_id: str
     import_id: str
+    target: TaskTarget
 
 
 class ResetLaunchResponse(BaseModel):
@@ -231,7 +232,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 await task_service.fail_task(task_id, str(exc))
 
         background_tasks.add_task(_run)
-        return ImportLaunchResponse(task_id=task_id, import_id=import_id)
+        return ImportLaunchResponse(task_id=task_id, import_id=import_id, target=target)
 
     @router.get(
         "/import-export/export",

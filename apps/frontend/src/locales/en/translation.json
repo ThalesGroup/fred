@@ -1570,13 +1570,20 @@
         "warningsTitle": "Warnings ({{count}})",
         "counter": {
           "identities_created": "Identities created",
+          "users_processed": "Users processed",
+          "teams_imported": "Teams found in the bundle",
           "teams_provisioned": "Teams created",
+          "teams_skipped": "Teams skipped",
           "team_roles_granted": "Team roles granted",
+          "team_roles_skipped": "Team roles skipped",
           "platform_roles_granted": "Platform roles granted",
           "agents_imported": "Agents imported",
+          "agents_skipped": "Agents skipped",
           "agents_gap": "Agents needing a template",
           "tags_imported": "Tags imported",
-          "docs_imported": "Documents imported"
+          "tags_skipped": "Tags skipped",
+          "docs_imported": "Documents imported",
+          "docs_skipped": "Documents skipped"
         }
       }
     }

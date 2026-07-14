@@ -43,16 +43,26 @@ import styles from "./TaskActivity.module.css";
 // order. Zero-valued counters are omitted (kept to the counters that
 // actually happened, same filtering spirit as the backend's own step
 // summary string in `importer.py::run_import`, applied independently here
-// for display — not a shared implementation).
+// for display — not a shared implementation). Includes every `*_skipped`
+// counter and `users_processed` — a non-zero skip count is exactly the kind
+// of partial-reconciliation signal this disclosure exists to surface, so it
+// must never be silently dropped from view.
 const MIGRATION_COUNTER_KEYS = [
   "identities_created",
+  "users_processed",
+  "teams_imported",
   "teams_provisioned",
+  "teams_skipped",
   "team_roles_granted",
+  "team_roles_skipped",
   "platform_roles_granted",
   "agents_imported",
+  "agents_skipped",
   "agents_gap",
   "tags_imported",
+  "tags_skipped",
   "docs_imported",
+  "docs_skipped",
 ] as const satisfies readonly (keyof MigrationResult)[];
 
 /** Narrow a generic `TaskSummary.detail` to `MigrationDetail` — only valid
@@ -73,10 +83,11 @@ function migrationResult(task: TaskSummary): MigrationResult | null {
  *  reconciliation — it must never read as a silent, unqualified success. */
 function hasMigrationWarnings(task: TaskSummary): boolean {
   const result = migrationResult(task);
-  return !!result && result.warnings.length > 0;
+  return !!result && (result.warnings?.length ?? 0) > 0;
 }
 
 function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFunction }) {
+  const warnings = result.warnings ?? [];
   const counters = MIGRATION_COUNTER_KEYS.map((key) => [key, result[key]] as const).filter(
     ([, value]) => typeof value === "number" && value > 0,
   );
@@ -85,7 +96,7 @@ function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFu
     // Warnings default the disclosure open — a partial reconciliation must be
     // seen without an extra click, not hidden behind a collapsed summary that
     // would itself read as "nothing to see here".
-    <Disclosure title={t("rework.taskActivity.migration.detailsTitle")} defaultOpen={result.warnings.length > 0}>
+    <Disclosure title={t("rework.taskActivity.migration.detailsTitle")} defaultOpen={warnings.length > 0}>
       {counters.length > 0 && (
         <dl className={styles.counterList}>
           {counters.map(([key, value]) => (
@@ -96,13 +107,13 @@ function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFu
           ))}
         </dl>
       )}
-      {result.warnings.length > 0 && (
+      {warnings.length > 0 && (
         <div className={styles.warningsBlock}>
           <span className={styles.warningsTitle}>
-            {t("rework.taskActivity.migration.warningsTitle", { count: result.warnings.length })}
+            {t("rework.taskActivity.migration.warningsTitle", { count: warnings.length })}
           </span>
           <ul className={styles.warningsList}>
-            {result.warnings.map((warning) => (
+            {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>

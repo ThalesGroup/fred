@@ -30,7 +30,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { TeamStats } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
-import { buildImportTarget, launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
+import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { exportPlatform } from "../../../../features/migration/exportPlatform";
 import styles from "./MigrationPage.module.css";
 
@@ -110,12 +110,12 @@ export default function MigrationPage() {
     setIsLaunching(true);
     setError(null);
     try {
-      const { taskId, importId } = await launchPlatformImport(file, label);
+      const { taskId, target } = await launchPlatformImport(file, label);
       dispatch(
         taskRegistered({
           taskId,
           kind: "migration",
-          target: buildImportTarget(importId, label, file.name),
+          target,
         }),
       );
       setFile(null);

@@ -259,10 +259,8 @@ Execution protocol:
     the ordinary API still refusing the same importer, cumulative roles, the
     `team_member` fallback and its suppression by an explicit role, idempotent
     re-run, and each fail-closed case — 17 tests total, `control-plane-backend`
-    full suite green, `make code-quality` clean. **Not yet live-verified**: the
-    live stack still carries Step 1's partial state (10 missing relations); the
-    operator re-imports the same bundle onto it, then re-runs `make
-    validation-report` — tracked as the remaining half of this step's exit gate.
+    full suite green, `make code-quality` clean. Live-verified the same day —
+    see this step's exit gate above (`225 passed, 0 failed, 0 errors, 2 skipped`).
     Commit: see `git log` for `fix(AUTHZ-07): make platform import reconcile
     team roles` on branch
     `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
@@ -362,6 +360,43 @@ Execution protocol:
     Commit: see `git log` for `feat(AUTHZ-07): expose platform import outcomes
     in activity` on branch
     `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
+  - Close-out hardening pass, same day (2026-07-14), same issue #1912 / PR
+    #1957 — four findings re-derived from the code and fixed: (1) the
+    frontend no longer rebuilds the import `TaskTarget` itself —
+    `ImportLaunchResponse` gained a `target: TaskTarget` field returned
+    verbatim from `_import_target()`; `launchPlatformImport.ts::buildImportTarget`
+    and `IMPORT_TARGET_TYPE` are deleted, `launchPlatformImport()` returns the
+    backend's own `target`, and `MigrationPage.tsx::handleLaunch` registers
+    that value directly — one canonical target, not two independently-built
+    ones (backend test asserts `launch["target"] == task["target"]`
+    verbatim). (2) `taskTypes.ts`'s hand-maintained `MigrationResult` mirror
+    is deleted; `MigrationTaskEvent.detail.result` now imports the generated
+    `MigrationResult` from `controlPlaneOpenApi.ts` — the SSE adapter itself
+    stays hand-maintained (still no generated `TaskEvent` union to draw from,
+    per the RFC note above it), but this one field IS on the OpenAPI schema
+    and no longer duplicated by hand. (3) `TaskActivity.tsx`'s counter
+    disclosure previously omitted every `*_skipped` counter and
+    `users_processed`, so a partial reconciliation with skips but no warning
+    text could still read as a clean, uninspectable success; the display list
+    now covers all fifteen numeric `MigrationResult` counters, and
+    `hasMigrationWarnings`/`MigrationResultDetails` default `warnings` to `[]`
+    to handle the generated type's now-optional field without a runtime
+    crash on an older/partial payload. (4) doc convergence: this file's Step
+    2 "Not yet live-verified" sentence (stale — the exit gate above already
+    records the 2026-07-14 live validation) is removed; `id-legend.yaml`'s
+    AUTHZ-07 note updated; `docs/swift/ux/COMPONENT-UX.md` gained a
+    `TaskActivity` entry; `CONTROL-PLANE-PRODUCT-CONTRACT.md` gained a dated
+    §16 entry for `TaskSummary.detail` / `ImportLaunchResponse.target`.
+    Tests: backend — two assertions added to
+    `test_import_export_task_observability.py` proving the launch response
+    and persisted task carry the identical target; frontend —
+    `TaskActivity.test.tsx` gained a test asserting a non-zero
+    `team_roles_skipped`/`agents_skipped`/`users_processed` counter renders.
+    Verified offline: targeted backend/frontend suites, `make
+    update-control-plane-api` regenerated `controlPlaneOpenApi.ts`,
+    `tsc --noEmit`/`prettier --check` clean, `make code-quality` clean in both
+    touched projects. Commit: see `git log` for `fix(AUTHZ-07): converge
+    platform import observability contract` on the same branch.
 
 - [ ] **Step 4 — finish the pure-infrastructure factory boundary.** In
       `fred-deployment-factory`, remove nominative/demo users and legacy app

@@ -1570,13 +1570,20 @@
         "warningsTitle": "Avertissements ({{count}})",
         "counter": {
           "identities_created": "Identités créées",
+          "users_processed": "Utilisateurs traités",
+          "teams_imported": "Équipes trouvées dans le paquet",
           "teams_provisioned": "Équipes créées",
+          "teams_skipped": "Équipes ignorées",
           "team_roles_granted": "Rôles d'équipe accordés",
+          "team_roles_skipped": "Rôles d'équipe ignorés",
           "platform_roles_granted": "Rôles plateforme accordés",
           "agents_imported": "Agents importés",
+          "agents_skipped": "Agents ignorés",
           "agents_gap": "Agents sans modèle correspondant",
           "tags_imported": "Tags importés",
-          "docs_imported": "Documents importés"
+          "tags_skipped": "Tags ignorés",
+          "docs_imported": "Documents importés",
+          "docs_skipped": "Documents ignorés"
         }
       }
     }

@@ -206,6 +206,9 @@ async def test_import_start_sets_canonical_target_with_explicit_label(
     assert task["target"]["id"] == launch["import_id"]
     assert task["target"]["label"] == "Demo bundle"
     assert task["state"] == "succeeded"
+    # The launch response and the persisted task must carry exactly the same
+    # target — one canonical value, never two independently-built ones.
+    assert launch["target"] == task["target"]
 
 
 @pytest.mark.asyncio
@@ -228,6 +231,7 @@ async def test_import_start_without_label_falls_back_to_filename(
         app.dependency_overrides.clear()
 
     assert task["target"]["label"] == "kea-snapshot.zip"
+    assert launch["target"] == task["target"]
 
 
 @pytest.mark.asyncio

@@ -337,7 +337,8 @@ items:
       this independent of AUTHZ-07. (2) one declarative
       platform-provisioning operation for teams/roles/users — likely a
       hardened, generalized PLATFORM-IMPORT-RFC.md rather than a new bulk
-      endpoint — remains open, to confirm with that RFC's owner.
+      endpoint — flagged as open here; closed 2026-07-14, see "Part (2)
+      closed" below.
 
       Hardening pass, same day (2026-07-14), before the first local-docker
       test: 9 findings fixed one at a time with developer sign-off (5 from an
@@ -413,9 +414,29 @@ items:
       instead of warn-then-succeed. Verified offline: 17 tests in
       tests/test_import_export_users.py (was 8), full control-plane-backend
       suite green, make code-quality clean; PLATFORM-IMPORT-RFC.md §10
-      updated in the same change. Not yet live-verified — the live stack
-      still carries Step 1's partial state; next step is re-importing the
-      same bundle onto it and re-running make validation-report.
+      updated in the same change. Live-verified 2026-07-14: the operator
+      re-imported the same bundle onto the live stack, then re-ran root
+      make validation-report — 225 passed, 0 failed, 0 errors, 2 skipped
+      (expected), the prior 227-error cascade gone.
+
+      Step 3 (2026-07-14, same PR): import outcome made observable and
+      truthful — task started with a canonical TaskTarget instead of a raw
+      UUID, terminal succeeded event carries the full structured
+      MigrationResult, TaskActivity shows an explicit "with warnings" flag,
+      failed-task error text, and a disclosure with counters/warnings. Full
+      detail: AUTHZ-MIGRATION-BACKLOG.md Step 3.
+
+      Close-out hardening pass (2026-07-14, same issue #1912 / PR #1957):
+      four findings fixed — ImportLaunchResponse now returns the backend's
+      own target (frontend's buildImportTarget/IMPORT_TARGET_TYPE deleted,
+      no more independently-reconstructed target); taskTypes.ts's
+      MigrationResult mirror deleted in favor of the generated type;
+      TaskActivity's counter disclosure extended to every *_skipped counter
+      and users_processed; this note and AUTHZ-MIGRATION-BACKLOG.md's Step 2
+      "not yet live-verified" claims corrected to match the live-verified
+      state above. AUTHZ-07 stays in_progress: Step 4 (factory
+      pure-infrastructure boundary) and Step 5 (packaged bootstrap secret)
+      remain open.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

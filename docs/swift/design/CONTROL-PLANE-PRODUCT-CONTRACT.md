@@ -1055,3 +1055,38 @@ unchanged.
 revoke hooks. `TeamSettingsMembersTable.tsx` (the only frontend consumer)
 updated in the same change. Design detail: RFC Part 7 (§33-39); outstanding
 follow-ups: `NOTES-AUTHZ05-REVIEW.md`.
+
+## 16. Contract Notes — AUTHZ-07 Step 3, `TaskSummary.detail` (2026-07-14)
+
+**Decision:** `TaskSummary` (`GET /tasks`) gains an optional `detail` field —
+the last persisted per-kind detail (`IngestionDetail | EvaluationDetail |
+TaskLogDetail | MigrationDetail | ErasureDetail | None`), typed per the
+sibling `kind` field exactly like the existing per-kind `TaskEvent` union.
+`None` for a kind with no detail model (`log`) or a task recorded before this
+field existed — backward compatible, no migration. Rationale and full
+backend/frontend design: `PLATFORM-IMPORT-RFC.md` §11,
+`AUTHZ-MIGRATION-BACKLOG.md` Step 3.
+
+`MigrationDetail.result: MigrationResult | None = None` is populated only on
+the terminal `succeeded` event of a platform import — a typed projection of
+the import's internal `MigrationReport` (every counter named in
+`AUTHZ-MIGRATION-BACKLOG.md`'s Step 3 exit gate, plus `warnings: list[str]`).
+A non-empty `warnings` list is what distinguishes a partial reconciliation
+from full success; the task `state` stays `succeeded` either way — no new
+`TaskState` value.
+
+**`POST /import-export/import` — `ImportLaunchResponse.target: TaskTarget`
+(2026-07-14, close-out amendment):** the launch response now returns the
+exact `TaskTarget` the backend created the task with
+(`type="platform_import"`, `id=import_id`, `label=` trimmed operator label →
+uploaded filename → `"Platform import"` fallback — computed once in
+`_import_target()`, never re-derived). Frontend consumers must register the
+task with this returned `target` value, not reconstruct one locally — the
+backend is the single source of truth for the target's precedence rules.
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`): new
+`MigrationResult`/`MigrationDetail`/`ErasureDetail` schemas, `TaskSummary.detail`,
+`ImportLaunchResponse.target`. Frontend: `TaskActivity.tsx` (the shared task/
+activity surface, OPS-04 §3.4) narrows `detail` on `task.kind === "migration"`
+to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
+`ImportLaunchResponse.target` directly (no hand-built duplicate).

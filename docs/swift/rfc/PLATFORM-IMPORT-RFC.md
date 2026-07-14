@@ -520,10 +520,12 @@ renders as an explicit "with warnings" flag distinct from a silent success.
 launch, before the background import runs: `type="platform_import"`, `id=import_id`, `label=` the
 operator-supplied label (trimmed) if non-empty, else the uploaded file's name, else a safe fallback
 (`"Platform import"`). This is passed to `task_service.start(..., target=...)`, so it is durable from the
-first `GET /tasks` — including if the import fails before any progress event is ever emitted. The
-frontend's optimistic registration (`launchPlatformImport.ts::buildImportTarget`) reproduces the exact
-same precedence so the row never flickers between two different targets before the backend's own value
-arrives; it is not a second source of truth.
+first `GET /tasks` — including if the import fails before any progress event is ever emitted.
+`ImportLaunchResponse` also returns this exact `target` (2026-07-14 close-out amendment,
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §16): the frontend's optimistic registration
+(`launchPlatformImport.ts` → `MigrationPage.tsx::handleLaunch`) registers the backend's own returned
+value directly, rather than reconstructing the same precedence rules a second time — one canonical
+target, not two independently-built ones.
 
 **Structured terminal result.** `fred_core.tasks.models.MigrationResult` (a new Pydantic model, sibling of
 `MigrationDetail`) is a typed public projection of the internal `MigrationReport`

@@ -1976,6 +1976,7 @@ export type EvaluationCaseListResponse = {
 export type ImportLaunchResponse = {
   task_id: string;
   import_id: string;
+  target: TaskTarget;
 };
 export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
   file: string;
