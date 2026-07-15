@@ -1273,7 +1273,7 @@ Execution: waived GitHub issue for local session
 - [ ] Sweeper: Temporal scheduled workflow per task-owning worker calls `reconcile_stale(grace, limit)`; optional read-time reconcile on SSE subscribe
 - [ ] Tests: reconcile decision matrix (failed / timed_out / completed / running / None) + integration (stuck task → terminal without the original worker)
 
-**P4 — Ingestion live-feedback wiring (found via live testing 2026-07-12, `NOTES-INGESTION-TASK-TRACKING-FIX.md`)**
+**P4 — Ingestion live-feedback wiring (found via live testing 2026-07-12)**
 
 The SSE/task-store infrastructure above was already correct; three integration gaps kept
 it from ever reaching the screen for a fresh document upload — the tray component existed
@@ -1320,6 +1320,18 @@ Two further findings surfaced during the live verification of the above (same da
       existing tag→team resolution out of `_check_quota_before_upload` into a shared
       `_resolve_tag_owners`, reused to tag the task with its destination team_id
       (left `None`, unchanged, when ambiguous or personal-space)
+
+Live acceptance still required before P4 can be closed:
+
+- [ ] Re-ingest a fresh collaborative-team document and confirm that a team admin
+      can see another member's ingestion task in the team-scoped Activity page.
+      Pre-fix tasks with `team_id=NULL` are intentionally not backfilled.
+- [ ] After restarting the Temporal worker with the current `workflow.py`, confirm
+      that processing remains indeterminate from scheduling through completion and
+      never freezes on the former synthetic 30% value.
+- [ ] Optional resilience probe: interrupt or block Temporal during scheduling and
+      confirm `rpc_timeout_seconds` makes the launch fail observably instead of
+      leaving the upload modal or task indefinitely pending. This is not a P4 gate.
 
 #### OPS-05 Object storage naming cleanup
 
