@@ -69,8 +69,10 @@ def _read_configured_token(configuration: Configuration) -> str | None:
     env_var = configuration.app.bootstrap_token_env_var
     if env_var:
         value = os.getenv(env_var)
-        if value and len(value) >= _MIN_TOKEN_LENGTH:
-            return value
+        if value:
+            value = value.strip()
+            if len(value) >= _MIN_TOKEN_LENGTH:
+                return value
         return None
 
     file_path = configuration.app.bootstrap_token_file

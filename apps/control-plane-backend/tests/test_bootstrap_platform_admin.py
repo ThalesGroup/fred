@@ -214,6 +214,50 @@ async def test_bootstrap_env_var_configured_but_absent_does_not_fall_back_to_fil
 
 
 @pytest.mark.asyncio
+async def test_bootstrap_strips_trailing_newline_from_env_var_token(
+    tmp_path, monkeypatch
+):
+    """Kubernetes Secrets created from files commonly preserve a trailing
+    newline. The UI submits the visible single-line token without it, so the
+    env-sourced secret must be normalized the same way the file-sourced one
+    already is — otherwise a correct secret is rejected.
+    """
+    deps = _deps(
+        env_var_name="FRED_BOOTSTRAP_TOKEN",
+        env_var_value="env-token-7c21d4e9\n",
+        monkeypatch=monkeypatch,
+    )
+
+    response = await bootstrap_platform_admin(
+        _user(), BootstrapPlatformAdminRequest(token="env-token-7c21d4e9"), deps
+    )
+    assert response.user_id == "benjamin-sub"
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_treats_whitespace_only_env_var_as_unconfigured(
+    tmp_path, monkeypatch
+):
+    """A whitespace-only environment value must be treated as unconfigured,
+    same as an empty or whitespace-only file — and, per the fail-closed
+    source precedence, must not fall back to a configured file even though
+    the file alone holds a valid secret here.
+    """
+    deps = _deps(
+        env_var_name="FRED_BOOTSTRAP_TOKEN",
+        env_var_value="   \n",
+        file_path=tmp_path / "token",
+        file_value="file-token-4b18f0a2",
+        monkeypatch=monkeypatch,
+    )
+
+    with pytest.raises(BootstrapTokenInvalidError):
+        await bootstrap_platform_admin(
+            _user(), BootstrapPlatformAdminRequest(token="file-token-4b18f0a2"), deps
+        )
+
+
+@pytest.mark.asyncio
 async def test_bootstrap_rejects_wrong_token(tmp_path, monkeypatch):
     deps = _deps(
         file_path=tmp_path / "token",
