@@ -434,9 +434,24 @@ items:
       TaskActivity's counter disclosure extended to every *_skipped counter
       and users_processed; this note and AUTHZ-MIGRATION-BACKLOG.md's Step 2
       "not yet live-verified" claims corrected to match the live-verified
-      state above. AUTHZ-07 stays in_progress: Step 4 (factory
-      pure-infrastructure boundary) and Step 5 (packaged bootstrap secret)
-      remain open.
+      state above.
+
+      Step 4 (fred-deployment-factory commits 05dda9e/65090fd, live-validated
+      2026-07-15): factory reduced to pure identity/authz infrastructure —
+      tracked realm templates carry zero users/groups, legacy app
+      admin/editor/viewer roles removed (service_agent kept for M2M), the
+      k3d OpenFGA seed and the direct fredlab-authz-migrate-swift.py script
+      deleted, factory-owned validation targets removed in favor of
+      fred/validation, preflight now requires service_agent and rejects
+      admin/editor/viewer. Offline: check-pure-infrastructure, helm
+      lint/template, docker compose config, bash -n, OpenFGA sync all green.
+      Live 2026-07-15: full from-scratch restart, Keycloak
+      self-registration, bootstrap secret submission, first platform_admin,
+      entry into Fred, demo-provisioning-bundle import — all succeeded;
+      empty factory -> registration -> Fred bootstrap -> Fred import is
+      confirmed as the one tested path. AUTHZ-07 stays in_progress: Step 5
+      (packaged bootstrap secret) and Step 6 (final convergence/UX
+      hardening) remain open.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

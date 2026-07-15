@@ -398,14 +398,35 @@ Execution protocol:
     touched projects. Commit: see `git log` for `fix(AUTHZ-07): converge
     platform import observability contract` on the same branch.
 
-- [ ] **Step 4 — finish the pure-infrastructure factory boundary.** In
+- [x] **Step 4 — finish the pure-infrastructure factory boundary.** In
       `fred-deployment-factory`, remove nominative/demo users and legacy app
       roles from realm templates; make preflight/tests assert zero users; remove
       stale factory validation targets and links now owned by `fred/validation`;
       explicitly delete or time-bound the direct OpenFGA migration script.
   - Exit gate: factory starts identity/authz infrastructure with no Fred business
     population; registration → bootstrap → Fred import is the only tested path.
-  - Claude prompt/result/commit: pending Step 3.
+    **Met — live-validated 2026-07-15.**
+  - Result: `fred-deployment-factory` commit `05dda9e`
+    (`refactor(AUTHZ-07): make deployment factory infrastructure-only`) plus
+    correction commit `65090fd` (`fix(AUTHZ-07): align factory preflight with
+    identity-only realm`). Scope: tracked Keycloak realm templates now carry
+    zero users and zero groups; the legacy application user roles
+    `app:admin`/`app:editor`/`app:viewer` are removed; `app:service_agent` is
+    kept for M2M service accounts; service accounts are created dynamically
+    and provisioned by the post-install hooks rather than templated; the k3d
+    OpenFGA seed is removed; the direct `fredlab-authz-migrate-swift.py`
+    script is deleted; the factory's own validation targets are removed,
+    validation ownership moving entirely to `fred/validation`; preflight now
+    requires `service_agent` and rejects `admin`/`editor`/`viewer`. Verified
+    offline: the `check-pure-infrastructure` guard, `helm lint`/`helm
+    template`, `docker compose config`, `bash -n`, and the OpenFGA sync all
+    green. Live-validated 2026-07-15: a full from-scratch restart against the
+    resulting empty factory succeeded end to end — Alice self-registered in
+    Keycloak, submitted the one-time bootstrap secret, became the first
+    `platform_admin`, entered Fred, and imported the
+    demo-provisioning-bundle successfully. The only tested path is therefore
+    empty factory → registration → Fred bootstrap → Fred import, confirming
+    the exit gate.
 
 - [ ] **Step 5 — package bootstrap for deployed environments and upgrades.** Wire
       the bootstrap secret through the existing Helm/Kubernetes secret mechanism
@@ -424,6 +445,15 @@ Execution protocol:
   - Exit gate: one owner per bootstrap/provisioning concept, full root quality
     and offline tests green, live `make validation-report` green, manual UI pass
     recorded, and no stale factory/script/documented alternative remains.
+  - Observed live, 2026-07-15 (during Step 4's validation run, no fix applied
+    here): after the demo-provisioning-bundle import succeeded, the Teams
+    page Alice already had open did not show the newly imported teams until
+    she manually refreshed. The import task's own terminal state and the
+    Activity page were both correct; the team list appears to still be
+    serving a stale RTK Query cache because import-task completion does not
+    invalidate/refetch the team-list query. To be re-derived against the
+    current code and fixed in Step 6, with a test proving the team list
+    updates automatically — no full page reload, no second parallel store.
   - Claude prompt/result/commit: pending Step 5.
 
 - [ ] Swift launch: build readiness-report endpoint reading live OpenFGA tuples (RFC §24.8 — no durable audit-log store exists yet; follow-up, not a launch blocker).
