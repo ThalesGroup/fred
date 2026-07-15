@@ -307,7 +307,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
-        get_policy_catalog=lambda: ConversationPolicyCatalog(),
+        get_policy_catalog=ConversationPolicyCatalog,
         get_users_by_ids=cast(Any, _no_users_by_ids),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
@@ -1090,7 +1090,7 @@ async def test_find_user_sub_by_username_returns_none_when_not_found() -> None:
 async def test_find_user_sub_by_username_returns_none_when_keycloak_disabled() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
-        create_keycloak_admin_client=lambda: KeycloackDisabled(),
+        create_keycloak_admin_client=KeycloackDisabled,
     )
 
     assert await find_user_sub_by_username("alice", deps) is None
