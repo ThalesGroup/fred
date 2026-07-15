@@ -282,6 +282,16 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
     # enforces (e.g. standalone / dev deployments without Keycloak).
     gcu_version = deps.configuration.app.gcu_version if user_security.enabled else None
     root_bootstrap_completed = await deps.get_platform_bootstrap_store().is_completed()
+    # Mirrors the refusal predicate `POST /bootstrap/platform-admin` enforces
+    # (auth disabled or ReBAC disabled -> 503): `root_bootstrap_completed`
+    # alone is not "must show BootstrapGuard" on those deployments, since the
+    # durable marker stays False forever there while the endpoint can never
+    # succeed. `root_bootstrap_completed` itself stays untouched and truthful.
+    root_bootstrap_required = (
+        user_security.enabled
+        and deps.team_dependencies.rebac.enabled
+        and not root_bootstrap_completed
+    )
     if user_security.enabled:
         return FrontendConfig(
             user_auth=FrontendUserAuthConfig(
@@ -291,11 +301,13 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
             ),
             gcu_version=gcu_version,
             root_bootstrap_completed=root_bootstrap_completed,
+            root_bootstrap_required=root_bootstrap_required,
         )
     return FrontendConfig(
         user_auth=FrontendUserAuthConfig(enabled=False),
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
+        root_bootstrap_required=root_bootstrap_required,
     )
 
 

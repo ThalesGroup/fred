@@ -190,7 +190,7 @@ CLI display) and must **not** be used to gate the UI. See
 `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
 
-#### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-14)
+#### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-15)
 
 - `POST /control-plane/v1/bootstrap/platform-admin` → `BootstrapPlatformAdminResponse`
   - Request: `{ token: str }`, `min_length=16` (422 below the floor) — no
@@ -230,6 +230,28 @@ role from deployment config anymore; the only other path is the declarative
 platform import (`PLATFORM-IMPORT-RFC.md` §10).
 Endpoint authorization matrix entry:
 `docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
+
+**`FrontendConfig` gating fields (revised 2026-07-15).** `GET /frontend/config`
+(§3.1.1) carries two distinct root-bootstrap booleans — do not conflate them:
+
+- `root_bootstrap_completed` — the truthful **durable historical marker**.
+  True once `POST /bootstrap/platform-admin` has ever succeeded, permanently,
+  per §3.1.2 above (`PlatformBootstrapStore`). Never reinterpreted based on
+  live `security.user`/ReBAC state.
+- `root_bootstrap_required` — the **authoritative frontend gating decision**
+  for `BootstrapGuard`. Computed by `build_frontend_config()` as
+  `security.user.enabled AND security.rebac.enabled AND NOT
+  root_bootstrap_completed`.
+
+These necessarily diverge on deployments where user authentication or ReBAC is
+disabled: `root_bootstrap_completed` stays `false` on a fresh database (no one
+has ever bootstrapped it), but `POST /bootstrap/platform-admin` deliberately
+refuses with 503 there (auth-disabled and ReBAC-disabled guards above), so the
+bootstrap form can never succeed. Before this revision, `BootstrapGuard` gated
+directly on `NOT root_bootstrap_completed` and was permanently trapped on that
+unusable form on such deployments (the default insecure/dev configuration
+included). `root_bootstrap_required` is the fix: the frontend must gate on it
+exclusively and must not re-derive the auth/ReBAC predicate itself.
 
 ### 3.2 Managed agent discovery
 

@@ -89,7 +89,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_completed } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_required } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -97,7 +97,7 @@ export const loadConfig = async () => {
     properties: base.properties ?? {},
     user_auth,
     gcu_version,
-    root_bootstrap_completed,
+    root_bootstrap_required,
   };
 
   if (config.user_auth?.enabled) {
@@ -128,7 +128,7 @@ export const loadConfig = async () => {
 const loadPublicConfig = async (): Promise<{
   user_auth: UserAuthConfig;
   gcu_version: string | null;
-  root_bootstrap_completed: boolean;
+  root_bootstrap_required: boolean;
 }> => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
@@ -142,7 +142,13 @@ const loadPublicConfig = async (): Promise<{
       client_id: payload.user_auth.client_id ?? undefined,
     },
     gcu_version: payload.gcu_version ?? null,
-    root_bootstrap_completed: payload.root_bootstrap_completed ?? false,
+    // Rolling-compatibility fallback only: a control-plane deployed before
+    // `root_bootstrap_required` existed omits the field, so this re-derives
+    // the old (incorrect) predicate for that transition window. Once
+    // `root_bootstrap_required` is present, it is always authoritative — the
+    // frontend must not otherwise re-derive ReBAC/auth policy itself.
+    root_bootstrap_required:
+      payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
   };
 };
 
@@ -209,14 +215,16 @@ export const getProperty = (key: string): string => getConfig().properties?.[key
 export const getGcuVersion = (): string | null => getConfig().gcu_version;
 
 /**
- * Return whether root platform-admin bootstrap (AUTHZ-07) has ever completed
- * on this deployment.
+ * Return whether root platform-admin bootstrap (AUTHZ-07) must still be shown.
  *
  * Why this function exists:
  * - `BootstrapGuard` must know this *before* authentication has produced any
- *   per-user state; the value is a durable, global marker, not a per-user one
+ *   per-user state; the value is the backend's authoritative gating decision,
+ *   not a per-user one, and not simply "has bootstrap ever completed" — it is
+ *   also `false` on deployments where user auth or ReBAC is disabled, since
+ *   `POST /bootstrap/platform-admin` can never succeed there
  *
  * How to use it:
- * - call after `loadConfig()`; `false` means the bootstrap screen must be shown
+ * - call after `loadConfig()`; `true` means the bootstrap screen must be shown
  */
-export const getRootBootstrapCompleted = (): boolean => getConfig().root_bootstrap_completed;
+export const getRootBootstrapRequired = (): boolean => getConfig().root_bootstrap_required;

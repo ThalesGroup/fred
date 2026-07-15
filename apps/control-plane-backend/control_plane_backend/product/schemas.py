@@ -111,6 +111,23 @@ class FrontendConfig(BaseModel):
             "safe on this public/unauthenticated surface, same as gcu_version."
         ),
     )
+    root_bootstrap_required: bool = Field(
+        ...,
+        description=(
+            "The authoritative frontend gating decision for BootstrapGuard — "
+            "true only when `security.user.enabled AND security.rebac.enabled "
+            "AND NOT root_bootstrap_completed`. Deliberately distinct from "
+            "`root_bootstrap_completed`, which stays the truthful durable "
+            "historical marker and is never reinterpreted: on deployments "
+            "where user authentication or ReBAC is disabled, "
+            "`root_bootstrap_completed` is still False on a fresh database "
+            "even though `POST /bootstrap/platform-admin` deliberately "
+            "refuses with 503 there, so the frontend must not treat "
+            "'not completed' alone as 'must show the bootstrap page'. The "
+            "frontend must gate on this field, not re-derive the ReBAC/auth "
+            "predicate itself."
+        ),
+    )
 
 
 class AgentTemplateSummary(BaseModel):
