@@ -12,8 +12,10 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
 > Every platform role (`platform_admin`/`platform_observer`) and every team role
 > (`team_admin`/`team_editor`/`team_analyst`/`team_member`) is a stored OpenFGA
-> relation, granted through config-seeded bootstrap or an explicit in-product
-> action — never derived from a Keycloak role, group, or claim. A `platform_admin`
+> relation, granted through the root bootstrap endpoint (a one-time,
+> secret-gated `POST /bootstrap/platform-admin` — AUTHZ-07, RFC Part 8) or an
+> explicit in-product action — never derived from a Keycloak role, group, or
+> claim. A `platform_admin`
 > carries no team relation of any kind, ever, for any purpose — not even to
 > create a team's first admin, which goes through the one-shot bootstrap
 > endpoint below, not an implicit relation.
@@ -38,7 +40,7 @@ Concrete examples:
 ## Technical Summary In 90 Seconds
 
 1. **Identity source**: Keycloak manages user accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
-2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations on `organization:fred`, stored tuples only, granted via config-seeded bootstrap or explicit admin action.
+2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations on `organization:fred`, stored tuples only, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, AUTHZ-07) or explicit admin action.
 3. **Team roles (ReBAC)**: `team_admin` / `team_editor` / `team_analyst` / `team_member` are relations on each `team:<id>`. A person may hold more than one simultaneously — each is granted/revoked as its own independent action, never a bulk replace.
 4. **Team registry**: a team is a `team_metadata` row (id, name) plus its OpenFGA relations — nothing about a team lives in Keycloak.
 5. **Bridge object**: Fred uses one organization object (`organization:fred`) for platform-wide context, without implicit team privilege escalation.
@@ -240,7 +242,7 @@ Fred uses a singleton organization node in ReBAC:
 
 How it works:
 
-1. Platform roles are explicit stored tuples on `organization:fred`, granted via config-seeded bootstrap (`platform_admin_subjects`/`platform_observer_subjects`) or explicit admin action — never derived from the Keycloak token.
+1. Platform roles are explicit stored tuples on `organization:fred`, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, one-time and secret-gated — AUTHZ-07) or explicit admin action — never derived from the Keycloak token, and never declared as a `sub` in deployment config.
 2. Team checks rely on persistent tuples linking teams to the organization:
    - `organization:fred#organization@team:<team_id>`
 3. Team permissions still require explicit team relations (`team_admin`/`team_editor`/`team_analyst`/`team_member`) for the target team.
@@ -284,6 +286,15 @@ security:
     headers:
       # Optional static headers sent to OpenFGA
       X-Custom-Header: "value"
-    platform_admin_subjects: [] # Keycloak `sub` values granted `platform_admin` at startup, idempotently
-    platform_observer_subjects: [] # Keycloak `sub` values granted `platform_observer` at startup
 ```
+
+> **No config-seeded platform roles.** `platform_admin_subjects`/`platform_observer_subjects`
+> (a Keycloak `sub` list granted platform roles at OpenFGA-engine startup) existed under
+> AUTHZ-05 §24.3 and was removed by AUTHZ-07 (RFC Part 8 §40-41): it was a second,
+> parallel authority alongside root bootstrap + declarative import, and an opaque
+> per-realm UUID in versioned/secret config is fragile across realm re-imports. The first
+> `platform_admin` is granted exclusively by `POST /control-plane/v1/bootstrap/platform-admin`
+> (self-promotion only, see §3.1.2 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`); every other
+> platform or team role is granted exclusively by the declarative platform import
+> (`PLATFORM-IMPORT-RFC.md` §10). No field in `security.rebac` configures a platform role
+> anymore.

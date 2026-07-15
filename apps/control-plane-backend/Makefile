@@ -31,6 +31,29 @@ CP_NEW_USER_PASSWORD ?=
 cli: dev ## Open the local interactive control-plane CLI
 	ENV_FILE=$(ROOT_DIR)/config/.env VIRTUAL_ENV= $(UV) run fred-control-plane-cli $(ARGS)
 
+BOOTSTRAP_TOKEN_FILE ?= target/bootstrap-token
+
+.PHONY: bootstrap-token
+bootstrap-token: ## Create the local root-bootstrap secret (AUTHZ-07). Never overwrites; the app never generates this itself.
+	@mkdir -p $(dir $(BOOTSTRAP_TOKEN_FILE))
+	@if [ -f $(BOOTSTRAP_TOKEN_FILE) ]; then \
+		echo "Already exists: $(BOOTSTRAP_TOKEN_FILE) (not overwritten)"; \
+	else \
+		umask 077 && openssl rand -hex 32 > $(BOOTSTRAP_TOKEN_FILE).tmp && mv $(BOOTSTRAP_TOKEN_FILE).tmp $(BOOTSTRAP_TOKEN_FILE) && \
+		echo "Created: $(BOOTSTRAP_TOKEN_FILE)" || \
+		{ echo "Failed to create $(BOOTSTRAP_TOKEN_FILE)" >&2; rm -f $(BOOTSTRAP_TOKEN_FILE).tmp; exit 1; }; \
+	fi
+
+DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
+DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
+
+.PHONY: build-demo-bundle
+build-demo-bundle: ## Zip the checked-in demo provisioning fixture (manifest.json + users.json) for upload via Admin > Migration
+	@mkdir -p $(dir $(DEMO_BUNDLE_FILE))
+	@rm -f $(DEMO_BUNDLE_FILE)
+	cd $(DEMO_PROVISIONING_FIXTURE_DIR) && zip -q -X $(abspath $(DEMO_BUNDLE_FILE)) manifest.json users.json
+	@echo "Created: $(DEMO_BUNDLE_FILE)"
+
 .PHONY: create-test-user
 create-test-user: dev ## Create a user in control-plane without manual bearer token copy/paste
 	@set -a; \

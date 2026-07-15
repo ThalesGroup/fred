@@ -110,12 +110,12 @@ export default function MigrationPage() {
     setIsLaunching(true);
     setError(null);
     try {
-      const { taskId, importId } = await launchPlatformImport(file, label);
+      const { taskId, target } = await launchPlatformImport(file, label);
       dispatch(
         taskRegistered({
           taskId,
           kind: "migration",
-          target: { type: "platform", id: importId, label: file.name },
+          target,
         }),
       );
       setFile(null);

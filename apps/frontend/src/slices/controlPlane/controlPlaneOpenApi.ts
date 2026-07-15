@@ -415,6 +415,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    bootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPost: build.mutation<
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse,
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/bootstrap/platform-admin`,
+        method: "POST",
+        body: queryArg.bootstrapPlatformAdminRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -934,6 +944,11 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   sessionId?: string | null;
   lang?: string;
 };
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
+  /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
+  bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1318,6 +1333,10 @@ export type FrontendUserAuthConfig = {
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
+  /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
+  root_bootstrap_completed: boolean;
+  /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
+  root_bootstrap_required: boolean;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -1700,6 +1719,15 @@ export type ExecutionPreparation = {
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
 };
+export type BootstrapPlatformAdminResponse = {
+  /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
+  user_id: string;
+  username: string;
+};
+export type BootstrapPlatformAdminRequest = {
+  /** The one-time root-bootstrap secret. */
+  token: string;
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -1733,6 +1761,61 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
+export type IngestionDetail = {
+  processed: number;
+  total: number;
+  failed: number;
+  preview: number;
+  vectorized: number;
+  sql_indexed: number;
+};
+export type EvaluationDetail = {
+  campaign_id: string;
+  completed: number;
+  total: number;
+  passed: number;
+  failed: number;
+  execution_errors: number;
+  scoring_errors: number;
+};
+export type TaskLogDetail = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export type MigrationResult = {
+  import_id: string;
+  source_platform: string;
+  identities_created?: number;
+  users_processed?: number;
+  users_skipped?: string[];
+  teams_imported?: number;
+  teams_skipped?: number;
+  teams_provisioned?: number;
+  team_roles_granted?: number;
+  team_roles_skipped?: number;
+  platform_roles_granted?: number;
+  agents_imported?: number;
+  agents_skipped?: number;
+  agents_gap?: number;
+  tags_imported?: number;
+  tags_skipped?: number;
+  docs_imported?: number;
+  docs_skipped?: number;
+  warnings?: string[];
+};
+export type MigrationDetail = {
+  step_id: string;
+  processed: number;
+  total: number;
+  failed: number;
+  result?: MigrationResult | null;
+};
+export type ErasureDetail = {
+  reason?: ErasureReason | null;
+  stores_ok?: number;
+  stores_total?: number;
+  attempts?: number;
+};
 export type TaskSummary = {
   task_id: string;
   kind: string;
@@ -1746,6 +1829,7 @@ export type TaskSummary = {
   created_at: string;
   updated_at: string;
   scheduled_for?: string | null;
+  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
@@ -1894,6 +1978,7 @@ export type EvaluationCaseListResponse = {
 export type ImportLaunchResponse = {
   task_id: string;
   import_id: string;
+  target: TaskTarget;
 };
 export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
   file: string;
@@ -1991,6 +2076,7 @@ export const {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

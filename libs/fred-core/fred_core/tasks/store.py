@@ -16,16 +16,57 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
-from fred_core.tasks.models import TaskEvent, TaskState, TaskSummary, TaskTarget
+from fred_core.tasks.models import (
+    ErasureDetail,
+    EvaluationDetail,
+    IngestionDetail,
+    MigrationDetail,
+    TaskEvent,
+    TaskLogDetail,
+    TaskState,
+    TaskSummary,
+    TaskTarget,
+)
 from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
 
 _EVENT_ADAPTER: TypeAdapter[TaskEvent] = TypeAdapter(TaskEvent)
+
+# kind → the Detail model it persists, mirroring TaskEvent's per-kind `detail`
+# shape (service.py::_build_terminal_event uses the same kind set for the
+# event side). `log` has no persisted-summary detail model; an unrecognised
+# future kind falls back to None rather than guessing a shape.
+_DETAIL_MODEL_BY_KIND: dict[str, type] = {
+    "ingestion": IngestionDetail,
+    "evaluation": EvaluationDetail,
+    "migration": MigrationDetail,
+    "erasure": ErasureDetail,
+    "log": TaskLogDetail,
+}
+
+
+def _parse_task_detail(
+    kind: str, detail: dict[str, Any] | None
+) -> (
+    IngestionDetail
+    | EvaluationDetail
+    | TaskLogDetail
+    | MigrationDetail
+    | ErasureDetail
+    | None
+):
+    if detail is None:
+        return None
+    model = _DETAIL_MODEL_BY_KIND.get(kind)
+    if model is None:
+        return None
+    return model(**detail)
 
 
 def _utcnow() -> datetime:
@@ -246,6 +287,7 @@ class TaskStore:
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 scheduled_for=row.scheduled_for,
+                detail=_parse_task_detail(row.kind, row.detail),
             )
             for row in rows
         ]

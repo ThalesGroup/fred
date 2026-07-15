@@ -612,59 +612,6 @@ async def test_platform_admin_and_observer_never_grant_team_access(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bootstrap_seeds_platform_admin_from_config() -> None:
-    """AUTHZ-05 §24.3: config-seeded subjects become platform_admin at startup."""
-    api_url = os.getenv("OPENFGA_TEST_API_URL", "http://localhost:7080")
-    store = _integration_token()
-    seeded_subject = _unique_id("seeded-admin")
-
-    try:
-        config = OpenFgaRebacConfig(
-            api_url=api_url,  # pyright: ignore[reportArgumentType]
-            store_name=store,
-            sync_schema_on_init=True,
-            platform_admin_subjects=[seeded_subject],
-        )
-        mock_m2m = M2MSecurity(
-            enabled=True,
-            realm_url=AnyHttpUrl("http://app-keycloak:8080/realms/app"),
-            client_id="test-client",
-        )
-    except ValidationError as exc:
-        pytest.skip(f"Invalid OpenFGA configuration: {exc}")
-
-    os.environ.setdefault(mock_m2m.secret_env_var, secrets.token_urlsafe(16))
-    os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
-
-    try:
-        engine = OpenFgaRebacEngine(config, token=store)
-    except Exception as exc:
-        pytest.skip(f"Failed to create OpenFGA engine: {exc}")
-
-    # Triggers `_initialize_client_and_store`, which runs the bootstrap.
-    await engine.get_client()
-
-    organization = RebacReference(Resource.ORGANIZATION, "fred")
-    seeded_user = RebacReference(Resource.USER, seeded_subject)
-
-    assert await engine.has_permission(
-        seeded_user,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
-        organization,
-    ), "Config-seeded subject should be granted platform_admin at startup"
-
-    # Re-initializing (fresh engine, same store) must not fail or duplicate writes.
-    engine_again = OpenFgaRebacEngine(config, token=store)
-    await engine_again.get_client()
-    assert await engine_again.has_permission(
-        seeded_user,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
-        organization,
-    ), "Bootstrap must remain idempotent across engine re-initialization"
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_team_tag_document_hierarchy(
     rebac_engine: RebacEngine,
 ) -> None:

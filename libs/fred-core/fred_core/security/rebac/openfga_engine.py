@@ -28,7 +28,6 @@ from fred_core.security.rebac.openfga_schema import (
     DEFAULT_SCHEMA,
 )
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -401,50 +400,11 @@ class OpenFgaRebacEngine(RebacEngine):
         if self._config.sync_schema_on_init:
             await self.sync_schema(client)
 
-        # AUTHZ-05 bootstrap (RFC §24.3): config-seeded platform_admin/platform_observer.
-        await self._bootstrap_platform_roles(client)
-
         logger.info(
             "[REBAC] OpenFGA engine initialized in %dms",
             int((time.monotonic() - started) * 1000),
         )
         return client
-
-    async def _bootstrap_platform_roles(self, client: OpenFgaClient) -> None:
-        """Write config-seeded platform_admin/platform_observer tuples once.
-
-        Called with the client already resolved (not `self.get_client()`) because
-        this runs from inside `_initialize_client_and_store`, which itself holds
-        the client-initialization lock — going through `add_relation` here would
-        deadlock on that lock. Writes are idempotent (`_build_options` sets
-        `on_duplicate_writes=IGNORE`) and never remove an existing grant.
-        """
-        relations = [
-            Relation(
-                subject=RebacReference(Resource.USER, sub),
-                relation=RelationType.PLATFORM_ADMIN,
-                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-            )
-            for sub in self._config.platform_admin_subjects
-        ] + [
-            Relation(
-                subject=RebacReference(Resource.USER, sub),
-                relation=RelationType.PLATFORM_OBSERVER,
-                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-            )
-            for sub in self._config.platform_observer_subjects
-        ]
-        if not relations:
-            return
-
-        logger.info(
-            "[REBAC] Bootstrapping %d config-seeded platform-role tuple(s)",
-            len(relations),
-        )
-        body = ClientWriteRequest(
-            writes=[OpenFgaRebacEngine._relation_to_tuple(r) for r in relations]
-        )
-        _ = await client.write(body, self._build_options())
 
     async def get_client(self) -> OpenFgaClient:
         """Lazily initialize and cache an OpenFGA client with store ID."""

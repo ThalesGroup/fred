@@ -79,14 +79,49 @@
 }
 
 .row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr);
-  align-items: center;
-  gap: var(--spacing-s);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);
   background: var(--surface-container);
   padding: var(--spacing-2xs) var(--spacing-s);
+}
+
+.rowMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr);
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.stateCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+/* A `succeeded` task that still produced warnings must never read as a plain,
+   silent success — this flag sits next to the state badge, distinct from it. */
+.warningFlag {
+  color: var(--warning);
+  font: var(--font-label-small);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A failed task's message — wraps and breaks long/unbroken text instead of
+   overflowing the row or getting clipped like the single-line meta column. */
+.rowError {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-label-small);
+  overflow-wrap: anywhere;
+}
+
+.rowDisclosure {
+  min-width: 0;
 }
 
 .name {
@@ -150,7 +185,7 @@
    drop the meta onto its own full-width line so nothing compresses or overlaps,
    and left-align it under the row. */
 @container (max-width: 480px) {
-  .row {
+  .rowMain {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -164,4 +199,50 @@
   .progress {
     min-width: 0;
   }
+}
+
+/* ── migration result disclosure (AUTHZ-07 Step 3) ─────────────────────── */
+
+.counterList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0 0 var(--spacing-s);
+}
+
+.counterRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+  font: var(--font-label-small);
+}
+
+.counterLabel {
+  color: var(--on-surface-retreat);
+}
+
+.counterValue {
+  margin: 0;
+  color: var(--on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.warningsBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+.warningsTitle {
+  color: var(--warning);
+  font: var(--font-label-small);
+  font-weight: 600;
+}
+
+.warningsList {
+  margin: 0;
+  padding-left: var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  overflow-wrap: anywhere;
 }

@@ -17,6 +17,7 @@ import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.t
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
+import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
@@ -276,6 +277,10 @@ export const routes: RouteObject[] = [
         element: <PageError />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "/bootstrap",
+    element: <BootstrapPage />,
   },
   {
     path: "/documents/:uid",

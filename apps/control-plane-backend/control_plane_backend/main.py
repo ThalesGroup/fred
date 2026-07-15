@@ -30,6 +30,10 @@ from control_plane_backend.app.dependencies import (
     attach_application_container,
     get_application_configuration,
 )
+from control_plane_backend.bootstrap.api import (
+    register_exception_handlers as register_bootstrap_exception_handlers,
+)
+from control_plane_backend.bootstrap.api import router as bootstrap_router
 from control_plane_backend.config.loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -252,6 +256,7 @@ def create_app() -> FastAPI:
     router.include_router(users_router)
     router.include_router(teams_router)
     router.include_router(product_router)
+    router.include_router(bootstrap_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())
@@ -259,5 +264,6 @@ def create_app() -> FastAPI:
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
+    register_bootstrap_exception_handlers(app)
     app.include_router(router)
     return app

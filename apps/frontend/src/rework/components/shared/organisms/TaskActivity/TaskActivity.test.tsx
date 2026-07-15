@@ -97,3 +97,167 @@ describe("TaskActivity stalled surfacing", () => {
     expect(html).not.toContain("rework.taskActivity.stalled");
   });
 });
+
+// AUTHZ-07 Step 3 — the migration terminal result must be observable, durable,
+// and never read as a silent success when partial.
+
+function migrationTask(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state">): TaskSummary {
+  return task({ kind: "migration", target: { type: "platform_import", id: "imp-1", label: "demo.zip" }, ...over });
+}
+
+const CLEAN_RESULT = {
+  import_id: "imp-1",
+  source_platform: "swift",
+  identities_created: 15,
+  users_processed: 15,
+  users_skipped: [],
+  teams_imported: 3,
+  teams_skipped: 0,
+  teams_provisioned: 3,
+  team_roles_granted: 14,
+  team_roles_skipped: 0,
+  platform_roles_granted: 2,
+  agents_imported: 4,
+  agents_skipped: 0,
+  agents_gap: 0,
+  tags_imported: 2,
+  tags_skipped: 0,
+  docs_imported: 1,
+  docs_skipped: 0,
+  warnings: [] as string[],
+};
+
+describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
+  it("renders a clean success with no 'with warnings' flag", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m1",
+        state: "succeeded",
+        detail: { step_id: "done", processed: 1, total: 1, failed: 0, result: CLEAN_RESULT },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("explicitly flags a succeeded import that produced warnings, distinct from a clean success", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m2",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: { ...CLEAN_RESULT, agents_gap: 1, warnings: ["agent x: no swift template for v2.custom"] },
+        },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("exposes structured counters and warnings inside the accessible disclosure", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m3",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: { ...CLEAN_RESULT, warnings: ["agent x: no swift template for v2.custom"] },
+        },
+      }),
+    ];
+    const html = render();
+    // Warnings default the disclosure open, so its content is present without
+    // simulating a click (this test harness renders static markup only).
+    expect(html).toContain("agent x: no swift template for v2.custom");
+    expect(html).toContain("rework.taskActivity.migration.counter.identities_created");
+    expect(html).toContain("15");
+  });
+
+  it("shows a non-zero *_skipped counter and users_processed, not just the granted/imported ones", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m3b",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: {
+            ...CLEAN_RESULT,
+            team_roles_skipped: 2,
+            agents_skipped: 1,
+            // Non-empty warnings default the disclosure open, so its content is
+            // present without simulating a click (static-markup test harness).
+            warnings: ["team fredlab: 2 roles skipped"],
+          },
+        },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.migration.counter.team_roles_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.agents_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.users_processed");
+  });
+
+  it("never shows counters/warnings for a task with no result yet (e.g. still running)", () => {
+    h.tasks = [migrationTask({ task_id: "m4", state: "running", progress: 0.4 })];
+    const html = render();
+    expect(html).not.toContain("rework.taskActivity.migration.detailsTitle");
+  });
+
+  it("shows the failed task's error message, never the success text", () => {
+    h.tasks = [migrationTask({ task_id: "m5", state: "failed", error: "OpenFGA unreachable" })];
+    const html = render();
+    expect(html).toContain("OpenFGA unreachable");
+    expect(html).toContain("rework.taskActivity.failedOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
+  });
+
+  it("uses the backend label, never a raw task id, when a target is present", () => {
+    h.tasks = [migrationTask({ task_id: "m6", state: "succeeded" })];
+    const html = render();
+    expect(html).toContain("demo.zip");
+    expect(html).not.toContain(">m6<");
+  });
+
+  it("does not regress a non-migration task (no migration-only markup leaks in)", () => {
+    h.tasks = [
+      task({
+        task_id: "e1",
+        state: "succeeded",
+        kind: "erasure",
+        target: { type: "conversation", id: "e1", label: "chat" },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.migration.detailsTitle");
+    expect(html).not.toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("renders the disclosure toggle as a native, keyboard-operable button with an accessible name", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m7",
+        state: "succeeded",
+        detail: { step_id: "done", processed: 1, total: 1, failed: 0, result: CLEAN_RESULT },
+      }),
+    ];
+    const html = render();
+    // Disclosure.tsx renders a native <button aria-expanded=...>; a native
+    // button is keyboard-operable (Enter/Space) without extra wiring, and its
+    // visible text content ("Import details") is its accessible name.
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>/);
+    expect(html).toContain("rework.taskActivity.migration.detailsTitle");
+  });
+});

@@ -8,10 +8,13 @@ blocked on the real production data migration (`fredlab-authz-migrate-swift.py`)
 any open design question. **Part 7 (2026-07-12, `AUTHZ-06`) code-complete, awaiting the
 validation campaign** — cumulative team roles (one user may hold
 `team_admin`+`team_editor`+`team_analyst` simultaneously on the same team). **Part 8 (2026-07-13,
-`AUTHZ-07`) proposed, not yet implemented** — replaces config-embedded Keycloak `sub` bootstrap
-with a k8s-style secret-gated bootstrap endpoint, plus a single declarative platform-provisioning
-operation likely built by generalizing `PLATFORM-IMPORT-RFC.md` rather than a new endpoint.
-Current
+`AUTHZ-07`) — revised 2026-07-14 (§42): root bootstrap redesigned after review before the K8s
+templating step** — JWT + deploy-secret dual-proof, self-promotion only (no `identifier`), a
+durable completion marker instead of a live "zero admin" check, secret never generated/logged by
+Fred. The first implementation pass (JWT-less, `identifier`-based, live-zero-admin-checked) is
+superseded by `§42` and must be reworked before merge — see `§42` for the precise file/migration/
+test plan. The declarative platform-provisioning operation (likely a generalized
+`PLATFORM-IMPORT-RFC.md`) remains unimplemented. Current
 design state: `docs/swift/platform/REBAC.md`. Outstanding follow-ups:
 `NOTES-AUTHZ05-REVIEW.md`.
 **Date:** 2026-07-04
@@ -920,8 +923,8 @@ into each, which is its own reviewable unit of work — not something to bundle 
 Tracked as a new backlog item; must be resolved before this RFC's acceptance criteria (`§19`, `§25`) can be
 considered fully met for swift production.
 
-A live-reproducing regression tripwire for this exact gap now exists in the companion
-`fred-deployment-factory` repo: `validation/scenarios/test_content_scope_bypass.py`, marked
+A live-reproducing regression tripwire for this exact gap now exists in this repo's own
+`validation/scenarios/test_content_scope_bypass.py`, marked
 `xfail(strict=True)` — it fails loudly (turns the run red) the day this is fixed and someone forgets
 to update the test, instead of silently staying green on a vulnerability nobody re-checked.
 
@@ -982,7 +985,7 @@ per-tag loop):
 
 **Fixed via a small, additive contract change** (new required `team_id`/`tag_id` field
 — this is the part that closes the two `xfail` regression tests in
-`fred-deployment-factory/validation/scenarios/test_content_scope_bypass.py`):
+`validation/scenarios/test_content_scope_bypass.py`):
 
 - `corpus_manager/corpus_manager_controller.py`: `capabilities`, `tasks_get`,
   `tasks_result`, `tasks_list` — none of these carried a team-identifying value before;
@@ -1343,12 +1346,11 @@ stored in deployment config:
 1. **Root bootstrap.** A fresh deployment has no `platform_admin` yet, and the UI/API cannot
    authorize its own bootstrap. Fred adopts the same shape every access-controlled system uses for
    this — Kubernetes' cluster-admin bootstrap via kubeconfig, ArgoCD's
-   `argocd-initial-admin-secret`, Rancher's bootstrap password: deployment tooling generates a
-   one-time secret out-of-band (a Kubernetes Secret for GKE/AKS; an equivalent generated file for
-   the local dev stack), and a single endpoint resolves the intended admin's identity
-   (email/username) at call time and grants `platform_admin` — permanently refusing once any
-   `platform_admin` already exists (a live OpenFGA check, not a flag, same discipline as
-   `can_rescue_team_admin`, `§32`). No Keycloak `sub` is ever declared in config.
+   `argocd-initial-admin-secret`, Rancher's bootstrap password, Keycloak's own
+   `KC_BOOTSTRAP_ADMIN_*` variables: a deploy-time secret, supplied from outside the application
+   (never generated or logged by Fred itself — `§42.4`), authorizes exactly one grant. See `§42`
+   for the exact security properties this must have — they are not optional hardening, they are
+   the mechanism.
 2. **Platform provisioning.** Populating a fresh platform with teams, roles, and users is not a
    sequence of CRUD calls — it is one declarative operation: hand Fred a description of the target
    state, Fred reconciles it. This is not a new capability to invent: `PLATFORM-IMPORT-RFC.md`
@@ -1363,7 +1365,73 @@ stored in deployment config:
 
 No option catalogue, no CRUD-style team/role provisioning API, no identity ever declared in
 deployment config or values files. `§9`'s bootstrap options and `§24.3`'s config-seeded-subjects
-decision are superseded by this part for any deployment created after it lands.
+decision are superseded by this part for any deployment created after it lands. **Recovery from
+total `platform_admin` loss is explicitly out of scope here** — that is a separate, deliberate
+break-glass procedure (mirroring `can_rescue_team_admin`'s own narrow, separate design at the team
+level), not a side effect of the root-bootstrap endpoint reactivating.
+
+**Candidate delivery scope confirmed 2026-07-15.** AUTHZ-07 is delivered for new Swift
+installations. No deployed Swift version requires an in-place transition from pre-marker
+`platform_admin` tuples, so this RFC deliberately defines no live-tuple detection, marker-sealing
+upgrade path, migration flag, or compatibility command. The one required migration is KEA to a
+fresh Swift platform and remains owned by `PLATFORM-IMPORT-RFC.md`: export KEA, install empty
+Swift, perform the authenticated one-time bootstrap, then import the declarative bundle. If a
+future supported Swift-to-Swift upgrade appears, it requires its own inventory, contract and
+developer decision; it must not be inferred from this fresh-install mechanism.
+
+## 42. Root bootstrap — exact security properties (revised 2026-07-14, developer + reviewer pass)
+
+The first implementation pass (`§42` originally) conflated *proof of infrastructure access* with
+*identity* by taking an arbitrary `identifier` in the request body. Reviewed and corrected before
+implementation landed on `docker-up`/K8s: an attacker holding only the deploy-time secret — no
+Fred identity, no Keycloak session — could otherwise name any existing Keycloak user by
+email/username and grant them `platform_admin` without that person's knowledge or consent. The
+corrected design:
+
+1. **Two independent proofs, not one.** The endpoint requires **both** a valid Keycloak JWT
+   (`get_current_user` — proves the caller is a real, authenticated identity in this realm) **and**
+   the deploy-time secret (proves the caller has legitimate deploy-time access). Neither on its own
+   is sufficient. This does not reopen the bootstrap chicken-and-egg (`§8`): Keycloak authentication
+   depends on nothing Fred/OpenFGA owns, only the *authorization* step did, and there is none here.
+2. **Self-promotion only.** The request carries no `identifier`. The `platform_admin` grant always
+   targets the calling JWT's own `sub` — the endpoint cannot be used to promote a third party, ever,
+   under any input. `CloudOps` supplies the deploy secret; the future admin supplies their own Fred
+   identity. Neither alone is enough, and combining them cannot reach anyone but the caller.
+3. **Durable completion, not a live re-derived check.** `§42`'s original design read "does
+   `organization:fred` currently have zero `platform_admin`" as the guard. That is the same bug
+   shape as the reverted `§24.7` escalation: a condition that is true only *for now*, treated as a
+   standing safety property. Removing the last `platform_admin` (accident or otherwise) would
+   silently reopen root bootstrap for anyone who still holds the secret. The guard must be a
+   **durably persisted "bootstrap completed" marker** — analogous to the existence of Keycloak's
+   own master realm — written once, checked thereafter, never re-derived from current OpenFGA
+   state. Write order matters, but the other way round than first drafted (this write-order point
+   revised again 2026-07-14, second pass): the OpenFGA tuple is written *before* the durable
+   marker, under the same advisory lock used elsewhere for check-then-write races
+   (`rescue_team_admin`'s pattern, `§32`). This is safe because the tuple write is idempotent
+   (`on_duplicate_writes=IGNORE`, the same mechanism `_bootstrap_platform_roles` already relies
+   on): if the process crashes or OpenFGA fails before the marker is written, nothing durable has
+   happened yet, and a retry safely re-applies the same tuple and then closes the marker — no
+   break-glass recovery (`§41`) needed for that case. The only residual window is narrower and
+   non-critical: a second distinct secret-holder racing that exact gap could also be granted
+   `platform_admin` for themselves — still self-promotion only (`§42` point 2 above still holds),
+   never a third party, and a far better trade-off than the original ordering's permanent lockout
+   on any transient OpenFGA failure. Default deny (`§2.5`) over convenience, but not at the cost of
+   an unrecoverable bootstrap on a routine transient failure.
+4. **The secret is never generated or logged by Fred, in any environment.** It is always supplied
+   externally — an environment variable sourced from a Kubernetes Secret (itself populated by
+   whatever secrets pipeline the deployment already trusts: a git-ignored values file at C1,
+   SOPS/sealed-secrets or a cloud secret manager at C2, an external HSM-backed Vault at C3 — the
+   *same* "secrets source" knob RFC-0001 §6 already defines in `fred-deployment-factory`, not a new
+   one), or an explicitly operator-provided local file for the dev stack (`make bootstrap-token`,
+   or hand-supplied). Fred's own code never calls a random-token generator and never writes the
+   secret's value to a log line, in local dev or in production — mirroring Keycloak's own
+   `KC_BOOTSTRAP_ADMIN_USERNAME`/`KC_BOOTSTRAP_ADMIN_PASSWORD`: the variable may remain present
+   after bootstrap completes, but becomes inert (`§42.3`'s durable marker already blocks reuse
+   regardless). Rotation or removal of the variable post-bootstrap is recommended operational
+   hygiene, not enforced by Fred.
+
+Same shape as Kubernetes/ArgoCD/Rancher/Keycloak, not a novel mechanism — refined once to close the
+arbitrary-third-party-promotion gap and the reactivation-after-admin-loss gap found in review.
 
 ---
 

@@ -813,6 +813,22 @@
       }
     },
     "back": "Back",
+    "bootstrap": {
+      "continue": "Continue",
+      "description": "This deployment has no platform administrator yet. Enter the deploy-time bootstrap secret to become the first one.",
+      "errors": {
+        "alreadyCompleted": "Root bootstrap has already been completed for this deployment.",
+        "forbidden": "This bootstrap secret is not valid. Please try again.",
+        "generic": "Something went wrong. Please try again."
+      },
+      "reload": "Reload",
+      "submit": "Become platform administrator",
+      "successMessage": "You are now the platform administrator, {{username}}.",
+      "title": "Platform administrator setup",
+      "tokenExplanation": "The deploy-time bootstrap secret, provided by whoever deployed this platform.",
+      "tokenLabel": "Bootstrap secret",
+      "tokenPlaceholder": "Enter the bootstrap secret"
+    },
     "cancel": "Cancel",
     "collapse": "Collapse",
     "create": "Create",
@@ -1546,7 +1562,30 @@
       "failedOn": "Failed {{when}}",
       "cancelledOn": "Cancelled {{when}}",
       "stalled": "Stalled",
-      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention."
+      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
+      "withWarnings": "With warnings",
+      "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "migration": {
+        "detailsTitle": "Import details",
+        "warningsTitle": "Warnings ({{count}})",
+        "counter": {
+          "identities_created": "Identities created",
+          "users_processed": "Users processed",
+          "teams_imported": "Teams found in the bundle",
+          "teams_provisioned": "Teams created",
+          "teams_skipped": "Teams skipped",
+          "team_roles_granted": "Team roles granted",
+          "team_roles_skipped": "Team roles skipped",
+          "platform_roles_granted": "Platform roles granted",
+          "agents_imported": "Agents imported",
+          "agents_skipped": "Agents skipped",
+          "agents_gap": "Agents needing a template",
+          "tags_imported": "Tags imported",
+          "tags_skipped": "Tags skipped",
+          "docs_imported": "Documents imported",
+          "docs_skipped": "Documents skipped"
+        }
+      }
     }
   },
   "runtime": {

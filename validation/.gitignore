@@ -1,0 +1,10 @@
+# Local validation environment and generated test artifacts
+.venv/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.claim_groups.json
+report.xml
+report.md

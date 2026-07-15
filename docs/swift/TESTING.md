@@ -171,8 +171,11 @@ required for the steps below; noted here because we'll want to test it too
 
 ## 3. Run the authorization validation suite
 
+`validation/` lives in this `fred` checkout (not `fred-deployment-factory` —
+that repo only provides the backing services started in step 1). From the
+`fred` repo root:
+
 ```bash
-cd fred-deployment-factory
 make validation-report
 ```
 

@@ -1182,6 +1182,36 @@ _(none yet)_
 
 ---
 
+## OPS-04 / AUTHZ-07 organisms
+
+### `TaskActivity`
+
+**Location:** `src/rework/components/shared/organisms/TaskActivity/TaskActivity.tsx`
+**Status:** `Functional`
+
+The one shared task/activity surface (OPS-04 §3.4), rendered identically for platform
+and team admins: scheduled/running/completed groups for every task kind, driven by
+`GET /tasks`. A `succeeded` migration (platform import) whose structured result carries
+warnings shows an explicit "With warnings" flag next to the state badge, plus a
+per-row `Disclosure` (AUTHZ-07 Step 3) listing the principal non-zero counters —
+including every `*_skipped` counter and `users_processed`, not just the
+granted/imported ones (AUTHZ-07 Step 3 close-out) — and the full warning list, open
+by default when warnings are present. A `failed` task renders `task.error` inline.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — implemented and covered by unit tests
+  (`TaskActivity.test.tsx`), but no designer/product-owner pass has validated the
+  counter disclosure's layout, the "With warnings" flag's visual weight against the
+  state badge, or density once a migration result has most of its ~15 counters
+  populated at once.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

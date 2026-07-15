@@ -38,6 +38,17 @@ export interface AppConfig {
    * itself GCU-gated and cannot carry this value (chicken-and-egg).
    */
   gcu_version: string | null;
+  /**
+   * The authoritative frontend gating decision for `BootstrapGuard`: whether
+   * root platform-admin bootstrap (AUTHZ-07) must still be shown. Sourced from
+   * the public pre-auth `/frontend/config` so the guard can decide before
+   * authentication (same chicken-and-egg as `gcu_version`). Deliberately not
+   * the same as "has bootstrap ever completed" — on deployments where user
+   * auth or ReBAC is disabled, `POST /bootstrap/platform-admin` can never
+   * succeed, so this is `false` there even though the durable completion
+   * marker is also `false`.
+   */
+  root_bootstrap_required: boolean;
 }
 
 type RawAppConfig = {
@@ -78,7 +89,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_required } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -86,6 +97,7 @@ export const loadConfig = async () => {
     properties: base.properties ?? {},
     user_auth,
     gcu_version,
+    root_bootstrap_required,
   };
 
   if (config.user_auth?.enabled) {
@@ -113,7 +125,11 @@ export const loadConfig = async () => {
  * - called by `loadConfig()` at Stage 0; failures abort startup like a missing
  *   `/config.json`, since the control-plane is required to run the app
  */
-const loadPublicConfig = async (): Promise<{ user_auth: UserAuthConfig; gcu_version: string | null }> => {
+const loadPublicConfig = async (): Promise<{
+  user_auth: UserAuthConfig;
+  gcu_version: string | null;
+  root_bootstrap_required: boolean;
+}> => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
     throw new Error(`Cannot load ${FRONTEND_CONFIG_URL}: ${res.status} ${res.statusText}`);
@@ -126,6 +142,13 @@ const loadPublicConfig = async (): Promise<{ user_auth: UserAuthConfig; gcu_vers
       client_id: payload.user_auth.client_id ?? undefined,
     },
     gcu_version: payload.gcu_version ?? null,
+    // Rolling-compatibility fallback only: a control-plane deployed before
+    // `root_bootstrap_required` existed omits the field, so this re-derives
+    // the old (incorrect) predicate for that transition window. Once
+    // `root_bootstrap_required` is present, it is always authoritative — the
+    // frontend must not otherwise re-derive ReBAC/auth policy itself.
+    root_bootstrap_required:
+      payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
   };
 };
 
@@ -190,3 +213,18 @@ export const getProperty = (key: string): string => getConfig().properties?.[key
  * - call after `loadConfig()`; `null` means no acceptance screen is shown
  */
 export const getGcuVersion = (): string | null => getConfig().gcu_version;
+
+/**
+ * Return whether root platform-admin bootstrap (AUTHZ-07) must still be shown.
+ *
+ * Why this function exists:
+ * - `BootstrapGuard` must know this *before* authentication has produced any
+ *   per-user state; the value is the backend's authoritative gating decision,
+ *   not a per-user one, and not simply "has bootstrap ever completed" — it is
+ *   also `false` on deployments where user auth or ReBAC is disabled, since
+ *   `POST /bootstrap/platform-admin` can never succeed there
+ *
+ * How to use it:
+ * - call after `loadConfig()`; `true` means the bootstrap screen must be shown
+ */
+export const getRootBootstrapRequired = (): boolean => getConfig().root_bootstrap_required;

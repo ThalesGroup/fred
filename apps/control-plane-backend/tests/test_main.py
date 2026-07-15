@@ -22,6 +22,7 @@ from control_plane_backend.agent_instances.store import (
     AgentInstanceStore,
 )
 from control_plane_backend.app.dependencies import get_application_container_from_app
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -29,6 +30,7 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -55,6 +57,7 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common import TeamId, personal_team_id
+from fred_core.security import oidc
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -778,6 +781,125 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
 
 
 @pytest.mark.asyncio
+async def test_bootstrap_platform_admin_returns_401_without_bearer_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real route — not just the service function — must enforce
+    authentication. With Keycloak genuinely enabled and no bearer token
+    supplied, the real `get_current_user` (not the no-security mock admin
+    every other route in this test config gets by default) must reject the
+    call with 401 before the bootstrap service ever runs (AUTHZ-07)."""
+    app = create_app()
+    # create_app() calls initialize_user_security() from the loaded test
+    # config (security.user.enabled=False), so KEYCLOAK_ENABLED must be
+    # flipped *after* create_app(), not before — otherwise create_app()
+    # overwrites it right back to False.
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
+    container = get_application_container_from_app(app)
+    container.configuration.security.user.enabled = True
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/bootstrap/platform-admin",
+            json={"token": "irrelevant-but-16-chars"},
+        )
+
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_platform_admin_returns_503_when_auth_disabled(
+    tmp_path: Path,
+) -> None:
+    """`BootstrapAuthDisabledError` end-to-end through the real route, not just
+    the service function. With a correctly configured secret (so the token
+    check itself passes) but `security.user.enabled=False`, the route must
+    surface 503 with the fail-closed message rather than falling through to a
+    grant (AUTHZ-07, RFC Part 8 §42.1)."""
+    token_path = tmp_path / "token"
+    token_path.write_text("secret-token-9f3a2b1c")
+
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.app.bootstrap_token_file = str(token_path)
+    container.configuration.security.user.enabled = False
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/control-plane/v1/bootstrap/platform-admin",
+                json={"token": "secret-token-9f3a2b1c"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 503
+    assert "Authentication is disabled" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_platform_admin_happy_path_through_real_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One minimal proof that the real route, dependency wiring, and
+    registered exception handlers cooperate end-to-end on success — the
+    business logic itself (token comparison, self-promotion-only, durable
+    marker, write ordering, ...) is already covered exhaustively at the
+    service-function level in test_bootstrap_platform_admin.py (AUTHZ-07)."""
+
+    class _FakeRebac:
+        enabled = True
+
+        def __init__(self) -> None:
+            self.added_relations: list[object] = []
+
+        async def add_relation(self, relation):
+            self.added_relations.append(relation)
+            return None
+
+    fake_rebac = _FakeRebac()
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: fake_rebac,
+    )
+
+    token_path = tmp_path / "token"
+    token_path.write_text("secret-token-9f3a2b1c")
+
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.app.bootstrap_token_file = str(token_path)
+    container.configuration.security.user.enabled = True
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="carol-sub", username="carol", roles=[]
+    )
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/control-plane/v1/bootstrap/platform-admin",
+                json={"token": "secret-token-9f3a2b1c"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["user_id"] == "carol-sub"
+    assert payload["username"] == "carol"
+    assert len(fake_rebac.added_relations) == 1
+
+
+@pytest.mark.asyncio
 async def test_frontend_config_disabled_omits_oidc_client() -> None:
     """Public pre-auth config reports disabled user auth and hides OIDC client."""
     app = create_app()
@@ -840,6 +962,249 @@ async def test_frontend_config_exposes_gcu_version_when_gating_enabled() -> None
 
     assert resp.status_code == 200
     assert resp.json()["gcu_version"] == "V1"
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_completed_false_on_fresh_store(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_completed` is False when root bootstrap (AUTHZ-07) has
+    never run on this deployment, mirroring `PlatformBootstrapStore.is_completed()`
+    on a store with no durable marker row.
+
+    Uses a dedicated per-test engine (same real-SQLite-engine pattern as
+    `test_metadata_stores.py`'s `test_platform_bootstrap_store_*` tests) rather
+    than the shared container engine: `test_bootstrap_platform_admin_happy_path_through_real_route`
+    permanently completes bootstrap on that shared store within the same test
+    session, so asserting "fresh" against it would be order-dependent.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-fresh.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        assert resp.json()["root_bootstrap_completed"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_completed_true_after_mark_completed(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_completed` flips to True once the durable
+    `PlatformBootstrapStore` marker has been set — same real-SQLite-engine
+    pattern as `test_metadata_stores.py`'s `test_platform_bootstrap_store_*`
+    tests, wired through `create_app()`'s container so the assertion goes
+    through the actual public `/frontend/config` route rather than calling
+    `build_frontend_config` directly. A dedicated per-test engine (rather than
+    the shared container engine) keeps this test from leaking the permanent
+    marker into the rest of the suite."""
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-completed.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        assert resp.json()["root_bootstrap_completed"] is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_required_true_when_auth_and_rebac_enabled_and_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`root_bootstrap_required` is the authoritative frontend gating decision:
+    true only when auth is enabled, ReBAC is enabled, and root bootstrap has
+    never completed — the one case where `POST /bootstrap/platform-admin` can
+    actually succeed."""
+
+    class _FakeEnabledRebac:
+        enabled = True
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-required-true.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        monkeypatch.setattr(
+            "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+            lambda _self: _FakeEnabledRebac(),
+        )
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_once_completed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once root bootstrap has durably completed, `root_bootstrap_required`
+    flips to False even though auth and ReBAC remain enabled — the guard must
+    stop gating once the one-time grant has happened."""
+
+    class _FakeEnabledRebac:
+        enabled = True
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-required-completed.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="dana-sub")
+
+        monkeypatch.setattr(
+            "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+            lambda _self: _FakeEnabledRebac(),
+        )
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is True
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_when_auth_disabled(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_required` stays False when user authentication is
+    disabled — `POST /bootstrap/platform-admin` refuses with 503 there, so the
+    guard must never trap this deployment on a form that can never succeed,
+    even though the durable `root_bootstrap_completed` marker is False.
+
+    Uses a dedicated per-test engine (same rationale as the
+    `root_bootstrap_completed` tests above): the shared container store can
+    carry a permanent `True` marker left by other tests in the same session.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-not-required-auth-disabled.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = False
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_when_rebac_disabled(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_required` stays False when ReBAC is disabled — the test
+    container's default `NoopRebacEngine` (`enabled=False`) mirrors the same
+    deployment shape `POST /bootstrap/platform-admin` refuses with 503, so the
+    guard must not trap this deployment either.
+
+    Uses a dedicated per-test engine for the same reason as the sibling test
+    above — the shared container store is not safe to assert "fresh" against
+    once other tests have run in the same session.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-not-required-rebac-disabled.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -2196,6 +2561,7 @@ def _build_erasure_deps(
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
         get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
+        get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
     )
 
 

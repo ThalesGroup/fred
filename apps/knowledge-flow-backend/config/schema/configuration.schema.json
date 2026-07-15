@@ -1346,22 +1346,6 @@
           "default": null,
           "description": "Static HTTP headers to send with each OpenFGA API request",
           "title": "Headers"
-        },
-        "platform_admin_subjects": {
-          "description": "AUTHZ-05 bootstrap (RFC FRED-AUTHORIZATION-TARGET-MODEL \u00a724.3): Keycloak `sub` values to grant the target `platform_admin` relation to at startup. Idempotent; never removes an existing grant. Empty by default (no behavior change until explicitly configured).",
-          "items": {
-            "type": "string"
-          },
-          "title": "Platform Admin Subjects",
-          "type": "array"
-        },
-        "platform_observer_subjects": {
-          "description": "AUTHZ-05 bootstrap: Keycloak `sub` values to grant the target `platform_observer` relation to at startup. Idempotent.",
-          "items": {
-            "type": "string"
-          },
-          "title": "Platform Observer Subjects",
-          "type": "array"
         }
       },
       "required": [

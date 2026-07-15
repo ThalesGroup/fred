@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { getGcuVersion, getProperty } from "../common/config";
+import { getGcuVersion, getProperty, getRootBootstrapRequired } from "../common/config";
 
 export interface FrontendProperties {
   agentIconName: string;
@@ -29,6 +29,7 @@ export interface FrontendProperties {
   gcuVersion: string | null;
   logoName: string;
   logoNameDark: string;
+  rootBootstrapRequired: boolean;
   siteDisplayName: string;
   siteSubtitle: string;
   siteTitle: string;
@@ -71,6 +72,12 @@ export function useFrontendProperties(): FrontendProperties {
       gcuVersion: getGcuVersion() ?? (getProperty("gcuVersion") || null),
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
+      // Sourced from the public pre-auth `/frontend/config` (via
+      // `getRootBootstrapRequired`) — `BootstrapGuard` must know this before
+      // any per-user state exists. This is the backend's authoritative gating
+      // decision (AUTHZ-07), not simply "has bootstrap ever completed": it is
+      // also `false` on deployments where user auth or ReBAC is disabled.
+      rootBootstrapRequired: getRootBootstrapRequired(),
       siteDisplayName: getProperty("siteDisplayName") || "Fred",
       siteSubtitle: getProperty("siteSubtitle") || "",
       siteTitle: getProperty("siteTitle") || "Fred",

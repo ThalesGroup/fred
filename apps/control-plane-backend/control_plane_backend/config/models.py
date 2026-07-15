@@ -25,6 +25,29 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    bootstrap_token_env_var: str | None = Field(
+        default=None,
+        description=(
+            "Name of the environment variable holding the one-time root "
+            "platform-admin bootstrap secret (AUTHZ-07) — same pattern as "
+            "SecurityConfiguration.m2m.secret_env_var. The value comes from a "
+            "Kubernetes Secret populated by the deployment's own secrets "
+            "pipeline (git-ignored file at C1, SOPS/sealed-secrets or a cloud "
+            "secret manager at C2, an external Vault at C3 — RFC-0001 §6's "
+            "existing 'secrets source' knob, not a new one). Fred never "
+            "generates or logs this value. Checked before bootstrap_token_file."
+        ),
+    )
+    bootstrap_token_file: str | None = Field(
+        default=None,
+        description=(
+            "Path to the one-time root platform-admin bootstrap secret, for "
+            "local dev only (AUTHZ-07). Must be provided explicitly (e.g. "
+            "`make bootstrap-token`) — Fred never generates or logs this value "
+            "itself, in any environment. Ignored if bootstrap_token_env_var is "
+            "set. None disables the POST /bootstrap/platform-admin endpoint."
+        ),
+    )
     default_team_max_resources_storage_size: int | None = Field(
         default=None,
         description="Default maximum resources storage size in bytes for a team",

@@ -293,6 +293,7 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "image": _IMAGE,
         "command": _COMMAND,
         "env": _arr(_ENV_VAR),
+        "extraEnvVars": _arr(_ENV_VAR),
         "ports": _arr(_PORT_DEF),
         "service": _SERVICE,
         "metricsService": _METRICS_SERVICE,

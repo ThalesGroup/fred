@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.models.base import Base
+from control_plane_backend.models.bootstrap_models import (
+    SINGLETON_ID,
+    PlatformBootstrapRow,
+)
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
@@ -25,7 +30,7 @@ from fred_core.teams.metadata_store import (
     TeamMetadataPatch,
     TeamMetadataStore,
 )
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
 async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
@@ -912,5 +917,98 @@ async def test_prompt_store_rejects_duplicate_name_within_same_team(
                     created_by="alice",
                 )
             )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_is_completed_toggles_after_mark_completed(
+    tmp_path: Path,
+) -> None:
+    """`is_completed()` is False before any write and True once `mark_completed()`
+    has run, against a real (SQLite) engine.
+
+    Why this test exists:
+    - AUTHZ-07 test coverage gap: every existing bootstrap test drives
+      `_FakeBootstrapStore` (`tests/test_bootstrap_platform_admin.py`); this is
+      the first test exercising `PlatformBootstrapStore` itself against a real
+      engine, not a hand-rolled fake.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        assert await store.is_completed() is False
+
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        assert await store.is_completed() is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_mark_completed_persists_completed_by_and_timestamp(
+    tmp_path: Path,
+) -> None:
+    """`mark_completed()` durably persists `completed_by` and a `completed_at`
+    timestamp, not just a bare "row exists" flag.
+
+    Why this test exists:
+    - the AUTHZ-07 durable marker (RFC Part 8 §42.3) records who completed root
+      bootstrap and when; a real read-back proves those fields actually reach
+      the row rather than being silently dropped by the ORM mapping.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap-fields.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        async with AsyncSession(engine) as session:
+            row = await session.get(PlatformBootstrapRow, SINGLETON_ID)
+
+        assert row is not None
+        assert row.completed_by == "benjamin-sub"
+        assert row.completed_at is not None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_advisory_lock_is_a_no_op_on_sqlite(
+    tmp_path: Path,
+) -> None:
+    """`advisory_lock` must degrade gracefully on non-Postgres dialects.
+
+    Why this test exists:
+    - `PlatformBootstrapStore.advisory_lock` explicitly checks
+      `self._engine.dialect.name == "postgresql"` before issuing
+      `pg_advisory_xact_lock` (same primitive and rationale as
+      `TeamMetadataStore.advisory_lock`'s `rescue_team_admin` pattern); SQLite
+      (used by every other offline test in this file) has no such primitive,
+      so the lock must skip that statement rather than error.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap-lock.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        entered = False
+        async with store.advisory_lock():
+            entered = True
+        assert entered
     finally:
         await engine.dispose()

@@ -813,6 +813,22 @@
       }
     },
     "back": "Retour",
+    "bootstrap": {
+      "continue": "Continuer",
+      "description": "Ce déploiement n'a pas encore d'administrateur de plateforme. Saisissez le secret de démarrage défini au déploiement pour devenir le premier administrateur.",
+      "errors": {
+        "alreadyCompleted": "Le démarrage racine a déjà été effectué pour ce déploiement.",
+        "forbidden": "Ce secret de démarrage n'est pas valide. Veuillez réessayer.",
+        "generic": "Une erreur est survenue. Veuillez réessayer."
+      },
+      "reload": "Recharger",
+      "submit": "Devenir administrateur de la plateforme",
+      "successMessage": "Vous êtes maintenant administrateur de la plateforme, {{username}}.",
+      "title": "Configuration de l'administrateur de la plateforme",
+      "tokenExplanation": "Le secret de démarrage défini au déploiement, fourni par la personne ayant déployé cette plateforme.",
+      "tokenLabel": "Secret de démarrage",
+      "tokenPlaceholder": "Saisissez le secret de démarrage"
+    },
     "cancel": "Annuler",
     "collapse": "Réduire",
     "create": "Créer",
@@ -1546,7 +1562,30 @@
       "failedOn": "Échec {{when}}",
       "cancelledOn": "Annulée {{when}}",
       "stalled": "Bloqué",
-      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention."
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
+      "withWarnings": "Avec avertissements",
+      "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "migration": {
+        "detailsTitle": "Détail de l'import",
+        "warningsTitle": "Avertissements ({{count}})",
+        "counter": {
+          "identities_created": "Identités créées",
+          "users_processed": "Utilisateurs traités",
+          "teams_imported": "Équipes trouvées dans le paquet",
+          "teams_provisioned": "Équipes créées",
+          "teams_skipped": "Équipes ignorées",
+          "team_roles_granted": "Rôles d'équipe accordés",
+          "team_roles_skipped": "Rôles d'équipe ignorés",
+          "platform_roles_granted": "Rôles plateforme accordés",
+          "agents_imported": "Agents importés",
+          "agents_skipped": "Agents ignorés",
+          "agents_gap": "Agents sans modèle correspondant",
+          "tags_imported": "Tags importés",
+          "tags_skipped": "Tags ignorés",
+          "docs_imported": "Documents importés",
+          "docs_skipped": "Documents ignorés"
+        }
+      }
     }
   },
   "runtime": {

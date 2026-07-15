@@ -209,6 +209,9 @@ poetry.toml
 .nfs*
 secrets/openai-api-key.sh
 
+# Local one-time bootstrap secrets
+**/bootstrap-token
+
 /media/
 
 # Helm dependency files

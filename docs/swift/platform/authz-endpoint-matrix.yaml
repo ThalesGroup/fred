@@ -396,6 +396,11 @@ operations:
     path: /control-plane/v1/users/{user_id}
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/bootstrap/platform-admin
+    review_status: external_or_public
+    required_permission: bootstrap_token # authenticated (Keycloak JWT required) but not ReBAC-gated — grants only the caller's own sub, gated by a deploy-time secret (RFC Part 8, AUTHZ-07); permanently inert once a durable completion marker is set (not a live platform_admin count)
 
   - service: knowledge-flow
     method: GET

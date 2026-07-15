@@ -190,6 +190,69 @@ CLI display) and must **not** be used to gate the UI. See
 `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
 
+#### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-15)
+
+- `POST /control-plane/v1/bootstrap/platform-admin` → `BootstrapPlatformAdminResponse`
+  - Request: `{ token: str }`, `min_length=16` (422 below the floor) — no
+    `identifier` field. The grant always targets the calling JWT's own
+    `sub`; this endpoint cannot promote a third party under any input.
+  - Response: `{ user_id: str, username: str }` — the caller's own identity,
+    now `platform_admin`.
+
+**Requires authentication** (`get_current_user` — a valid Keycloak JWT) **and**
+the deploy-time secret. Neither alone is sufficient: the JWT proves a real
+identity in this realm, the secret proves legitimate deploy-time access. This
+does not reopen the bootstrap chicken-and-egg — Keycloak authentication
+depends on nothing Fred/OpenFGA owns, only *authorization* did, and there is
+none here. The secret is never generated or logged by Fred, in any
+environment: it is supplied externally, via `bootstrap_token_env_var` (an
+environment variable sourced from a Kubernetes Secret — the deployment's
+existing secrets pipeline, RFC-0001 §6) or `bootstrap_token_file` (local dev
+only, created explicitly with `make bootstrap-token`).
+
+Permanently refuses (409) once root bootstrap has ever completed — a durably
+persisted marker (`PlatformBootstrapStore`), **not** a live count of
+`platform_admin` relations. Removing every `platform_admin` later must not
+silently reopen this endpoint; that is a separate, deliberate break-glass
+recovery procedure, not a side effect of bootstrap. Refuses (503) if ReBAC is
+disabled in this deployment — checked before the durable marker is written,
+since granting would otherwise be a silent no-op that still burns the
+one-time completion. Also refuses (503) if authentication (Keycloak/OIDC) is
+disabled in this deployment — checked even before the ReBAC guard, since a
+mocked identity would make the JWT proof meaningless. See
+`docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
+the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
+ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
+Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — replaces the config-seeded
+`platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
+from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
+role from deployment config anymore; the only other path is the declarative
+platform import (`PLATFORM-IMPORT-RFC.md` §10).
+Endpoint authorization matrix entry:
+`docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
+
+**`FrontendConfig` gating fields (revised 2026-07-15).** `GET /frontend/config`
+(§3.1.1) carries two distinct root-bootstrap booleans — do not conflate them:
+
+- `root_bootstrap_completed` — the truthful **durable historical marker**.
+  True once `POST /bootstrap/platform-admin` has ever succeeded, permanently,
+  per §3.1.2 above (`PlatformBootstrapStore`). Never reinterpreted based on
+  live `security.user`/ReBAC state.
+- `root_bootstrap_required` — the **authoritative frontend gating decision**
+  for `BootstrapGuard`. Computed by `build_frontend_config()` as
+  `security.user.enabled AND security.rebac.enabled AND NOT
+  root_bootstrap_completed`.
+
+These necessarily diverge on deployments where user authentication or ReBAC is
+disabled: `root_bootstrap_completed` stays `false` on a fresh database (no one
+has ever bootstrapped it), but `POST /bootstrap/platform-admin` deliberately
+refuses with 503 there (auth-disabled and ReBAC-disabled guards above), so the
+bootstrap form can never succeed. Before this revision, `BootstrapGuard` gated
+directly on `NOT root_bootstrap_completed` and was permanently trapped on that
+unusable form on such deployments (the default insecure/dev configuration
+included). `root_bootstrap_required` is the fix: the frontend must gate on it
+exclusively and must not re-derive the auth/ReBAC predicate itself.
+
 ### 3.2 Managed agent discovery
 
 Two distinct concepts:
@@ -1017,3 +1080,38 @@ unchanged.
 revoke hooks. `TeamSettingsMembersTable.tsx` (the only frontend consumer)
 updated in the same change. Design detail: RFC Part 7 (§33-39); outstanding
 follow-ups: `NOTES-AUTHZ05-REVIEW.md`.
+
+## 16. Contract Notes — AUTHZ-07 Step 3, `TaskSummary.detail` (2026-07-14)
+
+**Decision:** `TaskSummary` (`GET /tasks`) gains an optional `detail` field —
+the last persisted per-kind detail (`IngestionDetail | EvaluationDetail |
+TaskLogDetail | MigrationDetail | ErasureDetail | None`), typed per the
+sibling `kind` field exactly like the existing per-kind `TaskEvent` union.
+`None` for a kind with no detail model (`log`) or a task recorded before this
+field existed — backward compatible, no migration. Rationale and full
+backend/frontend design: `PLATFORM-IMPORT-RFC.md` §11,
+`AUTHZ-MIGRATION-BACKLOG.md` Step 3.
+
+`MigrationDetail.result: MigrationResult | None = None` is populated only on
+the terminal `succeeded` event of a platform import — a typed projection of
+the import's internal `MigrationReport` (every counter named in
+`AUTHZ-MIGRATION-BACKLOG.md`'s Step 3 exit gate, plus `warnings: list[str]`).
+A non-empty `warnings` list is what distinguishes a partial reconciliation
+from full success; the task `state` stays `succeeded` either way — no new
+`TaskState` value.
+
+**`POST /import-export/import` — `ImportLaunchResponse.target: TaskTarget`
+(2026-07-14, close-out amendment):** the launch response now returns the
+exact `TaskTarget` the backend created the task with
+(`type="platform_import"`, `id=import_id`, `label=` trimmed operator label →
+uploaded filename → `"Platform import"` fallback — computed once in
+`_import_target()`, never re-derived). Frontend consumers must register the
+task with this returned `target` value, not reconstruct one locally — the
+backend is the single source of truth for the target's precedence rules.
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`): new
+`MigrationResult`/`MigrationDetail`/`ErasureDetail` schemas, `TaskSummary.detail`,
+`ImportLaunchResponse.target`. Frontend: `TaskActivity.tsx` (the shared task/
+activity surface, OPS-04 §3.4) narrows `detail` on `task.kind === "migration"`
+to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
+`ImportLaunchResponse.target` directly (no hand-built duplicate).

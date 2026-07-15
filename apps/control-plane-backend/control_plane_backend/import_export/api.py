@@ -39,7 +39,13 @@ from fred_core import (
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
-from fred_core.tasks.models import MigrationTaskEvent, StartMigrationRequest, TaskState
+from fred_core.tasks.models import (
+    MigrationDetail,
+    MigrationTaskEvent,
+    StartMigrationRequest,
+    TaskState,
+    TaskTarget,
+)
 from fred_core.tasks.service import TaskService
 from pydantic import BaseModel
 from sqlalchemy import delete
@@ -49,7 +55,7 @@ from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.exporter import run_export
-from control_plane_backend.import_export.importer import run_import
+from control_plane_backend.import_export.importer import run_import, to_migration_result
 from control_plane_backend.import_export.stats import (
     PlatformStats,
     compute_platform_stats,
@@ -59,15 +65,45 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB — realistic snapshots are well under 10 MB
 
+# TaskTarget.type for a platform import (AUTHZ-07 Step 3) — distinguishes this
+# task's target kind from every other TaskTarget.type in the system (document,
+# user, conversation, …), never a raw UUID shown to the operator.
+IMPORT_TARGET_TYPE = "platform_import"
+_DEFAULT_IMPORT_LABEL = "Platform import"
+
+
+def _import_target(
+    import_id: str, label: str | None, filename: str | None
+) -> TaskTarget:
+    """Canonical, durable target for an import task (AUTHZ-07 Step 3).
+
+    Precedence: the operator-supplied label (trimmed) → the uploaded file's
+    name → a safe fallback. Computed once here so the backend is the single
+    source of truth — the frontend's optimistic registration must reproduce
+    the same precedence, never invent a second one.
+    """
+    trimmed_label = (label or "").strip()
+    trimmed_filename = (filename or "").strip()
+    return TaskTarget(
+        type=IMPORT_TARGET_TYPE,
+        id=import_id,
+        label=trimmed_label or trimmed_filename or _DEFAULT_IMPORT_LABEL,
+    )
+
 
 class ImportLaunchResponse(BaseModel):
     task_id: str
     import_id: str
+    target: TaskTarget
 
 
 class ResetLaunchResponse(BaseModel):
@@ -103,7 +139,11 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             "**Accepted formats:**\n"
             "- Kea snapshot v1 (produced by kea `/admin/migration` export)\n\n"
             "**What is imported:**\n"
-            "- Agent instances (kea agents mapped to their swift template equivalent)\n\n"
+            "- Agent instances (kea agents mapped to their swift template equivalent)\n"
+            "- Declarative team/platform role provisioning from a top-level `users.json` "
+            "entry (AUTHZ-07 Part 8 §40.2) — never creates a Keycloak identity; an "
+            "unresolved username, or a team-role grant the calling platform admin "
+            "cannot make, is skipped and reported, not silently dropped\n\n"
             "**What is skipped with a warning:**\n"
             "- Document metadata (content/vectors not in the zip — mirror separately)\n"
             "- Tags (knowledge-flow import path not yet implemented)\n"
@@ -122,6 +162,12 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             AgentInstanceStore, Depends(_get_agent_instance_store)
         ],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+        team_deps: Annotated[
+            TeamServiceDependencies, Depends(get_team_service_dependencies)
+        ],
+        user_deps: Annotated[
+            UserServiceDependencies, Depends(get_user_service_dependencies)
+        ],
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
@@ -140,23 +186,28 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 detail=f"Snapshot exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
             )
         import_id = str(uuid.uuid4())
+        target = _import_target(import_id, label, file.filename)
 
         start_response = await task_service.start(
             StartMigrationRequest(),
             created_by=user.uid,
+            target=target,
         )
         task_id = start_response.task_id
 
         async def _run() -> None:
             try:
                 bundle = open_bundle(data)
-                await run_import(
+                report = await run_import(
                     bundle=bundle,
                     import_id=import_id,
                     task_id=task_id,
                     task_service=task_service,
                     engine=engine,
                     agent_instance_store=agent_instance_store,
+                    platform_admin=user,
+                    user_deps=user_deps,
+                    team_deps=team_deps,
                 )
                 await task_service.record(
                     MigrationTaskEvent(
@@ -164,6 +215,15 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                         state=TaskState.succeeded,
                         seq=0,
                         timestamp=datetime.now(timezone.utc),
+                        progress=1.0,
+                        target=target,
+                        detail=MigrationDetail(
+                            step_id="done",
+                            processed=1,
+                            total=1,
+                            failed=0,
+                            result=to_migration_result(report),
+                        ),
                     )
                 )
                 logger.info("[import-export] import %s completed", import_id)
@@ -172,7 +232,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 await task_service.fail_task(task_id, str(exc))
 
         background_tasks.add_task(_run)
-        return ImportLaunchResponse(task_id=task_id, import_id=import_id)
+        return ImportLaunchResponse(task_id=task_id, import_id=import_id, target=target)
 
     @router.get(
         "/import-export/export",
