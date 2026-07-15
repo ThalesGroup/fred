@@ -1543,7 +1543,10 @@ applications:
     # POST /control-plane/v1/bootstrap/platform-admin. This chart never
     # creates the Secret, never carries a literal value, and never mounts a
     # bootstrap_token_file inside Kubernetes — the instance overlay (a real
-    # deployment factory) supplies a reference to a Secret it already owns:
+    # deployment factory) supplies a reference to a Secret it already owns.
+    # `extraEnvVars` only reaches this application's Deployment, never the
+    # Alembic migration Job (`hook-migration.yaml` renders `.app.env` only) —
+    # the migration Job has no need for the bootstrap token:
     #
     #   extraEnvVars:
     #     - name: FRED_BOOTSTRAP_TOKEN

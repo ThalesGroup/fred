@@ -497,10 +497,21 @@ Execution protocol:
         acceptance checks into their canonical backlogs, replace every reference
         to the two root `NOTES-*` files, and delete them. No new RFC or ID: this
         is documentation convergence under AUTHZ-07 and OPS-04.
-  - [ ] **Chart secret boundary — release gate:** stop application-only
-        `extraEnvVars`, especially `FRED_BOOTSTRAP_TOKEN`, from being copied into
-        the Control Plane Alembic hook. Render with migration enabled in CI and
-        prove exactly one workload receives the token.
+  - [x] **Chart secret boundary — release gate.** Done 2026-07-15:
+        `deploy/charts/fred/templates/hook-migration.yaml` no longer copies
+        `.app.extraEnvVars` into the Control Plane Alembic migration Job —
+        `extraEnvVars` is now a Deployment-only extension point; the migration
+        Job still gets `.app.env`, `envFrom`, volume mounts, image,
+        command/args, and hook behavior unchanged. No hardcoded
+        `FRED_BOOTSTRAP_TOKEN` filter, alias, or new migration-only variable
+        was introduced. `.github/workflows/Check-pending-requests.yml`'s
+        rendered bootstrap-secret contract check now also renders with
+        `applications.control-plane-backend.migration.enabled=true` and
+        proves the token is present in the `control-plane-backend` Deployment
+        document and absent from the migration Job document. Verified:
+        `helm lint`/render and `git diff --check` all passed. The other Step
+        6 chart release gate (Control Plane migration disabled by default)
+        remains open.
   - [ ] **Control Plane migration default — release gate:** remove the stale
         "enable when migrations exist" default. Make the base chart, or every
         enforced supported overlay, run the migration that creates

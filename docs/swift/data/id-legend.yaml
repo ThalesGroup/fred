@@ -494,6 +494,14 @@ items:
       GKE/AKS/S3NS rollout clarification. Temporary root NOTES files are
       retired into the AUTHZ-07 and OPS-04 canonical backlogs.
 
+      Step 6 "Chart secret boundary" release gate closed, 2026-07-15:
+      hook-migration.yaml no longer copies .app.extraEnvVars into the Alembic
+      migration Job (.app.env still flows to it as before). CI's rendered
+      bootstrap-secret contract check now also renders with the migration Job
+      enabled and proves the token reaches the Deployment, not the Job. helm
+      lint/render clean; remaining Step 6 chart gate (migration disabled by
+      default) still open.
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01
