@@ -428,50 +428,97 @@ Execution protocol:
     empty factory → registration → Fred bootstrap → Fred import, confirming
     the exit gate.
 
-- [ ] **Step 5 — package one fresh-install path for k3d, GKE and AKS.** Wire
-      the externally supplied bootstrap secret through the existing
+- [x] **Step 5 — package one fresh-install path for the GKE/ArgoCD reference;
+      hand a documented contract to the future AKS/Flux workshop.** (k3d's own
+      Helm chart in `fred-deployment-factory` is a separate, not-yet-converged
+      chart — CHART-1/CHART-2 territory, explicitly not resolved by this task;
+      k3d's local dev bootstrap already has its own path, `make bootstrap-token`
+      + `bootstrap_token_file`, untouched here.)
+      Wire the externally supplied bootstrap secret through the existing
       Helm/Kubernetes Secret mechanisms, without committing or logging it. The
       canonical Fred chart owns one portable application contract
-      (`bootstrap_token_env_var` plus `secretKeyRef`); each platform overlay
-      supplies only the existing Secret name/key through its classification's
-      secret source. Do not create a cloud-specific bootstrap implementation,
-      a second chart, a migration command, or compatibility code for a Swift
-      installation predating the durable marker.
-  - **Delivery decision confirmed 2026-07-15:** today's two targets are new
-    platforms, one on GKE and one on AKS. AUTHZ-07 therefore supports a clean
-    installation only. The sole data migration in scope is **KEA → fresh Swift**:
-    export KEA, deploy empty Swift infrastructure/application, self-register the
-    first identity, complete root bootstrap, then use Fred's canonical platform
-    import. There is no Swift → Swift in-place-upgrade contract to invent in
-    this candidate.
+      (`bootstrap_token_env_var` plus `secretKeyRef`); the GKE/ArgoCD instance
+      overlay supplies only the existing Foundation Secret name/key. Do not
+      create a cloud-specific bootstrap implementation, a second chart, a
+      migration command, or compatibility code for a Swift installation
+      predating the durable marker.
+  - **Delivery decision confirmed 2026-07-15, corrected same day (this entry
+    superseded the AKS-inclusive framing `91e10bb4` introduced):** today's
+    concrete, live-testable target is one fresh installation on **GKE**. There
+    is no AKS overlay in `fred` or `fred-deployment-factory`, and none is
+    created by this task — AKS/Flux is a **future** instance, owned by a
+    separate workshop with Benjamin, that reuses this same portable chart
+    contract. The sole data migration in scope, on every platform, is
+    **KEA → fresh Swift**: export KEA, deploy empty Swift infrastructure/
+    application, self-register the first identity, complete root bootstrap,
+    then use Fred's canonical platform import. There is no Swift → Swift
+    in-place-upgrade contract to invent in this candidate.
   - Implementation order for today's critical path:
     1. add the portable existing-Secret reference to the canonical Fred chart
-       and set `app.bootstrap_token_env_var` to its environment-variable name;
-    2. wire the GKE overlay to its existing C1 Foundation Secret and git-ignored
-       values source;
-    3. wire the AKS overlay to the same chart contract and its existing C2
-       Secret source — values only, no forked templates;
-    4. prove with `helm lint`/`helm template` that both workloads render the
-       same Control Plane contract, contain only `secretKeyRef`, never a secret
-       value or `bootstrap_token_file`, and fail closed when the reference is
-       absent or invalid;
-    5. perform one fresh-install smoke path per cloud: empty services → user
-       registration → authenticated secret submission → first
-       `platform_admin` → declarative import → teams visible →
-       `make validation-report`.
-  - Exit gate: one chart contract works unchanged on GKE and AKS; tracked files
-    contain no bootstrap-secret value; both rendered deployments use an
-    obligatory Secret reference; both fresh installations complete bootstrap
-    and import; no Swift-upgrade compatibility path was added.
+       and set `app.bootstrap_token_env_var` to its environment-variable name
+       (`deploy/charts/fred`, no cloud-specific code — see
+       `deploy/README.md` "Root bootstrap secret contract");
+    2. wire the GKE/ArgoCD reference deployment (`fred-deployment-factory`) to
+       reference the existing C1 Foundation Secret's own bootstrap key —
+       values only, no new chart, no Apps-layer Secret;
+    3. prove with `helm lint`/`helm template` (both repos) that the rendered
+       Control Plane workload contains only a `secretKeyRef`, never a secret
+       value or `bootstrap_token_file`, and that a missing/invalid reference
+       fails closed;
+    4. document the exact contract a future AKS/Flux overlay must supply
+       (namespace, pre-existing Secret name/key, chart values, expected
+       Foundation endpoints, install sequence, secret rotation/removal
+       recommendation, no Fred identity in values) — no AKS template, chart,
+       or values file is created here;
+    5. the live fresh-install smoke path (empty services → user registration
+       → authenticated secret submission → first `platform_admin` →
+       declarative import → teams visible → `make validation-report`) is
+       performed on **GKE**, by Dimitri, after this candidate merges — it is
+       the deployment's acceptance, not a prerequisite to this offline verdict.
+  - Exit gate: the chart contract is portable (proven offline via
+    `helm lint`/`helm template` with a fake `secretKeyRef`, not by an actual
+    AKS render); tracked files in both repos contain no bootstrap-secret
+    value; the GKE/ArgoCD rendered deployment uses an obligatory Secret
+    reference; the AKS/Flux contract is documented, not implemented; no
+    Swift-upgrade compatibility path was added. **Met, offline, 2026-07-15** —
+    see the close-out report for this task for the exact files/tests.
   - Execution: issue #1912 / PR #1957 / branch
     `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
-  - Claude prompt/result/commit: pending this recadrage.
+  - Claude prompt/result/commit: `feat(AUTHZ-07): finalize portable
+    fresh-install bootstrap` (`fred`) and `feat(AUTHZ-07): wire GKE reference
+    bootstrap secret` (`fred-deployment-factory`), 2026-07-15.
 
 - [ ] **Step 6 — final convergence and UX hardening.** Remove the superseded
       config-seeded platform-role path and any remaining parallel vocabulary;
       decide and implement durable/recoverable execution for the canonical
       import; close bootstrap-page responsive, truncation, semantic-form and
       accessibility gaps; align RFCs, generated contracts, backlog and PMO.
+  - **Config-seeded platform-role removal — done, 2026-07-15 (same pass as
+    Step 5, `feat(AUTHZ-07): finalize portable fresh-install bootstrap`).**
+    `OpenFgaRebacConfig.platform_admin_subjects`/`platform_observer_subjects`
+    (`libs/fred-core/fred_core/security/structure.py`) and
+    `OpenFgaRebacEngine._bootstrap_platform_roles`
+    (`libs/fred-core/fred_core/security/rebac/openfga_engine.py`, and its
+    startup call site in `_initialize_client_and_store`) deleted outright —
+    no config field, no OpenFGA bootstrap-on-startup path, no alias, no
+    migration shim. Root bootstrap (`POST /bootstrap/platform-admin`) and the
+    declarative platform import (`PLATFORM-IMPORT-RFC.md` §10) are untouched
+    and remain the only two ways to hold a platform role; `platform_observer`
+    stays a valid Fred role, assignable only via the import. `schema.fga` not
+    touched (no dependency found). Regenerated
+    `apps/{control-plane-backend,fred-agents,knowledge-flow-backend}/config/schema/configuration.schema.json`
+    and `deploy/charts/fred/values.schema.json` (`make generate-config-schema`
+    per backend). Removed the now-obsolete
+    `test_bootstrap_seeds_platform_admin_from_config` integration test
+    (`libs/fred-core/fred_core/tests/integration/test_rebac.py`) — the
+    adjacent `test_platform_admin_and_observer_never_grant_team_access` (a
+    different test, direct `add_relations`, unrelated to config-seeding) is
+    untouched and still proves platform roles never grant team access. Docs
+    converged: `docs/swift/platform/REBAC.md` (config sample + explicit "no
+    config-seeded platform roles" note), `CONTROL-PLANE-PRODUCT-CONTRACT.md`
+    §3.1.2 (no longer implies the path survives as a non-default option).
+    The rest of Step 6 (durable/recoverable import execution, bootstrap-page
+    UX gaps) remains open and out of this task's scope.
   - Exit gate: one owner per bootstrap/provisioning concept, full root quality
     and offline tests green, live `make validation-report` green, manual UI pass
     recorded, and no stale factory/script/documented alternative remains.

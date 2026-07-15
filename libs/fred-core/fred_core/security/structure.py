@@ -108,22 +108,6 @@ class OpenFgaRebacConfig(RebacBaseConfig):
         default=None,
         description="Static HTTP headers to send with each OpenFGA API request",
     )
-    platform_admin_subjects: list[str] = Field(
-        default_factory=list,
-        description=(
-            "AUTHZ-05 bootstrap (RFC FRED-AUTHORIZATION-TARGET-MODEL §24.3): Keycloak "
-            "`sub` values to grant the target `platform_admin` relation to at startup. "
-            "Idempotent; never removes an existing grant. Empty by default (no behavior "
-            "change until explicitly configured)."
-        ),
-    )
-    platform_observer_subjects: list[str] = Field(
-        default_factory=list,
-        description=(
-            "AUTHZ-05 bootstrap: Keycloak `sub` values to grant the target "
-            "`platform_observer` relation to at startup. Idempotent."
-        ),
-    )
 
 
 RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]

@@ -449,13 +449,27 @@ items:
       self-registration, bootstrap secret submission, first platform_admin,
       entry into Fred, demo-provisioning-bundle import — all succeeded;
       empty factory -> registration -> Fred bootstrap -> Fred import is
-      confirmed as the one tested path. Scope recadrage confirmed 2026-07-15:
-      today's GKE and AKS targets are fresh installations; no Swift-to-Swift
-      pre-marker upgrade compatibility is required or to be invented. The sole
-      migration is KEA export -> fresh Swift bootstrap -> canonical platform
-      import. AUTHZ-07 stays in_progress: Step 5 (one portable packaged
-      bootstrap-secret reference plus live fresh-install proof on GKE and AKS)
-      and Step 6 (final convergence/UX hardening) remain open.
+      confirmed as the one tested path. Scope recadrage confirmed 2026-07-15,
+      corrected same day (91e10bb4's AKS-inclusive framing overstated this
+      candidate's delivered scope): today's concrete, live-testable target is
+      one fresh installation on GKE. There is no AKS overlay in fred or
+      fred-deployment-factory and none is created here -- AKS/Flux is a
+      future instance for a separate workshop with Benjamin, reusing the same
+      portable chart contract. No Swift-to-Swift pre-marker upgrade
+      compatibility is required or to be invented; the sole migration is KEA
+      export -> fresh Swift bootstrap -> canonical platform import. Step 5
+      closed offline 2026-07-15: portable bootstrap-secret contract
+      (bootstrap_token_env_var + secretKeyRef) in deploy/charts/fred, wired to
+      the GKE/ArgoCD reference deployment in fred-deployment-factory, plus a
+      documented (not implemented) AKS/Flux contract in deploy/README.md. Same
+      pass also closed Step 6's config-seeded-platform-role removal
+      (platform_admin_subjects/platform_observer_subjects +
+      _bootstrap_platform_roles deleted outright, see
+      AUTHZ-MIGRATION-BACKLOG.md's Step 6 entry for the file list). AUTHZ-07
+      stays in_progress: the rest of Step 6 (durable/recoverable import
+      execution, bootstrap-page UX gaps) remains open, out of this task's
+      scope; live GKE fresh-install validation is Dimitri's post-merge
+      acceptance step, not a merge-gate prerequisite.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

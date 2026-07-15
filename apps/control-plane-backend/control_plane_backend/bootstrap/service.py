@@ -109,8 +109,7 @@ async def bootstrap_platform_admin(
     - write order: the OpenFGA tuple is written *before* the durable marker,
       under the same Postgres advisory lock `rescue_team_admin` uses for its
       own check-then-write race. `add_relation` is idempotent
-      (`on_duplicate_writes=IGNORE`, the same mechanism
-      `_bootstrap_platform_roles` already relies on) — so if the process
+      (`on_duplicate_writes=IGNORE`) — so if the process
       crashes or OpenFGA fails before the marker is written, nothing is lost:
       a retry safely re-applies the same tuple and then closes the marker.
       The only residual window is narrower and non-critical: a second

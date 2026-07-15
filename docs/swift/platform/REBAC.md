@@ -286,6 +286,15 @@ security:
     headers:
       # Optional static headers sent to OpenFGA
       X-Custom-Header: "value"
-    platform_admin_subjects: [] # Legacy config-seeded path (Keycloak `sub` values granted `platform_admin` at startup). Superseded by control-plane's `POST /bootstrap/platform-admin` (AUTHZ-07) — no `sub` needs to be declared in config anymore.
-    platform_observer_subjects: [] # Keycloak `sub` values granted `platform_observer` at startup
 ```
+
+> **No config-seeded platform roles.** `platform_admin_subjects`/`platform_observer_subjects`
+> (a Keycloak `sub` list granted platform roles at OpenFGA-engine startup) existed under
+> AUTHZ-05 §24.3 and was removed by AUTHZ-07 (RFC Part 8 §40-41): it was a second,
+> parallel authority alongside root bootstrap + declarative import, and an opaque
+> per-realm UUID in versioned/secret config is fragile across realm re-imports. The first
+> `platform_admin` is granted exclusively by `POST /control-plane/v1/bootstrap/platform-admin`
+> (self-promotion only, see §3.1.2 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`); every other
+> platform or team role is granted exclusively by the declarative platform import
+> (`PLATFORM-IMPORT-RFC.md` §10). No field in `security.rebac` configures a platform role
+> anymore.

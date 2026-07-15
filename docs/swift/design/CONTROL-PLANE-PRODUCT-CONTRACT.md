@@ -223,8 +223,11 @@ mocked identity would make the JWT proof meaningless. See
 `docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
 the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
 ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
-Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — supersedes the
-config-seeded `platform_admin_subjects` path as the default.
+Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — replaces the config-seeded
+`platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
+from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
+role from deployment config anymore; the only other path is the declarative
+platform import (`PLATFORM-IMPORT-RFC.md` §10).
 Endpoint authorization matrix entry:
 `docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
 
