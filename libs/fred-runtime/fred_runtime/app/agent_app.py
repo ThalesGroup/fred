@@ -129,9 +129,6 @@ from fred_runtime.capabilities import (
     build_capability_contexts,
     enforce_asset_slots,
     evaluate_chat_controls_batch,
-    is_mcp_capability_id,
-    mcp_capability_id,
-    mcp_server_id_of,
     validate_turn_options,
 )
 from fred_runtime.capabilities.errors import CapabilityError, TurnOptionsInvalidError
@@ -407,7 +404,7 @@ class _PodAgentSettings:
     # Active MCP server refs for this request (#1978). The MCP tuning trio was
     # retired, so the live MCP tool provider no longer reads `tuning.mcp_servers`
     # — it reads this field, which agent assembly derives from the agent's
-    # selected `mcp:<id>` capabilities (falling back to the template's
+    # selected MCP-server capabilities (falling back to the template's
     # `default_mcp_servers`). Kept off `AgentTuning` so the SDK contract stays
     # trio-free.
     # Typed as `Sequence` (not `tuple`) to match `AgentSettingsLike` exactly:
@@ -546,7 +543,7 @@ def _build_agent_settings(
         tuning=_definition_to_agent_tuning(definition),
         # The live MCP tool provider reads active servers from here (#1978).
         # `_apply_runtime_tuning` has already narrowed `default_mcp_servers` to
-        # the servers the agent's selected `mcp:<id>` capabilities activate.
+        # the servers the agent's selected MCP-server capabilities activate.
         active_mcp_servers=tuple(definition.default_mcp_servers),
     )
 
@@ -969,15 +966,15 @@ def _active_mcp_server_refs(
     Resolve the MCP server refs one agent activates from its capability
     selection (#1978, RFC §3.8).
 
-    An MCP server is now an `mcp:<id>` capability, so its activation is an entry
-    in `selected_capability_ids`:
+    An MCP server is a capability whose id IS the catalog server id (#1988), so
+    its activation is an entry in `selected_capability_ids`:
     - `None` (template default) → all the template's `default_mcp_servers`
       (backward compatibility with the retired `selected_mcp_server_ids = None`
       semantics, which meant "all declared servers active");
-    - a list → the `mcp:<id>` entries, resolved against the template defaults
-      first (preserving `require_tools`/`locked`), then the pod's whole MCP
-      catalog (so a newly-selected non-template server still loads). Selections
-      the pod does not know are skipped — the live provider skips them anyway.
+    - a list → each id is resolved against the template defaults first
+      (preserving `require_tools`/`locked`), then the pod's whole MCP catalog
+      (so a newly-selected non-template server still loads). Ids matching
+      neither are package capabilities (or unknown servers) — not MCP refs.
     """
 
     if selected_capability_ids is None:
@@ -988,14 +985,11 @@ def _active_mcp_server_refs(
     mcp_config = get_runtime_context().config.mcp_configuration
     refs: list[MCPServerRef] = []
     for cap_id in selected_capability_ids:
-        if not is_mcp_capability_id(cap_id):
-            continue
-        server_id = mcp_server_id_of(cap_id)
-        existing = default_refs.get(server_id)
+        existing = default_refs.get(cap_id)
         if existing is not None:
             refs.append(existing.model_copy(deep=True))
-        elif mcp_config is not None and mcp_config.get_server(server_id) is not None:
-            refs.append(MCPServerRef(id=server_id))
+        elif mcp_config is not None and mcp_config.get_server(cap_id) is not None:
+            refs.append(MCPServerRef(id=cap_id))
     return tuple(refs)
 
 
@@ -1012,7 +1006,7 @@ def _apply_runtime_tuning(
       old agentic-backend definition factory
 
     MCP handling (#1978): the active MCP server set is derived from the agent's
-    selected `mcp:<id>` capabilities and narrows `default_mcp_servers` for the
+    selected MCP-server capabilities and narrows `default_mcp_servers` for the
     live tool provider. The catalog `agent_instructions` are NO LONGER appended
     here — they are delivered by each `McpCapability`'s prompt-fragment
     middleware (see `_build_capability_block`).
@@ -1127,7 +1121,7 @@ async def _resolve_agent_instance(
             )
         # Direct execution has no persisted capability selection; carry a
         # template-default tuning so the execution path still assembles the
-        # template's MCP servers as `mcp:<id>` capabilities and delivers their
+        # template's MCP servers as capabilities and delivers their
         # `agent_instructions` prompt fragments (#1978 — otherwise the
         # non-negotiable grounding contract would be lost on this path).
         return _ResolvedExecutionTarget(
@@ -2171,23 +2165,28 @@ def _effective_capability_ids(
 
     Shared by `_build_capability_block` (execution) and the pre-stream
     turn-options gate (#1976): `None` selection → the template's
-    `default_mcp_servers` as `mcp:<id>` ids; unadvertised `mcp:<id>` ids are
-    dropped (the live tool provider skips them anyway). Non-ReAct templates
-    carry no capabilities. When the registry is absent the raw selection is
-    returned unfiltered — the caller decides whether that is an error.
+    `default_mcp_servers` ids; a selected id that is a known-but-DISABLED
+    catalog MCP server is dropped (the live tool provider skips it anyway —
+    #1988 keeps that tolerance), while an id the pod knows nothing about stays
+    and fails loudly downstream. Non-ReAct templates carry no capabilities.
+    When the registry is absent the raw selection is returned unfiltered — the
+    caller decides whether that is an error.
     """
 
     if not isinstance(definition, ReActAgentDefinition):
         return []
     selected = tuning.selected_capability_ids if tuning is not None else None
     if selected is None:
-        selected = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
+        selected = [ref.id for ref in definition.default_mcp_servers]
     if capability_registry is None:
         return list(selected)
+    mcp_config = get_runtime_context().config.mcp_configuration
     return [
         cap_id
         for cap_id in selected
-        if not is_mcp_capability_id(cap_id) or cap_id in capability_registry
+        if cap_id in capability_registry
+        or mcp_config is None
+        or mcp_config.get_server(cap_id) is None
     ]
 
 
@@ -2258,12 +2257,12 @@ def _build_capability_block(
 
     Returns None when the agent selects no capabilities.
 
-    MCP handling (#1978): an `mcp:<id>` capability delivers its catalog
+    MCP handling (#1978, #1988): an MCP-server capability delivers its catalog
     `agent_instructions` as a prompt fragment. The effective selection mirrors
     `_active_mcp_server_refs`: a `None` capability selection (template default)
-    activates the template's `default_mcp_servers` as `mcp:<id>` capabilities so
-    their instructions are delivered — otherwise a default-configured agent
-    would silently lose its non-negotiable grounding contract.
+    activates the template's `default_mcp_servers` as capabilities so their
+    instructions are delivered — otherwise a default-configured agent would
+    silently lose its non-negotiable grounding contract.
     """
 
     if not isinstance(definition, ReActAgentDefinition):
@@ -2282,17 +2281,17 @@ def _build_capability_block(
         # A None selection with no registry is inert; a real selection is a bug.
         raw = selected
         if raw is None:
-            raw = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
+            raw = [ref.id for ref in definition.default_mcp_servers]
         if not raw:
             return None
         raise CapabilityError(
             f"Agent selects capabilities {raw} but no capability registry "
             "is available on this execution path."
         )
-    # Tolerate `mcp:<id>` selections the pod does not advertise (a disabled or
-    # unknown catalog server): the live tool provider already skips them, so the
-    # instruction fragment is simply absent. Real (non-MCP) capabilities still
-    # raise loudly through `build_capability_contexts`.
+    # Tolerate selections naming a known-but-disabled catalog MCP server: the
+    # live tool provider already skips them, so the instruction fragment is
+    # simply absent. Anything else unknown still raises loudly through
+    # `build_capability_contexts`.
     effective = _effective_capability_ids(tuning, definition, capability_registry)
     if not effective:
         return None

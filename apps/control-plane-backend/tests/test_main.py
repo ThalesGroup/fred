@@ -63,7 +63,6 @@ from fred_sdk.contracts.capability import (
     ChatControlItem,
     ChatControlsResponse,
     ChatControlsResult,
-    mcp_capability_id,
 )
 from fred_sdk.contracts.models import FieldSpec
 from httpx import ASGITransport, AsyncClient
@@ -5311,18 +5310,21 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
 
 
 # ---------------------------------------------------------------------------
-# MCP server selection — now `mcp:<server>` capabilities (#1978, RFC
-# AGENT-CAPABILITY-RFC.md §3.8). The generic capability-selection contract
-# (unknown id -> 422, pod round-trip, prune/reset semantics) is covered by
-# test_capability_selection_1974.py; this section covers what is specific to
-# MCP capabilities: the `mcp:<id>` namespacing, drift detection
-# (`catalog_warnings`), and the cache-aside chat-controls orchestration at prep
-# (#1976, RFC §3.3/§3.7 — the `chat_options.*` resolution itself now lives on
-# the pod in McpCapability.chat_controls, tested in fred-runtime).
+# MCP server selection — MCP servers are ordinary capabilities keyed by their
+# plain catalog server id now (#1988, supersedes the `mcp:<server>` namespacing
+# of #1978; RFC AGENT-CAPABILITY-RFC.md §3.8). The generic capability-selection
+# contract (unknown id -> 422, pod round-trip, prune/reset semantics) is covered
+# by test_capability_selection_1974.py; this section covers what is specific to
+# MCP-backed capabilities: drift detection (`catalog_warnings`) and the
+# cache-aside chat-controls orchestration at prep (#1976, RFC §3.3/§3.7 — the
+# `chat_options.*` resolution itself now lives on the pod in
+# McpCapability.chat_controls, tested in fred-runtime).
 # ---------------------------------------------------------------------------
 
-_MCP_SEARCH_ID = mcp_capability_id("mcp-search")
-_MCP_STORAGE_ID = mcp_capability_id("mcp-storage")
+# #1988: an MCP-backed capability's id is the plain catalog server id (no
+# `mcp:` prefix). These constants are the ids as advertised by the pod catalog.
+_MCP_SEARCH_ID = "mcp-search"
+_MCP_STORAGE_ID = "mcp-storage"
 
 
 def _make_template_with_mcp_servers(
@@ -5695,9 +5697,9 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
 async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The `mcp:<id>` namespaced form goes through the SAME save-time
-    availability check as any other capability id (#1978) — see
-    test_capability_selection_1974.py for the generic version of this test."""
+    """An unknown MCP-backed capability id (plain catalog server id, #1988)
+    goes through the SAME save-time availability check as any other capability
+    id — see test_capability_selection_1974.py for the generic version."""
 
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
@@ -5731,12 +5733,12 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
             json={
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
-                "capability_ids": ["mcp:mcp-unknown"],
+                "capability_ids": ["mcp-unknown"],
             },
         )
 
     assert resp.status_code == 422
-    assert "mcp:mcp-unknown" in resp.json()["detail"]
+    assert "mcp-unknown" in resp.json()["detail"]
     assert store._records == []
 
 

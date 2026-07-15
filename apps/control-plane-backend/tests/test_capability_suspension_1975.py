@@ -19,9 +19,10 @@ Agent suspension lifecycle for broken/revoked capabilities
 Covers:
 - `reconcile_instance_suspension`: an unavailable selected capability suspends
   the instance (`capability_unavailable`); the #1980 ReBAC entry point suspends
-  with `capability_access_revoked`; MCP selections are tolerated (never
-  suspend); availability suspension clears when the capability returns; a
-  config-invalid suspension is NOT cleared by availability reconcile
+  with `capability_access_revoked`; ids in `tolerated_ids` (known-but-disabled
+  catalog MCP servers, #1988) are never suspended; availability suspension
+  clears when the capability returns; a config-invalid suspension is NOT cleared
+  by availability reconcile
 - `reconcile_instance_config_health`: a stored slice that no longer validates
   through the pod suspends `capability_config_invalid`; a healthy slice is a
   no-op
@@ -101,21 +102,46 @@ async def test_revoked_reason_is_the_rebac_entry_point() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_selection_is_tolerated_never_suspends() -> None:
+async def test_tolerated_id_is_never_unavailable() -> None:
+    # #1988: a selected id in `tolerated_ids` (a known-but-disabled catalog MCP
+    # server, supplied by the availability sweep) is never a suspension even
+    # when absent from the advertised set.
     record = _make_record()
     record.tuning = record.tuning.model_copy(
-        update={"selected_capability_ids": ["mcp:some_server"]}
+        update={"selected_capability_ids": ["some_server"]}
     )
     store = _FakeAgentInstanceStore([record])
 
     reason = await reconcile_instance_suspension(
         instance=record,
         store=store,
-        available_capability_ids=frozenset(),  # server absent
+        available_capability_ids=frozenset(),  # server absent from templates
+        tolerated_ids=frozenset({"some_server"}),  # but disabled in MCP catalog
     )
 
     assert reason is None
     assert record.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_revocation_path_suspends_revoked_mcp_capability() -> None:
+    # #1988: the revocation path passes NO tolerated ids, so revoking an
+    # MCP-backed capability suspends its dependents like any other capability.
+    record = _make_record()
+    record.tuning = record.tuning.model_copy(
+        update={"selected_capability_ids": ["market_data"]}
+    )
+    store = _FakeAgentInstanceStore([record])
+
+    reason = await reconcile_instance_suspension(
+        instance=record,
+        store=store,
+        available_capability_ids=frozenset(),  # grant revoked
+        revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+    )
+
+    assert reason is SuspensionReason.CAPABILITY_ACCESS_REVOKED
+    assert record.suspension_reason == "capability_access_revoked"
 
 
 @pytest.mark.asyncio

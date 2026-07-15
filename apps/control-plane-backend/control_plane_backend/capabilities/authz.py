@@ -17,9 +17,10 @@ Read-side capability authorization (CAPAB-01 / #1980, RFC §8.1).
 
 The `can_use` half consumed by the catalog listing and the agent-save check.
 Callers here NEVER touch the structural tuples — they only ask `can_use`.
-MCP (`mcp:<id>`) capabilities are not part of the FGA `capability` type (they are
-governed by the pod MCP catalog / team policy) and are therefore never filtered
-here — only real capabilities are scoped.
+Every capability id is FGA-gated the same way — an MCP-backed capability's id
+is the plain catalog server id now (#1988, supersedes the `mcp:<id>` bypass),
+so it is an ordinary `capability` object in the FGA type and is scoped here
+like any other.
 """
 
 from __future__ import annotations
@@ -30,7 +31,6 @@ from typing import Iterable, Sequence
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.security.rebac.rebac_engine import RebacEngine
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.capability.mcp_ids import is_mcp_capability_id
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 async def usable_capability_ids(
     rebac: RebacEngine, user: KeycloakUser
 ) -> set[str] | None:
-    """Real (non-MCP) capability ids a user may use (`ListObjects` — RFC §8.1).
+    """Capability ids a user may use (`ListObjects` — RFC §8.1).
 
     Returns None when ReBAC is disabled, signalling "no scoping" so the caller
     leaves the catalog unfiltered (everything is public in that mode).
@@ -55,12 +55,11 @@ async def can_use_capability(
 ) -> bool:
     """`Check(user, can_use, capability:{id})` (agent save / session prep).
 
-    MCP capabilities are always allowed here (out of the FGA type's scope). The
-    noop engine returns True, so ReBAC-disabled deployments allow everything.
+    Every capability — including MCP-backed ones (#1988) — is gated by this
+    check. The noop engine returns True, so ReBAC-disabled deployments allow
+    everything.
     """
 
-    if is_mcp_capability_id(capability_id):
-        return True
     return await rebac.has_user_permission(
         user, CapabilityPermission.CAN_USE, capability_id
     )
@@ -72,28 +71,23 @@ def filter_entries_by_usable(
 ) -> list[CapabilityCatalogEntry]:
     """Drop admin-gated capabilities the user cannot use from a catalog list.
 
-    `usable_ids=None` (ReBAC disabled) leaves the list untouched. MCP entries
-    always pass through.
+    `usable_ids=None` (ReBAC disabled) leaves the list untouched. MCP-backed
+    entries are gated exactly like any other capability now (#1988).
     """
 
     if usable_ids is None:
         return list(entries)
-    return [
-        entry
-        for entry in entries
-        if is_mcp_capability_id(entry.id) or entry.id in usable_ids
-    ]
+    return [entry for entry in entries if entry.id in usable_ids]
 
 
 def unusable_selected_ids(
     selected_ids: Iterable[str], usable_ids: set[str] | None
 ) -> list[str]:
-    """Selected real capabilities the user may NOT use (agent-save rejection)."""
+    """Selected capabilities the user may NOT use (agent-save rejection).
+
+    MCP-backed capabilities are gated like any other id now (#1988).
+    """
 
     if usable_ids is None:
         return []
-    return [
-        cap_id
-        for cap_id in selected_ids
-        if not is_mcp_capability_id(cap_id) and cap_id not in usable_ids
-    ]
+    return [cap_id for cap_id in selected_ids if cap_id not in usable_ids]

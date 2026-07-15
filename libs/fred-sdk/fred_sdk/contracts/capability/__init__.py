@@ -58,15 +58,8 @@ from .manifest import (
     UploadedFile,
     chat_part_kind,
 )
-from .mcp_ids import (
-    MCP_CAPABILITY_PREFIX,
-    is_mcp_capability_id,
-    mcp_capability_id,
-    mcp_server_id_of,
-)
 
 __all__ = [
-    "MCP_CAPABILITY_PREFIX",
     "AgentCapability",
     "AssetSlot",
     "CapabilityCatalogEntry",
@@ -89,7 +82,4 @@ __all__ = [
     "TeamScopePolicy",
     "UploadedFile",
     "chat_part_kind",
-    "is_mcp_capability_id",
-    "mcp_capability_id",
-    "mcp_server_id_of",
 ]

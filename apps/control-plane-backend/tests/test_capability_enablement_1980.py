@@ -406,6 +406,39 @@ async def test_seed_registration_skips_default_on_with_required_settings() -> No
 
 
 @pytest.mark.asyncio
+async def test_seed_registration_skips_admin_gated_mcp_entry() -> None:
+    # #1988 regression: an MCP-derived catalog entry now carries a PLAIN server
+    # id (no `mcp:` prefix, which was illegal in an OpenFGA object id and
+    # crashed seeding). An admin-gated MCP server is seeded like any admin-gated
+    # capability: NOT seeded, no anchor written — and crucially, no crash.
+    rebac = _FakeRebac()
+    catalog = [_entry("mcp-bank-core-demo", team_scope=TeamScopePolicy.ADMIN_GATED)]
+
+    seeded = await seeding.seed_registration_defaults(rebac=rebac, catalog=catalog)
+
+    assert seeded == []
+    # No anchor / default_on tuple written for an admin-gated capability.
+    assert rebac.tuples == set()
+
+
+@pytest.mark.asyncio
+async def test_seed_registration_seeds_default_on_mcp_entry() -> None:
+    # #1988 regression: a DEFAULT_ON MCP-derived entry (plain server id) is
+    # seeded exactly like any default-on capability — anchor + default_on tuple.
+    rebac = _FakeRebac()
+    catalog = [_entry("mcp-bank-core-demo", team_scope=TeamScopePolicy.DEFAULT_ON)]
+
+    seeded = await seeding.seed_registration_defaults(rebac=rebac, catalog=catalog)
+
+    assert seeded == ["mcp-bank-core-demo"]
+    assert (
+        "organization:fred",
+        "default_on",
+        "capability:mcp-bank-core-demo",
+    ) in rebac.tuples
+
+
+@pytest.mark.asyncio
 async def test_default_on_toggle_rejects_required_settings() -> None:
     rebac = _FakeRebac()
     store = _FakeAgentInstanceStore([])
@@ -490,19 +523,28 @@ class _FilterRebac:
 
 
 @pytest.mark.asyncio
-async def test_catalog_filter_hides_unusable_but_keeps_mcp() -> None:
+async def test_catalog_filter_gates_mcp_like_any_capability() -> None:
+    # #1988: an MCP-backed capability's id is the plain catalog server id and is
+    # FGA-gated exactly like any other capability — no `mcp:` pass-through.
     from control_plane_backend.capabilities.authz import (
         filter_entries_by_usable,
         usable_capability_ids,
     )
 
-    rebac = _FilterRebac({"doc_access"})
+    rebac = _FilterRebac({"doc_access", "bank_core"})
     usable = await usable_capability_ids(rebac, user=object())
     entries = [
         _entry("doc_access"),
         _entry("corp_drive"),
         CapabilityCatalogEntry(
-            id="mcp:server",
+            id="bank_core",
+            version="1",
+            name="n",
+            description="d",
+            icon="i",
+        ),
+        CapabilityCatalogEntry(
+            id="market_data",  # MCP-backed, not usable → filtered out
             version="1",
             name="n",
             description="d",
@@ -510,7 +552,7 @@ async def test_catalog_filter_hides_unusable_but_keeps_mcp() -> None:
         ),
     ]
     kept = {e.id for e in filter_entries_by_usable(entries, usable)}
-    assert kept == {"doc_access", "mcp:server"}
+    assert kept == {"doc_access", "bank_core"}
 
 
 @pytest.mark.asyncio
@@ -531,11 +573,13 @@ async def test_catalog_filter_disabled_rebac_keeps_everything() -> None:
 async def test_can_use_capability_check() -> None:
     from control_plane_backend.capabilities.authz import can_use_capability
 
-    rebac = _FilterRebac({"doc_access"})
+    rebac = _FilterRebac({"doc_access", "bank_core"})
     assert await can_use_capability(rebac, object(), "doc_access") is True
     assert await can_use_capability(rebac, object(), "corp_drive") is False
-    # MCP capabilities are always allowed (out of the FGA type's scope).
-    assert await can_use_capability(rebac, object(), "mcp:x") is True
+    # #1988: MCP-backed capabilities are gated like any other id — a granted
+    # MCP capability passes, a non-granted one is rejected.
+    assert await can_use_capability(rebac, object(), "bank_core") is True
+    assert await can_use_capability(rebac, object(), "market_data") is False
 
 
 # ---------------------------------------------------------------------------

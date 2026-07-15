@@ -15,10 +15,10 @@
 // Chat-turn-control registry keyed by capability id, with a capability-agnostic
 // "stock kit" fallback keyed by widget id alone (CAPAB-01 #1976, RFC §9 item
 // 2). The exact mirror of `sidePanelRegistry` (RFC §9 item 3), plus one wrinkle:
-// MCP capabilities have DYNAMIC ids (`mcp:<server>`) and cannot each ship a
-// plugin folder, so their stock widgets (`attach_files`, `document_scope`,
-// `search_policy`, `rag_scope`) resolve through the stock kit instead of a
-// per-capability plugin entry.
+// MCP capabilities have DYNAMIC ids (the plain catalog server id) and cannot
+// each ship a plugin folder, so their stock widgets (`attach_files`,
+// `document_scope`, `search_policy`, `rag_scope`) resolve through the stock
+// kit instead of a per-capability plugin entry.
 //
 // Resolution order per descriptor: the owning capability's own plugin entry
 // first (a capability MAY override a stock widget id), then the stock kit by

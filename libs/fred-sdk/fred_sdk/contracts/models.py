@@ -124,6 +124,18 @@ class ClientAuthMode(str, Enum):
     NO_TOKEN = "no_token"  # nosec B105
 
 
+class TeamScopePolicy(str, Enum):
+    """How a capability becomes usable by a team (RFC §7, §8.3).
+
+    Lives here (not in `capability.manifest`) so `MCPServerConfiguration` can
+    declare a per-server `team_scope` without an import cycle; re-exported from
+    `capability.manifest` for its original import path.
+    """
+
+    DEFAULT_ON = "default_on"
+    ADMIN_GATED = "admin_gated"
+
+
 class MCPServerConfiguration(BaseModel):
     """Configuration for an MCP server."""
 
@@ -179,6 +191,14 @@ class MCPServerConfiguration(BaseModel):
             "User-facing configuration options declared by this server. "
             "Rendered in the agent form beneath the server's activation checkbox. "
             "Values flow into RuntimeContext as tuning field values at execution time."
+        ),
+    )
+    team_scope: TeamScopePolicy = Field(
+        TeamScopePolicy.ADMIN_GATED,
+        description=(
+            "Team scoping of the capability this server becomes (#1988): "
+            "admin_gated (default) requires a platform admin to enable the "
+            "server per team; default_on makes it usable by every team."
         ),
     )
 

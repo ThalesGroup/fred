@@ -124,16 +124,15 @@ export function AgentFormBody({
   // (untick/reset the capability and re-save, or contact a platform admin). A
   // successful save re-validates every active slice and clears the suspension —
   // there is no second clearing mechanism. The offending capability id is only
-  // derivable for the availability reasons (a selected non-MCP id the template
-  // no longer advertises); `capability_config_invalid` names no id (the pod's
-  // 422 wording is not carried on the summary), so its message is generic.
+  // derivable for the availability reasons (a selected id the template no
+  // longer advertises, including MCP capabilities, which are FGA/team-gated
+  // like every other capability); `capability_config_invalid` names no id (the
+  // pod's 422 wording is not carried on the summary), so its message is generic.
   const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
   const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
   const missingCapabilityIds =
     suspensionReason && suspensionReason !== "capability_config_invalid"
-      ? (editInstance?.selected_capability_ids ?? []).filter(
-          (id) => !id.startsWith("mcp:") && !availableCapabilityIds.has(id),
-        )
+      ? (editInstance?.selected_capability_ids ?? []).filter((id) => !availableCapabilityIds.has(id))
       : [];
   const suspensionMessage = (() => {
     if (!suspensionReason) return undefined;

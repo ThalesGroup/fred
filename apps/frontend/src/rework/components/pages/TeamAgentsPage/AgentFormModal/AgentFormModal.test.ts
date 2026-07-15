@@ -85,25 +85,25 @@ describe("buildAgentFormSubmitPayload", () => {
     expect(payload.capabilityConfigValues).toEqual({ "ppt-filler": { tone: "formal" } });
   });
 
-  it("keeps mcp:<id> capabilities like any other capability (#1978 — MCP servers are capabilities)", () => {
+  it("keeps MCP capabilities like any other capability (#1988 — MCP capability ids are plain catalog server ids)", () => {
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",
         displayName: "Agent",
         description: "",
         tuningValues: {},
-        selectedCapabilityIds: ["mcp:knowledge-flow-mcp-text"],
+        selectedCapabilityIds: ["knowledge-flow-mcp-text"],
         capabilityConfigValues: {
-          "mcp:knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
+          "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
         },
       },
-      makeCapabilityTemplate(["mcp:knowledge-flow-mcp-text"]),
+      makeCapabilityTemplate(["knowledge-flow-mcp-text"]),
     );
 
     expect(payload.templateHasCapabilities).toBe(true);
-    expect(payload.selectedCapabilityIds).toEqual(["mcp:knowledge-flow-mcp-text"]);
+    expect(payload.selectedCapabilityIds).toEqual(["knowledge-flow-mcp-text"]);
     expect(payload.capabilityConfigValues).toEqual({
-      "mcp:knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
+      "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
     });
   });
 });

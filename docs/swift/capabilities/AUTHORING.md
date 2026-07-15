@@ -43,7 +43,7 @@ Contract surface (import from here, never re-declare):
 | --- | --- |
 | `libs/fred-runtime/fred_runtime/capabilities/demo.py` (`DemoEchoCapability`) | **Minimal tracer**: one static tool, one scalar config field, plus one router + one owned table + one chat part + one side panel — the full vertical, smallest possible. |
 | `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: a live vector-search tool reaching a platform service through a typed `RuntimeServices` port, static config-field scoping, and one computed chat-turn control. The tutorial. |
-| `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. |
+| `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. |
 
 ---
 
@@ -94,7 +94,7 @@ by declaring a part with a `Literal` `type` discriminator in `manifest.chat_part
 
 | You need | You author | Fred code written |
 | --- | --- | --- |
-| Tools + config + prompt fragment | an **MCP server** registered in the catalog → it *is* an `mcp:<server>` capability | **zero** `[T1]` |
+| Tools + config + prompt fragment | an **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id (no prefix — #1988) | **zero** `[T1]` |
 | Full vertical (`validate_config`, middleware, `router`, `tables`, team settings) | a **capability package** built on `fred-sdk` | the package only |
 | First-party | same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
 
@@ -120,7 +120,16 @@ under `cap_<id>_alembic_version` (RFC §7.1). `demo.py` + `demo_migrations/` is 
 
 **Team scope** (RFC §8.3): `TeamScopePolicy.DEFAULT_ON` (usable without an admin gate — a
 capability with a *required* team-settings field cannot be default-on) or `ADMIN_GATED`
-(default). `document_access` is default-on.
+(default). `document_access` is default-on. MCP catalog servers carry the same policy via
+`MCPServerConfiguration.team_scope` in `mcp_catalog.yaml` (default `admin_gated` — a
+deployment must explicitly opt a server into `default_on`, #1988); there is no separate
+MCP enablement mechanism.
+
+**Manifest id pattern (#1988):** `CapabilityManifest.id` must match
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe) — a bad id fails pod boot
+loudly instead of crashing control-plane FGA tuple writes later. No capability id may
+carry a `:` or other separator; this is why MCP capability ids are the bare catalog
+server id, not a `mcp:`-prefixed string.
 
 ---
 

@@ -31,19 +31,18 @@ How to use:
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..models import FieldSpec
+from ..models import FieldSpec, TeamScopePolicy
 
-
-class TeamScopePolicy(str, Enum):
-    """How a capability becomes usable by a team (RFC §7, §8.3)."""
-
-    DEFAULT_ON = "default_on"
-    ADMIN_GATED = "admin_gated"
+# Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
+# URL path segments (`/capabilities/{id}/...`, §9.1). OpenFGA forbids `:`,
+# `#`, `*` and whitespace in object ids; this pattern is the conservative
+# URL-safe subset, enforced at declaration so a bad id fails pod boot loudly
+# instead of crashing control-plane tuple writes (#1988).
+CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 
 
 class UploadedFile(BaseModel):
@@ -202,7 +201,7 @@ class CapabilityManifest(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    id: str = Field(min_length=1)
+    id: str = Field(min_length=1, pattern=CAPABILITY_ID_PATTERN)
     version: str = Field(min_length=1)
     name: str = Field(min_length=1, description="i18n key")
     description: str = Field(min_length=1, description="i18n key")

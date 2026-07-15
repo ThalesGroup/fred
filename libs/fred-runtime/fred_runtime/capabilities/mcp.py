@@ -18,16 +18,17 @@
 
 Why this module exists:
 - MCP stops being special. Every `mcp_catalog.yaml` entry becomes a
-  pre-registered `mcp:<server>` capability instance, so MCP servers, built-ins,
-  and full-vertical capabilities live in ONE registry and ONE product contract
-  (the "one Tools tab"). This retires the `ManagedAgentTuning`/`AgentTuning` MCP
-  trio (`mcp_servers`, `selected_mcp_server_ids`, `mcp_config_values`).
+  pre-registered capability instance whose id IS the catalog server id (#1988),
+  so MCP servers, built-ins, and full-vertical capabilities live in ONE
+  registry, ONE product contract, and ONE team-gating model (the "one Tools
+  tab"). This retires the `ManagedAgentTuning`/`AgentTuning` MCP trio
+  (`mcp_servers`, `selected_mcp_server_ids`, `mcp_config_values`).
 
 Contained Tier-1 shape (does NOT touch the execution loop):
 - an `McpCapability` does NOT itself load MCP tools. Live MCP tool loading stays
   in `FredMcpToolProvider`, driven by `definition.default_mcp_servers` — which
-  agent assembly derives from the `mcp:<id>` entries of `selected_capability_ids`
-  (see `fred_runtime.app.agent_app`).
+  agent assembly derives from the selected capability ids that resolve to
+  `McpCapability` registry entries (see `fred_runtime.app.agent_app`).
 - the capability's ONLY runtime contribution is a prompt-fragment middleware
   carrying the catalog server's `agent_instructions` (RFC §3.8 AC4), delivered
   through `awrap_model_call` exactly like `DynamicPromptMiddleware`.
@@ -43,30 +44,18 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
 from fred_sdk.contracts.capability import (
-    MCP_CAPABILITY_PREFIX,
     AgentCapability,
     CapabilityContext,
     CapabilityManifest,
     ChatControlSpec,
     EmptyModel,
-    TeamScopePolicy,
-    is_mcp_capability_id,
-    mcp_capability_id,
-    mcp_server_id_of,
 )
 
-# Re-exported (the `mcp:<server>` id contract lives in fred-sdk so control-plane
-# shares it) so callers can keep importing them from the runtime capability
-# package.
 __all__ = [
-    "MCP_CAPABILITY_PREFIX",
     "MCP_CAPABILITY_SCHEMA_VERSION",
     "McpCapability",
     "McpServerConfig",
     "build_mcp_capability",
-    "is_mcp_capability_id",
-    "mcp_capability_id",
-    "mcp_server_id_of",
     "register_mcp_capabilities",
 ]
 from fred_sdk.contracts.models import MCPServerConfiguration
@@ -283,19 +272,20 @@ def build_mcp_capability(server: MCPServerConfiguration) -> McpCapability:
 
     The manifest is server-specific, so a dynamic subclass carries it (the SDK
     declares `manifest`/`ConfigModel` as `ClassVar`s). `name`/`description` are
-    already i18n keys on `MCPServerConfiguration`; `team_scope` is `DEFAULT_ON`
-    to preserve today's behaviour (MCP servers were never admin-gated —
-    per-team gating is Tier 3).
+    already i18n keys on `MCPServerConfiguration`. The capability id IS the
+    catalog server id, and `team_scope` comes from the catalog entry
+    (`admin_gated` unless the yaml opts into `default_on`) — MCP servers are
+    team-gated like every other capability (#1988).
     """
 
     manifest = CapabilityManifest(
-        id=mcp_capability_id(server.id),
+        id=server.id,
         version=MCP_CAPABILITY_SCHEMA_VERSION,
         name=server.name,
         description=server.description or server.name,
         icon=_MCP_CAPABILITY_ICON,
         config_fields=[field.model_copy(deep=True) for field in server.config_fields],
-        team_scope=TeamScopePolicy.DEFAULT_ON,
+        team_scope=server.team_scope,
     )
     attributes: dict[str, Any] = {"manifest": manifest, "_server": server}
     subclass = type(f"McpCapability_{server.id}", (McpCapability,), attributes)
@@ -306,7 +296,7 @@ def register_mcp_capabilities(
     registry: "CapabilityRegistry", servers: Iterable[MCPServerConfiguration]
 ) -> list[str]:
     """
-    Register one `mcp:<server>` capability per ENABLED catalog server (#1978).
+    Register one capability per ENABLED catalog server (#1978, #1988).
 
     Called from `boot_capability_registry` between entry-point discovery and
     boot validation, so a catalog id colliding with an installed capability id

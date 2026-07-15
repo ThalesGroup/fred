@@ -45,7 +45,7 @@ Do not skip this. Open and skim:
 
 | Caller need | Lane | Fred code |
 | --- | --- | --- |
-| Tools + config + prompt fragment, nothing bespoke | **MCP server** registered in the catalog → it *is* an `mcp:<server>` capability | **zero** `[T1]` — do not write a capability class; register the MCP server |
+| Tools + config + prompt fragment, nothing bespoke | **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id, no `mcp:` prefix (#1988) | **zero** `[T1]` — do not write a capability class; register the MCP server |
 | Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
 | First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
 
@@ -108,7 +108,11 @@ you do **not** edit the union).
   tree beside the package, and `migrations_location()` returning its path. See `demo.py`
   + `demo_migrations/`.
 - Team scope: `TeamScopePolicy.DEFAULT_ON` (no admin gate; incompatible with a *required*
-  team-settings field) or `ADMIN_GATED` (default).
+  team-settings field) or `ADMIN_GATED` (default). MCP catalog servers use the same enum
+  via `MCPServerConfiguration.team_scope` in `mcp_catalog.yaml` — default `admin_gated`.
+- Manifest id must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe, #1988) —
+  no `:` or other separator. This is also why MCP capability ids are the bare catalog
+  server id, not `mcp:<server>`; `mcp_ids.py`/`is_mcp_capability_id` are retired.
 
 ---
 

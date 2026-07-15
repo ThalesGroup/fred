@@ -15,9 +15,9 @@
 // Capability-agnostic chat-turn-control fallback ("stock kit"), keyed by
 // `widget` id alone (CAPAB-01 #1976, RFC §3.3). The MCP capability's widget
 // ids (`attach_files`, `document_scope`, `search_policy`, `rag_scope`) are
-// computed at prep by a single shared capability whose *id* is dynamic
-// (`mcp:<server>`) — it cannot ship a plugin folder per server, so these rows
-// resolve here instead of through `CapabilityUiPlugin.chatTurnControls`.
+// computed at prep by a single shared capability whose *id* is dynamic (the
+// plain catalog server id) — it cannot ship a plugin folder per server, so
+// these rows resolve here instead of through `CapabilityUiPlugin.chatTurnControls`.
 // `chatTurnControlRegistry.ts` only falls back to this map when no plugin
 // claims the (capability_id, widget) pair.
 

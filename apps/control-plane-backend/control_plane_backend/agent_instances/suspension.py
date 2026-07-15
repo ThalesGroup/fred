@@ -55,7 +55,6 @@ from typing import Protocol
 from fred_core.common import TeamId
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_sdk.contracts.capability.mcp_ids import is_mcp_capability_id
 
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
@@ -140,22 +139,32 @@ class SliceInvalid(Exception):
 def unavailable_capabilities(
     instance: AgentInstanceRecord,
     available_capability_ids: Collection[str],
+    *,
+    tolerated_ids: Collection[str] = (),
 ) -> list[str]:
     """
-    The instance's selected NON-MCP capabilities the pod no longer advertises.
+    The instance's selected capabilities the pod no longer advertises (#1988).
 
-    MCP (`mcp:<id>`) selections are tolerated at agent assembly (the live tool
-    provider skips unknown/disabled servers), mirroring the runtime's
-    `_build_capability_block`, so a missing MCP server is a catalog warning —
-    never a suspension. Real capabilities are the loud ones.
+    Every capability id is FGA-safe and reconciled the same way now — an
+    MCP-backed capability's id is the plain catalog server id, no longer a
+    `mcp:<id>` id skipped wholesale.
+
+    `tolerated_ids` names capabilities that must never be reported unavailable
+    even when absent from `available_capability_ids`. It is used ONLY by the
+    availability sweep to carry the pod's known-but-DISABLED catalog MCP servers
+    (supplied from the pod MCP catalog): such a server is intentionally skipped
+    by the live tool provider at assembly, so a missing tool is a catalog
+    warning — never a suspension. The revocation path passes nothing here, so
+    revoking an MCP-backed capability DOES suspend its dependents.
     """
 
     available = set(available_capability_ids)
+    tolerated = set(tolerated_ids)
     selected = instance.tuning.selected_capability_ids or []
     return [
         cap_id
         for cap_id in selected
-        if not is_mcp_capability_id(cap_id) and cap_id not in available
+        if cap_id not in available and cap_id not in tolerated
     ]
 
 
@@ -259,6 +268,7 @@ async def reconcile_instance_suspension(
     instance: AgentInstanceRecord,
     store: SuspensionStore,
     available_capability_ids: Collection[str],
+    tolerated_ids: Collection[str] = (),
     revoked_reason: SuspensionReason = SuspensionReason.CAPABILITY_UNAVAILABLE,
     kpi_writer: BaseKPIWriter | None = None,
 ) -> SuspensionReason | None:
@@ -267,8 +277,8 @@ async def reconcile_instance_suspension(
     selected capability is gone (#1975, RFC §3.9). THE named entry point.
 
     Behaviour:
-    - if any selected non-MCP capability is absent from
-      `available_capability_ids` → suspend with `revoked_reason` (unless already
+    - if any selected capability is absent from `available_capability_ids` (and
+      not in `tolerated_ids`) → suspend with `revoked_reason` (unless already
       suspended for that exact reason) and return it. This is the same mismatch
       the pod raises `UnknownCapabilityError` for at assembly — reconciliation
       catches it first so the agent leaves the catalog before anyone hits it.
@@ -279,12 +289,19 @@ async def reconcile_instance_suspension(
 
     Returns the reason the instance is (now) availability-suspended for, or None.
 
+    `tolerated_ids` (#1988) carries the known-but-disabled catalog MCP servers
+    the availability sweep supplies from the pod MCP catalog; those are never
+    reported unavailable. The revocation path passes nothing so revoking an
+    MCP-backed capability suspends its dependents.
+
     #1980 calls this on ReBAC enablement-tuple deletion with
     `revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED` and the reduced
     available set (see the module docstring's trigger-point contract).
     """
 
-    missing = unavailable_capabilities(instance, available_capability_ids)
+    missing = unavailable_capabilities(
+        instance, available_capability_ids, tolerated_ids=tolerated_ids
+    )
     current = instance.suspension_reason
     if missing:
         if current != revoked_reason.value:
@@ -306,17 +323,24 @@ async def reconcile_instance_config_health(
     instance: AgentInstanceRecord,
     store: SuspensionStore,
     validate_slice,
+    skip_ids: Collection[str] = (),
     kpi_writer: BaseKPIWriter | None = None,
 ) -> SuspensionReason | None:
     """
-    Detect a `capability_config_invalid` instance by re-validating each active,
-    non-MCP stored config slice through the pod (#1975, RFC §3.9).
+    Detect a `capability_config_invalid` instance by re-validating each active
+    stored config slice through the pod (#1975, RFC §3.9).
 
     `validate_slice(capability_id, config) -> Awaitable[None]` re-runs the pod's
     `validate-config` (which applies the lazy `upgrade_config` hook for a stored
     slice whose `schema_version` lags the installed capability) and must raise
     `SliceInvalid` when the slice no longer validates. The first invalid slice
     suspends the instance with `capability_config_invalid` and stops.
+
+    `skip_ids` (#1988) names capabilities NOT to pod-revalidate — the caller
+    passes the pod's MCP catalog server ids so MCP-backed config slices keep
+    today's behaviour (not pod-revalidated). A DISABLED catalog server's
+    capability is absent from the pod registry, so revalidating it would falsely
+    suspend.
 
     Availability takes precedence: an instance already suspended for an
     availability reason is skipped (untick-and-save is the fix path there, and a
@@ -326,8 +350,9 @@ async def reconcile_instance_config_health(
     if instance.suspension_reason in _AVAILABILITY_REASON_VALUES:
         return None
 
+    skip = set(skip_ids)
     for cap_id in instance.tuning.selected_capability_ids or []:
-        if is_mcp_capability_id(cap_id):
+        if cap_id in skip:
             continue
         stored = instance.tuning.capability_config.get(cap_id)
         config = dict(stored.get("config") or {}) if isinstance(stored, dict) else {}

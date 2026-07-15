@@ -47,7 +47,10 @@ from fred_sdk.contracts.capability import (
     UploadedFile,
     chat_part_kind,
 )
-from fred_sdk.contracts.models import AgentTuning, FieldSpec
+from fred_sdk.contracts.capability.manifest import (
+    TeamScopePolicy as ManifestTeamScopePolicy,
+)
+from fred_sdk.contracts.models import AgentTuning, FieldSpec, MCPServerConfiguration
 from fred_sdk.contracts.runtime import RuntimeServices
 
 # ---------------------------------------------------------------------------
@@ -276,6 +279,20 @@ def test_manifest_rejects_blank_id() -> None:
         _manifest(id="")
 
 
+def test_manifest_rejects_id_containing_colon() -> None:
+    # Capability ids land in OpenFGA object ids (`capability:<id>`) and URL
+    # path segments; OpenFGA forbids `:` in object ids, so a colon must be
+    # rejected at declaration rather than crashing tuple writes later (#1988).
+    with pytest.raises(ValidationError):
+        _manifest(id="mcp:x")
+
+
+def test_manifest_accepts_ids_with_dots_dashes_and_underscores() -> None:
+    for candidate in ("mcp-bank-core-demo", "doc.access_v2"):
+        manifest = _manifest(id=candidate)
+        assert manifest.id == candidate
+
+
 def test_chat_control_and_side_panel_specs() -> None:
     class _Params(BaseModel):
         library_ids: list[str] = []
@@ -340,21 +357,22 @@ def test_stored_capability_config_envelope_shape() -> None:
 def test_agent_tuning_carries_capability_selection_including_mcp_servers() -> None:
     # #1978 retired the MCP tuning trio (mcp_servers/selected_mcp_server_ids/
     # mcp_config_values): MCP servers are now selected and configured as
-    # ordinary `mcp:<server>` capabilities alongside any other capability.
+    # ordinary capabilities alongside any other capability, keyed by the
+    # catalog server id directly (#1988 dropped the `mcp:` id prefix).
     tuning = AgentTuning(
         role="r",
         description="d",
-        selected_capability_ids=["demo_echo", "mcp:tavily"],
+        selected_capability_ids=["demo_echo", "tavily"],
         capability_config={
             "demo_echo": StoredCapabilityConfig(
                 schema_version="0.1.0", config={"uppercase": True}
             ),
-            "mcp:tavily": StoredCapabilityConfig(schema_version="1", config={}),
+            "tavily": StoredCapabilityConfig(schema_version="1", config={}),
         },
     )
-    assert tuning.selected_capability_ids == ["demo_echo", "mcp:tavily"]
+    assert tuning.selected_capability_ids == ["demo_echo", "tavily"]
     assert tuning.capability_config["demo_echo"].schema_version == "0.1.0"
-    assert tuning.capability_config["mcp:tavily"].schema_version == "1"
+    assert tuning.capability_config["tavily"].schema_version == "1"
     assert not hasattr(tuning, "mcp_servers")
     assert not hasattr(tuning, "selected_mcp_server_ids")
     assert not hasattr(tuning, "mcp_config_values")
@@ -362,3 +380,33 @@ def test_agent_tuning_carries_capability_selection_including_mcp_servers() -> No
     empty = AgentTuning(role="r", description="d")
     assert empty.selected_capability_ids is None
     assert empty.capability_config == {}
+
+
+# ---------------------------------------------------------------------------
+# TeamScopePolicy / MCPServerConfiguration.team_scope (#1988)
+# ---------------------------------------------------------------------------
+
+
+def test_team_scope_policy_importable_from_both_paths() -> None:
+    # TeamScopePolicy moved to fred_sdk.contracts.models but must remain
+    # importable from its original home (capability.manifest) and from the
+    # capability package's public surface — both re-export the same enum.
+    assert ManifestTeamScopePolicy is TeamScopePolicy
+
+
+def test_mcp_server_configuration_team_scope_defaults_to_admin_gated() -> None:
+    server = MCPServerConfiguration.model_validate(
+        {"id": "tavily", "name": "mcp.tavily.name"}
+    )
+    assert server.team_scope is TeamScopePolicy.ADMIN_GATED
+
+
+def test_mcp_server_configuration_team_scope_parses_from_raw_value() -> None:
+    # yaml-style raw input: a plain string, not the enum member.
+    raw = {
+        "id": "tavily",
+        "name": "mcp.tavily.name",
+        "team_scope": "default_on",
+    }
+    server = MCPServerConfiguration.model_validate(raw)
+    assert server.team_scope is TeamScopePolicy.DEFAULT_ON

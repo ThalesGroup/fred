@@ -1480,10 +1480,11 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
 
     Why this exists:
     - #1978 retired the MCP tuning trio: MCP servers are now selected through
-      `mcp:<id>` entries in `selected_capability_ids`, but the tri-state
-      semantics survive the migration — None=inherited template default (all
-      of `definition.default_mcp_servers`), []=activate none, a non-empty list
-      of `mcp:<id>` ids=exact subset
+      plain server-id entries in `selected_capability_ids` (#1988 dropped the
+      `mcp:` id prefix — the capability id IS the catalog server id), but the
+      tri-state semantics survive the migration — None=inherited template
+      default (all of `definition.default_mcp_servers`), []=activate none, a
+      non-empty list of server ids=exact subset
     - runtime execution must therefore not collapse an explicit empty
       selection back to "all tools"
 
@@ -1543,11 +1544,12 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     Why this exists:
     - #1978 moved `agent_instructions` delivery off `_apply_runtime_tuning`
       (which no longer touches the system prompt for MCP at all) and onto each
-      `mcp:<id>` capability's `_McpInstructionsMiddleware` — assembled by
-      `_build_capability_block` from the agent's selected capabilities. The
-      instructions must stay enforced even when an operator overrides
-      `prompts.system`, since they are delivered as a separate middleware
-      layer, not folded into `system_prompt_template`.
+      MCP server's own capability `_McpInstructionsMiddleware` — assembled by
+      `_build_capability_block` from the agent's selected capabilities. #1988
+      dropped the `mcp:` id prefix: the capability id IS the catalog server
+      id (`server.id`). The instructions must stay enforced even when an
+      operator overrides `prompts.system`, since they are delivered as a
+      separate middleware layer, not folded into `system_prompt_template`.
 
     How to use it:
     - run in the default offline fred-runtime test suite
@@ -1558,7 +1560,7 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
     from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
-    from fred_sdk.contracts.capability import mcp_capability_id
+    from fred_sdk.contracts.capability import TeamScopePolicy
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -1582,10 +1584,15 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
             )
         ],
     )
+    # #1988: the capability id IS the plain catalog server id (no `mcp:`
+    # prefix), and team_scope flows from the catalog entry's default.
+    registered = registry.capability("mcp-search")
+    assert registered.manifest.id == "mcp-search"
+    assert registered.manifest.team_scope is TeamScopePolicy.ADMIN_GATED
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        selected_capability_ids=[mcp_capability_id("mcp-search")],
+        selected_capability_ids=["mcp-search"],
         values={"prompts.system": "Custom override prompt."},
     )
 
@@ -1617,8 +1624,8 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     Why this exists:
     - tool contracts should disappear when the corresponding MCP server is not
       part of the agent's effective `selected_capability_ids` — even though
-      the pod's capability registry still advertises the `mcp:<id>` capability
-      for other agents
+      the pod's capability registry still advertises the server's capability
+      (keyed by its plain server id, #1988) for other agents
 
     How to use it:
     - run in the default offline fred-runtime test suite
@@ -1629,7 +1636,6 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
     from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
-    from fred_sdk.contracts.capability import mcp_capability_id
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -1664,7 +1670,7 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        selected_capability_ids=[mcp_capability_id("mcp-storage")],
+        selected_capability_ids=["mcp-storage"],
     )
 
     block = _build_capability_block(
@@ -1684,6 +1690,45 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
         if isinstance(mw, _McpInstructionsMiddleware)
     ]
     assert fragments == []
+
+
+def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:
+    """
+    Ensure `build_mcp_capability` sets the manifest id to the plain catalog
+    server id and forwards the server's `team_scope` verbatim.
+
+    Why this exists:
+    - #1988 removed the `mcp:` capability id prefix — the capability id IS
+      `server.id`, unprefixed, so it survives `CAPABILITY_ID_PATTERN` (which
+      rejects `:`) and can be written straight into OpenFGA tuples
+    - `team_scope` must flow from the catalog entry, not default silently:
+      an `admin_gated` server must stay admin-gated once registered as a
+      capability, and a `default_on` server must stay default-on
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server -q`
+    """
+    from fred_runtime.capabilities.mcp import build_mcp_capability
+    from fred_sdk.contracts.capability import TeamScopePolicy
+    from fred_sdk.contracts.models import MCPServerConfiguration
+
+    admin_gated_server = MCPServerConfiguration.model_validate(
+        {"id": "mcp-search", "name": "Search"}
+    )
+    default_on_server = MCPServerConfiguration.model_validate(
+        {"id": "mcp-storage", "name": "Storage", "team_scope": "default_on"}
+    )
+
+    admin_gated_capability = build_mcp_capability(admin_gated_server)
+    default_on_capability = build_mcp_capability(default_on_server)
+
+    assert admin_gated_capability.manifest.id == "mcp-search"
+    assert admin_gated_capability.manifest.team_scope is TeamScopePolicy.ADMIN_GATED
+    assert default_on_capability.manifest.id == "mcp-storage"
+    assert default_on_capability.manifest.team_scope is TeamScopePolicy.DEFAULT_ON
 
 
 # ---------------------------------------------------------------------------

@@ -49,13 +49,13 @@ describe("chatTurnControlRegistry (#1976)", () => {
   it("falls back to the stock kit by widget id for a dynamic MCP capability id", () => {
     const registry = buildChatTurnControlRegistry([withControl], stockKit);
     const resolved = resolveChatTurnControls(
-      [descriptor("mcp:my-server", "search_policy", { default: "hybrid" })],
+      [descriptor("my-server", "search_policy", { default: "hybrid" })],
       registry,
     );
 
     expect(resolved).toHaveLength(1);
     expect(resolved[0]).toMatchObject({
-      capabilityId: "mcp:my-server",
+      capabilityId: "my-server",
       widget: "search_policy",
       params: { default: "hybrid" },
       Component: StockControl,
@@ -69,18 +69,18 @@ describe("chatTurnControlRegistry (#1976)", () => {
 
   it("defaults params to {} when the descriptor omits them", () => {
     const registry = buildChatTurnControlRegistry([], stockKit);
-    const resolved = resolveChatTurnControls([descriptor("mcp:my-server", "attach_files")], registry);
+    const resolved = resolveChatTurnControls([descriptor("my-server", "attach_files")], registry);
     expect(resolved[0].params).toEqual({});
   });
 
   it("preserves descriptor order and prefers the plugin entry over a same-named stock widget", () => {
     const overridingPlugin: CapabilityUiPlugin = {
-      id: "mcp:my-server",
+      id: "my-server",
       chatTurnControls: { attach_files: StubControl },
     };
     const registry = buildChatTurnControlRegistry([overridingPlugin], stockKit);
     const resolved = resolveChatTurnControls(
-      [descriptor("mcp:my-server", "search_policy"), descriptor("mcp:my-server", "attach_files")],
+      [descriptor("my-server", "search_policy"), descriptor("my-server", "attach_files")],
       registry,
     );
 

@@ -26,8 +26,6 @@ from fred_sdk.contracts.capability import (
     ChatControlsRequestItem,
     ChatControlsResponse,
     StoredCapabilityConfig,
-    is_mcp_capability_id,
-    mcp_server_id_of,
 )
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 from pydantic import ValidationError
@@ -189,9 +187,9 @@ class _RuntimeTemplatePayload:
         Why this function exists:
         - control-plane keeps its own typed managed-agent models, so runtime
           template payloads need one normalization step before aggregation
-        - MCP servers surface as `mcp:<server>` capabilities in
-          `available_capabilities` (#1978), so no MCP-specific enrichment
-          happens here anymore
+        - MCP servers surface as ordinary capabilities keyed by their plain
+          catalog server id in `available_capabilities` (#1988), so no
+          MCP-specific enrichment happens here anymore
 
         How to use it:
         - call with one raw `/agents/templates` item returned by a runtime pod
@@ -1031,16 +1029,16 @@ async def list_managed_agent_instances(
             continue
 
         warnings: list[str] = []
-        # MCP servers are `mcp:<id>` capabilities now (#1978); drift is checked
-        # against the pod's MCP catalog for the selected `mcp:<id>` capabilities.
+        # An MCP-backed capability's id is the plain catalog server id now
+        # (#1988). Drift for those is checked against the pod's MCP catalog map
+        # ({server_id -> enabled}, disabled servers included). A selected id that
+        # IS a known-but-DISABLED catalog server is warning-only (the live tool
+        # provider skips it at assembly). A server REMOVED from the catalog is
+        # indistinguishable from a package capability id here, so its "gone"
+        # warning is dropped — removal is now covered by availability suspension.
         for cid in record.tuning.selected_capability_ids or []:
-            if not is_mcp_capability_id(cid):
-                continue
-            sid = mcp_server_id_of(cid)
-            if sid not in catalog:
-                warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
-            elif not catalog[sid]:
-                warnings.append(f"MCP server '{sid}' is disabled in the pod catalog.")
+            if cid in catalog and not catalog[cid]:
+                warnings.append(f"MCP server '{cid}' is disabled in the pod catalog.")
         summaries.append(_record_to_summary(record, catalog_warnings=warnings))
 
     return summaries
@@ -1090,6 +1088,39 @@ async def _available_capability_ids_by_source(
     return available
 
 
+async def _mcp_catalog_sets_by_source(
+    deps: ProductServiceDependencies,
+) -> dict[str, tuple[frozenset[str], frozenset[str]]]:
+    """
+    Map each enabled runtime source to `(disabled_ids, all_ids)` from its pod
+    MCP catalog (#1988).
+
+    - `disabled_ids` — servers declared but DISABLED in the pod catalog. The
+      sweep tolerates these (they are never an availability suspension because
+      the live tool provider skips a disabled server at assembly).
+    - `all_ids` — every declared server id (enabled or not). The sweep skips
+      pod config-revalidation for these MCP-backed slices.
+
+    An unreachable pod (None catalog) yields two empty sets: with no catalog
+    signal the sweep tolerates nothing extra (availability already skips an
+    unreachable source entirely, so this only matters for config health, where
+    "skip nothing" is the safe default).
+    """
+
+    sets: dict[str, tuple[frozenset[str], frozenset[str]]] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        catalog = await _fetch_mcp_catalog(source.base_url)
+        if catalog is None:
+            sets[source.runtime_id] = (frozenset(), frozenset())
+            continue
+        disabled = frozenset(sid for sid, enabled in catalog.items() if not enabled)
+        all_ids = frozenset(catalog)
+        sets[source.runtime_id] = (disabled, all_ids)
+    return sets
+
+
 async def run_capability_reconciliation_sweep(
     deps: ProductServiceDependencies,
     *,
@@ -1125,6 +1156,14 @@ async def run_capability_reconciliation_sweep(
         for source in deps.configuration.platform.runtime_catalog_sources
         if source.enabled
     }
+    # Per-source pod MCP catalog: an MCP-backed capability's id IS its plain
+    # catalog server id now (#1988). `tolerated` = servers present-but-DISABLED
+    # in the pod catalog — never an availability suspension (the live tool
+    # provider skips them at assembly); a REMOVED server suspends like any
+    # vanished capability. `all_mcp` = every declared server id, used to skip
+    # pod config-revalidation of MCP-backed slices (their config lives in the
+    # permissive pod bag, not a pod `validate-config` verdict).
+    mcp_catalog_by_source = await _mcp_catalog_sets_by_source(deps)
 
     summary = ReconciliationSweepSummary()
     for record in await store.list_all():
@@ -1134,13 +1173,17 @@ async def run_capability_reconciliation_sweep(
             continue
         summary.checked += 1
         was_suspended = record.suspension_reason is not None
+        tolerated_mcp, all_mcp = mcp_catalog_by_source.get(
+            record.source_runtime_id, (frozenset(), frozenset())
+        )
 
         if dry_run:
             # Report-only: compute the availability verdict without writing.
+            # A disabled catalog MCP server is tolerated, never "missing" (#1988).
             missing = [
                 cap_id
                 for cap_id in (record.tuning.selected_capability_ids or [])
-                if not is_mcp_capability_id(cap_id) and cap_id not in available
+                if cap_id not in available and cap_id not in tolerated_mcp
             ]
             if missing:
                 summary.newly_suspended += 0 if was_suspended else 1
@@ -1154,6 +1197,7 @@ async def run_capability_reconciliation_sweep(
             instance=record,
             store=store,
             available_capability_ids=available,
+            tolerated_ids=tolerated_mcp,
             kpi_writer=kpi_writer,
         )
         if reason is None:
@@ -1168,6 +1212,7 @@ async def run_capability_reconciliation_sweep(
                     validate_slice=_make_slice_validator(
                         base_url=base_url, team_id=record.team_id
                     ),
+                    skip_ids=all_mcp,
                     kpi_writer=kpi_writer,
                 )
 
@@ -1453,7 +1498,8 @@ async def enroll_agent_instance(
     - pass request-scoped product dependencies when available
     - `tuning_field_values` configures agent-authored fields only
     - `capability_ids` and `capability_config_values` configure tool activation
-      (including MCP servers as `mcp:<id>` capabilities) and per-tool options
+      (including MCP servers, which are capabilities keyed by their plain
+      catalog server id — #1988) and per-tool options
 
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
@@ -1519,8 +1565,9 @@ async def enroll_agent_instance(
             }
         )
     # MCP activation/config flows through the capability path (#1978): an MCP
-    # server is an `mcp:<id>` capability, validated and stored via the same pod
-    # round-trip as every other capability below.
+    # server is a capability keyed by its plain catalog server id (#1988),
+    # validated and stored via the same pod round-trip as every other
+    # capability below.
     if request.capability_ids is not None or request.capability_config_values:
         tuning = await _apply_capability_selection(
             tuning,
@@ -1592,7 +1639,8 @@ async def update_agent_instance(
     - `tuning_field_values=None` clears stored agent tuning values
     - `capability_ids=None` resets the instance to the template default
       capability selection; `capability_ids=[]` activates no capabilities
-      (MCP servers are `mcp:<id>` capabilities, #1978)
+      (MCP servers are capabilities keyed by their plain catalog server id,
+      #1988)
     - `capability_config_values=None` resets every selected capability to its
       defaults
 
@@ -1637,8 +1685,9 @@ async def update_agent_instance(
                     }
                 )
         # MCP activation/config is part of the capability selection now (#1978):
-        # an `mcp:<id>` capability is validated and stored through the same pod
-        # round-trip as every other capability below.
+        # an MCP-backed capability (keyed by its plain catalog server id, #1988)
+        # is validated and stored through the same pod round-trip as every other
+        # capability below.
         if {"capability_ids", "capability_config_values"} & tuning_fields_set:
             # Capability writes REQUIRE the live pod: the availability check
             # runs against what the pod advertises and every active slice is

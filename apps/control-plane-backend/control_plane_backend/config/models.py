@@ -108,8 +108,9 @@ class ManagedAgentTuning(BaseModel):
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
     # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
     # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
-    # is now an `mcp:<server>` capability. Its activation lives in
-    # `selected_capability_ids` and its per-server config in `capability_config`.
+    # is now an ordinary capability keyed by its plain catalog server id
+    # (#1988). Its activation lives in `selected_capability_ids` and its
+    # per-server config in `capability_config`.
     selected_capability_ids: list[str] | None = Field(
         default=None,
         description=(

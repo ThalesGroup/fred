@@ -850,6 +850,7 @@ export type CapabilityCatalogEntry = {
   name: string;
   route_base_url?: string | null;
   team_scope?: TeamScopePolicy;
+  team_settings_fields?: FieldSpec[];
   version: string;
 };
 export type ClientAuthMode = "user_token" | "no_token";
@@ -879,6 +880,8 @@ export type McpServerConfiguration = {
   provider?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
   sse_read_timeout?: number | null;
+  /** Team scoping of the capability this server becomes (#1988): admin_gated (default) requires a platform admin to enable the server per team; default_on makes it usable by every team. */
+  team_scope?: TeamScopePolicy;
   /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
   transport?: string | null;
   /** URL and endpoint of the MCP server */

@@ -105,9 +105,10 @@ class AgentTemplateSummary(BaseModel):
         description=(
             "Capabilities installed on this template's source pod (#1974/#1978, "
             "RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest "
-            "advertisement. MCP servers surface here as `mcp:<server>` "
-            "capabilities. Drives the one Tools tab in agent creation; "
-            "config_fields render through the metadata-driven form."
+            "advertisement. MCP servers surface here as ordinary capabilities "
+            "keyed by their plain catalog server id (#1988). Drives the one "
+            "Tools tab in agent creation; config_fields render through the "
+            "metadata-driven form."
         ),
     )
 

@@ -108,9 +108,10 @@ export interface CapabilityUiPlugin {
   configWidgets?: Record<string, unknown>;
   /**
    * Composer chat-turn controls keyed by `ChatControlDescriptor.widget` id
-   * (RFC §9 item 2). Capabilities with dynamic ids (MCP servers, `mcp:<server>`)
-   * cannot each ship a plugin folder — they resolve through the capability-agnostic
-   * stock kit fallback instead (`chatTurnControlRegistry.ts`).
+   * (RFC §9 item 2). Capabilities with dynamic ids (MCP servers, id = the
+   * plain catalog server id) cannot each ship a plugin folder — they resolve
+   * through the capability-agnostic stock kit fallback instead
+   * (`chatTurnControlRegistry.ts`).
    */
   chatTurnControls?: Record<string, CapabilityChatTurnControl>;
   /**

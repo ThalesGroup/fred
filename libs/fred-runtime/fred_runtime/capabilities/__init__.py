@@ -58,14 +58,10 @@ from .errors import (
     UnknownCapabilityError,
 )
 from .mcp import (
-    MCP_CAPABILITY_PREFIX,
     MCP_CAPABILITY_SCHEMA_VERSION,
     McpCapability,
     McpServerConfig,
     build_mcp_capability,
-    is_mcp_capability_id,
-    mcp_capability_id,
-    mcp_server_id_of,
     register_mcp_capabilities,
 )
 from .registry import (
@@ -76,16 +72,12 @@ from .registry import (
 
 __all__ = [
     "FRED_CAPABILITIES_ENTRY_POINT_GROUP",
-    "MCP_CAPABILITY_PREFIX",
     "MCP_CAPABILITY_SCHEMA_VERSION",
     "AssetSlotViolationError",
     "CapabilityAgentBlock",
     "McpCapability",
     "McpServerConfig",
     "build_mcp_capability",
-    "is_mcp_capability_id",
-    "mcp_capability_id",
-    "mcp_server_id_of",
     "register_mcp_capabilities",
     "CapabilityAssemblyError",
     "CapabilityConfigInvalidError",

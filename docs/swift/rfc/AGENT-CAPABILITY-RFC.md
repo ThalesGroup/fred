@@ -121,7 +121,7 @@ A capability is one backend package + one frontend folder + one registration lin
 
 ```python
 class CapabilityManifest(BaseModel):
-    id: str                              # "ppt_filler", "document_access", "mcp:<server>"
+    id: str                              # "ppt_filler", "document_access", "mcp-bank-core-demo" (catalog server id, no prefix — #1988)
     version: str                         # bumped per release — cache key for computed surfaces (§3.7)
     name: str                            # i18n key
     description: str                     # i18n key
@@ -423,8 +423,9 @@ class ManagedAgentTuning(BaseModel):
     capability_config: dict[str, dict]          # capability_id -> {"schema_version": manifest.version,
                                               #   "config": StoredConfigModel dump} — opaque to control-plane (§3.9)
     # REMOVED (Tier 1): mcp_servers, selected_mcp_server_ids, mcp_config_values
-    #   — an MCP server is an `mcp:<server>` capability; its selection and per-server
-    #     config become ordinary capability slices. One mechanism, not two.
+    #   — an MCP server IS a capability, id == the catalog server id (no prefix,
+    #     #1988); its selection and per-server config become ordinary capability
+    #     slices. One mechanism, not two.
 ```
 
 Design points:
@@ -503,6 +504,43 @@ Design points:
 > catalog-default fallback there depends on the pod being reachable at read time;
 > the durable move of chat-option resolution to computed `chat_controls` (§3.3)
 > stays with the chat-controls sibling ticket.
+
+> **As implemented (2026-07-15, #1988 — amends #1978/#1980; supersedes the
+> `mcp:<id>` prefix everywhere it appears above and below).** Control-plane
+> startup crashed seeding capability defaults: MCP-derived capabilities carried
+> hardcoded `team_scope=DEFAULT_ON`, so the seeder wrote FGA tuples for them, but
+> `mcp:<server>` contains `:`, which OpenFGA rejects in object ids (HTTP 400).
+> Root cause was architectural, not a formatting bug: MCP capabilities had been
+> carved OUT of the FGA capability type, leaving fragile `is_mcp_capability_id`
+> skips scattered across every FGA path — the seeder simply missed its skip.
+> **Fix: MCP servers become first-class team-gated capabilities, not a
+> special-cased id shape.**
+> - **No more prefix.** Capability id == the MCP catalog server id verbatim
+>   (e.g. `mcp-bank-core-demo`). `fred_sdk.contracts.capability.mcp_ids` and all
+>   its helpers (`is_mcp_capability_id` included) are retired. `CapabilityManifest.id`
+>   now enforces `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe) so a bad
+>   id fails pod boot (still via `DuplicateCapabilityIdError` on collision with an
+>   installed capability id) instead of crashing control-plane tuple writes later.
+> - **`MCPServerConfiguration` gains `team_scope: default_on | admin_gated`**
+>   (default `admin_gated` — deployments must opt a server into `default_on`;
+>   this deliberately breaks the old "every MCP server usable by every team"
+>   retro-compat default). `TeamScopePolicy` moved to `fred_sdk.contracts.models`,
+>   re-exported from `capability/manifest.py`.
+> - **FGA now gates MCP capabilities exactly like any other**: `can_use` at
+>   agent save, catalog filtering, `default_on` seeding, admin per-team
+>   enable/disable, and disable → dependent-instance suspension
+>   (`CAPABILITY_ACCESS_REVOKED`) all apply uniformly. §8.1's "MCP capabilities
+>   are out of the FGA type's scope and never filtered" (below) no longer holds.
+> - **Nuance kept:** a catalog server *disabled* in the pod yaml stays
+>   warning-only (never availability-suspension — the live tool provider skips
+>   it at assembly); MCP-ness is now detected via the pod's MCP catalog fetch
+>   (control-plane) / registry membership (runtime), never by id sniffing. A
+>   server *removed* from the yaml now suspends dependents like any vanished
+>   capability — this reverses §3.9/#1975's "MCP selections never suspend"
+>   (below), which was itself downstream of the carve-out this issue fixes.
+> - **Data migration:** a follow-up alembic migration rewrites persisted
+>   `mcp:X` ids to `X` in agent-instance tuning (`selected_capability_ids` and
+>   `capability_config` keys).
 
 > **As implemented (2026-07-11, #1906 — `fred_runtime/capabilities/document_access/`,
 > `fred_sdk/contracts/runtime.py`, `fred_runtime/integrations/v2_runtime/adapters.py`,
@@ -643,7 +681,10 @@ longer valid — reset them and re-save the agent"). The convention keeping this
 > - **MCP selections never suspend.** `mcp:<id>` selections are tolerated at
 >   assembly (the live tool provider skips unknown/disabled servers), so a missing
 >   MCP server is a catalog warning, mirroring the runtime's
->   `_build_capability_block` — only real capabilities are loud.
+>   `_build_capability_block` — only real capabilities are loud. **Superseded by
+>   #1988** (§3.8 note): a server *removed* from the catalog now suspends
+>   dependents like any other capability; only a server *disabled* in the pod
+>   yaml stays warning-only.
 > - **One clearing mechanism: a successful save.** `update_agent_instance` clears
 >   any suspension after the save re-validated every active slice through the pod
 >   (untick-and-re-save is the fix path for all three reasons). An availability
@@ -1011,7 +1052,7 @@ author and share must be the capability, and mixing must be cheap.
 
 | Team need | What they author | Fred code written |
 | --- | --- | --- |
-| **Tools + config fields + prompt fragment** | An **MCP server**, registered in the catalog → it *is* an `mcp:<server>` capability (Tier 1) | **Zero.** Mixable with everything, on any pod — MCP is already a network protocol, so this lane federates across pods for free |
+| **Tools + config fields + prompt fragment** | An **MCP server**, registered in the catalog → it *is* a capability (Tier 1), id == the catalog server id (no prefix, #1988) | **Zero.** Mixable with everything, on any pod — MCP is already a network protocol, so this lane federates across pods for free |
 | **Full vertical** (`validate_config`, middleware, `router`, `tables`, team settings) | A **capability Python package** built on `fred-sdk` | The package only — no fred code copied or modified, same non-fork guarantee agents have |
 | **First-party** (document-access, PPT filler, WritableDocument) | Same package model — a `fred-capabilities-core` package installed in the shared `fred-agents` pod | In-tree |
 
@@ -1269,6 +1310,9 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   (`list_agent_templates(..., user=)`); agent save `Check`s `can_use` per selected
 >   non-MCP capability in `_apply_capability_selection` (403 on denial). MCP
 >   (`mcp:<id>`) capabilities are out of the FGA type's scope and never filtered.
+>   **This carve-out is the root cause of the #1988 startup crash and is
+>   reversed there: MCP capabilities are now first-class in the FGA type and
+>   `can_use`-filtered like any other** (§3.8 note above).
 > - **Settings (§8.2).** `team_capability_settings(team_id, capability_id, settings,
 >   updated_by, updated_at)` table + `TeamCapabilitySettingsStore`. The typed
 >   `TeamSettingsModel` is advertised on the wire as `manifest.team_settings_fields`
@@ -1479,8 +1523,9 @@ adapter then intersects the result with the session binding's own scope
 end-to-end test through the real adapter.
 
 **Duplicate-search-tool story (pilot decision).** The builtin `knowledge.search`
-(`TOOL_REF_KNOWLEDGE_SEARCH`) and the inprocess `mcp:mcp-knowledge-flow-mcp-text`
-catalog server both still expose a vector-search tool that reads scope from
+(`TOOL_REF_KNOWLEDGE_SEARCH`) and the inprocess `mcp-knowledge-flow-mcp-text`
+catalog server (capability id, no `mcp:` prefix since #1988) both still expose a
+vector-search tool that reads scope from
 `RuntimeContext` only. An instance that BOTH wires one of those AND selects this
 capability would get two vector-search tools with different scoping. For the
 pilot, `DocumentAccessCapability` is the forward path (it adds per-capability

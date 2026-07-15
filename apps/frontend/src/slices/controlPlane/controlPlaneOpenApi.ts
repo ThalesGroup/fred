@@ -1380,7 +1380,7 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
-  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as `mcp:<server>` capabilities. Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
