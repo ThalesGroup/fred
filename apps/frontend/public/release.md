@@ -1,3 +1,25 @@
+**v2.1.1** — 2026-07-15
+
+- **Summary**
+
+  Root platform-admin bootstrap and declarative platform provisioning. A fresh Fred
+  deployment now creates its first `platform_admin` through a one-time, secret-gated
+  bootstrap page instead of a config-seeded subject list, and every subsequent
+  platform/team role can be provisioned declaratively via a `users.json` import bundle.
+  (AUTHZ-07, #1986, #1987)
+
+- **Features**
+
+  - Root platform-admin bootstrap: a one-time, deploy-secret-gated flow (env var or file, Kubernetes-Secret-safe) grants the very first `platform_admin`, replacing the removed config-seeded `platform_admin_subjects`/`platform_observer_subjects` path (AUTHZ-07, #1987)
+  - Declarative platform provisioning: a `users.json` import bundle grants platform and cumulative team roles directly, reconciling roles on both new and pre-existing teams (AUTHZ-07, #1987)
+  - Platform import outcomes are now visible in Activity — a partial "with warnings" import is distinguishable from full success, with per-phase granted/skipped/processed counters (AUTHZ-07, #1987)
+
+- **Bug Fixes**
+
+  - Fix `BootstrapGuard` trapping auth/ReBAC-disabled deployments (the default insecure/dev config) on a bootstrap form that could never succeed (AUTHZ-07, #1987)
+  - Fail closed instead of silently succeeding when a `users.json` import runs with ReBAC disabled (AUTHZ-07, #1987)
+  - Normalize the env-sourced bootstrap secret (strip trailing newline) so Kubernetes-Secret-backed tokens compare correctly (AUTHZ-07, #1987)
+
 **v2.1.0** — 2026-07-13
 
 - **Summary**
