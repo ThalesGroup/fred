@@ -77,6 +77,11 @@ This is the current black-box release-validation mode.
    - `apps/fred-agents`
    - `apps/knowledge-flow` / worker if the tested flow needs it
    - `apps/frontend` if you want to validate the browser-facing proxy path
+
+   For the full step-by-step sequence - infra up, prod-like config, AUTHZ-07
+   root bootstrap, demo-data import, starting each app, then this suite and
+   the Admin > Self-test UI check - see `fred-deployment-factory`'s
+   `docs/LOCAL-DEVELOPMENT.md` ("Full bootstrap walkthrough").
 3. Point `FRED_CONTROL_PLANE_URL` at the manually started control-plane, usually
    `http://localhost:8222/control-plane/v1`.
 4. Point runtime calls at the same public base that a browser would use for the
