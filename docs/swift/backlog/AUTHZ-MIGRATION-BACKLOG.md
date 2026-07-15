@@ -428,14 +428,44 @@ Execution protocol:
     empty factory → registration → Fred bootstrap → Fred import, confirming
     the exit gate.
 
-- [ ] **Step 5 — package bootstrap for deployed environments and upgrades.** Wire
-      the bootstrap secret through the existing Helm/Kubernetes secret mechanism
-      for k3d/GKE/AKS, without committing or logging it; define and test the
-      upgrade behavior for a platform that already owns `platform_admin` tuples
-      but has no completion marker.
-  - Exit gate: rendered charts carry only a secret reference; fresh-install and
-    existing-install paths are both documented and tested fail-closed.
-  - Claude prompt/result/commit: pending Step 4.
+- [ ] **Step 5 — package one fresh-install path for k3d, GKE and AKS.** Wire
+      the externally supplied bootstrap secret through the existing
+      Helm/Kubernetes Secret mechanisms, without committing or logging it. The
+      canonical Fred chart owns one portable application contract
+      (`bootstrap_token_env_var` plus `secretKeyRef`); each platform overlay
+      supplies only the existing Secret name/key through its classification's
+      secret source. Do not create a cloud-specific bootstrap implementation,
+      a second chart, a migration command, or compatibility code for a Swift
+      installation predating the durable marker.
+  - **Delivery decision confirmed 2026-07-15:** today's two targets are new
+    platforms, one on GKE and one on AKS. AUTHZ-07 therefore supports a clean
+    installation only. The sole data migration in scope is **KEA → fresh Swift**:
+    export KEA, deploy empty Swift infrastructure/application, self-register the
+    first identity, complete root bootstrap, then use Fred's canonical platform
+    import. There is no Swift → Swift in-place-upgrade contract to invent in
+    this candidate.
+  - Implementation order for today's critical path:
+    1. add the portable existing-Secret reference to the canonical Fred chart
+       and set `app.bootstrap_token_env_var` to its environment-variable name;
+    2. wire the GKE overlay to its existing C1 Foundation Secret and git-ignored
+       values source;
+    3. wire the AKS overlay to the same chart contract and its existing C2
+       Secret source — values only, no forked templates;
+    4. prove with `helm lint`/`helm template` that both workloads render the
+       same Control Plane contract, contain only `secretKeyRef`, never a secret
+       value or `bootstrap_token_file`, and fail closed when the reference is
+       absent or invalid;
+    5. perform one fresh-install smoke path per cloud: empty services → user
+       registration → authenticated secret submission → first
+       `platform_admin` → declarative import → teams visible →
+       `make validation-report`.
+  - Exit gate: one chart contract works unchanged on GKE and AKS; tracked files
+    contain no bootstrap-secret value; both rendered deployments use an
+    obligatory Secret reference; both fresh installations complete bootstrap
+    and import; no Swift-upgrade compatibility path was added.
+  - Execution: issue #1912 / PR #1957 / branch
+    `1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning`.
+  - Claude prompt/result/commit: pending this recadrage.
 
 - [ ] **Step 6 — final convergence and UX hardening.** Remove the superseded
       config-seeded platform-role path and any remaining parallel vocabulary;

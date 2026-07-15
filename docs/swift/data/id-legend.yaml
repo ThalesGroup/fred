@@ -449,9 +449,13 @@ items:
       self-registration, bootstrap secret submission, first platform_admin,
       entry into Fred, demo-provisioning-bundle import — all succeeded;
       empty factory -> registration -> Fred bootstrap -> Fred import is
-      confirmed as the one tested path. AUTHZ-07 stays in_progress: Step 5
-      (packaged bootstrap secret) and Step 6 (final convergence/UX
-      hardening) remain open.
+      confirmed as the one tested path. Scope recadrage confirmed 2026-07-15:
+      today's GKE and AKS targets are fresh installations; no Swift-to-Swift
+      pre-marker upgrade compatibility is required or to be invented. The sole
+      migration is KEA export -> fresh Swift bootstrap -> canonical platform
+      import. AUTHZ-07 stays in_progress: Step 5 (one portable packaged
+      bootstrap-secret reference plus live fresh-install proof on GKE and AKS)
+      and Step 6 (final convergence/UX hardening) remain open.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

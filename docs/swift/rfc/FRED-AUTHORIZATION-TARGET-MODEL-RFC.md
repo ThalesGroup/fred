@@ -1370,6 +1370,15 @@ total `platform_admin` loss is explicitly out of scope here** — that is a sepa
 break-glass procedure (mirroring `can_rescue_team_admin`'s own narrow, separate design at the team
 level), not a side effect of the root-bootstrap endpoint reactivating.
 
+**Candidate delivery scope confirmed 2026-07-15.** AUTHZ-07 is delivered for new Swift
+installations. No deployed Swift version requires an in-place transition from pre-marker
+`platform_admin` tuples, so this RFC deliberately defines no live-tuple detection, marker-sealing
+upgrade path, migration flag, or compatibility command. The one required migration is KEA to a
+fresh Swift platform and remains owned by `PLATFORM-IMPORT-RFC.md`: export KEA, install empty
+Swift, perform the authenticated one-time bootstrap, then import the declarative bundle. If a
+future supported Swift-to-Swift upgrade appears, it requires its own inventory, contract and
+developer decision; it must not be inferred from this fresh-install mechanism.
+
 ## 42. Root bootstrap — exact security properties (revised 2026-07-14, developer + reviewer pass)
 
 The first implementation pass (`§42` originally) conflated *proof of infrastructure access* with
