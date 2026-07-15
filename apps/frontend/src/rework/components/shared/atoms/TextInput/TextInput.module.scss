@@ -75,9 +75,7 @@
 
 .hint {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-wrap: nowrap;
+  overflow-wrap: break-word;
 }
 
 .maxLength {

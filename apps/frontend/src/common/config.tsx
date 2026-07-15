@@ -39,14 +39,16 @@ export interface AppConfig {
    */
   gcu_version: string | null;
   /**
-   * Whether `POST /bootstrap/platform-admin` (AUTHZ-07) has ever succeeded on
-   * this deployment. `false` until anyone bootstraps, permanently `true` after.
-   * Sourced from the public pre-auth `/frontend/config` so `BootstrapGuard` can
-   * decide before authentication — the authenticated bootstrap surface itself
-   * requires this flag to already be resolved (same chicken-and-egg as
-   * `gcu_version`).
+   * The authoritative frontend gating decision for `BootstrapGuard`: whether
+   * root platform-admin bootstrap (AUTHZ-07) must still be shown. Sourced from
+   * the public pre-auth `/frontend/config` so the guard can decide before
+   * authentication (same chicken-and-egg as `gcu_version`). Deliberately not
+   * the same as "has bootstrap ever completed" — on deployments where user
+   * auth or ReBAC is disabled, `POST /bootstrap/platform-admin` can never
+   * succeed, so this is `false` there even though the durable completion
+   * marker is also `false`.
    */
-  root_bootstrap_completed: boolean;
+  root_bootstrap_required: boolean;
 }
 
 type RawAppConfig = {
