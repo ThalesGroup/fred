@@ -71,7 +71,15 @@ fichier ne garde que ce qui reste réellement à faire ou à surveiller.
       d'inventaire, pas une revue de chaque permission une par une. Pas bloquant pour
       la fusion de cette branche, mais à garder en tête pour une passe de revue
       ultérieure.
-- [ ] **`platform_admin_subjects`/`platform_observer_subjects`** (déploiement Swift,
-      pas du code) : le champ de config et la logique de bootstrap au démarrage sont
-      implémentés (RFC §24.3) ; il reste à peupler la vraie liste de sujets pour le
-      déploiement Swift — tâche opérationnelle, pas un blocage de code.
+- [x] **`platform_admin_subjects`/`platform_observer_subjects`** — **superseded et
+      supprimé (AUTHZ-07, RFC Part 8 §40-41).** Le champ de config et
+      `OpenFgaRebacEngine._bootstrap_platform_roles` (le bootstrap au démarrage
+      lisant ce champ) ont été retirés entièrement, sans remplacement ni alias — voir
+      `libs/fred-core/fred_core/security/structure.py` et
+      `libs/fred-core/fred_core/security/rebac/openfga_engine.py`. Le premier
+      `platform_admin` est désormais obtenu par le root bootstrap
+      (`POST /control-plane/v1/bootstrap/platform-admin`, self-promotion only) ; tous
+      les autres rôles plateforme (et `platform_observer`) sont obtenus par l'import
+      déclaratif (`PLATFORM-IMPORT-RFC.md` §10). Aucune tâche de peuplement de
+      configuration ne reste : il n'existe plus de liste de sujets à peupler nulle
+      part.
