@@ -219,7 +219,7 @@ class _FakeKeycloakAdmin:
         return [{"id": sub, "username": username}] if sub else []
 
     def __getattr__(self, name: str) -> Any:
-        raise AssertionError(
+        raise AttributeError(
             f"find_user_sub_by_username must never call Keycloak admin "
             f"method {name!r} — read-only by design"
         )
@@ -980,5 +980,5 @@ async def test_find_user_sub_by_username_never_calls_a_write_method() -> None:
 
     # Sanity: the fake really has no write path (confirms the assertions
     # above would have failed loudly had a write ever been attempted).
-    with pytest.raises(AssertionError):
+    with pytest.raises(AttributeError):
         await admin.a_create_user({})  # type: ignore[attr-defined]
