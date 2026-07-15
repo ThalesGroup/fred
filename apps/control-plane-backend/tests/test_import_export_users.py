@@ -66,6 +66,7 @@ from control_plane_backend.import_export.importer import (
     MigrationReport,
     _effective_team_relations,
     _provision_bundle_identities,
+    _run_users_phase,
     run_import,
 )
 from control_plane_backend.import_export.schemas import BundleUserEntry
@@ -97,6 +98,7 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.tasks.models import StartMigrationRequest
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
@@ -133,6 +135,12 @@ class _FakeTeamRebac:
         self.team_admins: dict[str, set[str]] = {}
         self.org_relations: list[Relation] = []
         self.team_relations: list[Relation] = []
+        # Production `RebacEngine` implementations expose `enabled` (see
+        # `RebacEngine.enabled`/`NoopRebacEngine.enabled`), and
+        # `_run_users_phase` now checks `team_deps.rebac.enabled` before
+        # doing anything else (AUTHZ-07 review r3585102660) — this fake must
+        # report the same thing a real, active ReBAC engine would.
+        self.enabled = True
 
     async def ensure_team_organization_relations(self, team_ids: list[Any]) -> None:
         return None
@@ -196,6 +204,19 @@ class _FakeTeamRebac:
                 for uid in self.team_admins.get(str(resource.id), set())
             }
         return set()
+
+
+class _SpyNoopRebac(NoopRebacEngine):
+    """The real production no-op engine (`NoopRebacEngine`), spied on rather
+    than reimplemented, so the ReBAC-disabled tests below prove `add_relation`
+    is never even called — not just that it would have been a no-op."""
+
+    def __init__(self) -> None:
+        self.add_relation_calls: list[Relation] = []
+
+    async def add_relation(self, relation: Relation) -> str | None:
+        self.add_relation_calls.append(relation)
+        return await super().add_relation(relation)
 
 
 class _FakeKeycloakAdmin:
@@ -736,6 +757,118 @@ async def test_users_phase_fails_when_team_cannot_be_provisioned(
             )
 
         assert rebac.team_relations == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_users_phase_fails_when_rebac_disabled(tmp_path: Path) -> None:
+    """Review thread on PR #1987 (discussion_r3585102660): when ReBAC is
+    disabled, `team_deps.rebac` is `NoopRebacEngine` — every `add_relation`
+    call it makes is a silent no-op, so `_apply_bundle_user_roles` would still
+    increment `team_roles_granted`/`platform_roles_granted` and let the
+    import finish `succeeded` while no authorization tuple was ever written.
+    The users phase now refuses to run at all in that case, end-to-end
+    through `run_import()`: no Keycloak identity is created (even though this
+    entry carries a `password`) and no team is provisioned, proving the guard
+    runs before phase 1 (identity creation) and phase 2 (team/role
+    provisioning), not just before the role-granting loop."""
+    engine = await _make_engine(tmp_path, "users-rebac-disabled.sqlite3")
+    try:
+        spy_rebac = _SpyNoopRebac()
+        team_deps = _team_deps(engine, cast(Any, spy_rebac))
+        user_deps, admin = _writable_user_deps({})
+        platform_admin = _admin_user()
+
+        bundle_bytes = _build_bundle_bytes(
+            [
+                {
+                    "username": "alice",
+                    "email": "alice@app.com",
+                    "first_name": "Alice",
+                    "last_name": "Watson",
+                    "password": "Azerty123_",  # pragma: allowlist secret
+                    "team_roles": {"team_admin": ["fredlab"]},
+                    "platform_roles": ["admin"],
+                }
+            ]
+        )
+
+        with pytest.raises(BundleProvisioningError, match="ReBAC is disabled"):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        assert admin.create_calls == []
+        metadata_store = team_deps.get_team_metadata_store()
+        assert await metadata_store.get_by_name("fredlab") is None
+        assert spy_rebac.add_relation_calls == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_run_users_phase_rebac_disabled_guard_precedes_every_counter_increment(
+    tmp_path: Path,
+) -> None:
+    """Same regression as `test_users_phase_fails_when_rebac_disabled`, but
+    calling `_run_users_phase` directly (like
+    `test_provision_bundle_identities_creates_missing_user_with_password`
+    does for phase 1) so the test owns the `MigrationReport` instance and can
+    assert every counter the phase could have touched — identities_created,
+    users_processed, teams_provisioned, team_roles_granted,
+    platform_roles_granted — is still at its zero default after the
+    exception, not just that the import failed."""
+    engine = await _make_engine(tmp_path, "users-phase-rebac-disabled.sqlite3")
+    try:
+        spy_rebac = _SpyNoopRebac()
+        team_deps = _team_deps(engine, cast(Any, spy_rebac))
+        user_deps, admin = _writable_user_deps({})
+        platform_admin = _admin_user()
+        task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+        start = await task_service.start(
+            StartMigrationRequest(), created_by=platform_admin.uid
+        )
+        report = MigrationReport(
+            import_id="imp-rebac-disabled", source_platform="swift"
+        )
+
+        bundle_users = [
+            BundleUserEntry(
+                username="alice",
+                email="alice@app.com",
+                first_name="Alice",
+                last_name="Watson",
+                password="Azerty123_",  # pragma: allowlist secret
+                team_roles={"team_admin": ["fredlab"]},
+                platform_roles=["admin"],
+            )
+        ]
+
+        with pytest.raises(BundleProvisioningError, match="ReBAC is disabled"):
+            await _run_users_phase(
+                bundle_users=bundle_users,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+                task_service=task_service,
+                task_id=start.task_id,
+                report=report,
+            )
+
+        assert admin.create_calls == []
+        metadata_store = team_deps.get_team_metadata_store()
+        assert await metadata_store.get_by_name("fredlab") is None
+        assert spy_rebac.add_relation_calls == []
+        assert report.identities_created == 0
+        assert report.users_processed == 0
+        assert report.teams_provisioned == 0
+        assert report.team_roles_granted == 0
+        assert report.platform_roles_granted == 0
     finally:
         await engine.dispose()
 

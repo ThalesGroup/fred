@@ -443,14 +443,26 @@ directly on top would be redundant, not additive.
 **Fail-closed, not warn-and-succeed (AUTHZ-07 Step 2).** A declared-valid bundle must never produce a
 silently incomplete `succeeded` import. `importer.py::BundleProvisioningError` is raised — aborting the
 whole users phase, which `import_export/api.py`'s background-task wrapper turns into
-`task_service.fail_task` — for every one of: an unknown `team_roles` key or `platform_roles` value
-(validated upfront, before any write); a username still unresolved after the identity phase; a team
-referenced by the bundle (via `teams` or `team_roles`) that does not already exist and has no
-`team_admin` declared for it anywhere in the bundle (so `create_team` cannot seed it). None of these are
-downgraded to a warning anymore. **Idempotence is preserved**: `add_relation`'s
-`on_duplicate_writes=IGNORE` means re-running an already-fully-reconciled bundle re-writes the same
-tuples with no error and no duplicate — `report.team_roles_granted` counts every declared grant on every
-run, whether or not the underlying write was a no-op.
+`task_service.fail_task` — for every one of: **ReBAC disabled** (checked first, before anything else in
+`_run_users_phase` — see below); an unknown `team_roles` key or `platform_roles` value (validated upfront,
+before any write); a username still unresolved after the identity phase; a team referenced by the bundle
+(via `teams` or `team_roles`) that does not already exist and has no `team_admin` declared for it anywhere
+in the bundle (so `create_team` cannot seed it). None of these are downgraded to a warning anymore.
+**Idempotence is preserved**: `add_relation`'s `on_duplicate_writes=IGNORE` means re-running an
+already-fully-reconciled bundle re-writes the same tuples with no error and no duplicate —
+`report.team_roles_granted` counts every declared grant on every run, whether or not the underlying write
+was a no-op.
+
+**Precondition — ReBAC must be enabled (2026-07-15, PR #1987 review r3585102660).** A bundle that contains
+`users.json` requires ReBAC to be enabled. With ReBAC disabled, `team_deps.rebac` is `NoopRebacEngine` —
+every `add_relation` call it makes is a silent no-op — so, without this guard, `_apply_bundle_user_roles`
+would still increment `team_roles_granted`/`platform_roles_granted` and the import could report `succeeded`
+with no authorization tuple ever written, exactly the gap the fail-closed rule above exists to prevent.
+`_run_users_phase` therefore checks `team_deps.rebac.enabled` as its very first step, before role-name
+validation, Keycloak identity creation, username resolution, team creation, or any relation write or
+counter increment — raising `BundleProvisioningError` immediately if it is false. A bundle whose
+`users.json` is absent or empty never invokes `_run_users_phase` at all, so this guard has no effect on an
+ordinary agents/tags/metadata-only import.
 
 **Report fields** (`importer.py::MigrationReport`, folded into the existing task-event summary string,
 same as every other phase — no new HTTP response field, since the report was never returned over HTTP

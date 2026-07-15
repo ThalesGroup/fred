@@ -42,11 +42,13 @@ Scope (current snapshot):
              and still team-admin-bounded) — this is a narrow, private write
              path reachable only from this already `CAN_MANAGE_PLATFORM`-gated
              import flow, not a new capability exposed anywhere else.
-             Fail-closed by design (AUTHZ-07 Step 2): an unknown team-role or
-             platform-role name, a username still unresolved after the
-             identity phase, or a team that cannot be created or resolved,
-             each raise `BundleProvisioningError` and abort the users phase —
-             a declared-valid bundle never ends in a silently incomplete
+             Fail-closed by design (AUTHZ-07 Step 2): ReBAC disabled (the
+             engine is `NoopRebacEngine`, so no relation write would persist
+             anything), an unknown team-role or platform-role name, a
+             username still unresolved after the identity phase, or a team
+             that cannot be created or resolved, each raise
+             `BundleProvisioningError` and abort the users phase — a
+             declared-valid bundle never ends in a silently incomplete
              `succeeded` task.
 - MCP servers      → SKIP (re-seeded by deployment on swift)
 - Resources/prompts → SKIP (0 rows in current exports)
@@ -705,7 +707,25 @@ async def _run_users_phase(
     still-unresolved username, `create_team` fails closed on a name
     collision, `add_relation` is idempotent) — see the module docstring and
     each helper for the exact safety properties.
+
+    Guard 0 — ReBAC must be enabled. With it disabled, `team_deps.rebac` is
+    `NoopRebacEngine`: every `add_relation` call below is a silent no-op, so
+    `_apply_bundle_user_roles` would still increment `team_roles_granted`/
+    `platform_roles_granted` and let the import report `succeeded` with no
+    authorization tuple actually written — the same class of gap Step 2 (the
+    `BundleProvisioningError` fail-closed rule, above) exists to close.
+    Checked before role-name validation, identity creation, username
+    resolution, team creation, or any counter increment, so a bundle with
+    `users.json` fails before any side effect when ReBAC is off.
     """
+    if not team_deps.rebac.enabled:
+        raise BundleProvisioningError(
+            "users.json declares declarative provisioning but ReBAC is "
+            "disabled: no authorization tuple can be written "
+            "(team_deps.rebac is the no-op engine), so the users phase "
+            "refuses to run rather than report a false success. Enable "
+            "ReBAC before importing a bundle that contains users.json."
+        )
     _validate_bundle_role_names(bundle_users)
     await _provision_bundle_identities(bundle_users, user_deps, platform_admin, report)
     resolved = await _resolve_bundle_usernames(bundle_users, user_deps)
