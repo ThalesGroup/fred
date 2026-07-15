@@ -32,7 +32,7 @@ def _platform_admin_username() -> str:
     for username, user in sorted(USERS.items()):
         if user.is_platform_admin:
             return username
-    pytest.fail("No platform_admin user found in validation configuration.", pytrace=False)
+    raise AssertionError("No platform_admin user found in validation configuration.")
 
 
 NON_PLATFORM_ADMINS = sorted(u for u in USERS if not USERS[u].is_platform_admin)

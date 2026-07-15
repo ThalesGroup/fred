@@ -35,7 +35,7 @@ def _platform_admin_username() -> str:
     for username, user in sorted(USERS.items()):
         if user.is_platform_admin:
             return username
-    pytest.fail("No platform_admin user found in validation configuration.", pytrace=False)
+    raise AssertionError("No platform_admin user found in validation configuration.")
 
 
 def _resolve_team_id(cp, team_name: str) -> str:
