@@ -14,7 +14,7 @@
 
 """Typed bundle schemas for declarative platform provisioning.
 
-AUTHZ-07 Part 8 §40.2 / `docs/swift/rfc/PLATFORM-IMPORT-RFC.md` §10. `BundleUserEntry`
+AUTHZ-07 Part 8 §40.2 / `docs/swift/rfc/PLATFORM-IMPORT-RFC.md` §6. `BundleUserEntry`
 is the typed shape of each `users.json` bundle entry — it carries both the
 identity-creation fields consumed by `importer.py::_provision_bundle_identities`
 (email/first_name/last_name/password, all optional) and the authorization
@@ -54,7 +54,7 @@ class BundleUserEntry(BaseModel):
     last_name: str | None = None
     password: str | None = None
     # Role phase (`_resolve_bundle_usernames` / `_apply_bundle_user_roles`) —
-    # unchanged from the shape documented in `PLATFORM-IMPORT-RFC.md` §10.
+    # unchanged from the shape documented in `PLATFORM-IMPORT-RFC.md` §6.
     teams: list[str] = Field(default_factory=list)
     team_roles: dict[str, list[str]] = Field(default_factory=dict)
     platform_roles: list[str] = Field(default_factory=list)

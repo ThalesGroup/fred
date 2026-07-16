@@ -1873,15 +1873,15 @@ items:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
-      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. SHIPPED
-      (reviewed + live-tested): atomic import of agents+tags+document-metadata (single SQLAlchemy
-      transaction in a FastAPI BackgroundTask — NOT Temporal; idempotent by PK), swift-native export
-      (re-importable), atomic reset (test cycle), and a Platform-data stats dashboard. Module is
-      import_export/ under /control-plane/v1/import-export/ (import|export|reset|stats). DEFERRED:
-      agent prompt transfer (05.11 — next gap; agents land with default tuning, no prompt content),
-      OpenFGA tuple restore (05.04 — ops bulk-copy Option A), stage reconciliation (05.07 → MIGR-07).
-      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07; conversations out of scope.
-      Architecture deviation from the Temporal design recorded in PLATFORM-IMPORT-RFC §0.
+      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. Full current
+      contract: PLATFORM-IMPORT-RFC.md (rewritten 2026-07-16 to state the current contract only —
+      history is in git log, not inline). SHIPPED: atomic import of agents+tags+document-metadata+
+      team-metadata (single SQLAlchemy transaction in a FastAPI BackgroundTask, idempotent by PK),
+      swift-native export/reset, Platform-data stats dashboard, declarative users.json team/platform
+      role provisioning (fail-closed), validated+versioned manifest, honest content_keys + stage
+      reconciliation (05.13). DEFERRED (kea-import path only): OpenFGA tuple restore (05.04 — ops
+      bulk-copy Option A), agent prompt transfer (05.11). Document binaries move via MIGR-06;
+      embeddings rebuilt by MIGR-07 (re-vectorize trigger after import not yet wired).
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"

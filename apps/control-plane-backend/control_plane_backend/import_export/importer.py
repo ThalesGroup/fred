@@ -15,7 +15,7 @@ Scope (current snapshot):
 - Team metadata → team_metadata rows (branding + per-team retention, CTRLP-12;
              swift-native snapshots only, idempotent skip-if-present)
 - Users    → two-phase declarative provisioning (AUTHZ-07 Part 8 §40.2,
-             `PLATFORM-IMPORT-RFC.md` §10, reconciliation fix AUTHZ-07 Step 2)
+             `PLATFORM-IMPORT-RFC.md` §6, reconciliation fix AUTHZ-07 Step 2)
              from the top-level `users.json` bundle entry, run outside the DB
              transaction above (after it, so role grants may reference teams
              the same bundle just created).
@@ -78,6 +78,7 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.documents.document_models import DocumentMetadataRow
+from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
 from fred_core.tasks.models import (
@@ -124,12 +125,37 @@ _PLATFORM_ROLE_RELATIONS: dict[str, RelationType] = {
     "observer": RelationType.PLATFORM_OBSERVER,
 }
 
+# Canonical contract — swift-native baseline (PLATFORM-IMPORT-RFC.md):
+# vectors/SQL indexes are never transported by this import (products are
+# rebuilt on the target, MIGR-07), so a restored document must not carry
+# forward the source's stale DONE claim for them. PREVIEW_READY is left
+# alone — the data-before-metadata ordering (MIGR-06 before MIGR-05) is a
+# documented precondition, so preview content is trusted to already be there.
+_STAGES_RESET_ON_IMPORT = (
+    ProcessingStage.VECTORIZED.value,
+    ProcessingStage.SQL_INDEXED.value,
+)
+
+
+def _reset_transported_stages(doc: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Reset VECTORIZED/SQL_INDEXED to NOT_STARTED on a restored metadata `doc`
+    blob so the platform never reports a document as searchable when its
+    embeddings/index were never restored."""
+    if not doc:
+        return doc
+    stages = (doc.get("processing") or {}).get("stages")
+    if isinstance(stages, dict):
+        for stage in _STAGES_RESET_ON_IMPORT:
+            if stage in stages:
+                stages[stage] = ProcessingStatus.NOT_STARTED.value
+    return doc
+
 
 class BundleProvisioningError(Exception):
     """A `users.json` bundle cannot be fully reconciled (AUTHZ-07 Step 2).
 
     Why this type exists:
-    - `PLATFORM-IMPORT-RFC.md` §10's fail-closed rule: a declared-valid
+    - `PLATFORM-IMPORT-RFC.md` §6's fail-closed rule: a declared-valid
       bundle must never produce a silently incomplete `succeeded` import.
       Every one of the conditions below now aborts the whole users phase
       (and thus the import — `import_export/api.py`'s background-task
@@ -533,7 +559,7 @@ def _effective_team_relations(
     entry: BundleUserEntry,
 ) -> dict[str, set[UserTeamRelation]]:
     """Resolve the exact set of direct team-role tuples one bundle entry
-    requests (AUTHZ-07 Step 2 / `PLATFORM-IMPORT-RFC.md` §10 `teams`/
+    requests (AUTHZ-07 Step 2 / `PLATFORM-IMPORT-RFC.md` §6 `teams`/
     `team_roles` semantics).
 
     - A team name in `entry.team_roles` requests exactly the named
@@ -940,7 +966,7 @@ async def run_import(
                         source_tag=row.get("source_tag"),
                         date_added_to_kb=_coerce_dt(row.get("date_added_to_kb")),
                         tag_ids=row.get("tag_ids") or [],
-                        doc=row.get("doc"),
+                        doc=_reset_transported_stages(row.get("doc")),
                     )
                 )
                 return True
@@ -953,6 +979,18 @@ async def run_import(
                 import_fn=_import_metadata,
                 session=session,
             )
+            if bundle.manifest.content_keys:
+                # Canonical contract — track, don't embed: this import never
+                # carries document binaries, only declares what it assumes is
+                # already mirrored (MIGR-06). Not verified here (no
+                # cross-backend content-store probe) — surfaced so the
+                # operator can check, same as any other partial-reconciliation
+                # warning (RFC §11's "with warnings" tell).
+                report.warnings.append(
+                    f"{len(bundle.manifest.content_keys)} document(s) expect content "
+                    "already present in the target's object store (mirrored via "
+                    "MIGR-06) — not verified by this import"
+                )
 
             # --- team metadata (branding + retention) ---
             async def _import_team_metadata(

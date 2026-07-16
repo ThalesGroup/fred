@@ -359,6 +359,7 @@ def _build_bundle_bytes(users: list[dict[str, Any]]) -> bytes:
             json.dumps(
                 {
                     "format_version": 1,
+                    "users_schema_version": 1,
                     "source_platform": "swift",
                     "created_at": "2026-07-14T00:00:00Z",
                     "tables": {},
