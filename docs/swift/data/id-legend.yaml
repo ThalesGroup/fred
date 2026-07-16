@@ -1284,6 +1284,22 @@ items:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §7b"
 
+  - id: OBSERV-03
+    title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
+    status: draft
+    owner: Dimitri
+    parent: OBSERV-01
+    refs:
+      rfc: "docs/swift/rfc/AGENT-TOOL-CALL-AUDIT-RFC.md"
+    notes: >
+      Extends OBSERV-01's structured KPI/audit logging channels rather than
+      adding a new one: closes the gap where only failed tool calls become
+      structured log events (successes only hit the Prometheus histogram),
+      wires the already-defined but unused KPIWriter.log_llm() for outbound
+      LLM calls, and adds GCP Log Router sink + locked bucket guidance for
+      tamper-evident, backed-up audit storage. No backlog phase or
+      implementation started yet — pending developer confirmation.
+
   # ── OPS ───────────────────────────────────────────────────────────────
 
   - id: OPS-01

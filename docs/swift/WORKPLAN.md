@@ -1,5 +1,10 @@
 # Workplan
 
+> **Frozen 2026-07-16 — superseded.** With a 2-3 person team, "who does what in what
+> order" is a conversation, not a document. GitHub Milestones (`swift-golive`,
+> `swift ga`) now carry that role — see [`STATUS.md`](STATUS.md). Kept as historical
+> record only; do not add to it.
+
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
