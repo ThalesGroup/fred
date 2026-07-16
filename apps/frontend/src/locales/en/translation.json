@@ -761,7 +761,6 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "all": "All ({{content}})",
           "teams": "{{count}} team(s)",
           "inheritedHint": "Enabled for all teams by default. Teams that opted out are already subtracted.",
           "unknown": "Unknown",

@@ -138,14 +138,12 @@ describe("CapabilitiesPage catalog rows", () => {
     };
     const html = render();
 
-    // 12 teams on the platform, 1 opted out → 11 can use it, wrapped in the
-    // "All (…)" label. The two explicit grants are irrelevant: everyone already
-    // inherits access. Personal spaces inherit default-on too, but their roster
-    // is unknown here (no user directory), so the unlabeled variant follows.
-    expect(html).toContain(
-      "rework.admin.capabilities.enabledTeams.all:" +
-        "rework.admin.capabilities.enabledTeams.teams:11 + rework.admin.capabilities.enabledTeams.personalUnknown",
-    );
+    // 12 teams on the platform, 1 opted out → 11 can use it. The two explicit
+    // grants are irrelevant: everyone already inherits access. Personal spaces
+    // inherit default-on too, but their roster is unknown here (no user
+    // directory), so the unnumbered variant follows on its own line.
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:11");
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.personalUnknown");
     expect(html).not.toContain("teams:2");
   });
 

@@ -132,11 +132,11 @@ export default function CapabilitiesPage() {
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
         const personal = personalSpaceCount(cap);
-        // Personal-class reach is additive to the team count — "12 teams + 40
-        // personal spaces" — because personal spaces are deliberately not in
-        // `total_team_count` (RFC §8.4). A zero part says nothing, so it is
-        // dropped ("8 personal spaces", not "0 teams + 8 personal spaces");
-        // `null` personal means "reaches personal spaces, roster unknown".
+        // Personal-class reach is additive to the team count — "12 teams" over
+        // "40 personal spaces", one line each — because personal spaces are
+        // deliberately not in `total_team_count` (RFC §8.4). A zero part says
+        // nothing, so it is dropped; `null` personal means "reaches personal
+        // spaces, roster unknown".
         const parts: string[] = [];
         if (count !== null && count > 0) {
           parts.push(t("rework.admin.capabilities.enabledTeams.teams", { count }));
@@ -146,7 +146,15 @@ export default function CapabilitiesPage() {
         } else if (personal > 0) {
           parts.push(t("rework.admin.capabilities.enabledTeams.personal", { count: personal }));
         }
-        const content = parts.join(" + ");
+        const stack = (
+          <span className={`${styles.countStack} ${isUnused(cap) ? styles.dimmed : ""}`}>
+            {parts.map((part) => (
+              <span key={part} className={styles.count}>
+                {part}
+              </span>
+            ))}
+          </span>
+        );
         return (
           <div className={styles.centered}>
             {count === null ? (
@@ -156,15 +164,13 @@ export default function CapabilitiesPage() {
               <Tooltip text={t("rework.admin.capabilities.enabledTeams.unknownHint")}>
                 <span className={styles.countUnknown}>{t("rework.admin.capabilities.enabledTeams.unknown")}</span>
               </Tooltip>
-            ) : !content ? null : cap.default_on ? ( // Reaches nobody at all — an empty cell, not "0 + 0".
-              // Default-on grants access by inheritance, so the count is a roster
-              // headcount rather than a list of explicit grants — say so, otherwise
-              // "12" looks like 12 admins clicked Enable.
-              <Tooltip text={t("rework.admin.capabilities.enabledTeams.inheritedHint")}>
-                <span className={styles.count}>{t("rework.admin.capabilities.enabledTeams.all", { content })}</span>
-              </Tooltip>
+            ) : parts.length === 0 ? null : cap.default_on ? ( // Reaches nobody at all — an empty cell, not "0".
+              // Default-on grants access by inheritance, so the counts are roster
+              // headcounts rather than lists of explicit grants — say so, otherwise
+              // "12 teams" looks like 12 admins clicked Enable.
+              <Tooltip text={t("rework.admin.capabilities.enabledTeams.inheritedHint")}>{stack}</Tooltip>
             ) : (
-              <span className={`${styles.count} ${isUnused(cap) ? styles.dimmed : ""}`}>{content}</span>
+              stack
             )}
           </div>
         );

@@ -761,7 +761,6 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "all": "Toutes ({{content}})",
           "teams": "{{count}} équipe(s)",
           "inheritedHint": "Activée par défaut pour toutes les équipes. Les équipes qui s'en sont exclues sont déjà déduites.",
           "unknown": "Inconnu",
