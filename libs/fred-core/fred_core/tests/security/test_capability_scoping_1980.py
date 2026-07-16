@@ -61,16 +61,30 @@ def test_capability_permissions_map_to_capability_resource() -> None:
 
 
 def test_capability_structural_relation_types_exist() -> None:
-    # The enablement API writes these three tuple relations.
+    # The enablement API writes these tuple relations.
     assert RelationType.ENABLED.value == "enabled"
     assert RelationType.DISABLED.value == "disabled"
     assert RelationType.DEFAULT_ON.value == "default_on"
+    # Personal-space class positions (CAPAB-01 / #1961, RFC §8.4).
+    assert RelationType.PERSONAL_ON.value == "personal_on"
+    assert RelationType.PERSONAL_DISABLED.value == "personal_disabled"
+    assert RelationType.PERSONAL_TEAM.value == "personal_team"
 
 
 def test_schema_declares_capability_relations() -> None:
     cap = _capability_type()
     relations = cap["relations"]
-    for name in ("organization", "default_on", "enabled", "disabled"):
+    for name in (
+        "organization",
+        "default_on",
+        "enabled",
+        "disabled",
+        "personal_on",
+        "personal_disabled",
+        "personal_grant",
+        "personal_block",
+        "inherited",
+    ):
         assert name in relations, f"structural relation {name!r} missing"
     # Callers only ever check these two computed permissions.
     assert "can_use" in relations
@@ -78,30 +92,56 @@ def test_schema_declares_capability_relations() -> None:
 
 
 def test_can_use_encodes_the_tristate() -> None:
-    # TEAM-SUBJECT shape: (enabled OR team from default_on) BUT NOT disabled.
-    # The subject of a `can_use` check is the team the agent belongs to — a
-    # user-subject shape (`member from enabled`) would leak a capability
-    # enabled for one of the user's teams into every team context they browse.
+    # TEAM-SUBJECT shape: (enabled OR inherited) BUT NOT disabled. The subject of
+    # a `can_use` check is the team the agent belongs to — a user-subject shape
+    # (`member from enabled`) would leak a capability enabled for one of the
+    # user's teams into every team context they browse.
     cap = _capability_type()
     can_use = cap["relations"]["can_use"]
     difference = can_use["difference"]
     base = difference["base"]["union"]["child"]
     assert {"computedUserset": {"relation": "enabled"}} in base
+    assert {"computedUserset": {"relation": "inherited"}} in base
+    assert difference["subtract"]["computedUserset"]["relation"] == "disabled"
+
+
+def test_inherited_encodes_default_on_and_personal_class() -> None:
+    # `inherited` = (team from default_on OR personal_grant) BUT NOT
+    # personal_block — the intermediate layer the personal-class opt-out
+    # subtracts from, so it never touches a per-space explicit grant
+    # (CAPAB-01 / #1961, RFC §8.4).
+    cap = _capability_type()
+    inherited = cap["relations"]["inherited"]
+    difference = inherited["difference"]
+    base = difference["base"]["union"]["child"]
     default_on = next(c["tupleToUserset"] for c in base if "tupleToUserset" in c)
     assert default_on["tupleset"]["relation"] == "default_on"
     # Resolved through the organization's `team` reverse edge (supplied as a
     # contextual tuple at check time — never persisted).
     assert default_on["computedUserset"]["relation"] == "team"
-    assert difference["subtract"]["computedUserset"]["relation"] == "disabled"
+    assert {"computedUserset": {"relation": "personal_grant"}} in base
+    assert difference["subtract"]["computedUserset"]["relation"] == "personal_block"
+
+    # The personal-class relations resolve through the org's personal_team edge.
+    personal_grant = cap["relations"]["personal_grant"]["tupleToUserset"]
+    assert personal_grant["tupleset"]["relation"] == "personal_on"
+    assert personal_grant["computedUserset"]["relation"] == "personal_team"
+    personal_block = cap["relations"]["personal_block"]["tupleToUserset"]
+    assert personal_block["tupleset"]["relation"] == "personal_disabled"
+    assert personal_block["computedUserset"]["relation"] == "personal_team"
 
 
-def test_organization_declares_team_reverse_edge() -> None:
-    # The contextual reverse index `organization#team@team:<id>` used by
-    # team-subject capability checks must stay declared on the organization.
+def test_organization_declares_team_reverse_edges() -> None:
+    # The contextual reverse indexes `organization#team@team:<id>` and
+    # `organization#personal_team@team:<id>` used by team-subject capability
+    # checks must stay declared on the organization.
     schema = _load_schema()
     org = next(t for t in schema["type_definitions"] if t["type"] == "organization")
-    team_types = org["metadata"]["relations"]["team"]["directly_related_user_types"]
-    assert team_types == [{"type": "team"}]
+    relations = org["metadata"]["relations"]
+    assert relations["team"]["directly_related_user_types"] == [{"type": "team"}]
+    assert relations["personal_team"]["directly_related_user_types"] == [
+        {"type": "team"}
+    ]
 
 
 def test_can_manage_is_platform_admin() -> None:

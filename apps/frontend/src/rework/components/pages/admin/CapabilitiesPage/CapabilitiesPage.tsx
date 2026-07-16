@@ -38,7 +38,7 @@ import {
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
-import { enabledTeamCount, isCapabilityUnused as isUnused } from "./capabilityEnablement";
+import { enabledTeamCount, isCapabilityUnused as isUnused, personalSpaceCount } from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) — one admin
@@ -146,22 +146,40 @@ export default function CapabilitiesPage() {
       size: "1fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
+        const personal = personalSpaceCount(cap);
+        // Personal-class reach is additive to the team count — "12 teams + 40
+        // personal spaces" — because personal spaces are deliberately not in
+        // `total_team_count` (RFC §8.4). A zero part says nothing, so it is
+        // dropped ("8 personal spaces", not "0 teams + 8 personal spaces");
+        // `null` personal means "reaches personal spaces, roster unknown".
+        const parts: string[] = [];
+        if (count !== null && count > 0) {
+          parts.push(t("rework.admin.capabilities.enabledTeams.teams", { count }));
+        }
+        if (personal === null) {
+          parts.push(t("rework.admin.capabilities.enabledTeams.personalUnknown"));
+        } else if (personal > 0) {
+          parts.push(t("rework.admin.capabilities.enabledTeams.personal", { count: personal }));
+        }
+        const content = parts.join(" + ");
         return (
           <div className={styles.centered}>
             {count === null ? (
-              // Default-on with no team roster from the backend — "unknown", not "0".
+              // Default-on with no team roster from the backend — "unknown", not
+              // "0". The personal roster comes from the same directory, so no
+              // personal part either — one "Unknown" covers both.
               <Tooltip text={t("rework.admin.capabilities.enabledTeams.unknownHint")}>
                 <span className={styles.countUnknown}>{t("rework.admin.capabilities.enabledTeams.unknown")}</span>
               </Tooltip>
-            ) : cap.default_on ? (
+            ) : !content ? null : cap.default_on ? ( // Reaches nobody at all — an empty cell, not "0 + 0".
               // Default-on grants access by inheritance, so the count is a roster
               // headcount rather than a list of explicit grants — say so, otherwise
               // "12" looks like 12 admins clicked Enable.
               <Tooltip text={t("rework.admin.capabilities.enabledTeams.inheritedHint")}>
-                <span className={styles.count}>{t("rework.admin.capabilities.enabledTeams.all", { count })}</span>
+                <span className={styles.count}>{t("rework.admin.capabilities.enabledTeams.all", { content })}</span>
               </Tooltip>
             ) : (
-              <span className={`${styles.count} ${isUnused(cap) ? styles.dimmed : ""}`}>{count}</span>
+              <span className={`${styles.count} ${isUnused(cap) ? styles.dimmed : ""}`}>{content}</span>
             )}
           </div>
         );

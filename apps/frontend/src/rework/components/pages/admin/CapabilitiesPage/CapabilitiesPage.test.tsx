@@ -28,13 +28,16 @@ const h = vi.hoisted(() => ({
   },
 }));
 
-// `t` echoes its key, but appends an interpolated `count` when one is passed —
-// the count is the value under test for the enabled-teams column, and a bare
-// key echo would hide whether the right number ever reached the label.
+// `t` echoes its key, but appends an interpolated `count` (or the composed
+// `content` of the "All (…)" wrapper) when one is passed — those are the values
+// under test for the enabled-teams column, and a bare key echo would hide
+// whether the right number ever reached the label.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string; count?: number }) =>
-      opts?.defaultValue ?? (opts?.count === undefined ? key : `${key}:${opts.count}`),
+    t: (key: string, opts?: { defaultValue?: string; count?: number; content?: string }) => {
+      const interpolated = opts?.count ?? opts?.content;
+      return opts?.defaultValue ?? (interpolated === undefined ? key : `${key}:${interpolated}`);
+    },
     i18n: { language: "en" },
   }),
 }));
@@ -105,8 +108,8 @@ describe("CapabilitiesPage catalog rows", () => {
     };
     const html = render();
 
-    // A non-default-on capability counts explicit grants only.
-    expect(html).toContain(">1<");
+    // A non-default-on capability counts explicit grants only, labeled as teams.
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:1");
 
     // Health is neutral (no resting per-capability count until the sweep, #1975).
     expect(html).toContain("rework.admin.capabilities.health.pending");
@@ -135,10 +138,53 @@ describe("CapabilitiesPage catalog rows", () => {
     };
     const html = render();
 
-    // 12 teams on the platform, 1 opted out → 11 can use it. The two explicit
-    // grants are irrelevant: everyone already inherits access.
-    expect(html).toContain("rework.admin.capabilities.enabledTeams.all:11");
-    expect(html).not.toContain(">2<");
+    // 12 teams on the platform, 1 opted out → 11 can use it, wrapped in the
+    // "All (…)" label. The two explicit grants are irrelevant: everyone already
+    // inherits access. Personal spaces inherit default-on too, but their roster
+    // is unknown here (no user directory), so the unlabeled variant follows.
+    expect(html).toContain(
+      "rework.admin.capabilities.enabledTeams.all:" +
+        "rework.admin.capabilities.enabledTeams.teams:11 + rework.admin.capabilities.enabledTeams.personalUnknown",
+    );
+    expect(html).not.toContain("teams:2");
+  });
+
+  it("shows only the personal-space part when no team has access (zero parts are hidden)", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({
+            id: "personal_only",
+            default_on: false,
+            enabled_team_ids: [],
+            personal_scope: "enabled",
+            total_personal_space_count: 8,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // "8 personal spaces", not "0 teams + 8 personal spaces".
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.personal:8");
+    expect(html).not.toContain("rework.admin.capabilities.enabledTeams.teams");
+  });
+
+  it("leaves the cell empty when the capability reaches no team and no personal space", () => {
+    h.list = {
+      data: {
+        items: [cap({ id: "reaches_nobody", default_on: false, enabled_team_ids: [], personal_scope: "disabled" })],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    expect(html).not.toContain("rework.admin.capabilities.enabledTeams.teams");
+    expect(html).not.toContain("rework.admin.capabilities.enabledTeams.personal");
+    expect(html).not.toContain(">0<");
   });
 
   it("shows unknown rather than zero when a default-on cap has no team roster", () => {

@@ -28,6 +28,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
     },
+    putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+    },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
     },
@@ -189,4 +192,6 @@ export const {
     useDisableTeamCapabilityMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation:
     useSetCapabilityDefaultOnMutation,
+  usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation:
+    useSetCapabilityPersonalScopeMutation,
 } = enhancedControlPlaneApi;

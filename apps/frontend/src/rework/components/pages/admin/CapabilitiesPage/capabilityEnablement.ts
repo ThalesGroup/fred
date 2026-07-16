@@ -69,6 +69,40 @@ export function teamCapabilityChoice(capability: EnablementFacts, teamId: string
 }
 
 /**
+ * Reserved id for the synthetic "All personal spaces" row (RFC §8.4). It is not
+ * a real team id, so it can never collide with one, and it keys the same
+ * optimistic `pendingByTeam` spinner machinery as ordinary team rows.
+ */
+export const PERSONAL_SCOPE_ROW_ID = "__personal_scope__";
+
+/**
+ * True for a personal-space team id (`personal-{uid}`). Mirrors fred-core's
+ * `is_personal_team_id` prefix check — the admin's own personal team is removed
+ * from the ordinary team rows because the synthetic class row governs it.
+ */
+export function isPersonalTeamId(teamId: string | undefined | null): boolean {
+  return typeof teamId === "string" && teamId.startsWith("personal-");
+}
+
+/** Drop every personal space from the team roster (RFC §8.4 — the class row
+ * governs them, so they must not appear as ordinary per-team rows). */
+export function excludePersonalTeams<T extends { id: string }>(teams: T[]): T[] {
+  return teams.filter((team) => !isPersonalTeamId(team.id));
+}
+
+/**
+ * The personal-space class tri-state position, straight from the capability's
+ * `personal_scope` (RFC §8.4). Drives the synthetic "All personal spaces" row's
+ * segmented control, exactly as `teamCapabilityChoice` drives a team row.
+ * Absent (older payloads) reads as `default`.
+ */
+export function capabilityPersonalScopeChoice(
+  capability: Pick<CapabilityEnablementItem, "personal_scope">,
+): TeamCapabilityChoice {
+  return capability.personal_scope ?? "default";
+}
+
+/**
  * Matrix drawer ordering: teams with an explicit position first (enabled,
  * then disabled), the default majority last — on a ~100-team roster the
  * handful of explicit overrides is what the admin came to see. Alphabetical
@@ -107,8 +141,14 @@ export function enabledTeamCount(
     "default_on" | "enabled_team_ids" | "disabled_team_ids" | "total_team_count"
   >,
 ): number | null {
+  // Explicit tuples can name personal spaces (per-space grants, plus leftovers
+  // from the withdrawn personal_defaults seeding). Those are counted by
+  // `personalSpaceCount`, and `total_team_count` never includes them — mixing
+  // them in here would double-count or drive the subtraction negative.
+  const enabled = (capability.enabled_team_ids ?? []).filter((id) => !isPersonalTeamId(id));
+  const disabled = (capability.disabled_team_ids ?? []).filter((id) => !isPersonalTeamId(id));
   if (!capability.default_on) {
-    return (capability.enabled_team_ids ?? []).length;
+    return enabled.length;
   }
   const total = capability.total_team_count ?? 0;
   if (total <= 0) {
@@ -116,7 +156,38 @@ export function enabledTeamCount(
   }
   // An opt-out only subtracts if it names a team that is actually in the roster;
   // clamp so a stale tuple can never drive the count below zero.
-  const optedOut = (capability.disabled_team_ids ?? []).length;
+  return Math.max(0, total - disabled.length);
+}
+
+/**
+ * How many personal spaces can actually use this capability — the personal-class
+ * companion of `enabledTeamCount`, following the same FGA precedence (RFC §8.4):
+ *
+ * - **Class access on** (`personal_scope: enabled`, or `default` while the
+ *   capability is default-on) — every personal space inherits except explicit
+ *   per-space opt-outs: `total_personal_space_count - opted-out`. Returns `null`
+ *   ("unknown") when the backend had no user directory (count is 0), mirroring
+ *   the team-side unknown case.
+ * - **Class access off** — only explicit per-space `enabled` grants count
+ *   (they survive both class-off and `personal_disabled`), so the answer is
+ *   exact.
+ */
+export function personalSpaceCount(
+  capability: Pick<
+    CapabilityEnablementItem,
+    "default_on" | "enabled_team_ids" | "disabled_team_ids" | "personal_scope" | "total_personal_space_count"
+  >,
+): number | null {
+  const scope = capabilityPersonalScopeChoice(capability);
+  const classOn = scope === "enabled" || (scope === "default" && capability.default_on);
+  if (!classOn) {
+    return (capability.enabled_team_ids ?? []).filter(isPersonalTeamId).length;
+  }
+  const total = capability.total_personal_space_count ?? 0;
+  if (total <= 0) {
+    return null;
+  }
+  const optedOut = (capability.disabled_team_ids ?? []).filter(isPersonalTeamId).length;
   return Math.max(0, total - optedOut);
 }
 
@@ -126,17 +197,23 @@ export function enabledTeamCount(
  *
  * Drives the dimmed row treatment: these rows are real and actionable, just
  * inert, so they should recede rather than compete with capabilities in use.
- * Derived from `enabledTeamCount` so the two can never disagree about what
- * "zero teams" means. A default-on capability is never unused — even the
- * unknown-roster case reaches teams; we just cannot say how many.
+ * Derived from `enabledTeamCount` + `personalSpaceCount` so the three can never
+ * disagree about what "reaches nobody" means. A default-on capability is never
+ * unused — even the unknown-roster case (`null`) reaches teams or personal
+ * spaces; we just cannot say how many.
  */
 export function isCapabilityUnused(
   capability: Pick<
     CapabilityEnablementItem,
-    "default_on" | "enabled_team_ids" | "disabled_team_ids" | "total_team_count"
+    | "default_on"
+    | "enabled_team_ids"
+    | "disabled_team_ids"
+    | "total_team_count"
+    | "personal_scope"
+    | "total_personal_space_count"
   >,
 ): boolean {
-  return enabledTeamCount(capability) === 0;
+  return enabledTeamCount(capability) === 0 && personalSpaceCount(capability) === 0;
 }
 
 /**

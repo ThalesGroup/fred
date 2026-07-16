@@ -463,6 +463,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setCapabilityDefaultOnRequest,
       }),
     }),
+    putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: build.mutation<
+      PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiResponse,
+      PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/personal-scope`,
+        method: "PUT",
+        body: queryArg.setCapabilityPersonalScopeRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1010,6 +1020,12 @@ export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDef
 export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg = {
   capabilityId: string;
   setCapabilityDefaultOnRequest: SetCapabilityDefaultOnRequest;
+};
+export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiResponse =
+  /** status 200 Successful Response */ CapabilityPersonalScopeResult;
+export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiArg = {
+  capabilityId: string;
+  setCapabilityPersonalScopeRequest: SetCapabilityPersonalScopeRequest;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
@@ -1858,6 +1874,10 @@ export type CapabilityEnablementItem = {
   disabled_team_ids?: string[];
   /** Platform-wide team count — the denominator for a default_on capability's inherited access. Counts every team in the org, not just the ones the calling admin belongs to. */
   total_team_count?: number;
+  /** Platform-wide personal-space count (= realm user count; one personal space per user) — the denominator for personal-class access (RFC §8.4), as total_team_count is for default_on. */
+  total_personal_space_count?: number;
+  /** Personal-space class position (RFC §8.4): `enabled` = usable by all personal spaces (`personal_on` tuple present); `disabled` = blocked for all personal spaces (`personal_disabled` present); `default` = neither, personal spaces follow `default_on` like any team. */
+  personal_scope?: "enabled" | "disabled" | "default";
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
   /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. */
@@ -1888,6 +1908,15 @@ export type CapabilityDefaultOnResult = {
 };
 export type SetCapabilityDefaultOnRequest = {
   default_on: boolean;
+};
+export type CapabilityPersonalScopeResult = {
+  capability_id: string;
+  scope: "enabled" | "disabled" | "default";
+  /** Dependent PERSONAL-space instances suspended by this change (#1975). */
+  suspended_instances?: number;
+};
+export type SetCapabilityPersonalScopeRequest = {
+  scope: "enabled" | "disabled" | "default";
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2243,6 +2272,7 @@ export const {
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
+  usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,
