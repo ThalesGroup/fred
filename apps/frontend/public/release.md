@@ -1,3 +1,13 @@
+**v2.1.3** — 2026-07-16
+
+- **Summary**
+
+This release hardens the import swift contract in order to safely be used a first production release.
+
+- **Improvement**
+
+  - make the swift import production ready (#1993)
+
 **v2.1.2** — 2026-07-16
 
 - **Summary**
