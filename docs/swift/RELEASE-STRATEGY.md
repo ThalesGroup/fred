@@ -170,5 +170,5 @@ or expected.
 
 | Branch  | Status                    | Latest tag                        | Doc tree               |
 | ------- | ------------------------- | ---------------------------------- | ---------------------- |
-| `swift` | Active — v2.x development | `code/v2.1.1` + `chart/v2.1.1` (2026-07-15) | `docs/swift/`          |
+| `swift` | Active — v2.x development | `code/v2.1.2` + `chart/v2.1.2` (2026-07-16) | `docs/swift/`          |
 | `eagle` | Not yet created           | —                                  | `docs/eagle/` (future) |

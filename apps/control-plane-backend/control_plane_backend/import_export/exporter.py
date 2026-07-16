@@ -146,7 +146,10 @@ async def run_export(engine: AsyncEngine) -> bytes:
         },
         "tuple_count": 0,
         "realm_exported": False,
-        "content_keys": [],
+        # Every exported document's binary is expected to already be mirrored
+        # into the target's object store (MIGR-06) — this import never
+        # transports content, only declares what it assumes is there.
+        "content_keys": [m["document_uid"] for m in metadata],
     }
 
     buffer = io.BytesIO()
