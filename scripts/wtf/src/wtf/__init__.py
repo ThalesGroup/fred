@@ -5,13 +5,16 @@ import json
 import os
 import random
 import re
+import select
 import shutil
 import socket
 import subprocess
 import sys
+import termios
 import textwrap
 import threading
 import time
+import tty
 from pathlib import Path
 
 import click
@@ -108,6 +111,71 @@ class Spinner:
         self._thread.join()
         sys.stderr.write("\r\033[K")  # clear the spinner line
         sys.stderr.flush()
+
+
+def _read_key() -> str:
+    """Read one keypress in raw mode, folding arrow-key escape sequences into one string."""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        # TCSADRAIN (not the default TCSAFLUSH) so keys typed during a redraw are not discarded.
+        # os.read (not sys.stdin.read) so escape-sequence bytes stay visible to select().
+        tty.setraw(fd, termios.TCSADRAIN)
+        key = os.read(fd, 1).decode(errors="replace")
+        # Arrow keys arrive as "\x1b[A".."\x1b[D"; a bare Esc has no follow-up bytes
+        if key == "\x1b" and select.select([fd], [], [], 0.05)[0]:
+            key += os.read(fd, 1).decode(errors="replace")
+            if key.endswith("[") and select.select([fd], [], [], 0.05)[0]:
+                key += os.read(fd, 1).decode(errors="replace")
+        return key
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def multi_select(options: list[str]) -> list[int] | None:
+    """Interactive checklist: ↑/↓ move, space toggles, enter confirms.
+
+    Returns the selected indices, or None if cancelled (q, Esc, Ctrl+C).
+    """
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise click.ClickException("Interactive selection requires a terminal")
+
+    selected = [False] * len(options)
+    cursor = 0
+    footer = click.style("  ↑/↓ move · space toggle · a all · enter confirm · q cancel", fg="bright_black")
+
+    sys.stdout.write("\x1b[?25l")  # hide cursor
+    try:
+        first = True
+        while True:
+            if not first:
+                sys.stdout.write(f"\x1b[{len(options) + 1}A")  # move back up to redraw in place
+            first = False
+            for i, opt in enumerate(options):
+                pointer = click.style("❯", fg="cyan", bold=True) if i == cursor else " "
+                box = click.style("◉", fg="green", bold=True) if selected[i] else "◯"
+                label = click.style(opt, bold=True) if i == cursor else opt
+                sys.stdout.write(f"\r\x1b[K {pointer} {box} {label}\n")
+            sys.stdout.write(f"\r\x1b[K{footer}\n")
+            sys.stdout.flush()
+
+            key = _read_key()
+            if key in ("\x1b[A", "k"):
+                cursor = (cursor - 1) % len(options)
+            elif key in ("\x1b[B", "j"):
+                cursor = (cursor + 1) % len(options)
+            elif key == " ":
+                selected[cursor] = not selected[cursor]
+            elif key == "a":
+                everything_on = all(selected)
+                selected = [not everything_on] * len(options)
+            elif key in ("\r", "\n"):
+                return [i for i, on in enumerate(selected) if on]
+            elif key in ("q", "\x1b", "\x03"):
+                return None
+    finally:
+        sys.stdout.write("\x1b[?25h")  # restore cursor
+        sys.stdout.flush()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -450,6 +518,65 @@ def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_t
     ok("Patched files hidden from git status (skip-worktree)")
 
 
+def open_vscode(wt: Path) -> None:
+    """Open the VSCode workspace of a worktree."""
+    workspace_file = wt / ".vscode" / "fred.code-workspace"
+    if not workspace_file.exists():
+        raise click.ClickException(f"Workspace file not found: {workspace_file}")
+
+    step("Opening VSCode...")
+    subprocess.Popen(
+        ["code", str(workspace_file)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    ok(f"VSCode opened: {workspace_file}")
+
+
+def _claude_terminal_command(wt: Path) -> list[str] | None:
+    """Build the command that opens a new terminal window at `wt` running `claude`."""
+    terminal_env = os.environ.get("TERMINAL")
+    candidates: list[tuple[str, list[str]]] = []
+    if terminal_env:
+        candidates.append((terminal_env, [terminal_env, "-e", "claude"]))
+    candidates += [
+        ("gnome-terminal", ["gnome-terminal", f"--working-directory={wt}", "--", "claude"]),
+        ("konsole", ["konsole", "--workdir", str(wt), "-e", "claude"]),
+        ("xfce4-terminal", ["xfce4-terminal", f"--working-directory={wt}", "-x", "claude"]),
+        ("kitty", ["kitty", "--directory", str(wt), "claude"]),
+        ("alacritty", ["alacritty", "--working-directory", str(wt), "-e", "claude"]),
+        ("wezterm", ["wezterm", "start", "--cwd", str(wt), "--", "claude"]),
+        ("xterm", ["xterm", "-e", "claude"]),
+    ]
+    for binary, cmd in candidates:
+        if shutil.which(binary):
+            return cmd
+    return None
+
+
+def open_claude_terminal(wt: Path) -> None:
+    """Open a new terminal window in the worktree with `claude` started."""
+    cmd = _claude_terminal_command(wt)
+    if cmd is None:
+        click.echo(
+            click.style("! ", fg="yellow", bold=True)
+            + "No terminal emulator found — set $TERMINAL or start claude manually:\n"
+            + f"    cd {wt} && claude"
+        )
+        return
+
+    step("Opening claude terminal...")
+    subprocess.Popen(
+        cmd,
+        cwd=wt,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    ok(f"Claude terminal opened in {wt}")
+
+
 def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
     return textwrap.dedent(f"""\
         # Worktree: {branch}
@@ -523,7 +650,25 @@ def cli():
     shell_complete=complete_git_branch,
     help="Source branch to create the new branch from (defaults to current HEAD)",
 )
-def create(branch: str | None, from_issue: str | None, provider: str | None, autorun_task: str | None, from_branch: str | None):
+@click.option(
+    "--claude/--no-claude",
+    default=True,
+    help="Open a new terminal with claude started in the worktree (default: on)",
+)
+@click.option(
+    "--code/--no-code",
+    default=False,
+    help="Open the VSCode workspace (default: off)",
+)
+def create(
+    branch: str | None,
+    from_issue: str | None,
+    provider: str | None,
+    autorun_task: str | None,
+    from_branch: str | None,
+    claude: bool,
+    code: bool,
+):
     """Create a new worktree with full dev environment."""
     # Resolve branch name
     if from_issue and not branch:
@@ -612,10 +757,11 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
 
     apply_patch_pipeline(wt, branch, ports, autorun_task)
 
-    # Open VSCode
-    step("Opening VSCode...")
-    workspace_file = wt / ".vscode" / "fred.code-workspace"
-    subprocess.Popen(["code", str(workspace_file)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Open editor / claude terminal
+    if code:
+        open_vscode(wt)
+    if claude:
+        open_claude_terminal(wt)
 
     # Summary
     w = 54
@@ -634,15 +780,9 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     click.echo(bar)
 
 
-@cli.command()
-@click.argument("branch", shell_complete=complete_worktree_branch)
-@click.option("-p", "--prune", is_flag=True, help="Delete the branch without confirmation if fully merged")
-def remove(branch: str, prune: bool):
-    """Remove a worktree and optionally its branch."""
+def remove_worktree_and_branch(branch: str, prune: bool) -> None:
+    """Remove one worktree; offer to delete its branch if fully merged."""
     wt = worktree_dir(branch)
-    if not wt.exists():
-        raise click.ClickException(f"Worktree not found: {wt}")
-
     os.chdir(FRED_ROOT)
     with Spinner(f"Removing worktree {click.style(branch, fg='yellow')}..."):
         try:
@@ -660,6 +800,52 @@ def remove(branch: str, prune: bool):
         if prune or click.confirm(f"Branch '{branch}' is fully merged. Delete it?", default=False):
             run(["git", "branch", "-d", branch])
             ok(f"Branch deleted: {click.style(branch, fg='yellow')}")
+
+
+@cli.command()
+@click.argument("branch", shell_complete=complete_worktree_branch)
+@click.option("-p", "--prune", is_flag=True, help="Delete the branch without confirmation if fully merged")
+def remove(branch: str, prune: bool):
+    """Remove a worktree and optionally its branch."""
+    wt = worktree_dir(branch)
+    if not wt.exists():
+        raise click.ClickException(f"Worktree not found: {wt}")
+
+    remove_worktree_and_branch(branch, prune)
+
+
+@cli.command()
+@click.option("-p", "--prune", is_flag=True, help="Delete fully merged branches without confirmation")
+def clean(prune: bool):
+    """Interactively pick worktrees to remove (↑/↓ move, space toggles, enter confirms)."""
+    dirs = existing_worktree_dirs()
+
+    # Never offer the worktree we are currently inside — removing it would delete cwd
+    cwd = Path.cwd().resolve()
+    current = next((wt for wt in dirs if cwd == wt or cwd.is_relative_to(wt)), None)
+    candidates = [wt for wt in dirs if wt != current]
+
+    if not candidates:
+        click.echo(click.style("No removable worktrees found.", fg="bright_black"))
+        return
+
+    click.echo(click.style("Select worktrees to remove:", bold=True))
+    if current is not None:
+        info(f"{current.name.removeprefix('fred-wt-')} is the current worktree — not listed")
+
+    branches = [wt.name.removeprefix("fred-wt-") for wt in candidates]
+    picked = multi_select(branches)
+    if not picked:
+        click.echo(click.style("Nothing removed.", fg="bright_black"))
+        return
+
+    names = [branches[i] for i in picked]
+    if not click.confirm(f"Remove {len(names)} worktree(s): {', '.join(names)}?", default=True):
+        click.echo(click.style("Aborted.", fg="bright_black"))
+        return
+
+    for name in names:
+        remove_worktree_and_branch(name, prune)
 
 
 @cli.command(name="list")
@@ -691,24 +877,26 @@ def list_worktrees():
 
 @cli.command(name="open")
 @click.argument("branch", shell_complete=complete_worktree_branch)
-def open_worktree(branch: str):
-    """Open the VSCode workspace for an existing worktree."""
+@click.option(
+    "--claude/--no-claude",
+    default=True,
+    help="Open a new terminal with claude started in the worktree (default: on)",
+)
+@click.option(
+    "--code/--no-code",
+    default=False,
+    help="Open the VSCode workspace (default: off)",
+)
+def open_worktree(branch: str, claude: bool, code: bool):
+    """Open an existing worktree (claude terminal by default, VSCode with --code)."""
     wt = worktree_dir(branch)
     if not wt.exists():
         raise click.ClickException(f"Worktree not found: {wt}")
 
-    workspace_file = wt / ".vscode" / "fred.code-workspace"
-    if not workspace_file.exists():
-        raise click.ClickException(f"Workspace file not found: {workspace_file}")
-
-    step(f"Opening VSCode for {click.style(branch, fg='yellow')}...")
-    subprocess.Popen(
-        ["code", str(workspace_file)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    ok(f"VSCode opened: {workspace_file}")
+    if code:
+        open_vscode(wt)
+    if claude:
+        open_claude_terminal(wt)
 
 
 @cli.command(name="show-hidden-files")
