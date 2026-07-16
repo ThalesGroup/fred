@@ -1182,7 +1182,7 @@ The `GET /admin/capabilities` item gains **`personal_scope`** (`"enabled" \|
 **`total_personal_space_count`** (the realm user count — one personal space per
 user; `0` = user directory unavailable, read as "unknown" like
 `total_team_count`), the denominator the dashboard uses to render personal-class
-reach as `N teams + X personal spaces`. Precedence
+reach as an `X personal space(s)` line under the team count. Precedence
 across the whole matrix: a team's explicit `enabled`/`disabled` beats the
 personal-class position, which beats `default_on`. Frontend consumes the
 `useSetCapabilityPersonalScopeMutation` friendly alias; the team-matrix drawer
