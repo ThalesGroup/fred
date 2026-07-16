@@ -1369,50 +1369,33 @@
       "comingSoon": "This screen is moving here — coming next.",
       "create": {
         "title": "New campaign",
-        "description": "Configure and launch an agent validation campaign",
+        "description": "Run an agent against a dataset and score the results",
         "back": "Back",
-        "steps": {
-          "target": "Target",
-          "dataset": "Dataset",
-          "policy": "Policy"
-        },
-        "name": {
-          "label": "Campaign name",
-          "placeholder": "e.g. Nightly regression"
-        },
-        "targetKind": {
-          "label": "What do you want to evaluate?"
-        },
-        "target": {
-          "managed": {
-            "title": "Managed instance",
-            "desc": "A team agent instance from the control plane"
-          },
-          "runtime": {
-            "title": "Runtime agent",
-            "desc": "A specific agent on a runtime, by ID"
-          }
-        },
-        "instance": {
-          "label": "Agent instance",
-          "placeholder": "Select an instance",
+        "agent": {
+          "label": "Managed agent",
+          "placeholder": "Select an agent instance",
           "loading": "Loading instances..."
         },
-        "runtime": {
-          "label": "Runtime ID",
-          "placeholder": "runtime-..."
-        },
-        "agent": {
-          "label": "Agent ID",
-          "placeholder": "agent-..."
-        },
-        "securityNote": "Runtime URLs are never exposed to the browser. Only controlled identifiers are accepted.",
         "dataset": {
-          "name": "Dataset name",
-          "version": "Version (optional)"
-        },
-        "manual": {
-          "label": "Test cases"
+          "sectionLabel": "Dataset",
+          "useExisting": "Use an existing dataset",
+          "useExistingDesc": "Pick a dataset already saved for this team",
+          "createNew": "Create a dataset for this evaluation",
+          "createNewDesc": "Import a JSON file or enter test cases by hand",
+          "select": {
+            "label": "Saved dataset",
+            "placeholder": "Select a dataset",
+            "loading": "Loading datasets...",
+            "empty": "No saved datasets for this team yet"
+          },
+          "sourceJson": "Import JSON",
+          "sourceManual": "Enter rows manually",
+          "preview": {
+            "cases": "{{count}} cases",
+            "withExpected": "All cases have an expected reply",
+            "withoutExpected": "No expected replies — reference-free metrics only",
+            "partialExpected": "{{count}} of {{total}} cases have an expected reply"
+          }
         },
         "case": {
           "n": "Case {{n}}",
@@ -1422,65 +1405,23 @@
           "remove": "Remove case"
         },
         "import": {
-          "json": "Import JSON",
-          "csv": "Import CSV",
-          "dropHint": "Drag & drop a {{mode}} file, or click to browse",
+          "dropHint": "Drag & drop a JSON file, or click to browse",
           "dropSub": "Up to 200 cases",
-          "jsonImported": "{{count}} cases imported from JSON",
-          "csvImported": "{{count}} cases imported from CSV",
-          "error": "Invalid file. Check the JSON or CSV format.",
-          "tooMany": "Maximum 200 cases allowed.",
-          "total": "Total: {{count}} cases to evaluate"
-        },
-        "judge": {
-          "label": "Judge profile",
-          "help": "Model profile used to score answers"
-        },
-        "concurrency": {
-          "label": "Max concurrency"
-        },
-        "timeout": {
-          "label": "Case timeout (s)"
-        },
-        "metrics": {
-          "label": "Custom metrics",
-          "help": "Natural-language criteria, judged alongside the built-in metrics",
-          "add": "Add a criterion",
-          "remove": "Remove criterion",
-          "n": "Criterion {{n}}",
-          "name": "Name",
-          "namePlaceholder": "e.g. cites_source",
-          "criteria": "Criterion to evaluate",
-          "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
-          "parameters": "Fields the judge may read",
-          "threshold": "Pass threshold"
-        },
-        "recap": {
-          "title": "Summary",
-          "campaign": "Campaign",
-          "targetType": "Target type",
-          "managed": "Managed instance",
-          "runtime": "Runtime agent",
-          "instance": "Instance",
-          "runtimeId": "Runtime ID",
-          "agent": "Agent ID",
-          "dataset": "Dataset",
-          "cases": "Cases",
-          "judge": "Judge",
-          "concurrency": "Concurrency",
-          "timeout": "Timeout",
-          "customMetrics": "Custom metrics",
-          "profile": "Profile",
-          "profileAuto": "Automatic"
+          "imported": "{{count}} cases imported",
+          "invalidJson": "This file is not valid JSON.",
+          "mustBeArray": "The JSON must be an array of cases.",
+          "empty": "The file contains no cases.",
+          "missingInput": "Every case needs a non-empty \"input\" field.",
+          "tooMany": "Maximum 200 cases allowed."
         },
         "nav": {
-          "prev": "Previous",
-          "next": "Next",
-          "launch": "Launch campaign"
+          "start": "Start evaluation"
         },
-        "launching": "Launching...",
-        "success": "Campaign queued",
-        "error": "Failed to create the campaign"
+        "launching": "Starting...",
+        "success": "Evaluation started",
+        "datasetError": "Could not save the dataset. Try again.",
+        "campaignError": "Could not start the evaluation.",
+        "campaignErrorDatasetSaved": "The dataset was saved, but the evaluation could not start: {{message}} You can retry by selecting it from \"Use an existing dataset\"."
       },
       "detail": {
         "cancelError": "Could not cancel the campaign",

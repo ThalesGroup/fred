@@ -10,6 +10,7 @@ from fred_core import (
     OrganizationPermission,
     TeamPermission,
     get_current_user,
+    is_service_agent,
 )
 from fred_core.common import TeamId
 
@@ -1110,12 +1111,25 @@ async def post_prepare_execution(
     reached. Gated on ``CAN_USE_TEAM_AGENTS`` instead, the same team_member-only
     capability already required to list this team's agent instances in the
     first place (the natural next step in the same flow).
+
+    EVAL-03: the evaluation worker calls this route with its ``service_agent``
+    M2M identity to resolve one managed agent instance's execution context for
+    a running campaign. It gets ``CAN_READ`` instead of ``CAN_USE_TEAM_AGENTS``
+    — the existing scoped, no-OpenFGA-relation bypass in
+    ``_validate_team_and_check_permission`` (RFC EVAL-AUTH, Sol. A), since
+    ``CAN_READ`` is in ``SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS``. A normal
+    interactive user is unaffected and still requires ``CAN_USE_TEAM_AGENTS``.
     """
+    required_permissions = (
+        [TeamPermission.CAN_READ]
+        if is_service_agent(user)
+        else [TeamPermission.CAN_USE_TEAM_AGENTS]
+    )
     team = await get_team_by_id_from_service(
         user,
         team_id,
         deps.team_dependencies,
-        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+        required_permissions=required_permissions,
     )
 
     try:

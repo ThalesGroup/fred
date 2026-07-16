@@ -192,6 +192,21 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 - [x] `knowledge-flow`: recognize `service_agent` in `TagService.resolve_authorized_tag_ids_in_rebac` — authorize the **team's** tags (owner/editor/viewer) scoped to `team_id`, read-only, fail-closed without a (non-personal) team (fred PR #1923). Covers the corpus-scoping (`tag_ids`) path used by RAG search; the explicit per-document path is unchanged (worker does not pass explicit `document_uids`).
 - [x] Tests: allow/deny in fred-core, fred-runtime, control-plane, knowledge-flow (`tests/services/test_tag_service_service_agent.py`)
 - [x] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator branch `21`)
+- [x] **2026-07-16 follow-up finding:** the generic `_validate_team_and_check_permission`
+  bypass landed, but the **managed** `POST .../agent-instances/{id}/prepare-execution`
+  route (`product/api.py::post_prepare_execution`) still passed the hardcoded
+  `required_permissions=[CAN_USE_TEAM_AGENTS]` unconditionally — not a subset of
+  `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS`, so the worker's `service_agent` call fell
+  through to the real ReBAC check and got 403, and no campaign cases ran. Fixed by
+  computing `required_permissions` per caller at that one call site: `[CAN_READ]` when
+  `is_service_agent(user)`, else `[CAN_USE_TEAM_AGENTS]` — same pattern already used
+  generically, now wired at the specific route the worker calls. The sibling **direct**
+  runtime-agent `prepare-execution` route (`post_prepare_runtime_agent_execution`) and
+  `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` itself are unchanged. Tests added:
+  `test_product_api_authz.py` (wiring: service_agent → `CAN_READ`, normal user → still
+  `CAN_USE_TEAM_AGENTS`, sibling route unaffected), `test_service_agent_authz.py`
+  (end-to-end: service_agent bypasses OpenFGA with no team relation; a non-service
+  `CAN_READ`-only caller is still denied).
 
 ---
 
@@ -238,13 +253,31 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 ### Phase 4 — Frontend
 
 - [ ] Add routes: `/monitoring/evaluations`, `/monitoring/evaluations/new`, `/monitoring/evaluations/:campaignId`
-- [ ] Campaign creation — 3-step form: target, dataset (manual / JSON / CSV), evaluation policy
-- [ ] Campaign list — name, target agent, dataset name/version, operational state, verdict, progress, pass rate
-- [ ] Campaign detail — shared SSE task manager, aggregate metric cards, paginated case table
-- [ ] Case detail drawer — input, expected output, actual output, structural checks, metric scores/reasons, latency, tokens, errors
-- [ ] Permission-aware controls and side-effect warning before start
-- [ ] All request/response types from generated OpenAPI — no hand-written TypeScript duplicates
-- [ ] Reuse patterns from `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`, `rework/features/tasks`
+      — still hosted inside the Team Settings modal (`TeamSettingsEvaluations`); not
+      addressed by `EVAL-04`.
+- [x] Campaign creation — `EVAL-04` (2026-07-16) shipped a **reduced, breaking** first
+      release instead of the full 3-step form: one journey — managed agent → pick or
+      create a dataset (JSON import or manual rows; **no CSV**) → one "Start evaluation"
+      button. No evaluation-policy step (profile/judge/metrics/concurrency/timeout are
+      server-owned defaults); no campaign-name input. See
+      `docs/swift/rfc/AGENT-EVALUATION-RFC.md` §12 amendment.
+- [x] Campaign list — name, target agent, dataset name/version (now sourced from the
+      joined dataset resource, not a campaign-local string), operational state, verdict,
+      progress, pass rate — unchanged view, updated field source (`EVAL-04`).
+- [x] Campaign detail — shared SSE task manager, aggregate metric cards, paginated case
+      table — pre-existing, untouched by `EVAL-04`.
+- [x] Case detail drawer — input, expected output, actual output, structural checks,
+      metric scores/reasons, latency, tokens, errors — pre-existing, untouched.
+- [ ] Permission-aware controls and side-effect warning before start — not addressed by
+      `EVAL-04`.
+- [x] All request/response types from generated OpenAPI — no hand-written TypeScript
+      duplicates. Regenerated for `EVAL-04`'s new dataset/campaign contract.
+- [x] Reuse patterns from `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`,
+      `rework/features/tasks` — pre-existing, untouched.
+- [x] **Deliberately deferred by `EVAL-04`, not abandoned:** CSV import, runtime-agent
+      targets, custom metrics/judge/profile selection, concurrency/timeout controls, a
+      standalone dataset-management screen (dataset selection/creation lives only inside
+      the campaign-creation flow this release).
 
 ---
 
@@ -299,6 +332,53 @@ cutover to canonical task events.
 
 ---
 
+### EVAL-05 — Campaign and Dataset both retire: two nouns, Evaluation + Run
+
+RFC: [`AGENT-EVALUATION-RFC.md §8.5/§9.5/§12 amendment`](../rfc/AGENT-EVALUATION-RFC.md).
+**Status: not started — RFC amendment drafted, awaiting developer confirmation before any item
+below moves.** Vocabulary consolidation agreed with Thomas/Odélia, revised once during
+drafting to land on two nouns instead of three: `Campaign` retires, and `Dataset`/
+`EvaluationDataset` (`EVAL-04`) retires too — `Evaluation` **is** the named, versioned,
+immutable case set (what `EVAL-04` shipped as a dataset), not a wrapper around one. An
+analyst names an `Evaluation` and gives it cases; each `Run` of it independently picks
+target/model/prompt and produces a report; the UI lists runs grouped by evaluation.
+
+- [ ] `fred-agent-evaluator`: rename `datasets/` domain → `Evaluation` (was `EvaluationDataset`,
+      `dataset_id` → `evaluation_id`); rename/retire `campaigns/` domain — expose the existing
+      `EvaluationRunRow` split (already present at the storage layer) through new routes
+      instead of the current single `POST /campaigns` create-and-start call
+- [ ] `POST /evaluation/v1/evaluations` (create, no run — name + cases, JSON import or manual
+      rows) / `GET .../evaluations` / `GET .../evaluations/{id}` — supersedes
+      `/evaluation/v1/datasets` outright, not kept alongside it
+- [ ] `POST /evaluation/v1/evaluations/{id}/runs` (Start — body: target, profile?,
+      judge_profile_id?, execution?) / `GET .../evaluations/{id}/runs` /
+      `GET /evaluation/v1/runs/{run_id}` / `.../cases` / `.../cases/{case_id}` / `.../cancel`
+- [ ] Add `RunSnapshot` (evaluation name/version, resolved target config, profile, judge
+      profile, execution options actually used), frozen at run creation, on `EvaluationRunRow`
+- [ ] `EvaluationCaseResult`/`EvaluationCaseRow`: drop `campaign_id`, keep `run_id` only
+- [ ] Frontend: rename `EvaluationCampaignCreate.tsx` → `EvaluationCreate.tsx` (name + cases
+      only, no target, no execution — the `EVAL-04` dataset-picker sub-step disappears, this
+      screen **is** that step now); rename `EvaluationCampaignDetail.tsx` →
+      `EvaluationDetail.tsx` (evaluation info + run list + "Start" action prompting for target)
+      and extract the existing task-SSE/metric-cards/case-table view into `RunDetail.tsx`
+      scoped to one `run_id`
+- [ ] Frontend: evaluation list groups by `Evaluation`, expandable to its `Run`s
+- [ ] Regenerate the vendored `apps/frontend/src/slices/evaluation/` client against the new
+      evaluator OpenAPI (see `EVAL-02`'s cross-repo codegen guard item above)
+- [ ] Close the pre-existing authz gap surfaced during this RFC pass: `/evaluation/v1` routes
+      (both the old dataset/campaign routes and the new evaluation/run routes) currently carry
+      no ReBAC check beyond `get_current_user` — port the `TeamPermission.CAN_READ`/
+      `CAN_UPDATE_AGENTS` pattern from the dead `control-plane-backend` evaluations module,
+      reusing the `service_agent` pattern already proven under `EVAL-03`/`EVAL-AUTH`
+- [ ] Cleanup candidate, separate PR: delete `control-plane-backend`'s `evaluations/` module
+      once confirmed unreferenced (frontend now targets `/evaluation/v1` exclusively)
+- [ ] Cross-repo: update `fred-agent-evaluator/docs/rfc/EVAL-DATASET-RFC.md` §3/§7.2 to point
+      at the superseding `Evaluation` model instead of `EvaluationDataset` (see cross-reference
+      note added there)
+- [ ] Tests + `make code-quality` in both `fred` and `fred-agent-evaluator`
+
+---
+
 ## 4 Resolved decisions
 
 | Decision | Chosen answer |
@@ -334,7 +414,8 @@ All previously open questions are resolved by RFC v2. See `docs/swift/rfc/AGENT-
 | Phase 1 — CLI core extraction | Not started | `fred-deepeval-cli` repo |
 | Phase 2 — Campaign API | Not started | Depends on Phase 0 |
 | Phase 3 — Evaluation worker | Not started | Depends on Phase 1 + 2 |
-| Phase 4 — Frontend | Not started | Depends on Phase 2 + 3 |
+| Phase 4 — Frontend | First release shipped (`EVAL-04`, 2026-07-16) | Reduced, breaking scope — managed-agent + dataset (JSON/manual) + single-button start; deferred: `/monitoring/evaluations` routes, CSV, custom metrics/judge/policy UI, standalone dataset page |
 | Phase 5 — OTel export | Not started | Depends on Phase 3 |
 | EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source tray |
+| EVAL-05 — Two nouns: Evaluation + Run | Not started — RFC amendment drafted | Retires `Campaign` and `Dataset`; two nouns `Evaluation` (was Dataset) + `Run` (carries target/policy + `RunSnapshot`); awaiting confirmation |
 | Phase 6 — Live validation | Not started | Depends on Phase 3 + 4 |

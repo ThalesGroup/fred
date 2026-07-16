@@ -51,18 +51,6 @@
   gap: var(--spacing-m);
 }
 
-.row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-m);
-}
-
-.note {
-  margin: 0;
-  color: var(--on-surface-muted);
-  font: var(--font-label-small);
-}
-
 .caseList {
   display: flex;
   flex-direction: column;
@@ -95,42 +83,6 @@
 .success {
   color: var(--success);
   font: var(--font-label-medium);
-}
-
-.recap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  background: var(--surface-container);
-  padding: var(--spacing-m);
-  color: var(--on-surface);
-}
-
-.recapTitle {
-  margin-bottom: var(--spacing-2xs);
-  color: var(--on-surface);
-  font: var(--font-body-medium-emphasized);
-}
-
-.recapRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-m);
-  border-bottom: 1px solid var(--outline-variant);
-  padding: var(--spacing-2xs) 0;
-}
-
-.recapRow:last-child {
-  border-bottom: none;
-}
-
-.recapValue {
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-  text-align: right;
 }
 
 .nav {

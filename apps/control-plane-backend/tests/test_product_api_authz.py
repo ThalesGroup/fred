@@ -42,6 +42,15 @@ def _user() -> KeycloakUser:
     return KeycloakUser(uid="u", username="u", roles=["viewer"], email=None)
 
 
+def _service_agent_user() -> KeycloakUser:
+    return KeycloakUser(
+        uid="fred-evaluation-worker",
+        username="svc",
+        roles=["service_agent"],
+        email=None,
+    )
+
+
 class _FakeTeam:
     id = TeamId("bid-and-capture")
 
@@ -245,12 +254,54 @@ async def test_prepare_execution_requires_can_use_team_agents(
     from control-plane, unlike the sibling `get_team_agent_instance_runtime`
     (deliberately kept on CAN_READ, config only, no prompt content). Must
     require CAN_USE_TEAM_AGENTS (team_member only), not the default CAN_READ
-    (team_member or `public`)."""
+    (team_member or `public`) for a normal interactive user."""
     get_team = AsyncMock(return_value=_FakeTeam())
     monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.post_prepare_execution(TeamId("t"), "inst-1", deps, _user())
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_USE_TEAM_AGENTS
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_requires_only_can_read_for_service_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EVAL-03: the evaluation worker calls this route with its `service_agent`
+    M2M identity. It must request CAN_READ (the existing scoped, no-OpenFGA-relation
+    bypass in `_validate_team_and_check_permission`), not CAN_USE_TEAM_AGENTS —
+    the worker holds no team relation and would otherwise get a 403."""
+    get_team = AsyncMock(return_value=_FakeTeam())
+    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    await product_api.post_prepare_execution(
+        TeamId("t"), "inst-1", deps, _service_agent_user()
+    )
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_READ
+    ]
+
+
+@pytest.mark.asyncio
+async def test_service_agent_relaxation_does_not_broaden_sibling_endpoints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The service_agent exception is wired only into `post_prepare_execution`.
+    A sibling CAN_USE_TEAM_AGENTS-gated route (agent-instance listing) must keep
+    requesting CAN_USE_TEAM_AGENTS unconditionally, even for a service_agent
+    caller — proving this fix did not broaden permissions globally."""
+    get_team = AsyncMock(return_value=_FakeTeam())
+    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    await product_api.get_team_agent_instances(TeamId("t"), deps, _service_agent_user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [

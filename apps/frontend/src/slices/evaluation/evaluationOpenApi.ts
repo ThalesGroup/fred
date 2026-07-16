@@ -91,6 +91,23 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/evaluation/v1/campaigns/${queryArg.campaignId}/analyze`, method: "POST" }),
     }),
+    createDatasetEvaluationV1DatasetsPost: build.mutation<
+      CreateDatasetEvaluationV1DatasetsPostApiResponse,
+      CreateDatasetEvaluationV1DatasetsPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/datasets`, method: "POST", body: queryArg.createDatasetRequest }),
+    }),
+    listDatasetsEvaluationV1DatasetsGet: build.query<
+      ListDatasetsEvaluationV1DatasetsGetApiResponse,
+      ListDatasetsEvaluationV1DatasetsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/evaluation/v1/datasets`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     listTasksEvaluationV1TasksGet: build.query<
       ListTasksEvaluationV1TasksGetApiResponse,
       ListTasksEvaluationV1TasksGetApiArg
@@ -191,6 +208,15 @@ export type AnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostApiResponse
 export type AnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostApiArg = {
   campaignId: string;
 };
+export type CreateDatasetEvaluationV1DatasetsPostApiResponse =
+  /** status 201 Successful Response */ DatasetDetailResponse;
+export type CreateDatasetEvaluationV1DatasetsPostApiArg = {
+  createDatasetRequest: CreateDatasetRequest;
+};
+export type ListDatasetsEvaluationV1DatasetsGetApiResponse = /** status 200 Successful Response */ DatasetListResponse;
+export type ListDatasetsEvaluationV1DatasetsGetApiArg = {
+  teamId: string;
+};
 export type ListTasksEvaluationV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksEvaluationV1TasksGetApiArg = {
   scope?: "user" | "team";
@@ -230,10 +256,29 @@ export type CampaignCreatedResponse = {
   task_id: string | null;
   state: string;
 };
+export type EvaluatorErrorDetail = {
+  code:
+    | "authentication_required"
+    | "access_forbidden"
+    | "control_plane_authentication_failed"
+    | "target_forbidden"
+    | "target_not_found"
+    | "target_unavailable"
+    | "target_invalid"
+    | "control_plane_unavailable"
+    | "control_plane_invalid_response"
+    | "dataset_not_found";
+  message: string;
+};
+export type EvaluatorErrorResponse = {
+  detail: EvaluatorErrorDetail;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
   type: string;
+  input?: any;
+  ctx?: object;
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
@@ -242,41 +287,26 @@ export type ManagedInstanceTarget = {
   kind: "managed_instance";
   agent_instance_id: string;
 };
+export type CreateEvaluationCampaignRequest = {
+  team_id: string;
+  target: ManagedInstanceTarget;
+  dataset_id: string;
+};
 export type RuntimeAgentTarget = {
   kind: "runtime_agent";
   runtime_id: string;
   agent_id: string;
 };
-export type EvaluationCaseInput = {
-  external_id?: string | null;
-  input: string;
-  expected_output?: string | null;
-  tags?: string[];
-};
-export type EvaluationDataset = {
+export type DatasetCompleteness = "minimal" | "complete";
+export type DatasetSummaryResponse = {
+  dataset_id: string;
   name: string;
-  version?: string | null;
-  cases: EvaluationCaseInput[];
-};
-export type CustomMetric = {
-  name: string;
-  criteria: string;
-  parameters: string[];
-  threshold?: number;
-};
-export type EvaluationExecutionOptions = {
-  max_concurrency?: number;
-  case_timeout_seconds?: number;
-};
-export type CreateEvaluationCampaignRequest = {
-  name: string;
+  version: string;
   team_id: string;
-  target: ManagedInstanceTarget | RuntimeAgentTarget;
-  dataset: EvaluationDataset;
-  profile?: string;
-  judge_profile_id: string;
-  custom_metrics?: CustomMetric[];
-  execution?: EvaluationExecutionOptions;
+  origin: "capture" | "upload" | "manual";
+  completeness: DatasetCompleteness;
+  case_count: number;
+  created_at: string;
 };
 export type EvaluationCampaignResponse = {
   schema_version?: "1";
@@ -287,8 +317,7 @@ export type EvaluationCampaignResponse = {
   team_id: string;
   created_by: string;
   target: ManagedInstanceTarget | RuntimeAgentTarget;
-  dataset_name: string;
-  dataset_version: string | null;
+  dataset: DatasetSummaryResponse | null;
   profile: string;
   judge_profile_id: string;
   operational_state: string;
@@ -367,6 +396,35 @@ export type CampaignAnalysisResponse = {
   analysis: CampaignAnalysisResult;
   cached: boolean;
 };
+export type DatasetCase = {
+  external_id?: string | null;
+  input: string;
+  expected_output?: string | null;
+  tags?: string[];
+  source_candidate_id?: string | null;
+  source_session_id?: string | null;
+};
+export type DatasetDetailResponse = {
+  dataset_id: string;
+  name: string;
+  version: string;
+  team_id: string;
+  origin: "capture" | "upload" | "manual";
+  completeness: DatasetCompleteness;
+  case_count: number;
+  created_at: string;
+  cases: DatasetCase[];
+};
+export type CreateDatasetRequest = {
+  team_id: string;
+  origin: "upload" | "manual";
+  source_filename?: string | null;
+  cases: DatasetCase[];
+};
+export type DatasetListResponse = {
+  datasets: DatasetSummaryResponse[];
+  total: number;
+};
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
   type: string;
@@ -385,6 +443,7 @@ export type TaskSummary = {
   team_id?: string | null;
   created_at: string;
   updated_at: string;
+  scheduled_for?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
@@ -434,6 +493,9 @@ export const {
   useGetTelemetryEvaluationV1TelemetryGetQuery,
   useLazyGetTelemetryEvaluationV1TelemetryGetQuery,
   useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation,
+  useCreateDatasetEvaluationV1DatasetsPostMutation,
+  useListDatasetsEvaluationV1DatasetsGetQuery,
+  useLazyListDatasetsEvaluationV1DatasetsGetQuery,
   useListTasksEvaluationV1TasksGetQuery,
   useLazyListTasksEvaluationV1TasksGetQuery,
   useGetTaskEvaluationV1TasksTaskIdGetQuery,

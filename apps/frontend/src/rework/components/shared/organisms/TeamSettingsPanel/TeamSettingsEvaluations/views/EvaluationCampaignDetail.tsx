@@ -246,7 +246,7 @@ export default function EvaluationCampaignDetail({
   const metadata: { label: string; value: string }[] = [
     {
       label: t("rework.evaluation.detail.meta.dataset"),
-      value: `${campaign.dataset_name}${campaign.dataset_version ? ` v${campaign.dataset_version}` : ""}`,
+      value: campaign.dataset ? `${campaign.dataset.name} (${campaign.dataset.version})` : "—",
     },
     { label: t("rework.evaluation.detail.meta.profile"), value: campaign.profile },
     { label: t("rework.evaluation.detail.meta.judge"), value: campaign.judge_profile_id },

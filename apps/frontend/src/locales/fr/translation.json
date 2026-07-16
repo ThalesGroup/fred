@@ -1369,118 +1369,59 @@
       "comingSoon": "Cet écran arrive ici — bientôt disponible.",
       "create": {
         "title": "Nouvelle campagne",
-        "description": "Configurez et lancez une campagne de validation d'agent",
+        "description": "Exécuter un agent sur un jeu de données et noter les résultats",
         "back": "Retour",
-        "steps": {
-          "target": "Cible",
-          "dataset": "Jeu de données",
-          "policy": "Politique"
-        },
-        "name": {
-          "label": "Nom de la campagne",
-          "placeholder": "ex. Régression nocturne"
-        },
-        "targetKind": {
-          "label": "Que voulez-vous évaluer ?"
-        },
-        "target": {
-          "managed": {
-            "title": "Instance gérée",
-            "desc": "Une instance d'agent de l'équipe (control plane)"
-          },
-          "runtime": {
-            "title": "Agent runtime",
-            "desc": "Un agent précis sur un runtime, par identifiant"
-          }
-        },
-        "instance": {
-          "label": "Instance d'agent",
-          "placeholder": "Sélectionnez une instance",
+        "agent": {
+          "label": "Agent géré",
+          "placeholder": "Sélectionner une instance d'agent",
           "loading": "Chargement des instances..."
         },
-        "runtime": {
-          "label": "Identifiant runtime",
-          "placeholder": "runtime-..."
-        },
-        "agent": {
-          "label": "Identifiant d'agent",
-          "placeholder": "agent-..."
-        },
-        "securityNote": "Les URLs de runtime ne sont jamais exposées au navigateur. Seuls des identifiants contrôlés sont acceptés.",
         "dataset": {
-          "name": "Nom du jeu de données",
-          "version": "Version (optionnel)"
-        },
-        "manual": {
-          "label": "Cas de test"
+          "sectionLabel": "Jeu de données",
+          "useExisting": "Utiliser un jeu de données existant",
+          "useExistingDesc": "Choisir un jeu de données déjà enregistré pour cette équipe",
+          "createNew": "Créer un jeu de données pour cette évaluation",
+          "createNewDesc": "Importer un fichier JSON ou saisir les cas de test à la main",
+          "select": {
+            "label": "Jeu de données enregistré",
+            "placeholder": "Sélectionner un jeu de données",
+            "loading": "Chargement des jeux de données...",
+            "empty": "Aucun jeu de données enregistré pour cette équipe"
+          },
+          "sourceJson": "Importer un JSON",
+          "sourceManual": "Saisir les lignes manuellement",
+          "preview": {
+            "cases": "{{count}} cas",
+            "withExpected": "Tous les cas ont une réponse attendue",
+            "withoutExpected": "Aucune réponse attendue — métriques sans référence uniquement",
+            "partialExpected": "{{count}} cas sur {{total}} ont une réponse attendue"
+          }
         },
         "case": {
           "n": "Cas {{n}}",
-          "input": "Entrée",
-          "expected": "Sortie attendue (optionnel)",
+          "input": "Question",
+          "expected": "Réponse attendue (optionnel)",
           "add": "Ajouter un cas",
           "remove": "Supprimer le cas"
         },
         "import": {
-          "json": "Importer du JSON",
-          "csv": "Importer du CSV",
-          "dropHint": "Glissez-déposez un fichier {{mode}}, ou cliquez pour parcourir",
-          "dropSub": "Jusqu'à 200 cas",
-          "jsonImported": "{{count}} cas importés depuis le JSON",
-          "csvImported": "{{count}} cas importés depuis le CSV",
-          "error": "Fichier invalide. Vérifiez le format JSON ou CSV.",
-          "tooMany": "200 cas maximum autorisés.",
-          "total": "Total : {{count}} cas à évaluer"
-        },
-        "judge": {
-          "label": "Profil du juge",
-          "help": "Profil de modèle utilisé pour noter les réponses"
-        },
-        "concurrency": {
-          "label": "Concurrence max"
-        },
-        "timeout": {
-          "label": "Délai par cas (s)"
-        },
-        "metrics": {
-          "label": "Métriques personnalisées",
-          "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
-          "add": "Ajouter un critère",
-          "remove": "Retirer le critère",
-          "n": "Critère {{n}}",
-          "name": "Nom",
-          "namePlaceholder": "ex. ancrage_source",
-          "criteria": "Critère à évaluer",
-          "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
-          "parameters": "Champs évalués par le juge",
-          "threshold": "Seuil de réussite"
-        },
-        "recap": {
-          "title": "Récapitulatif",
-          "campaign": "Campagne",
-          "targetType": "Type de cible",
-          "managed": "Instance gérée",
-          "runtime": "Agent runtime",
-          "instance": "Instance",
-          "runtimeId": "Identifiant runtime",
-          "agent": "Identifiant d'agent",
-          "dataset": "Jeu de données",
-          "cases": "Cas",
-          "judge": "Juge",
-          "concurrency": "Concurrence",
-          "timeout": "Délai",
-          "customMetrics": "Métriques personnalisées",
-          "profile": "Profil",
-          "profileAuto": "Automatique"
+          "dropHint": "Glissez-déposez un fichier JSON, ou cliquez pour parcourir",
+          "dropSub": "200 cas maximum",
+          "imported": "{{count}} cas importés",
+          "invalidJson": "Ce fichier n'est pas un JSON valide.",
+          "mustBeArray": "Le JSON doit être un tableau de cas.",
+          "empty": "Le fichier ne contient aucun cas.",
+          "missingInput": "Chaque cas doit avoir un champ \"input\" non vide.",
+          "tooMany": "200 cas maximum autorisés."
         },
         "nav": {
-          "prev": "Précédent",
-          "next": "Suivant",
-          "launch": "Lancer la campagne"
+          "start": "Lancer l'évaluation"
         },
         "launching": "Lancement...",
-        "success": "Campagne en file d'attente",
-        "error": "Échec de la création de la campagne"
+        "success": "Évaluation lancée",
+        "datasetError": "Impossible d'enregistrer le jeu de données. Réessayez.",
+        "campaignError": "Impossible de démarrer l'évaluation.",
+        "campaignErrorDatasetSaved": "Le jeu de données a été enregistré, mais l'évaluation n'a pas pu démarrer : {{message}} Vous pouvez réessayer en le sélectionnant depuis \"Utiliser un jeu de données existant\"."
       },
       "detail": {
         "cancelError": "Impossible d'annuler la campagne",

@@ -1018,6 +1018,52 @@ items:
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
     notes: "Solution A: runtime + control-plane + knowledge-flow recognize service_agent for team can_read only (read-only, no OpenFGA tuple), scoped to the request team_id. knowledge-flow enforcement in TagService.resolve_authorized_tag_ids_in_rebac authorizes the team's corpus tags so RAG evaluations retrieve the team corpus (fred PR #1923). Branch 1890. Identity provisioned in fred-deployment-factory (client fred-evaluation-worker). Reusable service-account pattern for async agent workers — see RFC EVAL-AUTH §11. Deploy-time invariant: grant service_agent role only to trusted M2M clients."
 
+  - id: EVAL-04
+    title: "First-release evaluation campaigns (dataset-first, managed-agent only)"
+    status: in_progress
+    parent: EVAL-01
+    owner: Dimitri
+    refs:
+      rfc: "fred-agent-evaluator/docs/rfc/EVAL-DATASET-RFC.md §12 amendment; docs/swift/rfc/AGENT-EVALUATION-RFC.md §12 amendment"
+      backlog: "fred-agent-evaluator/docs/backlog/EVAL-DATASET-BACKLOG.md §Phase 4-5; docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md §Phase 4"
+    notes: >
+      Deliberately small, breaking first release of one journey only: pick a managed agent,
+      pick or create a dataset (JSON import or manual rows only, no CSV), start, watch
+      progress. Datasets become first-class immutable resources (POST/GET
+      /evaluation/v1/datasets) referenced by campaigns via dataset_id — the old inline
+      dataset/cases campaign-creation path is removed, not kept in parallel. No
+      runtime-agent target, no custom metrics, no judge/profile/concurrency/timeout input,
+      no campaign-name input, no standalone dataset-management screen this release
+      (server-owned defaults for all of the above). No GitHub issue opened this session
+      (waived by Dimitri — work stays uncommitted/unpushed pending review).
+
+  - id: EVAL-05
+    title: "Campaign and Dataset both retire: two nouns, Evaluation + Run"
+    status: proposed
+    parent: EVAL-01
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md §8.5/§9.5/§12 amendment"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md §EVAL-05"
+    notes: >
+      RFC-only, not yet confirmed for implementation. Vocabulary and data-model amendment
+      agreed with Thomas/Odélia, revised once during drafting: not three nouns (Dataset,
+      Evaluation, Run) but two. `Campaign` retires, and `Dataset`/`EvaluationDataset`
+      (`EVAL-04`) also retires — `Evaluation` **is** the named, versioned, immutable case set
+      EVAL-04 shipped as a dataset, not a wrapper around one. Target/model/prompt/judge
+      selection move off `Evaluation` (which has no update route) onto `Run`, created by a
+      repeatable "Start" action on the evaluation's detail view; UI groups runs under their
+      evaluation. Adds `RunSnapshot`, frozen at run creation, recording the target's resolved
+      config and execution options actually used — the drift risk that remains even though
+      case content is already immutable/versioned. Not a new architecture:
+      `fred-agent-evaluator`'s `campaigns/models.py` already has a separate `EvaluationRunRow`
+      at the storage layer; this finishes exposing that split through the API. Surfaced two
+      pre-existing gaps to track, not fixed by this item: the live `/evaluation/v1` routes
+      carry no ReBAC permission check at all (only `get_current_user`), and
+      `control-plane-backend`'s old `evaluations/` module looks dead now that the frontend
+      targets `/evaluation/v1` exclusively. No GitHub issue yet — awaiting developer
+      confirmation of the RFC amendment before backlog items move past "not started."
+
   # ── FRONT ─────────────────────────────────────────────────────────────
 
   - id: FRONT-01
