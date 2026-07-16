@@ -782,7 +782,7 @@
         },
         "matrix": {
           "title": "{{name}} — team access",
-          "subtitle": "Enable or disable this capability per team. Enabling collects any required settings.",
+          "subtitle": "Set each team's access: enable with settings, disable explicitly, or leave it on the platform default. Dimmed teams cannot use this capability right now.",
           "searchPlaceholder": "Search teams...",
           "clearSearch": "Clear search",
           "searchEmpty": "No team matches your search.",
@@ -790,16 +790,15 @@
           "disable": "Disable",
           "cancel": "Cancel",
           "saveEnable": "Save & enable",
-          "state": {
-            "enabled": "Enabled",
-            "inherited": "On by default",
-            "off": "Off"
-          },
           "enabledToast": "Capability enabled for {{team}}.",
           "enableError": "Could not enable the capability.",
           "disabledToast": "Capability disabled for {{team}}.",
           "disabledSuspendedToast": "Disabled for {{team}} — {{count}} instance(s) suspended.",
-          "disableError": "Could not disable the capability."
+          "disableError": "Could not disable the capability.",
+          "default": "Default",
+          "defaultToast": "{{team}} now follows the platform default.",
+          "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
+          "defaultError": "Could not reset the capability to the platform default."
         }
       }
     },

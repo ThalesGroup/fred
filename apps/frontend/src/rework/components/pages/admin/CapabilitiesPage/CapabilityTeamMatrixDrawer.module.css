@@ -59,33 +59,40 @@
   white-space: nowrap;
 }
 
-.stateBadge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-2xl);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  font: var(--font-label-small);
-  white-space: nowrap;
-}
-
-.stateBadge[data-state="enabled"] {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-
-.stateBadge[data-state="inherited"] {
-  background: var(--tertiary-container);
-  color: var(--on-tertiary-container);
-}
-
-.stateBadge[data-state="off"] {
-  background: var(--surface-container-high);
-  color: var(--on-surface-muted);
+/* A team the capability is effectively off for (explicit disable, or default
+ * while the platform default is off): present and actionable, but inert, so it
+ * recedes behind the teams that can use it — same treatment as the catalog
+ * table. Opacity (not a muted colour) so name and control dim as one; 0.55
+ * keeps the text above WCAG AA against the row background. */
+.dimmed {
+  opacity: 0.55;
 }
 
 .teamActions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+/* Indeterminate ring shown while a tri-state change is in flight (mutation +
+ * list refetch). The segment already moved optimistically; this is the "not
+ * settled yet" cue next to it. */
+.spinner {
+  flex-shrink: 0;
+  animation: spin 0.75s linear infinite;
+  box-sizing: border-box;
+  border: 2px solid var(--outline-variant);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .settingsForm {

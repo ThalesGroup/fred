@@ -50,6 +50,44 @@ export function isCapabilityOnForTeam(capability: EnablementFacts, teamId: strin
 }
 
 /**
+ * The team's *explicit* tri-state position — what the admin actually chose,
+ * as opposed to `teamCapabilityState` which is the *effective* access after
+ * inheritance. `default` means "no explicit tuple: the platform default
+ * applies", whether that default is on or off. Drives the segmented control
+ * in the team matrix drawer. Opt-out beats grant, mirroring the FGA schema.
+ */
+export type TeamCapabilityChoice = "disabled" | "default" | "enabled";
+
+export function teamCapabilityChoice(capability: EnablementFacts, teamId: string): TeamCapabilityChoice {
+  if ((capability.disabled_team_ids ?? []).includes(teamId)) {
+    return "disabled";
+  }
+  if ((capability.enabled_team_ids ?? []).includes(teamId)) {
+    return "enabled";
+  }
+  return "default";
+}
+
+/**
+ * Matrix drawer ordering: teams with an explicit position first (enabled,
+ * then disabled), the default majority last — on a ~100-team roster the
+ * handful of explicit overrides is what the admin came to see. Alphabetical
+ * within each group. Returns a new array; the input is not mutated.
+ */
+const CHOICE_RANK: Record<TeamCapabilityChoice, number> = { enabled: 0, disabled: 1, default: 2 };
+
+export function sortTeamsForMatrix<T extends { id: string; name: string }>(
+  teams: T[],
+  capability: EnablementFacts,
+): T[] {
+  return [...teams].sort((a, b) => {
+    const rank =
+      CHOICE_RANK[teamCapabilityChoice(capability, a.id)] - CHOICE_RANK[teamCapabilityChoice(capability, b.id)];
+    return rank !== 0 ? rank : a.name.localeCompare(b.name);
+  });
+}
+
+/**
  * How many teams can actually use this capability (the catalog column).
  *
  * Two regimes, because access is granted two different ways:

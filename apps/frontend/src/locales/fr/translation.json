@@ -782,7 +782,7 @@
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",
-          "subtitle": "Activez ou désactivez cette capacité par équipe. L'activation collecte les réglages requis.",
+          "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette capacité actuellement.",
           "searchPlaceholder": "Rechercher une équipe...",
           "clearSearch": "Effacer la recherche",
           "searchEmpty": "Aucune équipe ne correspond à votre recherche.",
@@ -790,16 +790,15 @@
           "disable": "Désactiver",
           "cancel": "Annuler",
           "saveEnable": "Enregistrer et activer",
-          "state": {
-            "enabled": "Activée",
-            "inherited": "Activée par défaut",
-            "off": "Désactivée"
-          },
           "enabledToast": "Capacité activée pour {{team}}.",
           "enableError": "Impossible d'activer la capacité.",
           "disabledToast": "Capacité désactivée pour {{team}}.",
           "disabledSuspendedToast": "Désactivée pour {{team}} — {{count}} instance(s) suspendue(s).",
-          "disableError": "Impossible de désactiver la capacité."
+          "disableError": "Impossible de désactiver la capacité.",
+          "default": "Défaut",
+          "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
+          "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
+          "defaultError": "Impossible de remettre la capacité au défaut de la plateforme."
         }
       }
     },

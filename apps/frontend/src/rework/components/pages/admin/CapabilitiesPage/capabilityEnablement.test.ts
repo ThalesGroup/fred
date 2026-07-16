@@ -20,6 +20,8 @@ import {
   isCapabilityOnForTeam,
   isCapabilityUnused,
   seedSettingsFromFields,
+  sortTeamsForMatrix,
+  teamCapabilityChoice,
   teamCapabilityState,
 } from "./capabilityEnablement";
 
@@ -57,6 +59,46 @@ describe("teamCapabilityState (RFC §8.5 tri-state)", () => {
   it("lets an explicit opt-out beat an explicit grant (FGA: disable overrides enable)", () => {
     const cap = { default_on: true, enabled_team_ids: ["nb"], disabled_team_ids: ["nb"] };
     expect(teamCapabilityState(cap, "nb")).toBe("off");
+  });
+});
+
+describe("teamCapabilityChoice (explicit tri-state position)", () => {
+  it("reports the explicit grant and the explicit opt-out", () => {
+    const cap = { default_on: true, enabled_team_ids: ["nb"], disabled_team_ids: ["legal"] };
+    expect(teamCapabilityChoice(cap, "nb")).toBe("enabled");
+    expect(teamCapabilityChoice(cap, "legal")).toBe("disabled");
+  });
+
+  it("reports `default` when no explicit tuple exists, whatever the platform default", () => {
+    // The *choice* is "default" either way — only the effective state differs.
+    expect(teamCapabilityChoice({ default_on: true, enabled_team_ids: [] }, "nb")).toBe("default");
+    expect(teamCapabilityChoice({ default_on: false, enabled_team_ids: [] }, "nb")).toBe("default");
+  });
+
+  it("lets the opt-out beat the grant (FGA: disable overrides enable)", () => {
+    const cap = { default_on: false, enabled_team_ids: ["nb"], disabled_team_ids: ["nb"] };
+    expect(teamCapabilityChoice(cap, "nb")).toBe("disabled");
+  });
+});
+
+describe("sortTeamsForMatrix", () => {
+  const teams = [
+    { id: "d2", name: "Zulu (default)" },
+    { id: "off", name: "Legal (disabled)" },
+    { id: "on2", name: "Ops (enabled)" },
+    { id: "d1", name: "Alpha (default)" },
+    { id: "on1", name: "Data (enabled)" },
+  ];
+  const cap = { default_on: false, enabled_team_ids: ["on1", "on2"], disabled_team_ids: ["off"] };
+
+  it("orders enabled, then disabled, then the default majority, alphabetically within groups", () => {
+    expect(sortTeamsForMatrix(teams, cap).map((t) => t.id)).toEqual(["on1", "on2", "off", "d1", "d2"]);
+  });
+
+  it("does not mutate the input list", () => {
+    const before = [...teams];
+    sortTeamsForMatrix(teams, cap);
+    expect(teams).toEqual(before);
   });
 });
 

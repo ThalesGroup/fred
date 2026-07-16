@@ -29,15 +29,15 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useAdminCapabilitiesQuery,
   useListTeamsQuery,
   useSetCapabilityDefaultOnMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { enabledTeamCount, isCapabilityUnused as isUnused } from "./capabilityEnablement";
-import styles from "./CapabilitiesPage.module.css";
 
 export default function CapabilitiesPage() {
   const { t } = useTranslation();
@@ -51,10 +51,16 @@ export default function CapabilitiesPage() {
   // enablement mutations (revoke / default-off). The aggregate list carries no
   // resting per-capability health count yet — that data lands with #1975.
   const [suspendedByCapability, setSuspendedByCapability] = useState<Record<string, number>>({});
-  const [matrixCapability, setMatrixCapability] = useState<CapabilityEnablementItem | null>(null);
+  const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
 
   const capabilities = data?.items ?? [];
+
+  // Resolved from the live query on every render — NOT snapshotted into state.
+  // Every drawer mutation invalidates and refetches the list; a snapshot taken
+  // at open time would keep the drawer's tri-state frozen while the table
+  // behind it updates.
+  const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
 
   const recordSuspended = (capabilityId: string, count: number) => {
     setSuspendedByCapability((prev) => ({ ...prev, [capabilityId]: count }));
@@ -182,7 +188,7 @@ export default function CapabilitiesPage() {
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "groups" }}
-            onClick={() => setMatrixCapability(cap)}
+            onClick={() => setMatrixCapabilityId(cap.id)}
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
@@ -211,7 +217,7 @@ export default function CapabilitiesPage() {
         capability={matrixCapability}
         teams={teams}
         open={matrixCapability !== null}
-        onClose={() => setMatrixCapability(null)}
+        onClose={() => setMatrixCapabilityId(null)}
         onSuspended={recordSuspended}
       />
 
