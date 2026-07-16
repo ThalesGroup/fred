@@ -439,6 +439,75 @@ async def test_seed_registration_seeds_default_on_mcp_entry() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_registration_isolates_per_entry_failure() -> None:
+    # One bad entry (e.g. an id the FGA store rejects) must not starve the
+    # rest of the catalog of their first-registration seed.
+    class _RejectingRebac(_FakeRebac):
+        async def add_relation(self, relation: Relation) -> str | None:
+            if relation.resource.id == "bad_cap":
+                raise RuntimeError("HTTP 400 Invalid tuple")
+            return await super().add_relation(relation)
+
+    rebac = _RejectingRebac()
+    catalog = [
+        _entry("bad_cap", team_scope=TeamScopePolicy.DEFAULT_ON),
+        _entry("good_cap", team_scope=TeamScopePolicy.DEFAULT_ON),
+    ]
+
+    seeded = await seeding.seed_registration_defaults(rebac=rebac, catalog=catalog)
+
+    assert seeded == ["good_cap"]
+    assert (
+        "organization:fred",
+        "default_on",
+        "capability:good_cap",
+    ) in rebac.tuples
+
+
+# ---------------------------------------------------------------------------
+# Catalog aggregation — invalid-id quarantine (#1988 hardening)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> None:
+    # A pod on pre-#1988 code can advertise a legacy `mcp:`-prefixed id that
+    # OpenFGA rejects in object ids. The aggregation chokepoint must drop it
+    # (and keep valid entries) so no downstream FGA write ever sees it.
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+    from control_plane_backend.product import service as product_service
+
+    entries = [
+        _entry("mcp:mcp-bank-core-demo"),
+        _entry("doc_access"),
+    ]
+
+    async def _fake_fetch(base_url: str):
+        return entries
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(enabled=True, base_url="http://pod")
+                ]
+            )
+        )
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    assert set(catalog) == {"doc_access"}
+
+
+@pytest.mark.asyncio
 async def test_default_on_toggle_rejects_required_settings() -> None:
     rebac = _FakeRebac()
     store = _FakeAgentInstanceStore([])

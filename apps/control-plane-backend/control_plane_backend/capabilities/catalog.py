@@ -23,12 +23,16 @@ their `team_settings_fields` / `team_scope` from here — never a second copy.
 from __future__ import annotations
 
 import logging
+import re
 
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
+from fred_sdk.contracts.capability.manifest import CAPABILITY_ID_PATTERN
 
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 logger = logging.getLogger(__name__)
+
+_CAPABILITY_ID_RE = re.compile(CAPABILITY_ID_PATTERN)
 
 
 async def aggregate_capability_catalog(
@@ -61,5 +65,18 @@ async def aggregate_capability_catalog(
             )
             continue
         for entry in entries:
+            if not _CAPABILITY_ID_RE.fullmatch(entry.id):
+                # A pod on pre-#1988 code (or a third-party pod) can advertise
+                # an id OpenFGA rejects (e.g. legacy `mcp:<server>`); admitting
+                # it would crash every downstream FGA tuple write. Quarantine
+                # here — the single ingest chokepoint — instead.
+                logger.warning(
+                    "[capability-catalog] skipping capability with invalid id %r "
+                    "from %s (must match %s — pod likely runs outdated code)",
+                    entry.id,
+                    source.base_url,
+                    CAPABILITY_ID_PATTERN,
+                )
+                continue
             catalog[entry.id] = entry
     return catalog

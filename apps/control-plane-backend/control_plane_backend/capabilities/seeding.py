@@ -96,12 +96,22 @@ async def seed_registration_defaults(
         if team_settings_has_required_fields(entry.team_settings_fields):
             # Required team settings ⇒ admin-gated by construction (§8.2).
             continue
-        if await _is_capability_registered(rebac, entry.id):
+        try:
+            if await _is_capability_registered(rebac, entry.id):
+                continue
+            await ensure_capability_anchor(rebac, entry.id)
+            await rebac.add_relation(
+                _default_on_relation(entry.id),
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort per capability
+            # One bad entry (e.g. an id OpenFGA rejects) must not starve the
+            # rest of the catalog of their first-registration seed.
+            logger.warning(
+                "[capability-seeding] failed to seed default_on capability=%s: %s",
+                entry.id,
+                exc,
+            )
             continue
-        await ensure_capability_anchor(rebac, entry.id)
-        await rebac.add_relation(
-            _default_on_relation(entry.id),
-        )
         seeded.append(entry.id)
         logger.info("[capability-seeding] seeded default_on capability=%s", entry.id)
     return seeded
