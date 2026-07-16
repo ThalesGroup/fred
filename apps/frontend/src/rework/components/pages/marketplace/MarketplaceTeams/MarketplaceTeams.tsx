@@ -36,7 +36,7 @@ import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap"
  */
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
-  const { activeTeam, availableTeams, bootstrap } = useFrontendBootstrap();
+  const { activeTeam, availableTeams, bootstrap, isLoading } = useFrontendBootstrap();
   // AUTHZ-05 review item 4: platform-admin gating is OpenFGA-derived
   // (`PermissionSummary.is_platform_admin`), not a raw Keycloak role check.
   const isAdmin = bootstrap?.permissions?.is_platform_admin ?? false;
@@ -48,6 +48,12 @@ export default function MarketplaceTeams() {
 
   const yourTeams = teams && teams.filter((t) => t.is_member);
   const otherTeams = teams && teams.filter((t) => !t.is_member);
+
+  // Wait for bootstrap before redirecting away: redirecting on the first,
+  // pre-bootstrap render sends the user to the bare "personal" alias, then a
+  // second redirect fires once activeTeam.id resolves — the same URL/navbar
+  // desync as the CTRLP-10 index-route residual (router.tsx).
+  if (isLoading) return null;
 
   if (collaborativeTeams.length === 0) {
     return <Navigate to={`/team/${personalTeamId}/agents`} replace />;

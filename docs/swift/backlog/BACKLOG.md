@@ -4,11 +4,6 @@ Snapshot of the **`swift-golive`** GitHub milestone only, taken 2026-07-16.
 16 open / 38 total. This file is a triage view, not a source of truth —
 GitHub is. Re-generate rather than hand-edit as issues close.
 
-> ⚠️ **Date mismatch to resolve**: the GitHub milestone is due **2026-07-31**,
-> but the real internal target mentioned is **tomorrow evening (2026-07-17)**.
-> If that's the real deadline, not all 16 issues below can land by then —
-> pick the subset that actually blocks go-live tonight, and either close or
-> re-milestone the rest to `swift ga` rather than letting them ride silently.
 
 ---
 

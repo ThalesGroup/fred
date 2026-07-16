@@ -21,6 +21,7 @@ import { useLocation } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 
 /**
  * Left-side team selector.
@@ -40,6 +41,13 @@ export default function TeamSelectionNavbar() {
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
+  // Shape-based check, not a comparison against personalTeamId: activeTeam.id
+  // resolves from "personal" to "personal-<uid>" once bootstrap loads, but the
+  // pathname only follows if something re-navigates. A prefix match against a
+  // moving target flips `selected` to false right after bootstrap resolves.
+  // Mirrors the same fix already applied in useSelectedTeam.ts.
+  const currentRouteTeamId = pathname.match(/^\/team\/([^/]+)/)?.[1];
+  const isPersonalRouteSelected = isPersonalTeamId(currentRouteTeamId);
 
   return (
     <div className={styles.teamNavbarContainer}>
@@ -51,7 +59,7 @@ export default function TeamSelectionNavbar() {
         <TeamSelectionItem
           redirection={`/team/${personalTeamId}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
-          selected={pathname.startsWith(`/team/${personalTeamId}`)}
+          selected={isPersonalRouteSelected}
           imgUrl={defaultPersonalAvatarFile ? `/images/${defaultPersonalAvatarFile}` : undefined}
           avatarName={KeyCloakService.GetUserFullName()}
           avatarColor={PERSONAL_TEAM_COLOR}
