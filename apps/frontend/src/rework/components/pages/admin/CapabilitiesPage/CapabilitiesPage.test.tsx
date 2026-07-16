@@ -14,7 +14,7 @@
 
 // The Capabilities dashboard is data-driven from the aggregated enablement list.
 // `t` is mocked to echo its key, so we assert on which key each state uses and
-// that catalog rows surface the scope badge, enabled-team count, and health.
+// that catalog rows surface the enabled-team count and health.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +91,7 @@ describe("CapabilitiesPage states", () => {
 });
 
 describe("CapabilitiesPage catalog rows", () => {
-  it("renders each capability with scope badge, enabled-team count, and neutral health", () => {
+  it("renders each capability with enabled-team count and neutral health", () => {
     h.list = {
       data: {
         items: [
@@ -103,10 +103,6 @@ describe("CapabilitiesPage catalog rows", () => {
       isError: false,
     };
     const html = render();
-
-    // Scope badges reflect the manifest policy.
-    expect(html).toContain('data-tone="default-on"');
-    expect(html).toContain('data-tone="admin-gated"');
 
     // Enabled-team counts come from enabled_team_ids length.
     expect(html).toContain(">2<");

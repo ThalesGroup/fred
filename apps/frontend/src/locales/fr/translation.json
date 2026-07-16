@@ -748,22 +748,17 @@
     "admin": {
       "capabilities": {
         "title": "Capacités",
-        "subtitle": "Catalogue des capacités de la plateforme : portée par défaut, activation par équipe et état.",
+        "subtitle": "Catalogue des capacités de la plateforme : activation par équipe, valeurs par défaut et état.",
         "loading": "Chargement des capacités…",
         "loadError": "Impossible de charger le catalogue des capacités.",
         "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
         "manageTeams": "Gérer les équipes",
         "col": {
           "capability": "Capacité",
-          "scope": "Portée",
           "enabledTeams": "Équipes activées",
           "defaultOn": "Activé par défaut",
           "health": "État",
           "actions": "Actions"
-        },
-        "scope": {
-          "defaultOn": "Par défaut",
-          "adminGated": "Sur autorisation"
         },
         "health": {
           "suspended": "{{count}} suspendue(s)",

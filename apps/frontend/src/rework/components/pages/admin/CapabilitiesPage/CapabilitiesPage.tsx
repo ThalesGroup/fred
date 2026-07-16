@@ -14,9 +14,9 @@
 
 // Admin Capabilities dashboard (CAPAB-01 / #1981, RFC §8.5). The management
 // surface over the enablement model #1980 shipped: the aggregated catalog with
-// scope badges + enabled-team counts, the platform default-on toggle, a health
-// column, and (via the drawer) the per-team tri-state matrix. Consumes only the
-// generated enablement hooks — no hand-written fetch or response types.
+// enabled-team counts, the platform default-on toggle, a health column, and
+// (via the drawer) the per-team tri-state matrix. Consumes only the generated
+// enablement hooks — no hand-written fetch or response types.
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -36,7 +36,7 @@ import {
   useSetCapabilityDefaultOnMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
-import { enabledTeamCount, scopeBadge } from "./capabilityEnablement";
+import { enabledTeamCount } from "./capabilityEnablement";
 import styles from "./CapabilitiesPage.module.css";
 
 export default function CapabilitiesPage() {
@@ -105,18 +105,6 @@ export default function CapabilitiesPage() {
           </div>
         </div>
       ),
-    },
-    {
-      label: t("rework.admin.capabilities.col.scope"),
-      size: "1.2fr",
-      cellRenderer: (cap) => {
-        const badge = scopeBadge(cap.team_scope);
-        return (
-          <span className={styles.scopeBadge} data-tone={badge.tone}>
-            {t(badge.labelKey)}
-          </span>
-        );
-      },
     },
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),

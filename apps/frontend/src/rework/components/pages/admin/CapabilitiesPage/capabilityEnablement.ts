@@ -13,14 +13,10 @@
 // limitations under the License.
 
 // Pure enablement logic for the admin Capabilities dashboard (CAPAB-01 / #1981,
-// RFC §8.5). Kept framework-free so the tri-state derivation, scope badge, and
-// settings-form seeding are unit-testable without rendering.
+// RFC §8.5). Kept framework-free so the tri-state derivation and settings-form
+// seeding are unit-testable without rendering.
 
-import type {
-  CapabilityEnablementItem,
-  FieldSpec,
-  TeamScopePolicy,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 /**
  * Per-team enablement state for one capability (RFC §8.5 tri-state).
@@ -57,18 +53,6 @@ export function isCapabilityOnForTeam(
 /** Count of teams carrying an explicit `enabled` grant (the catalog column). */
 export function enabledTeamCount(capability: Pick<CapabilityEnablementItem, "enabled_team_ids">): number {
   return (capability.enabled_team_ids ?? []).length;
-}
-
-export type ScopeBadgeTone = "default-on" | "admin-gated";
-
-/** Map the manifest team-scope policy to a badge tone + i18n key suffix. */
-export function scopeBadge(policy: TeamScopePolicy): {
-  tone: ScopeBadgeTone;
-  labelKey: string;
-} {
-  return policy === "default_on"
-    ? { tone: "default-on", labelKey: "rework.admin.capabilities.scope.defaultOn" }
-    : { tone: "admin-gated", labelKey: "rework.admin.capabilities.scope.adminGated" };
 }
 
 /**

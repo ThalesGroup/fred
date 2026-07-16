@@ -77,26 +77,6 @@
   font: var(--font-label-small);
 }
 
-.scopeBadge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-2xl);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  font: var(--font-label-small);
-  white-space: nowrap;
-}
-
-.scopeBadge[data-tone="default-on"] {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-
-.scopeBadge[data-tone="admin-gated"] {
-  border: 1px solid var(--outline-variant);
-  background: var(--surface-container-high);
-  color: var(--on-surface-muted);
-}
-
 .count {
   color: var(--on-surface);
   font: var(--font-body-medium);

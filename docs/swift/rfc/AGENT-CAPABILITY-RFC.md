@@ -1349,10 +1349,15 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 > client-side equivalent of the backend's org-admin `can_manage` list gate).
 >
 > - **Catalog table.** One row per aggregated capability: icon + i18n name +
->   version, a **scope badge** (`default-on` / `admin-gated`), the **enabled-team
->   count** (`enabled_team_ids.length`), an inline **default-on toggle**, a
->   **health** cell, and a "manage teams" action. Renders through the shared
->   `DataTable`; loading / error / empty states use the existing page primitives.
+>   version, the **enabled-team count** (`enabled_team_ids.length`), an inline
+>   **default-on toggle**, a **health** cell, and a "manage teams" action. Renders
+>   through the shared `DataTable`; loading / error / empty states use the
+>   existing page primitives. A **scope badge** column (the manifest
+>   `team_scope`) shipped initially but was dropped (2026-07-16, live-testing
+>   feedback): the manifest value is only the registration seed, and showing it
+>   next to the authoritative default-on toggle read as two conflicting
+>   defaults. Admins manage the live state; the seed stays visible in the
+>   manifest itself.
 > - **Team matrix** (`CapabilityTeamMatrixDrawer`, an `InlineDrawer`). One row per
 >   team with the tri-state badge (`enabled` / `on-by-default` / `off`) and the
 >   enable / disable actions. **Enable-with-settings** renders the capability's

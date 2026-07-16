@@ -17,7 +17,6 @@ import type { FieldSpec } from "../../../../../slices/controlPlane/controlPlaneO
 import {
   enabledTeamCount,
   isCapabilityOnForTeam,
-  scopeBadge,
   seedSettingsFromFields,
   teamCapabilityState,
 } from "./capabilityEnablement";
@@ -61,14 +60,6 @@ describe("enabledTeamCount", () => {
   it("counts explicit grants and tolerates the absent list", () => {
     expect(enabledTeamCount({ enabled_team_ids: ["a", "b", "c"] })).toBe(3);
     expect(enabledTeamCount({})).toBe(0);
-  });
-});
-
-describe("scopeBadge", () => {
-  it("maps default_on and admin_gated to distinct tones", () => {
-    expect(scopeBadge("default_on").tone).toBe("default-on");
-    expect(scopeBadge("admin_gated").tone).toBe("admin-gated");
-    expect(scopeBadge("default_on").labelKey).not.toBe(scopeBadge("admin_gated").labelKey);
   });
 });
 

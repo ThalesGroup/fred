@@ -748,22 +748,17 @@
     "admin": {
       "capabilities": {
         "title": "Capabilities",
-        "subtitle": "Platform capability catalog: default-on scope, per-team enablement, and health.",
+        "subtitle": "Platform capability catalog: per-team enablement, platform defaults, and health.",
         "loading": "Loading capabilities…",
         "loadError": "Could not load the capability catalog.",
         "empty": "No capabilities are advertised by any runtime pod yet.",
         "manageTeams": "Manage teams",
         "col": {
           "capability": "Capability",
-          "scope": "Scope",
           "enabledTeams": "Enabled teams",
           "defaultOn": "Default-on",
           "health": "Health",
           "actions": "Actions"
-        },
-        "scope": {
-          "defaultOn": "Default-on",
-          "adminGated": "Admin-gated"
         },
         "health": {
           "suspended": "{{count}} suspended",
