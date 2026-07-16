@@ -1,3 +1,15 @@
+**v2.1.2** — 2026-07-16
+
+- **Summary**
+
+  Follow-up hardening on the v2.1.1 bootstrap/provisioning candidate. Closes the AUTHZ-07
+  chart secret-boundary release gate and consolidates its remaining review notes into the
+  canonical AUTHZ-07/OPS-04 backlogs. No application behavior change. (AUTHZ-07, #1991)
+
+- **Security**
+
+  - The Control Plane's Alembic migration Job no longer receives `FRED_BOOTSTRAP_TOKEN` (or any other app-only `extraEnvVars`) — scoped to the Deployment only, with CI now proving exactly one rendering location (AUTHZ-07, #1991)
+
 **v2.1.1** — 2026-07-15
 
 - **Summary**
