@@ -48,6 +48,7 @@ from control_plane_backend.capabilities.schemas import (
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.teams.service import count_all_collaborative_teams
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,11 @@ def _catalog_entry(
     return entry
 
 
-async def _enabled_team_ids(rebac: RebacEngine, capability_id: str) -> list[str]:
+async def _teams_with_relation(
+    rebac: RebacEngine, capability_id: str, relation: RelationType
+) -> list[str]:
     subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id), RelationType.ENABLED, Resource.TEAM
+        _cap_ref(capability_id), relation, Resource.TEAM
     )
     if isinstance(subjects, RebacDisabledResult):
         return []
@@ -113,6 +116,9 @@ async def list_capability_enablement(
     await _require_manage_any(rebac, user)
 
     catalog = await aggregate_capability_catalog(deps)
+    # Platform-wide denominator for default-on inheritance (§8.5). Fetched once
+    # for the whole list — it is the same for every capability.
+    total_team_count = await count_all_collaborative_teams(deps.team_dependencies)
     items: list[CapabilityEnablementItem] = []
     for entry in catalog.values():
         items.append(
@@ -123,7 +129,13 @@ async def list_capability_enablement(
                 icon=entry.icon,
                 team_scope=entry.team_scope,
                 default_on=await _is_default_on(rebac, entry.id),
-                enabled_team_ids=await _enabled_team_ids(rebac, entry.id),
+                enabled_team_ids=await _teams_with_relation(
+                    rebac, entry.id, RelationType.ENABLED
+                ),
+                disabled_team_ids=await _teams_with_relation(
+                    rebac, entry.id, RelationType.DISABLED
+                ),
+                total_team_count=total_team_count,
                 team_settings_fields=list(entry.team_settings_fields),
             )
         )

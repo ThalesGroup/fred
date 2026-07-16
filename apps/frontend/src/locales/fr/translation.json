@@ -760,6 +760,12 @@
           "health": "État",
           "actions": "Actions"
         },
+        "enabledTeams": {
+          "all": "Toutes ({{count}})",
+          "inheritedHint": "Activée par défaut pour toutes les équipes. Les équipes qui s'en sont exclues sont déjà déduites.",
+          "unknown": "Inconnu",
+          "unknownHint": "Activée par défaut pour toutes les équipes, mais l'annuaire des équipes est indisponible : le nombre exact ne peut pas être déterminé."
+        },
         "health": {
           "suspended": "{{count}} suspendue(s)",
           "pending": "L'état par capacité en temps réel arrive avec le balayage de suspension."

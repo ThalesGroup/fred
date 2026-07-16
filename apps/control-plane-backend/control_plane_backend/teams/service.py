@@ -863,6 +863,27 @@ async def _get_team_users_by_relation(
     return {subject.id for subject in subjects}
 
 
+async def count_all_collaborative_teams(deps: TeamServiceDependencies) -> int:
+    """Count every collaborative team in the organization, unfiltered by caller.
+
+    Why this exists: `list_teams` is caller-scoped — it filters to teams the user
+    holds `CAN_READ` on and folds in that user's own personal space. Admin
+    surfaces that need a platform-wide denominator (e.g. how many teams inherit a
+    default-on capability, RFC §8.5) must not use it, or they report a number
+    scoped to the admin's own memberships. Personal spaces are excluded for the
+    same reason `import_export/stats` excludes them: they are per-user, not teams.
+
+    Returns 0 when Keycloak is not configured — callers should treat that as
+    "unknown" rather than "no teams".
+    """
+
+    admin = deps.create_keycloak_admin_client()
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; team count unavailable.")
+        return 0
+    return len(await _fetch_root_keycloak_groups(admin))
+
+
 async def _fetch_root_keycloak_groups(
     admin: KeycloakAdmin,
 ) -> list[KeycloakGroupSummary]:

@@ -36,7 +36,7 @@ import {
   useSetCapabilityDefaultOnMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
-import { enabledTeamCount } from "./capabilityEnablement";
+import { enabledTeamCount, isCapabilityUnused as isUnused } from "./capabilityEnablement";
 import styles from "./CapabilitiesPage.module.css";
 
 export default function CapabilitiesPage() {
@@ -94,10 +94,24 @@ export default function CapabilitiesPage() {
 
   const columns: DataTableColumn<CapabilityEnablementItem>[] = [
     {
+      label: t("rework.admin.capabilities.col.defaultOn"),
+      size: "1fr",
+      cellRenderer: (cap) => (
+        <div className={styles.centered}>
+          <Switch
+            checked={cap.default_on}
+            disabled={isTogglingDefault}
+            onChange={() => onToggleDefault(cap)}
+            aria-label={t("rework.admin.capabilities.col.defaultOn")}
+          />
+        </div>
+      ),
+    },
+    {
       label: t("rework.admin.capabilities.col.capability"),
       size: "2.4fr",
       cellRenderer: (cap) => (
-        <div className={styles.capCell}>
+        <div className={`${styles.capCell} ${isUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
             <span className={styles.capName}>{t(cap.name, { defaultValue: cap.name })}</span>
@@ -109,37 +123,47 @@ export default function CapabilitiesPage() {
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
       size: "1fr",
-      cellRenderer: (cap) => <span className={styles.count}>{enabledTeamCount(cap)}</span>,
-    },
-    {
-      label: t("rework.admin.capabilities.col.defaultOn"),
-      size: "1fr",
-      cellRenderer: (cap) => (
-        <Switch
-          checked={cap.default_on}
-          disabled={isTogglingDefault}
-          onChange={() => onToggleDefault(cap)}
-          aria-label={t("rework.admin.capabilities.col.defaultOn")}
-        />
-      ),
+      cellRenderer: (cap) => {
+        const count = enabledTeamCount(cap);
+        return (
+          <div className={styles.centered}>
+            {count === null ? (
+              // Default-on with no team roster from the backend — "unknown", not "0".
+              <Tooltip text={t("rework.admin.capabilities.enabledTeams.unknownHint")}>
+                <span className={styles.countUnknown}>{t("rework.admin.capabilities.enabledTeams.unknown")}</span>
+              </Tooltip>
+            ) : cap.default_on ? (
+              // Default-on grants access by inheritance, so the count is a roster
+              // headcount rather than a list of explicit grants — say so, otherwise
+              // "12" looks like 12 admins clicked Enable.
+              <Tooltip text={t("rework.admin.capabilities.enabledTeams.inheritedHint")}>
+                <span className={styles.count}>{t("rework.admin.capabilities.enabledTeams.all", { count })}</span>
+              </Tooltip>
+            ) : (
+              <span className={`${styles.count} ${isUnused(cap) ? styles.dimmed : ""}`}>{count}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       label: t("rework.admin.capabilities.col.health"),
       size: "1fr",
       cellRenderer: (cap) => {
         const suspended = suspendedByCapability[cap.id];
-        if (suspended && suspended > 0) {
-          return (
-            <span className={styles.healthWarn}>
-              <Icon category="outlined" type="warning" />
-              {t("rework.admin.capabilities.health.suspended", { count: suspended })}
-            </span>
-          );
-        }
         return (
-          <Tooltip text={t("rework.admin.capabilities.health.pending")}>
-            <span className={styles.healthNeutral}>—</span>
-          </Tooltip>
+          <div className={styles.centered}>
+            {suspended && suspended > 0 ? (
+              <span className={styles.healthWarn}>
+                <Icon category="outlined" type="warning" />
+                {t("rework.admin.capabilities.health.suspended", { count: suspended })}
+              </span>
+            ) : (
+              <Tooltip text={t("rework.admin.capabilities.health.pending")}>
+                <span className={styles.healthNeutral}>—</span>
+              </Tooltip>
+            )}
+          </div>
         );
       },
     },
@@ -150,7 +174,9 @@ export default function CapabilitiesPage() {
       // rather than forcing the table to overflow.
       size: "1.4fr",
       cellRenderer: (cap) => (
-        <div className={styles.actionsCell}>
+        // Dimmed but never disabled: an unused capability is exactly the one an
+        // admin opens to grant its first team.
+        <div className={`${styles.actionsCell} ${isUnused(cap) ? styles.dimmed : ""}`}>
           <Button
             color="on-surface"
             variant="outlined"

@@ -38,6 +38,21 @@ class CapabilityEnablementItem(BaseModel):
         default_factory=list,
         description="Teams carrying an explicit `enabled` grant.",
     )
+    disabled_team_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Teams carrying an explicit `disabled` opt-out. Only meaningful for a "
+            "default_on capability, where it subtracts from the inherited roster."
+        ),
+    )
+    total_team_count: int = Field(
+        default=0,
+        description=(
+            "Platform-wide team count — the denominator for a default_on "
+            "capability's inherited access. Counts every team in the org, not "
+            "just the ones the calling admin belongs to."
+        ),
+    )
     team_settings_fields: list[FieldSpec] = Field(
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",

@@ -1693,6 +1693,10 @@ export type CapabilityEnablementItem = {
   default_on: boolean;
   /** Teams carrying an explicit `enabled` grant. */
   enabled_team_ids?: string[];
+  /** Teams carrying an explicit `disabled` opt-out. Only meaningful for a default_on capability, where it subtracts from the inherited roster. */
+  disabled_team_ids?: string[];
+  /** Platform-wide team count — the denominator for a default_on capability's inherited access. Counts every team in the org, not just the ones the calling admin belongs to. */
+  total_team_count?: number;
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
 };

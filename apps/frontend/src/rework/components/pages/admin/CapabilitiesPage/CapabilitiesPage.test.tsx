@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // The Capabilities dashboard is data-driven from the aggregated enablement list.
-// `t` is mocked to echo its key, so we assert on which key each state uses and
-// that catalog rows surface the enabled-team count and health.
+// `t` is mocked to echo its key (plus any interpolated count), so we assert on
+// which key each state uses and on the enabled-team count and health it renders.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,9 +28,13 @@ const h = vi.hoisted(() => ({
   },
 }));
 
+// `t` echoes its key, but appends an interpolated `count` when one is passed —
+// the count is the value under test for the enabled-teams column, and a bare
+// key echo would hide whether the right number ever reached the label.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? key,
+    t: (key: string, opts?: { defaultValue?: string; count?: number }) =>
+      opts?.defaultValue ?? (opts?.count === undefined ? key : `${key}:${opts.count}`),
     i18n: { language: "en" },
   }),
 }));
@@ -94,18 +98,14 @@ describe("CapabilitiesPage catalog rows", () => {
   it("renders each capability with enabled-team count and neutral health", () => {
     h.list = {
       data: {
-        items: [
-          cap({ id: "document_access", team_scope: "default_on", default_on: true, enabled_team_ids: ["nb", "ops"] }),
-          cap({ id: "web_search", team_scope: "admin_gated", default_on: false, enabled_team_ids: ["nb"] }),
-        ],
+        items: [cap({ id: "web_search", team_scope: "admin_gated", default_on: false, enabled_team_ids: ["nb"] })],
       },
       isLoading: false,
       isError: false,
     };
     const html = render();
 
-    // Enabled-team counts come from enabled_team_ids length.
-    expect(html).toContain(">2<");
+    // A non-default-on capability counts explicit grants only.
     expect(html).toContain(">1<");
 
     // Health is neutral (no resting per-capability count until the sweep, #1975).
@@ -114,6 +114,78 @@ describe("CapabilitiesPage catalog rows", () => {
 
     // Manage-teams action is offered per row.
     expect(html).toContain("rework.admin.capabilities.manageTeams");
+  });
+
+  it("counts a default-on capability from the roster minus opt-outs, not its grants", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({
+            id: "document_access",
+            team_scope: "default_on",
+            default_on: true,
+            enabled_team_ids: ["nb", "ops"],
+            disabled_team_ids: ["legal"],
+            total_team_count: 12,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // 12 teams on the platform, 1 opted out → 11 can use it. The two explicit
+    // grants are irrelevant: everyone already inherits access.
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.all:11");
+    expect(html).not.toContain(">2<");
+  });
+
+  it("shows unknown rather than zero when a default-on cap has no team roster", () => {
+    h.list = {
+      data: {
+        items: [cap({ id: "document_access", team_scope: "default_on", default_on: true, total_team_count: 0 })],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // Rendering 0 here would read as "nobody has this" — the opposite of true.
+    expect(html).toContain("rework.admin.capabilities.enabledTeams.unknown");
+    expect(html).not.toContain(">0<");
+  });
+
+  it("leads with the default-on toggle column, then the capability", () => {
+    h.list = {
+      data: { items: [cap({ id: "web_search" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    expect(html.indexOf("rework.admin.capabilities.col.defaultOn")).toBeLessThan(
+      html.indexOf("rework.admin.capabilities.col.capability"),
+    );
+  });
+
+  it("dims a capability no team can use, and leaves the in-use ones bright", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "unused_cap", default_on: false, enabled_team_ids: [] }),
+          cap({ id: "used_cap", default_on: false, enabled_team_ids: ["nb"] }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    const unusedRow = html.slice(html.indexOf("cap.unused_cap"), html.indexOf("cap.used_cap"));
+    const usedRow = html.slice(html.indexOf("cap.used_cap"));
+    expect(unusedRow).toContain("dimmed");
+    expect(usedRow).not.toContain("dimmed");
   });
 
   it("reflects the default-on flag on the toggle (checked only for default-on caps)", () => {

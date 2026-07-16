@@ -93,6 +93,12 @@ class _FakeRebac:
         self.write_log.append(("delete", key))
         return None
 
+    async def check_user_permission_or_raise(
+        self, user, permission, resource_id, **kwargs
+    ) -> None:
+        """Permissive by default — the deny path has its own subclass."""
+        return None
+
     async def lookup_subjects(self, resource, relation, subject_type):
         if not self._enabled:
             return RebacDisabledResult()
@@ -785,3 +791,73 @@ async def test_enablement_is_gated_on_can_manage() -> None:
             settings={},
             deps=deps,  # type: ignore[arg-type]
         )
+
+
+# ---------------------------------------------------------------------------
+# Aggregate list — enabled/disabled rosters and the platform team count (§8.5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_aggregate_list_exposes_optouts_and_platform_team_count(
+    monkeypatch,
+) -> None:
+    """The admin list must carry what the dashboard needs to state, exactly, how
+    many teams can use a capability.
+
+    For a default-on capability that means the `disabled` opt-out roster plus a
+    PLATFORM-WIDE team count. The count must not come from `list_teams`, which is
+    caller-scoped — an admin in 1 of 12 teams would otherwise see "1".
+    """
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    cap = RebacReference(type=Resource.CAPABILITY, id="doc_access")
+    org = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    await rebac.add_relation(
+        Relation(subject=org, relation=RelationType.DEFAULT_ON, resource=cap)
+    )
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.TEAM, id="ops"),
+            relation=RelationType.ENABLED,
+            resource=cap,
+        )
+    )
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.TEAM, id="legal"),
+            relation=RelationType.DISABLED,
+            resource=cap,
+        )
+    )
+
+    async def _fake_catalog(_deps):
+        return {"doc_access": _entry("doc_access")}
+
+    async def _fake_count(_team_deps):
+        return 12
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    monkeypatch.setattr(
+        capability_service, "count_all_collaborative_teams", _fake_count
+    )
+
+    deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+    result = await capability_service.list_capability_enablement(
+        user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
+        deps=deps,  # type: ignore[arg-type]
+    )
+
+    item = result.items[0]
+    assert item.default_on is True
+    assert item.enabled_team_ids == ["ops"]
+    assert item.disabled_team_ids == ["legal"]
+    assert item.total_team_count == 12
+    # 12 teams inherit it, 1 opted out → the dashboard renders 11.
+    assert item.total_team_count - len(item.disabled_team_ids) == 11

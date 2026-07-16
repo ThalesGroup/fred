@@ -22,20 +22,22 @@ import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/
  * Per-team enablement state for one capability (RFC §8.5 tri-state).
  *
  * - `enabled` — the team carries an explicit `enabled` grant.
- * - `inherited` — the capability is platform default-on and the team has no
- *   explicit grant, so it is on by inheritance.
- * - `off` — neither an explicit grant nor a default-on inheritance.
+ * - `inherited` — the capability is platform default-on and the team has neither
+ *   an explicit grant nor an explicit opt-out, so it is on by inheritance.
+ * - `off` — an explicit `disabled` opt-out, or no grant and no default-on.
  *
- * Note: the aggregate list carries `enabled_team_ids` + `default_on` but not the
- * per-team `disabled` opt-out tuples, so an explicit opt-out of a default-on
- * capability is not distinguishable from `inherited` here (backend seam, #1980).
+ * Precedence mirrors the FGA schema: an explicit `disabled` opt-out beats both
+ * an `enabled` grant and default-on inheritance (see the ReBAC integration test
+ * "disable overrides enable"), so it is checked first.
  */
 export type TeamCapabilityState = "enabled" | "inherited" | "off";
 
-export function teamCapabilityState(
-  capability: Pick<CapabilityEnablementItem, "default_on" | "enabled_team_ids">,
-  teamId: string,
-): TeamCapabilityState {
+type EnablementFacts = Pick<CapabilityEnablementItem, "default_on" | "enabled_team_ids" | "disabled_team_ids">;
+
+export function teamCapabilityState(capability: EnablementFacts, teamId: string): TeamCapabilityState {
+  if ((capability.disabled_team_ids ?? []).includes(teamId)) {
+    return "off";
+  }
   if ((capability.enabled_team_ids ?? []).includes(teamId)) {
     return "enabled";
   }
@@ -43,16 +45,60 @@ export function teamCapabilityState(
 }
 
 /** Whether the capability is effectively active for the team (explicit or inherited). */
-export function isCapabilityOnForTeam(
-  capability: Pick<CapabilityEnablementItem, "default_on" | "enabled_team_ids">,
-  teamId: string,
-): boolean {
+export function isCapabilityOnForTeam(capability: EnablementFacts, teamId: string): boolean {
   return teamCapabilityState(capability, teamId) !== "off";
 }
 
-/** Count of teams carrying an explicit `enabled` grant (the catalog column). */
-export function enabledTeamCount(capability: Pick<CapabilityEnablementItem, "enabled_team_ids">): number {
-  return (capability.enabled_team_ids ?? []).length;
+/**
+ * How many teams can actually use this capability (the catalog column).
+ *
+ * Two regimes, because access is granted two different ways:
+ * - **Not default-on** — only explicit grants count, so the answer is exact.
+ * - **Default-on** — every team inherits access except those that opted out, so
+ *   the answer is `total teams - opted-out teams`. `total_team_count` is the
+ *   platform-wide roster from the backend, NOT the caller-scoped `/teams` list.
+ *
+ * Returns `null` for a default-on capability when the backend could not supply a
+ * roster (Keycloak disabled → `total_team_count` is 0): the truthful answer is
+ * "unknown", and rendering 0 would read as "nobody has this" — the exact
+ * opposite of the truth for a capability that is on for everyone.
+ */
+export function enabledTeamCount(
+  capability: Pick<
+    CapabilityEnablementItem,
+    "default_on" | "enabled_team_ids" | "disabled_team_ids" | "total_team_count"
+  >,
+): number | null {
+  if (!capability.default_on) {
+    return (capability.enabled_team_ids ?? []).length;
+  }
+  const total = capability.total_team_count ?? 0;
+  if (total <= 0) {
+    return null;
+  }
+  // An opt-out only subtracts if it names a team that is actually in the roster;
+  // clamp so a stale tuple can never drive the count below zero.
+  const optedOut = (capability.disabled_team_ids ?? []).length;
+  return Math.max(0, total - optedOut);
+}
+
+/**
+ * Whether no team can currently use this capability — advertised by a pod, but
+ * reaching nobody (not default-on, and no team was ever granted it).
+ *
+ * Drives the dimmed row treatment: these rows are real and actionable, just
+ * inert, so they should recede rather than compete with capabilities in use.
+ * Derived from `enabledTeamCount` so the two can never disagree about what
+ * "zero teams" means. A default-on capability is never unused — even the
+ * unknown-roster case reaches teams; we just cannot say how many.
+ */
+export function isCapabilityUnused(
+  capability: Pick<
+    CapabilityEnablementItem,
+    "default_on" | "enabled_team_ids" | "disabled_team_ids" | "total_team_count"
+  >,
+): boolean {
+  return enabledTeamCount(capability) === 0;
 }
 
 /**

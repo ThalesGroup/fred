@@ -760,6 +760,12 @@
           "health": "Health",
           "actions": "Actions"
         },
+        "enabledTeams": {
+          "all": "All ({{count}})",
+          "inheritedHint": "Enabled for all teams by default. Teams that opted out are already subtracted.",
+          "unknown": "Unknown",
+          "unknownHint": "Enabled for all teams by default, but the team directory is unavailable so the exact count cannot be resolved."
+        },
         "health": {
           "suspended": "{{count}} suspended",
           "pending": "Live per-capability health arrives with the suspension sweep."
