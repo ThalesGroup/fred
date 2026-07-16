@@ -783,6 +783,9 @@
         "matrix": {
           "title": "{{name}} — team access",
           "subtitle": "Enable or disable this capability per team. Enabling collects any required settings.",
+          "searchPlaceholder": "Search teams...",
+          "clearSearch": "Clear search",
+          "searchEmpty": "No team matches your search.",
           "enable": "Enable",
           "disable": "Disable",
           "cancel": "Cancel",

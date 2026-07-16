@@ -783,6 +783,9 @@
         "matrix": {
           "title": "{{name}} — accès des équipes",
           "subtitle": "Activez ou désactivez cette capacité par équipe. L'activation collecte les réglages requis.",
+          "searchPlaceholder": "Rechercher une équipe...",
+          "clearSearch": "Effacer la recherche",
+          "searchEmpty": "Aucune équipe ne correspond à votre recherche.",
           "enable": "Activer",
           "disable": "Désactiver",
           "cancel": "Annuler",

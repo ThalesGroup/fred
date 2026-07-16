@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   enabledTeamCount,
+  filterTeamsByName,
   isCapabilityOnForTeam,
   isCapabilityUnused,
   seedSettingsFromFields,
@@ -150,5 +151,27 @@ describe("seedSettingsFromFields", () => {
 
   it("returns an empty object for no fields", () => {
     expect(seedSettingsFromFields(undefined)).toEqual({});
+  });
+});
+
+describe("filterTeamsByName (matrix drawer search)", () => {
+  const teams = [{ name: "Nightly Build" }, { name: "Ops" }, { name: "Data Science" }];
+
+  it("matches case-insensitively on a substring", () => {
+    expect(filterTeamsByName(teams, "night")).toEqual([{ name: "Nightly Build" }]);
+    expect(filterTeamsByName(teams, "OPS")).toEqual([{ name: "Ops" }]);
+  });
+
+  it("treats a blank or whitespace-only query as no filter", () => {
+    expect(filterTeamsByName(teams, "")).toEqual(teams);
+    expect(filterTeamsByName(teams, "   ")).toEqual(teams);
+  });
+
+  it("ignores leading/trailing whitespace around the query", () => {
+    expect(filterTeamsByName(teams, "  ops ")).toEqual([{ name: "Ops" }]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(filterTeamsByName(teams, "zzz")).toEqual([]);
   });
 });

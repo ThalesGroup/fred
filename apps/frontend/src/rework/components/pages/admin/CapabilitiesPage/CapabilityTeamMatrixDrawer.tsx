@@ -19,8 +19,9 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
+import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
@@ -33,7 +34,12 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer.tsx";
 import styles from "./CapabilityTeamMatrixDrawer.module.css";
-import { seedSettingsFromFields, teamCapabilityState, type TeamCapabilityState } from "./capabilityEnablement";
+import {
+  filterTeamsByName,
+  seedSettingsFromFields,
+  teamCapabilityState,
+  type TeamCapabilityState,
+} from "./capabilityEnablement";
 
 interface CapabilityTeamMatrixDrawerProps {
   capability: CapabilityEnablementItem | null;
@@ -65,10 +71,20 @@ export function CapabilityTeamMatrixDrawer({
   // The team currently being configured with an enable-with-settings form.
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
+  const [teamQuery, setTeamQuery] = useState("");
+
+  // The drawer component stays mounted across open/close, so stale queries
+  // from a previous capability would silently pre-filter the next one.
+  useEffect(() => {
+    setTeamQuery("");
+  }, [capability?.id]);
 
   const busy = isEnabling || isDisabling;
   const fields = capability?.team_settings_fields ?? [];
   const hasSettings = fields.length > 0;
+
+  const hasQuery = teamQuery.trim() !== "";
+  const visibleTeams = filterTeamsByName(teams, teamQuery);
 
   const startEnable = (teamId: string) => {
     if (!capability) return;
@@ -125,8 +141,18 @@ export function CapabilityTeamMatrixDrawer({
       {capability && (
         <div className={styles.body}>
           <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
+          <SearchField
+            value={teamQuery}
+            onChange={setTeamQuery}
+            placeholder={t("rework.admin.capabilities.matrix.searchPlaceholder")}
+            clearAriaLabel={t("rework.admin.capabilities.matrix.clearSearch")}
+            autoFocus
+          />
+          {hasQuery && visibleTeams.length === 0 && (
+            <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
+          )}
           <ul className={styles.teamList}>
-            {teams.map((team) => {
+            {visibleTeams.map((team) => {
               const state = teamCapabilityState(capability, team.id);
               const on = state !== "off";
               const isEditing = editingTeamId === team.id;

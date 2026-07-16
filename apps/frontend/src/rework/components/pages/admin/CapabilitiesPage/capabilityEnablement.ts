@@ -102,6 +102,19 @@ export function isCapabilityUnused(
 }
 
 /**
+ * Case-insensitive name filter for the team matrix drawer. A blank (or
+ * whitespace-only) query means "no filter", not "match nothing" — production
+ * rosters run ~100 teams, so the drawer starts from the full list.
+ */
+export function filterTeamsByName<T extends { name: string }>(teams: T[], query: string): T[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return teams;
+  }
+  return teams.filter((team) => team.name.toLowerCase().includes(normalized));
+}
+
+/**
  * Seed the enable-with-settings form values from the field specs' declared
  * defaults. Existing settings (rare on the admin surface) override the defaults.
  */
