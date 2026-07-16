@@ -3269,6 +3269,25 @@ and scoped to the team so it is not affected.
       nav-link placeholder itself is unchanged — still tracked as a residual
       of CTRLP-10.
       Execution: https://github.com/ThalesGroup/fred/issues/1959
+- [x] Fixed 2026-07-15: the nav-link placeholder itself. `router.tsx`'s index
+      route (`/`) held a static `<Navigate to="/team/personal/agents" replace />`
+      that never resolved to the canonical `personal-{uid}` id, so the address
+      bar stayed on `/team/personal/agents` for the whole session. Because
+      `TeamSelectionNavbar`'s `selected` check compared `pathname` against
+      `activeTeam?.id` (which *does* resolve to `personal-{uid}` once bootstrap
+      loads), the two drifted apart and the personal-space sidebar item lost
+      its highlighted state right after bootstrap resolved. Fix: replaced the
+      static redirect with `HomeIndexRoute`, a component that waits on
+      `useFrontendBootstrap()` and navigates to `activeTeam.id`; changed
+      `TeamSelectionNavbar`'s selection check to a shape-based test
+      (`isPersonalTeamId` on the current route's team-id segment) instead of a
+      prefix match against a moving target, mirroring the pattern already used
+      in `useSelectedTeam.ts`. Same pre-bootstrap double-redirect risk fixed in
+      `MarketplaceTeams.tsx` by gating its redirect on `isLoading`.
+      Files: `apps/frontend/src/common/router.tsx`,
+      `apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamSelectionNavbar/TeamSelectionNavbar.tsx`,
+      `apps/frontend/src/rework/components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx`.
+      Execution: https://github.com/ThalesGroup/fred/issues/1959
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)
 
