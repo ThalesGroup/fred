@@ -39,6 +39,10 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 logger = logging.getLogger(__name__)
 
 FORMAT_VERSION = 1
+# This export never writes users.json, but manifest.json's users_schema_version
+# is required on every bundle regardless (bundle.py::SnapshotManifest) — declare
+# it so a re-import of this exact export never fails on a missing field.
+USERS_SCHEMA_VERSION = 1
 SOURCE_PLATFORM = "swift"
 
 
@@ -136,6 +140,7 @@ async def run_export(engine: AsyncEngine) -> bytes:
 
     manifest = {
         "format_version": FORMAT_VERSION,
+        "users_schema_version": USERS_SCHEMA_VERSION,
         "source_platform": SOURCE_PLATFORM,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "tables": {

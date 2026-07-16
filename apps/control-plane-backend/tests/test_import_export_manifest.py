@@ -46,13 +46,26 @@ def _minimal_bundle_bytes(manifest: dict) -> bytes:
 
 
 def test_open_bundle_rejects_unsupported_format_version() -> None:
-    data = _minimal_bundle_bytes({"format_version": 999, "source_platform": "swift"})
+    data = _minimal_bundle_bytes(
+        {"format_version": 999, "users_schema_version": 1, "source_platform": "swift"}
+    )
     with pytest.raises(UnsupportedBundleFormatError):
         open_bundle(data)
 
 
 def test_open_bundle_rejects_missing_format_version() -> None:
-    data = _minimal_bundle_bytes({"source_platform": "swift"})
+    data = _minimal_bundle_bytes(
+        {"users_schema_version": 1, "source_platform": "swift"}
+    )
+    with pytest.raises(ValidationError):
+        open_bundle(data)
+
+
+def test_open_bundle_rejects_missing_users_schema_version() -> None:
+    """No silent default — a bundle producer that forgets this field must fail
+    loudly, not be silently treated as schema v1 (the gap a Codex review found
+    on PR #1993: users_schema_version used to default to 1 when absent)."""
+    data = _minimal_bundle_bytes({"format_version": 1, "source_platform": "swift"})
     with pytest.raises(ValidationError):
         open_bundle(data)
 
@@ -69,6 +82,7 @@ def test_open_bundle_accepts_a_conformant_manifest() -> None:
     data = _minimal_bundle_bytes(
         {
             "format_version": 1,
+            "users_schema_version": 1,
             "source_platform": "swift",
             "created_at": "2026-07-16T00:00:00Z",
             "tables": {},

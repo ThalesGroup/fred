@@ -81,9 +81,11 @@ Two version numbers, tracked independently because they evolve at different rate
 - **`users_schema_version`** — `BundleUserEntry`'s field set (`schemas.py`), which has already
   grown once (identity fields, §6) independent of any container change.
 
-Fields: `format_version: int` (required) · `users_schema_version: int = 1` ·
+Fields: `format_version: int` (required) · `users_schema_version: int` (required) ·
 `source_platform: str = "kea"` · `created_at: str` · `tables: dict[str, int]` ·
-`tuple_count: int` · `realm_exported: bool` · `content_keys: list[str]`.
+`tuple_count: int` · `realm_exported: bool` · `content_keys: list[str]`. Both version fields are
+required on **every** bundle, whether or not it carries a `users.json` — a bundle producer that
+omits either fails loudly at `open_bundle()`, never silently assumed to be `v1`.
 
 `source_platform` is the live discriminator: `"swift"` takes the swift-native branch (this
 document); anything else takes the kea-import branch (§8).

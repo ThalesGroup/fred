@@ -37,7 +37,7 @@ class SnapshotManifest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     format_version: int
-    users_schema_version: int = 1
+    users_schema_version: int
     source_platform: str = "kea"
     created_at: str = ""
     tables: dict[str, int] = Field(default_factory=dict)
