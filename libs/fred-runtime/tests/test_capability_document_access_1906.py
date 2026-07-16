@@ -396,7 +396,7 @@ class _TwoToolCapability(AgentCapability[_TwoToolConfig, _TwoToolConfig, EmptyMo
         version="1.0.0",
         name="cap.two_tool.name",
         description="cap.two_tool.description",
-        icon="Extension",
+        icon="extension",
     )
     ConfigModel = _TwoToolConfig
 

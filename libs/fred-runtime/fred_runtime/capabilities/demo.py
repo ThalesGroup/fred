@@ -186,7 +186,7 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
         version="0.1.0",
         name="capability.demo_echo.name",
         description="capability.demo_echo.description",
-        icon="GraphicEq",
+        icon="graphic_eq",
         config_fields=[
             FieldSpec(
                 key="uppercase",

@@ -63,7 +63,7 @@ def _capability_with_part(cap_id: str, part: type[BaseModel]):
             version="0.0.1",
             name=f"capability.{cap_id}.name",
             description=f"capability.{cap_id}.description",
-            icon="Extension",
+            icon="extension",
             chat_parts=[part],
         )
 

@@ -205,7 +205,17 @@ class CapabilityManifest(BaseModel):
     version: str = Field(min_length=1)
     name: str = Field(min_length=1, description="i18n key")
     description: str = Field(min_length=1, description="i18n key")
-    icon: str = Field(min_length=1)
+    icon: str = Field(
+        min_length=1,
+        description=(
+            "Material Symbols name in snake_case (e.g. 'graphic_eq', "
+            "'find_in_page'). Must be in the frontend's supported set — the "
+            "`materialIcons` list in "
+            "apps/frontend/src/rework/components/shared/utils/Type.ts; extend "
+            "that list to adopt a new glyph. Unknown names fall back to a "
+            "generic capability icon in the UI."
+        ),
+    )
 
     config_fields: list[FieldSpec] = Field(default_factory=list)
     # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Mirrors
@@ -251,7 +261,10 @@ class CapabilityCatalogEntry(BaseModel):
     version: str = Field(min_length=1)
     name: str = Field(min_length=1, description="i18n key")
     description: str = Field(min_length=1, description="i18n key")
-    icon: str = Field(min_length=1)
+    icon: str = Field(
+        min_length=1,
+        description="Material Symbols name; see CapabilityManifest.icon",
+    )
     config_fields: list[FieldSpec] = Field(default_factory=list)
     # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Advertised
     # so control-plane can render + validate the admin enable-with-settings form

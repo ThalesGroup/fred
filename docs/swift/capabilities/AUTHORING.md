@@ -131,6 +131,14 @@ loudly instead of crashing control-plane FGA tuple writes later. No capability i
 carry a `:` or other separator; this is why MCP capability ids are the bare catalog
 server id, not a `mcp:`-prefixed string.
 
+**Manifest icon:** `CapabilityManifest.icon` is a **Material Symbols name in
+snake_case** (e.g. `graphic_eq`, `find_in_page`, `extension`) — the frontend renders
+it as a font ligature, so a name outside the supported set shows as raw text. The
+supported set is the `materialIcons` list in
+`apps/frontend/src/rework/components/shared/utils/Type.ts`; to use a new glyph, add
+its name there (any name from https://fonts.google.com/icons works). Unknown names
+fall back to a generic capability icon in the admin catalog.
+
 ---
 
 ## Ships a router? Regenerate its API slice (#1979)

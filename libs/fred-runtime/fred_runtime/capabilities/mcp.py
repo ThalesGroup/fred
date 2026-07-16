@@ -72,7 +72,7 @@ if TYPE_CHECKING:
 # real `upgrade_config` — a stable version is enough.
 MCP_CAPABILITY_SCHEMA_VERSION = "1"
 
-_MCP_CAPABILITY_ICON = "Extension"
+_MCP_CAPABILITY_ICON = "extension"
 
 # Dotted `chat_options.*` config keys an MCP catalog server may declare — the
 # same keys `_resolve_effective_chat_options` read control-plane-side before

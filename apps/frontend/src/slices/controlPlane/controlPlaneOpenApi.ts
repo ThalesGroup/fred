@@ -1357,6 +1357,7 @@ export type CapabilityCatalogEntry = {
   name: string;
   /** i18n key */
   description: string;
+  /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   config_fields?: FieldSpec[];
   team_settings_fields?: FieldSpec[];

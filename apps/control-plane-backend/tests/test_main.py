@@ -5349,7 +5349,7 @@ def _make_template_with_mcp_servers(
                 version="1",
                 name="Search",
                 description="Search",
-                icon="Extension",
+                icon="extension",
                 config_fields=[
                     FieldSpec(
                         key="chat_options.libraries_binding",
@@ -5415,7 +5415,7 @@ def _make_template_with_mcp_servers(
                 version="1",
                 name="Storage",
                 description="Storage",
-                icon="Extension",
+                icon="extension",
             ),
         ],
     )

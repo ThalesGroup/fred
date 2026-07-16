@@ -272,7 +272,7 @@ class DocumentAccessCapability(
         version="0.1.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
-        icon="FindInPage",
+        icon="find_in_page",
         config_fields=[
             FieldSpec(
                 key="library_tag_ids",

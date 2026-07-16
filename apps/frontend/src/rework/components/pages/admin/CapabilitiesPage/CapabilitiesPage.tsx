@@ -26,7 +26,7 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import type { IconType } from "@shared/utils/Type.ts";
+import { toIconType } from "@shared/utils/Type.ts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -98,7 +98,7 @@ export default function CapabilitiesPage() {
       size: "2.4fr",
       cellRenderer: (cap) => (
         <div className={styles.capCell}>
-          <Icon category="outlined" type={cap.icon as IconType} />
+          <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
             <span className={styles.capName}>{t(cap.name, { defaultValue: cap.name })}</span>
             <span className={styles.capVersion}>v{cap.version}</span>

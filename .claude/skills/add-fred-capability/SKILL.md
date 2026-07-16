@@ -113,6 +113,11 @@ you do **not** edit the union).
 - Manifest id must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe, #1988) —
   no `:` or other separator. This is also why MCP capability ids are the bare catalog
   server id, not `mcp:<server>`; `mcp_ids.py`/`is_mcp_capability_id` are retired.
+- Manifest `icon` is a **snake_case Material Symbols name** (`graphic_eq`, not
+  `GraphicEq` — the frontend renders it as a font ligature, so a wrong name shows as raw
+  text). Pick from the `materialIcons` list in
+  `apps/frontend/src/rework/components/shared/utils/Type.ts`; to adopt a new glyph, add
+  its name there first. Unknown names fall back to a generic icon in the admin catalog.
 
 ---
 
