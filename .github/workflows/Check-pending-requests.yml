@@ -284,8 +284,12 @@ jobs:
 
           # An overlay-supplied Secret reference must render as a bare secretKeyRef,
           # fail-closed (optional: false), never a literal value, never bootstrap_token_file.
+          # Migration Job is enabled here too, so this one render also proves
+          # extraEnvVars stays a Deployment-only extension point (never copied
+          # into the Alembic migration Job, which only needs .app.env).
           helm template fred deploy/charts/fred \
             --set-string applications.control-plane-backend.image.tag=swift-dev \
+            --set applications.control-plane-backend.migration.enabled=true \
             --set-string applications.control-plane-backend.extraEnvVars[0].name=FRED_BOOTSTRAP_TOKEN \
             --set-string applications.control-plane-backend.extraEnvVars[0].valueFrom.secretKeyRef.name=fake-foundation-secret \
             --set-string applications.control-plane-backend.extraEnvVars[0].valueFrom.secretKeyRef.key=bootstrap-token \
@@ -308,12 +312,26 @@ jobs:
           grep -q "bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN" /tmp/rendered-bootstrap.yaml
 
           # Only control-plane-backend's Deployment env may receive the token; no
-          # other app/worker gets it (fred-agents, knowledge-flow, frontend, workers).
+          # other app/worker, and no migration Job, gets it (this render has the
+          # migration Job enabled — see above).
           env_entries=$(grep -c "^\s*- name: FRED_BOOTSTRAP_TOKEN$" /tmp/rendered-bootstrap.yaml)
           if [ "$env_entries" -ne 1 ]; then
             echo "FAIL: expected exactly one FRED_BOOTSTRAP_TOKEN env entry, found $env_entries"
             exit 1
           fi
+
+          # Per-document proof of *which* object owns that single entry: the
+          # Deployment, never the migration Job.
+          awk -v RS='\n---\n' '
+            /kind: Job/ && /name: control-plane-backend-migration-/ && /FRED_BOOTSTRAP_TOKEN/ {
+              print "FAIL: FRED_BOOTSTRAP_TOKEN leaked into the control-plane-backend migration Job"; err=1
+            }
+            /kind: Deployment/ && /app: control-plane-backend/ {
+              seen=1
+              if (!/FRED_BOOTSTRAP_TOKEN/) { print "FAIL: FRED_BOOTSTRAP_TOKEN missing from the control-plane-backend Deployment"; err=1 }
+            }
+            END { if (!seen) { print "FAIL: control-plane-backend Deployment document not found"; err=1 } exit err+0 }
+          ' /tmp/rendered-bootstrap.yaml
 
           echo "Rendered bootstrap-secret contract checks passed."
 

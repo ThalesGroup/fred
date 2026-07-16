@@ -55,6 +55,11 @@ Kubernetes. Every instance overlay — the GKE/ArgoCD reference in
 `fred-deployment-factory`, and any future platform (AKS/Flux, etc.) — supplies only the
 `extraEnvVars` reference above, pointed at a Secret it already owns.
 
+`extraEnvVars` is an application-Deployment-only extension point: it reaches
+`control-plane-backend`'s Deployment and no other workload. The Alembic migration Job
+(rendered when `applications.control-plane-backend.migration.enabled` is `true`) only
+ever receives `.app.env`, never `.app.extraEnvVars`.
+
 **If the overlay omits `extraEnvVars`** (the chart's own default), no
 `FRED_BOOTSTRAP_TOKEN` variable is injected at all: the backend's own fail-closed logic
 (`control_plane_backend/bootstrap/service.py::_read_configured_token`) makes the root

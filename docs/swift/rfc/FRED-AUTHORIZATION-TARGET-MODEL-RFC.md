@@ -1,22 +1,14 @@
 # RFC - Fred authorization target model: Keycloak for SSO, Fred for authorization
 
-**Status:** Proposed (Part 5 + Part 6 addenda implemented on branch, pushed through 2026-07-10 —
-branch `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`,
-PR #1957, still awaiting human review before merge). Code-complete except item `8b`
-(`NOTES-AUTHZ05-REVIEW.md`) — the Keycloak-`groups`-claim-derived `team_member` fallback, which is
-blocked on the real production data migration (`fredlab-authz-migrate-swift.py`) having run, not on
-any open design question. **Part 7 (2026-07-12, `AUTHZ-06`) code-complete, awaiting the
-validation campaign** — cumulative team roles (one user may hold
-`team_admin`+`team_editor`+`team_analyst` simultaneously on the same team). **Part 8 (2026-07-13,
-`AUTHZ-07`) — revised 2026-07-14 (§42): root bootstrap redesigned after review before the K8s
-templating step** — JWT + deploy-secret dual-proof, self-promotion only (no `identifier`), a
-durable completion marker instead of a live "zero admin" check, secret never generated/logged by
-Fred. The first implementation pass (JWT-less, `identifier`-based, live-zero-admin-checked) is
-superseded by `§42` and must be reworked before merge — see `§42` for the precise file/migration/
-test plan. The declarative platform-provisioning operation (likely a generalized
-`PLATFORM-IMPORT-RFC.md`) remains unimplemented. Current
-design state: `docs/swift/platform/REBAC.md`. Outstanding follow-ups:
-`NOTES-AUTHZ05-REVIEW.md`.
+**Status:** Proposed target model; Parts 5-8 are implemented in the v2.1.1
+candidate. The former item `8b` — removal of the Keycloak-`groups`-claim-derived
+`team_member` fallback — is complete and its personal-space regression is corrected
+and recorded in this RFC and the runtime contract. Part 7 (`AUTHZ-06`) implements
+cumulative team roles. Part 8 (`AUTHZ-07`, revised §42) implements JWT plus
+deploy-secret dual proof, self-promotion only, a durable one-time completion marker,
+and declarative provisioning as specified by `PLATFORM-IMPORT-RFC.md`. The superseded
+JWT-less, third-party `identifier`, and live-zero-admin design is historical only and
+must not be restored. Current design state: `docs/swift/platform/REBAC.md`.
 **Date:** 2026-07-04
 **Task ID:** `AUTHZ-05` (Part 7: `AUTHZ-06`; Part 8: `AUTHZ-07`)
 **Audience:** Product governance, CVSSI, platform owners, then implementers
@@ -1067,7 +1059,7 @@ still doesn't fully apply yet" — `list_teams`, `create_team`, `get_team_by_id`
 that: a team is a `team_metadata` row plus its OpenFGA relations, full stop. Keycloak
 manages user accounts (login, JWT, stable `sub`) and nothing about teams.
 
-**Implemented 2026-07-10** (AUTHZ-05 review item 9, `NOTES-AUTHZ05-REVIEW.md`): every
+**Implemented 2026-07-10** (AUTHZ-05 review item 9): every
 function this section names was rewritten exactly as specified below, verified against
 the full offline suite of all touched projects plus a live OpenFGA instance, and the
 control-plane OpenAPI client was regenerated. Team `name` is immutable after creation
@@ -1194,7 +1186,7 @@ radius of one compromised account — but it was never actually mandated by this
 own text. `§6.2`'s original target vocabulary (line 344) wrote
 `define can_update_agents: team_admin` — i.e. the admin role originally *did* carry
 content authority. The orthogonal split was introduced during implementation (item 7,
-`NOTES-AUTHZ05-REVIEW.md`, 2026-07-09) without a dedicated RFC section arguing for it;
+2026-07-09) without a dedicated RFC section arguing for it;
 `§26` is a pure renaming section (`owner`→`team_admin`, `manager`→`team_editor`) and
 says nothing about hierarchy.
 
@@ -1330,7 +1322,7 @@ deployment-factory test profiles seeded with combined `team_admin`+`team_editor`
 `team_analyst` roles in `fredlab`, specifically to exercise this part. Results recorded
 in `docs/swift/platform/authz-endpoint-matrix.yaml` (endpoint-level) and a new,
 dedicated test-campaign registry (persona/scenario-level OK/KO), not only in
-`NOTES-AUTHZ05-REVIEW.md` prose.
+temporary review notes.
 
 ---
 

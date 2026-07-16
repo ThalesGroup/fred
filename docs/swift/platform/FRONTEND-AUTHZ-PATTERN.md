@@ -10,8 +10,8 @@ any UI element, route, or button whose visibility depends on who the user is.
 > one entirely dead (`usePermissions()`, reading a Keycloak-role-derived list
 > that AUTHZ-05 emptied for every user platform-wide). The dead one silently
 > disabled 6 routes and 3 in-page controls for **everyone, including
-> platform_admin**, until this pass. See the close-out note in
-> `NOTES-AUTHZ05-REVIEW.md` item 11 for the full incident writeup.
+> platform_admin**, until this pass. The resulting frozen-contract correction
+> is recorded in `CONTROL-PLANE-PRODUCT-CONTRACT.md` §14.
 
 ## The two-tier model
 

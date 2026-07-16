@@ -1018,8 +1018,7 @@ now deleted), which iterated **Keycloak app roles** — removed platform-wide by
 AUTHZ-05 review item 8a, so every seeded user had `app_roles: []` and these
 fields were permanently empty/`false` for everyone, including `platform_admin`.
 Live impact before the fix: 6 frontend routes and 3 in-page controls were
-unreachable/disabled for all users (full writeup: `NOTES-AUTHZ05-REVIEW.md`
-item 11).
+unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
 `is_platform_observer` — unchanged, already OpenFGA-derived since review item
@@ -1078,8 +1077,7 @@ unchanged.
 `TeamMember.relation` → `relations`, `UpdateTeamMemberRequest` replaced by
 `GrantTeamMemberRoleRequest`, the PATCH member-role hook replaced by grant/
 revoke hooks. `TeamSettingsMembersTable.tsx` (the only frontend consumer)
-updated in the same change. Design detail: RFC Part 7 (§33-39); outstanding
-follow-ups: `NOTES-AUTHZ05-REVIEW.md`.
+updated in the same change. Design detail: RFC Part 7 (§33-39).
 
 ## 16. Contract Notes — AUTHZ-07 Step 3, `TaskSummary.detail` (2026-07-14)
 

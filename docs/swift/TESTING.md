@@ -166,8 +166,8 @@ of sitting at "processing" forever.
 The control-plane backend has its own analogous worker
 (`cd apps/control-plane-backend && make run-worker-prod`, also Temporal —
 handles deferred erasure/purge-queue reconciliation, see `CTRLP-12`). Not
-required for the steps below; noted here because we'll want to test it too
-— see `NOTES-AUTHZ05-REVIEW.md`'s "À suivre" section.
+required for the steps below; noted here because its own live-validation work
+is tracked with `CTRLP-12` in the canonical backlog.
 
 ## 3. Run the authorization validation suite
 
@@ -212,5 +212,6 @@ actually hides a button it should, or shows a sane error. That layer is:
   [`platform/FRONTEND-AUTHZ-PATTERN.md`](platform/FRONTEND-AUTHZ-PATTERN.md)'s
   testing pyramid for exactly which layer proves what.
 - The manual, multi-persona checklist for anything neither of the above
-  reaches. See [`../../NOTES-AUTHZ05-REVIEW.md`](../../NOTES-AUTHZ05-REVIEW.md)
-  for the current state of that campaign.
+  reaches. Its current acceptance work is tracked in
+  [`backlog/AUTHZ-MIGRATION-BACKLOG.md`](backlog/AUTHZ-MIGRATION-BACKLOG.md),
+  under the AUTHZ-07 candidate-hardening workplan.

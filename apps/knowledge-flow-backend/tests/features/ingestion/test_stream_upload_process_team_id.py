@@ -18,7 +18,7 @@ destination team_id. Before this fix, `task_svc.start(...)` never received a
 team-scoped Activity query (`WHERE team_id = :team_id`) never matches NULL, so
 a team admin saw an empty Activity page while a platform admin (no team_id
 filter) saw everything (found via live testing, see
-`NOTES-INGESTION-TASK-TRACKING-FIX.md`).
+`docs/swift/backlog/BACKLOG.md`, OPS-04 P4).
 """
 
 from __future__ import annotations

@@ -127,7 +127,7 @@ items:
       live stack via fred's own validation/ suite and against a
       live OpenFGA instance (fred-core integration tests) — see
       validation/report.md.
-      Post-review pass (2026-07-09/10, `NOTES-AUTHZ05-REVIEW.md`, triggered by
+      Post-review pass (2026-07-09/10, triggered by
       human review of PR #1957): all findings closed except item 8b. Cut
       `can_create_team` to `platform_admin`-only (item 5, no other caller
       depended on the legacy `admin` bridge). Item 8a (2026-07-10): removed the
@@ -162,8 +162,7 @@ items:
       directly, and `build_personal_team` never calls ReBAC) but was not
       exhaustively proven safe — flagged as a live-validation watch item.
       Live-campaign findings (2026-07-11, found while standing up the
-      fred-deployment-factory validation campaign, tracked in
-      `NOTES-AUTHZ05-REVIEW.md` items 10-11, not the RFC itself). Item 10:
+      fred-deployment-factory validation campaign). Item 10:
       `promote_prompt` checked `CAN_UPDATE_RESOURCES` on the source team only
       — the target team was never resolved or permission-checked, letting a
       team_editor copy a prompt's text into any team_id, including one they
@@ -182,10 +181,10 @@ items:
       current admin's own session or any other account (Keycloak
       direct-grant, dev/test realms only), so "does the UI honor the
       authorization model" has a self-service, in-browser answer going
-      forward. PR #1957 open, awaiting human review before merge; status
-      stays `in_progress` until 8b closes and the review lands.
-      Live-campaign findings continued (2026-07-11/12, `NOTES-AUTHZ05-REVIEW.md`
-      items 12-17): item 12, `GET /teams/all` leaked the caller's own personal
+      forward. AUTHZ-05 remains the in-progress parent while AUTHZ-07's
+      consolidated Step 6 follow-up remains open.
+      Live-campaign findings continued (2026-07-11/12, items 12-17): item 12,
+      `GET /teams/all` leaked the caller's own personal
       space into the registry (false positive in the self-test, not a
       cross-tenant leak) — filtered out. Item 13, the frontend route guard
       `Protected` decided before `/frontend/bootstrap` had loaded, redirecting
@@ -251,9 +250,8 @@ items:
       `libs/fred-runtime/tests/test_agent_app.py`. Verified offline:
       fred-runtime 420 passed, `make code-quality` clean. Documented in
       `RUNTIME-EXECUTION-CONTRACT.md` §2.2 + new dated entry;
-      `AUTHZ-MIGRATION-BACKLOG.md`. Live re-validation
-      (`make validation-report`, UI self-test) still pending, tracked in
-      `NOTES-AUTHZ05-REVIEW.md`.
+      `AUTHZ-MIGRATION-BACKLOG.md`. Remaining live acceptance is tracked by
+      AUTHZ-07's candidate-hardening workplan.
 
   - id: AUTHZ-06
     title: "Cumulative team roles (team_admin + team_editor + team_analyst on one team)"
@@ -264,7 +262,6 @@ items:
       rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 7 (§33-39)"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
       design: "docs/swift/platform/REBAC.md"
-      notes: "NOTES-AUTHZ05-REVIEW.md"
       pr: "https://github.com/ThalesGroup/fred/pull/1957"
     notes: >
       Found live (2026-07-12): the small-team shape — one person who is
@@ -284,8 +281,8 @@ items:
       capabilities each role carries. Contract change: `TeamMember.relation`
       (singular) -> `relations` (list) — frozen-contract entry in
       `CONTROL-PLANE-PRODUCT-CONTRACT.md` §15. Code-complete 2026-07-12
-      (backend + frontend, tests green); validation campaign against the
-      live stack not yet run — see `NOTES-AUTHZ05-REVIEW.md`.
+      (backend + frontend, tests green); remaining validation acceptance is
+      tracked by the AUTHZ-07 candidate-hardening workplan.
 
   - id: AUTHZ-07
     title: "Root bootstrap and declarative platform provisioning"
@@ -296,7 +293,7 @@ items:
       rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 8 (§40-42)"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
       design: "docs/swift/platform/REBAC.md"
-      execution: "branch 1986-authz-07-root-platform-admin-bootstrap-and-declarative-platform-provisioning"
+      execution: "branch 1989-follow-up-review-and-consolidation-of-candidate-release"
     notes: >
       Supersedes §24.3's config-seeded platform_admin_subjects. Two
       mechanisms, no CRUD, no identity ever in deployment config: (1) a
@@ -470,6 +467,40 @@ items:
       execution, bootstrap-page UX gaps) remains open, out of this task's
       scope; live GKE fresh-install validation is Dimitri's post-merge
       acceptance step, not a merge-gate prerequisite.
+
+      Cross-platform hardening review, 2026-07-15 (ahead of the GKE C1
+      fresh-install redeploy and a joint review with Benjamin (AKS/TDP) and
+      Sébastien/Arthur (S3NS/GKE C3)): implementation read end-to-end and
+      judged sound enough to proceed (two independent proofs, self-promotion
+      only, durable marker not a re-derived OpenFGA count, constant-time
+      secret comparison, fail-closed on every degraded config). Four
+      candidates recorded, not fixed, under Step 6 in
+      AUTHZ-MIGRATION-BACKLOG.md: no rate-limit/audit-trail on failed
+      bootstrap attempts; no break-glass path if the last platform_admin is
+      lost (RFC §41 non-goal, unrevisited for production); fresh-install-only
+      scope not yet reconciled with S3NS being a migration target; AKS/TDP
+      secret-transport source not yet chosen (contract documented, no
+      concrete overlay).
+
+      v2.1.1 consolidated follow-up review, 2026-07-15: no high finding and
+      the root-bootstrap backend is accepted. AUTHZ-07 Step 6 is the single
+      workplan for two chart release gates (the bootstrap secret copied into
+      the migration Job; the required Control Plane migration disabled by
+      default), durable/recoverable import execution, exact-versus-additive
+      provisioning semantics, OpenAPI and canonical-role vocabulary cleanup,
+      a proven-unused-path/dead-code sweep, bootstrap UI
+      accessibility/responsiveness/tests, terminal team-list
+      refresh, failed-attempt audit/rate-limit and break-glass decisions, and
+      GKE/AKS/S3NS rollout clarification. Temporary root NOTES files are
+      retired into the AUTHZ-07 and OPS-04 canonical backlogs.
+
+      Step 6 "Chart secret boundary" release gate closed, 2026-07-15:
+      hook-migration.yaml no longer copies .app.extraEnvVars into the Alembic
+      migration Job (.app.env still flows to it as before). CI's rendered
+      bootstrap-secret contract check now also renders with the migration Job
+      enabled and proves the token reaches the Deployment, not the Job. helm
+      lint/render clean; remaining Step 6 chart gate (migration disabled by
+      default) still open.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
