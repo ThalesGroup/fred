@@ -41,8 +41,9 @@ class CapabilityEnablementItem(BaseModel):
     disabled_team_ids: list[str] = Field(
         default_factory=list,
         description=(
-            "Teams carrying an explicit `disabled` opt-out. Only meaningful for a "
-            "default_on capability, where it subtracts from the inherited roster."
+            "Teams carrying an explicit `disabled` opt-out (the tri-state "
+            "'disabled' position). For a default_on capability it also "
+            "subtracts from the inherited roster."
         ),
     )
     total_team_count: int = Field(

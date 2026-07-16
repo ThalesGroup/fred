@@ -39,6 +39,7 @@ from control_plane_backend.capabilities.enablement import (
     disable_capability_for_team,
     enable_capability_for_team,
     ensure_capability_anchor,
+    reset_capability_for_team,
     set_capability_default_on,
 )
 from control_plane_backend.capabilities.schemas import (
@@ -209,6 +210,37 @@ async def disable_team_capability(
     )
 
 
+async def reset_team_capability(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> TeamCapabilityEnablementResult:
+    """Drop the team's explicit grant/opt-out so the platform default applies
+    (the "default" segment of the admin tri-state matrix, RFC §8.5)."""
+
+    rebac = _rebac(deps)
+    await _require_can_manage(rebac, user, capability_id)
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    default_on = await _is_default_on(rebac, capability_id)
+    suspended = await reset_capability_for_team(
+        rebac=rebac,
+        agent_instance_store=deps.get_agent_instance_store(),
+        catalog_entry=entry,
+        team_id=team_id,
+        default_on=default_on,
+        kpi_writer=deps.get_kpi_writer(),
+    )
+    return TeamCapabilityEnablementResult(
+        capability_id=capability_id,
+        team_id=str(team_id),
+        enabled=default_on,
+        suspended_instances=suspended,
+    )
+
+
 async def set_default_on(
     *,
     user: KeycloakUser,
@@ -241,5 +273,6 @@ __all__ = [
     "list_capability_enablement",
     "enable_team_capability",
     "disable_team_capability",
+    "reset_team_capability",
     "set_default_on",
 ]

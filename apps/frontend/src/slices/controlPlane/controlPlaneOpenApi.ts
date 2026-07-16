@@ -401,6 +401,9 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
         method: "DELETE",
+        params: {
+          mode: queryArg.mode,
+        },
       }),
     }),
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: build.mutation<
@@ -890,6 +893,8 @@ export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeams
 export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg = {
   capabilityId: string;
   teamId: string;
+  /** `disable` writes an explicit opt-out (tri-state 'disabled'); `default` clears both the grant and the opt-out so the platform default applies (tri-state 'default'). Both suspend dependent instances when the team loses access. */
+  mode?: "disable" | "default";
 };
 export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse =
   /** status 200 Successful Response */ CapabilityDefaultOnResult;
@@ -1693,7 +1698,7 @@ export type CapabilityEnablementItem = {
   default_on: boolean;
   /** Teams carrying an explicit `enabled` grant. */
   enabled_team_ids?: string[];
-  /** Teams carrying an explicit `disabled` opt-out. Only meaningful for a default_on capability, where it subtracts from the inherited roster. */
+  /** Teams carrying an explicit `disabled` opt-out (the tri-state 'disabled' position). For a default_on capability it also subtracts from the inherited roster. */
   disabled_team_ids?: string[];
   /** Platform-wide team count — the denominator for a default_on capability's inherited access. Counts every team in the org, not just the ones the calling admin belongs to. */
   total_team_count?: number;

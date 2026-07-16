@@ -46,7 +46,6 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.models import Resource
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -231,10 +230,12 @@ async def disable_capability_for_team(
     """Disable one capability for one team and suspend its dependents (§8.2, #1975).
 
     The `enabled` tuple is deleted (the settings row is KEPT so a later
-    re-enable restores prior settings). For a default-on capability, a
-    `disabled` opt-out tuple is written so the team truly loses `can_use`.
-    Every dependent agent instance is then suspended with
-    `CAPABILITY_ACCESS_REVOKED`. Returns the number of instances suspended.
+    re-enable restores prior settings) and a `disabled` opt-out tuple is
+    written — always, not only for default-on capabilities, so the explicit
+    disable survives a later default-on flip and reads back as the "disabled"
+    position in the admin tri-state matrix. Every dependent agent instance is
+    then suspended with `CAPABILITY_ACCESS_REVOKED`. Returns the number of
+    instances suspended.
     """
 
     await rebac.delete_relation(
@@ -244,16 +245,58 @@ async def disable_capability_for_team(
             resource=_cap_ref(catalog_entry.id),
         )
     )
-    if catalog_entry.team_scope is TeamScopePolicy.DEFAULT_ON:
-        # Opt this team out of the platform-wide default so `can_use` is false.
-        await rebac.add_relation(
-            Relation(
-                subject=_team_ref(team_id),
-                relation=RelationType.DISABLED,
-                resource=_cap_ref(catalog_entry.id),
-            )
+    await rebac.add_relation(
+        Relation(
+            subject=_team_ref(team_id),
+            relation=RelationType.DISABLED,
+            resource=_cap_ref(catalog_entry.id),
         )
+    )
     del settings_store  # settings row is intentionally retained (re-enable restores)
+    return await suspend_dependent_instances(
+        agent_instance_store=agent_instance_store,
+        team_id=team_id,
+        capability_id=catalog_entry.id,
+        kpi_writer=kpi_writer,
+    )
+
+
+async def reset_capability_for_team(
+    *,
+    rebac: RebacEngine,
+    agent_instance_store: AgentInstanceStore,
+    catalog_entry: CapabilityCatalogEntry,
+    team_id: TeamId,
+    default_on: bool,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> int:
+    """Clear a team's explicit position so it falls back to the platform
+    default (the "default" segment of the admin tri-state matrix).
+
+    Both the `enabled` grant and the `disabled` opt-out are deleted; the
+    settings row is kept, like disable, so a later re-enable restores prior
+    settings. When the platform default is off the team loses `can_use`, so
+    dependents are suspended exactly as an explicit disable would; when it is
+    on, access continues by inheritance and nothing is suspended. Returns the
+    number of instances suspended.
+    """
+
+    await rebac.delete_relation(
+        Relation(
+            subject=_team_ref(team_id),
+            relation=RelationType.ENABLED,
+            resource=_cap_ref(catalog_entry.id),
+        )
+    )
+    await rebac.delete_relation(
+        Relation(
+            subject=_team_ref(team_id),
+            relation=RelationType.DISABLED,
+            resource=_cap_ref(catalog_entry.id),
+        )
+    )
+    if default_on:
+        return 0
     return await suspend_dependent_instances(
         agent_instance_store=agent_instance_store,
         team_id=team_id,

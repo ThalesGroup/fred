@@ -22,9 +22,9 @@ tuples are written only through this surface — callers everywhere else check
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError
@@ -110,15 +110,33 @@ async def put_team_capability(
 @router.delete(
     "/admin/capabilities/{capability_id}/teams/{team_id}",
     response_model=TeamCapabilityEnablementResult,
-    summary="Disable a capability for a team (suspends dependent instances).",
+    summary="Disable a capability for a team, or reset it to the platform default.",
 )
 async def delete_team_capability(
     capability_id: Annotated[str, Path(min_length=1)],
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
+    mode: Annotated[
+        Literal["disable", "default"],
+        Query(
+            description=(
+                "`disable` writes an explicit opt-out (tri-state 'disabled'); "
+                "`default` clears both the grant and the opt-out so the "
+                "platform default applies (tri-state 'default'). Both suspend "
+                "dependent instances when the team loses access."
+            ),
+        ),
+    ] = "disable",
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamCapabilityEnablementResult:
     try:
+        if mode == "default":
+            return await capability_service.reset_team_capability(
+                user=user,
+                capability_id=capability_id,
+                team_id=team_id,
+                deps=deps,
+            )
         return await capability_service.disable_team_capability(
             user=user,
             capability_id=capability_id,

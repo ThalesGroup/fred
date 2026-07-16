@@ -51,6 +51,7 @@ from control_plane_backend.capabilities.enablement import (
     DefaultOnNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
+    reset_capability_for_team,
     validate_team_settings,
 )
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
@@ -322,10 +323,19 @@ async def test_disable_suspends_dependent_instances_with_access_revoked() -> Non
 
 
 @pytest.mark.asyncio
-async def test_disable_default_on_writes_optout_tuple() -> None:
+@pytest.mark.parametrize(
+    "scope", [TeamScopePolicy.DEFAULT_ON, TeamScopePolicy.ADMIN_GATED]
+)
+async def test_disable_writes_optout_tuple_for_any_scope(
+    scope: TeamScopePolicy,
+) -> None:
+    """Disable is the explicit tri-state position: the opt-out tuple is written
+    regardless of scope, so it survives a later default-on flip and reads back
+    as `disabled` in the admin matrix."""
+
     rebac = _FakeRebac()
     settings = _FakeSettingsStore()
-    entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
+    entry = _entry(team_scope=scope)
     store = _FakeAgentInstanceStore([])
 
     await disable_capability_for_team(
@@ -337,6 +347,115 @@ async def test_disable_default_on_writes_optout_tuple() -> None:
     )
     # Opt-out tuple written so the team truly loses `can_use`.
     assert ("team:team-a", "disabled", "capability:corp_drive") in rebac.tuples
+
+
+# ---------------------------------------------------------------------------
+# Reset to platform default (tri-state "default" segment)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reset_clears_both_tuples_and_keeps_settings() -> None:
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    entry = _entry()
+    store = _FakeAgentInstanceStore([])
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+    await disable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        agent_instance_store=store,
+        catalog_entry=entry,
+        team_id="team-a",
+    )
+
+    await reset_capability_for_team(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=entry,
+        team_id="team-a",
+        default_on=True,
+    )
+
+    assert ("team:team-a", "enabled", "capability:corp_drive") not in rebac.tuples
+    assert ("team:team-a", "disabled", "capability:corp_drive") not in rebac.tuples
+    # Settings row kept — a later re-enable restores prior settings.
+    assert ("team-a", "corp_drive") in settings._rows
+
+
+@pytest.mark.asyncio
+async def test_reset_suspends_dependents_when_default_is_off() -> None:
+    """enabled → default with the platform default off means the team loses
+    `can_use`, so the reset suspends dependents exactly like a disable."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    entry = _entry()
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+    dependent = _make_record(agent_instance_id="dep", team_id="team-a")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([dependent])
+
+    suspended = await reset_capability_for_team(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=entry,
+        team_id="team-a",
+        default_on=False,
+    )
+
+    assert suspended == 1
+    assert dependent.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
+async def test_reset_with_default_on_keeps_access_and_suspends_nothing() -> None:
+    """enabled → default with default-on set: access continues by inheritance,
+    so no dependent instance may be touched."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+    dependent = _make_record(agent_instance_id="dep", team_id="team-a")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([dependent])
+
+    suspended = await reset_capability_for_team(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=entry,
+        team_id="team-a",
+        default_on=True,
+    )
+
+    assert suspended == 0
+    assert dependent.suspension_reason is None
 
 
 # ---------------------------------------------------------------------------
