@@ -145,17 +145,22 @@ export default function CapabilitiesPage() {
     },
     {
       label: t("rework.admin.capabilities.col.actions"),
-      size: "1fr",
+      // Wide enough for the one-line button at desktop widths, but still a
+      // shrinkable fr so narrow viewports fall back to the wrapped label
+      // rather than forcing the table to overflow.
+      size: "1.4fr",
       cellRenderer: (cap) => (
-        <Button
-          color="on-surface"
-          variant="outlined"
-          size="small"
-          icon={{ category: "outlined", type: "groups" }}
-          onClick={() => setMatrixCapability(cap)}
-        >
-          {t("rework.admin.capabilities.manageTeams")}
-        </Button>
+        <div className={styles.actionsCell}>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "groups" }}
+            onClick={() => setMatrixCapability(cap)}
+          >
+            {t("rework.admin.capabilities.manageTeams")}
+          </Button>
+        </div>
       ),
     },
   ];

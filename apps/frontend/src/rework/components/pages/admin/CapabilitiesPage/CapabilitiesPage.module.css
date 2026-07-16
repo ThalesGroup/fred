@@ -94,3 +94,33 @@
   color: var(--warning);
   font: var(--font-label-medium);
 }
+
+/* Button sets a fixed height (2rem at size="small") and clips overflow, but
+ * leaves its label free to wrap. The action column is only just narrower than
+ * the one-line label, so the label wrapped to two lines, overflowed the fixed
+ * height and got clipped — the squashed button.
+ *
+ * Relax the fixed height to a min-height and give the label real vertical
+ * padding, so a wrapped label renders as a padded two-line block instead of
+ * being cut off. Two lines (~40px) plus padding stays within the table's
+ * 3.75rem row. `min-width: min-content` stops flex shrinking the button past
+ * its longest word, which is what masked the text on narrow viewports. */
+.actionsCell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.actionsCell button {
+  min-width: min-content;
+  height: auto;
+  min-height: 2rem;
+}
+
+.actionsCell button > * {
+  padding-top: var(--spacing-2xs);
+  padding-bottom: var(--spacing-2xs);
+  height: auto;
+  min-height: 1.875rem;
+  text-align: left;
+}

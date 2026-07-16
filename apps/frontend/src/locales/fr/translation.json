@@ -756,7 +756,7 @@
         "col": {
           "capability": "Capacité",
           "enabledTeams": "Équipes activées",
-          "defaultOn": "Activé par défaut",
+          "defaultOn": "Activé pour tous",
           "health": "État",
           "actions": "Actions"
         },

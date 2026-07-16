@@ -756,7 +756,7 @@
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
-          "defaultOn": "Default-on",
+          "defaultOn": "Enabled for all",
           "health": "Health",
           "actions": "Actions"
         },
