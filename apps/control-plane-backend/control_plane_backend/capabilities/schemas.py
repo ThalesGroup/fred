@@ -16,11 +16,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
 from pydantic import BaseModel, Field
+
+PersonalScope = Literal["enabled", "disabled", "default"]
 
 
 class CapabilityEnablementItem(BaseModel):
@@ -54,6 +56,23 @@ class CapabilityEnablementItem(BaseModel):
             "just the ones the calling admin belongs to."
         ),
     )
+    total_personal_space_count: int = Field(
+        default=0,
+        description=(
+            "Platform-wide personal-space count (= realm user count; one "
+            "personal space per user) — the denominator for personal-class "
+            "access (RFC §8.4), as total_team_count is for default_on."
+        ),
+    )
+    personal_scope: PersonalScope = Field(
+        default="default",
+        description=(
+            "Personal-space class position (RFC §8.4): `enabled` = usable by all "
+            "personal spaces (`personal_on` tuple present); `disabled` = blocked "
+            "for all personal spaces (`personal_disabled` present); `default` = "
+            "neither, personal spaces follow `default_on` like any team."
+        ),
+    )
     team_settings_fields: list[FieldSpec] = Field(
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
@@ -74,6 +93,12 @@ class SetCapabilityDefaultOnRequest(BaseModel):
     default_on: bool
 
 
+class SetCapabilityPersonalScopeRequest(BaseModel):
+    """Set the personal-space class tri-state for a capability (RFC §8.4)."""
+
+    scope: PersonalScope
+
+
 class TeamCapabilityEnablementResult(BaseModel):
     capability_id: str
     team_id: str
@@ -89,3 +114,14 @@ class CapabilityDefaultOnResult(BaseModel):
     capability_id: str
     default_on: bool
     suspended_instances: int = 0
+
+
+class CapabilityPersonalScopeResult(BaseModel):
+    capability_id: str
+    scope: PersonalScope
+    suspended_instances: int = Field(
+        default=0,
+        description=(
+            "Dependent PERSONAL-space instances suspended by this change (#1975)."
+        ),
+    )

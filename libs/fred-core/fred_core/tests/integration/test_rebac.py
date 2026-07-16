@@ -998,6 +998,21 @@ def _org_team_edge(team: RebacReference) -> list[Relation]:
     ]
 
 
+def _org_personal_team_edge(team: RebacReference) -> list[Relation]:
+    """Contextual reverse edges for a PERSONAL space: both the plain
+    `organization#team` edge and the personal-only `organization#personal_team`
+    edge the personal-space class relations resolve through (CAPAB-01 / #1961,
+    RFC §8.4). A regular team gets only the first."""
+
+    return _org_team_edge(team) + [
+        Relation(
+            subject=team,
+            relation=RelationType.PERSONAL_TEAM,
+            resource=_organization_ref(),
+        )
+    ]
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_capability_can_use_tristate(rebac_engine: RebacEngine) -> None:
@@ -1104,6 +1119,94 @@ async def test_capability_default_on_inherited(rebac_engine: RebacEngine) -> Non
         CapabilityPermission.CAN_USE,
         capability,
         contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_capability_personal_class_scope(rebac_engine: RebacEngine) -> None:
+    """The personal-space class position (CAPAB-01 / #1961, RFC §8.4).
+
+    `personal_on` grants ALL personal spaces (contextual `personal_team` edge)
+    but not regular teams; `personal_disabled` opts the whole class out;
+    precedence is per-team explicit > personal-class > default_on, and the
+    class opt-out never touches a per-space explicit `enabled` grant."""
+
+    org = _organization_ref()
+    capability = _make_reference(Resource.CAPABILITY, prefix="cap")
+    personal = _make_reference(Resource.TEAM, prefix="personal")
+    regular = _make_reference(Resource.TEAM, prefix="team")
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=org, relation=RelationType.ORGANIZATION, resource=capability)
+    )
+
+    # (1) personal_on → every personal space can use it...
+    token = await rebac_engine.add_relation(
+        Relation(subject=org, relation=RelationType.PERSONAL_ON, resource=capability)
+    )
+    assert await rebac_engine.has_permission(
+        personal,
+        CapabilityPermission.CAN_USE,
+        capability,
+        contextual_relations=_org_personal_team_edge(personal),
+        consistency_token=token,
+    )
+    # ...but a REGULAR team (no personal_team edge injected) does not.
+    assert not await rebac_engine.has_permission(
+        regular,
+        CapabilityPermission.CAN_USE,
+        capability,
+        contextual_relations=_org_team_edge(regular),
+        consistency_token=token,
+    )
+
+    # (2) A per-space explicit `disabled` beats the class grant (most specific).
+    token = await rebac_engine.add_relation(
+        Relation(subject=personal, relation=RelationType.DISABLED, resource=capability)
+    )
+    assert not await rebac_engine.has_permission(
+        personal,
+        CapabilityPermission.CAN_USE,
+        capability,
+        contextual_relations=_org_personal_team_edge(personal),
+        consistency_token=token,
+    )
+
+    # (3) personal_disabled opts the whole class out of a default_on capability,
+    # yet a per-space explicit `enabled` grant survives it (the opt-out
+    # subtracts only from the inherited layer).
+    org_off = _organization_ref()
+    cap2 = _make_reference(Resource.CAPABILITY, prefix="cap")
+    kept = _make_reference(Resource.TEAM, prefix="personal")
+    dropped = _make_reference(Resource.TEAM, prefix="personal")
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=org_off, relation=RelationType.ORGANIZATION, resource=cap2
+            ),
+            Relation(subject=org_off, relation=RelationType.DEFAULT_ON, resource=cap2),
+            Relation(
+                subject=org_off, relation=RelationType.PERSONAL_DISABLED, resource=cap2
+            ),
+            Relation(subject=kept, relation=RelationType.ENABLED, resource=cap2),
+        ]
+    )
+    # `dropped` inherited default_on but the personal-class opt-out revokes it.
+    assert not await rebac_engine.has_permission(
+        dropped,
+        CapabilityPermission.CAN_USE,
+        cap2,
+        contextual_relations=_org_personal_team_edge(dropped),
+        consistency_token=token,
+    )
+    # `kept` has an explicit `enabled` grant → the class opt-out cannot touch it.
+    assert await rebac_engine.has_permission(
+        kept,
+        CapabilityPermission.CAN_USE,
+        cap2,
+        contextual_relations=_org_personal_team_edge(kept),
         consistency_token=token,
     )
 

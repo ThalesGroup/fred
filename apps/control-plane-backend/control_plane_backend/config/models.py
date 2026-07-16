@@ -145,10 +145,14 @@ class ManagedAgentTuning(BaseModel):
 class CapabilitiesConfig(BaseModel):
     """Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).
 
-    RFC AGENT-CAPABILITY §8.3–§8.4. Security-sensitive operators can start every
+    RFC AGENT-CAPABILITY §8.3. Security-sensitive operators can start every
     capability admin-gated (`default_policy: explicit`) instead of honoring the
-    `manifest.team_scope: default_on` seeds; `personal_defaults` lists capability
-    ids seeded as `enabled` for each personal space at first materialization.
+    `manifest.team_scope: default_on` seeds.
+
+    The personal-space class position is now pure FGA runtime state, admin-
+    toggleable via `PUT /admin/capabilities/{id}/personal-scope` (RFC §8.4,
+    amended 2026-07-16 — the former `personal_defaults` config-seeding list is
+    withdrawn).
     """
 
     default_policy: Literal["seed", "explicit"] = Field(
@@ -156,13 +160,6 @@ class CapabilitiesConfig(BaseModel):
         description=(
             "seed = honor manifest default-on seeds at first registration; "
             "explicit = ignore seeds, start everything admin-gated."
-        ),
-    )
-    personal_defaults: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Capability ids enabled for every personal space at first "
-            "materialization (RFC §8.4). Changing later needs a backfill."
         ),
     )
 

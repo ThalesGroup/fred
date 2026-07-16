@@ -1276,22 +1276,72 @@ Recommendation:
 
 ### 8.4 Personal spaces
 
-Personal spaces are real teams (`personal-{uid}`, TEAM-PLATFORM-POLICY §12.3), so
-`enabled: [team]` already covers enabling a capability for one personal space. "Enable
-for **all** personal spaces but not regular teams" has no clean FGA expression — the
-schema does not discriminate team types.
+> **Amended 2026-07-16 (updated in place).** The original v1 answer here — a
+> `platform.capabilities.personal_defaults` deployment-config list seeded into each
+> personal space at first bootstrap — shipped in #1980 and is **withdrawn**.
+> First-touch seeding proved operationally wrong in live testing: changing the list
+> required a redeploy, removing an id revoked nothing (the promised backfill command
+> was never built), and the net effect was silent rights drift between users
+> depending on when they first logged in. The seeding path
+> (`seed_personal_team_capabilities`, the frontend-bootstrap hook, the
+> `personal_defaults` config field) is removed. The replacement below is pure FGA
+> runtime state, admin-toggleable like `default_on`. (`default_policy` and the §8.3
+> registration seeding are untouched.)
 
-- **v1:** `default_on` applies to all teams, personal and regular alike. A capability
-  meant for personal spaces only is admin-gated and **seeded at personal-team
-  creation**: the existing personal-team bootstrap (which already creates the policy
-  row automatically) also writes `enabled` tuples from a
-  `capability_defaults.personal` deployment-config list. Fan-out is bounded (k tuples
-  per user, written once, automatically); changing the list later requires a backfill
-  command — accepted and documented.
+Personal spaces are real teams (`personal-{uid}`, TEAM-PLATFORM-POLICY §12.3), so
+`enabled: [team]` already covers enabling a capability for one personal space.
+
+"Enable for **all** personal spaces but not regular teams" was originally rejected as
+having no clean FGA expression — the schema does not discriminate team types. The
+2026-07-16 `can_use` team-subject fix (§8.1) dissolved that objection: every
+team-subject check now flows through one helper that injects derived organization
+reverse edges as **contextual tuples**, and that caller knows the team type
+(`is_personal_team_id`). The class "all personal teams" is therefore expressible at
+check time without persisting a single per-team tuple:
+
+```
+type organization
+  define team: [team]            # existing — contextual, never persisted
+  define personal_team: [team]   # NEW — contextual, injected only for personal-{uid} subjects
+
+type capability
+  define personal_on: [organization]        # class grant — one platform-wide tuple
+  define personal_disabled: [organization]  # class opt-out — one platform-wide tuple
+  define personal_grant: personal_team from personal_on
+  define personal_block: personal_team from personal_disabled
+  define inherited: (team from default_on or personal_grant) but not personal_block
+  define can_use: (enabled or inherited) but not disabled
+```
+
+- **Precedence — most specific wins**, one uniform rule across the whole matrix: a
+  team's explicit `enabled`/`disabled` beats the personal-class position, which beats
+  `default_on`. The intermediate `inherited` relation exists exactly so the class
+  opt-out subtracts only from the inherited layer, never from a per-space explicit
+  grant.
+- **The class is a tri-state**, mirroring a normal team row: *Enabled* =
+  `personal_on` tuple present; *Disabled* = `personal_disabled` tuple present;
+  *Default* = neither, personal spaces follow `default_on` like any team. Toggling
+  writes/deletes one tuple and applies instantly to ALL personal spaces — past,
+  future, and users who never log in. No seeding, no backfill, no per-user fan-out.
+- **§8.2 constraint carries over:** a capability whose `TeamSettingsModel` has
+  required fields cannot be class-enabled (nobody filled the settings) — same rule
+  and error as `default_on`. A class transition that loses access for personal
+  spaces (enabled→disabled, enabled→default without `default_on`, or
+  default→disabled with `default_on`) suspends dependent personal-space instances
+  through the same #1975 sweep as `set_capability_default_on(False)`.
+- **Admin surface (§8.5):** the team matrix gains one synthetic **pinned first row
+  "All personal spaces"** driven by the class state, rendered with the same
+  tri-state control as team rows. The admin's own personal team no longer appears as
+  an ordinary row — live testing (2026-07-16) showed it reads as a global
+  personal-space control, which it is not. API:
+  `PUT /admin/capabilities/{id}/personal-scope` with body
+  `{scope: "enabled" | "disabled" | "default"}` (idempotent setter beside
+  `/default-on`; response carries the suspended-instance count); the admin list
+  response gains `personal_scope`.
 - Resolving per-type defaults dynamically control-plane side (mirroring
-  TEAM-PLATFORM-POLICY §12.2) was considered and rejected **for authorization**: it
-  would split `can_use` across FGA and a config merge, so a bare FGA check would no
-  longer be authoritative.
+  TEAM-PLATFORM-POLICY §12.2) remains rejected **for authorization**: it would split
+  `can_use` across FGA and a config merge, so a bare FGA check would no longer be
+  authoritative.
 
 ### 8.5 Admin dashboard
 
@@ -1304,7 +1354,8 @@ scripts is not a product. The control-plane admin area gains a **Capabilities** 
   enabled / disabled), and the enablement form rendered from `TeamSettingsModel`
   (§8.2);
 - the default-on toggle (writes/deletes the `default_on` tuple) and the
-  personal-spaces default list (§8.4);
+  personal-spaces class tri-state (§8.4, amended 2026-07-16 — formerly a
+  config-only default list);
 - a per-capability **health column**: suspended-instance counts from the §3.9
   reconciliation (and, later, `health_check()` probe results, §7.2).
 
@@ -1356,7 +1407,9 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   (`seed_personal_team_capabilities`, from `platform.capabilities.personal_defaults`)
 >   is wired at frontend-bootstrap first-touch (idempotent via the settings-row
 >   marker). **Deviation:** config lives under `platform.capabilities.*` rather than
->   a top-level `capability_defaults` block.
+>   a top-level `capability_defaults` block. *(Personal-space seeding withdrawn by
+>   the 2026-07-16 §8.4 amendment — replaced by the `personal_on`/`personal_disabled`
+>   class relations; registration seeding and `default_policy` remain.)*
 > - **API (§8.5).** Routes live under `control_plane_backend/capabilities/api.py`,
 >   each mutation gated on `capability#can_manage` (anchor-ensured first); the
 >   aggregate list gated on the equivalent org-admin relation. Generated
@@ -1402,8 +1455,10 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   **personal-spaces default list** (§8.4) stays config-only
 >   (`platform.capabilities.personal_defaults`, changing it needs a backfill) — no
 >   read/write API exists to make it editable, so that half of the criterion is
->   deferred rather than faked. All three are additive backend extensions; the
->   dashboard consumes them the moment the fields land.
+>   deferred rather than faked. *(Resolved by the 2026-07-16 §8.4 amendment: the
+>   config list is withdrawn in favor of the `personal_scope` class tri-state and
+>   its "All personal spaces" matrix row.)* All three are additive backend
+>   extensions; the dashboard consumes them the moment the fields land.
 
 > **As implemented (2026-07-16 — `can_use` team-subject fix).** Live testing of
 > #1980/#1988 surfaced a cross-team leak: a capability enabled for team A
@@ -1653,7 +1708,9 @@ entry's display name.
 4. **`capability` ReBAC relations — resolved.** Schema and rationale in §8.1.
    (a) the `but not disabled` tri-state exclusion is **kept** (admin-dashboard
    tri-state; one line of FGA);
-   (b) per-team-type default-on stays as the §8.4 seeding approach — no schema change;
+   (b) per-team-type default-on is the §8.4 personal-class relations (amended
+   2026-07-16; the original no-schema-change seeding approach shipped in #1980 and
+   was withdrawn);
    (c) `TeamPlatformPolicy` / `tool_guardrails.allowed_mcp_server_ids` is verified
    **docs-only** (zero code anywhere in the repo) — capability enablement supersedes
    it; amend that draft RFC when Tier 3 lands. Nothing coexists, nothing migrates.

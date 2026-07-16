@@ -970,10 +970,31 @@ feedback. Frontend consumes the generated hooks via the friendly aliases
 `useDisableTeamCapabilityMutation` / `useSetCapabilityDefaultOnMutation` in
 `controlPlaneApiEnhancements.ts`; the dashboard lives at `/admin/capabilities`.
 
+**2026-07-16 — personal-space class scope (CAPAB-01 / #1961, RFC
+`AGENT-CAPABILITY-RFC.md` §8.4 amendment).** The personal-space capability class
+is now pure FGA runtime state, admin-toggleable like `default_on` — replacing the
+withdrawn config-only `platform.capabilities.personal_defaults` first-touch
+seeding. One new route (org-admin-gated on `capability#can_manage`, same as
+`/default-on`), and one new field on the aggregate list item.
+
+| Method + path | Request | Response | Effect |
+| --- | --- | --- | --- |
+| `PUT /admin/capabilities/{capability_id}/personal-scope` | `SetCapabilityPersonalScopeRequest` (`scope: "enabled" \| "disabled" \| "default"`) | `CapabilityPersonalScopeResult` (`scope`, `suspended_instances`) | Set the personal-space class tri-state: `enabled` writes the `personal_on` org tuple (usable by ALL personal spaces), `disabled` writes `personal_disabled` (blocked for all), `default` clears both. Idempotent. A transition that loses access for personal spaces (enabled→disabled, enabled→default without default_on, default→disabled with default_on) suspends dependent **personal-space** instances whose team lacks an explicit `enabled` grant. `enabled` is rejected (409) for a capability with a required team setting, mirroring `default_on`. |
+
+The `GET /admin/capabilities` item gains **`personal_scope`** (`"enabled" \|
+"disabled" \| "default"`), derived from the two org-subject class tuples, and
+**`total_personal_space_count`** (the realm user count — one personal space per
+user; `0` = user directory unavailable, read as "unknown" like
+`total_team_count`), the denominator the dashboard uses to render personal-class
+reach as `N teams + X personal spaces`. Precedence
+across the whole matrix: a team's explicit `enabled`/`disabled` beats the
+personal-class position, which beats `default_on`. Frontend consumes the
+`useSetCapabilityPersonalScopeMutation` friendly alias; the team-matrix drawer
+renders the class as a synthetic pinned "All personal spaces" first row and drops
+the admin's own personal team from the ordinary per-team rows.
+
 **Known gaps (deferred, tracked on #1975 / a future enablement-list extension):**
-the aggregate list carries no `disabled_team_ids` (so an explicit opt-out of a
-default-on capability is not distinguishable from inheritance on the read side),
 no **resting** per-capability suspended-instance count (only the mutation delta
 exists — the suspension row records a typed reason, not the causing capability
-id), and no read/write API for the config-only `platform.capabilities.personal_defaults`
-list (changing it needs a backfill, RFC §8.4).
+id). The config-only `platform.capabilities.personal_defaults` list was removed
+by the 2026-07-16 §8.4 amendment (replaced by the `personal-scope` route above).

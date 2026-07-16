@@ -34,10 +34,14 @@ import type {
 import {
   useDisableTeamCapabilityMutation,
   useEnableTeamCapabilityMutation,
+  useSetCapabilityPersonalScopeMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer.tsx";
 import styles from "./CapabilityTeamMatrixDrawer.module.css";
 import {
+  PERSONAL_SCOPE_ROW_ID,
+  capabilityPersonalScopeChoice,
+  excludePersonalTeams,
   filterTeamsByName,
   isCapabilityOnForTeam,
   seedSettingsFromFields,
@@ -78,6 +82,25 @@ const OFF_TOAST_KEYS = {
   },
 } as const;
 
+/** Toast keys for the synthetic "All personal spaces" row (RFC §8.4). The
+ * "team" placeholder is filled with the localized class label. */
+const PERSONAL_TOAST_KEYS = {
+  enabled: {
+    done: "rework.admin.capabilities.matrix.personal.enabledToast",
+    error: "rework.admin.capabilities.matrix.personal.enableError",
+  },
+  disabled: {
+    done: "rework.admin.capabilities.matrix.personal.disabledToast",
+    suspended: "rework.admin.capabilities.matrix.personal.disabledSuspendedToast",
+    error: "rework.admin.capabilities.matrix.personal.disableError",
+  },
+  default: {
+    done: "rework.admin.capabilities.matrix.personal.defaultToast",
+    suspended: "rework.admin.capabilities.matrix.personal.defaultSuspendedToast",
+    error: "rework.admin.capabilities.matrix.personal.defaultError",
+  },
+} as const;
+
 export function CapabilityTeamMatrixDrawer({
   capability,
   teams,
@@ -89,6 +112,7 @@ export function CapabilityTeamMatrixDrawer({
   const { showSuccess, showError, showWarn } = useToast();
   const [enableCapability, { isLoading: isEnabling }] = useEnableTeamCapabilityMutation();
   const [disableCapability, { isLoading: isDisabling }] = useDisableTeamCapabilityMutation();
+  const [setPersonalScope, { isLoading: isSettingPersonal }] = useSetCapabilityPersonalScopeMutation();
 
   // The team currently being configured with an enable-with-settings form.
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
@@ -115,7 +139,7 @@ export function CapabilityTeamMatrixDrawer({
 
   // `busy` at settle time, readable from the effect below without making the
   // effect re-run (and wrongly drop entries) on every mutation start/stop.
-  const busy = isEnabling || isDisabling;
+  const busy = isEnabling || isDisabling || isSettingPersonal;
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
@@ -131,9 +155,13 @@ export function CapabilityTeamMatrixDrawer({
       if (Object.keys(prev).length === 0) return prev;
       if (!capability || !busyRef.current) return {};
       const next: Record<string, TeamCapabilityChoice> = {};
-      for (const [teamId, choice] of Object.entries(prev)) {
-        if (teamCapabilityChoice(capability, teamId) !== choice) {
-          next[teamId] = choice;
+      for (const [rowId, choice] of Object.entries(prev)) {
+        const settled =
+          rowId === PERSONAL_SCOPE_ROW_ID
+            ? capabilityPersonalScopeChoice(capability)
+            : teamCapabilityChoice(capability, rowId);
+        if (settled !== choice) {
+          next[rowId] = choice;
         }
       }
       return next;
@@ -154,18 +182,27 @@ export function CapabilityTeamMatrixDrawer({
   // in the same effect because the drawer stays mounted across open/close, so
   // a stale query from a previous capability would silently pre-filter the
   // next one.
-  const [orderedTeams, setOrderedTeams] = useState<Team[]>(teams);
+  // Personal spaces are governed by the synthetic class row (RFC §8.4), so the
+  // admin's own personal team is dropped from the ordinary per-team roster.
+  const [orderedTeams, setOrderedTeams] = useState<Team[]>(() => excludePersonalTeams(teams));
   useEffect(() => {
     setTeamQuery("");
     const snapshot = capabilityRef.current;
-    setOrderedTeams(snapshot ? sortTeamsForMatrix(teams, snapshot) : teams);
+    const roster = excludePersonalTeams(teams);
+    setOrderedTeams(snapshot ? sortTeamsForMatrix(roster, snapshot) : roster);
   }, [capability?.id, open, teams]);
 
   const fields = capability?.team_settings_fields ?? [];
   const hasSettings = fields.length > 0;
+  // A capability with a REQUIRED team setting cannot be class-enabled for all
+  // personal spaces (nobody filled the settings) — same §8.2 rule as default-on.
+  const requiresSettings = fields.some((field) => field.required);
 
   const hasQuery = teamQuery.trim() !== "";
   const visibleTeams = filterTeamsByName(orderedTeams, teamQuery);
+  // The pinned class row is not a team, so it stays out of name filtering; it is
+  // simply hidden while a search query is active.
+  const showPersonalRow = !hasQuery;
 
   // Toasts name the team; ids are opaque (Keycloak group ids), so resolve.
   const teamLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
@@ -219,6 +256,40 @@ export function CapabilityTeamMatrixDrawer({
     }
   };
 
+  const personalLabel = t("rework.admin.capabilities.matrix.personal.label");
+
+  /** Set the personal-space class tri-state (RFC §8.4) for the whole class at
+   * once. Uses the same optimistic spinner mechanics as a team row, keyed by
+   * the reserved `PERSONAL_SCOPE_ROW_ID`. */
+  const submitPersonalScope = async (next: TeamCapabilityChoice) => {
+    if (!capability) return;
+    const scope = next === "enabled" ? "enabled" : next === "disabled" ? "disabled" : "default";
+    const keys = PERSONAL_TOAST_KEYS[scope];
+    markPending(PERSONAL_SCOPE_ROW_ID, next);
+    try {
+      const result = await setPersonalScope({
+        capabilityId: capability.id,
+        setCapabilityPersonalScopeRequest: { scope },
+      }).unwrap();
+      const suspended = result.suspended_instances ?? 0;
+      onSuspended(capability.id, suspended);
+      if (suspended > 0 && "suspended" in keys) {
+        showWarn({ summary: t(keys.suspended, { team: personalLabel, count: suspended }) });
+      } else {
+        showSuccess({ summary: t(keys.done, { team: personalLabel }) });
+      }
+    } catch {
+      unmarkPending(PERSONAL_SCOPE_ROW_ID);
+      showError({ summary: t(keys.error) });
+    }
+  };
+
+  const selectPersonalChoice = (current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
+    if (busy || next === current) return;
+    if (next === "enabled" && requiresSettings) return;
+    void submitPersonalScope(next);
+  };
+
   const selectChoice = (teamId: string, current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
     if (next === "enabled") {
@@ -251,6 +322,38 @@ export function CapabilityTeamMatrixDrawer({
             <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
           )}
           <ul className={styles.teamList}>
+            {showPersonalRow &&
+              (() => {
+                const personalChoice = capabilityPersonalScopeChoice(capability);
+                const pendingChoice = pendingByTeam[PERSONAL_SCOPE_ROW_ID];
+                const isPending = pendingChoice !== undefined;
+                const displayChoice = pendingChoice ?? personalChoice;
+                return (
+                  <li
+                    key={PERSONAL_SCOPE_ROW_ID}
+                    className={`${styles.teamRow} ${styles.personalRow}`}
+                    aria-busy={isPending}
+                  >
+                    <div className={styles.personalMain}>
+                      <span className={styles.teamName}>{personalLabel}</span>
+                      <span className={styles.personalSub}>{t("rework.admin.capabilities.matrix.personal.hint")}</span>
+                    </div>
+                    <div className={styles.teamActions}>
+                      {isPending && <span className={styles.spinner} aria-hidden="true" />}
+                      <ButtonGroup
+                        size="small"
+                        color="primary"
+                        selectedIndex={CHOICES.indexOf(displayChoice)}
+                        onSelectedIndexChange={(index) => selectPersonalChoice(displayChoice, CHOICES[index])}
+                        items={CHOICES.map((target) => ({
+                          label: t(CHOICE_LABEL_KEY[target]),
+                          disabled: busy || (target === "enabled" && requiresSettings),
+                        }))}
+                      />
+                    </div>
+                  </li>
+                );
+              })()}
             {visibleTeams.map((team) => {
               const choice = teamCapabilityChoice(capability, team.id);
               const off = !isCapabilityOnForTeam(capability, team.id);

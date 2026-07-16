@@ -33,12 +33,15 @@ from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     CapabilitySettingsInvalid,
     DefaultOnNotAllowed,
+    PersonalScopeNotAllowed,
 )
 from control_plane_backend.capabilities.schemas import (
     CapabilityDefaultOnResult,
     CapabilityEnablementList,
+    CapabilityPersonalScopeResult,
     EnableTeamCapabilityRequest,
     SetCapabilityDefaultOnRequest,
+    SetCapabilityPersonalScopeRequest,
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.capabilities import service as capability_service
@@ -169,5 +172,31 @@ async def put_capability_default_on(
         AuthorizationError,
         CapabilityNotFound,
         DefaultOnNotAllowed,
+    ) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.put(
+    "/admin/capabilities/{capability_id}/personal-scope",
+    response_model=CapabilityPersonalScopeResult,
+    summary="Set the personal-space class tri-state for a capability.",
+)
+async def put_capability_personal_scope(
+    capability_id: Annotated[str, Path(min_length=1)],
+    body: SetCapabilityPersonalScopeRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> CapabilityPersonalScopeResult:
+    try:
+        return await capability_service.set_personal_scope(
+            user=user,
+            capability_id=capability_id,
+            scope=body.scope,
+            deps=deps,
+        )
+    except (
+        AuthorizationError,
+        CapabilityNotFound,
+        PersonalScopeNotAllowed,
     ) as exc:
         raise _map_error(exc) from exc

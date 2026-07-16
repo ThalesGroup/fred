@@ -33,9 +33,9 @@ here so the RFC invariants hold in exactly one spot:
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Literal, Mapping
 
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -76,6 +76,13 @@ class CapabilitySettingsInvalid(Exception):
 
 class DefaultOnNotAllowed(Exception):
     """A capability with required team settings cannot be seeded/toggled default-on."""
+
+    http_status = 409
+
+
+class PersonalScopeNotAllowed(Exception):
+    """A capability with required team settings cannot be class-enabled for all
+    personal spaces — nobody has filled the settings (RFC §8.4, mirrors §8.2)."""
 
     http_status = 409
 
@@ -392,6 +399,161 @@ async def set_capability_default_on(
             instance=instance,
             store=agent_instance_store,
             available_capability_ids=selected - {catalog_entry.id},
+            revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            kpi_writer=kpi_writer,
+        )
+        if reason is not None:
+            suspended += 1
+    return suspended
+
+
+async def set_capability_personal_scope(
+    *,
+    rebac: RebacEngine,
+    agent_instance_store: AgentInstanceStore,
+    catalog_entry: CapabilityCatalogEntry,
+    scope: Literal["enabled", "disabled", "default"],
+    kpi_writer: BaseKPIWriter | None = None,
+) -> int:
+    """Set the personal-space class position for a capability (RFC §8.4).
+
+    The class is a tri-state, written as at most one org-subject tuple:
+
+    - ``enabled``  → `personal_on`  present, `personal_disabled` absent;
+    - ``disabled`` → `personal_disabled` present, `personal_on` absent;
+    - ``default``  → neither present (personal spaces follow `default_on`).
+
+    Idempotent: it writes/deletes so exactly the requested state holds. Applies
+    instantly to ALL personal spaces via the contextual `personal_team` edge —
+    no per-space tuple, no seeding, no backfill.
+
+    A capability with a REQUIRED team-settings field can never be class-enabled
+    (§8.2) — nobody has filled the settings (raises `PersonalScopeNotAllowed`).
+
+    When the transition loses access for personal spaces — ``enabled`` →
+    ``disabled``; ``enabled`` → ``default`` while NOT default-on; ``default`` →
+    ``disabled`` while default-on — every dependent PERSONAL-space instance whose
+    team lacks an explicit `enabled` grant is suspended
+    (`CAPABILITY_ACCESS_REVOKED`), the same #1975 sweep as
+    `set_capability_default_on(False)` but filtered to personal spaces. Returns
+    the number of instances suspended.
+    """
+
+    if scope == "enabled" and team_settings_has_required_fields(
+        catalog_entry.team_settings_fields
+    ):
+        raise PersonalScopeNotAllowed(
+            f"Capability {catalog_entry.id!r} has required team settings and "
+            "cannot be class-enabled for all personal spaces."
+        )
+
+    await ensure_capability_anchor(rebac, catalog_entry.id)
+
+    # Whether a personal space carrying NO explicit per-team tuple has inherited
+    # access, before and after the write. Inheritance for such a space is
+    # `(personal_on OR default_on) AND NOT personal_disabled` — the FGA
+    # `inherited` relation evaluated for a personal subject. `default_on` is a
+    # constant across the write; only the two class tuples move.
+    was_on_class = await _has_org_relation(
+        rebac, catalog_entry.id, RelationType.PERSONAL_ON
+    )
+    was_off_class = await _has_org_relation(
+        rebac, catalog_entry.id, RelationType.PERSONAL_DISABLED
+    )
+    default_on = await _has_org_relation(
+        rebac, catalog_entry.id, RelationType.DEFAULT_ON
+    )
+    had_access = (was_on_class or default_on) and not was_off_class
+
+    want_on = scope == "enabled"
+    want_disabled = scope == "disabled"
+    await _apply_personal_scope_tuples(
+        rebac, catalog_entry.id, want_on=want_on, want_disabled=want_disabled
+    )
+    has_access = (want_on or default_on) and not want_disabled
+
+    if had_access and not has_access:
+        return await _suspend_personal_dependents(
+            rebac=rebac,
+            agent_instance_store=agent_instance_store,
+            capability_id=catalog_entry.id,
+            kpi_writer=kpi_writer,
+        )
+    return 0
+
+
+async def _apply_personal_scope_tuples(
+    rebac: RebacEngine, capability_id: str, *, want_on: bool, want_disabled: bool
+) -> None:
+    """Write/delete the two org-subject class tuples so exactly the requested
+    state holds (at most one present). Idempotent."""
+
+    on_relation = Relation(
+        subject=_ORG_REF,
+        relation=RelationType.PERSONAL_ON,
+        resource=_cap_ref(capability_id),
+    )
+    disabled_relation = Relation(
+        subject=_ORG_REF,
+        relation=RelationType.PERSONAL_DISABLED,
+        resource=_cap_ref(capability_id),
+    )
+    if want_on:
+        await rebac.add_relation(on_relation)
+        await rebac.delete_relation(disabled_relation)
+    elif want_disabled:
+        await rebac.add_relation(disabled_relation)
+        await rebac.delete_relation(on_relation)
+    else:  # default → clear both
+        await rebac.delete_relation(on_relation)
+        await rebac.delete_relation(disabled_relation)
+
+
+async def _has_org_relation(
+    rebac: RebacEngine, capability_id: str, relation: RelationType
+) -> bool:
+    """True when the singleton org holds `relation` on the capability (used to
+    read back the class/default-on org-subject markers)."""
+
+    from fred_core import RebacDisabledResult
+
+    subjects = await rebac.lookup_subjects(
+        _cap_ref(capability_id),
+        relation,
+        Resource.ORGANIZATION,
+    )
+    if isinstance(subjects, RebacDisabledResult):
+        return False
+    return any(ref.id == ORGANIZATION_ID for ref in subjects)
+
+
+async def _suspend_personal_dependents(
+    *,
+    rebac: RebacEngine,
+    agent_instance_store: AgentInstanceStore,
+    capability_id: str,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> int:
+    """Suspend PERSONAL-space instances selecting `capability_id` whose team
+    lacks an explicit `enabled` grant (the personal-class revocation sweep).
+
+    A per-space explicit `enabled` grant survives the class change (it keeps
+    `can_use`), so those instances are never touched."""
+
+    enabled_teams = await _explicitly_enabled_team_ids(rebac, capability_id)
+    suspended = 0
+    for instance in await agent_instance_store.list_all():
+        if not is_personal_team_id(str(instance.team_id)):
+            continue
+        selected = set(instance.tuning.selected_capability_ids or [])
+        if capability_id not in selected:
+            continue
+        if str(instance.team_id) in enabled_teams:
+            continue
+        reason = await reconcile_instance_suspension(
+            instance=instance,
+            store=agent_instance_store,
+            available_capability_ids=selected - {capability_id},
             revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
             kpi_writer=kpi_writer,
         )

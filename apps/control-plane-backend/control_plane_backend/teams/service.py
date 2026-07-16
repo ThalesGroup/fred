@@ -884,6 +884,25 @@ async def count_all_collaborative_teams(deps: TeamServiceDependencies) -> int:
     return len(await _fetch_root_keycloak_groups(admin))
 
 
+async def count_all_personal_spaces(deps: TeamServiceDependencies) -> int:
+    """Count every personal space in the organization — i.e. the realm user count.
+
+    Personal spaces are virtual (one per user, `personal-<uid>`), so no roster of
+    them exists anywhere; the user directory IS the roster. Admin surfaces use
+    this as the denominator for personal-class capability access (RFC §8.4),
+    the personal-space sibling of `count_all_collaborative_teams` above.
+
+    Returns 0 when Keycloak is not configured — callers should treat that as
+    "unknown" rather than "no personal spaces".
+    """
+
+    admin = deps.create_keycloak_admin_client()
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; user count unavailable.")
+        return 0
+    return int(await admin.a_users_count())
+
+
 async def _fetch_root_keycloak_groups(
     admin: KeycloakAdmin,
 ) -> list[KeycloakGroupSummary]:

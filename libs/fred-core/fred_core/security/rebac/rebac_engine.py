@@ -67,12 +67,22 @@ class RelationType(str, Enum):
     # Never persisted — injected as a contextual tuple for team-subject checks
     # (capability#can_use), since every team belongs to the singleton org.
     TEAM = "team"
+    # Reverse index restricted to PERSONAL spaces
+    # (`organization:fred#personal_team@team:<id>`). Never persisted — injected
+    # as a contextual tuple only for `personal-{uid}` subjects so the
+    # personal-space capability class (CAPAB-01 / #1961, RFC §8.4) applies to
+    # every personal team and no regular team.
+    PERSONAL_TEAM = "personal_team"
 
     # Capability team-scoping structural relations (CAPAB-01 / #1980,
     # RFC AGENT-CAPABILITY §8.1). Written only by the enablement API.
     DEFAULT_ON = "default_on"
     ENABLED = "enabled"
     DISABLED = "disabled"
+    # Personal-space class position (CAPAB-01 / #1961, RFC §8.4). One
+    # platform-wide org-subject tuple each; toggled by writing/deleting them.
+    PERSONAL_ON = "personal_on"
+    PERSONAL_DISABLED = "personal_disabled"
     PUBLIC = "public"
 
 
