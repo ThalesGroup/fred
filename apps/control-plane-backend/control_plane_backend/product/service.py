@@ -855,7 +855,6 @@ async def _apply_capability_selection(
     agent_instance_id: str | None,
     authorization: str | None,
     context_label: str,
-    user: KeycloakUser | None = None,
     deps: ProductServiceDependencies | None = None,
 ) -> ManagedAgentTuning:
     """
@@ -872,9 +871,12 @@ async def _apply_capability_selection(
       envelope is persisted verbatim
     - values for unselected capabilities are ignored (same policy as the MCP
       config path)
-    - when `user`/`deps` are supplied, every selected non-MCP capability is
-      gated on ReBAC `can_use` (CAPAB-01 / #1980, RFC §8.1): a team may not save
-      an agent using an admin-gated capability it is not enabled for (→ 403)
+    - when `deps` is supplied, every selected capability is gated on ReBAC
+      `can_use` checked with the TARGET TEAM as subject (CAPAB-01 / #1980,
+      RFC §8.1): a team may not save an agent using an admin-gated capability
+      it is not enabled for (→ 403). The team subject — not the acting user —
+      is what keeps a capability enabled for one of the user's other teams
+      from being saved here.
     """
     if selected_ids is not None:
         _validate_capability_ids(
@@ -882,12 +884,12 @@ async def _apply_capability_selection(
             available_ids=frozenset(entry.id for entry in available),
             context_label=context_label,
         )
-        if user is not None and deps is not None:
+        if deps is not None:
             rebac = deps.team_dependencies.rebac
             denied = [
                 cap_id
                 for cap_id in selected_ids
-                if not await can_use_capability(rebac, user, cap_id)
+                if not await can_use_capability(rebac, team_id, cap_id)
             ]
             if denied:
                 raise EnrollmentError(
@@ -929,7 +931,6 @@ async def list_agent_templates(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     include_non_public: bool = False,
-    user: KeycloakUser | None = None,
 ) -> list[AgentTemplateSummary]:
     """
     Aggregate template summaries from all enabled configured runtime pods.
@@ -941,18 +942,19 @@ async def list_agent_templates(
     How to use it:
     - call from the team template-listing route for one team context
     - pass request-scoped product dependencies when available
-    - pass `user` so each template's advertised `available_capabilities` is
-      filtered to the ones the user `can_use` (CAPAB-01 / #1980, RFC §8.1):
-      admin-gated capabilities the user's team is not enabled for are hidden.
-      Omitted (or ReBAC disabled) leaves the list unfiltered.
+    - each template's advertised `available_capabilities` is filtered to the
+      ones the TEAM CONTEXT `can_use` (CAPAB-01 / #1980, RFC §8.1): admin-gated
+      capabilities this team is not enabled for are hidden — including ones
+      enabled for OTHER teams the browsing user belongs to. ReBAC disabled
+      leaves the list unfiltered.
 
     Example:
-    - `templates = await list_agent_templates(team_id, deps, user=user)`
+    - `templates = await list_agent_templates(team_id, deps)`
     """
-    # One ListObjects per request drives the whole catalog filter (RFC §8.1).
-    usable_ids: set[str] | None = None
-    if user is not None:
-        usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, user)
+    # One ListObjects per request drives the whole catalog filter (RFC §8.1),
+    # checked with the team as subject — the route already verified the user
+    # belongs to `team_id`.
+    usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
 
     templates: list[AgentTemplateSummary] = []
     for source in deps.configuration.platform.runtime_catalog_sources:
@@ -1580,7 +1582,6 @@ async def enroll_agent_instance(
             agent_instance_id=agent_instance_id,
             authorization=authorization,
             context_label="agent enrollment",
-            user=user,
             deps=deps,
         )
     record = AgentInstanceRecord(
@@ -1750,7 +1751,6 @@ async def update_agent_instance(
                 agent_instance_id=agent_instance_id,
                 authorization=authorization,
                 context_label="agent update",
-                user=user,
                 deps=deps,
             )
         new_tuning = base

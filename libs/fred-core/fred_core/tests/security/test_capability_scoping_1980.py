@@ -78,16 +78,30 @@ def test_schema_declares_capability_relations() -> None:
 
 
 def test_can_use_encodes_the_tristate() -> None:
+    # TEAM-SUBJECT shape: (enabled OR team from default_on) BUT NOT disabled.
+    # The subject of a `can_use` check is the team the agent belongs to — a
+    # user-subject shape (`member from enabled`) would leak a capability
+    # enabled for one of the user's teams into every team context they browse.
     cap = _capability_type()
     can_use = cap["relations"]["can_use"]
-    # (member from enabled OR viewer from default_on) BUT NOT member from disabled.
     difference = can_use["difference"]
     base = difference["base"]["union"]["child"]
-    base_tuplesets = {c["tupleToUserset"]["tupleset"]["relation"] for c in base}
-    assert base_tuplesets == {"enabled", "default_on"}
-    subtract = difference["subtract"]["tupleToUserset"]
-    assert subtract["tupleset"]["relation"] == "disabled"
-    assert subtract["computedUserset"]["relation"] == "member"
+    assert {"computedUserset": {"relation": "enabled"}} in base
+    default_on = next(c["tupleToUserset"] for c in base if "tupleToUserset" in c)
+    assert default_on["tupleset"]["relation"] == "default_on"
+    # Resolved through the organization's `team` reverse edge (supplied as a
+    # contextual tuple at check time — never persisted).
+    assert default_on["computedUserset"]["relation"] == "team"
+    assert difference["subtract"]["computedUserset"]["relation"] == "disabled"
+
+
+def test_organization_declares_team_reverse_edge() -> None:
+    # The contextual reverse index `organization#team@team:<id>` used by
+    # team-subject capability checks must stay declared on the organization.
+    schema = _load_schema()
+    org = next(t for t in schema["type_definitions"] if t["type"] == "organization")
+    team_types = org["metadata"]["relations"]["team"]["directly_related_user_types"]
+    assert team_types == [{"type": "team"}]
 
 
 def test_can_manage_is_org_admin() -> None:

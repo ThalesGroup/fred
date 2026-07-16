@@ -10,6 +10,12 @@ type organization
     define editor: [user] or admin
     define viewer: [user] or editor
 
+    # Reverse index of team.organization (FGA cannot traverse relations
+    # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
+    # checking with a team subject (capability#can_use) — every team belongs to
+    # the singleton organization, so the edge is derived, not stored state.
+    define team: [team]
+
   define can_create_team: admin
   define can_create_agent: editor
   define can_edit_agent_class_path: admin
@@ -189,10 +195,15 @@ type capability
     define disabled: [team]
 
     # --------------- Permissions (computed relations) ---------------
-    # Can manage (enable/disable/toggle default-on) — org admin only.
+    # Can manage (enable/disable/toggle default-on) —
+    # -> org admin only
     define can_manage: admin from organization
 
-    # Can use this capability in an agent: a member of an explicitly-enabled
-    # team, OR any org viewer when the capability is default-on, UNLESS the
-    # team explicitly opted out.
-    define can_use: (member from enabled or viewer from default_on) but not member from disabled
+    # Can use this capability in an agent. The SUBJECT IS THE TEAM the agent
+    # belongs to (`Check(team:X, can_use, capability:C)`), never a user: a
+    # user-subject check would answer "is this user in ANY enabled team" and
+    # leak the capability into every team the user belongs to. The team is
+    # explicitly enabled, OR the capability is default-on for the organization
+    # (resolved through the contextual `organization#team` reverse edge),
+    # UNLESS the team explicitly opted out.
+    define can_use: (enabled or team from default_on) but not disabled

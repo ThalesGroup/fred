@@ -63,6 +63,10 @@ class RelationType(str, Enum):
     MEMBER = "member"
     ORGANIZATION = "organization"
     ADMIN = "admin"
+    # Reverse index of team.organization (`organization:fred#team@team:<id>`).
+    # Never persisted — injected as a contextual tuple for team-subject checks
+    # (capability#can_use), since every team belongs to the singleton org.
+    TEAM = "team"
 
     # Capability team-scoping structural relations (CAPAB-01 / #1980,
     # RFC AGENT-CAPABILITY §8.1). Written only by the enablement API.
@@ -192,7 +196,10 @@ class CapabilityPermission(str, Enum):
     permissions — never the structural relations (`enabled`/`disabled`/
     `default_on`/`organization`), which are written solely by the enablement API.
 
-    - `CAN_USE`: may an actor select this capability in an agent? Answers the
+    - `CAN_USE`: may agents of one team select this capability? The check
+      SUBJECT IS THE TEAM (`Check(team:<id>, can_use, capability:<id>)`), never
+      a user — a user-subject check would leak a capability enabled for one of
+      the user's teams into every team context they browse. Answers the
       tri-state (inherited via default-on / explicitly enabled / disabled).
     - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
       default-on marker? Org admin only.

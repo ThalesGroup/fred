@@ -948,6 +948,14 @@ through this surface — every other caller checks the computed `can_use`.
 Implemented in `control_plane_backend/capabilities/api.py`, mounted under
 `/control-plane/v1`.
 
+**2026-07-16 — `can_use` subject corrected to the team.** No route shape
+changed, but the enforcement semantics did: `can_use` is now checked with the
+TEAM in the URL as subject (RFC §8.1 amendment). Consequence visible on this
+surface: `GET /teams/{team_id}/agent-templates` filters each template's
+`available_capabilities` to what THAT team can use — a capability enabled for
+another of the caller's teams no longer appears (and can no longer be saved,
+403) outside its enabled team.
+
 | Method + path | Request | Response | Effect |
 | --- | --- | --- | --- |
 | `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs). |

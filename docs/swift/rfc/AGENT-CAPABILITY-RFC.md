@@ -1142,19 +1142,24 @@ for capabilities. Once MCP servers are capabilities (Tier 1), that RFC's
 `tool_guardrails.allowed_mcp_server_ids` and capability enablement answer the same
 question; they must converge (see §12 Q4c).
 
-### 8.1 Schema (resolved 2026-07-09)
+### 8.1 Schema (resolved 2026-07-09; check subject corrected 2026-07-16)
 
 The `tag`/`document` `parent: [team]` pattern was considered and **rejected**: it models
 *ownership* of an object by one team, while a capability is one platform-wide object many
 teams are *enabled for*. With `parent: [team]`, default-on capabilities would require one
 tuple per (team × capability) plus team-creation and backfill hooks — exactly the
-drift-prone fan-out ReBAC is meant to eliminate. And listing gains nothing: the idiomatic
-query in both shapes is `ListObjects(user, can_use, capability)`.
+drift-prone fan-out ReBAC is meant to eliminate.
 
 The OpenFGA model (`fred-core/.../rebac/schema.fga`) has no capability type, but is a
 standard Zanzibar schema, extended as:
 
 ```
+type organization
+  relations
+    ...
+    define team: [team]   # reverse index of team.organization — supplied as a
+                          # CONTEXTUAL tuple at check time, never persisted
+
 type capability
   relations
     define organization: [organization]      # platform anchor — every capability has one
@@ -1162,27 +1167,42 @@ type capability
     define enabled: [team]             # explicit per-team grant (admin-gated path)
     define disabled: [team]            # per-team opt-out of a default-on capability
 
-    define can_manage: admin from parent
-    define can_use: (member from enabled or viewer from default_on) but not member from disabled
+    define can_manage: admin from organization
+    define can_use: (enabled or team from default_on) but not disabled
 ```
 
 Design notes:
 
-- `parent` is pure anchoring (admin management rights). It no longer doubles as the
-  default-on marker — `default_on` is its own relation so it is **runtime state**,
-  toggleable by writing/deleting one tuple, not a code property (§8.3).
-- `enabled`/`disabled` tuples name the team object
-  (`capability:ppt_filler#enabled@team:X`); the expansion to members happens inside
-  `can_use` (`member from enabled`), so checking `can_use` for a plain user works
-  directly.
+- **The `can_use` subject is the TEAM the agent belongs to, never a user**
+  (corrected 2026-07-16 — see the dated amendment below). Enablement is a
+  per-team fact; the original user-subject shape
+  (`member from enabled …`, queried as `ListObjects(user, can_use, capability)`)
+  answered "is this user in ANY enabled team" and therefore leaked a capability
+  enabled for one team into every team context its members browsed — visible in
+  the create-agent catalog of other teams and savable there. The user's
+  membership in the browsed team is already enforced by the route
+  (`get_team_by_id`); `can_use` only has to answer "may agents of team T use C".
+- `organization` on the capability is pure anchoring (admin management rights). It
+  does not double as the default-on marker — `default_on` is its own relation so it
+  is **runtime state**, toggleable by writing/deleting one tuple, not a code
+  property (§8.3).
+- The `default_on` path resolves through the organization's `team` reverse edge
+  (FGA cannot traverse `team.organization` backwards). The edge is **derived, not
+  stored**: every team belongs to the singleton organization, so callers inject
+  `organization:fred#team@team:{id}` as a contextual tuple on every team-subject
+  check — no per-team tuple writes, no backfill, and personal teams are covered
+  for free.
 - **Callers check `can_use`, never the structural relations.** UI listing =
-  `ListObjects(user, can_use, capability)`; enforcement at agent save and session prep =
-  `Check(user, can_use, capability:{id})`. Structural tuples are written only by the
-  enablement API (§8.5).
+  `ListObjects(team:{ctx}, can_use, capability)`; enforcement at agent save and
+  session prep = `Check(team:{ctx}, can_use, capability:{id})` — both with the
+  contextual reverse edge. Structural tuples are written only by the enablement
+  API (§8.5).
 - The `but not` exclusion is the one non-trivial construct; it exists solely to give
   the admin dashboard a tri-state (inherited-on / enabled / disabled). If the team
   prefers to avoid exclusion in v1, drop `disabled`: removing a default-on capability
-  from one team then requires flipping the capability to admin-gated.
+  from one team then requires flipping the capability to admin-gated. (With a team
+  subject the exclusion is over direct relations — none of OpenFGA's documented
+  userset-subject + exclusion caveats apply.)
 
 Flows through the existing `sync_schema_on_init` bootstrap.
 
@@ -1384,6 +1404,37 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   read/write API exists to make it editable, so that half of the criterion is
 >   deferred rather than faked. All three are additive backend extensions; the
 >   dashboard consumes them the moment the fields land.
+
+> **As implemented (2026-07-16 — `can_use` team-subject fix).** Live testing of
+> #1980/#1988 surfaced a cross-team leak: a capability enabled for team A
+> appeared in (and was savable from) EVERY team its members browsed, because
+> `can_use` was checked with the USER as subject — a user-level FGA fact that
+> ignores the browsed team context. Fixed by re-shaping `can_use` to a
+> team-subject permission (§8.1 above, updated in place):
+>
+> - **Schema.** `capability#can_use` is now
+>   `(enabled or team from default_on) but not disabled`; `organization` gained
+>   the `team: [team]` reverse edge, injected as a **contextual tuple**
+>   (`organization:fred#team@team:{id}`) on every team-subject check — never
+>   persisted, so no backfill and personal teams are covered. New
+>   `RelationType.TEAM` in fred-core. `schema.fga.json` regenerated via
+>   `make transform-openfga-schema`; rolls out through `sync_schema_on_init`.
+> - **Enforcement.** `capabilities/authz.py` helpers now take the team id:
+>   catalog filtering = `lookup_resources(team:{ctx}, can_use, capability)`
+>   (`list_agent_templates` no longer takes `user`), agent save =
+>   `has_permission(team:{ctx}, can_use, capability:{id})` in
+>   `_apply_capability_selection` (403 unchanged). The write path
+>   (`enablement.py`) was already team-scoped and is untouched; the browsing
+>   user's membership stays enforced by the route (`get_team_by_id`).
+> - **Semantic shift.** A default-on capability is now "usable by every TEAM"
+>   rather than "usable by every org viewer" — save and session prep always
+>   run in a team context, so this is strictly more precise. Nested teams do
+>   not inherit `enabled` grants (explicit-grant philosophy).
+> - **Tests.** fred-core integration suite re-pins the tri-state with team
+>   subjects, the cross-team leak regression, and the
+>   contextual-edge-required behavior; the offline schema-shape test asserts
+>   the new `difference` tree; control-plane fakes assert the team-subject +
+>   contextual-edge check shape and a `team-a`-enabled / `team-b`-denied case.
 
 ---
 

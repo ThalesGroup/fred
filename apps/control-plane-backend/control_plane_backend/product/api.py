@@ -166,7 +166,7 @@ async def get_team_agent_templates(
     await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     effective_include_non_public = include_non_public and "admin" in user.roles
     return await list_agent_templates(
-        team_id, deps, include_non_public=effective_include_non_public, user=user
+        team_id, deps, include_non_public=effective_include_non_public
     )
 
 

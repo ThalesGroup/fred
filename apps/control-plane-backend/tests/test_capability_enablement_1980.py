@@ -574,21 +574,50 @@ async def test_personal_seeding_skips_unknown_capability() -> None:
 
 
 class _FilterRebac:
-    """Answers `can_use` from an allow-set (or disabled)."""
+    """Answers `can_use` from a per-team allow-set (or disabled).
 
-    def __init__(self, usable: set[str] | None) -> None:
-        self._usable = usable
+    Asserts the team-subject check shape: subject is `team:<id>` and the
+    contextual `organization#team` reverse edge is supplied (the leak fix —
+    a user subject would grant a capability in every team the user belongs to).
+    """
 
-    async def lookup_user_resources(self, user, permission):
+    def __init__(self, usable_by_team: dict[str, set[str]] | None) -> None:
+        self._usable_by_team = usable_by_team
+
+    def _assert_team_check(self, subject, contextual_relations) -> str:
+        assert subject.type is Resource.TEAM
+        assert [
+            (r.subject, r.relation.value, r.resource)
+            for r in contextual_relations or []
+        ] == [
+            (
+                subject,
+                "team",
+                RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            )
+        ]
+        return subject.id
+
+    async def lookup_resources(
+        self, subject, permission, resource_type, *, contextual_relations=None
+    ):
         assert permission is CapabilityPermission.CAN_USE
-        if self._usable is None:
+        assert resource_type is Resource.CAPABILITY
+        team_id = self._assert_team_check(subject, contextual_relations)
+        if self._usable_by_team is None:
             return RebacDisabledResult()
-        return [RebacReference(type=Resource.CAPABILITY, id=c) for c in self._usable]
+        return [
+            RebacReference(type=Resource.CAPABILITY, id=c)
+            for c in self._usable_by_team.get(team_id, set())
+        ]
 
-    async def has_user_permission(self, user, permission, resource_id):
-        if self._usable is None:
+    async def has_permission(
+        self, subject, permission, resource, *, contextual_relations=None
+    ):
+        team_id = self._assert_team_check(subject, contextual_relations)
+        if self._usable_by_team is None:
             return True
-        return resource_id in self._usable
+        return resource.id in self._usable_by_team.get(team_id, set())
 
 
 @pytest.mark.asyncio
@@ -600,8 +629,8 @@ async def test_catalog_filter_gates_mcp_like_any_capability() -> None:
         usable_capability_ids,
     )
 
-    rebac = _FilterRebac({"doc_access", "bank_core"})
-    usable = await usable_capability_ids(rebac, user=object())
+    rebac = _FilterRebac({"team-a": {"doc_access", "bank_core"}})
+    usable = await usable_capability_ids(rebac, team_id="team-a")
     entries = [
         _entry("doc_access"),
         _entry("corp_drive"),
@@ -632,7 +661,7 @@ async def test_catalog_filter_disabled_rebac_keeps_everything() -> None:
     )
 
     rebac = _FilterRebac(None)
-    usable = await usable_capability_ids(rebac, user=object())
+    usable = await usable_capability_ids(rebac, team_id="team-a")
     assert usable is None
     entries = [_entry("doc_access"), _entry("corp_drive")]
     assert len(filter_entries_by_usable(entries, usable)) == 2
@@ -642,13 +671,29 @@ async def test_catalog_filter_disabled_rebac_keeps_everything() -> None:
 async def test_can_use_capability_check() -> None:
     from control_plane_backend.capabilities.authz import can_use_capability
 
-    rebac = _FilterRebac({"doc_access", "bank_core"})
-    assert await can_use_capability(rebac, object(), "doc_access") is True
-    assert await can_use_capability(rebac, object(), "corp_drive") is False
+    rebac = _FilterRebac({"team-a": {"doc_access", "bank_core"}})
+    assert await can_use_capability(rebac, "team-a", "doc_access") is True
+    assert await can_use_capability(rebac, "team-a", "corp_drive") is False
     # #1988: MCP-backed capabilities are gated like any other id — a granted
     # MCP capability passes, a non-granted one is rejected.
-    assert await can_use_capability(rebac, object(), "bank_core") is True
-    assert await can_use_capability(rebac, object(), "market_data") is False
+    assert await can_use_capability(rebac, "team-a", "bank_core") is True
+    assert await can_use_capability(rebac, "team-a", "market_data") is False
+
+
+@pytest.mark.asyncio
+async def test_can_use_is_scoped_to_the_team_context() -> None:
+    # The leak this fix closes: a capability enabled for team-a must NOT be
+    # usable while operating in team-b, even when the SAME user belongs to
+    # both teams (the check subject is the team, not the user).
+    from control_plane_backend.capabilities.authz import (
+        can_use_capability,
+        usable_capability_ids,
+    )
+
+    rebac = _FilterRebac({"team-a": {"doc_access"}})
+    assert await can_use_capability(rebac, "team-a", "doc_access") is True
+    assert await can_use_capability(rebac, "team-b", "doc_access") is False
+    assert await usable_capability_ids(rebac, team_id="team-b") == set()
 
 
 # ---------------------------------------------------------------------------
