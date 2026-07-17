@@ -1244,7 +1244,7 @@ async def test_capability_personal_class_scope(rebac_engine: RebacEngine) -> Non
     personal = _make_reference(Resource.TEAM, prefix="personal")
     regular = _make_reference(Resource.TEAM, prefix="team")
 
-    token = await rebac_engine.add_relation(
+    await rebac_engine.add_relation(
         Relation(subject=org, relation=RelationType.ORGANIZATION, resource=capability)
     )
 
