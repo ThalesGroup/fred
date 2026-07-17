@@ -237,6 +237,13 @@ class CapabilityManifest(BaseModel):
     state_models: list[type[BaseModel]] = Field(default_factory=list)
 
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
+    # "tool" (the only kind before CAPAB-01 agent-visibility): an MCP server or
+    # other pod-side capability an agent activates. "agent": control-plane-side
+    # only projection of an agent template into this same FGA-gated object
+    # space (CAPAB-01, RFC §8.6) — no `CapabilityManifest` of kind "agent" is
+    # ever authored; this discriminator exists on `CapabilityCatalogEntry` for
+    # that projection and is carried here only so the two models stay aligned.
+    kind: Literal["tool", "agent"] = "tool"
 
 
 class CapabilityCatalogEntry(BaseModel):
@@ -272,6 +279,10 @@ class CapabilityCatalogEntry(BaseModel):
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
+    # "tool" (pod-advertised capability) or "agent" (control-plane-side
+    # projection of an agent template into this catalog, CAPAB-01 RFC §8.6) —
+    # see `CapabilityManifest.kind`.
+    kind: Literal["tool", "agent"] = "tool"
     # Ingress-relative base URL of this capability's auto-mounted router
     # (`{pod_base_url}/capabilities/{id}`), or None when the capability ships
     # no `router` (#1979, RFC §9.1). The template-bound (pre-save) surface
@@ -308,5 +319,6 @@ class CapabilityCatalogEntry(BaseModel):
             ],
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
             team_scope=manifest.team_scope,
+            kind=manifest.kind,
             route_base_url=route_base_url if manifest.router is not None else None,
         )

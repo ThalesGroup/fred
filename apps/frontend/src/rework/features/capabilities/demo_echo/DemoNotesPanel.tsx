@@ -36,7 +36,11 @@ export function DemoNotesPanel({ capabilityId }: CapabilitySidePanelProps) {
     <div className={styles.panel}>
       <p className={styles.hint}>{t(`capability.${capabilityId}.panel.demo_notes.hint`, { defaultValue: "" })}</p>
       <div className={styles.row}>
-        <TextInput value={text} onChange={(e) => setText(e.target.value)} placeholder="text" />
+        <TextInput
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={t(`capability.${capabilityId}.panel.demo_notes.textPlaceholder`, { defaultValue: "text" })}
+        />
         <Button
           color="primary"
           variant="filled"
@@ -57,15 +61,15 @@ export function DemoNotesPanel({ capabilityId }: CapabilitySidePanelProps) {
       {data && (
         <dl className={styles.result}>
           <div className={styles.resultRow}>
-            <dt>original</dt>
+            <dt>{t(`capability.${capabilityId}.panel.demo_notes.original`, { defaultValue: "original" })}</dt>
             <dd>{data.original}</dd>
           </div>
           <div className={styles.resultRow}>
-            <dt>transformed</dt>
+            <dt>{t(`capability.${capabilityId}.panel.demo_notes.transformed`, { defaultValue: "transformed" })}</dt>
             <dd>{data.transformed}</dd>
           </div>
           <div className={styles.resultRow}>
-            <dt>length</dt>
+            <dt>{t(`capability.${capabilityId}.panel.demo_notes.length`, { defaultValue: "length" })}</dt>
             <dd>{data.length}</dd>
           </div>
         </dl>

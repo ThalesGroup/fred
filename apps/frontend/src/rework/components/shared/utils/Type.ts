@@ -110,6 +110,7 @@ export const materialIcons = [
   "map",
   "graphic_eq",
   "extension",
+  "smart_toy",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

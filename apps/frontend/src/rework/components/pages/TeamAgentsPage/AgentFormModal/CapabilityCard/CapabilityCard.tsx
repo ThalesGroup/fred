@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Switch from "@shared/atoms/Switch/Switch.tsx";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
@@ -44,6 +45,7 @@ export function CapabilityCard({
   onConfigChange,
 }: CapabilityCardProps) {
   const { t } = useTranslation();
+  const switchId = useId();
   const configFields = capability.config_fields ?? [];
   const hasOptions = checked && configFields.length > 0;
   const displayName = t(capability.name);
@@ -51,14 +53,12 @@ export function CapabilityCard({
 
   return (
     <li className={`${styles.card} ${checked ? styles.cardActive : ""}`}>
-      <div className={styles.header} onClick={onToggle}>
-        <span className={styles.switchWrapper} onClick={(e) => e.stopPropagation()}>
-          <Switch checked={checked} onChange={onToggle} disabled={disabled} />
-        </span>
-        <div className={styles.meta}>
+      <div className={styles.header}>
+        <Switch id={switchId} checked={checked} onChange={onToggle} disabled={disabled} aria-label={displayName} />
+        <label htmlFor={switchId} className={styles.meta}>
           <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{displayName}</span>
           {description && <span className={styles.description}>{description}</span>}
-        </div>
+        </label>
       </div>
 
       {hasOptions && (

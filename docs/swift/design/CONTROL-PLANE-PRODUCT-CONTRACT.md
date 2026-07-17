@@ -692,6 +692,21 @@ See `docs/swift/design/FILESYSTEM.md`.
 - `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
 - `DELETE /teams/{team_id}/agent-instances/{id}` → 204
 
+> **2026-07-17 (CAPAB-01, PR review finding — closes an unmet #1980 acceptance
+> criterion).** `capability_ids` omitted (or explicitly `null`) on
+> `POST`/`PATCH` no longer means "inherit the template's default MCP servers
+> live, unchecked." It is resolved **once, at save time**, into an explicit
+> list — the template's default capability ids narrowed to what the team
+> currently `can_use` (ReBAC-filtered, no 403 for this implicit-default case)
+> — and that resolved list is always what gets persisted in
+> `ManagedAgentTuning.selected_capability_ids`; it is never left `null`.
+> Previously a `null` selection skipped the `can_use` ReBAC check entirely at
+> every layer (save, session prep, and the runtime's MCP-server activation),
+> letting a team obtain an admin-gated capability for free by submitting no
+> selection. See `AGENT-CAPABILITY-RFC.md` §8.1's dated fix note for the full
+> mechanism, including the required one-off backfill for instances persisted
+> before this change.
+
 **Execution preparation:**
 
 - `POST /teams/{team_id}/agent-instances/{id}/prepare-execution` → `ExecutionPreparation`
@@ -1150,6 +1165,22 @@ feedback. Frontend consumes the generated hooks via the friendly aliases
 `useAdminCapabilitiesQuery` / `useEnableTeamCapabilityMutation` /
 `useDisableTeamCapabilityMutation` / `useSetCapabilityDefaultOnMutation` in
 `controlPlaneApiEnhancements.ts`; the dashboard lives at `/admin/capabilities`.
+
+**2026-07-17 — agent templates join this surface (CAPAB-01, `AGENT-CAPABILITY-RFC.md`
+§8.6 / `AGENT-VISIBILITY-RFC.md` §7.5).** `CapabilityEnablementItem` and
+`CapabilityCatalogEntry` gained `kind: "tool" | "agent"` (defaults `"tool"`,
+so existing rows are unchanged). `GET /admin/capabilities` now also lists a
+`kind="agent"` row per registered agent template (control-plane-side
+projection — never a runtime pod change), enabled/disabled through the exact
+same `PUT`/`DELETE .../teams/{team_id}` and gated the exact same way. The
+frontend (`CapabilitiesPage.tsx`) filters the one dataset by `kind` (a
+"Tools"/"Agents" toggle) rather than adding a second page or route. Also
+newly gated on `can_use`, using the same `capability` object space with id
+`f"{runtime_id}__{agent_id}"`: `GET /teams/{team_id}/agent-templates` (hides
+a template the team isn't granted, not just its nested
+`available_capabilities` as before) and `POST /teams/{team_id}/agent-instances`
+(404 on an ungranted `template_id`, matching the existing non-public-template
+anti-guessing convention).
 
 **Known gaps (deferred, tracked on #1975 / a future enablement-list extension):**
 the aggregate list carries no `disabled_team_ids` (so an explicit opt-out of a

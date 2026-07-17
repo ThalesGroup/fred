@@ -13,6 +13,7 @@ meta:
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
     AUTHZ:   "Authorization model — RBAC→ReBAC migration, OpenFGA schema, authz teardown"
+    CAPAB:   "Agent capabilities — ReBAC team-scoping, enablement, selection, admin dashboard"
     CHAT:    "Chat UI — options panel, attachments, sessions, rendering"
     CTRLP:   "Control plane — APIs, sessions, instances, lifecycle, MCP"
     EVAL:    "Agent evaluation, scoring, harness"
@@ -622,6 +623,38 @@ items:
       regenerated config + chart values JSON schema. No Alembic impact.
       Remaining: live GKE validation (RFC §1bis merge gate).
 
+  # ── CAPAB ─────────────────────────────────────────────────────────────
+
+  - id: CAPAB-01
+    title: "Agent capability team-scoping — ReBAC gating, enablement, selection"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-CAPABILITY-RFC.md §8"
+      execution: "GitHub issue #1980"
+    notes: >
+      Retroactively registered (2026-07-17) — this ID was already used pervasively
+      in code/RFC comments ("CAPAB-01 / #1980") but never actually added here.
+      Backend (schema.fga `capability` type, enablement API, seeding, admin
+      dashboard) landed 2026-07-11 per the RFC §8 "as implemented" notes. #1980's
+      own acceptance criteria say "Check at agent save AND session prep" — the
+      session-prep half was never built, and the save-time half had a gap:
+      `selected_capability_ids = None` (the default no-explicit-selection save)
+      skipped the ReBAC check entirely, silently activating every admin-gated
+      template default. Fixed 2026-07-17 (PR review finding): `None` is now
+      resolved once at save time into an explicit, ReBAC-filtered list, always
+      persisted (never left `None`), with a required one-off backfill sweep
+      (`materialize_default_capability_selections`) for already-persisted rows.
+      Extended 2026-07-17 (CTRLP-14): agent templates now join this same
+      capability model as `kind="agent"` entries (RFC §8.6) — see CTRLP-14 for
+      the template-visibility side of this work. Platform policy ratified the
+      same day (RFC §8.3): this deployment never uses `team_scope: DEFAULT_ON`,
+      enforced by two guard tests (a manifest scan for `kind="tool"`, a unit
+      test on the projection function for `kind="agent"`). Still open:
+      `depends_on` (a capability declaring it needs others) and the
+      refuse-and-signal admin UX when enabling an agent without its tool
+      dependencies granted — deferred fast-follow, not implemented.
+
   # ── CHAT ──────────────────────────────────────────────────────────────
 
   - id: CHAT-01
@@ -987,6 +1020,30 @@ items:
       last_activity_at writer; refresh CONTROL-PLANE-PRODUCT-CONTRACT §11/line-465. No schema
       change (ErasureReason + scheduled_for exist). Shipped: shared TaskActivity UI + erasure
       out of team Settings (branch fixes). Pending: backend emission (member-removal, idle sweep).
+
+  - id: CTRLP-14
+    title: "Governed agent catalog admission — agent templates as kind=\"agent\" capabilities"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-VISIBILITY-RFC.md §7.5, docs/swift/rfc/AGENT-CAPABILITY-RFC.md §8.6"
+      execution: "GitHub issue #1913"
+    notes: >
+      Reserved 2026-07-16, minted 2026-07-17 once the design was finalized. Supersedes
+      an earlier plan (branch `1913-agent-catalog-admission-...`, zero commits) for a
+      static YAML deployment admission catalog with no UI — reversed in favor of
+      reusing the CAPAB-01 capability model directly: agent templates are projected
+      as `kind="agent"` capabilities in the SAME FGA `capability` type (no new type),
+      gated on `can_use` at `list_agent_templates` (visibility) and
+      `enroll_agent_instance` (defense in depth), managed through the existing
+      `/admin/capabilities` UI (a "Tools"/"Agents" filter, not a new page). Ships with
+      a required compatibility migration (`grant_existing_teams_served_templates`)
+      that explicitly grants every existing team access to every currently-served
+      template — zero visible change at deploy. Does NOT resolve #1996's actual
+      product ask (default templates are very technical, curate them down) — that
+      stays a manual admin decision via the new UI, made after this ships. Deferred:
+      `depends_on` capability-dependency declarations + refuse-and-signal UX when
+      enabling an agent without its tool dependencies granted.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 

@@ -13,7 +13,16 @@
 // limitations under the License.
 
 import styles from "./Select.module.scss";
-import { CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { OptionModel } from "@models/Option.model.ts";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
@@ -49,6 +58,10 @@ export default function Select<T>({
   size,
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  // Virtual focus (aria-activedescendant pattern): DOM focus stays on the
+  // trigger button (the portaled listbox isn't part of the tab order), and
+  // arrow keys move this index while Menu highlights the matching option.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -113,12 +126,69 @@ export default function Select<T>({
     return () => document.removeEventListener("keydown", handler);
   }, [isOpen]);
 
-  const toggleMenu = () => {
-    if (disabled) return;
-    setIsOpen((prev) => !prev);
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  const openMenu = () => {
+    const initial = options.findIndex((opt) => opt.value === value);
+    setActiveIndex(initial >= 0 ? initial : 0);
+    setIsOpen(true);
   };
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const toggleMenu = () => {
+    if (disabled) return;
+    if (isOpen) setIsOpen(false);
+    else openMenu();
+  };
+
+  const moveActive = (delta: number) => {
+    if (options.length === 0) return;
+    setActiveIndex((prev) => {
+      const base = prev < 0 ? 0 : prev;
+      return (base + delta + options.length) % options.length;
+    });
+  };
+
+  const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (!isOpen) openMenu();
+        else moveActive(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (!isOpen) openMenu();
+        else moveActive(-1);
+        break;
+      case "Home":
+        if (isOpen) {
+          e.preventDefault();
+          setActiveIndex(0);
+        }
+        break;
+      case "End":
+        if (isOpen) {
+          e.preventDefault();
+          setActiveIndex(options.length - 1);
+        }
+        break;
+      case "Enter":
+      case " ":
+        if (isOpen && activeIndex >= 0 && options[activeIndex]) {
+          e.preventDefault();
+          const option = options[activeIndex];
+          setIsOpen(false);
+          onChange(option.value);
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  const activeOption = isOpen && activeIndex >= 0 ? options[activeIndex] : undefined;
+  const activeOptionId = activeOption ? `${baseId}-opt-${activeOption.value}` : undefined;
 
   return (
     <div
@@ -141,9 +211,11 @@ export default function Select<T>({
         type="button"
         className={styles["trigger"]}
         onClick={toggleMenu}
+        onKeyDown={handleTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={`${baseId}-menu`}
+        aria-activedescendant={activeOptionId}
         disabled={disabled}
         data-error={error !== undefined}
       >
@@ -167,6 +239,7 @@ export default function Select<T>({
             <Menu
               options={options}
               baseId={baseId}
+              activeId={activeOptionId}
               selectedId={value}
               onChange={(v) => {
                 setIsOpen(false);

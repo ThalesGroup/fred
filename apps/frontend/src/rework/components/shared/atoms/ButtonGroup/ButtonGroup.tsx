@@ -39,7 +39,7 @@ export default function ButtonGroup({
   const resolvedIndex = selectedIndex !== undefined ? selectedIndex : internalIndex;
 
   return (
-    <div className={styles["button-group"]}>
+    <div className={styles["button-group"]} role="radiogroup">
       {items.map((item, index) => (
         <ButtonGroupItem
           key={index}

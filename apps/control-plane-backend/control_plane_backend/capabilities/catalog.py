@@ -48,6 +48,7 @@ async def aggregate_capability_catalog(
     # Lazy import breaks the product.service ↔ capabilities import cycle: the
     # pod-catalog fetch protocol lives with the rest of the runtime-source code.
     from control_plane_backend.product.service import (
+        _agent_capabilities_for_source,
         _available_capabilities_for_source,
     )
 
@@ -64,6 +65,16 @@ async def aggregate_capability_catalog(
                 exc,
             )
             continue
+        # `kind="agent"` projections (CAPAB-01, RFC §8.6) — a SEPARATE fetch
+        # from the tool catalog above, deliberately not merged into the
+        # runtime's own capability registry (see `_agent_capabilities_for_source`
+        # docstring for why that would leak agents into every template's tool
+        # picker). `_agent_capabilities_for_source` is itself best-effort
+        # (`None` on an unreachable pod, treated as empty here).
+        entries = entries + (
+            await _agent_capabilities_for_source(source.base_url, source.runtime_id)
+            or []
+        )
         for entry in entries:
             if not _CAPABILITY_ID_RE.fullmatch(entry.id):
                 # A pod on pre-#1988 code (or a third-party pod) can advertise

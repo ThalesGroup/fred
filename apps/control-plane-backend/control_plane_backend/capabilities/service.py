@@ -138,6 +138,7 @@ async def list_capability_enablement(
                 ),
                 total_team_count=total_team_count,
                 team_settings_fields=list(entry.team_settings_fields),
+                kind=entry.kind,
             )
         )
     items.sort(key=lambda item: item.id)

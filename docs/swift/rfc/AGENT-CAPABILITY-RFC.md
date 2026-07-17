@@ -1274,6 +1274,34 @@ Recommendation:
    security-sensitive on-prem operators ignore manifest seeds and start everything
    admin-gated.
 
+> **Platform policy ratified (2026-07-17, CVSSI review).** This deployment
+> takes the "against" branch above for every capability, both kinds: no
+> manifest ever sets `team_scope: DEFAULT_ON`; every team's access to every
+> tool and every agent is an explicit, auditable admin grant
+> (`capabilities.default_policy` need not even be set to `explicit` — nothing
+> declares `DEFAULT_ON` in the first place, so `seed_registration_defaults`
+> has nothing to act on). The mechanism above is kept, not removed — a
+> genuinely benign future capability may still use it after a documented
+> security review, which is exactly what the guard tests below enforce
+> instead of a comment someone could miss: `kind="tool"` static manifests are
+> scanned for an un-allowlisted `DEFAULT_ON`
+> (`apps/fred-agents/tests/test_capability_team_scope_policy.py`); `kind="agent"`
+> projections have no such field to scan (`AgentDefinition` declares no
+> `team_scope`), so that guard is a narrow unit test asserting the projection
+> function hardcodes `ADMIN_GATED`
+> (`control-plane-backend/tests/test_capability_selection_1974.py::test_agent_projection_always_hardcodes_admin_gated`).
+>
+> **Known, accepted trade-off**: no team-creation-time capability seeding
+> hook exists (only `seed_registration_defaults`, at first capability
+> registration, and `seed_personal_team_capabilities`, at personal-space
+> first-touch — neither fires when a regular team is created). A brand-new
+> collaborative team gets zero working agents/tools until an admin grants
+> some. Extending the `capabilities.personal_defaults` pattern to regular
+> team creation would close this gap without reintroducing `DEFAULT_ON`
+> (grants only new teams, stays revocable, doesn't retroactively open
+> existing teams) — tracked as a separate, non-blocking follow-up, not solved
+> here.
+
 ### 8.4 Personal spaces
 
 Personal spaces are real teams (`personal-{uid}`, TEAM-PLATFORM-POLICY §12.3), so
@@ -1365,6 +1393,63 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   aggregate list gated on the equivalent org-admin relation. Generated
 >   control-plane client regenerated.
 
+> **Fixed (2026-07-17, PR review finding — closes an unmet #1980 acceptance
+> criterion: "Check at agent save AND session prep").** `selected_capability_ids
+> = None` (the default "no explicit selection" save — the common path, since
+> General Assistant and Sentinel both declare non-empty `default_mcp_servers`,
+> all `admin_gated`, none `default_on`-seeded) skipped `can_use` **entirely**:
+> `_apply_capability_selection`'s whole ReBAC block was nested inside `if
+> selected_ids is not None:`. The runtime pod then activated every template
+> default MCP server with zero authorization check — the exact "session prep"
+> enforcement #1980 promised and never shipped. A team could obtain an
+> admin-gated capability for free by submitting no selection at all.
+>
+> **Corrected semantics** — `None` is no longer a live-inheriting sentinel; it
+> is resolved **once, at save time**, into an explicit, ReBAC-filtered list:
+> `effective_ids = template_default_capability_ids ∩ usable_capability_ids(team)`,
+> filtered silently (no 403 — an implicit default degrades gracefully to
+> "whatever this team already has" rather than blocking every fresh team's
+> first save) and **always persisted as an explicit list**, never left `None`.
+> This is what lets the existing revocation sweeps (`suspend_dependent_instances`,
+> `set_capability_default_on`) — which scan `selected_capability_ids` and
+> previously skipped `None` rows silently — correctly track these instances
+> going forward. Explicit selections are unchanged (still 403 on denial).
+>
+> Threaded the runtime's per-template `available_mcp_servers` (already on the
+> `/agents/templates` wire, previously parsed and dropped by
+> `_RuntimeTemplatePayload.model_validate`) into control-plane as
+> `default_capability_ids`, so `_apply_capability_selection` knows what a
+> template's `None` case resolves to. A one-off backfill
+> (`materialize_default_capability_selections`) re-resolves any
+> already-persisted `None` row — required at/before deploy, not a follow-up;
+> "0 remaining NULL `selected_capability_ids` rows" is the closure proof, not
+> "the sweep ran once." **Operational consequence, not a code bug**: any team
+> without an explicit grant for a template's default capabilities will now see
+> that agent run with fewer/zero MCP tools until an admin grants them — correct
+> enforcement of the ReBAC model this RFC already specified, but a visible
+> behavior change at rollout. Whether to seed any of these `default_on` is a
+> deployment decision, not made here.
+
+> **Extended (2026-07-17, CAPAB-01 — agent templates join this same
+> capability model).** `CapabilityManifest`/`CapabilityCatalogEntry` gained
+> `kind: Literal["tool", "agent"] = "tool"`. Every mechanism on this page
+> (schema, `can_use`, enablement API, seeding, admin dashboard) now governs
+> BOTH kinds uniformly — no new FGA type, no parallel system. Agent templates
+> are projected control-plane side into `kind="agent"` catalog entries
+> (`product/service.py` `_agent_capabilities_for_source`), gated on
+> `list_agent_templates`/`enroll_agent_instance`, with their own required
+> compatibility migration (`grant_existing_teams_served_templates`). Full
+> design and rationale — including why the runtime pod's own capability
+> registry is deliberately NOT the projection target — lives in
+> `AGENT-VISIBILITY-RFC.md` §7.5, since it answers that RFC's §7.1 bullet 5
+> ("compatible with the caller's team capability"), not a new concern of this
+> one. Platform policy ratified the same day: this deployment never uses
+> `team_scope: DEFAULT_ON` (§8.3 below), for either kind — enforced by a
+> scan-based guard test for `kind="tool"` static manifests
+> (`apps/fred-agents/tests/test_capability_team_scope_policy.py`) and a
+> narrow unit test on the projection function for `kind="agent"` (which has
+> no `team_scope`-equivalent field to scan at all).
+
 > **As implemented (2026-07-11, #1981 — admin dashboard UI).** The management
 > surface deferred by #1980. A control-plane admin **Capabilities** page at
 > `/admin/capabilities` (`apps/frontend/src/rework/components/pages/admin/CapabilitiesPage/`),
@@ -1438,6 +1523,45 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   contextual-edge-required behavior; the offline schema-shape test asserts
 >   the new `difference` tree; control-plane fakes assert the team-subject +
 >   contextual-edge check shape and a `team-a`-enabled / `team-b`-denied case.
+
+### 8.6 Agent templates as capabilities (CAPAB-01, 2026-07-17)
+
+`AGENT-VISIBILITY-RFC.md` needed the same "team-gated, admin-managed"
+treatment for agent template VISIBILITY that this section already built for
+tool ACTIVATION. Rather than a parallel FGA type + admin surface (rejected —
+see `AGENT-VISIBILITY-RFC.md` §7.5 for why), an agent template is a
+capability of `kind="agent"` in this exact same object space:
+
+- `kind: Literal["tool", "agent"] = "tool"` on `CapabilityManifest`/
+  `CapabilityCatalogEntry` — the only new field; every relation, API route,
+  and seeding path above governs both kinds unchanged.
+- Agent templates are never authored as `CapabilityManifest` — they stay
+  `AgentDefinition` at the SDK level (same non-unification precedent as MCP
+  servers, §3.8). Control-plane projects each registered template into a
+  `kind="agent"` `CapabilityCatalogEntry` purely for catalog/authz purposes
+  (`product/service.py` `_agent_capabilities_for_source`), deliberately NOT
+  by injecting them into the runtime pod's own capability registry (that
+  registry backs every template's `available_capabilities` tool picker,
+  shared identically across templates — see `AGENT-VISIBILITY-RFC.md` §7.5
+  for the concrete leak this avoids).
+- `id`: `template_capability_id(runtime_id, agent_id) ->
+  f"{runtime_id}__{agent_id}"` — colon-free (§3.8's `mcp:<id>` crash class,
+  applied to templates: `template_id`, used for routing, contains `:`).
+- `team_scope` is hardcoded `ADMIN_GATED` in the projection function, no
+  parameter to override — consistent with the §8.3 platform policy (never
+  `DEFAULT_ON`) and enforced by its own guard test (a template author cannot
+  even express `DEFAULT_ON`; `AgentDefinition` has no such field).
+- Enforcement reuses `list_agent_templates`/`enroll_agent_instance`'s
+  existing ReBAC call sites (`AGENT-VISIBILITY-RFC.md` §7.1/§7.2) rather than
+  adding new ones.
+- Compatibility migration (`grant_existing_teams_served_templates`) is
+  required, not optional, and companions Part 1's
+  `materialize_default_capability_selections` — see that RFC section for the
+  deploy-sequencing note.
+- Not built in this pass: `depends_on` (a capability declaring which others
+  it needs) and the admin-facing "refuse and tell me what's missing" UX when
+  enabling an agent without its tool dependencies granted. Tracked as a
+  fast-follow, not silently dropped.
 
 ---
 

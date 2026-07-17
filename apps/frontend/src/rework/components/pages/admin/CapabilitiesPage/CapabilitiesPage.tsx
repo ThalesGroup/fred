@@ -19,6 +19,7 @@
 // enablement hooks — no hand-written fetch or response types.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -39,6 +40,13 @@ import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { enabledTeamCount, isCapabilityUnused as isUnused } from "./capabilityEnablement";
 
+// "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
+// an agent template into this same catalog, CAPAB-01 RFC §8.6) — one admin
+// surface, filtered by kind, rather than a separate page: a tool can be
+// depended on by several agents, so admins need both views over the same
+// underlying enablement mechanism, not two disconnected ones.
+const KIND_FILTERS: Array<"tool" | "agent"> = ["tool", "agent"];
+
 export default function CapabilitiesPage() {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
@@ -53,8 +61,13 @@ export default function CapabilitiesPage() {
   const [suspendedByCapability, setSuspendedByCapability] = useState<Record<string, number>>({});
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
+  const [kindFilter, setKindFilter] = useState<"tool" | "agent">("tool");
 
-  const capabilities = data?.items ?? [];
+  const allCapabilities = data?.items ?? [];
+  // `kind` is optional on the generated type (added to the enablement item
+  // after tools already shipped) — an absent value is a tool, same default
+  // as the backend's own `CapabilityEnablementItem.kind`.
+  const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === kindFilter);
 
   // Resolved from the live query on every render — NOT snapshotted into state.
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
@@ -120,7 +133,9 @@ export default function CapabilitiesPage() {
         <div className={`${styles.capCell} ${isUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
-            <span className={styles.capName}>{t(cap.name, { defaultValue: cap.name })}</span>
+            <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
+              {t(cap.name, { defaultValue: cap.name })}
+            </span>
             <span className={styles.capVersion}>v{cap.version}</span>
           </div>
         </div>
@@ -204,11 +219,26 @@ export default function CapabilitiesPage() {
         <p className={styles.subtitle}>{t("rework.admin.capabilities.subtitle")}</p>
       </header>
 
+      <ButtonGroup
+        size="small"
+        color="primary"
+        selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
+        onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
+        items={KIND_FILTERS.map((kind) => ({
+          label: t(`rework.admin.capabilities.kindFilter.${kind}`),
+        }))}
+      />
+
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
 
       {!isLoading && !isError && capabilities.length === 0 && (
-        <PageEmptyState icon="tune" message={t("rework.admin.capabilities.empty")} />
+        <PageEmptyState
+          icon="tune"
+          message={t(
+            kindFilter === "agent" ? "rework.admin.capabilities.emptyAgents" : "rework.admin.capabilities.empty",
+          )}
+        />
       )}
 
       {!isLoading && !isError && capabilities.length > 0 && <DataTable columns={columns} data={capabilities} />}

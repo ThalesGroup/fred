@@ -14,12 +14,15 @@
  */
 
 /* Floating launcher rail — matches the chat page's floating-chrome idiom
- * (position: absolute, zero layout impact). Sits just below the top bar on the
- * right edge; each button opens one capability panel. */
+ * (position: absolute, zero layout impact). Sits below the top bar on the
+ * right edge; each button opens one capability panel.
+ * top clears ManagedChatPage's .topBar band (8px padding + 32px small
+ * button + 8px padding = 48px, --spacing-3xl) plus a small breathing gap so
+ * the rail never overlaps .topBarActions. */
 .rail {
   display: flex;
   position: absolute;
-  top: var(--spacing-l);
+  top: calc(var(--spacing-3xl) + var(--spacing-2xs));
   right: var(--spacing-s);
   flex-direction: column;
   gap: var(--spacing-2xs);

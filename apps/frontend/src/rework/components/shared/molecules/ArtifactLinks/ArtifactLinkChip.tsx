@@ -53,7 +53,9 @@ export function ArtifactLinkChip({ link }: ArtifactLinkChipProps) {
       <span className={styles.icon} aria-hidden>
         <Icon category="outlined" type="download" />
       </span>
-      <span className={styles.name}>{name}</span>
+      <span className={styles.name} title={name}>
+        {name}
+      </span>
     </button>
   );
 }

@@ -39,7 +39,14 @@ export default function ButtonGroupItem({
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
   return (
-    <button className={styles.buttonGroupItem} data-color={color} data-size={size} {...props}>
+    <button
+      className={styles.buttonGroupItem}
+      data-color={color}
+      data-size={size}
+      role="radio"
+      aria-checked={selected}
+      {...props}
+    >
       <div className={`${styles.stateLayer}`} data-selected={selected}>
         {icon && (
           <span className={styles.icon}>

@@ -79,7 +79,13 @@ export default function ManagedChatPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false);
+  // The capability side-panel and the session attachments drawer are both
+  // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
+  // a time so their widths never cumulate.
+  const [activePushDrawer, setActivePushDrawer] = useState<
+    { kind: "attachments" } | { kind: "capability"; key: string } | null
+  >(null);
+  const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
   const [dragActive, setDragActive] = useState(false);
   // Trace detail panel state is lifted here so the drawer is a sibling of the main
   // column. We store the selected entry's *key* (not a snapshot) and re-resolve it
@@ -260,7 +266,9 @@ export default function ManagedChatPage() {
                 <button
                   type="button"
                   className={styles.conversationFilesButton}
-                  onClick={() => setAttachmentsDrawerOpen((v) => !v)}
+                  onClick={() =>
+                    setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                  }
                 >
                   <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
                   <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
@@ -305,11 +313,15 @@ export default function ManagedChatPage() {
 
         {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
             main column so its push drawer reflows the conversation left. */}
-        <CapabilitySidePanelHost capabilityIds={chat.capabilityIds} />
+        <CapabilitySidePanelHost
+          capabilityIds={chat.capabilityIds}
+          activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
+          onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+        />
 
         <SessionAttachmentsDrawer
           open={attachmentsDrawerOpen}
-          onClose={() => setAttachmentsDrawerOpen(false)}
+          onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
           attachments={chat.persistedAttachments}
           isLoading={chat.isHydratingAttachments}
           onDelete={(attachmentId) => {

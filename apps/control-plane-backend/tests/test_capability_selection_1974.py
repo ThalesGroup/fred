@@ -27,10 +27,15 @@ Covers:
   the selected capabilities to their defaults
 """
 
+# pyright: reportArgumentType=false
+# ^ the CAPAB-01 migration tests below pass a lightweight SimpleNamespace
+#   fake in place of ProductServiceDependencies on purpose (same convention as
+#   test_capability_enablement_1980.py).
 from __future__ import annotations
 
 from typing import Any
 
+import control_plane_backend.product.service as service
 import httpx
 import pytest
 from control_plane_backend.app.dependencies import get_application_container_from_app
@@ -41,8 +46,9 @@ from control_plane_backend.config.models import (
 from control_plane_backend.main import create_app
 from control_plane_backend.product.service import _RuntimeTemplatePayload
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.models import FieldSpec
+from fred_sdk.contracts.models import FieldSpec, TeamScopePolicy
 from httpx import ASGITransport, AsyncClient
+from test_capability_enablement_1980 import _FilterRebac
 from test_main import (
     _PERSONAL_TEAM_ID,
     _fake_get_team_by_id,
@@ -77,7 +83,9 @@ _PROBE_ENTRY = CapabilityCatalogEntry(
 )
 
 
-def _template_payload() -> _RuntimeTemplatePayload:
+def _template_payload(
+    default_capability_ids: list[str] | None = None,
+) -> _RuntimeTemplatePayload:
     return _RuntimeTemplatePayload(
         template_agent_id="rags.sample.echo",
         title="Echo Agent",
@@ -88,6 +96,7 @@ def _template_payload() -> _RuntimeTemplatePayload:
             description="Echo template description",
         ),
         available_capabilities=[_DEMO_ENTRY, _PROBE_ENTRY],
+        default_capability_ids=default_capability_ids,
     )
 
 
@@ -103,7 +112,11 @@ def _wire_runtime_source(app) -> None:
     ]
 
 
-def _setup(monkeypatch: pytest.MonkeyPatch, records=None):
+def _setup(
+    monkeypatch: pytest.MonkeyPatch,
+    records=None,
+    default_capability_ids: list[str] | None = None,
+):
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
@@ -116,13 +129,49 @@ def _setup(monkeypatch: pytest.MonkeyPatch, records=None):
     async def _fake_fetch_runtime_templates(
         _base_url: str, include_non_public: bool = False
     ):
-        return [_template_payload()]
+        return [_template_payload(default_capability_ids=default_capability_ids)]
 
     monkeypatch.setattr(
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch_runtime_templates,
     )
     return app, store
+
+
+class _FilterRebacForEnrollment(_FilterRebac):
+    """`_FilterRebac` plus the platform-admin check `enroll_agent_instance`
+    makes to resolve non-public-template visibility (service.py:1571-1575) —
+    not exercised by `_FilterRebac`'s own test suite, which never enrolls."""
+
+    async def has_user_permission(self, user, permission, resource_id) -> bool:
+        return False
+
+
+def _wire_rebac(monkeypatch: pytest.MonkeyPatch, usable_by_team) -> None:
+    """
+    Inject a `_FilterRebac` (team -> usable capability ids, or `None` for
+    ReBAC-disabled) into every request's `team_dependencies.rebac`. Must be
+    called BEFORE `_setup`/`create_app()` — the engine is resolved fresh per
+    request via `ApplicationContext.get_rebac_engine`, not a persistent
+    container attribute.
+    """
+
+    fake = _FilterRebacForEnrollment(usable_by_team)
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda self: fake,
+    )
+
+
+def _product_deps(app):
+    """Build the request-scoped product dependencies from the test app."""
+
+    from control_plane_backend.product.dependencies import (
+        build_product_service_dependencies,
+    )
+
+    container = get_application_container_from_app(app)
+    return build_product_service_dependencies(container)
 
 
 def _fake_pod_validate(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
@@ -321,6 +370,231 @@ async def test_enroll_propagates_pod_422_wording(
 
 
 # ---------------------------------------------------------------------------
+# None-selection materialization (CAPAB-01 / #1980 bypass fix, RFC §8.1)
+#
+# Previously, `capability_ids` omitted at enroll time left
+# `selected_capability_ids = None` persisted with ZERO ReBAC check, and the
+# runtime pod then activated every one of the template's `default_mcp_servers`
+# regardless of team grants. These tests cover the fix: the effective
+# selection is always resolved and always persisted as an explicit list.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enroll_no_selection_materializes_only_granted_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_rebac(
+        monkeypatch,
+        {"personal": {"demo_echo", "runtime-a__rags.sample.echo"}},
+    )
+    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
+    calls = _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "Default selection",
+            },
+        )
+    assert resp.status_code == 201
+    tuning = store._records[0].tuning
+    # Materialized to an EXPLICIT list — never left `None` — and narrowed to
+    # only the capability this team is actually granted.
+    assert tuning.selected_capability_ids == ["demo_echo"]
+    assert set(tuning.capability_config) == {"demo_echo"}
+    assert [c["capability_id"] for c in calls] == ["demo_echo"]
+
+
+@pytest.mark.asyncio
+async def test_enroll_no_selection_with_no_grants_materializes_empty_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Granted the TEMPLATE itself (CAPAB-01, RFC §8.6) but none of its default
+    # tool capabilities — isolates "no capability grants" from "no template
+    # grant" (covered separately by test_enroll_hidden_template_is_404_not_500).
+    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
+    calls = _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "No grants",
+            },
+        )
+    assert resp.status_code == 201
+    tuning = store._records[0].tuning
+    # This is the exact bypass the fix closes: a team with no grant for the
+    # template's admin-gated default capabilities used to get `None`
+    # persisted (skipping every ReBAC check), and the runtime pod activated
+    # every default MCP server anyway. Now it materializes to an empty list.
+    assert tuning.selected_capability_ids == []
+    assert tuning.capability_config == {}
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_enroll_hidden_template_is_404_not_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    CAPAB-01 (RFC §8.6) defense in depth: a team not granted the template
+    itself gets 404 — same anti-guessing posture as the non-public-template
+    check (never leak "the template exists but you can't use it").
+    """
+    _wire_rebac(monkeypatch, {"personal": {"demo_echo", "probe_echo"}})
+    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "Should not exist for this team",
+            },
+        )
+    assert resp.status_code == 404
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_enroll_no_selection_with_rebac_disabled_takes_all_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_rebac(monkeypatch, None)  # ReBAC disabled -> no scoping (RFC §8.1)
+    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "ReBAC disabled",
+            },
+        )
+    assert resp.status_code == 201
+    assert store._records[0].tuning.selected_capability_ids == [
+        "demo_echo",
+        "probe_echo",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_enroll_explicit_selection_denied_by_rebac_is_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Template itself granted (else this would 404 before ever reaching the
+    # capability-selection check) but not the explicitly-requested capability.
+    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    app, store = _setup(monkeypatch)
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "Deliberate but denied",
+                "capability_ids": ["demo_echo"],
+            },
+        )
+    assert resp.status_code == 403
+    assert "CAPAB-01" in resp.json()["detail"]
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_update_capability_config_only_materializes_still_none_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Covers `update_agent_instance`'s narrower gap: a client sends
+    `capability_config_values` without `capability_ids` on an instance still
+    holding a legacy `selected_capability_ids = None`. Before the fix, this
+    reached `_apply_capability_selection(selected_ids=None)` and skipped the
+    ReBAC check the same way enroll did.
+    """
+    record = _make_record()
+    assert record.tuning.selected_capability_ids is None
+    _wire_rebac(monkeypatch, {"personal": {"demo_echo"}})
+    app, store = _setup(
+        monkeypatch,
+        records=[record],
+        default_capability_ids=["demo_echo", "probe_echo"],
+    )
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"capability_config_values": {"demo_echo": {"uppercase": True}}},
+        )
+    assert resp.status_code == 200
+    tuning = store._records[0].tuning
+    assert tuning.selected_capability_ids == ["demo_echo"]
+
+
+@pytest.mark.asyncio
+async def test_materialization_sweep_backfills_legacy_none_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    `materialize_default_capability_selections` is the required backfill
+    companion to the code fix: instances persisted BEFORE this change still
+    hold `selected_capability_ids = None` and stay exploitable until swept.
+    """
+    record = _make_record()
+    assert record.tuning.selected_capability_ids is None
+    _wire_rebac(monkeypatch, {"personal": {"demo_echo"}})
+    app, store = _setup(
+        monkeypatch,
+        records=[record],
+        default_capability_ids=["demo_echo", "probe_echo"],
+    )
+    deps = _product_deps(app)
+
+    summary = await service.materialize_default_capability_selections(deps)
+
+    assert summary.checked == 1
+    assert summary.materialized == 1
+    assert store._records[0].tuning.selected_capability_ids == ["demo_echo"]
+
+
+@pytest.mark.asyncio
+async def test_materialization_sweep_dry_run_does_not_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _make_record()
+    _wire_rebac(monkeypatch, {"personal": {"demo_echo"}})
+    app, store = _setup(
+        monkeypatch,
+        records=[record],
+        default_capability_ids=["demo_echo"],
+    )
+    deps = _product_deps(app)
+
+    summary = await service.materialize_default_capability_selections(
+        deps, dry_run=True
+    )
+
+    assert summary.materialized == 1
+    assert store._records[0].tuning.selected_capability_ids is None
+
+
+# ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------
 
@@ -425,3 +699,240 @@ async def test_update_unknown_capability_id_is_typed_422(
     assert "ghost" in resp.json()["detail"]
     # stored selection untouched
     assert store._records[0].tuning.selected_capability_ids == ["demo_echo"]
+
+
+# ---------------------------------------------------------------------------
+# Agent templates as capabilities (CAPAB-01, RFC §8.6)
+# ---------------------------------------------------------------------------
+
+
+def test_template_capability_id_is_colon_free() -> None:
+    cap_id = service.template_capability_id("runtime-a", "rags.sample.echo")
+    assert cap_id == "runtime-a__rags.sample.echo"
+    assert ":" not in cap_id
+
+
+@pytest.mark.asyncio
+async def test_agent_projection_always_hardcodes_admin_gated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Guard test (cross-review correction 1): `AgentDefinition` has no
+    `team_scope` field at all — a template author cannot declare
+    `DEFAULT_ON`, so there is nothing to scan (unlike `kind="tool"` static
+    manifests, guarded separately). The projection function itself is the
+    only place this could vary; assert directly that it never does.
+    """
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        return [
+            _template_payload(default_capability_ids=["demo_echo"]),
+        ]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    entries = await service._agent_capabilities_for_source(
+        "http://runtime-a/pod/v1", "runtime-a"
+    )
+    assert entries is not None and len(entries) == 1
+    assert entries[0].kind == "agent"
+    assert entries[0].team_scope == TeamScopePolicy.ADMIN_GATED
+    assert entries[0].id == "runtime-a__rags.sample.echo"
+
+
+@pytest.mark.asyncio
+async def test_agent_projection_returns_none_when_pod_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        raise ConnectionError("pod down")
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    entries = await service._agent_capabilities_for_source(
+        "http://runtime-a/pod/v1", "runtime-a"
+    )
+    assert entries is None
+
+
+@pytest.mark.asyncio
+async def test_list_agent_templates_hides_template_team_is_not_granted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_rebac(monkeypatch, {"personal": set()})
+    app, _store = _setup(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_list_agent_templates_shows_template_when_granted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    app, _store = _setup(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+    assert resp.status_code == 200
+    assert [t["template_id"] for t in resp.json()] == ["runtime-a:rags.sample.echo"]
+
+
+class _FakeTemplateGrantRebac:
+    """
+    Combines the two interfaces `grant_existing_teams_served_templates` needs:
+    `lookup_resources`/`has_permission` (read side, `usable_capability_ids`)
+    seeded from `already_granted`, and `add_relation`/`delete_relation` (write
+    side, `enable_capability_for_team`) — records every `enabled` tuple write
+    for assertions, ignores the rest (anchor, settings-related opt-out clear).
+    """
+
+    def __init__(self, already_granted: dict[str, set[str]] | None = None) -> None:
+        self.already_granted = already_granted or {}
+        self.enabled_writes: list[tuple[str, str]] = []
+
+    async def lookup_resources(
+        self, subject, permission, resource_type, *, contextual_relations=None
+    ):
+        from fred_core.security.rebac.rebac_engine import RebacReference
+
+        team_id = subject.id
+        return [
+            RebacReference(type=resource_type, id=cap_id)
+            for cap_id in self.already_granted.get(team_id, set())
+        ]
+
+    async def has_permission(
+        self, subject, permission, resource, *, contextual_relations=None
+    ) -> bool:
+        return resource.id in self.already_granted.get(subject.id, set())
+
+    async def add_relation(self, relation) -> str | None:
+        if relation.relation.value == "enabled":
+            self.enabled_writes.append((relation.subject.id, relation.resource.id))
+        return None
+
+    async def delete_relation(self, relation) -> str | None:
+        return None
+
+
+class _FakeTeamMetadataStoreForMigration:
+    def __init__(self, team_ids: list[str]) -> None:
+        from types import SimpleNamespace
+
+        self._teams = [SimpleNamespace(id=tid) for tid in team_ids]
+
+    async def list_all(self):
+        return self._teams
+
+
+@pytest.mark.asyncio
+async def test_grant_existing_teams_served_templates_migration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.settings_store import (
+        TeamCapabilitySettings,
+    )
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        return [_template_payload()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+
+    class _FakeSettings:
+        async def upsert(self, *, team_id, capability_id, settings, updated_by):
+            return TeamCapabilitySettings(
+                team_id=team_id,
+                capability_id=capability_id,
+                settings=dict(settings),
+                updated_by=updated_by,
+                updated_at=None,
+            )
+
+    rebac = _FakeTemplateGrantRebac(
+        already_granted={"team-already-granted": {"runtime-a__rags.sample.echo"}}
+    )
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(
+            rebac=rebac,
+            get_team_metadata_store=lambda: _FakeTeamMetadataStoreForMigration(
+                ["team-already-granted", "team-needs-grant"]
+            ),
+        ),
+        get_team_capability_settings_store=lambda: _FakeSettings(),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-a",
+                        base_url="http://runtime-a/pod/v1",
+                        enabled=True,
+                    )
+                ]
+            )
+        ),
+    )
+
+    summary = await service.grant_existing_teams_served_templates(deps)
+
+    assert summary.teams_checked == 2
+    assert summary.templates_checked == 1
+    assert summary.already_granted == 1
+    assert summary.grants_written == 1
+    assert rebac.enabled_writes == [("team-needs-grant", "runtime-a__rags.sample.echo")]
+
+
+@pytest.mark.asyncio
+async def test_grant_existing_teams_served_templates_migration_dry_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        return [_template_payload()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+
+    rebac = _FakeTemplateGrantRebac()
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(
+            rebac=rebac,
+            get_team_metadata_store=lambda: _FakeTeamMetadataStoreForMigration(
+                ["team-needs-grant"]
+            ),
+        ),
+        get_team_capability_settings_store=lambda: None,
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-a",
+                        base_url="http://runtime-a/pod/v1",
+                        enabled=True,
+                    )
+                ]
+            )
+        ),
+    )
+
+    summary = await service.grant_existing_teams_served_templates(deps, dry_run=True)
+
+    assert summary.grants_written == 1
+    assert rebac.enabled_writes == []  # dry_run never calls enable_capability_for_team

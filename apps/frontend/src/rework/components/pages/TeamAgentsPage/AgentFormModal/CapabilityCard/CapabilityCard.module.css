@@ -18,16 +18,9 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-  cursor: pointer;
   background: var(--surface-container-low);
   padding: var(--spacing-s) var(--spacing-m);
   user-select: none;
-}
-
-.switchWrapper {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
 }
 
 .meta {
@@ -35,6 +28,7 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-3xs);
+  cursor: pointer;
   min-width: 0;
 }
 

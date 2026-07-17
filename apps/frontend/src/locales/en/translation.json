@@ -121,8 +121,12 @@
         "demo_notes": {
           "title": "Demo notes",
           "hint": "Call the demo capability's own /analyze route directly.",
+          "textPlaceholder": "text",
           "analyze": "Analyze",
-          "error": "Request failed"
+          "error": "Request failed",
+          "original": "original",
+          "transformed": "transformed",
+          "length": "length"
         }
       }
     },
@@ -749,6 +753,11 @@
         "loadError": "Could not load the capability catalog.",
         "empty": "No capabilities are advertised by any runtime pod yet.",
         "manageTeams": "Manage teams",
+        "kindFilter": {
+          "tool": "Tools",
+          "agent": "Agents"
+        },
+        "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
@@ -1103,7 +1112,6 @@
         "title": "Marketplace"
       },
       "team": {
-        "avatarAlt": "Team {{teamName}}",
         "marketplace": "Marketplace",
         "menu": {
           "resources": "Resources"

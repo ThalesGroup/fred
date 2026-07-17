@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
@@ -57,6 +57,15 @@ class CapabilityEnablementItem(BaseModel):
     team_settings_fields: list[FieldSpec] = Field(
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
+    )
+    kind: Literal["tool", "agent"] = Field(
+        default="tool",
+        description=(
+            '"tool": a pod-advertised capability. "agent": a control-plane'
+            "-side projection of an agent template into this same catalog"
+            " (CAPAB-01, RFC §8.6) — every team's access to every agent is an"
+            " explicit admin grant, exactly like a tool."
+        ),
     )
 
 

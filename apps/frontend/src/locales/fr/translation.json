@@ -121,8 +121,12 @@
         "demo_notes": {
           "title": "Notes de démonstration",
           "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
+          "textPlaceholder": "texte",
           "analyze": "Analyser",
-          "error": "Échec de la requête"
+          "error": "Échec de la requête",
+          "original": "original",
+          "transformed": "transformé",
+          "length": "longueur"
         }
       }
     },
@@ -749,6 +753,11 @@
         "loadError": "Impossible de charger le catalogue des capacités.",
         "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
         "manageTeams": "Gérer les équipes",
+        "kindFilter": {
+          "tool": "Outils",
+          "agent": "Agents"
+        },
+        "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "col": {
           "capability": "Capacité",
           "enabledTeams": "Équipes activées",
@@ -1103,7 +1112,6 @@
         "title": "Marketplace"
       },
       "team": {
-        "avatarAlt": "Équipe {{teamName}}",
         "marketplace": "Marketplace",
         "menu": {
           "resources": "Ressources"

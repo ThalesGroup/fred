@@ -612,14 +612,22 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     async def _fake_fetch(base_url: str):
         return entries
 
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return []
+
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
-                    SimpleNamespace(enabled=True, base_url="http://pod")
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod", runtime_id="runtime-a"
+                    )
                 ]
             )
         )
@@ -628,6 +636,62 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     catalog = await aggregate_capability_catalog(deps)
 
     assert set(catalog) == {"doc_access"}
+
+
+@pytest.mark.asyncio
+async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
+    """
+    CAPAB-01 (RFC §8.6): the admin catalog (`GET /admin/capabilities`) must
+    list `kind="agent"` entries alongside `kind="tool"` ones — a SEPARATE
+    fetch (`_agent_capabilities_for_source`), never merged into the runtime's
+    own capability registry (see that function's docstring for why).
+    """
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+    from control_plane_backend.product import service as product_service
+
+    async def _fake_fetch(base_url: str):
+        return [_entry("doc_access")]
+
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return [
+            CapabilityCatalogEntry(
+                id=f"{runtime_id}__sentinel",
+                version="1",
+                name="agent.sentinel.name",
+                description="agent.sentinel.description",
+                icon="smart_toy",
+                kind="agent",
+                team_scope=TeamScopePolicy.ADMIN_GATED,
+            )
+        ]
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod", runtime_id="runtime-a"
+                    )
+                ]
+            )
+        )
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    assert set(catalog) == {"doc_access", "runtime-a__sentinel"}
+    assert catalog["runtime-a__sentinel"].kind == "agent"
+    assert catalog["doc_access"].kind == "tool"
 
 
 @pytest.mark.asyncio

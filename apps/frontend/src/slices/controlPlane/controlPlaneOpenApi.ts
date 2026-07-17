@@ -1514,6 +1514,7 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
+  kind?: "tool" | "agent";
   route_base_url?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -1859,6 +1860,8 @@ export type CapabilityEnablementItem = {
   total_team_count?: number;
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. */
+  kind?: "tool" | "agent";
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];

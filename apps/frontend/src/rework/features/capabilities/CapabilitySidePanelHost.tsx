@@ -21,7 +21,7 @@
 // Which panels appear is driven entirely by the session's
 // `selected_capability_ids`, resolved through the one plugin index.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
@@ -31,19 +31,26 @@ import styles from "./CapabilitySidePanelHost.module.css";
 interface CapabilitySidePanelHostProps {
   /** The session's active capability ids (`selected_capability_ids`). */
   capabilityIds: readonly string[];
+  /**
+   * Currently open panel key (`${capabilityId}:${widget}`), or `null`.
+   * Controlled by the host page so it can enforce a single open push-drawer
+   * across capability panels AND the session attachments drawer —
+   * two independently-opened push drawers would otherwise cumulate width.
+   */
+  activeKey: string | null;
+  onActiveKeyChange: (key: string | null) => void;
 }
 
 const entryKey = (entry: SidePanelEntry): string => `${entry.capabilityId}:${entry.widget}`;
 
-export function CapabilitySidePanelHost({ capabilityIds }: CapabilitySidePanelHostProps) {
+export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
-  const [openKey, setOpenKey] = useState<string | null>(null);
 
   // No active capability contributes a panel — the slot stays inert (zero chrome).
   if (entries.length === 0) return null;
 
-  const active = entries.find((entry) => entryKey(entry) === openKey) ?? null;
+  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
   // Each panel's launcher/drawer title resolves against the plugin's i18n keys;
   // a missing translation falls back to the widget id (never a blank label).
   const titleOf = (entry: SidePanelEntry): string =>
@@ -54,7 +61,7 @@ export function CapabilitySidePanelHost({ capabilityIds }: CapabilitySidePanelHo
       <div className={styles.rail}>
         {entries.map((entry) => {
           const key = entryKey(entry);
-          if (key === openKey) return null; // launcher hides while its panel is open
+          if (key === activeKey) return null; // launcher hides while its panel is open
           return (
             <IconButton
               key={key}
@@ -63,18 +70,18 @@ export function CapabilitySidePanelHost({ capabilityIds }: CapabilitySidePanelHo
               size="small"
               icon={{ category: "outlined", type: "edit_note" }}
               aria-label={titleOf(entry)}
-              onClick={() => setOpenKey(key)}
+              onClick={() => onActiveKeyChange(key)}
             />
           );
         })}
       </div>
       <InlineDrawer
         open={active !== null}
-        onClose={() => setOpenKey(null)}
+        onClose={() => onActiveKeyChange(null)}
         title={active ? titleOf(active) : ""}
         layout="push"
       >
-        {active && <active.Component capabilityId={active.capabilityId} onClose={() => setOpenKey(null)} />}
+        {active && <active.Component capabilityId={active.capabilityId} onClose={() => onActiveKeyChange(null)} />}
       </InlineDrawer>
     </>
   );

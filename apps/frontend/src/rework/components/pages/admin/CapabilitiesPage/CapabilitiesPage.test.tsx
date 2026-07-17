@@ -197,3 +197,30 @@ describe("CapabilitiesPage catalog rows", () => {
     expect(render()).toContain("checked");
   });
 });
+
+describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6)", () => {
+  it("shows only tool-kind capabilities by default, hiding agent-kind rows", () => {
+    h.list = {
+      data: {
+        items: [cap({ id: "web_search", kind: "tool" }), cap({ id: "sentinel", kind: "agent" })],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+    expect(html).toContain("cap.web_search");
+    expect(html).not.toContain("cap.sentinel");
+  });
+
+  it("treats a capability with no kind as a tool (backward-compatible default)", () => {
+    h.list = { data: { items: [cap({ id: "legacy_cap" })] }, isLoading: false, isError: false };
+    expect(render()).toContain("cap.legacy_cap");
+  });
+
+  it("renders the Tools/Agents filter toggle", () => {
+    h.list = { data: { items: [] }, isLoading: false, isError: false };
+    const html = render();
+    expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
+    expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
+  });
+});

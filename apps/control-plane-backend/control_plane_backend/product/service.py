@@ -32,6 +32,7 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 from pydantic import ValidationError
 
@@ -172,6 +173,7 @@ class _RuntimeTemplatePayload:
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
+        default_capability_ids: list[str] | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -183,6 +185,13 @@ class _RuntimeTemplatePayload:
             description=description,
         )
         self.available_capabilities = available_capabilities or []
+        # The capability ids activated when an instance's `selected_capability_ids`
+        # is None (CAPAB-01 / #1980, RFC §8.1 amendment): the plain catalog ids of
+        # `definition.default_mcp_servers`, mirrored on the wire as
+        # `available_mcp_servers` (`agent_app.py` `_AgentTemplateSummary`). Needed
+        # so `_apply_capability_selection` can ReBAC-check the None case instead of
+        # skipping it.
+        self.default_capability_ids = default_capability_ids or []
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -224,6 +233,14 @@ class _RuntimeTemplatePayload:
                 CapabilityCatalogEntry.model_validate(entry)
                 for entry in data.get("available_capabilities", [])
                 if isinstance(entry, dict)
+            ],
+            # Ids of `definition.default_mcp_servers` (the servers activated when
+            # `selected_capability_ids is None`) — same namespace as
+            # `available_capabilities` ids (#1988).
+            default_capability_ids=[
+                entry["id"]
+                for entry in data.get("available_mcp_servers", [])
+                if isinstance(entry, dict) and entry.get("id")
             ],
         )
 
@@ -529,6 +546,74 @@ async def _available_capabilities_for_source(
         for entry in template.available_capabilities:
             merged.setdefault(entry.id, entry)
     return list(merged.values())
+
+
+def template_capability_id(runtime_id: str, agent_id: str) -> str:
+    """
+    Colon-free FGA-safe capability id for one agent template (CAPAB-01, RFC
+    §8.6). `template_id` (`f"{runtime_id}:{agent_id}"`, used for routing/lookup
+    e.g. at line ~1012 below and in `enroll_agent_instance`) contains `:`,
+    which `CAPABILITY_ID_PATTERN` forbids — OpenFGA rejects `:` in object ids,
+    the same crash class `#1988` fixed for `mcp:<id>` capabilities. This is a
+    parallel identifier used ONLY for ReBAC checks and the admin catalog —
+    never for routing, which keeps using `template_id`.
+    """
+
+    return f"{runtime_id}__{agent_id}"
+
+
+async def _agent_capabilities_for_source(
+    base_url: str, runtime_id: str
+) -> list[CapabilityCatalogEntry] | None:
+    """
+    Project this pod's registered agent templates into `kind="agent"` catalog
+    entries (CAPAB-01, RFC §8.6) — control-plane side ONLY.
+
+    Why control-plane side, not the runtime's own capability registry:
+    every template's `available_capabilities` (the tool-picker list in the
+    Create-Agent modal) is built ONCE from the runtime's `capability_registry`
+    and reused IDENTICALLY for every template (`agent_app.py:2777-2797`).
+    Adding agent entries to that registry would make every other template's
+    tool-picker show every agent as a "selectable capability" (e.g. Sentinel
+    offered as a tool when creating a SQL Expert agent) — a pure accidental
+    side effect, not the deliberate `context.invoke_agent()` agent-as-sub-tool
+    composition (unrelated, unstarted idea). This function instead re-uses the
+    template list already fetched for `list_agent_templates`, so the runtime's
+    per-template tool catalog is never touched.
+
+    `team_scope` is HARDCODED to `ADMIN_GATED` — there is no parameter or code
+    path to override it. Every team's access to every agent is an explicit
+    admin grant, exactly like every tool (platform policy, 2026-07-17: this
+    platform never uses `team_scope: DEFAULT_ON`, see
+    `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §8.3).
+
+    Best-effort: returns `None` when the pod is unreachable, distinguishable
+    from a reachable pod that simply registers no templates (`[]`) — callers
+    that need to tell the two apart (the compatibility migration) can; callers
+    that don't (the admin catalog aggregation) just treat `None` as empty.
+    """
+
+    try:
+        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+    except Exception as exc:
+        logger.warning(
+            "[capability-catalog] failed to fetch agent templates from %s: %s",
+            base_url,
+            exc,
+        )
+        return None
+    return [
+        CapabilityCatalogEntry(
+            id=template_capability_id(runtime_id, template.template_agent_id),
+            version="1",
+            name=template.title,
+            description=template.description,
+            icon="smart_toy",
+            kind="agent",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
+        for template in templates
+    ]
 
 
 async def _fetch_chat_controls(
@@ -883,6 +968,7 @@ async def _apply_capability_selection(
     submitted_values: dict[str, dict[str, Any]] | None,
     reset_values: bool,
     available: Sequence[CapabilityCatalogEntry],
+    default_capability_ids: Sequence[str],
     base_url: str,
     team_id: TeamId,
     agent_instance_id: str | None,
@@ -895,21 +981,30 @@ async def _apply_capability_selection(
     (#1974, RFC AGENT-CAPABILITY §3.8).
 
     Semantics:
-    - `selected_ids`: None = template default selection (no template declares
-      default capabilities yet, so none active); [] = none; else exact set,
-      validated against the pod-advertised catalog (unknown → 422)
+    - `selected_ids`: None = the template's default MCP-server selection
+      (`default_capability_ids`, RFC §8.1 amendment), narrowed to the subset
+      the team `can_use` — silently, no 403, since this is an implicit
+      default rather than a deliberate team request; [] = none; else exact
+      set, validated against the pod-advertised catalog (unknown → 422)
+    - the resolved effective selection is ALWAYS persisted as an explicit
+      list — `selected_capability_ids` is never left `None` after this
+      function runs. This closes the gap where a `None` row skipped every
+      ReBAC check (both here and in the capability-revocation sweeps, which
+      scan `selected_capability_ids` and silently ignored `None` rows) and
+      lets a team obtain an admin-gated capability for free by submitting no
+      selection. See `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §8.1.
     - every ACTIVE capability's effective config is round-tripped through the
       pod: the submitted values when provided, else the previously stored
       config (`reset_values=True` forces defaults), else {}; the returned
       envelope is persisted verbatim
     - values for unselected capabilities are ignored (same policy as the MCP
       config path)
-    - when `deps` is supplied, every selected capability is gated on ReBAC
-      `can_use` checked with the TARGET TEAM as subject (CAPAB-01 / #1980,
-      RFC §8.1): a team may not save an agent using an admin-gated capability
-      it is not enabled for (→ 403). The team subject — not the acting user —
-      is what keeps a capability enabled for one of the user's other teams
-      from being saved here.
+    - when `deps` is supplied, every EXPLICITLY selected capability is gated
+      on ReBAC `can_use` checked with the TARGET TEAM as subject (CAPAB-01 /
+      #1980, RFC §8.1): a team may not save an agent using an admin-gated
+      capability it is not enabled for (→ 403). The team subject — not the
+      acting user — is what keeps a capability enabled for one of the user's
+      other teams from being saved here.
     """
     if selected_ids is not None:
         _validate_capability_ids(
@@ -931,8 +1026,30 @@ async def _apply_capability_selection(
                     "(CAPAB-01 / RFC §8.1).",
                     http_status=403,
                 )
-    envelopes: dict[str, dict[str, Any]] = {}
-    for cap_id in selected_ids or []:
+        effective_ids = list(selected_ids)
+    else:
+        # Template-default path: narrow to what the pod actually advertises
+        # for this template, then to what the team is currently authorized to
+        # use. No 403 — an implicit default silently degrades to "whatever
+        # this team already has" rather than blocking every fresh team's
+        # first save.
+        available_ids = frozenset(entry.id for entry in available)
+        candidate_ids = [
+            cap_id for cap_id in default_capability_ids if cap_id in available_ids
+        ]
+        if deps is not None and candidate_ids:
+            usable_ids = await usable_capability_ids(
+                deps.team_dependencies.rebac, team_id
+            )
+            effective_ids = (
+                candidate_ids
+                if usable_ids is None
+                else [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
+            )
+        else:
+            effective_ids = candidate_ids
+
+    async def _build_envelope(cap_id: str) -> tuple[str, dict[str, Any]]:
         if submitted_values is not None and cap_id in submitted_values:
             values = submitted_values[cap_id]
         elif reset_values:
@@ -942,7 +1059,7 @@ async def _apply_capability_selection(
             values = (
                 dict(stored.get("config") or {}) if isinstance(stored, dict) else {}
             )
-        envelopes[cap_id] = await _validate_capability_config_via_pod(
+        envelope = await _validate_capability_config_via_pod(
             base_url=base_url,
             capability_id=cap_id,
             config_values=values,
@@ -950,11 +1067,15 @@ async def _apply_capability_selection(
             agent_instance_id=agent_instance_id,
             authorization=authorization,
         )
+        return cap_id, envelope
+
+    envelope_pairs = await asyncio.gather(
+        *(_build_envelope(cap_id) for cap_id in effective_ids)
+    )
+    envelopes: dict[str, dict[str, Any]] = dict(envelope_pairs)
     return tuning.model_copy(
         update={
-            "selected_capability_ids": (
-                list(selected_ids) if selected_ids is not None else None
-            ),
+            "selected_capability_ids": effective_ids,
             "capability_config": envelopes,
         }
     )
@@ -980,6 +1101,11 @@ async def list_agent_templates(
       capabilities this team is not enabled for are hidden — including ones
       enabled for OTHER teams the browsing user belongs to. ReBAC disabled
       leaves the list unfiltered.
+    - the TEMPLATE ITSELF is also gated on `can_use(team, template_capability_id)`
+      (CAPAB-01, RFC §8.6): a team not granted a template does not see it at
+      all, same tri-state (enabled/disabled/inherited-on) as any other
+      capability — reuses the SAME `usable_ids` batch call as the nested
+      filter above, no second `ListObjects`.
 
     Example:
     - `templates = await list_agent_templates(team_id, deps)`
@@ -1007,6 +1133,11 @@ async def list_agent_templates(
             continue
 
         for template in runtime_templates:
+            template_cap_id = template_capability_id(
+                source.runtime_id, template.template_agent_id
+            )
+            if usable_ids is not None and template_cap_id not in usable_ids:
+                continue
             templates.append(
                 AgentTemplateSummary(
                     template_id=f"{source.runtime_id}:{template.template_agent_id}",
@@ -1267,6 +1398,229 @@ async def run_capability_reconciliation_sweep(
         summary.newly_suspended,
         summary.cleared,
         summary.skipped_unreachable,
+    )
+    return summary
+
+
+@dataclass
+class CapabilityMaterializationSummary:
+    checked: int = 0
+    materialized: int = 0
+    skipped_unreachable: int = 0
+    skipped_unknown_template: int = 0
+
+
+async def _default_capability_ids_by_source_and_template(
+    deps: ProductServiceDependencies,
+) -> dict[str, dict[str, list[str]] | None]:
+    """
+    Map each enabled runtime source to {template_agent_id: default_capability_ids}.
+
+    A `None` value for a source signals it was unreachable, so the caller can
+    skip its instances rather than wrongly materialize an empty selection.
+    """
+
+    result: dict[str, dict[str, list[str]] | None] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        try:
+            templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            logger.warning(
+                "[capability-materialization] sweep could not fetch templates "
+                "from %s: %s",
+                source.base_url,
+                exc,
+            )
+            result[source.runtime_id] = None
+            continue
+        result[source.runtime_id] = {
+            template.template_agent_id: template.default_capability_ids
+            for template in templates
+        }
+    return result
+
+
+async def materialize_default_capability_selections(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> CapabilityMaterializationSummary:
+    """
+    One-off backfill: resolve every already-persisted instance whose
+    `selected_capability_ids` is still `None` into an explicit, ReBAC-filtered
+    list (CAPAB-01 / #1980, RFC §8.1 amendment).
+
+    Why this function exists:
+    - `_apply_capability_selection` now materializes `None` at every future
+      save, but rows created BEFORE that fix shipped are still exploitable —
+      `get_runtime_binding_for_team` and the runtime pod both still trust a
+      `None` selection as "activate every template default," and the
+      capability-revocation sweeps (`suspend_dependent_instances`,
+      `set_capability_default_on`, `capabilities/enablement.py`) silently skip
+      `None` rows. This sweep is what closes the gap for already-existing
+      data, not just new writes.
+
+    How to use it:
+    - run once, deploy-time, before/alongside the code fix goes live (same
+      standalone-bootstrap pattern as `main_worker.py`: load configuration,
+      build the application container, then call this with the resulting
+      `ProductServiceDependencies`)
+    - `dry_run=True` reports what WOULD be materialized without writing
+    - treat "0 remaining NULL `selected_capability_ids` rows" as the proof of
+      closure, not "the sweep ran" — an unreachable pod during the sweep
+      leaves its instances untouched (`skipped_unreachable`), so re-run until
+      every runtime source is reachable and the count is zero
+    """
+
+    store = deps.get_agent_instance_store()
+    defaults_by_source = await _default_capability_ids_by_source_and_template(deps)
+    usable_ids_by_team: dict[TeamId, set[str] | None] = {}
+
+    summary = CapabilityMaterializationSummary()
+    for record in await store.list_all():
+        if record.tuning.selected_capability_ids is not None:
+            continue
+        summary.checked += 1
+
+        templates = defaults_by_source.get(record.source_runtime_id)
+        if templates is None:
+            summary.skipped_unreachable += 1
+            continue
+        default_ids = templates.get(record.source_agent_id)
+        if default_ids is None:
+            summary.skipped_unknown_template += 1
+            continue
+
+        if record.team_id not in usable_ids_by_team:
+            usable_ids_by_team[record.team_id] = await usable_capability_ids(
+                deps.team_dependencies.rebac, record.team_id
+            )
+        usable_ids = usable_ids_by_team[record.team_id]
+        effective_ids = (
+            list(default_ids)
+            if usable_ids is None
+            else [cap_id for cap_id in default_ids if cap_id in usable_ids]
+        )
+
+        summary.materialized += 1
+        if not dry_run:
+            await store.update(
+                agent_instance_id=record.agent_instance_id,
+                team_id=record.team_id,
+                tuning=record.tuning.model_copy(
+                    update={"selected_capability_ids": effective_ids}
+                ),
+            )
+
+    logger.info(
+        "[capability-materialization] sweep done dry_run=%s checked=%d "
+        "materialized=%d skipped_unreachable=%d skipped_unknown_template=%d",
+        dry_run,
+        summary.checked,
+        summary.materialized,
+        summary.skipped_unreachable,
+        summary.skipped_unknown_template,
+    )
+    return summary
+
+
+@dataclass
+class TemplateGrantMigrationSummary:
+    teams_checked: int = 0
+    templates_checked: int = 0
+    grants_written: int = 0
+    already_granted: int = 0
+    skipped_unreachable_sources: int = 0
+
+
+async def grant_existing_teams_served_templates(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> TemplateGrantMigrationSummary:
+    """
+    Required compatibility migration (CAPAB-01, RFC §8.6) — a companion to
+    `materialize_default_capability_selections` above, for a DIFFERENT gate:
+    `kind="agent"` capabilities default `ADMIN_GATED` like everything else
+    (platform policy — this deployment never uses `team_scope: DEFAULT_ON`,
+    see the dated note in `AGENT-CAPABILITY-RFC.md` §8.3), so without this
+    sweep every existing team loses access to every agent template the
+    instant `list_agent_templates`'s `can_use` gate goes live.
+
+    Writes an explicit `enabled` tuple (via `enable_capability_for_team` —
+    NEVER `default_on`) for every (existing team x currently-served template)
+    pair not already granted. Idempotent and safe to re-run: only ever adds a
+    missing grant, never touches one that's already explicit (enabled OR
+    disabled) — an admin who has already dialed a specific agent down for a
+    specific team is not overridden by this sweep.
+
+    How to use it:
+    - run once, at/before deploy, alongside `materialize_default_capability_selections`
+      — see the CAPAB-01 plan's deploy-sequencing note: each sweep must
+      complete before its corresponding `can_use` gate goes live, and both
+      should be rehearsed against a copy of real data before the actual
+      go-live, not attempted for the first time in production
+    - `dry_run=True` reports what WOULD be granted without writing
+    """
+
+    from control_plane_backend.capabilities.enablement import (
+        enable_capability_for_team,
+    )
+
+    rebac = deps.team_dependencies.rebac
+    settings_store = deps.get_team_capability_settings_store()
+
+    template_entries: dict[str, CapabilityCatalogEntry] = {}
+    unreachable_sources = 0
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        entries = await _agent_capabilities_for_source(
+            source.base_url, source.runtime_id
+        )
+        if entries is None:
+            unreachable_sources += 1
+            continue
+        for entry in entries:
+            template_entries[entry.id] = entry
+    summary = TemplateGrantMigrationSummary(
+        templates_checked=len(template_entries),
+        skipped_unreachable_sources=unreachable_sources,
+    )
+
+    teams = await deps.team_dependencies.get_team_metadata_store().list_all()
+    for team in teams:
+        summary.teams_checked += 1
+        usable_ids = await usable_capability_ids(rebac, team.id)
+        for template_id, entry in template_entries.items():
+            if usable_ids is not None and template_id in usable_ids:
+                summary.already_granted += 1
+                continue
+            summary.grants_written += 1
+            if not dry_run:
+                await enable_capability_for_team(
+                    rebac=rebac,
+                    settings_store=settings_store,
+                    catalog_entry=entry,
+                    team_id=team.id,
+                    settings={},
+                    updated_by=None,
+                )
+
+    logger.info(
+        "[template-grant-migration] sweep done dry_run=%s teams_checked=%d "
+        "templates_checked=%d grants_written=%d already_granted=%d "
+        "skipped_unreachable_sources=%d",
+        dry_run,
+        summary.teams_checked,
+        summary.templates_checked,
+        summary.grants_written,
+        summary.already_granted,
+        summary.skipped_unreachable_sources,
     )
     return summary
 
@@ -1590,6 +1944,23 @@ async def enroll_agent_instance(
             f"{source_runtime_id!r}.",
             http_status=404,
         )
+    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
+    # hides a template the team isn't granted, but never trust the frontend
+    # filter alone — re-check here too, same pattern as every other ReBAC gate
+    # in this codebase. 404, not 403: a team that guesses a hidden
+    # `template_id` gets exactly the same response as a nonexistent one (RFC
+    # §7.2/§10 anti-guessing rule, matching the non-public-template check
+    # above).
+    if not await can_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        template_capability_id(source_runtime_id, source_agent_id),
+    ):
+        raise EnrollmentError(
+            f"Template {request.template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
 
     tuning = template.default_tuning.model_copy(
         update={
@@ -1610,21 +1981,24 @@ async def enroll_agent_instance(
     # MCP activation/config flows through the capability path (#1978): an MCP
     # server is a capability keyed by its plain catalog server id (#1988),
     # validated and stored via the same pod round-trip as every other
-    # capability below.
-    if request.capability_ids is not None or request.capability_config_values:
-        tuning = await _apply_capability_selection(
-            tuning,
-            selected_ids=request.capability_ids,
-            submitted_values=request.capability_config_values,
-            reset_values=False,
-            available=template.available_capabilities,
-            base_url=source.base_url,
-            team_id=team_id,
-            agent_instance_id=agent_instance_id,
-            authorization=authorization,
-            context_label="agent enrollment",
-            deps=deps,
-        )
+    # capability below. This ALWAYS runs, even with no explicit
+    # `capability_ids` — the default (no-selection) path is exactly what must
+    # be ReBAC-checked and materialized (CAPAB-01 / #1980, RFC §8.1 amendment;
+    # a `None` selection previously skipped this check entirely).
+    tuning = await _apply_capability_selection(
+        tuning,
+        selected_ids=request.capability_ids,
+        submitted_values=request.capability_config_values,
+        reset_values=False,
+        available=template.available_capabilities,
+        default_capability_ids=template.default_capability_ids,
+        base_url=source.base_url,
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        authorization=authorization,
+        context_label="agent enrollment",
+        deps=deps,
+    )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1787,6 +2161,7 @@ async def update_agent_instance(
                     and request.capability_config_values is None
                 ),
                 available=template.available_capabilities,
+                default_capability_ids=template.default_capability_ids,
                 base_url=source.base_url,
                 team_id=team_id,
                 agent_instance_id=agent_instance_id,

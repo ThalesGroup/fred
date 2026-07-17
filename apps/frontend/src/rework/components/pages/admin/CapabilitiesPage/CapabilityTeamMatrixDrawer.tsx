@@ -267,7 +267,9 @@ export function CapabilityTeamMatrixDrawer({
                   aria-busy={isPending}
                 >
                   <div className={styles.teamMain}>
-                    <span className={styles.teamName}>{team.name}</span>
+                    <span className={styles.teamName} title={team.name}>
+                      {team.name}
+                    </span>
                   </div>
                   <div className={styles.teamActions}>
                     {isPending && <span className={styles.spinner} aria-hidden="true" />}

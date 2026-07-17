@@ -21,7 +21,7 @@
 .icon {
   display: inline-flex;
   align-items: center;
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
 }
 
 .title {
@@ -30,7 +30,7 @@
 }
 
 .body {
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
   font: var(--font-body-small);
   white-space: pre-wrap;
 }

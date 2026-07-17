@@ -2057,10 +2057,12 @@ async def test_enroll_agent_instance_creates_db_record(
     assert store._records[0].source_runtime_id == "runtime-a"
     assert store._records[0].source_agent_id == "rags.sample.echo"
     assert store._records[0].tuning.tags == ["ops"]
-    # No explicit selection at enroll time -> template default (#1978: the
-    # MCP tuning trio retired, so there is no template-declared default
-    # capability selection to inherit here).
-    assert store._records[0].tuning.selected_capability_ids is None
+    # No explicit selection at enroll time -> resolved against the template's
+    # default capability ids (none declared by this fixture template) and
+    # materialized as an explicit list, never left `None` (CAPAB-01 / #1980,
+    # RFC §8.1 amendment — a `None` selection previously skipped ReBAC
+    # enforcement entirely).
+    assert store._records[0].tuning.selected_capability_ids == []
 
 
 @pytest.mark.asyncio
@@ -5841,6 +5843,15 @@ async def test_enrolling_internal_template_is_admin_only(
                 permission == OrganizationPermission.CAN_MANAGE_PLATFORM
                 and user.uid == "alice"
             )
+
+        async def has_permission(
+            self, subject, permission, resource, *, contextual_relations=None
+        ) -> bool:
+            # Not what this test exercises (see CAPAB-01's template-level
+            # `can_use` check, service.py `enroll_agent_instance`) — permissive
+            # so the non-public-template admin-only gating above is what
+            # actually decides the outcome.
+            return True
 
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",

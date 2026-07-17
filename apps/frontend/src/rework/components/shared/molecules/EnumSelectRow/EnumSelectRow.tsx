@@ -19,8 +19,9 @@
 // `search_policy` and `rag_scope` chat controls, and any future capability
 // exposing a small closed-set choice can reuse it too.
 
-import type { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import Icon, { type IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import styles from "./EnumSelectRow.module.css";
 
 export interface EnumSelectOption<T extends string> {
@@ -50,38 +51,98 @@ export function EnumSelectRow<T extends string>({
   onChange,
 }: EnumSelectRowProps<T>) {
   const selected = options.find((option) => option.value === value) ?? options[0];
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const triggerWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const initial = Math.max(
+      0,
+      options.findIndex((option) => option.value === value),
+    );
+    setFocusedIndex(initial);
+    optionRefs.current[initial]?.focus();
+    // Move focus into the listbox only when it transitions to open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const moveFocus = (nextIndex: number) => {
+    const clamped = ((nextIndex % options.length) + options.length) % options.length;
+    setFocusedIndex(clamped);
+    optionRefs.current[clamped]?.focus();
+  };
+
+  const closeAndReturnFocus = () => {
+    onToggle();
+    triggerWrapRef.current?.querySelector("button")?.focus();
+  };
+
+  const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        moveFocus(index + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveFocus(index - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        moveFocus(0);
+        break;
+      case "End":
+        event.preventDefault();
+        moveFocus(options.length - 1);
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeAndReturnFocus();
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <div className={styles.rowWrap}>
-      <MenuPopoverItem
-        icon={icon}
-        label={label}
-        value={selected.label}
-        trailingIcon="chevron_right"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`${title}: ${selected.label}`}
-        onClick={onToggle}
-      />
+      <div ref={triggerWrapRef}>
+        <MenuPopoverItem
+          icon={icon}
+          label={label}
+          value={selected.label}
+          trailingIcon="chevron_right"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={`${title}: ${selected.label}`}
+          onClick={onToggle}
+        />
+      </div>
 
       {open && (
         <ul className={styles.selectMenu} role="listbox" aria-label={title}>
-          {options.map((option) => {
+          {options.map((option, index) => {
             const isActive = option.value === value;
             return (
               <li key={option.value} className={styles.menuItemWrap}>
                 <button
+                  ref={(el) => {
+                    optionRefs.current[index] = el;
+                  }}
                   type="button"
                   role="option"
                   aria-selected={isActive}
+                  tabIndex={index === focusedIndex ? 0 : -1}
                   className={styles.menuItem}
                   data-active={isActive}
                   onClick={() => onChange(option.value)}
+                  onKeyDown={(event) => handleOptionKeyDown(event, index)}
                 >
                   <span className={styles.menuItemLabel}>{option.label}</span>
                   {isActive && (
-                    <span className={`${styles.menuItemCheck} material-symbols-outlined`} aria-hidden>
-                      check
+                    <span className={styles.menuItemCheck} aria-hidden>
+                      <Icon category="outlined" type="check_circle" />
                     </span>
                   )}
                 </button>
