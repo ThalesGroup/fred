@@ -2218,12 +2218,21 @@ def _effective_capability_ids(
     if capability_registry is None:
         return list(selected)
     mcp_config = get_runtime_context().config.mcp_configuration
+    # `get_server()` filters on `enabled`, so it cannot tell a known-but-disabled
+    # catalog entry apart from one absent entirely — both would otherwise be kept
+    # and fail loudly downstream. Check raw catalog membership instead so only a
+    # genuinely unknown id survives to error; a disabled one is dropped here.
+    known_catalog_ids = (
+        {server.id for server in mcp_config.servers}
+        if mcp_config is not None
+        else set()
+    )
     return [
         cap_id
         for cap_id in selected
         if cap_id in capability_registry
         or mcp_config is None
-        or mcp_config.get_server(cap_id) is None
+        or cap_id not in known_catalog_ids
     ]
 
 

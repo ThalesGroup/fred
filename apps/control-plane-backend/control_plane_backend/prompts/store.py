@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import delete, literal, select, union_all, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -127,6 +128,7 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
 class PromptStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
+        self._dialect_name = engine.dialect.name
 
     async def create(
         self,
@@ -357,8 +359,9 @@ class PromptStore:
         """
 
         async with use_session(self._sessions, session) as s:
+            insert = pg_insert if self._dialect_name == "postgresql" else sqlite_insert
             stmt = (
-                sqlite_insert(DefaultPromptUsageRow)
+                insert(DefaultPromptUsageRow)
                 .values(team_id=str(team_id), category=category, session_count=1)
                 .on_conflict_do_update(
                     index_elements=["team_id", "category"],

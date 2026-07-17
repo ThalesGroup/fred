@@ -144,7 +144,18 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     )
     config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
     offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
-    offline_mcp_catalog.write_text("version: v1\nservers: []\n", encoding="utf-8")
+    offline_mcp_catalog.write_text(
+        # Sentinel's locked `default_mcp_servers` names this server (#1988): it
+        # must be present-but-disabled here, never enabled, so the capability
+        # resolves as tolerated-disabled instead of attempting a live MCP
+        # connection this offline pod has no server to answer.
+        "version: v1\n"
+        "servers:\n"
+        '  - id: "mcp-knowledge-flow-opensearch-ops"\n'
+        '    name: "mcp.servers.search_opensearch.name"\n'
+        "    enabled: false\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("CONFIG_FILE", str(config_file))
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(offline_mcp_catalog))
 

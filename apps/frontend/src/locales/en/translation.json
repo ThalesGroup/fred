@@ -1368,6 +1368,7 @@
           "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
         },
+        "selectPlaceholder": "Select an option",
         "suspended": {
           "title": "This agent is suspended.",
           "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",

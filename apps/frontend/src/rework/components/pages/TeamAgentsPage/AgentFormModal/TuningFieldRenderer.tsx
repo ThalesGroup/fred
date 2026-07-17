@@ -98,6 +98,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
           onChange={(v) => onChange(field.key, v)}
           disabled={disabled}
           error={error}
+          placeholder={t("rework.teams.formAgent.selectPlaceholder")}
         />
         {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
       </div>

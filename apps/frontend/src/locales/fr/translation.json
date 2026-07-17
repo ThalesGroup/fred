@@ -1368,6 +1368,7 @@
           "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
           "writeFromScratch": "Rédiger depuis zéro"
         },
+        "selectPlaceholder": "Sélectionner une option",
         "suspended": {
           "title": "Cet agent est suspendu.",
           "unavailable": "Une capacité qu'il utilise n'est plus disponible ({{capabilities}}). Décochez-la et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
