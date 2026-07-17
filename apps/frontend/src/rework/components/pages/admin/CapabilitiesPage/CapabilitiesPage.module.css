@@ -121,6 +121,32 @@
   font: var(--font-label-medium);
 }
 
+/* Same warning affordance as `.healthWarn`, but the "N suspended" count is a
+ * button that opens the per-team drill-down (#1975). Reset the native button
+ * chrome, underline on hover/focus so it reads as actionable, and keep a
+ * visible focus ring for keyboard users. */
+.healthWarnButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  color: var(--warning);
+  font: var(--font-label-medium);
+}
+
+.healthWarnButton:hover {
+  text-decoration: underline;
+}
+
+.healthWarnButton:focus-visible {
+  outline: 2px solid var(--warning);
+  outline-offset: 1px;
+}
+
 /* Disable-confirmation impact preview: the concrete count of agents this change
  * would break, an optional unreachable-pod caveat, and the affected-agent
  * drill-down. Sits under the dialog's generic message. */

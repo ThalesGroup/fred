@@ -785,9 +785,15 @@
         },
         "health": {
           "suspended": "{{count}} suspended",
+          "suspendedAction": "Show the {{count}} suspended agent(s), grouped by team",
           "unknown": "{{count}} unknown",
           "unknownHint": "The runtime pod was unreachable, so this capability's health can't be determined right now.",
           "healthy": "OK"
+        },
+        "suspendedDrawer": {
+          "title": "{{name}} — suspended agents",
+          "subtitle": "Agents this capability breaks right now, grouped by team. Restore each team's access from Manage teams to revive them.",
+          "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
         "defaultOffToast": "Default-on disabled platform-wide.",

@@ -1861,6 +1861,11 @@ export type BootstrapPlatformAdminRequest = {
   /** The one-time root-bootstrap secret. */
   token: string;
 };
+export type ImpactedInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  display_name: string;
+};
 export type CapabilityEnablementItem = {
   id: string;
   /** i18n key */
@@ -1884,14 +1889,11 @@ export type CapabilityEnablementItem = {
   suspended_instances?: number;
   /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
   health_unknown_instances?: number;
+  /** The agents behind `suspended_instances`, named for the health-column drill-down (which agents, in which team). Same derivation as the count — one entry per (instance, this capability) the instance is broken by at rest. Empty for a healthy capability; carries `team_id` so the admin surface can group by team. */
+  suspended_instance_details?: ImpactedInstanceSummary[];
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
-};
-export type ImpactedInstanceSummary = {
-  agent_instance_id: string;
-  team_id: string;
-  display_name: string;
 };
 export type CapabilityImpactPreview = {
   capability_id: string;

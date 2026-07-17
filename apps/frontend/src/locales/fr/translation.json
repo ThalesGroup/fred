@@ -785,9 +785,15 @@
         },
         "health": {
           "suspended": "{{count}} suspendue(s)",
+          "suspendedAction": "Afficher les {{count}} agent(s) suspendu(s), groupés par équipe",
           "unknown": "{{count}} inconnu(s)",
           "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
           "healthy": "OK"
+        },
+        "suspendedDrawer": {
+          "title": "{{name}} — agents suspendus",
+          "subtitle": "Agents que cette capacité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
         "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",

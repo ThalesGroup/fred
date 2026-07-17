@@ -122,6 +122,43 @@ async def test_impact_attributes_only_the_unusable_capability(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
+async def test_impact_collect_instances_names_broken_agents_by_team(
+    monkeypatch,
+) -> None:
+    """`collect_instances=True` names each broken agent (id, team, display name)
+    so the health-column drill-down can group by team — same derivation as the
+    count, one entry per (instance, capability) it breaks."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="inst-a",
+                team_id="team-a",
+                selected=["capa1"],
+            ),
+            _record_with(
+                agent_instance_id="inst-b",
+                team_id="team-b",
+                selected=["capa1"],
+            ),
+        ]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset({"capa1"})},
+        usable_by_team={"team-a": set(), "team-b": set()},  # capa1 revoked for both
+    )
+
+    result = await impact_mod.compute_capability_impact(
+        _deps_with(store), collect_instances=True
+    )
+
+    assert result["capa1"].suspended_instances == 2
+    by_team = {i.team_id: i.agent_instance_id for i in result["capa1"].instances}
+    assert by_team == {"team-a": "inst-a", "team-b": "inst-b"}
+
+
+@pytest.mark.asyncio
 async def test_impact_counts_pod_missing_capability(monkeypatch) -> None:
     """A capability the pod no longer advertises breaks its selectors even when
     ReBAC still grants `can_use` — the `capability_unavailable` half."""

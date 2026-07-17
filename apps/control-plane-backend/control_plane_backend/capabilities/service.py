@@ -131,8 +131,11 @@ async def list_capability_enablement(
     # Resting health for the WHOLE catalog in one pass (#1975): one ReBAC
     # `ListObjects` per team holding instances plus one template fetch per pod,
     # rather than a lookup per row. Admin-only screen, so the extra round-trips
-    # buy the most accurate answer available.
-    impact = await compute_capability_impact(deps)
+    # buy the most accurate answer available. `collect_instances` names the
+    # broken agents inline so the health-column drill-down (which agents, in
+    # which team) needs no second endpoint — the derivation already walked every
+    # instance, so naming them is a list append, not another pass.
+    impact = await compute_capability_impact(deps, collect_instances=True)
     items: list[CapabilityEnablementItem] = []
     for entry in catalog.values():
         items.append(
@@ -157,6 +160,18 @@ async def list_capability_enablement(
                 ),
                 health_unknown_instances=(
                     impact[entry.id].skipped_unreachable if entry.id in impact else 0
+                ),
+                suspended_instance_details=(
+                    [
+                        ImpactedInstanceSummary(
+                            agent_instance_id=item.agent_instance_id,
+                            team_id=item.team_id,
+                            display_name=item.display_name,
+                        )
+                        for item in impact[entry.id].instances
+                    ]
+                    if entry.id in impact
+                    else []
                 ),
             )
         )

@@ -39,6 +39,7 @@ import {
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
+import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { enabledTeamCount, isCapabilityUnused as isUnused } from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
@@ -63,6 +64,7 @@ export default function CapabilitiesPage() {
   const [fetchRevokeImpact, revokeImpact] = useLazyCapabilityRevokeImpactQuery();
 
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
+  const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent">("tool");
@@ -78,6 +80,7 @@ export default function CapabilitiesPage() {
   // at open time would keep the drawer's tri-state frozen while the table
   // behind it updates.
   const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
+  const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
     try {
@@ -238,10 +241,18 @@ export default function CapabilitiesPage() {
         return (
           <div className={styles.centered}>
             {suspended > 0 ? (
-              <span className={styles.healthWarn}>
+              // Clickable: opens the drill-down of which agents, in which team,
+              // this capability breaks at rest (#1975). A button, not a span, so
+              // it is keyboard-reachable and announced as actionable.
+              <button
+                type="button"
+                className={styles.healthWarnButton}
+                onClick={() => setSuspendedCapabilityId(cap.id)}
+                aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
+              >
                 <Icon category="outlined" type="warning" />
                 {t("rework.admin.capabilities.health.suspended", { count: suspended })}
-              </span>
+              </button>
             ) : unknown > 0 ? (
               <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
                 <span className={styles.healthNeutral}>
@@ -317,6 +328,13 @@ export default function CapabilitiesPage() {
         teams={teams}
         open={matrixCapability !== null}
         onClose={() => setMatrixCapabilityId(null)}
+      />
+
+      <SuspendedInstancesDrawer
+        capability={suspendedCapability}
+        teams={teams}
+        open={suspendedCapability !== null}
+        onClose={() => setSuspendedCapabilityId(null)}
       />
 
       <ConfirmationDialog

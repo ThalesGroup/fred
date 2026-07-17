@@ -97,6 +97,16 @@ class CapabilityEnablementItem(BaseModel):
             "(#1975, RFC §3.9), and this count reports the same way."
         ),
     )
+    suspended_instance_details: list[ImpactedInstanceSummary] = Field(
+        default_factory=list,
+        description=(
+            "The agents behind `suspended_instances`, named for the health-column "
+            "drill-down (which agents, in which team). Same derivation as the "
+            "count — one entry per (instance, this capability) the instance is "
+            "broken by at rest. Empty for a healthy capability; carries `team_id` "
+            "so the admin surface can group by team."
+        ),
+    )
 
 
 class CapabilityEnablementList(BaseModel):
