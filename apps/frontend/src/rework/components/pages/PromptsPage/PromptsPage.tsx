@@ -60,6 +60,13 @@ export default function PromptsPage() {
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
   const [viewingDefault, setViewingDefault] = useState<PromptSummary | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  // Which prompt id `form` is currently fully seeded for. RTK Query's
+  // `editDetail` can keep the same object reference across a close/reopen
+  // of the same card (skipping a query doesn't clear its last result), so
+  // a `useEffect` keyed on `[editDetail]` alone would never re-fire on
+  // reopen. Comparing against this id (a primitive, reset on close) makes
+  // reseeding reliable regardless of `editDetail`'s identity.
+  const [seededForId, setSeededForId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<PromptCategory | null>(null);
   const FILTER_VISIBLE = 4;
@@ -86,7 +93,18 @@ export default function PromptsPage() {
   const [deletePrompt] = useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation();
 
   useEffect(() => {
-    if (editDetail) {
+    // `editingPrompt` must also be checked: `editDetail` is RTK Query's
+    // *last* successful result for this endpoint, which lingers even after
+    // the query is skipped (editingPrompt set back to null on close) — so
+    // without this guard, resetting `seededForId` in `closeModal` would
+    // immediately re-mark it "seeded" against that lingering `editDetail`
+    // before the card is ever reopened.
+    // `editDetail.id === editingPrompt.id` is required too: if the user
+    // closes prompt A and opens prompt B before B's query resolves,
+    // `editDetail` can still be A's lingering result while `editingPrompt`
+    // is already B — without this check the form would seed from A's
+    // content under B's id (PR review, chatgpt-codex-connector).
+    if (editingPrompt && editDetail && editDetail.id === editingPrompt.id && seededForId !== editDetail.id) {
       setForm({
         name: editDetail.name,
         description: editDetail.description ?? "",
@@ -94,8 +112,9 @@ export default function PromptsPage() {
         tags: editDetail.tags ?? [],
         text: editDetail.text,
       });
+      setSeededForId(editDetail.id);
     }
-  }, [editDetail]);
+  }, [editingPrompt, editDetail, seededForId]);
 
   // Collect categories actually used in the current prompt list
   const usedCategories = useMemo(() => {
@@ -134,6 +153,7 @@ export default function PromptsPage() {
     setEditingPrompt(null);
     setViewingDefault(null);
     setForm(emptyForm);
+    setSeededForId(null);
   };
 
   const handleSubmit = async () => {

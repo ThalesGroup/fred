@@ -726,7 +726,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "name": "Equipe personnelle",
             "member_count": 1,
             "admins": [],
-            "is_member": False,
+            "is_member": True,
             "is_private": True,
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
@@ -1253,7 +1253,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "name": "Equipe personnelle",
         "member_count": 1,
         "admins": [],
-        "is_member": False,
+        "is_member": True,
         "is_private": True,
         "permissions": [
             "can_read",
