@@ -38,17 +38,6 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
-from fred_sdk.contracts.capability import (
-    AgentCapability,
-    CapabilityContext,
-    CapabilityIdentity,
-    CapabilityManifest,
-    EmptyModel,
-    StoredCapabilityConfig,
-)
-from fred_sdk.contracts.runtime import RuntimeServices
-from pydantic import BaseModel
-
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     build_capability_agent_block,
@@ -60,6 +49,16 @@ from fred_runtime.capabilities.errors import (
     CapabilityConfigInvalidError,
     UnknownCapabilityError,
 )
+from fred_sdk.contracts.capability import (
+    AgentCapability,
+    CapabilityContext,
+    CapabilityIdentity,
+    CapabilityManifest,
+    EmptyModel,
+    StoredCapabilityConfig,
+)
+from fred_sdk.contracts.runtime import RuntimeServices
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Test capabilities

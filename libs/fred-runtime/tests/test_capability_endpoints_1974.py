@@ -37,6 +37,9 @@ from typing import Any
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
+from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import create_agent_app
+from fred_runtime.capabilities.demo import DemoEchoCapability
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
@@ -50,10 +53,6 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel
-
-from fred_runtime.app import agent_app as agent_app_module
-from fred_runtime.app import create_agent_app
-from fred_runtime.capabilities.demo import DemoEchoCapability
 from test_agent_app import _build_test_config, _EchoAgent
 
 # ---------------------------------------------------------------------------

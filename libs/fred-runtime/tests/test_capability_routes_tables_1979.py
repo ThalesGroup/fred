@@ -30,6 +30,13 @@ from __future__ import annotations
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
+from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import create_agent_app
+from fred_runtime.capabilities import CapabilityRegistry
+from fred_runtime.capabilities.demo import DemoEchoCapability
+from fred_runtime.capabilities.errors import CapabilityTableHygieneError
+from fred_runtime.capabilities.openapi_dump import dump_capability_openapi
+from fred_runtime.migrations import run_all_migrations
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -40,16 +47,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-from fred_runtime.app import agent_app as agent_app_module
-from fred_runtime.app import create_agent_app
-from fred_runtime.capabilities import CapabilityRegistry
-from fred_runtime.capabilities.demo import DemoEchoCapability
-from fred_runtime.capabilities.errors import CapabilityTableHygieneError
-from fred_runtime.capabilities.openapi_dump import dump_capability_openapi
-from fred_runtime.migrations import run_all_migrations
 from test_agent_app import _build_test_config, _EchoAgent
-
 
 # ---------------------------------------------------------------------------
 # Helpers — a running pod with the demo capability discovered

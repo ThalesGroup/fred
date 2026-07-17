@@ -29,6 +29,7 @@ from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError
 
+from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     CapabilitySettingsInvalid,
@@ -41,7 +42,6 @@ from control_plane_backend.capabilities.schemas import (
     SetCapabilityDefaultOnRequest,
     TeamCapabilityEnablementResult,
 )
-from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,

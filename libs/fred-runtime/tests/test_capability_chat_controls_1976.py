@@ -34,17 +34,6 @@ from typing import Any, Literal
 import pytest
 from conftest import ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
-from fred_sdk.contracts.capability import (
-    AgentCapability,
-    CapabilityContext,
-    CapabilityManifest,
-    ChatControlSpec,
-)
-from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import AIMessage
-from langchain_core.tools import tool
-from pydantic import BaseModel
-
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.capabilities import (
     TurnOptionsInvalidError,
@@ -53,10 +42,18 @@ from fred_runtime.capabilities import (
 )
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability import (
+    AgentCapability,
+    CapabilityContext,
+    CapabilityManifest,
+    ChatControlSpec,
     ChatControlsRequest,
     ChatControlsRequestItem,
     StoredCapabilityConfig,
 )
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import AIMessage
+from langchain_core.tools import tool
+from pydantic import BaseModel
 
 # Reuse the #1974 endpoint harness verbatim (app + fake control-plane + registry).
 from test_capability_endpoints_1974 import (

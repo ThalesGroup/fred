@@ -36,12 +36,12 @@ from typing import Iterable, Mapping
 
 from fred_core import RebacDisabledResult
 from fred_core.common import TeamId
+from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
     RelationType,
 )
-from fred_core.security.models import Resource
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 

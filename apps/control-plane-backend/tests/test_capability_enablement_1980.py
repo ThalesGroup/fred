@@ -33,6 +33,16 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from control_plane_backend.capabilities import enablement, seeding
+from control_plane_backend.capabilities.enablement import (
+    CapabilitySettingsInvalid,
+    DefaultOnNotAllowed,
+    disable_capability_for_team,
+    enable_capability_for_team,
+    reset_capability_for_team,
+    validate_team_settings,
+)
+from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
 from fred_core import CapabilityPermission, RebacDisabledResult
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -44,19 +54,7 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
-
-from control_plane_backend.capabilities import enablement, seeding
-from control_plane_backend.capabilities.enablement import (
-    CapabilitySettingsInvalid,
-    DefaultOnNotAllowed,
-    disable_capability_for_team,
-    enable_capability_for_team,
-    reset_capability_for_team,
-    validate_team_settings,
-)
-from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
 from test_main import _FakeAgentInstanceStore, _make_record
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -888,8 +886,8 @@ def test_admin_capability_routes_are_mounted(_use_test_configuration) -> None:
 async def test_enablement_is_gated_on_can_manage() -> None:
     from types import SimpleNamespace
 
-    from fred_core.security.models import AuthorizationError, Resource
     from control_plane_backend.capabilities import service as capability_service
+    from fred_core.security.models import AuthorizationError, Resource
 
     class _DenyingRebac(_FakeRebac):
         async def check_user_permission_or_raise(

@@ -31,8 +31,6 @@ import json
 from typing import Iterator, Literal
 
 import pytest
-from pydantic import BaseModel, TypeAdapter, ValidationError
-
 from fred_sdk.contracts.context import GeoPart, LinkPart, ToolInvocationResult
 from fred_sdk.contracts.openai_compat import (
     OpenAICompletionChunk,
@@ -47,6 +45,7 @@ from fred_sdk.contracts.ui_part_union import (
     current_ui_part_union,
     rebuild_ui_part_union,
 )
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 
 class DemoCardTestPart(BaseModel):

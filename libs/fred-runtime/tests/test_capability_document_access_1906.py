@@ -38,6 +38,21 @@ from typing import Any
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
+from fred_runtime.capabilities import (
+    CapabilityRegistry,
+    DuplicateCapabilityIdError,
+    build_capability_agent_block,
+    build_capability_context,
+)
+from fred_runtime.capabilities.document_access import (
+    DOCUMENT_ACCESS_TOOL_REF,
+    DocumentAccessCapability,
+    DocumentAccessConfig,
+    narrow_scope_ids,
+)
+from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
+from fred_runtime.integrations.v2_runtime import adapters as adapters_module
+from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -59,22 +74,6 @@ from fred_sdk.contracts.runtime import (
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import tool
 from pydantic import BaseModel
-
-from fred_runtime.capabilities import (
-    CapabilityRegistry,
-    DuplicateCapabilityIdError,
-    build_capability_agent_block,
-    build_capability_context,
-)
-from fred_runtime.capabilities.document_access import (
-    DOCUMENT_ACCESS_TOOL_REF,
-    DocumentAccessCapability,
-    DocumentAccessConfig,
-    narrow_scope_ids,
-)
-from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
-from fred_runtime.integrations.v2_runtime import adapters as adapters_module
-from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
 
 _ENTRY_POINT_VALUE = (
     "fred_runtime.capabilities.document_access:DocumentAccessCapability"

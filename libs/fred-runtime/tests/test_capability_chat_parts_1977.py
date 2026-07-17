@@ -32,15 +32,14 @@ import json
 from typing import Literal
 
 import pytest
-from fred_sdk.contracts.capability import CapabilityIdentity
-from fred_sdk.contracts.context import ToolInvocationResult
-from fred_sdk.contracts.runtime import RuntimeServices
-from pydantic import BaseModel, ValidationError
-
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.assembly import build_capability_context
 from fred_runtime.capabilities.demo import DemoCardPart, DemoEchoCapability
 from fred_runtime.capabilities.registry import BUILTIN_CHAT_PART_KINDS
+from fred_sdk.contracts.capability import CapabilityIdentity
+from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.runtime import RuntimeServices
+from pydantic import BaseModel, ValidationError
 
 DEMO_CARD = {"type": "demo_card", "title": "Demo echo", "body": "HELLO"}
 

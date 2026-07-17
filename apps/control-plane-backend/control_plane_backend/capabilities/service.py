@@ -27,8 +27,8 @@ from typing import Any, Mapping
 
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId
-from fred_core.security.rebac.rebac_engine import RebacEngine, RelationType
 from fred_core.security.models import Resource
+from fred_core.security.rebac.rebac_engine import RebacEngine, RelationType
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 
