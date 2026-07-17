@@ -44,6 +44,13 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from fred_runtime.react.react_model_adapter import (
+    REACT_MODEL_OPERATION_PLANNING,
+    REACT_MODEL_OPERATION_ROUTING,
+    infer_react_model_operation_from_messages,
+)
+from fred_runtime.react.react_stream_adapter import extract_interrupt_request
+from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -65,14 +72,6 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
-
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_PLANNING,
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
-from fred_runtime.react.react_stream_adapter import extract_interrupt_request
-from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 
 # ---------------------------------------------------------------------------
 # Fakes

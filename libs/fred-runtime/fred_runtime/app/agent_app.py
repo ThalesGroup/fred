@@ -53,7 +53,6 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
-from starlette.datastructures import UploadFile as StarletteUploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
@@ -72,6 +71,15 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    CapabilityIdentity,
+    ChatControlsRequest,
+    ChatControlsResponse,
+    SaveContext,
+    StoredCapabilityConfig,
+    UploadedFile,
+)
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -110,16 +118,8 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from fred_sdk.contracts.capability import (
-    CapabilityCatalogEntry,
-    CapabilityIdentity,
-    ChatControlsRequest,
-    ChatControlsResponse,
-    SaveContext,
-    StoredCapabilityConfig,
-    UploadedFile,
-)
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from fred_runtime.capabilities import (
     AssetSlotViolationError,

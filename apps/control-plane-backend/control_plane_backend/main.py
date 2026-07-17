@@ -34,6 +34,7 @@ from control_plane_backend.bootstrap.api import (
     register_exception_handlers as register_bootstrap_exception_handlers,
 )
 from control_plane_backend.bootstrap.api import router as bootstrap_router
+from control_plane_backend.capabilities.api import router as capabilities_router
 from control_plane_backend.config.loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -43,7 +44,6 @@ from control_plane_backend.config.models import AppState
 from control_plane_backend.evaluations.api import build_evaluations_router
 from control_plane_backend.import_export.api import build_import_export_router
 from control_plane_backend.kpi.api import build_kpi_router
-from control_plane_backend.capabilities.api import router as capabilities_router
 from control_plane_backend.product.api import router as product_router
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,

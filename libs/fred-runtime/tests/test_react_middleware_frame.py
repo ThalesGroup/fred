@@ -38,6 +38,19 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from fred_runtime.react.middleware import (
+    CheckpointHygieneMiddleware,
+    DynamicPromptMiddleware,
+    FredHitlMiddleware,
+    ModelRoutingMiddleware,
+    TracingKpiMiddleware,
+    build_react_platform_middleware_frame,
+)
+from fred_runtime.react.react_model_adapter import (
+    REACT_MODEL_OPERATION_ROUTING,
+    infer_react_model_operation_from_messages,
+)
+from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -58,20 +71,6 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
-
-from fred_runtime.react.middleware import (
-    CheckpointHygieneMiddleware,
-    DynamicPromptMiddleware,
-    FredHitlMiddleware,
-    ModelRoutingMiddleware,
-    TracingKpiMiddleware,
-    build_react_platform_middleware_frame,
-)
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
-from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 
 # ---------------------------------------------------------------------------
 # Fakes

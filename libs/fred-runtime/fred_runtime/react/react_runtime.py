@@ -79,6 +79,8 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
 # - this file should decide when Fred invokes, streams, and emits runtime events
@@ -144,8 +146,6 @@ from .react_tool_binding import (
 from .react_tool_binding import (
     build_runtime_tool_prompt_suffix as _build_runtime_tool_prompt_suffix,
 )
-from fred_runtime.capabilities.assembly import CapabilityAgentBlock
-
 from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver

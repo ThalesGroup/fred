@@ -27,15 +27,6 @@ from importlib.metadata import EntryPoint
 from typing import Any, Literal
 
 import pytest
-from fred_sdk.contracts.capability import (
-    AgentCapability,
-    CapabilityContext,
-    CapabilityManifest,
-    EmptyModel,
-    TeamScopePolicy,
-)
-from pydantic import BaseModel
-
 from fred_runtime.capabilities import (
     CapabilityRegistrationError,
     CapabilityRegistry,
@@ -46,6 +37,14 @@ from fred_runtime.capabilities import (
     boot_capability_registry,
 )
 from fred_runtime.capabilities.demo import DemoEchoCapability
+from fred_sdk.contracts.capability import (
+    AgentCapability,
+    CapabilityContext,
+    CapabilityManifest,
+    EmptyModel,
+    TeamScopePolicy,
+)
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Capability factory

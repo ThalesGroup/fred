@@ -32,9 +32,20 @@ imported, not duplicated) and covers what the registry tests cannot:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from fred_runtime.capabilities import (
+    CapabilityRegistry,
+    build_capability_agent_block,
+    build_capability_context,
+)
+from fred_runtime.capabilities.demo import DemoEchoCapability, DemoEchoConfig
+from fred_runtime.react.react_model_adapter import (
+    REACT_MODEL_OPERATION_ROUTING,
+    infer_react_model_operation_from_messages,
+)
+from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -53,19 +64,6 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import BaseModel
-from typing import cast
-
-from fred_runtime.capabilities import (
-    CapabilityRegistry,
-    build_capability_agent_block,
-    build_capability_context,
-)
-from fred_runtime.capabilities.demo import DemoEchoCapability, DemoEchoConfig
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
-from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from test_react_middleware_frame import (
     ScriptedModel,
     _binding,

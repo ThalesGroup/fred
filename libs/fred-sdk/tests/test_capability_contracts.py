@@ -27,8 +27,6 @@ import asyncio
 from typing import Any, Literal
 
 import pytest
-from pydantic import BaseModel, ValidationError
-
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
@@ -52,6 +50,7 @@ from fred_sdk.contracts.capability.manifest import (
 )
 from fred_sdk.contracts.models import AgentTuning, FieldSpec, MCPServerConfiguration
 from fred_sdk.contracts.runtime import RuntimeServices
+from pydantic import BaseModel, ValidationError
 
 # ---------------------------------------------------------------------------
 # Fixture capability

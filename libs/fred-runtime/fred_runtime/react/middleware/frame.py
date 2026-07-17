@@ -25,10 +25,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
+from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import ChatModelFactoryPort, TracerPort
-from fred_core.kpi import BaseKPIWriter
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware

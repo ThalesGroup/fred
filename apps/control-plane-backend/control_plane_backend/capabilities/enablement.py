@@ -37,6 +37,7 @@ from typing import Any, Iterable, Mapping
 
 from fred_core.common import TeamId
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
@@ -44,7 +45,6 @@ from fred_core.security.rebac.rebac_engine import (
     Relation,
     RelationType,
 )
-from fred_core.security.models import Resource
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import FieldSpec
 

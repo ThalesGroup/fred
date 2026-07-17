@@ -8,7 +8,6 @@ Create Date: 2026-07-16 10:42:07.342830
 
 from typing import Sequence, Union
 
-
 # revision identifiers, used by Alembic.
 revision: str = "7fb19a619b0e"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = ("a1b2c3d4e5f7", "b1c2d3e4f5a6")

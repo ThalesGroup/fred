@@ -38,21 +38,20 @@ from pathlib import Path
 from typing import Literal, cast
 
 from fastapi import APIRouter
-from langchain.agents.middleware import AgentMiddleware
-from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel
-from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 from fred_sdk.contracts.capability import (
     AgentCapability,
-    CapabilityManifest,
     CapabilityContext,
+    CapabilityManifest,
     EmptyModel,
     SidePanelSpec,
 )
 from fred_sdk.contracts.context import ToolInvocationResult, UiPart
 from fred_sdk.contracts.models import FieldSpec
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class DemoEchoConfig(BaseModel):
