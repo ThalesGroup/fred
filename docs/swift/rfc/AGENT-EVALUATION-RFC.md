@@ -367,6 +367,49 @@ No new OpenFGA relation is introduced in the MVP.
 
 The task-event access rule must be amended so a team-scoped task is readable by authorized team members, not only its creator or a platform owner.
 
+### 8.5 Amendment 2026-07-16 (EVAL-05 — two nouns: Evaluation, Run — Campaign and Dataset both retire)
+
+§8.1-8.4 describe a single `POST .../evaluation-campaigns` that creates and starts one
+disposable execution in the same call, with an inline (later `dataset_id`-referenced) test
+set. Revisiting with Thomas/Odélia landed on a leaner split than the first `EVAL-05` draft:
+not three nouns (Dataset, Evaluation, Run) but two. `Campaign` retires as before, and
+`Dataset`/`EvaluationDataset` (`EVAL-04`) also retires — an `Evaluation` **is** the versioned
+JSON test set (what `EVAL-04` called a dataset), not a wrapper around one. What moves out of
+`Evaluation` and onto `Run` is target/model/prompt selection: an analyst names an `Evaluation`
+and gives it cases; each `Run` of it independently picks what to evaluate against.
+
+```http
+POST   /evaluation/v1/evaluations                       201, no run created — name + cases (JSON import or manual rows)
+GET    /evaluation/v1/evaluations?scope=user|team&team_id=<id>
+GET    /evaluation/v1/evaluations/{evaluation_id}
+
+POST   /evaluation/v1/evaluations/{evaluation_id}/runs   202 {run_id, task_id, state:"pending"} — body: {target, profile?, judge_profile_id?, execution?}
+GET    /evaluation/v1/evaluations/{evaluation_id}/runs   drives the "grouped by evaluation" list
+GET    /evaluation/v1/runs/{run_id}
+GET    /evaluation/v1/runs/{run_id}/cases
+GET    /evaluation/v1/runs/{run_id}/cases/{case_id}
+POST   /evaluation/v1/runs/{run_id}/cancel
+```
+
+`/evaluation/v1/datasets` (`EVAL-04`) is superseded by `/evaluation/v1/evaluations`, not kept
+alongside it — one route family, not two. `GET/POST /tasks/{task_id}/events` are reused
+unchanged. `Evaluation` has no update route — re-importing the same name creates a new version
+and becomes current, the "overwrite" behavior already agreed for datasets, now the behavior for
+evaluations. Deletion, rerun-with-overrides, and baseline comparison remain deferred, as under
+§8.3.
+
+> Route prefix note: the examples above and in §8.1-8.4 predate the `/evaluation/v1`
+> standalone-service extraction (`EVAL-02`, folded into `OPS-04`) already called out in the
+> §12.5 correction. New work targets `/evaluation/v1/...`, not `/control-plane/v1/...`.
+
+**Known gap, not introduced or fixed by this amendment:** the live `/evaluation/v1` routes in
+`fred-agent-evaluator` currently carry no ReBAC permission check at all — only
+`get_current_user` — unlike the `TeamPermission.CAN_READ`/`CAN_UPDATE_AGENTS` table in §8.4,
+which was enforced on the old (now-dead) `control-plane-backend` evaluations module but never
+ported when the evaluator moved to its own service. This must close before wider rollout;
+track as a backlog item reusing the pattern already proven in `EVAL-03`/`EVAL-AUTH` rather than
+solving it here.
+
 ---
 
 ## 9. Canonical data model
@@ -456,6 +499,86 @@ The system exposes independent dimensions:
 | Campaign verdict | Did the configured quality policy pass? |
 
 A campaign task reaches `succeeded` when all processable cases have durable terminal records and aggregates were computed. It may still have `verdict="failed"` because the evaluated agent failed quality thresholds.
+
+### 9.5 Amendment 2026-07-16 (EVAL-05 — two nouns: Evaluation absorbs Dataset, Run carries target/policy)
+
+`EvaluationCampaign` (§9.1) is superseded, not deleted from this document — it stays as
+historical context for §7-8's original design. Revised after further discussion (see §8.5):
+not `Evaluation` as a thin wrapper around a separately-referenced dataset, but `Evaluation`
+**as** the named, versioned, immutable case set — the same object `EVAL-04` shipped as
+`EvaluationDataset`, renamed and given a `runs` collection. Target, profile, and judge profile
+are **not** fixed on `Evaluation` — they are chosen per `Run`, because in practice the same
+named use case (e.g. "usage-arxivai") gets evaluated against different models/prompts over
+time, and fixing the target at definition time would have forced a new `Evaluation` for every
+config change. This is still a rename plus a cardinality change on top of existing structure,
+not a new architecture: `fred-agent-evaluator`'s `campaigns/models.py` already has a separate
+`EvaluationRunRow` alongside `EvaluationCampaignRow` at the storage layer.
+
+```python
+class EvaluationCase(BaseModel):
+    external_id: str | None
+    input: str
+    expected_output: str | None = None
+    tags: list[str] = []
+
+class Evaluation(BaseModel):
+    schema_version: Literal["1"] = "1"
+    evaluation_id: str            # was dataset_id
+    name: str                     # user-supplied at creation (e.g. "usage-arxivai") — the primary identity in the grouped list; a deliberate change from EVAL-04's server-derived dataset name, which fit a disposable artifact, not a reusable, named use case
+    version: str                  # immutable; re-import under the same name = new version = "overwrite"
+    team_id: str
+    created_by: str
+    origin: Literal["upload", "manual"]
+    completeness: Literal["minimal", "complete"]   # derived: minimal if any case lacks expected_output
+    cases: list[EvaluationCase]
+    created_at: datetime
+
+class EvaluationRun(BaseModel):
+    schema_version: Literal["1"] = "1"
+    run_id: str
+    evaluation_id: str
+    task_id: str
+    target: EvaluationTarget       # chosen at Start time — managed agent only this increment, per EVAL-04's scope reduction
+    profile: str
+    judge_profile_id: str
+    operational_state: TaskState
+    verdict: Literal["pending", "passed", "failed", "inconclusive"]
+    total_cases: int
+    completed_cases: int
+    passed_cases: int
+    failed_cases: int
+    execution_error_cases: int
+    scoring_error_cases: int
+    snapshot: RunSnapshot
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+class RunSnapshot(BaseModel):
+    schema_version: Literal["1"] = "1"
+    evaluation_name: str
+    evaluation_version: str
+    target: EvaluationTarget
+    resolved_target_config: dict[str, str] | None   # prompt/config id, corpus tag set — whatever prepare-execution resolves at Start time
+    profile: str
+    judge_profile_id: str
+    execution: EvaluationExecutionOptions            # concurrency/timeout actually used, not just the server default at read time
+```
+
+Why a snapshot is still needed even though `Evaluation` is immutable: the immutability of
+`Evaluation` only pins the case content — it says nothing about the target. Two `Run`s of the
+same `Evaluation` can resolve a different prompt/config/corpus for the same
+`agent_instance_id` over time, and server-side execution defaults can change between server
+deploys. `RunSnapshot` is what a later "why was this run okay and that one wasn't" question
+reads, written once at run creation and never joined live. No case-content copy is needed
+inside `RunSnapshot` itself: `EvaluationCaseResult` (§9.2, renaming `campaign_id` to `run_id`)
+already persists each case's `input`/`expected_output` per run.
+
+**Cleanup candidate, not resolved here:** `control-plane-backend`'s pre-existing
+`evaluations/` module (inline `dataset_name`/`dataset_version`, no `dataset_id`) appears
+unreferenced now that the frontend targets `/evaluation/v1` exclusively — flag for deletion
+once confirmed dead, per the minimality convention; do not carry two implementations of the
+same concept forward.
 
 ---
 
@@ -606,6 +729,65 @@ The implementation should reuse the interaction patterns of `ProcessorBench.tsx`
 ### 12.5 Generated API types
 
 All request and response types come from Control Plane OpenAPI generation. Hand-written duplicates of evaluation API types are not accepted.
+
+> **Correction (2026-07-16, EVAL-04):** the evaluator ships as its own standalone
+> `/evaluation/v1` service (per `EVAL-02`'s fold into `OPS-04`), not inside Control Plane.
+> Types are generated from the evaluator's own OpenAPI spec, vendored into
+> `apps/frontend/src/slices/evaluation/` per that directory's `README.md`. The
+> "no hand-written duplicates" rule itself is unchanged.
+
+### Amendment 2026-07-16 (EVAL-04 — first-release scope reduction)
+
+The sections above (§12.1-§12.4) describe the full target UX. The first shipped release
+(`EVAL-04`) is deliberately smaller and breaking, not incremental:
+
+- **No new routes.** The creation/list/detail views are hosted inside the Team Settings
+  panel's modal (`TeamSettingsEvaluations`), not at `/monitoring/evaluations/*` — this was
+  already true before `EVAL-04` and remains unaddressed; tracked as a known gap, not solved
+  here.
+- **§12.2 Campaign creation** is reduced to one journey, no steps: pick a managed agent
+  (no target-kind choice, no runtime-agent option, no execution-option controls) → pick an
+  existing saved dataset **or** create one (JSON import or manual rows only — **no CSV**) →
+  one "Start evaluation" button. No evaluation-policy step: profile, judge profile,
+  metrics/thresholds, and concurrency are all server-owned defaults this release, not
+  user-selectable. No campaign-name input; the server derives one from the dataset.
+  Datasets are now a first-class resource (`POST`/`GET /evaluation/v1/datasets`,
+  server-assigned name and version) referenced by campaigns via `dataset_id` — the old
+  inline dataset/cases request shape is removed, not kept alongside it.
+- **§12.3 Campaign list** — `dataset name/version` is still displayed, now sourced from the
+  joined dataset resource via the campaign response's `dataset` summary field instead of
+  campaign-local strings.
+- Deferred, not abandoned: CSV import, runtime-agent targets, custom metrics/judge/profile
+  selection, concurrency/timeout controls, the `/monitoring/evaluations/*` routes, and a
+  standalone dataset-management screen. See `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`
+  §Phase 4 and `fred-agent-evaluator/docs/rfc/EVAL-DATASET-RFC.md` §12 amendment for the
+  matching backend scope.
+
+### Amendment 2026-07-16 (EVAL-05 — two nouns: Evaluation, Run — creation vs. Start, grouped list)
+
+Revised after further discussion (§8.5/§9.5): not three UI concepts (dataset picker inside
+campaign creation, an evaluation wrapper, a run) but two — the `EVAL-04` dataset-picker
+sub-step disappears because creating an `Evaluation` **is** creating what `EVAL-04` called a
+dataset.
+
+- **Create vs. Start become two separate actions, split across two screens instead of one
+  combined step.** "Create evaluation" — name + cases (JSON import or manual rows, still no
+  CSV) — persists an `Evaluation`, no task created, no target chosen yet. "Start", on the
+  evaluation's own detail view, is where target (managed agent only, still no runtime-agent
+  option) is chosen; repeatable, each click creating a new `Run`. Policy (profile/judge/
+  concurrency) stays server-owned-defaults, consistent with `EVAL-04`; only target moves to
+  Start-time selection.
+- **List view groups by evaluation.** Each row is an `Evaluation` (name, case count, latest
+  run's target/state/verdict, run count); expanding it lists its `Run`s the way the old
+  campaign list displayed one row per campaign. `EvaluationCampaignCreate.tsx` and
+  `EvaluationCampaignDetail.tsx` are renamed accordingly (`EvaluationCreate.tsx` for the
+  name+cases form, `EvaluationDetail.tsx` for the run list + Start action, `RunDetail.tsx` for
+  the existing task-SSE/metric-cards/case-table view scoped to one `run_id` instead of one
+  `campaign_id`).
+- Everything else in `EVAL-04`'s scope reduction (no `/monitoring/evaluations/*` routes yet, no
+  CSV, no runtime-agent target) is unchanged by this amendment. The "standalone dataset
+  screen" item is superseded by this amendment's own evaluation list/detail views, which now
+  are that screen.
 
 ---
 
