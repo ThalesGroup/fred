@@ -99,7 +99,12 @@ export default function PromptsPage() {
     // without this guard, resetting `seededForId` in `closeModal` would
     // immediately re-mark it "seeded" against that lingering `editDetail`
     // before the card is ever reopened.
-    if (editingPrompt && editDetail && seededForId !== editDetail.id) {
+    // `editDetail.id === editingPrompt.id` is required too: if the user
+    // closes prompt A and opens prompt B before B's query resolves,
+    // `editDetail` can still be A's lingering result while `editingPrompt`
+    // is already B — without this check the form would seed from A's
+    // content under B's id (PR review, chatgpt-codex-connector).
+    if (editingPrompt && editDetail && editDetail.id === editingPrompt.id && seededForId !== editDetail.id) {
       setForm({
         name: editDetail.name,
         description: editDetail.description ?? "",

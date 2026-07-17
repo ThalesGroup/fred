@@ -71,25 +71,58 @@ const PROMPT_DETAIL = {
   text: "Real prompt text",
 };
 
+// A second prompt used only by the cross-prompt-leak test below. Its detail
+// query "resolves" only once `promptBReady` is flipped, letting the test
+// hold it in the uninitialized/loading gap where a naive re-seed guard would
+// leak the previous prompt's still-lingering `data` into its form.
+const PROMPT_B_SUMMARY = {
+  id: "prompt-2",
+  name: "Other Name",
+  description: "Other description",
+  category: "other" as const,
+  is_default: false,
+};
+const PROMPT_B_DETAIL = {
+  id: "prompt-2",
+  team_id: "team-1",
+  name: "Other Name",
+  description: "Other description",
+  category: "other" as const,
+  tags: [],
+  text: "Other prompt text",
+};
+let promptBReady = false;
+
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => ({
-    data: [PROMPT_SUMMARY],
+    data: [PROMPT_SUMMARY, PROMPT_B_SUMMARY],
     isLoading: false,
     isFetching: false,
     isUninitialized: false,
     isError: false,
     refetch: async () => {},
   }),
-  // Faithful reproduction of RTK Query's confirmed `data` persistence:
-  // returns the same PROMPT_DETAIL reference for a given id whenever not
-  // skipped, and leaves it untouched (not reset to undefined) while skipped.
+  // Faithful reproduction of RTK Query's confirmed `data` persistence
+  // (verified directly against @reduxjs/toolkit's buildHooks.ts
+  // `queryStatePreSelector`: `lastValue` is a per-hook-instance ref that is
+  // NEVER cleared on an args change, only on a very specific same-args store
+  // reset). So switching from one promptId to a different one keeps
+  // returning the PREVIOUS id's data for as long as the new id's fetch
+  // hasn't resolved yet — `lastData` below models exactly that.
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: (
     args: { promptId: string },
     opts: { skip: boolean },
   ) => {
     const lastData = useRef<typeof PROMPT_DETAIL | undefined>(undefined);
-    if (!opts.skip && args.promptId === PROMPT_DETAIL.id) {
-      lastData.current = PROMPT_DETAIL;
+    if (!opts.skip) {
+      if (args.promptId === PROMPT_DETAIL.id) {
+        lastData.current = PROMPT_DETAIL;
+      } else if (args.promptId === PROMPT_B_DETAIL.id && promptBReady) {
+        lastData.current = PROMPT_B_DETAIL;
+      }
+      // else: prompt-2 requested but not "resolved" yet — lastData.current
+      // is deliberately left untouched, lingering on whatever it held
+      // before (prompt-1's detail, if that was open last).
     }
     return { data: lastData.current };
   },
@@ -144,8 +177,9 @@ describe("PromptsPage edit form reseed", () => {
       root.render(<PromptsPage />);
     });
 
-    const openCard = () => {
-      const card = container.querySelector('[role="button"]') as HTMLElement;
+    const openCard = (index = 0) => {
+      const cards = container.querySelectorAll('[role="button"]');
+      const card = cards[index] as HTMLElement;
       act(() => {
         card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       });
@@ -172,6 +206,57 @@ describe("PromptsPage edit form reseed", () => {
       name: "Real Name",
       description: "Real description",
       text: "Real prompt text",
+    });
+  });
+
+  it("does not leak the previous prompt's data into a different prompt opened before its query resolves", () => {
+    // PR review (chatgpt-codex-connector): closing prompt 1 and opening
+    // prompt 2 before prompt 2's detail query resolves must not seed
+    // prompt 2's form with prompt 1's still-lingering `editDetail`.
+    promptBReady = false;
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+
+    const openCard = (index: number) => {
+      const cards = container.querySelectorAll('[role="button"]');
+      const card = cards[index] as HTMLElement;
+      act(() => {
+        card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+    };
+
+    // Open prompt 1 — resolves immediately, seeds the form.
+    openCard(0);
+    expect(formValues()).toEqual({
+      name: "Real Name",
+      description: "Real description",
+      text: "Real prompt text",
+    });
+
+    // Close, then open prompt 2 while its detail query is still pending
+    // (promptBReady is false — mirrors the real gap before a fresh fetch
+    // resolves). The form must NOT show prompt 1's leftover content.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    openCard(1);
+    expect(formValues()).toEqual({ name: "", description: "", text: "" });
+
+    // Prompt 2's query resolves: the form must now show ITS data.
+    promptBReady = true;
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    expect(formValues()).toEqual({
+      name: "Other Name",
+      description: "Other description",
+      text: "Other prompt text",
     });
   });
 });
