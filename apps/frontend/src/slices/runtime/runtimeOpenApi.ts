@@ -846,6 +846,7 @@ export type CapabilityCatalogEntry = {
   /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   id: string;
+  kind?: "tool" | "agent";
   /** i18n key */
   name: string;
   route_base_url?: string | null;
