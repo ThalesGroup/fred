@@ -4,9 +4,15 @@
 
 Two key references before diving in:
 
-- [How do you test it?](docs/swift/TESTING.md) — clone, run, and know in four steps whether this checkout actually works
+- [How do you test it?](docs/swift/TESTING.md) — clone, run, and know in five steps whether this checkout actually works
 - [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
 - [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
+
+> **Testing or developing locally? Don't stop after starting the apps.** Every
+> tool and agent template is admin-gated by default now (CAPAB-01/CTRLP-14) —
+> right after provisioning the demo platform, every team has an empty
+> toolbox until an admin explicitly authorizes it. See
+> [`TESTING.md`](docs/swift/TESTING.md) steps 3–4.
 
 Fred is a production-ready platform for building and operating multi-agent AI applications. It has two complementary faces:
 
