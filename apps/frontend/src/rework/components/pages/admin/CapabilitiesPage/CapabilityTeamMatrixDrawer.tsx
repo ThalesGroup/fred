@@ -343,6 +343,8 @@ export function CapabilityTeamMatrixDrawer({
                       <ButtonGroup
                         size="small"
                         color="primary"
+                        variant="radio"
+                        aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: personalLabel })}
                         selectedIndex={CHOICES.indexOf(displayChoice)}
                         onSelectedIndexChange={(index) => selectPersonalChoice(displayChoice, CHOICES[index])}
                         items={CHOICES.map((target) => ({
