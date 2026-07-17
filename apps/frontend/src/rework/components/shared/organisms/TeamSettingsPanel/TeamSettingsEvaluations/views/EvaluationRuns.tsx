@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The Runs of ONE Evaluation — RFC AGENT-EVALUATION §8.5: this list is "grouped
+// by evaluation", never a flat team-wide run list. The case set is shared by every
+// row here, which is exactly what makes two Runs comparable: they differ only by
+// the target/config each froze in its RunSnapshot.
+
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -26,26 +31,25 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { FieldBlock, StatusPill, operationalToTaskState, scoreTone, verdictTone } from "./EvaluationShared";
 import {
-  useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation,
-  useListCampaignsEvaluationV1CampaignsGetQuery,
-  useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
-  type EvaluationCampaignResponse,
+  useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
+  useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
+  useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
   type EvaluationCaseResponse,
+  type EvaluationRun,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
-import styles from "./EvaluationCampaigns.module.css";
+import styles from "./EvaluationRuns.module.css";
 
-interface EvaluationCampaignsProps {
-  teamId: string;
-  onNewCampaign: () => void;
-  onOpenCampaign: (campaignId: string, selectedCaseId?: string) => void;
+interface EvaluationRunsProps {
+  evaluationId: string;
+  evaluationName: string;
+  onBack: () => void;
+  onNewRun: () => void;
+  onOpenRun: (runId: string, selectedCaseId?: string) => void;
 }
 
-function targetLabel(
-  target: EvaluationCampaignResponse["target"],
-  t: (k: string, o?: Record<string, unknown>) => string,
-): string {
+function targetLabel(target: EvaluationRun["target"], t: (k: string, o?: Record<string, unknown>) => string): string {
   if (target.kind === "managed_instance") {
-    return t("rework.evaluation.campaigns.targetInstance", {
+    return t("rework.evaluation.runs.targetInstance", {
       id: target.agent_instance_id.slice(0, 8),
     });
   }
@@ -55,36 +59,36 @@ function targetLabel(
 // ── Case drawer ────────────────────────────────────────────────────────────
 
 function CaseDrawer({
-  campaignId,
+  runId,
   open,
   onClose,
   onOpenCase,
 }: {
-  campaignId: string | null;
+  runId: string | null;
   open: boolean;
   onClose: () => void;
   onOpenCase: (caseId: string) => void;
 }) {
   const { t } = useTranslation();
-  const { data, isLoading, isError } = useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery(
-    { campaignId: campaignId ?? "", limit: 200 },
-    { skip: !campaignId || !open },
+  const { data, isLoading, isError } = useListRunCasesEvaluationV1RunsRunIdCasesGetQuery(
+    { runId: runId ?? "", limit: 200 },
+    { skip: !runId || !open },
   );
   const cases = data?.cases ?? [];
 
   return (
-    <InlineDrawer open={open} onClose={onClose} title={t("rework.evaluation.campaigns.drawerTitle")} width="560px">
-      <p className={styles.drawerHint}>{t("rework.evaluation.campaigns.drawerHint")}</p>
+    <InlineDrawer open={open} onClose={onClose} title={t("rework.evaluation.runs.drawerTitle")} width="560px">
+      <p className={styles.drawerHint}>{t("rework.evaluation.runs.drawerHint")}</p>
 
       {isLoading && <p className={styles.muted}>{t("common.loading")}</p>}
-      {isError && <p className={styles.error}>{t("rework.evaluation.campaigns.casesError")}</p>}
+      {isError && <p className={styles.error}>{t("rework.evaluation.runs.casesError")}</p>}
 
       <div className={styles.caseList}>
         {cases.map((c) => (
           <CaseCard key={c.case_id} c={c} onClick={() => onOpenCase(c.case_id)} />
         ))}
         {!isLoading && !isError && cases.length === 0 && (
-          <p className={styles.muted}>{t("rework.evaluation.campaigns.noCases")}</p>
+          <p className={styles.muted}>{t("rework.evaluation.runs.noCases")}</p>
         )}
       </div>
     </InlineDrawer>
@@ -101,17 +105,17 @@ function CaseCard({ c, onClick }: { c: EvaluationCaseResponse; onClick: () => vo
           <StatusPill label={c.verdict} tone={verdictTone(c.verdict)} />
           {c.metrics.length > 0 && (
             <span className={styles.muted}>
-              {t("rework.evaluation.campaigns.metricsCount", { count: c.metrics.length })}
+              {t("rework.evaluation.runs.metricsCount", { count: c.metrics.length })}
             </span>
           )}
         </div>
       </div>
 
-      <FieldBlock label={t("rework.evaluation.campaigns.inputLabel")} value={c.input} />
+      <FieldBlock label={t("rework.evaluation.runs.inputLabel")} value={c.input} />
 
       {c.execution_error && (
         <div className={styles.execError}>
-          <span className={styles.execErrorTitle}>{t("rework.evaluation.campaigns.executionError")}</span>
+          <span className={styles.execErrorTitle}>{t("rework.evaluation.runs.executionError")}</span>
           <span>{c.execution_error}</span>
         </div>
       )}
@@ -139,53 +143,48 @@ function CaseCard({ c, onClick }: { c: EvaluationCaseResponse; onClick: () => vo
         </div>
       )}
 
-      <span className={styles.caseLink}>{t("rework.evaluation.campaigns.viewFullDetail")}</span>
+      <span className={styles.caseLink}>{t("rework.evaluation.runs.viewFullDetail")}</span>
     </button>
   );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default function EvaluationCampaigns({ teamId, onNewCampaign, onOpenCampaign }: EvaluationCampaignsProps) {
+export default function EvaluationRuns({
+  evaluationId,
+  evaluationName,
+  onBack,
+  onNewRun,
+  onOpenRun,
+}: EvaluationRunsProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
-  const [drawerCampaignId, setDrawerCampaignId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<EvaluationCampaignResponse | null>(null);
+  const [drawerRunId, setDrawerRunId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EvaluationRun | null>(null);
 
-  const { data, isLoading, isError, refetch } = useListCampaignsEvaluationV1CampaignsGetQuery(
-    { teamId },
-    { skip: !teamId, pollingInterval: 10_000 },
+  const { data, isLoading, isError, refetch } = useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery(
+    { evaluationId },
+    { skip: !evaluationId, pollingInterval: 10_000 },
   );
-  const [deleteCampaign, { isLoading: isDeleting }] = useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation();
+  const [deleteRun, { isLoading: isDeleting }] = useDeleteRunEvaluationV1RunsRunIdDeleteMutation();
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteCampaign({ campaignId: deleteTarget.campaign_id }).unwrap();
-      showSuccess({ summary: t("rework.evaluation.campaigns.deleteSuccess") });
+      await deleteRun({ runId: deleteTarget.run_id }).unwrap();
+      showSuccess({ summary: t("rework.evaluation.runs.deleteSuccess") });
       setDeleteTarget(null);
       refetch();
     } catch {
-      showError({ summary: t("rework.evaluation.campaigns.deleteError") });
+      showError({ summary: t("rework.evaluation.runs.deleteError") });
     }
   };
 
-  const campaigns = data?.campaigns ?? [];
-  const running = campaigns.filter((c) => c.operational_state === "running").length;
-  const totalCases = campaigns.reduce((sum, c) => sum + c.completed_cases, 0);
-  const criticalErrors = campaigns.reduce((sum, c) => sum + c.execution_error_cases, 0);
-  const completedWithAverages = campaigns.filter((c) => c.metric_averages && Object.keys(c.metric_averages).length > 0);
-  const globalScore = completedWithAverages.length
-    ? Math.round(
-        (completedWithAverages.reduce((sum, c) => {
-          const vals = Object.values(c.metric_averages!);
-          const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-          return sum + avg;
-        }, 0) /
-          completedWithAverages.length) *
-          100,
-      )
-    : null;
+  const runs = data ?? [];
+  const running = runs.filter((run) => run.operational_state === "running").length;
+  const completed = runs.filter((run) => run.operational_state === "completed").length;
+  const totalCases = runs.reduce((sum, run) => sum + run.completed_cases, 0);
+  const criticalErrors = runs.reduce((sum, run) => sum + run.execution_error_cases, 0);
 
   // Service unreachable → mirror the knowledge-flow "service not running" notice.
   if (isError) {
@@ -205,124 +204,123 @@ export default function EvaluationCampaigns({ teamId, onNewCampaign, onOpenCampa
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>{t("rework.evaluation.campaigns.title")}</h1>
-          <p className={styles.subtitle}>{t("rework.evaluation.campaigns.description")}</p>
+          <h1 className={styles.title}>{evaluationName}</h1>
+          <p className={styles.subtitle}>{t("rework.evaluation.runs.description")}</p>
         </div>
-        <Button color="primary" variant="filled" size="medium" onClick={onNewCampaign}>
-          {t("rework.evaluation.campaigns.newCampaign")}
-        </Button>
+        <div className={styles.actionsCell}>
+          <Button
+            color="on-surface"
+            variant="text"
+            size="medium"
+            icon={{ category: "outlined", type: "arrow_back" }}
+            onClick={onBack}
+          >
+            {t("rework.evaluation.runs.backToEvaluations")}
+          </Button>
+          <Button color="primary" variant="filled" size="medium" onClick={onNewRun}>
+            {t("rework.evaluation.runs.newRun")}
+          </Button>
+        </div>
       </div>
 
       <div className={styles.kpiRow}>
         <KpiStatCard
-          label={t("rework.evaluation.campaigns.kpi.active")}
+          label={t("rework.evaluation.runs.kpi.active")}
           value={running}
           isLoading={isLoading}
           isError={isError}
         />
         <KpiStatCard
-          label={t("rework.evaluation.campaigns.kpi.globalScore")}
-          value={globalScore ?? undefined}
+          label={t("rework.evaluation.runs.kpi.completed")}
+          value={completed}
           isLoading={isLoading}
           isError={isError}
         />
         <KpiStatCard
-          label={t("rework.evaluation.campaigns.kpi.casesEvaluated")}
+          label={t("rework.evaluation.runs.kpi.casesEvaluated")}
           value={totalCases}
           isLoading={isLoading}
           isError={isError}
         />
         <KpiStatCard
-          label={t("rework.evaluation.campaigns.kpi.criticalFailures")}
+          label={t("rework.evaluation.runs.kpi.criticalFailures")}
           value={criticalErrors}
           isLoading={isLoading}
           isError={isError}
         />
       </div>
 
-      {!isLoading && campaigns.length === 0 && (
+      {!isLoading && runs.length === 0 && (
         <PageEmptyState
           icon="reviews"
-          message={t("rework.evaluation.campaigns.empty")}
-          action={{ label: t("rework.evaluation.campaigns.createCampaign"), onClick: onNewCampaign }}
+          message={t("rework.evaluation.runs.empty")}
+          action={{ label: t("rework.evaluation.runs.newRun"), onClick: onNewRun }}
         />
       )}
 
-      {!isLoading && campaigns.length > 0 && (
+      {!isLoading && runs.length > 0 && (
         <div className={styles.table} role="table">
           <div className={`${styles.row} ${styles.headerRow}`} role="row">
-            <span>{t("rework.evaluation.campaigns.col.name")}</span>
-            <span>{t("rework.evaluation.campaigns.col.target")}</span>
-            <span>{t("rework.evaluation.campaigns.col.state")}</span>
-            <span>{t("rework.evaluation.campaigns.col.verdict")}</span>
-            <span>{t("rework.evaluation.campaigns.col.progress")}</span>
-            <span>{t("rework.evaluation.campaigns.col.scores")}</span>
+            <span>{t("rework.evaluation.runs.col.run")}</span>
+            <span>{t("rework.evaluation.runs.col.target")}</span>
+            <span>{t("rework.evaluation.runs.col.state")}</span>
+            <span>{t("rework.evaluation.runs.col.verdict")}</span>
+            <span>{t("rework.evaluation.runs.col.progress")}</span>
+            <span>{t("rework.evaluation.runs.col.scores")}</span>
             <span />
           </div>
 
-          {campaigns.map((c) => {
-            const isRunning = c.operational_state === "running";
+          {runs.map((run) => {
+            const isRunning = run.operational_state === "running";
             return (
               <div
-                key={c.campaign_id}
+                key={run.run_id}
                 className={`${styles.row} ${styles.bodyRow} ${isRunning ? styles.rowRunning : ""}`}
                 role="row"
                 tabIndex={0}
-                onClick={() => setDrawerCampaignId(c.campaign_id)}
+                onClick={() => setDrawerRunId(run.run_id)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") setDrawerCampaignId(c.campaign_id);
+                  if (e.key === "Enter") setDrawerRunId(run.run_id);
                 }}
               >
                 <div className={styles.nameCell}>
-                  {isRunning && <IndicatorDot status="streaming" label={t("rework.evaluation.campaigns.col.state")} />}
+                  {isRunning && <IndicatorDot status="streaming" label={t("rework.evaluation.runs.col.state")} />}
                   <div>
-                    <div className={styles.name}>{c.name}</div>
-                    <div className={styles.mono}>{c.campaign_id.slice(0, 12)}</div>
+                    <div className={styles.name}>
+                      {t("rework.evaluation.runs.versionLabel", { version: run.snapshot.evaluation_version })}
+                    </div>
+                    <div className={styles.mono}>{run.run_id.slice(0, 12)}</div>
                   </div>
                 </div>
-                <span className={styles.mono}>{targetLabel(c.target, t)}</span>
+                <span className={styles.mono}>{targetLabel(run.target, t)}</span>
                 <span>
-                  <TaskStateBadge state={operationalToTaskState(c.operational_state)} />
+                  <TaskStateBadge state={operationalToTaskState(run.operational_state)} />
                 </span>
                 <span>
-                  <StatusPill label={c.verdict} tone={verdictTone(c.verdict)} />
+                  <StatusPill label={run.verdict} tone={verdictTone(run.verdict)} />
                 </span>
                 <div className={styles.progressCell}>
                   <span className={styles.muted}>
-                    {c.completed_cases} / {c.total_cases}
+                    {run.completed_cases} / {run.total_cases}
                   </span>
-                  <ProgressBar theme="secondary" current={c.completed_cases} max={c.total_cases || 1} />
+                  <ProgressBar theme="secondary" current={run.completed_cases} max={run.total_cases || 1} />
                 </div>
                 <div className={styles.scoresCell}>
-                  {c.metric_averages && Object.keys(c.metric_averages).length > 0 ? (
-                    Object.entries(c.metric_averages).map(([name, avg]) => {
-                      const pct = Math.round(avg * 100);
-                      return (
-                        <div key={name} className={styles.scoreLine}>
-                          <span className={styles.muted}>{name}</span>
-                          <StatusPill label={`${pct}%`} tone={scoreTone(pct)} />
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <span className={styles.muted}>—</span>
-                  )}
+                  <div className={styles.scoreLine}>
+                    <span className={styles.muted}>{run.profile}</span>
+                    <StatusPill label={run.judge_profile_id} tone={scoreTone(run.verdict === "passed" ? 100 : 50)} />
+                  </div>
                 </div>
                 <div className={styles.actionsCell} onClick={(e) => e.stopPropagation()}>
-                  <Button
-                    color="on-surface"
-                    variant="outlined"
-                    size="small"
-                    onClick={() => onOpenCampaign(c.campaign_id)}
-                  >
-                    {t("rework.evaluation.campaigns.detail")}
+                  <Button color="on-surface" variant="outlined" size="small" onClick={() => onOpenRun(run.run_id)}>
+                    {t("rework.evaluation.runs.detail")}
                   </Button>
                   <Button
                     color="error"
                     variant="outlined"
                     size="small"
                     disabled={isRunning}
-                    onClick={() => setDeleteTarget(c)}
+                    onClick={() => setDeleteTarget(run)}
                   >
                     {t("common.delete")}
                   </Button>
@@ -334,20 +332,22 @@ export default function EvaluationCampaigns({ teamId, onNewCampaign, onOpenCampa
       )}
 
       <CaseDrawer
-        campaignId={drawerCampaignId}
-        open={!!drawerCampaignId}
-        onClose={() => setDrawerCampaignId(null)}
+        runId={drawerRunId}
+        open={!!drawerRunId}
+        onClose={() => setDrawerRunId(null)}
         onOpenCase={(caseId) => {
-          const id = drawerCampaignId;
-          setDrawerCampaignId(null);
-          if (id) onOpenCampaign(id, caseId);
+          const id = drawerRunId;
+          setDrawerRunId(null);
+          if (id) onOpenRun(id, caseId);
         }}
       />
 
       <ConfirmationDialog
         open={!!deleteTarget}
-        title={t("rework.evaluation.campaigns.deleteTitle")}
-        message={t("rework.evaluation.campaigns.deleteMessage", { name: deleteTarget?.name ?? "" })}
+        title={t("rework.evaluation.runs.deleteTitle")}
+        message={t("rework.evaluation.runs.deleteMessage", {
+          id: deleteTarget?.run_id.slice(0, 12) ?? "",
+        })}
         confirmLabel={isDeleting ? t("common.deleting") : t("common.delete")}
         cancelLabel={t("common.cancel")}
         criticalAction

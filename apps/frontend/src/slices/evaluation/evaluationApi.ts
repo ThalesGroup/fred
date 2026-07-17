@@ -8,6 +8,6 @@ import { createDynamicBaseQuery } from "../../common/dynamicBaseQuery";
 export const evaluationApi = createApi({
   reducerPath: "evaluationApi",
   baseQuery: createDynamicBaseQuery(),
-  tagTypes: ["EvaluationCampaign", "EvaluationCase"],
+  tagTypes: ["Evaluation", "EvaluationRun", "EvaluationCase"],
   endpoints: () => ({}),
 });

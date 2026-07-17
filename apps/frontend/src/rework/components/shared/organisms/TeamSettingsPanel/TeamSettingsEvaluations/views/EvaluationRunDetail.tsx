@@ -34,18 +34,18 @@ import {
 } from "./EvaluationShared";
 import { selectTask, taskRegistered } from "@rework/features/tasks/taskSlice";
 import {
-  useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation,
-  useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation,
-  useGetCampaignEvaluationV1CampaignsCampaignIdGetQuery,
+  useCancelRunEvaluationV1RunsRunIdCancelPostMutation,
+  useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation,
+  useGetRunEvaluationV1RunsRunIdGetQuery,
   useGetTelemetryEvaluationV1TelemetryGetQuery,
-  useGetTelemetrySessionEvaluationV1TelemetrySessionCampaignIdGetQuery,
-  useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
-  type CampaignAnalysisResult,
-  type EvaluationCampaignResponse,
+  useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery,
+  useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   type EvaluationCaseResponse,
   type EvaluationMetricResultResponse,
+  type EvaluationRun,
+  type RunAnalysisResult,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
-import styles from "./EvaluationCampaignDetail.module.css";
+import styles from "./EvaluationRunDetail.module.css";
 
 // ── Helpers (pure logic — no UI framework) ──────────────────────────────────
 
@@ -65,9 +65,26 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
-function passRate(c: EvaluationCampaignResponse): number {
-  if (!c.total_cases) return 0;
-  return Math.round((c.passed_cases / c.total_cases) * 100);
+function passRate(run: EvaluationRun): number {
+  if (!run.total_cases) return 0;
+  return Math.round((run.passed_cases / run.total_cases) * 100);
+}
+
+function aggregateMetricAverages(cases: EvaluationCaseResponse[]): Array<[string, number]> {
+  const metrics = new Map<string, number[]>();
+  for (const evaluationCase of cases) {
+    for (const metric of evaluationCase.metrics) {
+      if (metric.score == null) continue;
+      const scores = metrics.get(metric.name) ?? [];
+      scores.push(metric.score);
+      metrics.set(metric.name, scores);
+    }
+  }
+
+  return Array.from(metrics.entries()).map(([name, scores]) => [
+    name,
+    scores.reduce((sum, score) => sum + score, 0) / scores.length,
+  ]);
 }
 
 function useAnimatedCount(target: number): number {
@@ -124,72 +141,66 @@ const RISK_TONE: Record<string, StatusTone> = { low: "success", medium: "warning
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-interface EvaluationCampaignDetailProps {
-  campaignId: string;
+interface EvaluationRunDetailProps {
+  runId: string;
   selectedCaseId?: string;
   onBack: () => void;
 }
 
-export default function EvaluationCampaignDetail({
-  campaignId,
-  selectedCaseId,
-  onBack,
-}: EvaluationCampaignDetailProps) {
+export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: EvaluationRunDetailProps) {
   const { t } = useTranslation();
   const [selectedCase, setSelectedCase] = useState<EvaluationCaseResponse | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<CampaignAnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<RunAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const {
-    data: campaign,
-    isLoading: campaignLoading,
-    refetch: refetchCampaign,
-  } = useGetCampaignEvaluationV1CampaignsCampaignIdGetQuery({ campaignId }, { skip: !campaignId });
+    data: run,
+    isLoading: runLoading,
+    refetch: refetchRun,
+  } = useGetRunEvaluationV1RunsRunIdGetQuery({ runId }, { skip: !runId });
 
   const {
     data: casesData,
     isLoading: casesLoading,
     refetch: refetchCases,
-  } = useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery({ campaignId, limit: 200 }, { skip: !campaignId });
+  } = useListRunCasesEvaluationV1RunsRunIdCasesGetQuery({ runId, limit: 200 }, { skip: !runId });
 
-  const [cancelCampaign, { isLoading: isCancelling }] =
-    useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation();
-  const [analyzeCampaign, { isLoading: isAnalyzing }] =
-    useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation();
+  const [cancelRun, { isLoading: isCancelling }] = useCancelRunEvaluationV1RunsRunIdCancelPostMutation();
+  const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
 
   const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
-  const { data: langfuseSession } = useGetTelemetrySessionEvaluationV1TelemetrySessionCampaignIdGetQuery(
-    { campaignId },
+  const { data: langfuseSession } = useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery(
+    { runId },
     {
-      skip: !campaignId || !telemetry?.enabled,
+      skip: !runId || !telemetry?.enabled,
       pollingInterval: 10000,
     },
   );
 
-  const isLive = campaign?.operational_state === "running" || campaign?.operational_state === "pending";
+  const isLive = run?.operational_state === "running" || run?.operational_state === "pending";
 
   // The campaign run is a task in the shared task store. Register it (live only,
   // dedup-safe) so useTaskSseManager streams /evaluation/v1/tasks/{task_id}/events;
   // the badge/bar below read from the store. (TaskTray is currently unmounted from
   // Sidebar.tsx, see BACKLOG.md P4 — this store registration is otherwise unaffected.)
   const dispatch = useDispatch();
-  const taskVm = useSelector(selectTask(campaign?.task_id ?? ""));
+  const taskVm = useSelector(selectTask(run?.task_id ?? ""));
   useEffect(() => {
-    if (!campaign?.task_id || !isLive) return;
+    if (!run?.task_id || !isLive) return;
     dispatch(
       taskRegistered({
-        taskId: campaign.task_id,
+        taskId: run.task_id,
         kind: "evaluation",
-        target: { type: "evaluation_campaign", id: campaign.campaign_id, label: campaign.name },
+        target: { type: "evaluation_run", id: run.run_id, label: run.snapshot.evaluation_name },
       }),
     );
-  }, [dispatch, campaign?.task_id, campaign?.campaign_id, campaign?.name, isLive]);
+  }, [dispatch, run?.task_id, run?.run_id, run?.snapshot.evaluation_name, isLive]);
 
-  // Refresh domain data (campaign aggregates + cases) as the task progresses.
+  // Refresh domain data (run aggregates + cases) as the task progresses.
   useEffect(() => {
     if (!taskVm) return;
-    refetchCampaign();
+    refetchRun();
     refetchCases();
   }, [taskVm?.lastSeq, taskVm?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -203,7 +214,7 @@ export default function EvaluationCampaignDetail({
   const handleCancel = async () => {
     setCancelError(null);
     try {
-      await cancelCampaign({ campaignId }).unwrap();
+      await cancelRun({ runId }).unwrap();
     } catch (e) {
       const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
       setCancelError(typeof detail === "string" ? detail : t("rework.evaluation.detail.cancelError"));
@@ -213,18 +224,18 @@ export default function EvaluationCampaignDetail({
   const handleAnalyze = async () => {
     setAnalysisError(null);
     try {
-      const result = await analyzeCampaign({ campaignId }).unwrap();
-      setAnalysis(result.analysis as CampaignAnalysisResult);
+      const result = await analyzeRun({ runId }).unwrap();
+      setAnalysis(result.analysis as RunAnalysisResult);
     } catch (e) {
       const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
       setAnalysisError(typeof detail === "string" ? detail : t("rework.evaluation.detail.analyzeError"));
     }
   };
 
-  if (campaignLoading) {
+  if (runLoading) {
     return <div className={styles.centered}>{t("rework.evaluation.detail.loading")}</div>;
   }
-  if (!campaign) {
+  if (!run) {
     return (
       <div className={styles.page}>
         <ServiceNotice icon="error" title={t("rework.evaluation.detail.notFound")} centered />
@@ -233,27 +244,26 @@ export default function EvaluationCampaignDetail({
   }
 
   const cases = casesData?.cases ?? [];
-  const rate = passRate(campaign);
-  const taskState = taskVm?.state ?? operationalToTaskState(campaign.operational_state);
-  const taskProgress =
-    taskVm?.progress ?? (campaign.total_cases ? campaign.completed_cases / campaign.total_cases : null);
+  const rate = passRate(run);
+  const taskState = taskVm?.state ?? operationalToTaskState(run.operational_state);
+  const taskProgress = taskVm?.progress ?? (run.total_cases ? run.completed_cases / run.total_cases : null);
 
-  const metricEntries = Object.entries(campaign.metric_averages ?? {});
+  const metricEntries = aggregateMetricAverages(cases);
   const globalScore = metricEntries.length
-    ? Math.round((metricEntries.reduce((a, [, v]) => a + v, 0) / metricEntries.length) * 100)
+    ? Math.round((metricEntries.reduce((sum, [, avg]) => sum + avg, 0) / metricEntries.length) * 100)
     : null;
 
   const metadata: { label: string; value: string }[] = [
     {
       label: t("rework.evaluation.detail.meta.dataset"),
-      value: `${campaign.dataset_name}${campaign.dataset_version ? ` v${campaign.dataset_version}` : ""}`,
+      value: `${run.snapshot.evaluation_name} v${run.snapshot.evaluation_version}`,
     },
-    { label: t("rework.evaluation.detail.meta.profile"), value: campaign.profile },
-    { label: t("rework.evaluation.detail.meta.judge"), value: campaign.judge_profile_id },
-    { label: t("rework.evaluation.detail.meta.team"), value: campaign.team_id },
-    { label: t("rework.evaluation.detail.meta.created"), value: formatDate(campaign.created_at) },
-    { label: t("rework.evaluation.detail.meta.started"), value: formatDate(campaign.started_at) },
-    { label: t("rework.evaluation.detail.meta.completed"), value: formatDate(campaign.completed_at) },
+    { label: t("rework.evaluation.detail.meta.profile"), value: run.profile },
+    { label: t("rework.evaluation.detail.meta.judge"), value: run.judge_profile_id },
+    { label: t("rework.evaluation.detail.meta.team"), value: run.evaluation_id },
+    { label: t("rework.evaluation.detail.meta.created"), value: formatDate(run.created_at) },
+    { label: t("rework.evaluation.detail.meta.started"), value: formatDate(run.started_at) },
+    { label: t("rework.evaluation.detail.meta.completed"), value: formatDate(run.completed_at) },
   ];
 
   return (
@@ -261,10 +271,8 @@ export default function EvaluationCampaignDetail({
       {/* Header */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>{campaign.name}</h1>
-          <p className={styles.subtitle}>
-            {t("rework.evaluation.detail.subtitle", { id: campaign.campaign_id.slice(0, 12) })}
-          </p>
+          <h1 className={styles.title}>{run.snapshot.evaluation_name}</h1>
+          <p className={styles.subtitle}>{t("rework.evaluation.detail.subtitle", { id: run.run_id.slice(0, 12) })}</p>
         </div>
         <div className={styles.actions}>
           {isLive && (
@@ -314,14 +322,14 @@ export default function EvaluationCampaignDetail({
       <div className={styles.heroRow}>
         <TaskStateBadge state={taskState} />
         <StatusPill
-          label={t("rework.evaluation.detail.verdictLabel", { verdict: campaign.verdict })}
-          tone={verdictTone(campaign.verdict)}
+          label={t("rework.evaluation.detail.verdictLabel", { verdict: run.verdict })}
+          tone={verdictTone(run.verdict)}
         />
         <span className={styles.muted}>
           {t("rework.evaluation.detail.rateSummary", {
             rate,
-            done: campaign.completed_cases,
-            total: campaign.total_cases,
+            done: run.completed_cases,
+            total: run.total_cases,
           })}
         </span>
       </div>
@@ -331,16 +339,16 @@ export default function EvaluationCampaignDetail({
 
       {/* Aggregate stat cards */}
       <div className={styles.statRow}>
-        <StatCard label={t("rework.evaluation.detail.stats.passed")} value={campaign.passed_cases} tone="success" />
-        <StatCard label={t("rework.evaluation.detail.stats.failed")} value={campaign.failed_cases} tone="error" />
+        <StatCard label={t("rework.evaluation.detail.stats.passed")} value={run.passed_cases} tone="success" />
+        <StatCard label={t("rework.evaluation.detail.stats.failed")} value={run.failed_cases} tone="error" />
         <StatCard
           label={t("rework.evaluation.detail.stats.execErrors")}
-          value={campaign.execution_error_cases}
+          value={run.execution_error_cases}
           tone="warning"
         />
         <StatCard
           label={t("rework.evaluation.detail.stats.scoringErrors")}
-          value={campaign.scoring_error_cases}
+          value={run.scoring_error_cases}
           tone="neutral"
         />
       </div>

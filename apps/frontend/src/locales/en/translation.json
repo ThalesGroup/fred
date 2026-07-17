@@ -1118,7 +1118,7 @@
       },
       "evaluationService": {
         "title": "Evaluation service not running",
-        "description": "Start the fred-evaluation service to manage campaigns."
+        "description": "Start the fred-evaluation service to manage evaluations and runs."
       }
     },
     "sidebar": {
@@ -1474,67 +1474,13 @@
       "title": "Your profile"
     },
     "evaluation": {
-      "campaigns": {
-        "title": "Evaluations",
-        "description": "Agent validation campaigns",
-        "newCampaign": "+ New campaign",
-        "createCampaign": "Create a campaign",
-        "empty": "No evaluation campaigns yet",
-        "loadError": "Failed to load campaigns.",
-        "casesError": "Failed to load cases.",
-        "noCases": "No cases available.",
-        "drawerTitle": "Campaign cases",
-        "drawerHint": "Click a case to see full details",
-        "inputLabel": "Input",
-        "executionError": "Execution error",
-        "viewFullDetail": "View full detail →",
-        "metricsCount": "{{count}} metrics",
-        "targetInstance": "Instance · {{id}}",
-        "detail": "Detail",
-        "deleteTitle": "Delete campaign",
-        "deleteMessage": "Delete {{name}}? This permanently removes all cases, metrics and events for this campaign.",
-        "deleteSuccess": "Campaign deleted",
-        "deleteError": "Failed to delete campaign",
-        "kpi": {
-          "active": "Active campaigns",
-          "globalScore": "Average global score (%)",
-          "casesEvaluated": "Cases evaluated",
-          "criticalFailures": "Critical failures"
-        },
-        "col": {
-          "name": "Name / ID",
-          "target": "Target",
-          "state": "State",
-          "verdict": "Verdict",
-          "progress": "Progress",
-          "scores": "Scores"
-        }
-      },
       "comingSoon": "This screen is moving here — coming next.",
       "create": {
-        "title": "New campaign",
-        "description": "Configure and launch an agent validation campaign",
         "back": "Back",
-        "steps": {
-          "target": "Target",
-          "dataset": "Dataset",
-          "policy": "Policy"
-        },
-        "name": {
-          "label": "Campaign name",
-          "placeholder": "e.g. Nightly regression"
-        },
-        "targetKind": {
-          "label": "What do you want to evaluate?"
-        },
         "target": {
           "managed": {
             "title": "Managed instance",
-            "desc": "A team agent instance from the control plane"
-          },
-          "runtime": {
-            "title": "Runtime agent",
-            "desc": "A specific agent on a runtime, by ID"
+            "desc": "A team agent instance approved through the control plane"
           }
         },
         "instance": {
@@ -1542,19 +1488,11 @@
           "placeholder": "Select an instance",
           "loading": "Loading instances..."
         },
-        "runtime": {
-          "label": "Runtime ID",
-          "placeholder": "runtime-..."
-        },
         "agent": {
           "label": "Agent ID",
           "placeholder": "agent-..."
         },
         "securityNote": "Runtime URLs are never exposed to the browser. Only controlled identifiers are accepted.",
-        "dataset": {
-          "name": "Dataset name",
-          "version": "Version (optional)"
-        },
         "manual": {
           "label": "Test cases"
         },
@@ -1567,14 +1505,13 @@
         },
         "import": {
           "json": "Import JSON",
-          "csv": "Import CSV",
           "dropHint": "Drag & drop a {{mode}} file, or click to browse",
           "dropSub": "Up to 200 cases",
           "jsonImported": "{{count}} cases imported from JSON",
-          "csvImported": "{{count}} cases imported from CSV",
           "error": "Invalid file. Check the JSON or CSV format.",
           "tooMany": "Maximum 200 cases allowed.",
-          "total": "Total: {{count}} cases to evaluate"
+          "total": "Total: {{count}} cases to evaluate",
+          "empty": "The file contains no case."
         },
         "judge": {
           "label": "Judge profile",
@@ -1601,38 +1538,27 @@
         },
         "recap": {
           "title": "Summary",
-          "campaign": "Campaign",
           "targetType": "Target type",
           "managed": "Managed instance",
           "runtime": "Runtime agent",
           "instance": "Instance",
           "runtimeId": "Runtime ID",
           "agent": "Agent ID",
-          "dataset": "Dataset",
-          "cases": "Cases",
           "judge": "Judge",
           "concurrency": "Concurrency",
           "timeout": "Timeout",
           "customMetrics": "Custom metrics",
           "profile": "Profile",
           "profileAuto": "Automatic"
-        },
-        "nav": {
-          "prev": "Previous",
-          "next": "Next",
-          "launch": "Launch campaign"
-        },
-        "launching": "Launching...",
-        "success": "Campaign queued",
-        "error": "Failed to create the campaign"
+        }
       },
       "detail": {
-        "cancelError": "Could not cancel the campaign",
+        "cancelError": "Could not cancel the run",
         "analyzeError": "Analysis failed",
-        "loading": "Loading campaign...",
-        "notFound": "Campaign not found",
+        "loading": "Loading run...",
+        "notFound": "Run not found",
         "loadingCases": "Loading cases...",
-        "subtitle": "Campaign · {{id}}",
+        "subtitle": "Run · {{id}}",
         "back": "Back",
         "cancel": "Cancel",
         "cancelling": "Cancelling...",
@@ -1658,12 +1584,12 @@
         "strengths": "Strengths",
         "weaknesses": "Weaknesses",
         "recommendations": "Recommendations",
-        "campaignInfo": "Campaign information",
+        "campaignInfo": "Run information",
         "meta": {
-          "dataset": "Dataset",
+          "dataset": "Evaluation",
           "profile": "Scoring profile",
           "judge": "Judge",
-          "team": "Team",
+          "team": "Evaluation ID",
           "created": "Created",
           "started": "Started",
           "completed": "Completed"
@@ -1689,6 +1615,97 @@
         "skipped": "skipped",
         "passed": "passed",
         "failed": "failed"
+      },
+      "evaluations": {
+        "title": "Evaluations",
+        "description": "Versioned, reusable case sets. Open one to see its runs.",
+        "new": "+ New evaluation",
+        "empty": "No evaluation yet. Create one to get started.",
+        "openRuns": "Runs",
+        "caseCount": "{{count}} cases",
+        "col": {
+          "name": "Name / ID",
+          "version": "Version",
+          "author": "Author",
+          "origin": "Origin",
+          "cases": "Cases"
+        },
+        "origin": {
+          "upload": "Import",
+          "manual": "Manual",
+          "capture": "Capture"
+        }
+      },
+      "evaluationCreate": {
+        "title": "New evaluation",
+        "description": "Name the evaluation and give it its cases. No run is started.",
+        "name": {
+          "label": "Evaluation name",
+          "placeholder": "e.g. usage-arxivai"
+        },
+        "versionNote": "Reusing an existing name creates a new version (v1 → v2), which becomes the current one.",
+        "submit": "Create evaluation",
+        "saving": "Creating...",
+        "success": "Evaluation “{{name}}” created as {{version}}",
+        "error": "Could not create the evaluation",
+        "mode": {
+          "label": "How do you want to supply the cases?",
+          "import": {
+            "title": "Import my dataset",
+            "desc": "A JSON file holding the cases (input / expected_output)"
+          },
+          "manual": {
+            "title": "Write the cases by hand",
+            "desc": "Type each case directly into the form"
+          }
+        }
+      },
+      "runs": {
+        "casesError": "Failed to load cases.",
+        "noCases": "No cases available.",
+        "drawerTitle": "Run cases",
+        "drawerHint": "Click a case to see full details",
+        "inputLabel": "Input",
+        "executionError": "Execution error",
+        "viewFullDetail": "View full detail →",
+        "metricsCount": "{{count}} metrics",
+        "targetInstance": "Instance · {{id}}",
+        "detail": "Detail",
+        "deleteTitle": "Delete run",
+        "deleteSuccess": "Run deleted",
+        "deleteError": "Failed to delete run",
+        "loadError": "Failed to load runs.",
+        "description": "Runs of this evaluation",
+        "backToEvaluations": "Evaluations",
+        "newRun": "+ New run",
+        "empty": "No run for this evaluation yet",
+        "versionLabel": "Evaluation {{version}}",
+        "deleteMessage": "Delete run {{id}}? This permanently removes its cases, metrics and events.",
+        "kpi": {
+          "active": "Active runs",
+          "completed": "Completed runs",
+          "casesEvaluated": "Cases evaluated",
+          "criticalFailures": "Critical failures"
+        },
+        "col": {
+          "run": "Run / ID",
+          "target": "Target",
+          "state": "State",
+          "verdict": "Verdict",
+          "progress": "Progress",
+          "scores": "Profile / judge"
+        }
+      },
+      "runCreate": {
+        "title": "New run",
+        "description": "Evaluation “{{name}}” — pick the agent to evaluate.",
+        "submit": "Start run",
+        "starting": "Starting...",
+        "success": "Run started",
+        "error": "Could not start the run",
+        "recap": {
+          "evaluation": "Evaluation"
+        }
       }
     },
     "taskActivity": {
