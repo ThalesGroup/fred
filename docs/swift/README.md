@@ -14,7 +14,7 @@ Start here, then follow the links to the relevant section.
 | **A developer** touching an API boundary or execution path | [`design/`](#design--architecture-contracts)                                                                       |
 | **A developer** working on the chat UI                     | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)         |
 | **A UX designer** reviewing component rendering            | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
-| **A product manager** tracking progress                    | [`STATUS.md`](STATUS.md) → [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md)               |
+| **A product manager** tracking progress                    | [`STATUS.md`](STATUS.md) → GitHub Issues/Milestones (`swift-golive`, `swift ga`)                                   |
 | **Anyone** validating a checkout or a release candidate    | [`TESTING.md`](TESTING.md) — four steps, each ending in a clear pass/fail answer                                   |
 | **An architect** reviewing or proposing a change           | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts)                                 |
 | **Writing an agent** with the SDK                          | [`authoring/`](#authoring--agent-sdk)                                                                              |
@@ -50,7 +50,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
-| See what the team is working on now                   | [`WORKPLAN.md`](WORKPLAN.md)                                       |
+| See what the team is working on now                   | [`STATUS.md`](STATUS.md) → GitHub Milestones (`swift-golive`, `swift ga`) |
 | Understand the migration backlog                      | [`backlog/`](#backlog--project-state-and-sequencing)               |
 | Check UX status of a chat component                   | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)                         |
 | Read a technical proposal                             | [`rfc/`](#rfc--technical-proposals)                                |
@@ -156,12 +156,13 @@ backlog checkboxes, and STATUS.md. Canonical ID convention: see
 
 ### `backlog/` — Project state and sequencing
 
-Current migration state, feature backlogs, and audit reports.
-`BACKLOG.md` is the master sequencing document.
+Feature backlogs and audit reports. `BACKLOG.md` itself (the runtime migration
+backlog) is frozen — active work is tracked via GitHub Issues/Milestones, see
+[`STATUS.md`](STATUS.md).
 
 | File                                                                     | Purpose                                                                                  |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| [`BACKLOG.md`](backlog/BACKLOG.md)                                       | **Master backlog** — migration Phases 0→7, status and sequencing                         |
+| [`BACKLOG.md`](backlog/BACKLOG.md)                                       | Frozen 2026-07-16 — migration Phases 0→7 history, ~90% done, superseded by GitHub        |
 | [`FRONTEND-BACKLOG.md`](backlog/FRONTEND-BACKLOG.md)                     | Frontend Phase 5 adaptation plan                                                         |
 | [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md)                       | Chat UI quality build-out (Phases CHAT-01→CHAT-04)                                       |
 | [`MULTI-AGENT-MEMORY-BACKLOG.md`](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | Cross-turn conversational memory for graph agents (design: `design/MULTI_AGENT_MEMORY.md`) |
@@ -221,8 +222,8 @@ Runbooks and operational guides for the platform.
 
 | File                                       | Purpose                                                                                                     |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [`STATUS.md`](STATUS.md)                   | **Daily snapshot** — who owns what, what was done this week, feature→test map. Start here for quick status. |
-| [`WORKPLAN.md`](WORKPLAN.md)               | **Current sprint** — who does what, in what order, what is parallel                                         |
+| [`STATUS.md`](STATUS.md)                   | **Thin status pointer** — who's around, current focus, links to GitHub Milestones. Start here for quick status. |
+| [`WORKPLAN.md`](WORKPLAN.md)               | Frozen 2026-07-16 — superseded by GitHub Milestones (`swift-golive`, `swift ga`)                            |
 | [`TESTING.md`](TESTING.md)                 | **Release-candidate check** — four steps (offline tests → backing services → apps → auth validation suite), each with a pass/fail signal; linked from the repo root `README.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)       | Contribution guidelines                                                                                     |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Code of conduct                                                                                             |

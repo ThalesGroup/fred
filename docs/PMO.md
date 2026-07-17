@@ -1,5 +1,13 @@
 # docs/PMO.md
 
+> **Frozen 2026-07-16 — superseded.** This guide's workflow (RFC → backlog →
+> `sprint.yaml` → GitHub issue → PMO board sync) assumed `docs/swift/PMO-BOARD.md`
+> was in active use — it wasn't. `docs/swift/backlog/BACKLOG.md`,
+> `docs/swift/WORKPLAN.md`, and `docs/swift/PMO-BOARD.md` are all frozen now.
+> Current tracking = GitHub Issues/Milestones (`swift-golive`, `swift ga`) +
+> `docs/swift/STATUS.md`. Kept as historical record; do not follow the workflow
+> below as if it were live.
+
 Coordination guide for Claire and Arnaud. No coding background required.
 This guide tells you how to get project status, track progress, and update
 planning files using Claude Code — without reading code.

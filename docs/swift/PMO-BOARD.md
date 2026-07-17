@@ -1,5 +1,10 @@
 # PMO Board
 
+> **Frozen 2026-07-16 — superseded, unused.** No PMO stakeholder consumes this
+> board in practice. GitHub Milestones (`swift-golive`, `swift ga`) are the
+> tracked-work view now — see [`STATUS.md`](STATUS.md). Kept as historical
+> record only; do not add to it.
+
 Compact PMO-facing view of tracked work. Source of truth remains:
 
 - `docs/swift/backlog/`

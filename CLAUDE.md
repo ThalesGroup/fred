@@ -22,15 +22,19 @@ safe change aligned with the documented architecture.
 
 Run this audit before any implementation, spec, or doc change.
 
-**1. ID lookup** — open `docs/swift/data/id-legend.yaml`. Find the feature or track.
-If an entry exists: read its `backlog_ref` (source of truth for scope and status);
-check its `status` — if `done` or `deferred`, ask before reopening. Use its ID in
-every commit message, backlog checkbox, and STATUS.md row you touch. If no entry
-exists → create one before implementation starts (see §Task IDs).
+**1. GitHub issue lookup first** — `docs/swift/backlog/BACKLOG.md`,
+`docs/swift/WORKPLAN.md`, and `docs/swift/PMO-BOARD.md` are frozen (2026-07-16)
+and no longer track active work. **GitHub Issues + Milestones
+(`swift-golive`, `swift ga`) are the source of truth.** Before starting
+anything, check `gh issue list` (by title keyword or milestone) for an
+existing issue covering the task — do not create a duplicate.
 
-**2. Backlog lookup** — open the relevant backlog (`BACKLOG.md`,
-`CHAT-UI-BACKLOG.md`, `FRONTEND-BACKLOG.md`, `MULTI-AGENT-MEMORY-BACKLOG.md`).
-If a `[ ]` item already covers the task, link to it — do not create a duplicate.
+**2. ID lookup (narrow scope)** — open `docs/swift/data/id-legend.yaml` only
+when the task is tied to an RFC or a genuine cross-cutting architecture
+decision. Most issues do not need an ID — the GitHub issue itself (title,
+label, milestone) is the tracking unit; do not register one just to have one.
+If an entry exists: read its `status` — if `done` or `deferred`, ask before
+reopening.
 
 **3. Contract lookup** — before adding any field, endpoint, or type, check:
 
@@ -43,8 +47,10 @@ parallel type outside these files.
 **4. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
 covers the area, amend it rather than creating a new one.
 
-**5. Convergence check (before close-out)** — do the code, backlog checkbox,
-STATUS.md, and id-legend.yaml all agree on status? Fix divergence before closing.
+**5. Convergence check (before close-out)** — does the code match the GitHub
+issue's intent, and (if one exists) the RFC/`id-legend.yaml` entry? Fix
+divergence before closing. Close the GitHub issue or leave a status comment —
+that is the only tracking surface that needs to stay current.
 
 ---
 
@@ -55,7 +61,8 @@ Decision tree for every piece of new content:
     Design or API decision?
       → write/amend RFC in docs/swift/rfc/. Stop until developer confirms.
     New feature, endpoint, or component?
-      → add backlog entry + id-legend.yaml entry. Stop until developer confirms.
+      → check for an existing GitHub issue (swift-golive / swift ga milestone).
+        Add an id-legend.yaml entry only if an RFC backs it. Stop until developer confirms.
     Code style, typing, or testing rule?
       → docs/CONVENTIONS.md
     Architecture overview or component map?
@@ -70,32 +77,20 @@ Decision tree for every piece of new content:
 alternatives considered, impact on existing contracts. Mechanical fixes (typo,
 missing agreed field) are exempt — state why.
 
-**Step 2 — Backlog entry.** Find the relevant backlog file. Add or confirm a `[ ]`
-item. If no backlog covers the area, ask the developer before proceeding.
+**Step 2 — Backlog entry (RFC-backed work only).** If Step 1 produced an RFC,
+add/confirm its `id-legend.yaml` entry and, if a domain backlog file is still
+actively maintained for that area, link it there. Skip entirely for routine
+issue-driven work — the GitHub issue is the entry.
 
 **Step 3 — Developer confirmation.** Present: what will be built, which files
 touched, which tests added, which docs updated. **Do not begin until confirmed.**
 One sentence of approval is enough.
 
-**Step 3.5 — GitHub issue (execution handoff).** After confirmation and before
-implementation, a GitHub issue must exist that links the task ID, RFC, and
-backlog entry. This is the team's execution handoff — it is how the developer
-picks up the work and how the code assistant knows the task is authorised.
-If no issue exists, offer to create one. Do not implement without it unless the
-developer explicitly waives this step. The issue does not replace the RFC or
-backlog entry — it references them.
-
-**Step 3.6 — PMO sync (mandatory when PMO-visible tracking changes).**
-`docs/swift/PMO-BOARD.md` is the PMO-facing mirror of active and upcoming
-tracked work. Update the matching PMO board row in the same change whenever a
-tracked item's owner, status, backlog ref, RFC ref, blocker, or execution ref
-changes in any source document. Typical trigger files include
-`docs/swift/backlog/`, `docs/swift/rfc/`, `docs/swift/STATUS.md`,
-`docs/swift/data/id-legend.yaml`, `docs/swift/data/sprint.yaml`, and
-`docs/swift/tracks/`. Keep PMO fields aligned with the source documents.
-Execution ref priority: GitHub issue → PR → working branch → `TBD`. When an
-execution ref is known, mirror it directly under the relevant backlog item as
-`Execution: ...`.
+**Step 3.5 — GitHub issue (execution handoff).** Most work starts from an
+existing GitHub issue (`swift-golive` / `swift ga` milestone) — that's the
+normal case, use it. If none exists for the task, offer to create one before
+implementing. If Step 1 produced an RFC or Step 2 an `id-legend.yaml` entry,
+link them in the issue. Do not implement authorless, untracked work.
 
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
@@ -112,16 +107,15 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 
 | What changed                                                      | File to update                                                                           |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Backlog `[ ]` item done                                           | Mark `[x]` in backlog file                                                               |
 | New behaviour, API field, or contract change                      | Update spec table in the relevant design doc                                             |
 | Frozen contract touched (`execution.py`, `agent_app.py`, OpenAPI) | Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8` or `CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
-| Phase progress row exists                                         | Update progress table at bottom of backlog file                                          |
-| WORKPLAN sprint item finished                                     | Mark done in `docs/swift/WORKPLAN.md`                                                    |
-| PMO-visible tracking field changed (owner, status, blocker, refs, execution) | Update `docs/swift/PMO-BOARD.md` in the same change                         |
-| GitHub issue / PR / branch known for a backlog item               | Record it under the backlog item as `Execution: ...` and in `docs/swift/PMO-BOARD.md`   |
+| RFC-backed item finished                                          | Mark `id-legend.yaml` status `done`, close the GitHub issue                              |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
+
+`docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, and `PMO-BOARD.md` are frozen —
+never write to them. Do not mark backlog checkboxes or add PMO/WORKPLAN rows.
 
 **Close-out statement (required in every final reply):**
 
@@ -130,7 +124,7 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 - Code: <one line — what was changed>
 - Tests: <pass / n tests added / why none needed>
 - Docs updated: <list each file touched, or "none — mechanical fix">
-- Backlog: <item marked done, or "none — not tracked yet">
+- Tracking: <GitHub issue # closed/updated, or id-legend.yaml entry updated, or "none — not tracked">
 - Skipped steps: <list any Step 1–3 steps skipped and why>
 ```
 
@@ -158,22 +152,33 @@ Format: `DOMAIN-NN` — a 4-7 letter domain code and a two-digit sequential numb
 Examples: `MEMORY-01`, `PROMPT-04`, `CHAT-03`. No sub-phase suffixes.
 If an item needs a parent relationship, use the `parent:` field in `id-legend.yaml`.
 
-Rules:
+**Scope narrowed (2026-07-16):** an ID is only needed when the work is tied to
+an RFC or a genuine cross-cutting architecture decision. Routine issues do not
+need one — the GitHub issue (title, label, milestone) is the tracking unit.
+Forcing an ID onto every issue is exactly the busywork that made the old
+tracking docs unmaintainable; do not recreate it.
 
-1. Every new item gets an ID before implementation starts.
-2. The ID appears in: backlog checkbox, STATUS.md, sprint.yaml, commit subject.
-3. Add the ID to `id-legend.yaml` immediately — not after the work is done.
-4. `id-legend.yaml` and `sprint.yaml` status must stay in sync with backlog checkboxes.
+Rules (when an ID is warranted):
+
+1. Add the ID to `id-legend.yaml` before implementation starts, with an `issue:`
+   ref to the GitHub issue and, if applicable, an `rfc:` ref.
+2. The ID appears in the commit subject and the GitHub issue.
+3. Keep `id-legend.yaml` status in sync with the GitHub issue's open/closed state.
 
 ---
 
 ## Operational queries — status and team
 
-For team activity, sprint status, feature progress, or test coverage: read
-`docs/swift/STATUS.md`. It answers who owns what, what was delivered, what is
-blocked, and which tests cover which feature. Follow its `Backlog ref` links for
-deeper specs. For structured ID queries, read `docs/swift/data/id-legend.yaml`
-and `docs/swift/data/sprint.yaml` directly — faster than scanning prose.
+For team activity, current focus, and where the real work lives: read
+`docs/swift/STATUS.md` first — it is intentionally thin and points to GitHub.
+For the actual list of active/open work, query GitHub directly:
+`gh issue list --milestone "swift-golive"` (due 2026-07-31) or
+`--milestone "swift ga"` (due 2026-09-30). Do not expect `STATUS.md` to mirror
+issue content — it won't, by design.
+
+`docs/swift/backlog/BACKLOG.md`, `docs/swift/WORKPLAN.md`, and
+`docs/swift/PMO-BOARD.md` are frozen (2026-07-16) — historical record of the
+runtime migration only, not live tracking. Do not treat them as current status.
 
 The mandatory read order below applies to **development tasks only**. Skip for status queries.
 
@@ -184,12 +189,10 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 5. `docs/swift/platform/REBAC.md` — when touching access or team behavior
 6. `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` — fred-sdk, fred-runtime, runtime OpenAPI, CLI, tracing/KPI
 7. `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` — product/session/admin APIs
-8. `docs/swift/backlog/BACKLOG.md` — migration phase status and sequencing
-9. `docs/swift/WORKPLAN.md` — sprint assignments; read before starting any task
-10. `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` — mandatory for `apps/frontend/src/rework/`
-11. `docs/swift/backlog/FRONTEND-BACKLOG.md` — frontend bootstrap, session, team identity
-12. `docs/swift/backlog/CHAT-UI-BACKLOG.md` — ManagedChatPage, chat UI, SSE rendering
-13. `docs/swift/ux/COMPONENT-UX.md` — check open UX issues before writing CSS
+8. `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` — mandatory for `apps/frontend/src/rework/`
+9. `docs/swift/backlog/FRONTEND-BACKLOG.md` — frontend bootstrap, session, team identity
+10. `docs/swift/backlog/CHAT-UI-BACKLOG.md` — ManagedChatPage, chat UI, SSE rendering
+11. `docs/swift/ux/COMPONENT-UX.md` — check open UX issues before writing CSS
 
 ---
 
@@ -260,10 +263,10 @@ Do not silently expand scope. Do not silently delete content.
 | AI operational rules (Claude Code)       | `CLAUDE.md` (this file)                               |
 | OpenAI/Codex agent instructions          | `AGENT.md`, `AGENTS.md`                               |
 | Gemini agent instructions                | `GEMINI.md`                                           |
-| Team activity, sprint status, blockers   | `docs/swift/STATUS.md`                                |
-| Feature IDs and registry                 | `docs/swift/data/id-legend.yaml`                      |
-| Sprint-level structured data             | `docs/swift/data/sprint.yaml`                         |
-| Feature backlogs                         | `docs/swift/backlog/`                                 |
+| Team activity, current focus (thin — points to GitHub) | `docs/swift/STATUS.md`                  |
+| Active work, milestones (`swift-golive`, `swift ga`)   | GitHub Issues/Milestones (`gh issue list`) |
+| RFC-backed feature IDs (narrow scope)     | `docs/swift/data/id-legend.yaml`                      |
+| Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | Technical proposals                      | `docs/swift/rfc/`                                     |
@@ -271,7 +274,5 @@ Do not silently expand scope. Do not silently delete content.
 | Platform topology detail                 | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`         |
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
-| Sprint assignments                       | `docs/swift/WORKPLAN.md`                              |
 | Track manifests                          | `docs/swift/tracks/`                                  |
-| PMO delivery board                       | `docs/swift/PMO-BOARD.md`                             |
-| Coordination guide (Claire, Arnaud)      | `docs/PMO.md`                                         |
+| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `PMO-BOARD.md`, `docs/PMO.md` |
