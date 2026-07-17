@@ -128,9 +128,22 @@ export default function Select<T>({
 
   const selectedOption = options.find((opt) => opt.value === value);
 
+  const firstEnabledIndex = () => options.findIndex((opt) => !opt.disabled);
+
+  const lastEnabledIndex = () => {
+    for (let i = options.length - 1; i >= 0; i--) {
+      if (!options[i]?.disabled) return i;
+    }
+    return -1;
+  };
+
   const openMenu = () => {
-    const initial = options.findIndex((opt) => opt.value === value);
-    setActiveIndex(initial >= 0 ? initial : 0);
+    const selectedIndex = options.findIndex((opt) => opt.value === value);
+    // Prefer the selected option if it's enabled, otherwise the first enabled
+    // option, otherwise -1 (no active option) if every option is disabled —
+    // never land on a disabled option just because it's index 0.
+    const initial = selectedIndex >= 0 && !options[selectedIndex].disabled ? selectedIndex : firstEnabledIndex();
+    setActiveIndex(initial);
     setIsOpen(true);
   };
 
@@ -140,11 +153,18 @@ export default function Select<T>({
     else openMenu();
   };
 
+  // Walks past disabled options in `delta`'s direction; if every option is
+  // disabled, the active index doesn't move.
   const moveActive = (delta: number) => {
     if (options.length === 0) return;
     setActiveIndex((prev) => {
       const base = prev < 0 ? 0 : prev;
-      return (base + delta + options.length) % options.length;
+      let next = base;
+      for (let i = 0; i < options.length; i++) {
+        next = (next + delta + options.length) % options.length;
+        if (!options[next]?.disabled) return next;
+      }
+      return prev;
     });
   };
 
@@ -164,18 +184,20 @@ export default function Select<T>({
       case "Home":
         if (isOpen) {
           e.preventDefault();
-          setActiveIndex(0);
+          const first = firstEnabledIndex();
+          if (first >= 0) setActiveIndex(first);
         }
         break;
       case "End":
         if (isOpen) {
           e.preventDefault();
-          setActiveIndex(options.length - 1);
+          const last = lastEnabledIndex();
+          if (last >= 0) setActiveIndex(last);
         }
         break;
       case "Enter":
       case " ":
-        if (isOpen && activeIndex >= 0 && options[activeIndex]) {
+        if (isOpen && activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled) {
           e.preventDefault();
           const option = options[activeIndex];
           setIsOpen(false);
@@ -214,7 +236,7 @@ export default function Select<T>({
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-controls={`${baseId}-menu`}
+        aria-controls={options.length > 0 ? `${baseId}-listbox` : undefined}
         aria-activedescendant={activeOptionId}
         disabled={disabled}
         data-error={error !== undefined}

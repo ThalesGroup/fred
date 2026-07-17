@@ -222,6 +222,8 @@ export default function CapabilitiesPage() {
       <ButtonGroup
         size="small"
         color="primary"
+        variant="radio"
+        aria-label={t("rework.admin.capabilities.kindFilter.aria")}
         selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
         onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
         items={KIND_FILTERS.map((kind) => ({

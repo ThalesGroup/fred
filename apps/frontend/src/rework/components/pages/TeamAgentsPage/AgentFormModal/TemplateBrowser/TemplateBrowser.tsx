@@ -49,6 +49,8 @@ export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBro
             items={podFilterItems}
             size="small"
             color="primary"
+            variant="radio"
+            aria-label={t("rework.teams.agents.podFilter.aria")}
             selectedIndex={activePodId ? podIds.indexOf(activePodId) + 1 : 0}
             onSelectedIndexChange={(i) => setSelectedPodId(i === 0 ? null : podIds[i - 1])}
           />

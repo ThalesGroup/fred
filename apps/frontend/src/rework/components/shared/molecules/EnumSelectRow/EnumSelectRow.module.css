@@ -1,72 +1,24 @@
 /* Extracted from the former SearchConfig.module.css (CAPAB-01 #1976). The row
- * itself comes from MenuPopoverItem; this module only styles the anchored
- * listbox the row expands into. */
+ * itself comes from MenuPopoverItem, and the anchored listbox now reuses the
+ * MenuPopover shell (shadow/border/radius/background/padding) instead of
+ * duplicating it — this module only positions that shell relative to the
+ * row that owns it. */
 
 /* Position anchor for the row that owns the anchored listbox. */
 .rowWrap {
   position: relative;
 }
 
-.selectMenu {
-  display: flex;
+.selectMenuAnchor {
   position: absolute;
   top: 0;
   left: calc(100% + var(--spacing-xs));
-  flex-direction: column;
-  gap: var(--spacing-3xs);
   z-index: 20;
-  margin: 0;
-  box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  background: var(--surface-container-high);
-  padding: var(--spacing-2xs);
   min-width: 160px;
-  list-style: none;
-}
-
-.menuItemWrap {
-  margin: 0;
-  padding: 0;
-}
-
-.menuItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-s);
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--radius-s);
-  background: transparent;
-  padding: var(--spacing-xs) var(--spacing-s);
-  width: 100%;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-  text-align: left;
-}
-
-.menuItem:hover {
-  background: var(--state-on-surface-hover);
-}
-
-.menuItem[data-active="true"] {
-  background: var(--surface-container-highest);
-  color: var(--on-surface);
-}
-
-.menuItemLabel {
-  min-width: 0;
-}
-
-.menuItemCheck {
-  flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font-size: 18px;
 }
 
 @media (max-width: 720px) {
-  .selectMenu {
+  .selectMenuAnchor {
     top: calc(100% + var(--spacing-xs));
     right: 0;
     left: 0;

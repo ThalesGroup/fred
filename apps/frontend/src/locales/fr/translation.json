@@ -158,6 +158,17 @@
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
     },
+    "debugRaw": {
+      "title": "Débogage — messages bruts",
+      "scopeAria": "Portée des messages",
+      "scope": {
+        "lastExchange": "Dernier échange",
+        "all": "Tous"
+      },
+      "count": "{{count}} msg",
+      "copy": "Copier le JSON",
+      "copied": "Copié"
+    },
     "contextPrompts": {
       "ariaLabel": "Prompts attachés",
       "removeAria": "Retirer {{name}}",
@@ -755,7 +766,8 @@
         "manageTeams": "Gérer les équipes",
         "kindFilter": {
           "tool": "Outils",
-          "agent": "Agents"
+          "agent": "Agents",
+          "aria": "Filtrer par type de capacité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "col": {
@@ -803,7 +815,8 @@
           "default": "Défaut",
           "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
-          "defaultError": "Impossible de remettre la capacité au défaut de la plateforme."
+          "defaultError": "Impossible de remettre la capacité au défaut de la plateforme.",
+          "rowControlAria": "Accès pour {{team}}"
         }
       }
     },
@@ -970,7 +983,8 @@
       "brandRelease": "Version {{brand}}",
       "copied": "Copié !",
       "copy": "Copier",
-      "empty": "Aucune note de version disponible."
+      "empty": "Aucune note de version disponible.",
+      "versionsAria": "Versions des notes de version"
     },
     "resources": {
       "workspaceTitle": "Fichiers",
@@ -1349,7 +1363,8 @@
         "loading": "Chargement des {{agentsNicknamePlural}}...",
         "noAgent": "Créez votre premier {{agentsNicknameSingular}} pour commencer.",
         "podFilter": {
-          "all": "Tous"
+          "all": "Tous",
+          "aria": "Filtrer par pod"
         },
         "title": "Sollicitez vos {{agentsNicknamePlural}}"
       },
@@ -1375,6 +1390,13 @@
           "removeTagAria": "Retirer {{tag}}",
           "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
           "writeFromScratch": "Rédiger depuis zéro"
+        },
+        "sections": {
+          "aria": "Sections du formulaire",
+          "chat": "Discussion",
+          "prompts": "Prompts",
+          "settings": "Paramètres",
+          "tools": "Outils"
         },
         "selectPlaceholder": "Sélectionner une option",
         "suspended": {
@@ -1418,7 +1440,9 @@
         "english": "Anglais",
         "french": "Français",
         "light": "Clair",
-        "system": "Système"
+        "system": "Système",
+        "themeAria": "Thème",
+        "languageAria": "Langue"
       },
       "conversationProfile": {
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",

@@ -72,6 +72,8 @@ export default function UserSettingsPage() {
         </div>
         <div className={styles.userSettingsApplication}>
           <ButtonGroup
+            variant="radio"
+            aria-label={t("rework.userSettings.app.themeAria")}
             defaultSelectedIndex={themeMode === "dark" ? 0 : themeMode === "system" ? 1 : 2}
             items={[
               {
@@ -94,6 +96,8 @@ export default function UserSettingsPage() {
             color={"secondary"}
           ></ButtonGroup>
           <ButtonGroup
+            variant="radio"
+            aria-label={t("rework.userSettings.app.languageAria")}
             defaultSelectedIndex={i18n.language === "fr" ? 0 : 1}
             items={[
               {

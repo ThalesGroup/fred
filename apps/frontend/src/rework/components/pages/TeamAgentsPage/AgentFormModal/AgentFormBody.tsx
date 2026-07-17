@@ -30,11 +30,11 @@ export type SectionKey = "prompts" | "settings" | "chat" | "tools";
 
 const SECTION_ORDER: SectionKey[] = ["prompts", "settings", "chat", "tools"];
 
-const SECTION_LABELS: Record<SectionKey, string> = {
-  prompts: "Prompts",
-  settings: "Settings",
-  chat: "Chat",
-  tools: "Tools",
+const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
+  prompts: "rework.teams.formAgent.sections.prompts",
+  settings: "rework.teams.formAgent.sections.settings",
+  chat: "rework.teams.formAgent.sections.chat",
+  tools: "rework.teams.formAgent.sections.tools",
 };
 
 const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }> = {
@@ -243,10 +243,12 @@ export function AgentFormBody({
                   key={visibleSections.join(",")}
                   size="small"
                   color="secondary"
+                  variant="tabs"
+                  aria-label={t("rework.teams.formAgent.sections.aria")}
                   selectedIndex={activeSectionIndex}
                   onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
                   items={visibleSections.map((s) => ({
-                    label: SECTION_LABELS[s],
+                    label: t(SECTION_LABEL_KEYS[s]),
                     icon: SECTION_ICONS[s],
                     hasError: errorSections.has(s),
                     onClick: () => onSectionChange(s),

@@ -158,6 +158,17 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "debugRaw": {
+      "title": "Debug — raw messages",
+      "scopeAria": "Message scope",
+      "scope": {
+        "lastExchange": "Last exchange",
+        "all": "All"
+      },
+      "count": "{{count}} msg",
+      "copy": "Copy JSON",
+      "copied": "Copied"
+    },
     "contextPrompts": {
       "ariaLabel": "Attached prompts",
       "removeAria": "Remove {{name}}",
@@ -755,7 +766,8 @@
         "manageTeams": "Manage teams",
         "kindFilter": {
           "tool": "Tools",
-          "agent": "Agents"
+          "agent": "Agents",
+          "aria": "Filter by capability kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "col": {
@@ -803,7 +815,8 @@
           "default": "Default",
           "defaultToast": "{{team}} now follows the platform default.",
           "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
-          "defaultError": "Could not reset the capability to the platform default."
+          "defaultError": "Could not reset the capability to the platform default.",
+          "rowControlAria": "Access for {{team}}"
         }
       }
     },
@@ -970,7 +983,8 @@
       "brandRelease": "{{brand}} release",
       "copied": "Copied!",
       "copy": "Copy",
-      "empty": "No release notes available."
+      "empty": "No release notes available.",
+      "versionsAria": "Release versions"
     },
     "resources": {
       "workspaceTitle": "Files",
@@ -1349,7 +1363,8 @@
         "loading": "Loading {{agentsNicknamePlural}}...",
         "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
         "podFilter": {
-          "all": "All"
+          "all": "All",
+          "aria": "Filter by pod"
         },
         "title": "Chat with your {{agentsNicknamePlural}}"
       },
@@ -1375,6 +1390,13 @@
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
+        },
+        "sections": {
+          "aria": "Form sections",
+          "chat": "Chat",
+          "prompts": "Prompts",
+          "settings": "Settings",
+          "tools": "Tools"
         },
         "selectPlaceholder": "Select an option",
         "suspended": {
@@ -1418,7 +1440,9 @@
         "english": "English",
         "french": "French",
         "light": "Light",
-        "system": "System"
+        "system": "System",
+        "themeAria": "Theme",
+        "languageAria": "Language"
       },
       "conversationProfile": {
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",

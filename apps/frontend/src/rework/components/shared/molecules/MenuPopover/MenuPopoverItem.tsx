@@ -14,6 +14,7 @@
 
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { IconType } from "@shared/utils/Type.ts";
+import { type KeyboardEvent, type Ref } from "react";
 import styles from "./MenuPopover.module.scss";
 
 export interface MenuPopoverItemProps {
@@ -33,6 +34,10 @@ export interface MenuPopoverItemProps {
   selected?: boolean;
   onClick?: () => void;
   role?: "menuitem" | "option";
+  /** Roving-tabindex support for consumers driving keyboard nav across rows (e.g. `EnumSelectRow`). */
+  ref?: Ref<HTMLButtonElement>;
+  tabIndex?: number;
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
   "aria-haspopup"?: "menu" | "dialog" | "listbox" | "true";
   "aria-expanded"?: boolean;
   "aria-label"?: string;
@@ -55,10 +60,14 @@ export default function MenuPopoverItem({
   selected = false,
   onClick,
   role = "menuitem",
+  ref,
+  tabIndex,
+  onKeyDown,
   ...aria
 }: MenuPopoverItemProps) {
   return (
     <button
+      ref={ref}
       type="button"
       role={role}
       className={`${styles.item} ${danger ? styles.danger : ""}`}
@@ -66,6 +75,8 @@ export default function MenuPopoverItem({
       data-selected={selected}
       aria-selected={role === "option" ? selected : undefined}
       onClick={onClick}
+      tabIndex={tabIndex}
+      onKeyDown={onKeyDown}
       {...aria}
     >
       {icon && (

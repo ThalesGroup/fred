@@ -120,7 +120,15 @@ export default function ReleaseNotesContent() {
   return (
     <div className={styles.root}>
       <div className={styles.toolbar}>
-        {cards.length > 1 && <ButtonGroup items={tabItems} size="small" color="primary" />}
+        {cards.length > 1 && (
+          <ButtonGroup
+            items={tabItems}
+            size="small"
+            color="primary"
+            variant="tabs"
+            aria-label={t("rework.releaseNotes.versionsAria")}
+          />
+        )}
         <div className={styles.actions}>
           <button className={styles.codenameBadge} type="button" onClick={() => setCodenameOpen(true)}>
             {CODENAME.codename} · {CODENAME.version}

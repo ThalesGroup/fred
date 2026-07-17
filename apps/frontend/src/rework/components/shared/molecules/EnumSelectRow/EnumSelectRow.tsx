@@ -19,7 +19,8 @@
 // `search_policy` and `rag_scope` chat controls, and any future capability
 // exposing a small closed-set choice can reuse it too.
 
-import Icon, { type IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import { type IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import styles from "./EnumSelectRow.module.css";
@@ -78,6 +79,15 @@ export function EnumSelectRow<T extends string>({
     triggerWrapRef.current?.querySelector("button")?.focus();
   };
 
+  // Unlike Escape, selection doesn't call onToggle itself — the caller's own
+  // onChange already closes the row (e.g. SearchPolicyControl calls
+  // onToggleOpen() after composer.onSearchPolicyChange()). Calling onToggle
+  // here too would double-toggle it back open.
+  const selectOption = (optionValue: T) => {
+    onChange(optionValue);
+    triggerWrapRef.current?.querySelector("button")?.focus();
+  };
+
   const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     switch (event.key) {
       case "ArrowDown":
@@ -121,35 +131,32 @@ export function EnumSelectRow<T extends string>({
       </div>
 
       {open && (
-        <ul className={styles.selectMenu} role="listbox" aria-label={title}>
-          {options.map((option, index) => {
-            const isActive = option.value === value;
-            return (
-              <li key={option.value} className={styles.menuItemWrap}>
-                <button
-                  ref={(el) => {
-                    optionRefs.current[index] = el;
-                  }}
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={index === focusedIndex ? 0 : -1}
-                  className={styles.menuItem}
-                  data-active={isActive}
-                  onClick={() => onChange(option.value)}
-                  onKeyDown={(event) => handleOptionKeyDown(event, index)}
-                >
-                  <span className={styles.menuItemLabel}>{option.label}</span>
-                  {isActive && (
-                    <span className={styles.menuItemCheck} aria-hidden>
-                      <Icon category="outlined" type="check_circle" />
-                    </span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className={styles.selectMenuAnchor}>
+          <MenuPopover
+            role="listbox"
+            aria-label={title}
+            groups={[
+              options.map((option, index) => {
+                const isActive = option.value === value;
+                return (
+                  <MenuPopoverItem
+                    key={option.value}
+                    ref={(el) => {
+                      optionRefs.current[index] = el;
+                    }}
+                    role="option"
+                    label={option.label}
+                    selected={isActive}
+                    trailingIcon={isActive ? "check_circle" : undefined}
+                    tabIndex={index === focusedIndex ? 0 : -1}
+                    onClick={() => selectOption(option.value)}
+                    onKeyDown={(event) => handleOptionKeyDown(event, index)}
+                  />
+                );
+              }),
+            ]}
+          />
+        </div>
       )}
     </div>
   );
