@@ -96,6 +96,32 @@
       "type": "object",
       "additionalProperties": false
     },
+    "CapabilitiesConfig": {
+      "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3\u2013\u00a78.4. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds; `personal_defaults` lists capability\nids seeded as `enabled` for each personal space at first materialization.",
+      "properties": {
+        "default_policy": {
+          "default": "seed",
+          "description": "seed = honor manifest default-on seeds at first registration; explicit = ignore seeds, start everything admin-gated.",
+          "enum": [
+            "seed",
+            "explicit"
+          ],
+          "title": "Default Policy",
+          "type": "string"
+        },
+        "personal_defaults": {
+          "description": "Capability ids enabled for every personal space at first materialization (RFC \u00a78.4). Changing later needs a backfill.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Personal Defaults",
+          "type": "array"
+        }
+      },
+      "title": "CapabilitiesConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "FrontendBootstrapConfig": {
       "description": "Static frontend bootstrap configuration served by control-plane.",
       "properties": {
@@ -510,6 +536,9 @@
       "properties": {
         "frontend": {
           "$ref": "#/$defs/FrontendBootstrapConfig"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/CapabilitiesConfig"
         },
         "knowledge_flow_base_url": {
           "default": "http://127.0.0.1:8111/knowledge-flow/v1",
