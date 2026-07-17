@@ -53,6 +53,9 @@ class Resource(str, Enum):
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
     MCP_SERVERS = "mcp_servers"
+    # Agent-capability team scoping (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.1):
+    # a platform-wide object that teams are enabled-for, not owned-by.
+    CAPABILITY = "capability"
 
     # Authorization subject
     USER = "user"

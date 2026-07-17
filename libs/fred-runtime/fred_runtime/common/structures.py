@@ -17,9 +17,10 @@ Minimal contracts for runtime helpers that need agent settings.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
-from fred_sdk.contracts.models import AgentTuning
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 
 
 class AgentSettingsLike(Protocol):
@@ -31,16 +32,22 @@ class AgentSettingsLike(Protocol):
     - only a few identity/tuning fields are required by shared helpers
 
     How to use it:
-    - pass any object exposing `id`, `team_id`, and `tuning`
+    - pass any object exposing `id`, `team_id`, `tuning`, and
+      `active_mcp_servers`
 
     Example:
         >>> class SimpleAgentSettings:
         ...     id = "agent.demo"
         ...     team_id = None
         ...     tuning = None
+        ...     active_mcp_servers = ()
         >>> settings: AgentSettingsLike = SimpleAgentSettings()
     """
 
     id: str
     team_id: str | None
     tuning: AgentTuning | None
+    # The MCP servers active for this request (#1978). The MCP tuning trio was
+    # retired, so the live MCP tool provider reads the active server refs here
+    # instead of from `tuning.mcp_servers`.
+    active_mcp_servers: Sequence[MCPServerRef]

@@ -14,6 +14,7 @@
 
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
+import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
@@ -167,6 +168,17 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="observer">
             <AnalyticsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Admin Capabilities dashboard (CAPAB-01 / #1981, RFC §8.5). Gated on the
+        // admin role — the equivalent of `capability#can_manage` (org-admin), the
+        // same relation the backend list endpoint enforces.
+        path: "admin/capabilities",
+        element: (
+          <Protected requires="admin">
+            <CapabilitiesPage />
           </Protected>
         ),
       },

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -26,6 +27,7 @@ interface DebugRawDrawerProps {
 }
 
 export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps) {
+  const { t } = useTranslation();
   const [scopeIndex, setScopeIndex] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -49,23 +51,25 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   };
 
   return (
-    <InlineDrawer open={open} onClose={onClose} title="Debug — raw messages" width="560px">
+    <InlineDrawer open={open} onClose={onClose} title={t("chatbot.debugRaw.title")} width="560px">
       <div className={styles.toolbar}>
         <ButtonGroup
           size="small"
           color="primary"
+          variant="radio"
+          aria-label={t("chatbot.debugRaw.scopeAria")}
           selectedIndex={scopeIndex}
           onSelectedIndexChange={setScopeIndex}
-          items={[{ label: "Last exchange" }, { label: "All" }]}
+          items={[{ label: t("chatbot.debugRaw.scope.lastExchange") }, { label: t("chatbot.debugRaw.scope.all") }]}
         />
         <span className={styles.spacer} />
-        <span className={styles.count}>{displayed.length} msg</span>
+        <span className={styles.count}>{t("chatbot.debugRaw.count", { count: displayed.length })}</span>
         <IconButton
           color="on-surface"
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
-          aria-label={copied ? "Copied" : "Copy JSON"}
+          aria-label={copied ? t("chatbot.debugRaw.copied") : t("chatbot.debugRaw.copy")}
           onClick={handleCopy}
         />
       </div>

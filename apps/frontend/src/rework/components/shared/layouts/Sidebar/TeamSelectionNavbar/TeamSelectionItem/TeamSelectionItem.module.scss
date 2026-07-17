@@ -84,14 +84,13 @@
   object-fit: cover;
 }
 
+// Positioned inline via a `style` prop (see TeamSelectionItem.tsx) — it is
+// portaled to document.body so it escapes TeamSelectionNavbar's scrollable
+// team list, which clips anything positioned relative to an avatar inside it.
 .teamTooltip {
-  display: none;
-  position: absolute;
-  top: 50%;
-  left: calc(100% + var(--spacing-xs));
+  display: flex;
   align-items: center;
-  transform: translateY(-50%);
-  z-index: 1;
+  z-index: 1000;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline);
   border-radius: var(--spacing-xs);
@@ -102,10 +101,6 @@
   color: var(--on-surface);
   font: var(--font-title-medium);
   text-wrap: nowrap;
-}
-
-.teamAvatarContainer:hover .teamTooltip {
-  display: flex;
 }
 
 .activityDot {

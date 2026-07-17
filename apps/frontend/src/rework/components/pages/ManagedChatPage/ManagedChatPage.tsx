@@ -26,8 +26,9 @@ import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDra
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
-import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
+import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -78,7 +79,13 @@ export default function ManagedChatPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false);
+  // The capability side-panel and the session attachments drawer are both
+  // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
+  // a time so their widths never cumulate.
+  const [activePushDrawer, setActivePushDrawer] = useState<
+    { kind: "attachments" } | { kind: "capability"; key: string } | null
+  >(null);
+  const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
   const [dragActive, setDragActive] = useState(false);
   // Trace detail panel state is lifted here so the drawer is a sibling of the main
   // column. We store the selected entry's *key* (not a snapshot) and re-resolve it
@@ -104,9 +111,11 @@ export default function ManagedChatPage() {
   const isInitialState =
     chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
 
-  const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
   const attachmentsCount = chat.persistedAttachments.length;
-  const allowChatAttachments = opts?.attach_files === true;
+  // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
+  // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
+  // supersedes the retired `EffectiveChatOptions.attach_files`.
+  const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
   // The composer options menu always renders: even when an agent exposes no
   // search options, the chat-context prompts row is always available (personal +
   // team library + platform defaults).
@@ -187,22 +196,24 @@ export default function ManagedChatPage() {
       leftSlot={
         <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
           {({ closeMenu }) => (
-            <SearchConfig
-              teamId={teamId}
-              onAttach={() => fileInputRef.current?.click()}
+            <ComposerControlSlot
+              chatControls={chat.chatControls}
               onRequestClose={closeMenu}
-              selectedLibraryIds={chat.selectedLibraryIds}
-              onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
-              selectedDocumentUids={chat.selectedDocumentUids}
-              onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
-              searchPolicy={chat.searchPolicy}
-              onSearchPolicyChange={chat.setSearchPolicy}
-              ragScope={chat.ragScope}
-              onRagScopeChange={chat.setRagScope}
+              composer={{
+                teamId,
+                onAttach: () => fileInputRef.current?.click(),
+                selectedLibraryIds: chat.selectedLibraryIds,
+                onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
+                selectedDocumentUids: chat.selectedDocumentUids,
+                onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+                searchPolicy: chat.searchPolicy,
+                onSearchPolicyChange: chat.setSearchPolicy,
+                ragScope: chat.ragScope,
+                onRagScopeChange: chat.setRagScope,
+              }}
               contextPrompts={chat.contextPrompts}
               contextPromptIds={chat.contextPromptIds}
               onContextPromptIdsChange={chat.setContextPrompts}
-              options={opts}
             />
           )}
         </ComposerActionsMenu>
@@ -255,7 +266,9 @@ export default function ManagedChatPage() {
                 <button
                   type="button"
                   className={styles.conversationFilesButton}
-                  onClick={() => setAttachmentsDrawerOpen((v) => !v)}
+                  onClick={() =>
+                    setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                  }
                 >
                   <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
                   <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
@@ -298,9 +311,17 @@ export default function ManagedChatPage() {
           {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
         </div>
 
+        {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
+            main column so its push drawer reflows the conversation left. */}
+        <CapabilitySidePanelHost
+          capabilityIds={chat.capabilityIds}
+          activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
+          onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+        />
+
         <SessionAttachmentsDrawer
           open={attachmentsDrawerOpen}
-          onClose={() => setAttachmentsDrawerOpen(false)}
+          onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
           attachments={chat.persistedAttachments}
           isLoading={chat.isHydratingAttachments}
           onDelete={(attachmentId) => {

@@ -2,8 +2,10 @@
 Offline integration tests for the control-plane-backend product API.
 
 Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tuning
-     field validation (type/enum/min-max/pattern), MCP server selection (C1),
-     mcp_config_values per-server config;
+     field validation (type/enum/min-max/pattern), MCP server selection as
+     `mcp:<server>` capabilities (#1978, RFC AGENT-CAPABILITY-RFC.md §3.8) —
+     see test_capability_selection_1974.py for the generic capability-selection
+     contract (unknown id -> 422, pod round-trip, prune/reset semantics);
      §3d.9 (P1) — prompt template validation at persistence boundary (unknown tokens → 422);
      §6.4.D — PATCH session endpoint (updated_at, title).
 """
@@ -26,11 +28,11 @@ from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
-    ManagedMcpServerRef,
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.product import service as product_service
 from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -59,6 +61,13 @@ from fred_core import (
 from fred_core.common import TeamId, personal_team_id
 from fred_core.security import oidc
 from fred_core.teams.metadata_store import TeamMetadata
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    ChatControlItem,
+    ChatControlsResponse,
+    ChatControlsResult,
+)
+from fred_sdk.contracts.models import FieldSpec
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -179,6 +188,29 @@ class _FakeAgentInstanceStore:
             record.enabled = enabled
         if tuning is not None:
             record.tuning = tuning
+        return record
+
+    async def list_all(self) -> list[AgentInstanceRecord]:
+        return list(self._records)
+
+    async def set_suspension(
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        *,
+        reason: str | None,
+    ) -> AgentInstanceRecord | None:
+        record = next(
+            (
+                r
+                for r in self._records
+                if r.agent_instance_id == agent_instance_id and r.team_id == team_id
+            ),
+            None,
+        )
+        if record is None:
+            return None
+        record.suspension_reason = reason
         return record
 
     async def delete(self, agent_instance_id: str, team_id: TeamId) -> bool:
@@ -694,7 +726,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "name": "Equipe personnelle",
             "member_count": 1,
             "admins": [],
-            "is_member": False,
+            "is_member": True,
             "is_private": True,
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
@@ -1221,7 +1253,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "name": "Equipe personnelle",
         "member_count": 1,
         "admins": [],
-        "is_member": False,
+        "is_member": True,
         "is_private": True,
         "permissions": [
             "can_read",
@@ -1317,7 +1349,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "team_instantiable": True,
             "status": "available",
             "default_tuning_fields": [],
-            "mcp_servers": [],
+            "available_capabilities": [],
         }
     ]
 
@@ -1348,18 +1380,9 @@ async def test_team_agent_instances_returns_managed_identity(
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},
-            "mcp_config_values": {},
             "runtime_status": "unavailable",
             "catalog_warnings": [],
-            "effective_chat_options": {
-                "attach_files": False,
-                "libraries_selection": False,
-                "documents_selection": False,
-                "search_policy_selection": False,
-                "default_search_policy": "hybrid",
-                "rag_scope_selection": False,
-                "default_search_rag_scope": "hybrid",
-            },
+            "capability_config": {},
         }
     ]
 
@@ -1444,21 +1467,66 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     )
     assert payload["supports_streaming"] is True
     assert payload["supports_hitl"] is True
-    assert payload["effective_chat_options"] == {
-        "attach_files": False,
-        "libraries_selection": False,
-        "documents_selection": False,
-        "search_policy_selection": False,
-        "default_search_policy": "hybrid",
-        "rag_scope_selection": False,
-        "default_search_rag_scope": "hybrid",
-    }
+    # #1976: no selected capabilities → no computed chat controls.
+    assert payload["chat_controls"] == []
     # RUNTIME-07 rev. 2: no signed grant in the response — the control-plane issues
     # no capability; the pod authenticates via Keycloak and authorizes via OpenFGA.
     assert "execution_grant" not in payload
     for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
         assert "svc.cluster.local" not in payload[url_field]
         assert payload[url_field].startswith("/")
+    # #1979: no capabilities selected on this instance → empty map.
+    assert payload["capability_base_urls"] == {}
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_advertises_capability_base_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1979 (RFC §9.1): the instance-bound prep carries each selected
+    capability's ingress-relative router base URL, so the in-session UI calls
+    the pod routes directly (no proxy)."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_record(
+        agent_instance_id="inst-cap",
+        source_runtime_id="agents-v2",
+        template_id="agents-v2:rags.sample.echo",
+        source_agent_id="rags.sample.echo",
+        display_name="Echo Agent",
+        description="Test",
+    )
+    record.tuning = ManagedAgentTuning(
+        role="Echo Agent",
+        description="Test",
+        selected_capability_ids=["demo_echo"],
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cap/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["capability_base_urls"] == {
+        "demo_echo": "/runtime/agents-v2/capabilities/demo_echo"
+    }
 
 
 @pytest.mark.asyncio
@@ -1955,9 +2023,6 @@ async def test_enroll_agent_instance_creates_db_record(
                     role="Echo Agent",
                     description="Echo template description",
                     tags=["ops"],
-                    mcp_servers=[
-                        ManagedMcpServerRef(id="mcp-knowledge-flow-opensearch-ops")
-                    ],
                 ),
             )
         ]
@@ -1992,9 +2057,12 @@ async def test_enroll_agent_instance_creates_db_record(
     assert store._records[0].source_runtime_id == "runtime-a"
     assert store._records[0].source_agent_id == "rags.sample.echo"
     assert store._records[0].tuning.tags == ["ops"]
-    assert [server.id for server in store._records[0].tuning.mcp_servers] == [
-        "mcp-knowledge-flow-opensearch-ops"
-    ]
+    # No explicit selection at enroll time -> resolved against the template's
+    # default capability ids (none declared by this fixture template) and
+    # materialized as an explicit list, never left `None` (CAPAB-01 / #1980,
+    # RFC §8.1 amendment — a `None` selection previously skipped ReBAC
+    # enforcement entirely).
+    assert store._records[0].tuning.selected_capability_ids == []
 
 
 @pytest.mark.asyncio
@@ -2062,6 +2130,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     display_name VARCHAR(255) NOT NULL,
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
+                    suspension_reason VARCHAR(64),
                     created_by VARCHAR,
                     tuning_json TEXT,
                     prompt_refs_json TEXT,
@@ -2552,6 +2621,7 @@ def _build_erasure_deps(
         configuration=configuration,  # type: ignore[arg-type]
         team_dependencies=None,  # type: ignore[arg-type]
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
+        get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
@@ -5449,10 +5519,38 @@ async def test_patch_agent_instance_updates_tuning_field_values(
     assert store._records[0].tuning.values == {"persona": "new persona value"}
 
 
+def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Replace the capability config pod round-trip with an echo (#1978): the
+    envelope's `config` is whatever was submitted, persisted verbatim, exactly
+    as the real `mcp:<id>` capability's permissive `McpServerConfig` would.
+    """
+
+    async def _fake(
+        *,
+        base_url: str,
+        capability_id: str,
+        config_values: dict[str, Any],
+        team_id,
+        agent_instance_id,
+        authorization,
+    ) -> dict[str, Any]:
+        return {"schema_version": "1", "config": dict(config_values)}
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._validate_capability_config_via_pod",
+        _fake,
+    )
+
+
 @pytest.mark.asyncio
 async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_validating_update(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """An MCP server's `capability_config_values` re-validate through the same
+    pod round-trip as any other capability (#1978), using the freshly fetched
+    template contract rather than a stale snapshot."""
+
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
@@ -5470,23 +5568,12 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
         tuning=ManagedAgentTuning(
             role="MCP",
             description="MCP",
-            mcp_servers=[
-                ManagedMcpServerRef(
-                    id="mcp-search",
-                    display_name="Search",
-                    config_fields=[
-                        ManagedAgentFieldSpec(
-                            key="chat_options.libraries_selection",
-                            type="boolean",
-                            title="Libraries",
-                            default=False,
-                        )
-                    ],
-                )
-            ],
-            selected_mcp_server_ids=["mcp-search"],
-            mcp_config_values={
-                "mcp-search": {"chat_options.libraries_selection": True}
+            selected_capability_ids=[_MCP_SEARCH_ID],
+            capability_config={
+                _MCP_SEARCH_ID: {
+                    "schema_version": "1",
+                    "config": {"chat_options.libraries_selection": True},
+                }
             },
         ),
     )
@@ -5509,6 +5596,7 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch,
     )
+    _fake_pod_validate_config_echo(monkeypatch)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -5516,8 +5604,8 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
         resp = await client.patch(
             "/control-plane/v1/teams/personal/agent-instances/instance-mcp-refresh",
             json={
-                "mcp_config_values": {
-                    "mcp-search": {
+                "capability_config_values": {
+                    _MCP_SEARCH_ID: {
                         "chat_options.libraries_binding": True,
                         "chat_options.bound_library_ids": ["lib-a", "lib-b"],
                         "chat_options.libraries_selection": False,
@@ -5527,11 +5615,14 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
         )
 
     assert resp.status_code == 200
-    assert resp.json()["mcp_config_values"] == {
-        "mcp-search": {
-            "chat_options.libraries_binding": True,
-            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
-            "chat_options.libraries_selection": False,
+    assert resp.json()["capability_config"] == {
+        _MCP_SEARCH_ID: {
+            "schema_version": "1",
+            "config": {
+                "chat_options.libraries_binding": True,
+                "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                "chat_options.libraries_selection": False,
+            },
         }
     }
 
@@ -5560,8 +5651,21 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
 
 
 # ---------------------------------------------------------------------------
-# MCP server selection — enrollment, validation, and drift detection
+# MCP server selection — MCP servers are ordinary capabilities keyed by their
+# plain catalog server id now (#1988, supersedes the `mcp:<server>` namespacing
+# of #1978; RFC AGENT-CAPABILITY-RFC.md §3.8). The generic capability-selection
+# contract (unknown id -> 422, pod round-trip, prune/reset semantics) is covered
+# by test_capability_selection_1974.py; this section covers what is specific to
+# MCP-backed capabilities: drift detection (`catalog_warnings`) and the
+# cache-aside chat-controls orchestration at prep (#1976, RFC §3.3/§3.7 — the
+# `chat_options.*` resolution itself now lives on the pod in
+# McpCapability.chat_controls, tested in fred-runtime).
 # ---------------------------------------------------------------------------
+
+# #1988: an MCP-backed capability's id is the plain catalog server id (no
+# `mcp:` prefix). These constants are the ids as advertised by the pod catalog.
+_MCP_SEARCH_ID = "mcp-search"
+_MCP_STORAGE_ID = "mcp-storage"
 
 
 def _make_template_with_mcp_servers(
@@ -5570,7 +5674,7 @@ def _make_template_with_mcp_servers(
     documents_selection_default: bool = False,
     attach_files_default: bool = False,
 ) -> "_RuntimeTemplatePayload":
-    """Return a fake template payload with two declared MCP server refs."""
+    """Return a fake template payload advertising two `mcp:<id>` capabilities."""
     return _RuntimeTemplatePayload(
         template_agent_id="rags.sample.mcp",
         title="MCP Agent",
@@ -5579,73 +5683,82 @@ def _make_template_with_mcp_servers(
         default_tuning=ManagedAgentTuning(
             role="MCP Agent",
             description="Agent with MCP servers",
-            mcp_servers=[
-                ManagedMcpServerRef(
-                    id="mcp-search",
-                    display_name="Search",
-                    config_fields=[
-                        ManagedAgentFieldSpec(
-                            key="chat_options.libraries_binding",
-                            type="boolean",
-                            title="Libraries binding",
-                            default=False,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.libraries_selection",
-                            type="boolean",
-                            title="Libraries",
-                            default=libraries_selection_default,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.documents_selection",
-                            type="boolean",
-                            title="Documents",
-                            default=documents_selection_default,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.attach_files",
-                            type="boolean",
-                            title="File attachments",
-                            default=attach_files_default,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.bound_library_ids",
-                            type="array",
-                            title="Bound libraries",
-                            item_type="string",
-                            default=[],
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.search_policy_enabled",
-                            type="boolean",
-                            title="Search policy picker",
-                            default=documents_selection_default,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.search_policy",
-                            type="string",
-                            title="Search policy",
-                            enum=["strict", "hybrid", "semantic"],
-                            default="hybrid",
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.search_rag_scope_enabled",
-                            type="boolean",
-                            title="RAG scope picker",
-                            default=documents_selection_default,
-                        ),
-                        ManagedAgentFieldSpec(
-                            key="chat_options.search_rag_scope",
-                            type="string",
-                            title="RAG scope",
-                            enum=["corpus_only", "hybrid", "general_only"],
-                            default="hybrid",
-                        ),
-                    ],
-                ),
-                ManagedMcpServerRef(id="mcp-storage", display_name="Storage"),
-            ],
         ),
+        available_capabilities=[
+            CapabilityCatalogEntry(
+                id=_MCP_SEARCH_ID,
+                version="1",
+                name="Search",
+                description="Search",
+                icon="extension",
+                config_fields=[
+                    FieldSpec(
+                        key="chat_options.libraries_binding",
+                        type="boolean",
+                        title="Libraries binding",
+                        default=False,
+                    ),
+                    FieldSpec(
+                        key="chat_options.libraries_selection",
+                        type="boolean",
+                        title="Libraries",
+                        default=libraries_selection_default,
+                    ),
+                    FieldSpec(
+                        key="chat_options.documents_selection",
+                        type="boolean",
+                        title="Documents",
+                        default=documents_selection_default,
+                    ),
+                    FieldSpec(
+                        key="chat_options.attach_files",
+                        type="boolean",
+                        title="File attachments",
+                        default=attach_files_default,
+                    ),
+                    FieldSpec(
+                        key="chat_options.bound_library_ids",
+                        type="array",
+                        title="Bound libraries",
+                        item_type="string",
+                        default=[],
+                    ),
+                    FieldSpec(
+                        key="chat_options.search_policy_enabled",
+                        type="boolean",
+                        title="Search policy picker",
+                        default=documents_selection_default,
+                    ),
+                    FieldSpec(
+                        key="chat_options.search_policy",
+                        type="string",
+                        title="Search policy",
+                        enum=["strict", "hybrid", "semantic"],
+                        default="hybrid",
+                    ),
+                    FieldSpec(
+                        key="chat_options.search_rag_scope_enabled",
+                        type="boolean",
+                        title="RAG scope picker",
+                        default=documents_selection_default,
+                    ),
+                    FieldSpec(
+                        key="chat_options.search_rag_scope",
+                        type="string",
+                        title="RAG scope",
+                        enum=["corpus_only", "hybrid", "general_only"],
+                        default="hybrid",
+                    ),
+                ],
+            ),
+            CapabilityCatalogEntry(
+                id=_MCP_STORAGE_ID,
+                version="1",
+                name="Storage",
+                description="Storage",
+                icon="extension",
+            ),
+        ],
     )
 
 
@@ -5665,6 +5778,7 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch,
     )
+    _fake_pod_validate_config_echo(monkeypatch)
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -5685,12 +5799,12 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
             json={
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
-                "mcp_server_ids": ["mcp-search"],
+                "capability_ids": [_MCP_SEARCH_ID],
             },
         )
 
     assert resp.status_code == 201
-    assert store._records[0].tuning.selected_mcp_server_ids == ["mcp-search"]
+    assert store._records[0].tuning.selected_capability_ids == [_MCP_SEARCH_ID]
 
 
 @pytest.mark.asyncio
@@ -5729,6 +5843,15 @@ async def test_enrolling_internal_template_is_admin_only(
                 permission == OrganizationPermission.CAN_MANAGE_PLATFORM
                 and user.uid == "alice"
             )
+
+        async def has_permission(
+            self, subject, permission, resource, *, contextual_relations=None
+        ) -> bool:
+            # Not what this test exercises (see CAPAB-01's template-level
+            # `can_use` check, service.py `enroll_agent_instance`) — permissive
+            # so the non-public-template admin-only gating above is what
+            # actually decides the outcome.
+            return True
 
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
@@ -5893,6 +6016,7 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch,
     )
+    _fake_pod_validate_config_echo(monkeypatch)
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -5913,9 +6037,9 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
             json={
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
-                "mcp_server_ids": ["mcp-search"],
-                "mcp_config_values": {
-                    "mcp-search": {
+                "capability_ids": [_MCP_SEARCH_ID],
+                "capability_config_values": {
+                    _MCP_SEARCH_ID: {
                         "chat_options.libraries_binding": True,
                         "chat_options.bound_library_ids": ["lib-a", "lib-b"],
                         "chat_options.libraries_selection": False,
@@ -5927,30 +6051,30 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
         )
 
     assert resp.status_code == 201
-    assert resp.json()["mcp_config_values"] == {
-        "mcp-search": {
-            "chat_options.libraries_binding": True,
-            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
-            "chat_options.libraries_selection": False,
-            "chat_options.search_policy_enabled": True,
-            "chat_options.search_policy": "semantic",
-        }
+    expected_config = {
+        "chat_options.libraries_binding": True,
+        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+        "chat_options.libraries_selection": False,
+        "chat_options.search_policy_enabled": True,
+        "chat_options.search_policy": "semantic",
     }
-    assert store._records[0].tuning.mcp_config_values == {
-        "mcp-search": {
-            "chat_options.libraries_binding": True,
-            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
-            "chat_options.libraries_selection": False,
-            "chat_options.search_policy_enabled": True,
-            "chat_options.search_policy": "semantic",
-        }
+    assert resp.json()["capability_config"] == {
+        _MCP_SEARCH_ID: {"schema_version": "1", "config": expected_config}
     }
+    assert (
+        store._records[0].tuning.capability_config[_MCP_SEARCH_ID]["config"]
+        == expected_config
+    )
 
 
 @pytest.mark.asyncio
 async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """An unknown MCP-backed capability id (plain catalog server id, #1988)
+    goes through the SAME save-time availability check as any other capability
+    id — see test_capability_selection_1974.py for the generic version."""
+
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
@@ -5983,7 +6107,7 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
             json={
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
-                "mcp_server_ids": ["mcp-unknown"],
+                "capability_ids": ["mcp-unknown"],
             },
         )
 
@@ -5992,96 +6116,46 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
     assert store._records == []
 
 
-@pytest.mark.asyncio
-async def test_enroll_agent_instance_rejects_unknown_mcp_config_server_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
-    )
+# Note (#1978): the pre-migration `_validate_mcp_config_values` locally
+# rejected an unsupported dotted config key (e.g. "chat_options.unsupported")
+# with a 422. That local field-name check is retired by design: an MCP
+# server's stored config is now the pod-validated capability envelope, and
+# `McpServerConfig` (fred_runtime.capabilities.mcp) declares
+# `model_config = ConfigDict(extra="allow")` — a permissive bag, because
+# dotted keys cannot be declared as real Pydantic fields. Rejecting an unknown
+# key is the POD's call to make (if it chooses to), not control-plane's;
+# `test_enroll_agent_instance_rejects_unknown_mcp_server_id` above and
+# test_capability_selection_1974.py cover the ids/shape that ARE still
+# validated at this layer, and `test_enroll_propagates_pod_422_wording`
+# (test_capability_selection_1974.py) covers a pod-side rejection propagating.
+# There is deliberately no equivalent "unknown mcp config key -> 422" test.
 
-    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
-        return [_make_template_with_mcp_servers()]
 
-    monkeypatch.setattr(
-        "control_plane_backend.product.service._fetch_runtime_templates",
-        _fake_fetch,
-    )
-    store = _FakeAgentInstanceStore([])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="runtime-a",
-            base_url="http://runtime-a/pod/v1",
-            enabled=True,
-        )
-    ]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances",
-            json={
-                "template_id": "runtime-a:rags.sample.mcp",
-                "display_name": "MCP Instance",
-                "mcp_config_values": {
-                    "mcp-unknown": {"chat_options.search_policy": "semantic"}
-                },
+def _record_with_mcp_search_selected(
+    *, agent_instance_id: str, selected_capability_ids: list[str] | None
+) -> AgentInstanceRecord:
+    return AgentInstanceRecord(
+        agent_instance_id=agent_instance_id,
+        team_id=TeamId("personal"),
+        template_id="runtime-a:rags.sample.mcp",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP",
+        description=None,
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP",
+            description="MCP",
+            selected_capability_ids=selected_capability_ids,
+            capability_config={
+                _MCP_SEARCH_ID: {
+                    "schema_version": "1",
+                    "config": {"chat_options.search_policy": "semantic"},
+                }
             },
-        )
-
-    assert resp.status_code == 422
-    assert "mcp-unknown" in resp.json()["detail"]
-    assert store._records == []
-
-
-@pytest.mark.asyncio
-async def test_enroll_agent_instance_rejects_unknown_mcp_config_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        ),
     )
-
-    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
-        return [_make_template_with_mcp_servers()]
-
-    monkeypatch.setattr(
-        "control_plane_backend.product.service._fetch_runtime_templates",
-        _fake_fetch,
-    )
-    store = _FakeAgentInstanceStore([])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="runtime-a",
-            base_url="http://runtime-a/pod/v1",
-            enabled=True,
-        )
-    ]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances",
-            json={
-                "template_id": "runtime-a:rags.sample.mcp",
-                "display_name": "MCP Instance",
-                "mcp_config_values": {"mcp-search": {"chat_options.unsupported": True}},
-            },
-        )
-
-    assert resp.status_code == 422
-    assert "chat_options.unsupported" in resp.json()["detail"]
-    assert store._records == []
 
 
 @pytest.mark.asyncio
@@ -6092,40 +6166,44 @@ async def test_patch_agent_instance_can_clear_mcp_config_values(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
     )
-    record = AgentInstanceRecord(
+    record = _record_with_mcp_search_selected(
         agent_instance_id="instance-mcp-config",
-        team_id=TeamId("personal"),
-        template_id="runtime-a:rags.sample.mcp",
-        source_runtime_id="runtime-a",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP",
-        description=None,
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP",
-            description="MCP",
-            mcp_servers=_make_template_with_mcp_servers().default_tuning.mcp_servers,
-            mcp_config_values={
-                "mcp-search": {"chat_options.search_policy": "semantic"}
-            },
-        ),
+        selected_capability_ids=[_MCP_SEARCH_ID],
     )
     store = _FakeAgentInstanceStore([record])
     app = create_app()
     _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    _fake_pod_validate_config_echo(monkeypatch)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.patch(
             "/control-plane/v1/teams/personal/agent-instances/instance-mcp-config",
-            json={"mcp_config_values": None},
+            json={"capability_config_values": None},
         )
 
     assert resp.status_code == 200
-    assert resp.json()["mcp_config_values"] == {}
-    assert store._records[0].tuning.mcp_config_values == {}
+    assert resp.json()["capability_config"] == {
+        _MCP_SEARCH_ID: {"schema_version": "1", "config": {}}
+    }
+    assert store._records[0].tuning.capability_config[_MCP_SEARCH_ID]["config"] == {}
 
 
 @pytest.mark.asyncio
@@ -6136,55 +6214,88 @@ async def test_patch_agent_instance_can_activate_no_mcp_servers_and_prunes_confi
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
     )
-    record = AgentInstanceRecord(
+    record = _record_with_mcp_search_selected(
         agent_instance_id="instance-mcp-none",
-        team_id=TeamId("personal"),
-        template_id="runtime-a:rags.sample.mcp",
-        source_runtime_id="runtime-a",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP",
-        description=None,
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP",
-            description="MCP",
-            mcp_servers=_make_template_with_mcp_servers().default_tuning.mcp_servers,
-            selected_mcp_server_ids=None,
-            mcp_config_values={
-                "mcp-search": {"chat_options.search_policy": "semantic"}
-            },
-        ),
+        selected_capability_ids=None,
     )
     store = _FakeAgentInstanceStore([record])
     app = create_app()
     _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    _fake_pod_validate_config_echo(monkeypatch)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.patch(
             "/control-plane/v1/teams/personal/agent-instances/instance-mcp-none",
-            json={"mcp_server_ids": []},
+            json={"capability_ids": []},
         )
 
     assert resp.status_code == 200
-    assert resp.json()["selected_mcp_server_ids"] == []
-    assert resp.json()["mcp_config_values"] == {}
-    assert store._records[0].tuning.selected_mcp_server_ids == []
-    assert store._records[0].tuning.mcp_config_values == {}
+    assert resp.json()["selected_capability_ids"] == []
+    assert resp.json()["capability_config"] == {}
+    assert store._records[0].tuning.selected_capability_ids == []
+    assert store._records[0].tuning.capability_config == {}
 
 
-@pytest.mark.asyncio
-async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
-    monkeypatch: pytest.MonkeyPatch,
+def _wire_capability_catalog(
+    monkeypatch: pytest.MonkeyPatch, template: "_RuntimeTemplatePayload"
 ) -> None:
+    """Provide the pod capability catalog `_available_capabilities_for_source`
+    reads at prep (#1976, RFC §3.7): the authoritative source of each
+    capability's `version`, which keys the chat-controls cache. Fetched through
+    the same `_fetch_runtime_templates` seam used everywhere else."""
+
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
+        return [template]
+
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
     )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-chat-options",
+
+
+def _stub_chat_controls(
+    monkeypatch: pytest.MonkeyPatch, response: ChatControlsResponse | None
+) -> list[int]:
+    """Stub the control-plane→pod chat-controls call (#1976). Returns a
+    one-element counter of how many times the pod was asked — misses only, so a
+    cache hit leaves it unchanged."""
+
+    calls = [0]
+
+    async def _fake_fetch_chat_controls(_base_url, _request):
+        calls[0] += 1
+        return response
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_chat_controls",
+        _fake_fetch_chat_controls,
+    )
+    return calls
+
+
+def _mcp_chat_instance(
+    agent_instance_id: str, config: dict[str, Any] | None = None
+) -> AgentInstanceRecord:
+    return AgentInstanceRecord(
+        agent_instance_id=agent_instance_id,
         team_id=TeamId("personal"),
         template_id="agents-v2:rags.sample.mcp",
         source_runtime_id="agents-v2",
@@ -6196,87 +6307,23 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
         tuning=ManagedAgentTuning(
             role="MCP Chat Agent",
             description="Chat options",
-            mcp_servers=_make_template_with_mcp_servers().default_tuning.mcp_servers,
-            selected_mcp_server_ids=["mcp-search"],
-            mcp_config_values={
-                "mcp-search": {
-                    "chat_options.libraries_binding": True,
-                    "chat_options.bound_library_ids": ["lib-a", "lib-b"],
-                    "chat_options.libraries_selection": False,
-                    "chat_options.documents_selection": True,
-                    "chat_options.attach_files": True,
-                    "chat_options.search_policy_enabled": True,
-                    "chat_options.search_policy": "semantic",
-                    "chat_options.search_rag_scope_enabled": True,
-                    "chat_options.search_rag_scope": "corpus_only",
-                }
-            },
+            selected_capability_ids=[_MCP_SEARCH_ID],
+            capability_config=(
+                {_MCP_SEARCH_ID: {"schema_version": "1", "config": config}}
+                if config is not None
+                else {}
+            ),
         ),
     )
-    store = _FakeAgentInstanceStore([record])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="agents-v2",
-            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
-            enabled=True,
-            ingress_prefix="/runtime/agents-v2",
-        )
-    ]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-chat-options/prepare-execution"
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"] == {
-        "attach_files": True,
-        "bound_library_ids": ["lib-a", "lib-b"],
-        "libraries_selection": False,
-        "documents_selection": True,
-        "search_policy_selection": True,
-        "default_search_policy": "semantic",
-        "rag_scope_selection": True,
-        "default_search_rag_scope": "corpus_only",
-    }
 
 
-@pytest.mark.asyncio
-async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _prep_app_for_mcp_instance(
+    monkeypatch: pytest.MonkeyPatch, store: "_FakeAgentInstanceStore"
+):
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
     )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-doc-scope-defaults",
-        team_id=TeamId("personal"),
-        template_id="agents-v2:rags.sample.mcp",
-        source_runtime_id="agents-v2",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP Chat Agent",
-        description="Chat options",
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP Chat Agent",
-            description="Chat options",
-            values={},
-            mcp_servers=_make_template_with_mcp_servers(
-                libraries_selection_default=True,
-                documents_selection_default=True,
-            ).default_tuning.mcp_servers,
-            selected_mcp_server_ids=["mcp-search"],
-            mcp_config_values={},
-        ),
-    )
-    store = _FakeAgentInstanceStore([record])
     app = create_app()
     _patch_store(monkeypatch, store)
     container = get_application_container_from_app(app)
@@ -6288,83 +6335,158 @@ async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
             ingress_prefix="/runtime/agents-v2",
         )
     ]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-doc-scope-defaults/prepare-execution"
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"] == {
-        "attach_files": False,
-        "libraries_selection": True,
-        "documents_selection": True,
-        "search_policy_selection": True,
-        "default_search_policy": "hybrid",
-        "rag_scope_selection": True,
-        "default_search_rag_scope": "hybrid",
-    }
+    return app
 
 
 @pytest.mark.asyncio
-async def test_prepare_execution_defaults_attach_files_on_from_mcp_catalog(
+async def test_prepare_execution_attaches_computed_chat_controls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """attach_files resolves on from the active server's config_field default.
-
-    Mirrors how the search-documents catalog entry declares
-    ``chat_options.attach_files`` with ``default: true`` — when the operator never
-    overrides it, the resolved chat options must still expose attachments.
-    """
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
-    )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-attach-default",
-        team_id=TeamId("personal"),
-        template_id="agents-v2:rags.sample.mcp",
-        source_runtime_id="agents-v2",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP Chat Agent",
-        description="Chat options",
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP Chat Agent",
-            description="Chat options",
-            values={},
-            mcp_servers=_make_template_with_mcp_servers(
-                attach_files_default=True,
-            ).default_tuning.mcp_servers,
-            selected_mcp_server_ids=["mcp-search"],
-            mcp_config_values={},
+    """#1976 (RFC §3.3/§3.7): prep flattens the pod's per-capability
+    chat-controls onto `ExecutionPreparation.chat_controls`, tagged with the
+    owning capability id and in returned-list order. The old control-plane
+    `chat_options.*` resolution is retired — the computation lives on the pod
+    (McpCapability.chat_controls), tested in fred-runtime."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cc")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[
+                        ChatControlItem(
+                            widget="search_policy", params={"default": "semantic"}
+                        ),
+                        ChatControlItem(widget="rag_scope"),
+                    ],
+                )
+            ]
         ),
     )
-    store = _FakeAgentInstanceStore([record])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="agents-v2",
-            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
-            enabled=True,
-            ingress_prefix="/runtime/agents-v2",
-        )
-    ]
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-attach-default/prepare-execution"
+            "/control-plane/v1/teams/personal/agent-instances/inst-cc/prepare-execution"
         )
 
     assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"]["attach_files"] is True
+    # Prepare-execution serializes with exclude_none, so a null `params` is
+    # simply absent (the generated frontend type marks it optional).
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": _MCP_SEARCH_ID,
+            "widget": "search_policy",
+            "params": {"default": "semantic"},
+        },
+        {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_chat_controls_are_cache_aside(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.7): the pod is asked once per `(capability, version,
+    config_hash)`; a second prep with an unchanged instance serves from the
+    in-process cache without another pod round-trip."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cache")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    calls = _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[ChatControlItem(widget="attach_files")],
+                )
+            ]
+        ),
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cache/prepare-execution"
+        )
+        second = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cache/prepare-execution"
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["chat_controls"] == second.json()["chat_controls"]
+    assert [c["widget"] for c in first.json()["chat_controls"]] == ["attach_files"]
+    assert calls[0] == 1  # second prep hit the cache
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_skips_capability_chat_controls_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.9): a per-capability pod error skips ONLY that capability's
+    controls (with a warning) — never failing the whole prep, and never cached."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-err")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[],
+                    error="capability_config_invalid",
+                )
+            ]
+        ),
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-err/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["chat_controls"] == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_chat_controls_empty_when_pod_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.7): an unreachable pod yields no controls this prep
+    (best-effort, logged) rather than a failed prep — a cache MISS has no stale
+    entry to fall back to."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-down")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(monkeypatch, None)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-down/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["chat_controls"] == []
 
 
 @pytest.mark.asyncio
@@ -6385,7 +6507,7 @@ async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
         tuning=ManagedAgentTuning(
             role=base.tuning.role,
             description=base.tuning.description,
-            selected_mcp_server_ids=["mcp-search"],
+            selected_capability_ids=[_MCP_SEARCH_ID],
         ),
     )
     store = _FakeAgentInstanceStore([record])
@@ -6411,8 +6533,8 @@ async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
     item = resp.json()[0]
     assert item["runtime_status"] == "unavailable"
     assert item["catalog_warnings"] == []
-    assert item["selected_mcp_server_ids"] == ["mcp-search"]
-    assert item["mcp_config_values"] == {}
+    assert item["selected_capability_ids"] == [_MCP_SEARCH_ID]
+    assert item["capability_config"] == {}
 
 
 # ---------------------------------------------------------------------------

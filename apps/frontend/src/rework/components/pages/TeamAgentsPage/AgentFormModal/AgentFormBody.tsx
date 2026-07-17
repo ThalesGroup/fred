@@ -23,18 +23,18 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { McpServerCard } from "./McpServerCard/McpServerCard.tsx";
+import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import styles from "./AgentFormBody.module.css";
 
 export type SectionKey = "prompts" | "settings" | "chat" | "tools";
 
 const SECTION_ORDER: SectionKey[] = ["prompts", "settings", "chat", "tools"];
 
-const SECTION_LABELS: Record<SectionKey, string> = {
-  prompts: "Prompts",
-  settings: "Settings",
-  chat: "Chat",
-  tools: "Tools",
+const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
+  prompts: "rework.teams.formAgent.sections.prompts",
+  settings: "rework.teams.formAgent.sections.settings",
+  chat: "rework.teams.formAgent.sections.chat",
+  tools: "rework.teams.formAgent.sections.tools",
 };
 
 const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }> = {
@@ -73,9 +73,10 @@ type AgentFormBodyProps = {
   displayName: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
-  selectedMcpServerIds: string[] | null;
-  /** Per-server MCP config values: outer key = server id, inner key = config_fields[].key. */
-  mcpConfigValues: Record<string, Record<string, unknown>>;
+  /** Explicit list of active capability ids ([] = none active). */
+  selectedCapabilityIds: string[];
+  /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
+  capabilityConfigValues: Record<string, Record<string, unknown>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -86,8 +87,8 @@ type AgentFormBodyProps = {
   onDisplayNameChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
-  onMcpSelectionChange: (ids: string[]) => void;
-  onMcpConfigChange: (serverId: string, key: string, value: unknown) => void;
+  onCapabilitySelectionChange: (ids: string[]) => void;
+  onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
 };
 
 export function AgentFormBody({
@@ -97,8 +98,8 @@ export function AgentFormBody({
   displayName,
   description,
   tuningFieldValues,
-  selectedMcpServerIds,
-  mcpConfigValues,
+  selectedCapabilityIds,
+  capabilityConfigValues,
   isSubmitting,
   submitAttempted,
   activeSection,
@@ -109,14 +110,41 @@ export function AgentFormBody({
   onDisplayNameChange,
   onDescriptionChange,
   onTuningChange,
-  onMcpSelectionChange,
-  onMcpConfigChange,
+  onCapabilitySelectionChange,
+  onCapabilityConfigChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
-  const mcpServers = selectedTemplate?.mcp_servers ?? [];
+  const capabilities = selectedTemplate?.available_capabilities ?? [];
+
+  // #1975 (RFC §3.9): a platform-suspended instance renders its broken
+  // capability in an error state with plain-language text and the two fix paths
+  // (untick/reset the capability and re-save, or contact a platform admin). A
+  // successful save re-validates every active slice and clears the suspension —
+  // there is no second clearing mechanism. The offending capability id is only
+  // derivable for the availability reasons (a selected id the template no
+  // longer advertises, including MCP capabilities, which are FGA/team-gated
+  // like every other capability); `capability_config_invalid` names no id (the
+  // pod's 422 wording is not carried on the summary), so its message is generic.
+  const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
+  const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
+  const missingCapabilityIds =
+    suspensionReason && suspensionReason !== "capability_config_invalid"
+      ? (editInstance?.selected_capability_ids ?? []).filter((id) => !availableCapabilityIds.has(id))
+      : [];
+  const suspensionMessage = (() => {
+    if (!suspensionReason) return undefined;
+    const capabilityList = missingCapabilityIds.join(", ") || "—";
+    if (suspensionReason === "capability_config_invalid") {
+      return t("rework.teams.formAgent.suspended.configInvalid");
+    }
+    if (suspensionReason === "capability_access_revoked") {
+      return t("rework.teams.formAgent.suspended.accessRevoked", { capabilities: capabilityList });
+    }
+    return t("rework.teams.formAgent.suspended.unavailable", { capabilities: capabilityList });
+  })();
 
   const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
   const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
@@ -130,7 +158,7 @@ export function AgentFormBody({
   };
 
   const visibleSections = SECTION_ORDER.filter((s) => {
-    if (s === "tools") return mcpServers.length > 0;
+    if (s === "tools") return capabilities.length > 0;
     return fieldsBySection[s].length > 0;
   });
 
@@ -182,6 +210,12 @@ export function AgentFormBody({
         <p className={styles.templateUnavailableNotice}>{t("rework.teams.formAgent.templateUnavailable")}</p>
       ) : null}
 
+      {suspensionMessage && (
+        <div className={styles.suspensionBanner} role="alert">
+          <strong>{t("rework.teams.formAgent.suspended.title")}</strong> {suspensionMessage}
+        </div>
+      )}
+
       {!templateMissing && (
         <>
           <TextInput
@@ -209,10 +243,12 @@ export function AgentFormBody({
                   key={visibleSections.join(",")}
                   size="small"
                   color="secondary"
+                  variant="tabs"
+                  aria-label={t("rework.teams.formAgent.sections.aria")}
                   selectedIndex={activeSectionIndex}
                   onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
                   items={visibleSections.map((s) => ({
-                    label: SECTION_LABELS[s],
+                    label: t(SECTION_LABEL_KEYS[s]),
                     icon: SECTION_ICONS[s],
                     hasError: errorSections.has(s),
                     onClick: () => onSectionChange(s),
@@ -230,30 +266,26 @@ export function AgentFormBody({
                 {effectiveSection === "prompts" && renderFieldList(promptFields)}
                 {effectiveSection === "settings" && renderFieldList(settingsFields)}
                 {effectiveSection === "chat" && renderFieldList(chatFields)}
-                {effectiveSection === "tools" && (
-                  <ul className={styles.mcpList}>
-                    {mcpServers.map((server) => {
-                      const checked =
-                        server.locked === true ||
-                        selectedMcpServerIds === null ||
-                        selectedMcpServerIds.includes(server.id);
+                {effectiveSection === "tools" && capabilities.length > 0 && (
+                  <ul className={styles.toolsList}>
+                    {capabilities.map((capability) => {
+                      const checked = selectedCapabilityIds.includes(capability.id);
                       const toggle = () => {
-                        const current = selectedMcpServerIds ?? mcpServers.map((s) => s.id);
                         const next = checked
-                          ? current.filter((id) => id !== server.id)
-                          : [...current.filter((id) => id !== server.id), server.id];
-                        onMcpSelectionChange(next);
+                          ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                          : [...selectedCapabilityIds, capability.id];
+                        onCapabilitySelectionChange(next);
                       };
                       return (
-                        <McpServerCard
-                          key={server.id}
-                          server={server}
+                        <CapabilityCard
+                          key={capability.id}
+                          capability={capability}
                           teamId={teamId}
                           checked={checked}
                           disabled={isSubmitting}
-                          configValues={mcpConfigValues[server.id] ?? {}}
+                          configValues={capabilityConfigValues[capability.id] ?? {}}
                           onToggle={toggle}
-                          onConfigChange={(key, val) => onMcpConfigChange(server.id, key, val)}
+                          onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
                         />
                       );
                     })}

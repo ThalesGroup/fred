@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
+from collections import OrderedDict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Sequence, cast
+from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
 
 import httpx
@@ -19,9 +23,32 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.tasks import ErasureReason
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    ChatControlDescriptor,
+    ChatControlItem,
+    ChatControlsRequest,
+    ChatControlsRequestItem,
+    ChatControlsResponse,
+    StoredCapabilityConfig,
+)
+from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
+from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.suspension import (
+    SliceInvalid,
+    SuspensionReason,
+    clear_suspension,
+    reconcile_instance_config_health,
+    reconcile_instance_suspension,
+)
+from control_plane_backend.capabilities.authz import (
+    can_use_capability,
+    filter_entries_by_usable,
+    usable_capability_ids,
+)
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -39,7 +66,6 @@ from control_plane_backend.product.schemas import (
     CreatePromptRequest,
     CreateSessionAttachmentRequest,
     CreateSessionRequest,
-    EffectiveChatOptions,
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
@@ -90,14 +116,48 @@ _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
 )
 _DEFAULT_PROMPT_BY_CATEGORY = {spec.category: spec for spec in DEFAULT_PROMPTS}
 
-_CHAT_OPTION_ATTACH_FILES_KEY = "chat_options.attach_files"
-_CHAT_OPTION_LIBRARIES_BINDING_KEY = "chat_options.libraries_binding"
-_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY = "chat_options.bound_library_ids"
-_CHAT_OPTION_LIBRARIES_SELECTION_KEY = "chat_options.libraries_selection"
-_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY = "chat_options.search_policy_enabled"
-_CHAT_OPTION_SEARCH_POLICY_KEY = "chat_options.search_policy"
-_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY = "chat_options.search_rag_scope_enabled"
-_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY = "chat_options.search_rag_scope"
+# Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
+# persisted. Control-plane may cache the pod's per-capability evaluation
+# cache-aside only, keyed `(capability_id, manifest.version, config_hash)`. A
+# pod deploy bumps `manifest.version` → old entries miss and recompute; a config
+# edit changes `config_hash` → same. In-process bounded LRU per replica: a miss
+# is one pod call, never a migration. No TTL — the key already captures every
+# axis that invalidates an entry, as long as prep reads the pod's current
+# version at lookup (it does, via the catalog fetch below).
+_CHAT_CONTROLS_CACHE_MAXSIZE = 512
+_chat_controls_cache: "OrderedDict[tuple[str, str, str], list[ChatControlItem]]" = (
+    OrderedDict()
+)
+
+
+def _capability_config_hash(envelope: Mapping[str, Any] | None) -> str:
+    """Stable hash of one stored `capability_config` envelope (schema+config)."""
+
+    return hashlib.sha256(
+        json.dumps(
+            dict(envelope) if envelope else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _chat_controls_cache_get(
+    key: tuple[str, str, str],
+) -> list[ChatControlItem] | None:
+    cached = _chat_controls_cache.get(key)
+    if cached is not None:
+        _chat_controls_cache.move_to_end(key)
+    return cached
+
+
+def _chat_controls_cache_put(
+    key: tuple[str, str, str], controls: list[ChatControlItem]
+) -> None:
+    _chat_controls_cache[key] = controls
+    _chat_controls_cache.move_to_end(key)
+    while len(_chat_controls_cache) > _CHAT_CONTROLS_CACHE_MAXSIZE:
+        _chat_controls_cache.popitem(last=False)
 
 
 class _RuntimeTemplatePayload:
@@ -112,6 +172,8 @@ class _RuntimeTemplatePayload:
         description_by_lang: dict[str, str] | None = None,
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
+        available_capabilities: list[CapabilityCatalogEntry] | None = None,
+        default_capability_ids: list[str] | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -122,6 +184,14 @@ class _RuntimeTemplatePayload:
             role=title,
             description=description,
         )
+        self.available_capabilities = available_capabilities or []
+        # The capability ids activated when an instance's `selected_capability_ids`
+        # is None (CAPAB-01 / #1980, RFC §8.1 amendment): the plain catalog ids of
+        # `definition.default_mcp_servers`, mirrored on the wire as
+        # `available_mcp_servers` (`agent_app.py` `_AgentTemplateSummary`). Needed
+        # so `_apply_capability_selection` can ReBAC-check the None case instead of
+        # skipping it.
+        self.default_capability_ids = default_capability_ids or []
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -131,8 +201,9 @@ class _RuntimeTemplatePayload:
         Why this function exists:
         - control-plane keeps its own typed managed-agent models, so runtime
           template payloads need one normalization step before aggregation
-        - MCP catalog metadata such as `display_name` and `config_fields` is
-          enriched here onto each declared `ManagedMcpServerRef`
+        - MCP servers surface as ordinary capabilities keyed by their plain
+          catalog server id in `available_capabilities` (#1988), so no
+          MCP-specific enrichment happens here anymore
 
         How to use it:
         - call with one raw `/agents/templates` item returned by a runtime pod
@@ -149,37 +220,6 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
-        # Enrich mcp_server refs with display_name and config_fields from the MCP catalog
-        catalog_entries: dict[str, dict] = {
-            s["id"]: s
-            for s in data.get("available_mcp_servers", [])
-            if isinstance(s, dict) and "id" in s
-        }
-        if catalog_entries:
-            tuning = tuning.model_copy(
-                update={
-                    "mcp_servers": [
-                        ref.model_copy(
-                            update={
-                                "display_name": catalog_entries[ref.id].get(
-                                    "name", ref.id
-                                )
-                                if ref.id in catalog_entries
-                                else ref.id,
-                                "config_fields": [
-                                    ManagedAgentFieldSpec.model_validate(f)
-                                    for f in catalog_entries.get(ref.id, {}).get(
-                                        "config_fields", []
-                                    )
-                                    if isinstance(f, dict)
-                                ],
-                                "locked": ref.locked,
-                            }
-                        )
-                        for ref in tuning.mcp_servers
-                    ]
-                }
-            )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -187,6 +227,21 @@ class _RuntimeTemplatePayload:
             description_by_lang=data.get("description_by_lang") or None,
             kind=data["kind"],
             default_tuning=tuning,
+            # Pod-installed capabilities (#1974) — the same SDK wire model the
+            # pod serializes, never a hand-declared parallel copy.
+            available_capabilities=[
+                CapabilityCatalogEntry.model_validate(entry)
+                for entry in data.get("available_capabilities", [])
+                if isinstance(entry, dict)
+            ],
+            # Ids of `definition.default_mcp_servers` (the servers activated when
+            # `selected_capability_ids is None`) — same namespace as
+            # `available_capabilities` ids (#1988).
+            default_capability_ids=[
+                entry["id"]
+                for entry in data.get("available_mcp_servers", [])
+                if isinstance(entry, dict) and entry.get("id")
+            ],
         )
 
 
@@ -250,6 +305,11 @@ async def build_frontend_bootstrap(
         list_teams_from_service(user, deps.team_dependencies),
         _build_permission_summary(user, deps.team_dependencies.rebac),
     )
+    # First-touch personal-space capability seeding (CAPAB-01 / #1980, RFC §8.4):
+    # a no-op unless `platform.capabilities.personal_defaults` is configured, and
+    # idempotent (a capability already carrying a settings row for this personal
+    # team is skipped), so a repeated bootstrap does not re-write tuples.
+    await _seed_personal_capability_defaults(user, deps)
     return FrontendBootstrap(
         current_user=UserSummary.from_keycloak_user(user),
         active_team=active_team,
@@ -258,6 +318,38 @@ async def build_frontend_bootstrap(
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
     )
+
+
+async def _seed_personal_capability_defaults(
+    user: KeycloakUser, deps: ProductServiceDependencies
+) -> None:
+    """Seed the configured personal-space default capabilities for this user's
+    personal team (CAPAB-01 / #1980, RFC §8.4). Best-effort: never breaks
+    bootstrap, and a no-op when nothing is configured."""
+
+    personal_defaults = deps.configuration.platform.capabilities.personal_defaults
+    if not personal_defaults:
+        return
+    try:
+        from control_plane_backend.capabilities.catalog import (
+            aggregate_capability_catalog,
+        )
+        from control_plane_backend.capabilities.seeding import (
+            seed_personal_team_capabilities,
+        )
+
+        catalog = await aggregate_capability_catalog(deps)
+        await seed_personal_team_capabilities(
+            rebac=deps.team_dependencies.rebac,
+            settings_store=deps.get_team_capability_settings_store(),
+            catalog=catalog,
+            personal_defaults=personal_defaults,
+            team_id=personal_team_id(user.uid),
+        )
+    except Exception:  # noqa: BLE001 — seeding must never break bootstrap
+        logger.exception(
+            "[capability-seeding] personal-space seeding failed for %s", user.uid
+        )
 
 
 async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
@@ -403,7 +495,6 @@ async def _refresh_tuning_contract_from_runtime(
     return tuning.model_copy(
         update={
             "fields": template.default_tuning.fields,
-            "mcp_servers": template.default_tuning.mcp_servers,
         }
     )
 
@@ -432,6 +523,214 @@ async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
         return None
 
 
+async def _available_capabilities_for_source(
+    base_url: str,
+) -> list[CapabilityCatalogEntry]:
+    """
+    Fetch the pod's installed capability catalog (#1976, RFC §3.7).
+
+    Capabilities are pod-scoped, so every template from one pod advertises the
+    same set — merge across templates by id, first occurrence wins, preserving
+    the pod's registration order. This is the authoritative source of each
+    capability's `version`, which keys the chat-controls cache. Best-effort: an
+    unreachable pod yields an empty list (no chat controls this prep).
+    """
+
+    try:
+        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+    except Exception as exc:
+        logger.warning("Failed to fetch capability catalog from %s: %s", base_url, exc)
+        return []
+    merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
+    for template in templates:
+        for entry in template.available_capabilities:
+            merged.setdefault(entry.id, entry)
+    return list(merged.values())
+
+
+def template_capability_id(runtime_id: str, agent_id: str) -> str:
+    """
+    Colon-free FGA-safe capability id for one agent template (CAPAB-01, RFC
+    §8.6). `template_id` (`f"{runtime_id}:{agent_id}"`, used for routing/lookup
+    e.g. at line ~1012 below and in `enroll_agent_instance`) contains `:`,
+    which `CAPABILITY_ID_PATTERN` forbids — OpenFGA rejects `:` in object ids,
+    the same crash class `#1988` fixed for `mcp:<id>` capabilities. This is a
+    parallel identifier used ONLY for ReBAC checks and the admin catalog —
+    never for routing, which keeps using `template_id`.
+    """
+
+    return f"{runtime_id}__{agent_id}"
+
+
+async def _agent_capabilities_for_source(
+    base_url: str, runtime_id: str
+) -> list[CapabilityCatalogEntry] | None:
+    """
+    Project this pod's registered agent templates into `kind="agent"` catalog
+    entries (CAPAB-01, RFC §8.6) — control-plane side ONLY.
+
+    Why control-plane side, not the runtime's own capability registry:
+    every template's `available_capabilities` (the tool-picker list in the
+    Create-Agent modal) is built ONCE from the runtime's `capability_registry`
+    and reused IDENTICALLY for every template (`agent_app.py:2777-2797`).
+    Adding agent entries to that registry would make every other template's
+    tool-picker show every agent as a "selectable capability" (e.g. Sentinel
+    offered as a tool when creating a SQL Expert agent) — a pure accidental
+    side effect, not the deliberate `context.invoke_agent()` agent-as-sub-tool
+    composition (unrelated, unstarted idea). This function instead re-uses the
+    template list already fetched for `list_agent_templates`, so the runtime's
+    per-template tool catalog is never touched.
+
+    `team_scope` is HARDCODED to `ADMIN_GATED` — there is no parameter or code
+    path to override it. Every team's access to every agent is an explicit
+    admin grant, exactly like every tool (platform policy, 2026-07-17: this
+    platform never uses `team_scope: DEFAULT_ON`, see
+    `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §8.3).
+
+    Best-effort: returns `None` when the pod is unreachable, distinguishable
+    from a reachable pod that simply registers no templates (`[]`) — callers
+    that need to tell the two apart (the compatibility migration) can; callers
+    that don't (the admin catalog aggregation) just treat `None` as empty.
+    """
+
+    try:
+        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+    except Exception as exc:
+        logger.warning(
+            "[capability-catalog] failed to fetch agent templates from %s: %s",
+            base_url,
+            exc,
+        )
+        return None
+    return [
+        CapabilityCatalogEntry(
+            id=template_capability_id(runtime_id, template.template_agent_id),
+            version="1",
+            name=template.title,
+            description=template.description,
+            icon="smart_toy",
+            kind="agent",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
+        for template in templates
+    ]
+
+
+async def _fetch_chat_controls(
+    base_url: str, request: ChatControlsRequest
+) -> ChatControlsResponse | None:
+    """
+    Ask one pod to evaluate a batch of capabilities' chat controls (#1976).
+
+    POST `/agents/capabilities/chat-controls` — the same bearer-less control-
+    plane→pod call path as `_fetch_mcp_catalog`. Returns None when the pod is
+    unreachable: the missed capabilities' controls are then simply ABSENT from
+    this prep (logged, best-effort — the same silent-degrade contract as the
+    catalog fetch), never served from a stale entry, since a cache MISS by
+    construction has no entry to fall back to.
+    """
+
+    if not request.items:
+        return ChatControlsResponse(results=[])
+    url = f"{base_url.rstrip('/')}/agents/capabilities/chat-controls"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=request.model_dump(mode="json"))
+        response.raise_for_status()
+        return ChatControlsResponse.model_validate(response.json())
+    except Exception as exc:
+        logger.warning("Failed to fetch chat controls from %s: %s", base_url, exc)
+        return None
+
+
+async def _resolve_chat_controls(
+    tuning: ManagedAgentTuning,
+    available_capabilities: Sequence[CapabilityCatalogEntry],
+    base_url: str,
+) -> list[ChatControlDescriptor]:
+    """
+    Resolve one instance's chat controls at session prep, cache-aside (#1976).
+
+    For each selected capability the pod advertises (in catalog = registration
+    order), form the cache key `(capability_id, catalog version, config_hash)`;
+    serve hits from the in-process LRU and batch-evaluate only the misses on the
+    pod. Per-capability pod errors (RFC §3.9) skip that capability with a
+    warning. The result is flattened in catalog order — the composer host then
+    groups by `capability_id` and orders by plugin-registration order (RFC §9).
+    Nothing computed here is ever persisted.
+    """
+
+    versions = {entry.id: entry.version for entry in available_capabilities}
+    catalog_order = [entry.id for entry in available_capabilities]
+    selected = set(tuning.selected_capability_ids or [])
+    ordered_ids = [cid for cid in catalog_order if cid in selected]
+
+    per_capability: dict[str, list[ChatControlItem]] = {}
+    keys_by_id: dict[str, tuple[str, str, str]] = {}
+    misses: list[ChatControlsRequestItem] = []
+    for cap_id in ordered_ids:
+        version = versions[cap_id]
+        envelope = tuning.capability_config.get(cap_id)
+        key = (cap_id, version, _capability_config_hash(envelope))
+        cached = _chat_controls_cache_get(key)
+        if cached is not None:
+            # Copy cached items so a downstream mutation of a returned
+            # descriptor can never poison the shared cache entry.
+            per_capability[cap_id] = [item.model_copy(deep=True) for item in cached]
+            continue
+        try:
+            config_envelope = (
+                StoredCapabilityConfig.model_validate(envelope)
+                if isinstance(envelope, Mapping)
+                else None
+            )
+        except ValidationError as exc:
+            # A malformed stored envelope (RFC §3.9 `capability_config_invalid`)
+            # skips ONLY this capability's chat controls — it never fails the
+            # whole prep, matching the pod-side per-capability error contract.
+            logger.warning(
+                "Capability %s has an unreadable stored config envelope; "
+                "skipping its chat controls: %s",
+                cap_id,
+                exc,
+            )
+            continue
+        keys_by_id[cap_id] = key
+        misses.append(
+            ChatControlsRequestItem(
+                capability_id=cap_id,
+                config_envelope=config_envelope,
+            )
+        )
+
+    if misses:
+        response = await _fetch_chat_controls(
+            base_url, ChatControlsRequest(items=misses)
+        )
+        if response is not None:
+            for result in response.results:
+                if result.error:
+                    logger.warning(
+                        "Capability %s could not compute chat controls: %s",
+                        result.capability_id,
+                        result.error,
+                    )
+                    continue
+                per_capability[result.capability_id] = result.controls
+                key = keys_by_id.get(result.capability_id)
+                # Only cache when the pod's installed version matches the catalog
+                # version the key was formed from (defends against a mid-deploy
+                # version skew between the two pod reads).
+                if key is not None and key[1] == result.manifest_version:
+                    _chat_controls_cache_put(key, result.controls)
+
+    descriptors: list[ChatControlDescriptor] = []
+    for cap_id in ordered_ids:
+        for item in per_capability.get(cap_id, []):
+            descriptors.append(ChatControlDescriptor.from_item(cap_id, item))
+    return descriptors
+
+
 def _validate_tuning_field_values(
     *,
     field_specs: Sequence[ManagedAgentFieldSpec],
@@ -452,7 +751,7 @@ def _validate_tuning_field_values(
       instance together with the submitted values dict
     - unknown keys are ignored by default to preserve current write
       compatibility; pass `reject_unknown_keys=True` for dedicated typed
-      contracts such as `mcp_config_values`
+      contracts
     - invalid values raise `EnrollmentError(http_status=422)`
 
     Example:
@@ -572,286 +871,214 @@ def _validate_tuning_field_values(
     return validated
 
 
-def _validate_mcp_server_ids(
+def _validate_capability_ids(
     *,
     submitted_ids: list[str],
     available_ids: frozenset[str],
     context_label: str,
 ) -> list[str]:
     """
-    Validate submitted MCP server IDs against the template's declared servers.
+    Validate submitted capability IDs against the pod-advertised catalog
+    (#1974, RFC AGENT-CAPABILITY §3.8 save-time availability check).
 
     Unknown IDs raise EnrollmentError(422); known IDs are returned as-is.
+    An instance may never reference a capability its pod does not advertise.
     """
-    unknown = [sid for sid in submitted_ids if sid not in available_ids]
+    unknown = [cid for cid in submitted_ids if cid not in available_ids]
     if unknown:
         raise EnrollmentError(
-            f"Unknown MCP server ID(s) in {context_label}: {unknown!r}. "
-            "Only server IDs declared by the template are allowed.",
+            f"Unknown capability ID(s) in {context_label}: {unknown!r}. "
+            "Only capabilities advertised by the template's source pod are "
+            "allowed.",
             http_status=422,
         )
     return submitted_ids
 
 
-def _selected_mcp_servers(
+async def _validate_capability_config_via_pod(
     *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-) -> list[Any]:
+    base_url: str,
+    capability_id: str,
+    config_values: dict[str, Any],
+    team_id: TeamId,
+    agent_instance_id: str | None,
+    authorization: str | None,
+) -> dict[str, Any]:
     """
-    Resolve the active MCP server refs for one managed instance.
+    Round-trip one capability's config to its pod for validation (#1974,
+    RFC AGENT-CAPABILITY §3.7–§3.8).
 
     Why this function exists:
-    - the managed-agent contract now distinguishes three states for MCP
-      selection: inherit template defaults (`None`), activate none (`[]`), or
-      activate one exact subset (non-empty list)
-
-    How to use it:
-    - pass the declared server list and the stored selection value
-    - the returned list preserves the template order for deterministic UI and
-      effective-chat-option resolution
-
-    Example:
-    - `_selected_mcp_servers(declared_servers=tuning.mcp_servers, selected_server_ids=None)`
+    - capability code lives in the pod (RFC §7); control-plane cannot hold the
+      typed StoredConfigModels and does not need to — the pod's
+      `validate_config` is the schema authority and what it returns
+      (the {"schema_version", "config"} envelope) is persisted VERBATIM
+    - pod-side 422s (asset-slot violations, content validation) propagate to
+      the caller as EnrollmentError(422) with the pod's wording
     """
-
-    if selected_server_ids is None:
-        return list(declared_servers)
-    selected = frozenset(selected_server_ids)
-    return [server for server in declared_servers if server.id in selected]
-
-
-def _prune_inactive_mcp_config_values(
-    *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-    stored_values: dict[str, dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """
-    Drop stored MCP config for servers that are no longer active.
-
-    Why this function exists:
-    - changing the MCP selection should not leave behind hidden config for
-      servers that are no longer active for the instance
-
-    How to use it:
-    - call after applying a new `selected_mcp_server_ids` value and before
-      persisting the updated tuning payload
-
-    Example:
-    - `_prune_inactive_mcp_config_values(..., selected_server_ids=["mcp-search"], stored_values=base.mcp_config_values)`
-    """
-
-    active_ids = {
-        server.id
-        for server in _selected_mcp_servers(
-            declared_servers=declared_servers,
-            selected_server_ids=selected_server_ids,
-        )
+    url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/validate-config"
+    data: dict[str, str] = {
+        "config": json.dumps(config_values),
+        "team_id": str(team_id),
     }
-    return {
-        server_id: values
-        for server_id, values in stored_values.items()
-        if server_id in active_ids
-    }
-
-
-def _validate_mcp_config_values(
-    *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-    submitted_values: dict[str, dict[str, Any]],
-    context_label: str,
-) -> dict[str, dict[str, Any]]:
-    """
-    Validate one dedicated per-server MCP configuration payload.
-
-    Why this function exists:
-    - MCP tool options are no longer generic tuning-field keys; they need a
-      dedicated typed validator keyed by server id and then by config-field key
-
-    How to use it:
-    - pass the declared MCP server refs, the target selected-server policy, and
-      the nested submitted values map
-    - unknown or inactive server ids raise HTTP 422
-    - unknown config keys raise HTTP 422 because `mcp_config_values` is a
-      dedicated typed contract, not a compatibility bag
-
-    Example:
-    - `_validate_mcp_config_values(declared_servers=tuning.mcp_servers, selected_server_ids=None, submitted_values={"mcp-search": {"chat_options.search_policy": "hybrid"}}, context_label="agent enrollment")`
-    """
-
-    active_servers = {
-        server.id: server
-        for server in _selected_mcp_servers(
-            declared_servers=declared_servers,
-            selected_server_ids=selected_server_ids,
+    if agent_instance_id:
+        data["agent_instance_id"] = agent_instance_id
+    headers = {"Authorization": authorization} if authorization else None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, data=data, headers=headers)
+    except httpx.RequestError as exc:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} is not reachable to "
+            f"validate capability '{capability_id}' configuration. Start the "
+            "corresponding agent runtime, then try again.",
+            http_status=503,
+        ) from exc
+    if response.status_code in (400, 404, 422):
+        try:
+            detail = response.json().get("detail") or response.text
+        except ValueError:
+            detail = response.text
+        raise EnrollmentError(str(detail), http_status=422)
+    if response.status_code >= 400:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} returned "
+            f"{response.status_code} while validating capability "
+            f"'{capability_id}' configuration.",
+            http_status=502,
         )
-    }
-    validated: dict[str, dict[str, Any]] = {}
-    for server_id, server_values in submitted_values.items():
-        server = active_servers.get(server_id)
-        if server is None:
-            raise EnrollmentError(
-                f"Unknown or inactive MCP server ID {server_id!r} in {context_label}.",
-                http_status=422,
-            )
-        if not isinstance(server_values, dict):
-            raise EnrollmentError(
-                f"Invalid mcp_config_values entry for server {server_id!r} during {context_label}: expected an object.",
-                http_status=422,
-            )
-        typed_values = _validate_tuning_field_values(
-            field_specs=server.config_fields,
-            submitted_values=server_values,
-            context_label=f"{context_label} for MCP server {server_id!r}",
-            reject_unknown_keys=True,
+    envelope = response.json()
+    if (
+        not isinstance(envelope, dict)
+        or "schema_version" not in envelope
+        or "config" not in envelope
+    ):
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} returned a malformed "
+            f"stored-config envelope for capability '{capability_id}'.",
+            http_status=502,
         )
-        if typed_values:
-            validated[server_id] = typed_values
-    return validated
+    return envelope
 
 
-def _as_bool(value: object) -> bool:
-    """
-    Return a strict boolean view of one stored tuning value.
-
-    Why this function exists:
-    - resolved chat options combine values coming from generic tuning and
-      per-tool config, both of which are stored as union-typed payloads
-    - the frontend contract should only treat literal `True` / `False` values
-      as booleans, never truthy strings or numbers
-
-    How to use it:
-    - pass any stored tuning value before assigning it to a boolean field on a
-      typed outward-facing contract
-
-    Example:
-    - `_as_bool(server_values.get("chat_options.documents_selection"))`
-    """
-
-    return isinstance(value, bool) and value
-
-
-def _resolve_effective_chat_options(
+async def _apply_capability_selection(
     tuning: ManagedAgentTuning,
-) -> EffectiveChatOptions:
+    *,
+    selected_ids: list[str] | None,
+    submitted_values: dict[str, dict[str, Any]] | None,
+    reset_values: bool,
+    available: Sequence[CapabilityCatalogEntry],
+    default_capability_ids: Sequence[str],
+    base_url: str,
+    team_id: TeamId,
+    agent_instance_id: str | None,
+    authorization: str | None,
+    context_label: str,
+    deps: ProductServiceDependencies | None = None,
+) -> ManagedAgentTuning:
     """
-    Resolve the chat-option surface exposed by one managed agent instance.
+    Resolve one save's capability selection into pod-validated tuning slices
+    (#1974, RFC AGENT-CAPABILITY §3.8).
 
-    Why this function exists:
-    - the managed chat UI must consume one explicit typed contract instead of
-      inferring search controls from hard-coded agent or MCP ids
-    - prompts/settings and tool config have different ownership, but the UI
-      still needs one merged chat-affordance view
-
-    How to use it:
-    - call when building frontend-facing execution-preparation payloads
-    - template order decides precedence when multiple active MCP servers expose
-      the same option key
-
-    Example:
-    - `options = _resolve_effective_chat_options(instance.tuning)`
+    Semantics:
+    - `selected_ids`: None = the template's default MCP-server selection
+      (`default_capability_ids`, RFC §8.1 amendment), narrowed to the subset
+      the team `can_use` — silently, no 403, since this is an implicit
+      default rather than a deliberate team request; [] = none; else exact
+      set, validated against the pod-advertised catalog (unknown → 422)
+    - the resolved effective selection is ALWAYS persisted as an explicit
+      list — `selected_capability_ids` is never left `None` after this
+      function runs. This closes the gap where a `None` row skipped every
+      ReBAC check (both here and in the capability-revocation sweeps, which
+      scan `selected_capability_ids` and silently ignored `None` rows) and
+      lets a team obtain an admin-gated capability for free by submitting no
+      selection. See `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §8.1.
+    - every ACTIVE capability's effective config is round-tripped through the
+      pod: the submitted values when provided, else the previously stored
+      config (`reset_values=True` forces defaults), else {}; the returned
+      envelope is persisted verbatim
+    - values for unselected capabilities are ignored (same policy as the MCP
+      config path)
+    - when `deps` is supplied, every EXPLICITLY selected capability is gated
+      on ReBAC `can_use` checked with the TARGET TEAM as subject (CAPAB-01 /
+      #1980, RFC §8.1): a team may not save an agent using an admin-gated
+      capability it is not enabled for (→ 403). The team subject — not the
+      acting user — is what keeps a capability enabled for one of the user's
+      other teams from being saved here.
     """
-
-    _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
-    options = EffectiveChatOptions(
-        bound_library_ids=(
-            [str(v) for v in _raw_bound_ids]
-            if isinstance(_raw_bound_ids, list)
-            else None
-        ),
-    )
-    active_servers = _selected_mcp_servers(
-        declared_servers=tuning.mcp_servers,
-        selected_server_ids=tuning.selected_mcp_server_ids,
-    )
-
-    for server in active_servers:
-        field_defaults = {field.key: field.default for field in server.config_fields}
-        server_values = tuning.mcp_config_values.get(server.id, {})
-        binding_enabled = _as_bool(
-            server_values.get(
-                _CHAT_OPTION_LIBRARIES_BINDING_KEY,
-                field_defaults.get(_CHAT_OPTION_LIBRARIES_BINDING_KEY),
-            )
+    if selected_ids is not None:
+        _validate_capability_ids(
+            submitted_ids=selected_ids,
+            available_ids=frozenset(entry.id for entry in available),
+            context_label=context_label,
         )
-
-        if (
-            not binding_enabled
-            and _CHAT_OPTION_LIBRARIES_SELECTION_KEY in field_defaults
-        ):
-            value = server_values.get(
-                _CHAT_OPTION_LIBRARIES_SELECTION_KEY,
-                field_defaults[_CHAT_OPTION_LIBRARIES_SELECTION_KEY],
-            )
-            options.libraries_selection = options.libraries_selection or _as_bool(value)
-
-        if "chat_options.documents_selection" in field_defaults:
-            value = server_values.get(
-                "chat_options.documents_selection",
-                field_defaults["chat_options.documents_selection"],
-            )
-            options.documents_selection = options.documents_selection or _as_bool(value)
-
-        if _CHAT_OPTION_ATTACH_FILES_KEY in field_defaults:
-            value = server_values.get(
-                _CHAT_OPTION_ATTACH_FILES_KEY,
-                field_defaults[_CHAT_OPTION_ATTACH_FILES_KEY],
-            )
-            options.attach_files = options.attach_files or _as_bool(value)
-
-        if (
-            binding_enabled
-            and options.bound_library_ids is None
-            and _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY in field_defaults
-        ):
-            value = server_values.get(
-                _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY,
-                field_defaults[_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY],
-            )
-            if isinstance(value, list):
-                options.bound_library_ids = [str(v) for v in value]
-
-        if (
-            not options.search_policy_selection
-            and _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY in field_defaults
-        ):
-            enabled = server_values.get(
-                _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY,
-                field_defaults[_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY],
-            )
-            if _as_bool(enabled):
-                options.search_policy_selection = True
-                value = server_values.get(
-                    _CHAT_OPTION_SEARCH_POLICY_KEY,
-                    field_defaults.get(_CHAT_OPTION_SEARCH_POLICY_KEY),
+        if deps is not None:
+            rebac = deps.team_dependencies.rebac
+            denied = [
+                cap_id
+                for cap_id in selected_ids
+                if not await can_use_capability(rebac, team_id, cap_id)
+            ]
+            if denied:
+                raise EnrollmentError(
+                    f"Not authorized to use capability {denied!r} during "
+                    f"{context_label}: the team is not enabled for it "
+                    "(CAPAB-01 / RFC §8.1).",
+                    http_status=403,
                 )
-                if value in {"strict", "hybrid", "semantic"}:
-                    options.default_search_policy = cast(
-                        Literal["strict", "hybrid", "semantic"], value
-                    )
-
-        if (
-            not options.rag_scope_selection
-            and _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY in field_defaults
-        ):
-            enabled = server_values.get(
-                _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY,
-                field_defaults[_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY],
+        effective_ids = list(selected_ids)
+    else:
+        # Template-default path: narrow to what the pod actually advertises
+        # for this template, then to what the team is currently authorized to
+        # use. No 403 — an implicit default silently degrades to "whatever
+        # this team already has" rather than blocking every fresh team's
+        # first save.
+        available_ids = frozenset(entry.id for entry in available)
+        candidate_ids = [
+            cap_id for cap_id in default_capability_ids if cap_id in available_ids
+        ]
+        if deps is not None and candidate_ids:
+            usable_ids = await usable_capability_ids(
+                deps.team_dependencies.rebac, team_id
             )
-            if _as_bool(enabled):
-                options.rag_scope_selection = True
-                value = server_values.get(
-                    _CHAT_OPTION_SEARCH_RAG_SCOPE_KEY,
-                    field_defaults.get(_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY),
-                )
-                if value in {"corpus_only", "hybrid", "general_only"}:
-                    options.default_search_rag_scope = cast(
-                        Literal["corpus_only", "hybrid", "general_only"], value
-                    )
+            effective_ids = (
+                candidate_ids
+                if usable_ids is None
+                else [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
+            )
+        else:
+            effective_ids = candidate_ids
 
-    return options
+    async def _build_envelope(cap_id: str) -> tuple[str, dict[str, Any]]:
+        if submitted_values is not None and cap_id in submitted_values:
+            values = submitted_values[cap_id]
+        elif reset_values:
+            values = {}
+        else:
+            stored = tuning.capability_config.get(cap_id)
+            values = (
+                dict(stored.get("config") or {}) if isinstance(stored, dict) else {}
+            )
+        envelope = await _validate_capability_config_via_pod(
+            base_url=base_url,
+            capability_id=cap_id,
+            config_values=values,
+            team_id=team_id,
+            agent_instance_id=agent_instance_id,
+            authorization=authorization,
+        )
+        return cap_id, envelope
+
+    envelope_pairs = await asyncio.gather(
+        *(_build_envelope(cap_id) for cap_id in effective_ids)
+    )
+    envelopes: dict[str, dict[str, Any]] = dict(envelope_pairs)
+    return tuning.model_copy(
+        update={
+            "selected_capability_ids": effective_ids,
+            "capability_config": envelopes,
+        }
+    )
 
 
 async def list_agent_templates(
@@ -869,10 +1096,25 @@ async def list_agent_templates(
     How to use it:
     - call from the team template-listing route for one team context
     - pass request-scoped product dependencies when available
+    - each template's advertised `available_capabilities` is filtered to the
+      ones the TEAM CONTEXT `can_use` (CAPAB-01 / #1980, RFC §8.1): admin-gated
+      capabilities this team is not enabled for are hidden — including ones
+      enabled for OTHER teams the browsing user belongs to. ReBAC disabled
+      leaves the list unfiltered.
+    - the TEMPLATE ITSELF is also gated on `can_use(team, template_capability_id)`
+      (CAPAB-01, RFC §8.6): a team not granted a template does not see it at
+      all, same tri-state (enabled/disabled/inherited-on) as any other
+      capability — reuses the SAME `usable_ids` batch call as the nested
+      filter above, no second `ListObjects`.
 
     Example:
     - `templates = await list_agent_templates(team_id, deps)`
     """
+    # One ListObjects per request drives the whole catalog filter (RFC §8.1),
+    # checked with the team as subject — the route already verified the user
+    # belongs to `team_id`.
+    usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+
     templates: list[AgentTemplateSummary] = []
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
@@ -891,6 +1133,11 @@ async def list_agent_templates(
             continue
 
         for template in runtime_templates:
+            template_cap_id = template_capability_id(
+                source.runtime_id, template.template_agent_id
+            )
+            if usable_ids is not None and template_cap_id not in usable_ids:
+                continue
             templates.append(
                 AgentTemplateSummary(
                     template_id=f"{source.runtime_id}:{template.template_agent_id}",
@@ -902,7 +1149,9 @@ async def list_agent_templates(
                     category=template.kind,
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
-                    mcp_servers=template.default_tuning.mcp_servers,
+                    available_capabilities=filter_entries_by_usable(
+                        template.available_capabilities, usable_ids
+                    ),
                 )
             )
     return templates
@@ -946,18 +1195,467 @@ async def list_managed_agent_instances(
             continue
 
         warnings: list[str] = []
-        active_servers = _selected_mcp_servers(
-            declared_servers=record.tuning.mcp_servers,
-            selected_server_ids=record.tuning.selected_mcp_server_ids,
-        )
-        for sid in (server.id for server in active_servers):
-            if sid not in catalog:
-                warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
-            elif not catalog[sid]:
-                warnings.append(f"MCP server '{sid}' is disabled in the pod catalog.")
+        # An MCP-backed capability's id is the plain catalog server id now
+        # (#1988). Drift for those is checked against the pod's MCP catalog map
+        # ({server_id -> enabled}, disabled servers included). A selected id that
+        # IS a known-but-DISABLED catalog server is warning-only (the live tool
+        # provider skips it at assembly). A server REMOVED from the catalog is
+        # indistinguishable from a package capability id here, so its "gone"
+        # warning is dropped — removal is now covered by availability suspension.
+        for cid in record.tuning.selected_capability_ids or []:
+            if cid in catalog and not catalog[cid]:
+                warnings.append(f"MCP server '{cid}' is disabled in the pod catalog.")
         summaries.append(_record_to_summary(record, catalog_warnings=warnings))
 
     return summaries
+
+
+@dataclass
+class ReconciliationSweepSummary:
+    """Outcome of one capability reconciliation sweep (#1975, RFC §3.9)."""
+
+    checked: int = 0
+    newly_suspended: int = 0
+    cleared: int = 0
+    skipped_unreachable: int = 0
+    suspended_reasons: dict[str, int] = field(default_factory=dict)
+
+
+async def _available_capability_ids_by_source(
+    deps: ProductServiceDependencies,
+) -> dict[str, frozenset[str] | None]:
+    """
+    Map each enabled runtime source to the set of capability ids its pod
+    currently advertises (union across the pod's templates), or None when the
+    pod is unreachable so the sweep can skip its instances rather than suspend
+    them on a transient outage (#1975, RFC §3.9).
+    """
+
+    available: dict[str, frozenset[str] | None] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        try:
+            templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            logger.warning(
+                "[capability-suspension] sweep could not fetch templates from %s: %s",
+                source.base_url,
+                exc,
+            )
+            available[source.runtime_id] = None
+            continue
+        ids: set[str] = set()
+        for template in templates:
+            ids.update(entry.id for entry in template.available_capabilities)
+        available[source.runtime_id] = frozenset(ids)
+    return available
+
+
+async def _mcp_catalog_sets_by_source(
+    deps: ProductServiceDependencies,
+) -> dict[str, tuple[frozenset[str], frozenset[str]]]:
+    """
+    Map each enabled runtime source to `(disabled_ids, all_ids)` from its pod
+    MCP catalog (#1988).
+
+    - `disabled_ids` — servers declared but DISABLED in the pod catalog. The
+      sweep tolerates these (they are never an availability suspension because
+      the live tool provider skips a disabled server at assembly).
+    - `all_ids` — every declared server id (enabled or not). The sweep skips
+      pod config-revalidation for these MCP-backed slices.
+
+    An unreachable pod (None catalog) yields two empty sets: with no catalog
+    signal the sweep tolerates nothing extra (availability already skips an
+    unreachable source entirely, so this only matters for config health, where
+    "skip nothing" is the safe default).
+    """
+
+    sets: dict[str, tuple[frozenset[str], frozenset[str]]] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        catalog = await _fetch_mcp_catalog(source.base_url)
+        if catalog is None:
+            sets[source.runtime_id] = (frozenset(), frozenset())
+            continue
+        disabled = frozenset(sid for sid, enabled in catalog.items() if not enabled)
+        all_ids = frozenset(catalog)
+        sets[source.runtime_id] = (disabled, all_ids)
+    return sets
+
+
+async def run_capability_reconciliation_sweep(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> ReconciliationSweepSummary:
+    """
+    Reconcile every managed instance's capabilities against the live pod
+    manifests, suspending or clearing as needed (#1975, RFC §3.9).
+
+    This is the PROACTIVE detection mechanism: run it whenever the aggregated
+    manifests change (pod deploy/registration) so agents leave the catalog
+    before anyone hits an assembly error. The control-plane lifecycle Temporal
+    queue is the intended host — an activity wraps this call; #1980's ReBAC
+    revocation path reuses the finer-grained `reconcile_instance_suspension`
+    entry point directly (see `agent_instances/suspension.py`).
+
+    For each instance:
+    1. availability — a selected non-MCP capability absent from the pod's
+       advertised set → suspend `capability_unavailable` (and clearing when it
+       returns), via `reconcile_instance_suspension`.
+    2. config health — an active stored slice that no longer validates through
+       the pod (incl. a failing `upgrade_config`) → suspend
+       `capability_config_invalid`, via `reconcile_instance_config_health`.
+
+    `dry_run=True` computes the outcome without writing (reporting only).
+    """
+
+    store = deps.get_agent_instance_store()
+    kpi_writer = None if dry_run else deps.get_kpi_writer()
+    available_by_source = await _available_capability_ids_by_source(deps)
+    base_url_by_source = {
+        source.runtime_id: source.base_url
+        for source in deps.configuration.platform.runtime_catalog_sources
+        if source.enabled
+    }
+    # Per-source pod MCP catalog: an MCP-backed capability's id IS its plain
+    # catalog server id now (#1988). `tolerated` = servers present-but-DISABLED
+    # in the pod catalog — never an availability suspension (the live tool
+    # provider skips them at assembly); a REMOVED server suspends like any
+    # vanished capability. `all_mcp` = every declared server id, used to skip
+    # pod config-revalidation of MCP-backed slices (their config lives in the
+    # permissive pod bag, not a pod `validate-config` verdict).
+    mcp_catalog_by_source = await _mcp_catalog_sets_by_source(deps)
+
+    summary = ReconciliationSweepSummary()
+    for record in await store.list_all():
+        available = available_by_source.get(record.source_runtime_id)
+        if available is None:
+            summary.skipped_unreachable += 1
+            continue
+        summary.checked += 1
+        was_suspended = record.suspension_reason is not None
+        tolerated_mcp, all_mcp = mcp_catalog_by_source.get(
+            record.source_runtime_id, (frozenset(), frozenset())
+        )
+
+        if dry_run:
+            # Report-only: compute the availability verdict without writing.
+            # A disabled catalog MCP server is tolerated, never "missing" (#1988).
+            missing = [
+                cap_id
+                for cap_id in (record.tuning.selected_capability_ids or [])
+                if cap_id not in available and cap_id not in tolerated_mcp
+            ]
+            if missing:
+                summary.newly_suspended += 0 if was_suspended else 1
+                key = SuspensionReason.CAPABILITY_UNAVAILABLE.value
+                summary.suspended_reasons[key] = (
+                    summary.suspended_reasons.get(key, 0) + 1
+                )
+            continue
+
+        reason = await reconcile_instance_suspension(
+            instance=record,
+            store=store,
+            available_capability_ids=available,
+            tolerated_ids=tolerated_mcp,
+            kpi_writer=kpi_writer,
+        )
+        if reason is None:
+            base_url = base_url_by_source.get(record.source_runtime_id)
+            if base_url is not None:
+                # Availability reconcile may have just cleared a suspension;
+                # re-read so config health sees the current state.
+                fresh = await store.get(record.agent_instance_id) or record
+                reason = await reconcile_instance_config_health(
+                    instance=fresh,
+                    store=store,
+                    validate_slice=_make_slice_validator(
+                        base_url=base_url, team_id=record.team_id
+                    ),
+                    skip_ids=all_mcp,
+                    kpi_writer=kpi_writer,
+                )
+
+        if reason is not None and not was_suspended:
+            summary.newly_suspended += 1
+            summary.suspended_reasons[reason.value] = (
+                summary.suspended_reasons.get(reason.value, 0) + 1
+            )
+        elif was_suspended and reason is None:
+            summary.cleared += 1
+
+    logger.info(
+        "[capability-suspension] sweep done dry_run=%s checked=%d "
+        "newly_suspended=%d cleared=%d skipped_unreachable=%d",
+        dry_run,
+        summary.checked,
+        summary.newly_suspended,
+        summary.cleared,
+        summary.skipped_unreachable,
+    )
+    return summary
+
+
+@dataclass
+class CapabilityMaterializationSummary:
+    checked: int = 0
+    materialized: int = 0
+    skipped_unreachable: int = 0
+    skipped_unknown_template: int = 0
+
+
+async def _default_capability_ids_by_source_and_template(
+    deps: ProductServiceDependencies,
+) -> dict[str, dict[str, list[str]] | None]:
+    """
+    Map each enabled runtime source to {template_agent_id: default_capability_ids}.
+
+    A `None` value for a source signals it was unreachable, so the caller can
+    skip its instances rather than wrongly materialize an empty selection.
+    """
+
+    result: dict[str, dict[str, list[str]] | None] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        try:
+            templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            logger.warning(
+                "[capability-materialization] sweep could not fetch templates "
+                "from %s: %s",
+                source.base_url,
+                exc,
+            )
+            result[source.runtime_id] = None
+            continue
+        result[source.runtime_id] = {
+            template.template_agent_id: template.default_capability_ids
+            for template in templates
+        }
+    return result
+
+
+async def materialize_default_capability_selections(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> CapabilityMaterializationSummary:
+    """
+    One-off backfill: resolve every already-persisted instance whose
+    `selected_capability_ids` is still `None` into an explicit, ReBAC-filtered
+    list (CAPAB-01 / #1980, RFC §8.1 amendment).
+
+    Why this function exists:
+    - `_apply_capability_selection` now materializes `None` at every future
+      save, but rows created BEFORE that fix shipped are still exploitable —
+      `get_runtime_binding_for_team` and the runtime pod both still trust a
+      `None` selection as "activate every template default," and the
+      capability-revocation sweeps (`suspend_dependent_instances`,
+      `set_capability_default_on`, `capabilities/enablement.py`) silently skip
+      `None` rows. This sweep is what closes the gap for already-existing
+      data, not just new writes.
+
+    How to use it:
+    - run once, deploy-time, before/alongside the code fix goes live (same
+      standalone-bootstrap pattern as `main_worker.py`: load configuration,
+      build the application container, then call this with the resulting
+      `ProductServiceDependencies`)
+    - `dry_run=True` reports what WOULD be materialized without writing
+    - treat "0 remaining NULL `selected_capability_ids` rows" as the proof of
+      closure, not "the sweep ran" — an unreachable pod during the sweep
+      leaves its instances untouched (`skipped_unreachable`), so re-run until
+      every runtime source is reachable and the count is zero
+    """
+
+    store = deps.get_agent_instance_store()
+    defaults_by_source = await _default_capability_ids_by_source_and_template(deps)
+    usable_ids_by_team: dict[TeamId, set[str] | None] = {}
+
+    summary = CapabilityMaterializationSummary()
+    for record in await store.list_all():
+        if record.tuning.selected_capability_ids is not None:
+            continue
+        summary.checked += 1
+
+        templates = defaults_by_source.get(record.source_runtime_id)
+        if templates is None:
+            summary.skipped_unreachable += 1
+            continue
+        default_ids = templates.get(record.source_agent_id)
+        if default_ids is None:
+            summary.skipped_unknown_template += 1
+            continue
+
+        if record.team_id not in usable_ids_by_team:
+            usable_ids_by_team[record.team_id] = await usable_capability_ids(
+                deps.team_dependencies.rebac, record.team_id
+            )
+        usable_ids = usable_ids_by_team[record.team_id]
+        effective_ids = (
+            list(default_ids)
+            if usable_ids is None
+            else [cap_id for cap_id in default_ids if cap_id in usable_ids]
+        )
+
+        summary.materialized += 1
+        if not dry_run:
+            await store.update(
+                agent_instance_id=record.agent_instance_id,
+                team_id=record.team_id,
+                tuning=record.tuning.model_copy(
+                    update={"selected_capability_ids": effective_ids}
+                ),
+            )
+
+    logger.info(
+        "[capability-materialization] sweep done dry_run=%s checked=%d "
+        "materialized=%d skipped_unreachable=%d skipped_unknown_template=%d",
+        dry_run,
+        summary.checked,
+        summary.materialized,
+        summary.skipped_unreachable,
+        summary.skipped_unknown_template,
+    )
+    return summary
+
+
+@dataclass
+class TemplateGrantMigrationSummary:
+    teams_checked: int = 0
+    templates_checked: int = 0
+    grants_written: int = 0
+    already_granted: int = 0
+    skipped_unreachable_sources: int = 0
+
+
+async def grant_existing_teams_served_templates(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> TemplateGrantMigrationSummary:
+    """
+    Required compatibility migration (CAPAB-01, RFC §8.6) — a companion to
+    `materialize_default_capability_selections` above, for a DIFFERENT gate:
+    `kind="agent"` capabilities default `ADMIN_GATED` like everything else
+    (platform policy — this deployment never uses `team_scope: DEFAULT_ON`,
+    see the dated note in `AGENT-CAPABILITY-RFC.md` §8.3), so without this
+    sweep every existing team loses access to every agent template the
+    instant `list_agent_templates`'s `can_use` gate goes live.
+
+    Writes an explicit `enabled` tuple (via `enable_capability_for_team` —
+    NEVER `default_on`) for every (existing team x currently-served template)
+    pair not already granted. Idempotent and safe to re-run: only ever adds a
+    missing grant, never touches one that's already explicit (enabled OR
+    disabled) — an admin who has already dialed a specific agent down for a
+    specific team is not overridden by this sweep.
+
+    How to use it:
+    - run once, at/before deploy, alongside `materialize_default_capability_selections`
+      — see the CAPAB-01 plan's deploy-sequencing note: each sweep must
+      complete before its corresponding `can_use` gate goes live, and both
+      should be rehearsed against a copy of real data before the actual
+      go-live, not attempted for the first time in production
+    - `dry_run=True` reports what WOULD be granted without writing
+    """
+
+    from control_plane_backend.capabilities.enablement import (
+        enable_capability_for_team,
+    )
+
+    rebac = deps.team_dependencies.rebac
+    settings_store = deps.get_team_capability_settings_store()
+
+    template_entries: dict[str, CapabilityCatalogEntry] = {}
+    unreachable_sources = 0
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        entries = await _agent_capabilities_for_source(
+            source.base_url, source.runtime_id
+        )
+        if entries is None:
+            unreachable_sources += 1
+            continue
+        for entry in entries:
+            template_entries[entry.id] = entry
+    summary = TemplateGrantMigrationSummary(
+        templates_checked=len(template_entries),
+        skipped_unreachable_sources=unreachable_sources,
+    )
+
+    teams = await deps.team_dependencies.get_team_metadata_store().list_all()
+    for team in teams:
+        summary.teams_checked += 1
+        usable_ids = await usable_capability_ids(rebac, team.id)
+        for template_id, entry in template_entries.items():
+            if usable_ids is not None and template_id in usable_ids:
+                summary.already_granted += 1
+                continue
+            summary.grants_written += 1
+            if not dry_run:
+                await enable_capability_for_team(
+                    rebac=rebac,
+                    settings_store=settings_store,
+                    catalog_entry=entry,
+                    team_id=team.id,
+                    settings={},
+                    updated_by=None,
+                )
+
+    logger.info(
+        "[template-grant-migration] sweep done dry_run=%s teams_checked=%d "
+        "templates_checked=%d grants_written=%d already_granted=%d "
+        "skipped_unreachable_sources=%d",
+        dry_run,
+        summary.teams_checked,
+        summary.templates_checked,
+        summary.grants_written,
+        summary.already_granted,
+        summary.skipped_unreachable_sources,
+    )
+    return summary
+
+
+def _make_slice_validator(*, base_url: str, team_id: TeamId):
+    """
+    Build the `validate_slice` callable the config-health reconcile uses: it
+    round-trips one stored slice's inner config through the pod's
+    `validate-config` endpoint and raises `SliceInvalid` on a 422 (the slice no
+    longer validates / `upgrade_config` failed), swallowing transport errors so
+    a pod hiccup never suspends an instance (#1975, RFC §3.9).
+    """
+
+    async def _validate(capability_id: str, config: dict[str, Any]) -> None:
+        try:
+            await _validate_capability_config_via_pod(
+                base_url=base_url,
+                capability_id=capability_id,
+                config_values=config,
+                team_id=team_id,
+                agent_instance_id=None,
+                authorization=None,
+            )
+        except EnrollmentError as exc:
+            if exc.http_status == 422:
+                raise SliceInvalid(capability_id, str(exc)) from exc
+            # 503/502: pod unreachable or malformed — not a config verdict.
+            logger.warning(
+                "[capability-suspension] slice re-validation for '%s' could "
+                "not reach a verdict (%s); leaving suspension unchanged.",
+                capability_id,
+                exc,
+            )
+
+    return _validate
 
 
 def _record_to_summary(
@@ -977,6 +1675,11 @@ def _record_to_summary(
     - pass one store record plus optional runtime-status/warning annotations
       computed by the caller
 
+    Chat controls (#1976, RFC §3.7) are intentionally NOT resolved here: they
+    are a session-prep projection shipped on `ExecutionPreparation`, not a
+    listing-surface field. The retired `effective_chat_options` hint is gone;
+    the composer fetches controls via an eager prepare-execution at chat open.
+
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
     """
@@ -987,19 +1690,23 @@ def _record_to_summary(
         display_name=record.display_name,
         description=record.description,
         status="enabled" if record.enabled else "disabled",
+        suspension_reason=(
+            SuspensionReason(record.suspension_reason)
+            if record.suspension_reason is not None
+            else None
+        ),
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
         tuning_field_values=record.tuning.values,
-        mcp_config_values=record.tuning.mcp_config_values,
-        selected_mcp_server_ids=(
-            list(record.tuning.selected_mcp_server_ids)
-            if record.tuning.selected_mcp_server_ids is not None
+        selected_capability_ids=(
+            list(record.tuning.selected_capability_ids)
+            if record.tuning.selected_capability_ids is not None
             else None
         ),
+        capability_config=dict(record.tuning.capability_config),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
-        effective_chat_options=_resolve_effective_chat_options(record.tuning),
     )
 
 
@@ -1165,6 +1872,7 @@ async def enroll_agent_instance(
     team_id: TeamId,
     request: CreateAgentInstanceRequest,
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Enroll one discovered template for a team, creating a DB-backed managed instance.
@@ -1178,8 +1886,9 @@ async def enroll_agent_instance(
       request
     - pass request-scoped product dependencies when available
     - `tuning_field_values` configures agent-authored fields only
-    - `mcp_server_ids` and `mcp_config_values` configure tool activation and
-      per-tool options through dedicated typed surfaces
+    - `capability_ids` and `capability_config_values` configure tool activation
+      (including MCP servers, which are capabilities keyed by their plain
+      catalog server id — #1988) and per-tool options
 
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
@@ -1235,6 +1944,23 @@ async def enroll_agent_instance(
             f"{source_runtime_id!r}.",
             http_status=404,
         )
+    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
+    # hides a template the team isn't granted, but never trust the frontend
+    # filter alone — re-check here too, same pattern as every other ReBAC gate
+    # in this codebase. 404, not 403: a team that guesses a hidden
+    # `template_id` gets exactly the same response as a nonexistent one (RFC
+    # §7.2/§10 anti-guessing rule, matching the non-public-template check
+    # above).
+    if not await can_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        template_capability_id(source_runtime_id, source_agent_id),
+    ):
+        raise EnrollmentError(
+            f"Template {request.template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
 
     tuning = template.default_tuning.model_copy(
         update={
@@ -1252,25 +1978,27 @@ async def enroll_agent_instance(
                 )
             }
         )
-    if request.mcp_server_ids is not None:
-        available = frozenset(srv.id for srv in tuning.mcp_servers)
-        validated_ids = _validate_mcp_server_ids(
-            submitted_ids=request.mcp_server_ids,
-            available_ids=available,
-            context_label="agent enrollment",
-        )
-        tuning = tuning.model_copy(update={"selected_mcp_server_ids": validated_ids})
-    if request.mcp_config_values:
-        tuning = tuning.model_copy(
-            update={
-                "mcp_config_values": _validate_mcp_config_values(
-                    declared_servers=tuning.mcp_servers,
-                    selected_server_ids=tuning.selected_mcp_server_ids,
-                    submitted_values=request.mcp_config_values,
-                    context_label="agent enrollment",
-                )
-            }
-        )
+    # MCP activation/config flows through the capability path (#1978): an MCP
+    # server is a capability keyed by its plain catalog server id (#1988),
+    # validated and stored via the same pod round-trip as every other
+    # capability below. This ALWAYS runs, even with no explicit
+    # `capability_ids` — the default (no-selection) path is exactly what must
+    # be ReBAC-checked and materialized (CAPAB-01 / #1980, RFC §8.1 amendment;
+    # a `None` selection previously skipped this check entirely).
+    tuning = await _apply_capability_selection(
+        tuning,
+        selected_ids=request.capability_ids,
+        submitted_values=request.capability_config_values,
+        reset_values=False,
+        available=template.available_capabilities,
+        default_capability_ids=template.default_capability_ids,
+        base_url=source.base_url,
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        authorization=authorization,
+        context_label="agent enrollment",
+        deps=deps,
+    )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1312,6 +2040,7 @@ async def update_agent_instance(
     request: UpdateAgentInstanceRequest,
     deps: ProductServiceDependencies,
     user: KeycloakUser,
+    authorization: str | None = None,
 ) -> ManagedAgentInstanceSummary | None:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -1324,14 +2053,17 @@ async def update_agent_instance(
     - pass only the fields to change
     - omitted fields are left unchanged
     - `tuning_field_values=None` clears stored agent tuning values
-    - `mcp_server_ids=None` resets the instance to the template default MCP
-      selection; `mcp_server_ids=[]` activates no MCP servers
-    - `mcp_config_values=None` clears stored per-server MCP config
+    - `capability_ids=None` resets the instance to the template default
+      capability selection; `capability_ids=[]` activates no capabilities
+      (MCP servers are capabilities keyed by their plain catalog server id,
+      #1988)
+    - `capability_config_values=None` resets every selected capability to its
+      defaults
 
     Policy — current template contract:
-    - update validation uses the latest field specs and MCP config_fields
-      exposed by the source runtime template
-    - stored values and selected MCP servers are preserved, but the editable
+    - update validation uses the latest field specs exposed by the source
+      runtime template
+    - stored values and selected capabilities are preserved, but the editable
       contract follows the current template catalog
 
     Example:
@@ -1346,8 +2078,8 @@ async def update_agent_instance(
     new_tuning: ManagedAgentTuning | None = None
     if {
         "tuning_field_values",
-        "mcp_server_ids",
-        "mcp_config_values",
+        "capability_ids",
+        "capability_config_values",
     } & tuning_fields_set:
         base = await _refresh_tuning_contract_from_runtime(
             record.tuning,
@@ -1355,28 +2087,6 @@ async def update_agent_instance(
             source_agent_id=record.source_agent_id,
             deps=deps,
         )
-        if "mcp_server_ids" in tuning_fields_set:
-            if request.mcp_server_ids is None:
-                base = base.model_copy(update={"selected_mcp_server_ids": None})
-            else:
-                available = frozenset(srv.id for srv in base.mcp_servers)
-                validated_ids = _validate_mcp_server_ids(
-                    submitted_ids=request.mcp_server_ids,
-                    available_ids=available,
-                    context_label="agent update",
-                )
-                base = base.model_copy(
-                    update={"selected_mcp_server_ids": validated_ids}
-                )
-            base = base.model_copy(
-                update={
-                    "mcp_config_values": _prune_inactive_mcp_config_values(
-                        declared_servers=base.mcp_servers,
-                        selected_server_ids=base.selected_mcp_server_ids,
-                        stored_values=base.mcp_config_values,
-                    )
-                }
-            )
         if "tuning_field_values" in tuning_fields_set:
             if request.tuning_field_values is None:
                 base = base.model_copy(update={"values": {}})
@@ -1390,37 +2100,75 @@ async def update_agent_instance(
                         )
                     }
                 )
-        if "mcp_config_values" in tuning_fields_set:
-            if request.mcp_config_values is None:
-                base = base.model_copy(update={"mcp_config_values": {}})
-            else:
-                # Silently discard config for servers that are no longer active.
-                # This handles the common case where mcp_server_ids and
-                # mcp_config_values are sent together: the deselected server's
-                # config arrives in the payload but is already gone from the
-                # active set after the mcp_server_ids block above.
-                active_ids = frozenset(
-                    s.id
-                    for s in _selected_mcp_servers(
-                        declared_servers=base.mcp_servers,
-                        selected_server_ids=base.selected_mcp_server_ids,
-                    )
+        # MCP activation/config is part of the capability selection now (#1978):
+        # an MCP-backed capability (keyed by its plain catalog server id, #1988)
+        # is validated and stored through the same pod round-trip as every other
+        # capability below.
+        if {"capability_ids", "capability_config_values"} & tuning_fields_set:
+            # Capability writes REQUIRE the live pod: the availability check
+            # runs against what the pod advertises and every active slice is
+            # re-validated through the pod round-trip (RFC §3.8). A successful
+            # save is what clears a config-invalid state (RFC §3.9), so no
+            # stale-snapshot fallback here.
+            source = next(
+                (
+                    s
+                    for s in deps.configuration.platform.runtime_catalog_sources
+                    if s.runtime_id == record.source_runtime_id and s.enabled
+                ),
+                None,
+            )
+            if source is None:
+                raise EnrollmentError(
+                    f"Runtime source {record.source_runtime_id!r} is not "
+                    "available or not enabled; capability settings cannot be "
+                    "changed.",
+                    http_status=503,
                 )
-                active_submitted = {
-                    k: v
-                    for k, v in request.mcp_config_values.items()
-                    if k in active_ids
-                }
-                base = base.model_copy(
-                    update={
-                        "mcp_config_values": _validate_mcp_config_values(
-                            declared_servers=base.mcp_servers,
-                            selected_server_ids=base.selected_mcp_server_ids,
-                            submitted_values=active_submitted,
-                            context_label="agent update",
-                        )
-                    }
+            runtime_templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+            template = next(
+                (
+                    item
+                    for item in runtime_templates
+                    if item.template_agent_id == record.source_agent_id
+                ),
+                None,
+            )
+            if template is None:
+                raise EnrollmentError(
+                    f"Template {record.template_id!r} was not found on runtime "
+                    f"source {record.source_runtime_id!r}; capability settings "
+                    "cannot be changed.",
+                    http_status=503,
                 )
+            selected = (
+                request.capability_ids
+                if "capability_ids" in tuning_fields_set
+                else base.selected_capability_ids
+            )
+            base = await _apply_capability_selection(
+                base,
+                selected_ids=selected,
+                submitted_values=(
+                    request.capability_config_values
+                    if "capability_config_values" in tuning_fields_set
+                    else None
+                ),
+                reset_values=(
+                    "capability_config_values" in tuning_fields_set
+                    and request.capability_config_values is None
+                ),
+                available=template.available_capabilities,
+                default_capability_ids=template.default_capability_ids,
+                base_url=source.base_url,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+                authorization=authorization,
+                context_label="agent update",
+                deps=deps,
+            )
         new_tuning = base
 
     updated = await store.update(
@@ -1431,6 +2179,21 @@ async def update_agent_instance(
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
     )
+    # A save that re-validated every ACTIVE capability slice through the pod
+    # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
+    # Reaching here means `_apply_capability_selection` accepted the selection
+    # (unknown/unavailable ids already 422'd; every active slice round-tripped),
+    # so the broken state the agent was suspended for is resolved. Untick +
+    # re-save therefore clears both availability and config-invalid suspensions.
+    if (
+        updated is not None
+        and updated.suspension_reason is not None
+        and {"capability_ids", "capability_config_values"} & tuning_fields_set
+    ):
+        cleared = await clear_suspension(
+            store, updated, kpi_writer=deps.get_kpi_writer()
+        )
+        updated = cleared if cleared is not None else updated
     if updated is not None:
         try:
             effective_tuning = new_tuning if new_tuning is not None else record.tuning
@@ -1624,6 +2387,21 @@ async def prepare_execution(
             f"Agent instance {agent_instance_id!r} is disabled.",
             http_status=409,
         )
+    # --- #1975 suspension guard (RFC §3.9) — BEGIN -------------------------
+    # A suspended instance has a broken/unavailable capability; execution must
+    # fail loudly and typed rather than silently degrade (an agent missing its
+    # tools would answer from priors). This early guard is intentionally
+    # self-contained so it hand-merges cleanly with #1976's chat-control work
+    # below. Touches ONLY these lines.
+    if instance.suspension_reason is not None:
+        raise ExecutionPreparationError(
+            f"Agent instance {agent_instance_id!r} is suspended "
+            f"({instance.suspension_reason}): a capability it uses is broken or "
+            "unavailable. An editor must fix it in the agent settings before it "
+            "can run.",
+            http_status=409,
+        )
+    # --- #1975 suspension guard — END -------------------------------------
 
     source = next(
         (
@@ -1673,6 +2451,25 @@ async def prepare_execution(
             # contract stays a single scalar (fred-sdk/fred-runtime untouched).
             context_prompt_text = "\n\n".join(resolved) or None
 
+    # Instance-bound capability route base URLs (#1979, RFC §9.1): the same
+    # ingress-relative pattern the pod advertises on the template catalog
+    # (`{prefix}/capabilities/{id}`), resolved here for the capabilities this
+    # instance actually selected so the in-session UI calls them directly.
+    selected_capability_ids = instance.tuning.selected_capability_ids or []
+    capability_base_urls = {
+        cap_id: f"{prefix}/capabilities/{cap_id}" for cap_id in selected_capability_ids
+    }
+
+    # Chat-time composer controls (#1976, RFC §3.3/§3.7): computed per capability
+    # on the pod at session prep, version-keyed cache-aside, never persisted.
+    # Descriptors ship on ExecutionPreparation — the slot the retired
+    # `effective_chat_options` occupied. Best-effort: an unreachable pod yields
+    # no controls this prep (logged), never a failed prep.
+    available_capabilities = await _available_capabilities_for_source(source.base_url)
+    chat_controls = await _resolve_chat_controls(
+        instance.tuning, available_capabilities, source.base_url
+    )
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1680,9 +2477,10 @@ async def prepare_execution(
         execute_url=f"{prefix}/agents/execute",
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
-        effective_chat_options=_resolve_effective_chat_options(instance.tuning),
+        chat_controls=chat_controls,
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
+        capability_base_urls=capability_base_urls,
     )
 
 
@@ -1712,6 +2510,18 @@ async def get_runtime_binding_for_team(
     instance = await store.get_for_team(agent_instance_id, team_id)
     if instance is None:
         return None
+    # Resolve this team's per-capability enablement settings and ship only the
+    # slices for the capabilities this instance actually selected (CAPAB-01 /
+    # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
+    selected = set(instance.tuning.selected_capability_ids or [])
+    all_team_settings = await deps.get_team_capability_settings_store().list_for_team(
+        team_id
+    )
+    team_capability_settings = {
+        cap_id: settings
+        for cap_id, settings in all_team_settings.items()
+        if cap_id in selected
+    }
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
@@ -1719,6 +2529,7 @@ async def get_runtime_binding_for_team(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+        team_capability_settings=team_capability_settings,
     )
 
 

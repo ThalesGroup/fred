@@ -48,6 +48,7 @@ class AgentInstanceRecord:
         enabled: bool,
         created_by: str | None,
         tuning: ManagedAgentTuning,
+        suspension_reason: str | None = None,
         created_at=None,
         updated_at=None,
     ) -> None:
@@ -61,8 +62,18 @@ class AgentInstanceRecord:
         self.enabled = enabled
         self.created_by = created_by
         self.tuning = tuning
+        # Platform-forced suspension (#1975, RFC §3.9): None means the instance
+        # is not suspended; a non-None value is a `SuspensionReason`. Distinct
+        # from `enabled` (the editor's disable toggle).
+        self.suspension_reason = suspension_reason
         self.created_at = created_at
         self.updated_at = updated_at
+
+    @property
+    def is_suspended(self) -> bool:
+        """True when the platform has suspended this instance (#1975, RFC §3.9)."""
+
+        return self.suspension_reason is not None
 
 
 def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
@@ -93,6 +104,7 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         enabled=row.enabled,
         created_by=row.created_by,
         tuning=tuning,
+        suspension_reason=row.suspension_reason,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -119,6 +131,7 @@ class AgentInstanceStore:
             display_name=record.display_name,
             description=record.description,
             enabled=record.enabled,
+            suspension_reason=record.suspension_reason,
             created_by=record.created_by,
             tuning_json=tuning_json,
             created_at=created_at,
@@ -150,6 +163,21 @@ class AgentInstanceStore:
                 .scalars()
                 .all()
             )
+        return [_row_to_record(row) for row in rows]
+
+    async def list_all(
+        self,
+        session: AsyncSession | None = None,
+    ) -> list[AgentInstanceRecord]:
+        """
+        Return every managed agent instance across all teams.
+
+        Used by the capability reconciliation sweep (#1975, RFC §3.9), which
+        must re-check every instance's capability availability whenever the
+        aggregated pod manifests change. Team-scoped reads use `list_by_team`.
+        """
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(AgentInstanceRow))).scalars().all()
         return [_row_to_record(row) for row in rows]
 
     async def get(
@@ -223,6 +251,47 @@ class AgentInstanceStore:
             if tuning is not None:
                 row.tuning_json = tuning.model_dump_json()
             row.updated_at = _utcnow()
+        return await self.get(agent_instance_id)
+
+    async def set_suspension(
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        *,
+        reason: str | None,
+        session: AsyncSession | None = None,
+    ) -> AgentInstanceRecord | None:
+        """
+        Set or clear the platform-forced suspension reason for one instance
+        (#1975, RFC §3.9). ``reason=None`` clears the suspension.
+
+        Why this is a dedicated method (not part of ``update``):
+        - suspension is a platform-forced lifecycle state, separate from the
+          editor's ``enabled`` toggle and from tuning saves; ``update`` uses
+          ``None`` to mean "leave unchanged", which cannot express "clear the
+          suspension". This method writes the column directly.
+        - it deliberately does NOT touch ``updated_at``: a reconciliation sweep
+          flipping the platform state must not look like a user edit.
+
+        Returns the refreshed record, or None if no such instance exists in the
+        team.
+        """
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(AgentInstanceRow).where(
+                            AgentInstanceRow.agent_instance_id == agent_instance_id,
+                            AgentInstanceRow.team_id == str(team_id),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not rows:
+                return None
+            rows[0].suspension_reason = reason
         return await self.get(agent_instance_id)
 
     async def delete(

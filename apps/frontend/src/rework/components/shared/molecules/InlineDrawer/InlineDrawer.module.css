@@ -81,6 +81,27 @@
   width: var(--drawer-width);
 }
 
+/* Below this width, min(width, 45vw) leaves too little room for a push
+ * drawer's own content (e.g. ~169px on a 375px phone) — go full-width and
+ * fixed instead, the same footprint as the overlay layout, so narrow
+ * viewports get a usable panel rather than a squeezed sliver. */
+@media (max-width: 720px) {
+  .drawer[data-layout="push"] {
+    position: fixed;
+    z-index: 10;
+    inset: 0;
+    border-left: none;
+  }
+
+  .drawer[data-layout="push"][data-open="true"] {
+    width: 100%;
+  }
+
+  .drawer[data-layout="push"] .panel {
+    width: 100%;
+  }
+}
+
 .header {
   display: flex;
   flex-shrink: 0;

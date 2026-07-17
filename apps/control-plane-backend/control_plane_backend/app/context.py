@@ -27,6 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.settings_store import (
+    TeamCapabilitySettingsStore,
+)
 from control_plane_backend.config.loader import get_loaded_config_file_path
 from control_plane_backend.config.models import (
     Configuration,
@@ -63,6 +66,7 @@ class ApplicationContext:
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
+        self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
@@ -250,6 +254,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._agent_instance_store
+
+    def get_team_capability_settings_store(self) -> TeamCapabilitySettingsStore:
+        if self._team_capability_settings_store is None:
+            self._team_capability_settings_store = TeamCapabilitySettingsStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._team_capability_settings_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

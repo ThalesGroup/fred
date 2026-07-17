@@ -25,6 +25,16 @@ class AgentInstanceRow(Base):
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    suspension_reason: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment=(
+            "Platform-forced suspension reason (#1975, RFC §3.9). NULL = not "
+            "suspended; else one of capability_unavailable / "
+            "capability_access_revoked / capability_config_invalid. Distinct "
+            "from the editor's `enabled` toggle."
+        ),
+    )
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
     tuning_json: Mapped[str | None] = mapped_column(
         Text,

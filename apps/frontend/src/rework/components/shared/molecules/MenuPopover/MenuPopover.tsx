@@ -32,6 +32,7 @@ export interface MenuPopoverProps {
   groups: ReactNode[][];
   role?: string;
   className?: string;
+  "aria-label"?: string;
 }
 
 /**
@@ -48,12 +49,13 @@ export default function MenuPopover({
   groups,
   role = "menu",
   className,
+  "aria-label": ariaLabel,
 }: MenuPopoverProps) {
   const visibleGroups = groups.map((group) => group.filter(Boolean)).filter((group) => group.length > 0);
   const hasHeader = header != null || headerTitle != null;
 
   return (
-    <div ref={ref} className={`${styles.popover} ${className ?? ""}`} role={role}>
+    <div ref={ref} className={`${styles.popover} ${className ?? ""}`} role={role} aria-label={ariaLabel}>
       {hasHeader && (
         <div className={styles.header}>
           {header ?? (

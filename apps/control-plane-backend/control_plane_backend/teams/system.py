@@ -52,6 +52,7 @@ async def build_personal_team(
         name="Equipe personnelle",
         member_count=1,
         is_private=True,
+        is_member=True,
         admins=[],
         permissions=[
             TeamPermission("can_read"),

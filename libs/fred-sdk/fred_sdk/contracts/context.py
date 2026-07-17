@@ -244,6 +244,12 @@ class ToolContentBlock(FrozenModel):
     data: dict[str, object] | None = None
 
 
+# The frozen base union is link | geo. Capability chat parts extend it at
+# registration time via `contracts.ui_part_union.rebuild_ui_part_union`
+# (#1977, RFC AGENT-CAPABILITY-RFC §3.6/§4) — never by hand-editing this
+# literal. Code building validators after registration must resolve the union
+# lazily (`ui_part_union.current_ui_part_union()`), not freeze this name at
+# import time.
 UiPart = Annotated[LinkPart | GeoPart, Field(discriminator="type")]
 
 

@@ -11,6 +11,12 @@ type organization
     define platform_admin: [user]
     define platform_observer: [user] or platform_admin
 
+    # Reverse index of team.organization (FGA cannot traverse relations
+    # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
+    # checking with a team subject (capability#can_use) — every team belongs to
+    # the singleton organization, so the edge is derived, not stored state.
+    define team: [team]
+
   # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
   # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
   # gains no ongoing relation on the created team from this capability alone.
@@ -213,3 +219,39 @@ type resource
     # Can share resources: add/remove editors/viewers
     # -> must be able to share parent tag
     define share: share from parent
+
+type capability
+  # --------------- Agent-capability team scoping (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.1) ---------------
+  # A capability is ONE platform-wide object many teams are *enabled-for* (not a
+  # team-owned resource). Callers check only `can_use`/`can_manage`; the
+  # structural relations below are written exclusively by the enablement API.
+  relations
+    # Platform anchor — every capability is anchored to the singleton
+    # organization so management rights derive from the org admin role.
+    define organization: [organization]
+
+    # Default-on marker: tuple present => usable by ALL teams (runtime state,
+    # toggled by writing/deleting this one tuple — never a code property).
+    define default_on: [organization]
+
+    # Explicit per-team grant (the admin-gated path).
+    define enabled: [team]
+
+    # Per-team opt-out of a default-on capability (gives the dashboard a
+    # tri-state: inherited-on / enabled / disabled).
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    # Can manage (enable/disable/toggle default-on) —
+    # -> platform admin only (AUTHZ-05 retired the legacy `admin` organization
+    # relation; every org-admin-tier capability is `platform_admin`-only now)
+    define can_manage: platform_admin from organization
+
+    # Can use this capability in an agent. The SUBJECT IS THE TEAM the agent
+    # belongs to (`Check(team:X, can_use, capability:C)`), never a user: a
+    # user-subject check would answer "is this user in ANY enabled team" and
+    # leak the capability into every team the user belongs to. The team is
+    # explicitly enabled, OR the capability is default-on for the organization
+    # (resolved through the contextual `organization#team` reverse edge),
+    # UNLESS the team explicitly opted out.
+    define can_use: (enabled or team from default_on) but not disabled

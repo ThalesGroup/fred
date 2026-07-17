@@ -1,6 +1,10 @@
 # RFC - Governed agent catalog admission
 
-**Status:** Proposed target model
+**Status:** Partially implemented (2026-07-17, CAPAB-01) — see §7.5. §6/§7.1-7.4
+describe the originally proposed YAML-admission-catalog mechanism; §7.5
+documents what actually shipped, which supersedes the catalog/status/
+availability model in §6 with a capability-based one while keeping this RFC's
+decision (§1) and enforcement points (§7.1, §7.2) intact.
 **Author:** Dimitri Tombroff
 **Date:** 2026-07-04
 **Area:** control-plane, fred-runtime, frontend, deployment configuration
@@ -274,6 +278,82 @@ Target rule:
   control plane;
 - if a runtime endpoint remains reachable for operational reasons, it is not a product
   deployability boundary and must not be used by the UI to create/use governed agents.
+
+### 7.5 As implemented (2026-07-17, CAPAB-01 — supersedes §6's catalog model)
+
+The shipped mechanism realizes this RFC's decision (§1: "the pod declares what
+exists, the control plane decides what is deployable") and §7.1's listing
+rules (specifically bullet 5, "compatible with the caller's team capability")
+through the SAME ReBAC mechanism `AGENT-CAPABILITY-RFC.md` §8.1 already built
+for tool capabilities (`#1988`), rather than the standalone YAML admission
+catalog originally proposed in §6.1 (`status` + `availability.teams/personal`
+config shape). An earlier draft of this implementation proposed a brand new
+FGA `type template` mirroring `capability`'s relations — rejected on review as
+exactly the duplication `#1988` already fixed once for MCP servers: two FGA
+types, two enablement APIs, two seeding paths, mechanically identical.
+
+- **Agent templates are capabilities, of a different `kind`, not a different
+  type.** `CapabilityManifest`/`CapabilityCatalogEntry`
+  (`fred_sdk/contracts/capability/manifest.py`) gained `kind: Literal["tool",
+  "agent"] = "tool"`. No new FGA type, no new `Resource`, no new enablement
+  API — the existing `capability` FGA type (`can_use`, `enabled`/`disabled`/
+  `default_on`, `capabilities/enablement.py`) governs both.
+- **Projection, not SDK type unification** — same precedent as `#1988`
+  (`MCPServerConfiguration` was never made a `CapabilityManifest` subclass).
+  `AgentDefinition` stays its own pod-registration type; control-plane
+  projects each registered template into a `kind="agent"`
+  `CapabilityCatalogEntry` (`product/service.py`
+  `_agent_capabilities_for_source`), entirely control-plane side. This is
+  deliberately NOT done by adding agent entries to the runtime pod's own
+  `capability_registry` — that registry is what every template's
+  `available_capabilities` (the Create-Agent-modal tool picker) is built
+  from, reused identically across every template
+  (`fred_runtime/app/agent_app.py` `list_agent_templates`); doing so would
+  make every OTHER template's tool picker offer every agent as a selectable
+  "capability" — an accidental side effect, not the deliberate
+  `context.invoke_agent()` agent-as-sub-tool composition (a separate,
+  unstarted idea).
+- **Colon-free FGA id.** `template_id` (`f"{runtime_id}:{agent_id}"`, used for
+  routing) contains `:`, forbidden by OpenFGA object ids — the same crash
+  class `#1988` fixed for `mcp:<id>`. `template_capability_id(runtime_id,
+  agent_id) -> f"{runtime_id}__{agent_id}"` is the parallel, ReBAC-safe id,
+  used only for `can_use` checks and the admin catalog.
+- **§7.1 realized**: `list_agent_templates` gates the `AgentTemplateSummary`
+  entry itself (not just its nested `available_capabilities`) on
+  `can_use(team, template_capability_id)`, batched with the existing
+  `usable_capability_ids` call. **§7.2 realized**: `enroll_agent_instance`
+  re-checks the same `can_use`, 404 on denial (anti-guessing, matching the
+  existing non-public-template convention) — defense in depth against a team
+  guessing a `template_id`.
+- **Platform policy (CAPAB-01, ratified 2026-07-17, see
+  `AGENT-CAPABILITY-RFC.md` §8.3): this deployment never uses `team_scope:
+  DEFAULT_ON`**, for tools or agents — every team's access to every agent is
+  an explicit, auditable admin grant. This makes §6.2/§6.3's `status`/
+  `availability` vocabulary moot (superseded by the tri-state
+  enabled/disabled/inherited-on the capability model already has) and makes
+  a compatibility migration mandatory, not optional (§11 of this RFC still
+  applies, realized differently): `grant_existing_teams_served_templates`
+  writes an explicit `enabled` tuple (never `default_on`) for every
+  (existing team × currently-served template) pair, so no team loses access
+  to an agent it already uses at rollout. Must run before/with the `can_use`
+  gate going live; rehearse against a copy of real data first.
+- **Admin UI**: one surface, not two — the existing `/admin/capabilities`
+  page (`CapabilitiesPage.tsx`) gained a `kind` filter ("Tools" | "Agents")
+  over the same dataset, mutations, and drawer, rather than a new
+  `AgentTemplatesPage`/route/nav entry. A tool can be depended on by several
+  agents, so admins need both views, not one merged list or two disconnected
+  surfaces.
+- **Deferred, not part of this pass**: `depends_on` (a capability declaring
+  it needs others) and the resulting "refuse and tell the admin what's
+  missing" UX when enabling an agent without its tool dependencies granted.
+  §7.1's "compatible with the caller's team capability" is satisfied by the
+  agent-level gate alone for now; the dependency-aware refuse-and-signal
+  layer is a fast-follow.
+- **Not resolved by this change**: which templates end up visible to which
+  teams is still "everything, for everyone who already had it" post-
+  migration — the actual curation ask (fewer, better-chosen default
+  templates per team) is a manual admin decision via the new UI, made after
+  this ships, not automated here.
 
 ## 8. Relationship to `AgentDefinition.public`
 

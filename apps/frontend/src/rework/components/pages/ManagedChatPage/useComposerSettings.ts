@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import type { EffectiveChatOptions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 
@@ -23,6 +23,13 @@ interface ComposerState {
   ragScope: RagScope;
   selectedLibraryIds: string[];
   selectedDocumentUids: string[];
+}
+
+/** Reads a stock widget's `params.default` (RFC §3.3), e.g. `search_policy` /
+ * `rag_scope`, from the ordered `chat_controls` list. */
+function findDefault<T>(chatControls: readonly ChatControlDescriptor[], widget: string): T | undefined {
+  const params = chatControls.find((c) => c.widget === widget)?.params as { default?: T } | undefined;
+  return params?.default;
 }
 
 function storageKey(sessionId: string): string {
@@ -47,10 +54,10 @@ function writeStorage(sessionId: string, state: ComposerState): void {
   }
 }
 
-function buildInitial(sessionId: string | null, agentOptions: EffectiveChatOptions | null): ComposerState {
+function buildInitial(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]): ComposerState {
   const defaults: ComposerState = {
-    searchPolicy: agentOptions?.default_search_policy ?? "hybrid",
-    ragScope: agentOptions?.default_search_rag_scope ?? "hybrid",
+    searchPolicy: findDefault<SearchPolicyName>(chatControls, "search_policy") ?? "hybrid",
+    ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
     selectedLibraryIds: [],
     selectedDocumentUids: [],
   };
@@ -63,25 +70,28 @@ function buildInitial(sessionId: string | null, agentOptions: EffectiveChatOptio
  * library selection, and selected documents.
  *
  * Initialises from sessionStorage (keyed by sessionId) when available,
- * otherwise from the agent's effective_chat_options defaults.
+ * otherwise from the `search_policy`/`rag_scope` chat-control descriptors'
+ * `params.default` (CAPAB-01 #1976 — supersedes the retired
+ * `EffectiveChatOptions.default_search_policy`/`default_search_rag_scope`).
  * Writes through to sessionStorage on every change so state survives
  * navigation within the same browser tab.
  *
  * Call reset() when the session changes to reinitialise from storage/defaults.
  */
-export function useComposerSettings(sessionId: string | null, agentOptions: EffectiveChatOptions | null) {
-  const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, agentOptions));
+export function useComposerSettings(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) {
+  const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls));
 
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
-  // agentOptions arrives async (RTK Query). If it was null at mount and no
-  // sessionStorage data exists for this session, apply the agent defaults now.
+  // chatControls arrives async (an eager prepare-execution call, RFC §3.7). If
+  // it was empty at mount and no sessionStorage data exists for this session,
+  // apply the resolved defaults now.
   useEffect(() => {
-    if (!agentOptions) return;
+    if (chatControls.length === 0) return;
     if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
-    setState(buildInitial(sessionIdRef.current, agentOptions));
-  }, [agentOptions]);
+    setState(buildInitial(sessionIdRef.current, chatControls));
+  }, [chatControls]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
@@ -94,8 +104,8 @@ export function useComposerSettings(sessionId: string | null, agentOptions: Effe
     [sessionId],
   );
 
-  const reset = useCallback((nextSessionId: string | null, nextAgentOptions: EffectiveChatOptions | null) => {
-    setState(buildInitial(nextSessionId, nextAgentOptions));
+  const reset = useCallback((nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
+    setState(buildInitial(nextSessionId, nextChatControls));
   }, []);
 
   const setSearchPolicy = useCallback((p: SearchPolicyName) => update({ searchPolicy: p }), [update]);

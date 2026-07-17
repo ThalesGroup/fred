@@ -1179,6 +1179,23 @@ async def _get_team_users_by_relation(
     return {subject.id for subject in subjects}
 
 
+async def count_all_collaborative_teams(deps: TeamServiceDependencies) -> int:
+    """Count every collaborative team in the organization, unfiltered by caller.
+
+    Why this exists: `list_teams` is caller-scoped — it filters to teams the user
+    holds `CAN_READ` on and folds in that user's own personal space. Admin
+    surfaces that need a platform-wide denominator (e.g. how many teams inherit a
+    default-on capability, RFC §8.5) must not use it, or they report a number
+    scoped to the admin's own memberships.
+
+    `team_metadata_store` rows are collaborative teams only (AUTHZ-05 review
+    item 9, RFC Part 6 §32, `list_all_teams_for_registry`): a personal space
+    never gets a row there, so no extra filtering is needed.
+    """
+
+    return len(await deps.get_team_metadata_store().list_all())
+
+
 def _detect_image_content_type(payload: bytes) -> str | None:
     if payload.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"

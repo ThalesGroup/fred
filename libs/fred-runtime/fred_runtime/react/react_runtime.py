@@ -79,6 +79,8 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
 # - this file should decide when Fred invokes, streams, and emits runtime events
@@ -89,9 +91,6 @@ from .react_langchain_adapter import (
 )
 from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
-)
-from .react_langchain_adapter import (
-    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
 )
 from .react_langchain_adapter import (
     decode_stream_chunk as _decode_stream_chunk,
@@ -579,9 +578,19 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     - bind/activation logic: `on_bind(...)` and `on_activate(...)`
     """
 
-    def __init__(self, *, definition: ReActAgentDefinition, services: RuntimeServices):
+    def __init__(
+        self,
+        *,
+        definition: ReActAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+    ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
+        # Selected capabilities, pre-assembled into the frame block (#1974):
+        # id-sorted middleware stacks + HitlSpec bindings for the single
+        # platform HITL gate. None when the agent selects no capabilities.
+        self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -616,11 +625,6 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             raise RuntimeError("ReActRuntime model is not initialized.")
 
         policy = self.definition.policy()
-        if policy.tool_selection.max_tool_calls_per_turn is not None:
-            raise NotImplementedError(
-                "Per-turn tool-call limits are not enforced by the first v2 ReAct runtime yet."
-            )
-
         logger.debug(
             "[V2][EXECUTOR] build start agent=%s declared_tool_refs=%r toolset_key=%r",
             self.definition.agent_id,
@@ -691,6 +695,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
+            max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
+            capability_block=self._capability_block,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -738,6 +744,8 @@ def _create_compiled_react_agent(
     chat_model_factory: ChatModelFactoryPort | None,
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
+    max_tool_calls_per_turn: int | None = None,
+    capability_block: CapabilityAgentBlock | None = None,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -784,12 +792,14 @@ def _create_compiled_react_agent(
             infer_operation_from_messages=_infer_react_model_operation_from_messages,
             default_operation=REACT_MODEL_OPERATION_ROUTING,
             available_tool_names=available_tool_names,
-            model_call_wrapper=_build_tool_loop_model_call_wrapper(
-                tracer=tracer,
-                kpi=kpi,
-                binding=binding,
-                infer_operation_from_messages=_infer_react_model_operation_from_messages,
-                default_operation=REACT_MODEL_OPERATION_ROUTING,
+            tracer=tracer,
+            kpi=kpi,
+            max_tool_calls_per_turn=max_tool_calls_per_turn,
+            capability_middleware=(
+                capability_block.middleware if capability_block is not None else ()
+            ),
+            capability_hitl=(
+                capability_block.hitl if capability_block is not None else None
             ),
         ),
     )

@@ -15,9 +15,9 @@
 import styles from "./ButtonGroupItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
-import { ComponentPropsWithoutRef } from "react";
+import { ComponentPropsWithRef } from "react";
 
-export interface ButtonGroupItemProps extends ComponentPropsWithoutRef<"button"> {
+export interface ButtonGroupItemProps extends ComponentPropsWithRef<"button"> {
   label: string;
   icon?: IconProps;
   hasError?: boolean;
@@ -27,6 +27,8 @@ export interface ButtonGroupItemPrivateProps {
   size: ComponentSize;
   color: ColorTheme;
   selected: boolean;
+  /** Drives ARIA role/state: a mutually-exclusive "radio" pick or a "tabs" strip. */
+  variant: "radio" | "tabs";
 }
 
 export default function ButtonGroupItem({
@@ -36,10 +38,21 @@ export default function ButtonGroupItem({
   selected,
   size,
   hasError,
+  variant,
+  ref,
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
   return (
-    <button className={styles.buttonGroupItem} data-color={color} data-size={size} {...props}>
+    <button
+      ref={ref}
+      className={styles.buttonGroupItem}
+      data-color={color}
+      data-size={size}
+      role={variant === "radio" ? "radio" : "tab"}
+      aria-checked={variant === "radio" ? selected : undefined}
+      aria-selected={variant === "tabs" ? selected : undefined}
+      {...props}
+    >
       <div className={`${styles.stateLayer}`} data-selected={selected}>
         {icon && (
           <span className={styles.icon}>

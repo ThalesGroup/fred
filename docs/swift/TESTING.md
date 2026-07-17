@@ -1,7 +1,7 @@
 # How do you test it?
 
 You have internet, a Unix laptop, and you're curious whether this checkout of
-Fred actually works. Here is exactly what to do — four steps, each one ending
+Fred actually works. Here is exactly what to do — five steps, each one ending
 with a short, honest answer to "did that work?" that doesn't bury you in
 detail.
 
@@ -9,7 +9,7 @@ This checks one specific axis end-to-end: **identity and authorization**
 (Keycloak authenticates, OpenFGA decides who can do what — see
 [`platform/REBAC.md`](platform/REBAC.md)). It is not a
 full product test suite — there isn't one today. Treat a clean run through
-all four steps as "this checkout is a sound release candidate on the axis
+all five steps as "this checkout is a sound release candidate on the axis
 that matters most for a multi-tenant platform: nobody sees or touches what
 they shouldn't."
 
@@ -169,7 +169,101 @@ handles deferred erasure/purge-queue reconciliation, see `CTRLP-12`). Not
 required for the steps below; noted here because its own live-validation work
 is tracked with `CTRLP-12` in the canonical backlog.
 
-## 3. Run the authorization validation suite
+## 3. Become `platform_admin`, provision the demo platform
+
+`docker-up` (step 1) gives you empty infra — zero users, zero teams. Step 5's
+`validation-report` refuses to run against that (it only *verifies* the demo
+platform exists, it doesn't create it — see `validation/conftest.py`), so this
+step is required, not optional. Full detail/troubleshooting lives in
+`fred-deployment-factory`'s [`docs/LOCAL-DEVELOPMENT.md`](https://github.com/ThalesGroup/fred-deployment-factory/blob/swift/docs/LOCAL-DEVELOPMENT.md)
+("Full bootstrap walkthrough", steps 3–4) — this is the condensed version.
+
+In a new terminal, from the `fred` repo root:
+
+```bash
+cd apps/control-plane-backend
+make bootstrap-token    # writes target/bootstrap-token; never overwrites, never printed by the app
+```
+
+Self-register a throwaway user through **Keycloak's own** registration
+screen (no Fred frontend needed yet): open
+`http://localhost:8080/realms/app/account` → "Register". Then:
+
+```bash
+TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=app \
+  -d username=<your-username> -d password=<your-password> \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -s -X POST http://localhost:8222/control-plane/v1/bootstrap/platform-admin \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"token\": \"$(cat target/bootstrap-token)\"}"
+```
+
+One-shot and permanent — a second call, ever, returns `409`. That throwaway
+user is now `platform_admin`; use it to import the demo dataset, which creates
+the *real* named demo identities (`alice`, `bob`, `marc`, …) validation
+expects:
+
+```bash
+make build-demo-bundle    # zips tests/fixtures/import_export/demo_provisioning/ → target/demo-provisioning-bundle.zip
+
+curl -s -X POST http://localhost:8222/control-plane/v1/import-export/import \
+  -H "Authorization: Bearer $TOKEN" -F file=@target/demo-provisioning-bundle.zip
+```
+
+Import runs async (returns a `task_id`) — give it a few seconds.
+
+**✅ What tells you this worked:**
+
+```bash
+curl -s http://localhost:8222/control-plane/v1/teams/all \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+Should list `fredlab`, `northbridge`, `swiftpost`, and the rest of the demo
+teams. See `validation/README.md`'s "complete-matrix demo users" table for
+who's who and why.
+
+## 4. Authorize Tools and Agents for the demo teams (CAPAB-01 / CTRLP-14)
+
+Every tool (MCP server) and every agent template is admin-gated by default,
+platform-wide. Step 3 only provisions identities/teams/roles — it grants no
+team access to any tool or agent, so right now every demo team has an empty
+toolbox. `alice` (the demo bundle's `platform_admin`, password `Azerty123_`,
+matching `validation/factory_config.py`'s `PASSWORD` default) grants it, the
+same way the throwaway bootstrap user did above — get her a token, then flip
+every capability to platform-wide `default_on`:
+
+```bash
+ALICE_TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=app \
+  -d username=alice -d password=Azerty123_ \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+CAP_IDS=$(curl -s http://localhost:8222/control-plane/v1/admin/capabilities \
+  -H "Authorization: Bearer $ALICE_TOKEN" \
+  | python3 -c 'import sys,json; print("\n".join(i["id"] for i in json.load(sys.stdin)["items"]))')
+
+for id in $CAP_IDS; do
+  curl -s -X PUT "http://localhost:8222/control-plane/v1/admin/capabilities/$id/default-on" \
+    -H "Authorization: Bearer $ALICE_TOKEN" -H "Content-Type: application/json" \
+    -d '{"default_on": true}'
+done
+```
+
+**✅ What tells you this worked:**
+
+```bash
+curl -s http://localhost:8222/control-plane/v1/teams/<a-team-id>/agent-templates \
+  -H "Authorization: Bearer $ALICE_TOKEN" | python3 -m json.tool
+```
+
+Should be a non-empty list. An empty list here is exactly what makes
+`test_runtime_team_isolation.py` in step 5 fail with "agent catalog is empty" —
+if you see that failure, you skipped this step.
+
+## 5. Run the authorization validation suite
 
 `validation/` lives in this `fred` checkout (not `fred-deployment-factory` —
 that repo only provides the backing services started in step 1). From the
@@ -195,8 +289,8 @@ stack — not asserted, not assumed.
 
 ---
 
-If all four steps end green, you have a working, authorization-sound release
-candidate. If step 3 is red, `report.md` groups every failure by the
+If all five steps end green, you have a working, authorization-sound release
+candidate. If step 5 is red, `report.md` groups every failure by the
 real-world claim it breaks (not by test function name) — read that table
 next, not the raw pytest output.
 

@@ -680,7 +680,6 @@ def test_run_command_runtime_prints_binding_json(capsys) -> None:
                         "description": "Operations sentinel",
                         "tags": [],
                         "fields": [],
-                        "mcp_servers": [],
                     },
                 },
             )

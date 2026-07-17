@@ -15,10 +15,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 from fred_runtime.app.config import AgentPodConfig
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+
+
+@pytest.fixture(autouse=True)
+def _restore_base_ui_part_union() -> Iterator[None]:
+    """
+    Registry validation extends the process-wide `UiPart` union (#1977);
+    every test must leave the process on the frozen base union so union
+    membership never leaks between tests. No-op when nothing was registered.
+    """
+
+    yield
+    rebuild_ui_part_union(())
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):

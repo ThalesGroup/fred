@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -122,12 +122,21 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         *,
         prefix: str = "v2_",
         kpi: BaseKPIWriter | None = None,
+        extra_msgpack_allowlist: Sequence[tuple[str, str]] = (),
     ) -> None:
         # Pass the allowlist directly to the constructor.
         # with_msgpack_allowlist() is a no-op when the default serde starts with
         # allowed_msgpack_modules=True, because it returns self unchanged.
+        #
+        # `extra_msgpack_allowlist` is the capability typed-state opt-in
+        # (#1973, RFC AGENT-CAPABILITY-RFC.md §5.2 spike rule): compose
+        # `CapabilityRegistry.msgpack_allowlist()` in here at boot. The legacy
+        # entry always stays.
         serde = JsonPlusSerializer(
-            allowed_msgpack_modules=list(self._FRED_MSGPACK_ALLOWLIST)
+            allowed_msgpack_modules=[
+                *self._FRED_MSGPACK_ALLOWLIST,
+                *extra_msgpack_allowlist,
+            ]
         )
         super().__init__(serde=serde)
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)

@@ -43,6 +43,11 @@ export function InlineDrawer({
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
+  // Push drawers take real layout space from the flex row they sit in — cap
+  // at a fraction of the viewport so a wide `width` can't force the sibling
+  // main column below a usable size on narrow windows. Overlay
+  // drawers float over content and don't need the same guard.
+  const drawerWidth = layout === "push" ? `min(${width}, 45vw)` : width;
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +69,7 @@ export function InlineDrawer({
         data-layout={layout}
         aria-hidden={!open}
         aria-labelledby={titleId}
-        style={{ "--drawer-width": width } as React.CSSProperties}
+        style={{ "--drawer-width": drawerWidth } as React.CSSProperties}
       >
         <div className={styles.panel}>
           <div className={styles.header}>

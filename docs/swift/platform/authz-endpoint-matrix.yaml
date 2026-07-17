@@ -401,6 +401,26 @@ operations:
     path: /control-plane/v1/bootstrap/platform-admin
     review_status: external_or_public
     required_permission: bootstrap_token # authenticated (Keycloak JWT required) but not ReBAC-gated — grants only the caller's own sub, gated by a deploy-time secret (RFC Part 8, AUTHZ-07); permanently inert once a durable completion marker is set (not a live platform_admin count)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/capabilities
+    review_status: approved
+    required_permission: can_manage_platform # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_platform (_require_manage_any)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
 
   - service: knowledge-flow
     method: GET

@@ -1,0 +1,20 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention) */
+
+.geoChip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.geoIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}

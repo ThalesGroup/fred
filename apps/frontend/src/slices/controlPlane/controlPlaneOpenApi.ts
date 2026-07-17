@@ -425,6 +425,44 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapPlatformAdminRequest,
       }),
     }),
+    getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/capabilities` }),
+    }),
+    putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: build.mutation<
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse,
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "PUT",
+        body: queryArg.enableTeamCapabilityRequest,
+      }),
+    }),
+    deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: build.mutation<
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse,
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "DELETE",
+        params: {
+          mode: queryArg.mode,
+        },
+      }),
+    }),
+    putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: build.mutation<
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse,
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/default-on`,
+        method: "PUT",
+        body: queryArg.setCapabilityDefaultOnRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -949,6 +987,30 @@ export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiRes
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
   bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
 };
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
+  /** status 200 Successful Response */ CapabilityEnablementList;
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg = {
+  capabilityId: string;
+  teamId: string;
+  enableTeamCapabilityRequest: EnableTeamCapabilityRequest;
+};
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg = {
+  capabilityId: string;
+  teamId: string;
+  /** `disable` writes an explicit opt-out (tri-state 'disabled'); `default` clears both the grant and the opt-out so the platform default applies (tri-state 'default'). Both suspend dependent instances when the team loses access. */
+  mode?: "disable" | "default";
+};
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse =
+  /** status 200 Successful Response */ CapabilityDefaultOnResult;
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg = {
+  capabilityId: string;
+  setCapabilityDefaultOnRequest: SetCapabilityDefaultOnRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1367,13 +1429,93 @@ export type ManagedAgentFieldSpec = {
   item_type?: string | null;
   ui?: ManagedAgentUiHints;
 };
-export type ManagedMcpServerRef = {
+export type UiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+};
+export type FieldSpec = {
+  key: string;
+  type:
+    | "string"
+    | "text"
+    | "text-multiline"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  title: string;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  required?: boolean;
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "text-multiline"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  ui?: UiHints;
+};
+export type AssetSlot = {
+  key: string;
+  accepted_types: string[];
+  min_count?: number;
+  max_count?: number | null;
+};
+export type TeamScopePolicy = "default_on" | "admin_gated";
+export type CapabilityCatalogEntry = {
   id: string;
-  display_name?: string;
-  require_tools?: string[];
-  config_fields?: ManagedAgentFieldSpec[];
-  /** When True the server is part of the template's canonical tool set. The frontend renders its toggle as read-only; the operator can configure its config_fields but cannot remove the server. */
-  locked?: boolean;
+  version: string;
+  /** i18n key */
+  name: string;
+  /** i18n key */
+  description: string;
+  /** Material Symbols name; see CapabilityManifest.icon */
+  icon: string;
+  config_fields?: FieldSpec[];
+  team_settings_fields?: FieldSpec[];
+  assets?: AssetSlot[];
+  team_scope?: TeamScopePolicy;
+  kind?: "tool" | "agent";
+  route_base_url?: string | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -1391,20 +1533,10 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
-  /** MCP server references advertised by this template. Empty when the template declares no MCP dependencies. */
-  mcp_servers?: ManagedMcpServerRef[];
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
+  available_capabilities?: CapabilityCatalogEntry[];
 };
-export type EffectiveChatOptions = {
-  attach_files?: boolean;
-  libraries_selection?: boolean;
-  documents_selection?: boolean;
-  search_policy_selection?: boolean;
-  default_search_policy?: "strict" | "hybrid" | "semantic";
-  rag_scope_selection?: boolean;
-  default_search_rag_scope?: "corpus_only" | "hybrid" | "general_only";
-  /** When non-null, the agent is configured to use exactly these library IDs. The frontend must render the library picker as read-only and send exactly this list in RuntimeContext.selected_document_libraries_ids. Null means the user can freely select from all available libraries. */
-  bound_library_ids?: string[] | null;
-};
+export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -1412,6 +1544,8 @@ export type ManagedAgentInstanceSummary = {
   display_name: string;
   description?: string | null;
   status: "enabled" | "disabled";
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  suspension_reason?: SuspensionReason | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -1427,28 +1561,18 @@ export type ManagedAgentInstanceSummary = {
           [key: string]: string | number | number | boolean;
         };
   };
-  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Empty when no MCP options have been customised. */
-  mcp_config_values?: {
+  /** Capability activation policy for this instance (#1974). Null means inherit the template default selection; [] means no capabilities; a non-empty list means exactly that set. */
+  selected_capability_ids?: string[] | null;
+  /** Per-capability stored config envelopes ({'schema_version', 'config'}) keyed by capability id, as validated by the pod at save time. The edit form re-renders the capability's config_fields from the inner 'config' object. */
+  capability_config?: {
     [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
+      [key: string]: any;
     };
   };
-  /** Admin-chosen MCP server activation policy for this instance. Null means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
   /** ok when the pod is reachable at listing time; unavailable when the pod cannot be contacted. */
   runtime_status?: "ok" | "unavailable";
   /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
   catalog_warnings?: string[];
-  /** Resolved chat affordances for this instance, computed from active MCP server config_fields and tuning values. Tells the frontend which composer controls to show without waiting for prepare-execution. */
-  effective_chat_options?: EffectiveChatOptions;
 };
 export type CreateAgentInstanceRequest = {
   /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
@@ -1467,22 +1591,14 @@ export type CreateAgentInstanceRequest = {
           [key: string]: string | number | number | boolean;
         };
   } | null;
-  /** Optional per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only selected or inherited-active servers may be configured; unknown server ids or option keys are rejected with HTTP 422. */
-  mcp_config_values?: {
+  /** Optional capability activation policy (#1974). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. IDs not advertised by the template's source pod are rejected with HTTP 422. */
+  capability_ids?: string[] | null;
+  /** Optional per-capability configuration values keyed by capability id (the capability's config_fields values). Each selected capability's slice is round-tripped to the source pod for validation; the pod-returned stored envelope is persisted verbatim. Values for unselected capabilities are ignored. */
+  capability_config_values?: {
     [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
+      [key: string]: any;
     };
   } | null;
-  /** Optional MCP server activation policy for this instance. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
-  mcp_server_ids?: string[] | null;
 };
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
@@ -1501,22 +1617,14 @@ export type UpdateAgentInstanceRequest = {
           [key: string]: string | number | number | boolean;
         };
   } | null;
-  /** Replaces the stored per-server MCP configuration values. Omit the field to leave the current MCP config unchanged; pass null to clear all stored MCP config for the instance. */
-  mcp_config_values?: {
+  /** Replaces the capability activation policy (#1974). Omit to leave the current selection unchanged; pass null to reset to the template default; pass [] to deactivate all capabilities; pass a non-empty list to activate exactly that set. IDs not advertised by the source pod are rejected with HTTP 422. */
+  capability_ids?: string[] | null;
+  /** Replaces the per-capability configuration values (keyed by capability id). Omit to keep the stored configs; pass null to reset every selected capability to its defaults. Each selected capability's effective config is re-validated by the source pod and the returned stored envelope is persisted verbatim. */
+  capability_config_values?: {
     [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
+      [key: string]: any;
     };
   } | null;
-  /** Replaces the MCP server activation policy for this instance. Omit the field to leave the current selection unchanged; pass null to reset to the template default selection (all declared servers active); pass [] to activate no MCP servers; pass a non-empty list to activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
-  mcp_server_ids?: string[] | null;
 };
 export type PromptCategory =
   | "doc-assist"
@@ -1607,21 +1715,12 @@ export type ManagedAgentTuning = {
   description: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
-  mcp_servers?: ManagedMcpServerRef[];
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
-  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only keys declared by the matching server's config_fields are stored. */
-  mcp_config_values?: {
+  /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
+  selected_capability_ids?: string[] | null;
+  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
+  capability_config?: {
     [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
+      [key: string]: any;
     };
   };
   /** User-set agent tuning values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
@@ -1646,6 +1745,11 @@ export type ManagedAgentRuntimeBinding = {
   owner_team_id: string;
   enabled?: boolean;
   tuning: ManagedAgentTuning;
+  team_capability_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
 };
 export type SessionListItem = {
   session_id: string;
@@ -1698,6 +1802,13 @@ export type RuntimeAgentExecutionPreparation = {
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
 };
+export type ChatControlDescriptor = {
+  capability_id: string;
+  widget: string;
+  params?: {
+    [key: string]: any;
+  } | null;
+};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -1712,12 +1823,16 @@ export type ExecutionPreparation = {
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
-  /** Resolved chat-option surface derived from the stored managed-agent configuration. The frontend should render only the affordances enabled here rather than hard-code agent- or tool-specific rules. */
-  effective_chat_options?: EffectiveChatOptions;
+  /** Computed chat-time composer controls for this instance (CAPAB-01 #1976, RFC §3.3/§3.7), evaluated per capability on the pod at session prep and flattened in capability-registration then returned-list order. Supersedes the retired `effective_chat_options`: the composer resolves each `widget` id against the owning capability's plugin registry (§9) and silently skips unknown ids. Never persisted — a cache-aside projection of stored config. */
+  chat_controls?: ChatControlDescriptor[];
   runtime_display_name?: string | null;
   max_session_idle_seconds?: number | null;
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
+  /** Ingress-relative base URL of each selected capability's auto-mounted router, keyed by capability id (AGENT-CAPABILITY-RFC §9.1, #1979). The instance-bound (in-session) counterpart of the template catalog's route_base_url: the frontend calls these pod routes directly (no proxy), with the same bearer it already uses for execution. */
+  capability_base_urls?: {
+    [key: string]: string;
+  };
 };
 export type BootstrapPlatformAdminResponse = {
   /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
@@ -1727,6 +1842,52 @@ export type BootstrapPlatformAdminResponse = {
 export type BootstrapPlatformAdminRequest = {
   /** The one-time root-bootstrap secret. */
   token: string;
+};
+export type CapabilityEnablementItem = {
+  id: string;
+  /** i18n key */
+  name: string;
+  version: string;
+  icon: string;
+  team_scope: TeamScopePolicy;
+  /** Whether the platform-wide default_on marker is set. */
+  default_on: boolean;
+  /** Teams carrying an explicit `enabled` grant. */
+  enabled_team_ids?: string[];
+  /** Teams carrying an explicit `disabled` opt-out (the tri-state 'disabled' position). For a default_on capability it also subtracts from the inherited roster. */
+  disabled_team_ids?: string[];
+  /** Platform-wide team count — the denominator for a default_on capability's inherited access. Counts every team in the org, not just the ones the calling admin belongs to. */
+  total_team_count?: number;
+  /** The enable-with-settings form (rendered like config fields). */
+  team_settings_fields?: FieldSpec[];
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. */
+  kind?: "tool" | "agent";
+};
+export type CapabilityEnablementList = {
+  items?: CapabilityEnablementItem[];
+};
+export type TeamCapabilityEnablementResult = {
+  capability_id: string;
+  team_id: string;
+  enabled: boolean;
+  settings?: {
+    [key: string]: any;
+  };
+  /** Dependent agent instances suspended by this change (#1975). */
+  suspended_instances?: number;
+};
+export type EnableTeamCapabilityRequest = {
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type CapabilityDefaultOnResult = {
+  capability_id: string;
+  default_on: boolean;
+  suspended_instances?: number;
+};
+export type SetCapabilityDefaultOnRequest = {
+  default_on: boolean;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2077,6 +2238,11 @@ export const {
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
+  useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
+  useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
+  usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

@@ -112,6 +112,7 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
 | RFC-backed item finished                                          | Mark `id-legend.yaml` status `done`, close the GitHub issue                              |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
+| Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 
 `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, and `PMO-BOARD.md` are frozen —
 never write to them. Do not mark backlog checkboxes or add PMO/WORKPLAN rows.

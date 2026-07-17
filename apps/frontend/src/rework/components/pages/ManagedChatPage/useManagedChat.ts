@@ -19,12 +19,7 @@ import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useChatSse } from "@hooks/useChatSse";
-import type {
-  AwaitingHumanEvent,
-  ChatMessage,
-  LinkPart,
-  VectorSearchHit,
-} from "../../../../slices/agentic/agenticOpenApi";
+import type { AwaitingHumanEvent } from "../../../../slices/agentic/agenticOpenApi";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -32,121 +27,10 @@ import {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { isTraceChannel, linksOf, textOf } from "../../../../rework/utils/traceUtils";
-import type { ThreadMessage } from "@rework/types/thread";
-import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
-
-// ── Local view model builder ──────────────────────────────────────────────────
-
-function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const order: string[] = [];
-  const groups = new Map<string, ChatMessage[]>();
-
-  for (const msg of messages) {
-    const eid = msg.exchange_id;
-    if (!groups.has(eid)) {
-      order.push(eid);
-      groups.set(eid, []);
-    }
-    groups.get(eid)!.push(msg);
-  }
-
-  const result: ThreadMessage[] = [];
-  const lastEid = order[order.length - 1] as string | undefined;
-
-  for (const eid of order) {
-    const msgs = groups.get(eid)!;
-    const isLast = eid === lastEid;
-
-    const userMsg = msgs.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
-    if (userMsg) {
-      result.push({
-        id: `${eid}:user`,
-        role: "user",
-        text: textOf(userMsg),
-        isStreaming: false,
-        traceMessages: [],
-        sources: [],
-        links: [],
-      });
-    }
-
-    const hitlReqMsg = msgs.find((m) => (m.channel as string) === "hitl_request");
-    if (hitlReqMsg) {
-      type ReqPart = { question?: string; choices?: Array<{ id: string; label: string }>; title?: string | null };
-      const part = hitlReqMsg.parts?.[0] as unknown as ReqPart | undefined;
-      result.push({
-        id: `${eid}:hitl_req`,
-        role: "hitl_request",
-        text: part?.question ?? "",
-        isStreaming: false,
-        traceMessages: [],
-        sources: [],
-        links: [],
-        hitlChoices: part?.choices ?? [],
-        hitlTitle: part?.title,
-      });
-    }
-
-    const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
-    if (hitlRespMsg) {
-      type RespPart = { label?: string | null; choice_id?: string };
-      const part = hitlRespMsg.parts?.[0] as unknown as RespPart | undefined;
-      result.push({
-        id: `${eid}:hitl_resp`,
-        role: "hitl_response",
-        text: part?.label ?? part?.choice_id ?? "",
-        isStreaming: false,
-        traceMessages: [],
-        sources: [],
-        links: [],
-      });
-    }
-
-    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
-    const finalMessages = msgs.filter((m) => {
-      const ch = m.channel as string;
-      return m.role !== "user" && ch !== "hitl_request" && ch !== "hitl_response" && !isTraceChannel(m.channel);
-    });
-
-    if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
-      const sources: VectorSearchHit[] = [];
-      let tokenUsage: TokenUsage | null = null;
-      for (let i = finalMessages.length - 1; i >= 0; i--) {
-        const meta = finalMessages[i].metadata as Record<string, unknown> | undefined;
-        if (!tokenUsage && meta?.token_usage) {
-          const tu = meta.token_usage as Record<string, number>;
-          tokenUsage = {
-            input_tokens: tu.input_tokens ?? 0,
-            output_tokens: tu.output_tokens ?? 0,
-            total_tokens: tu.total_tokens ?? 0,
-          };
-        }
-        if (sources.length === 0) {
-          const srcs = meta?.sources as VectorSearchHit[] | undefined;
-          if (srcs && srcs.length > 0) sources.push(...srcs);
-        }
-        if (tokenUsage && sources.length > 0) break;
-      }
-      const links: LinkPart[] = finalMessages.flatMap((m) => linksOf(m));
-      result.push({
-        id: `${eid}:assistant`,
-        role: "assistant",
-        text: finalMessages.map((m) => textOf(m)).join(""),
-        isStreaming: isStreaming && isLast,
-        traceMessages,
-        sources,
-        links,
-        tokenUsage,
-      });
-    }
-  }
-
-  return result;
-}
+import { toThreadMessages } from "./toThreadMessages";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -178,12 +62,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   );
   const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
   const agentDisplayName = agentInstance?.display_name ?? "Agent";
-  // Baseline capabilities available at mount — no message needed.
-  const agentChatOptions = agentInstance?.effective_chat_options ?? null;
-  const agentChatOptionsRef = useRef(agentChatOptions);
-  agentChatOptionsRef.current = agentChatOptions;
+  // Capabilities active in this session — drives the capability side-panel slot
+  // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
+  const capabilityIds = agentInstance?.selected_capability_ids ?? [];
 
-  const composer = useComposerSettings(sessionId, agentChatOptions);
   const attachments = useChatAttachments({ teamId, sessionId });
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
@@ -239,23 +121,41 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     await Promise.all(Array.from(pendingSessionWritesRef.current));
   }, []);
 
-  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, abort, reset, replaceAllMessages } =
-    useChatSse({
-      agentInstanceId,
-      teamId,
-      lang,
-      flushPendingWrites: flushSessionWrites,
-      onBindDraftAgentToSessionId: bindSessionId,
-      onTurnPersisted: (sid) => {
-        refreshSession({
-          teamId,
-          sessionId: sid,
-          updateSessionRequest: { updated_at: new Date().toISOString() },
-        }).catch(() => {});
-      },
-      onAwaitingHuman: (event) => setPendingHitl(event),
-      onError: (msg) => showError({ summary: "Agent error", detail: msg }),
-    });
+  const {
+    messages,
+    waitResponse,
+    chatControls,
+    prepareChatControls,
+    send,
+    sendHitlResume,
+    abort,
+    reset,
+    replaceAllMessages,
+  } = useChatSse({
+    agentInstanceId,
+    teamId,
+    lang,
+    flushPendingWrites: flushSessionWrites,
+    onBindDraftAgentToSessionId: bindSessionId,
+    onTurnPersisted: (sid) => {
+      refreshSession({
+        teamId,
+        sessionId: sid,
+        updateSessionRequest: { updated_at: new Date().toISOString() },
+      }).catch(() => {});
+    },
+    onAwaitingHuman: (event) => setPendingHitl(event),
+    onError: (msg) => showError({ summary: "Agent error", detail: msg }),
+  });
+
+  // Chat controls are resolved per agent instance/config, not per session — a
+  // session change should keep showing the last-known controls (no composer
+  // flicker) while prepareChatControls quietly refreshes them, mirroring the
+  // old agentChatOptionsRef pattern this replaces.
+  const chatControlsRef = useRef(chatControls);
+  chatControlsRef.current = chatControls;
+
+  const composer = useComposerSettings(sessionId, chatControls);
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
@@ -271,8 +171,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setInput("");
     setSessionTitle(null);
     setContextPromptIds([]);
-    composer.reset(sessionId, agentChatOptionsRef.current);
-  }, [sessionId, reset, composer.reset]);
+    composer.reset(sessionId, chatControlsRef.current);
+    // Eager prep (RFC §3.7, CAPAB-01 #1976): resolve chat_controls at chat open
+    // — not only inside send() — so the composer control slot isn't empty
+    // until the first message. Safe with no session yet (sessionId null).
+    void prepareChatControls(sessionId).catch(() => {});
+  }, [sessionId, reset, composer.reset, prepareChatControls]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -355,6 +259,25 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       trackSessionWrite(created);
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
+    // `document_scope`'s params carry the same `bound_library_ids` the retired
+    // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
+    // MCP-server-bound library scope the picker cannot override.
+    const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
+    const boundLibraryIds =
+      (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
+    // The picker's per-turn selection must reach the OWNING capability's typed
+    // `turn_options[capability_id]` slice (RFC §3.5) — `document_access` reads
+    // its narrowing there, never from `runtime_context` (PR review,
+    // chatgpt-codex-connector). `documentScopeControl.capability_id` keys it
+    // correctly regardless of which capability actually surfaced the widget.
+    const turnOptions = documentScopeControl
+      ? {
+          [documentScopeControl.capability_id]: {
+            library_tag_ids: composer.selectedLibraryIds,
+            document_uids: composer.selectedDocumentUids,
+          },
+        }
+      : undefined;
     send(
       text,
       sid,
@@ -363,9 +286,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         selectedDocumentUids: composer.selectedDocumentUids,
         searchPolicy: composer.searchPolicy,
         ragScope: composer.ragScope,
-        boundLibraryIds: (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null,
+        boundLibraryIds,
         attachmentsMarkdown: attachmentContext,
       }),
+      turnOptions,
     );
     attachments.clearReadyAttachments();
   }, [
@@ -377,8 +301,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     teamId,
     agentInstanceId,
-    effectiveChatOptions,
-    agentChatOptions,
+    chatControls,
     composer.selectedLibraryIds,
     composer.selectedDocumentUids,
     composer.searchPolicy,
@@ -442,7 +365,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     sessionTitle,
     agentDisplayName,
-    agentChatOptions,
+    capabilityIds,
+    chatControls,
     input,
     setInput,
     pendingHitl,
@@ -467,7 +391,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     threadMessages,
     messages,
     waitResponse,
-    effectiveChatOptions: effectiveChatOptions ?? agentChatOptions,
     isLoadingHistory,
     handleSend,
     handleHitlAnswer,

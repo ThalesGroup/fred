@@ -1,0 +1,112 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.teamList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teamRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-s);
+}
+
+.teamMain {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.teamName {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A team the capability is effectively off for (explicit disable, or default
+ * while the platform default is off): present and actionable, but inert, so it
+ * recedes behind the teams that can use it — same treatment as the catalog
+ * table. Opacity (not a muted colour) so name and control dim as one; 0.55
+ * keeps the text above WCAG AA against the row background. */
+.dimmed {
+  opacity: 0.55;
+}
+
+.teamActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+/* Indeterminate ring shown while a tri-state change is in flight (mutation +
+ * list refetch). The segment already moved optimistically; this is the "not
+ * settled yet" cue next to it. */
+.spinner {
+  flex-shrink: 0;
+  animation: spin 0.75s linear infinite;
+  box-sizing: border-box;
+  border: 2px solid var(--outline-variant);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.settingsForm {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  margin-top: var(--spacing-xs);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}
+
+.settingsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-s);
+}

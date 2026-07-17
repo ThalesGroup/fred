@@ -38,7 +38,7 @@ import {
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
-type AgentRequestMcpConfigValues = NonNullable<CreateAgentInstanceRequest["mcp_config_values"]>;
+type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
 
 function extractApiErrorDetail(error: unknown): string {
   if (typeof error !== "object" || error === null) return String(error);
@@ -122,10 +122,10 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
-          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
-          mcp_config_values:
-            Object.keys(payload.mcpConfigValues).length > 0
-              ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
+          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+          capability_config_values:
+            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
               : undefined,
         },
       }).unwrap();
@@ -142,14 +142,6 @@ export default function TeamAgentsPage() {
 
   const handleEdit = async (payload: AgentFormPayload) => {
     if (!teamId || !editingInstance) return;
-    // When selectedMcpServerIds is an explicit list, drop config for servers
-    // that are no longer selected so the backend doesn't reject the request.
-    const activeMcpConfig =
-      payload.selectedMcpServerIds === null
-        ? payload.mcpConfigValues
-        : Object.fromEntries(
-            Object.entries(payload.mcpConfigValues).filter(([id]) => payload.selectedMcpServerIds!.includes(id)),
-          );
     try {
       await patchManagedInstance({
         teamId,
@@ -161,9 +153,11 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
-          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
-          mcp_config_values:
-            Object.keys(activeMcpConfig).length > 0 ? (activeMcpConfig as AgentRequestMcpConfigValues) : undefined,
+          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+          capability_config_values:
+            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+              : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} updated` });
@@ -284,35 +278,44 @@ export default function TeamAgentsPage() {
         />
       ) : (
         <div className={styles.agentList}>
-          {managedInstances.map((instance) => {
-            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-            const card = (
-              <AgentCard
-                instance={instance}
-                templateDisplayName={template?.display_name || instance.template_id}
-                templateCategory={template?.category}
-                runtimeId={template?.source_runtime_id}
-                canManageAgents={canManageAgents}
-                offline={templatesUnavailable}
-                onEdit={() => setEditingInstance(instance)}
-                onToggleEnabled={() => handleToggleEnabled(instance)}
-              />
-            );
+          {managedInstances
+            // #1975 (RFC §3.9): a suspended agent is hidden from chat-only
+            // members (they cannot fix it and must not see a broken agent);
+            // editors/owners (`can_update_agents`) keep seeing it with a warning
+            // and a locked enable toggle so they can open the edit form and fix.
+            .filter((instance) => canManageAgents || !instance.suspension_reason)
+            .map((instance) => {
+              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+              const card = (
+                <AgentCard
+                  instance={instance}
+                  templateDisplayName={template?.display_name || instance.template_id}
+                  templateCategory={template?.category}
+                  runtimeId={template?.source_runtime_id}
+                  canManageAgents={canManageAgents}
+                  offline={templatesUnavailable}
+                  onEdit={() => setEditingInstance(instance)}
+                  onToggleEnabled={() => handleToggleEnabled(instance)}
+                />
+              );
 
-            return instance.status === "enabled" ? (
-              <Link
-                key={instance.agent_instance_id}
-                to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
-                className={styles.chatLink}
-              >
-                {card}
-              </Link>
-            ) : (
-              <div key={instance.agent_instance_id} className={styles.disabledCard}>
-                {card}
-              </div>
-            );
-          })}
+              // A suspended instance never gets a chat link even if its stored
+              // status is still "enabled" (#1975, RFC §3.9): execution would be
+              // refused server-side, so it falls into the non-navigating branch.
+              return instance.status === "enabled" && !instance.suspension_reason ? (
+                <Link
+                  key={instance.agent_instance_id}
+                  to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
+                  className={styles.chatLink}
+                >
+                  {card}
+                </Link>
+              ) : (
+                <div key={instance.agent_instance_id} className={styles.disabledCard}>
+                  {card}
+                </div>
+              );
+            })}
         </div>
       )}
 

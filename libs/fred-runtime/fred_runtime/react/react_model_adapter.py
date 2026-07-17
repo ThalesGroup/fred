@@ -19,41 +19,30 @@ Why this module exists:
 - LangChain can call the chat model directly, but Fred adds two platform concerns
   around those calls: model routing and tracing
 - routing needs small operation labels such as `routing` and `planning`
-- tracing needs a wrapper that records which model was used for one ReAct turn
+- tracing needs stable helpers to read model names from models and responses
 - keeping that logic here prevents those SDK-specific details from spreading into
   the Fred runtime contract or prompt code
 
 How to use:
 - use `infer_react_model_operation_from_messages(...)` before a model call when
   deciding whether the turn is initial routing or tool-driven planning
-- use `build_tool_loop_model_call_wrapper(...)` when compiling the shared ReAct
-  tool loop so plain ReAct and HITL produce the same tracing behavior
+- the model-call span/KPI instrumentation itself lives in
+  `middleware.TracingKpiMiddleware` (re-homed there by #1972)
 
 Example:
 - operation inference:
   `operation = infer_react_model_operation_from_messages(messages)`
-- tracing wrapper:
-  `wrapper = build_tool_loop_model_call_wrapper(tracer=tracer, binding=binding, ...)`
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import contextmanager
-from typing import Any, Generator, Protocol, cast
+from collections.abc import AsyncIterator, Mapping, Sequence
+from typing import Protocol
 
-from fred_core.kpi import BaseKPIWriter, KPIActor
-from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 TRACE_MODEL_SPAN_NAME = "v2.react.model"
-
-
-@contextmanager
-def _nullctx() -> Generator[None, None, None]:
-    yield
 
 
 # Model-operation labels are Fred tracing metadata, not agent-facing concepts.
@@ -182,97 +171,6 @@ def infer_react_model_operation_from_messages(
         if isinstance(message, HumanMessage):
             return REACT_MODEL_OPERATION_ROUTING
     return REACT_MODEL_OPERATION_ROUTING
-
-
-def build_tool_loop_model_call_wrapper(
-    *,
-    tracer: TracerPort | None,
-    kpi: BaseKPIWriter | None,
-    binding: BoundRuntimeContext,
-    infer_operation_from_messages: Callable[[Sequence[object]], str],
-    default_operation: str,
-) -> Callable[[object, object, Callable[[], Any]], Any] | None:
-    """
-    Build the model-call wrapper used by the shared ReAct tool loop.
-
-    Why this exists:
-    - plain ReAct and HITL should emit the same model-call spans and operation metadata
-    - tracing and operation inference belong in the SDK adapter layer, not in prompts
-
-    How to use:
-    - pass the returned wrapper into the shared tool loop compiler
-
-    Example:
-    - `build_tool_loop_model_call_wrapper(tracer=tracer, kpi=kpi, binding=binding, ...)`
-    """
-
-    if tracer is None and kpi is None:
-        return None
-
-    async def _wrap(
-        state: object,
-        model_for_call: object,
-        invoke_model: Callable[[], object],
-    ) -> object:
-        state_messages = state.get("messages", []) if isinstance(state, dict) else []
-        messages = state_messages if isinstance(state_messages, list) else []
-        operation = (
-            infer_operation_from_messages(messages) if messages else default_operation
-        )
-        model_name = extract_model_name_from_object(model_for_call)
-
-        span = None
-        if tracer is not None:
-            attributes: dict[str, object] = {"operation": operation}
-            if model_name is not None:
-                attributes["model_name"] = model_name
-            from .react_tracing import active_agent_span
-
-            span = tracer.start_span(
-                name=TRACE_MODEL_SPAN_NAME,
-                context=binding.portable_context,
-                attributes=cast(dict[str, str | int | float | bool | None], attributes),
-                parent=active_agent_span.get(),
-            )
-
-        kpi_dims: dict[str, str | None] = {
-            "agent_id": binding.portable_context.agent_name
-            or binding.portable_context.agent_id,
-            "operation": operation,
-        }
-        if model_name is not None:
-            kpi_dims["model_name"] = model_name
-
-        kpi_ctx = (
-            kpi.timer(
-                "llm.call_latency_ms", dims=kpi_dims, actor=KPIActor(type="system")
-            )
-            if kpi is not None
-            else None
-        )
-        # Use the timer as a sync context manager (allowed inside async functions).
-        # _TimerImpl.__exit__ receives exc_type so status=error/cancelled is set
-        # automatically on failure — no manual bookkeeping needed.
-        with kpi_ctx if kpi_ctx is not None else _nullctx():
-            try:
-                response = await cast(Any, invoke_model)()
-                if span is not None:
-                    span.set_attribute("status", "ok")
-                    response_model_name = extract_model_name_from_model_response(
-                        response
-                    )
-                    if response_model_name is not None:
-                        span.set_attribute("model_name", response_model_name)
-                return response
-            except Exception:
-                if span is not None:
-                    span.set_attribute("status", "error")
-                raise
-            finally:
-                if span is not None:
-                    span.end()
-
-    return _wrap
 
 
 def _extract_model_name_from_message(message: BaseMessage | object) -> str | None:

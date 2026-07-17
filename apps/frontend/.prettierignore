@@ -7,3 +7,8 @@ dockerfiles
 
 # Ignore RTK Query slices generated from backend OpenAPI specs.
 src/slices/**/**OpenApi.ts
+
+# Ignore per-capability RTK Query slices and dumped schemas generated from
+# capability OpenAPI specs (see `make update-<cap>-capability-api`).
+src/rework/features/capabilities/**/api/**OpenApi.ts
+src/rework/features/capabilities/**/api/openapi.json

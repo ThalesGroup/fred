@@ -1,0 +1,27 @@
+/* Extracted from the former SearchConfig.module.css (CAPAB-01 #1976). The row
+ * itself comes from MenuPopoverItem, and the anchored listbox now reuses the
+ * MenuPopover shell (shadow/border/radius/background/padding) instead of
+ * duplicating it — this module only positions that shell relative to the
+ * row that owns it. */
+
+/* Position anchor for the row that owns the anchored listbox. */
+.rowWrap {
+  position: relative;
+}
+
+.selectMenuAnchor {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--spacing-xs));
+  z-index: 20;
+  min-width: 160px;
+}
+
+@media (max-width: 720px) {
+  .selectMenuAnchor {
+    top: calc(100% + var(--spacing-xs));
+    right: 0;
+    left: 0;
+    min-width: 0;
+  }
+}

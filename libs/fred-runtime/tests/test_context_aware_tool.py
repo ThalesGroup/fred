@@ -14,11 +14,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_sdk.contracts.context import RuntimeContext
-from fred_sdk.contracts.models import AgentTuning
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from langchain_core.tools import ArgsSchema, BaseTool
 from pydantic import BaseModel
 
@@ -50,6 +51,7 @@ class _FakeAgentSettings:
     id = "agent-1"
     team_id: str | None = "team-1"
     tuning: AgentTuning | None = None
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> None:

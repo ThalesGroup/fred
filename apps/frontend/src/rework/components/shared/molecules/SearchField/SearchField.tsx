@@ -22,9 +22,16 @@ export interface SearchFieldProps {
   onChange: (value: string) => void;
   placeholder?: string;
   clearAriaLabel?: string;
+  autoFocus?: boolean;
 }
 
-export default function SearchField({ value, onChange, placeholder, clearAriaLabel = "Clear" }: SearchFieldProps) {
+export default function SearchField({
+  value,
+  onChange,
+  placeholder,
+  clearAriaLabel = "Clear",
+  autoFocus = false,
+}: SearchFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -37,6 +44,7 @@ export default function SearchField({ value, onChange, placeholder, clearAriaLab
         className={styles.input}
         type="text"
         autoComplete="off"
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

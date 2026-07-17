@@ -24,7 +24,6 @@ import type {
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { sanitizeMcpConfigValuesForTemplate } from "./chatOptionsConfig.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
@@ -34,9 +33,17 @@ export type AgentFormPayload = {
   displayName: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
-  selectedMcpServerIds: string[] | null;
-  /** Per-server MCP config values: outer key = server id, inner key = config_fields[].key. */
-  mcpConfigValues: Record<string, Record<string, unknown>>;
+  /** Explicit list of active capability ids ([] = none active). */
+  selectedCapabilityIds: string[];
+  /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
+  capabilityConfigValues: Record<string, Record<string, unknown>>;
+  /**
+   * True when the chosen template advertises at least one capability. When false
+   * the caller omits capability fields from the request so a plain edit of a
+   * capability-less agent never triggers the backend's live-pod capability
+   * re-validation.
+   */
+  templateHasCapabilities: boolean;
 };
 
 type AgentFormModalProps = {
@@ -57,8 +64,8 @@ type FormState = {
   displayName: string;
   description: string;
   tuningValues: Record<string, unknown>;
-  selectedMcpServerIds: string[] | null;
-  mcpConfigValues: Record<string, Record<string, unknown>>;
+  selectedCapabilityIds: string[];
+  capabilityConfigValues: Record<string, Record<string, unknown>>;
 };
 
 function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
@@ -69,25 +76,48 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
 }
 
 /**
- * Builds the submit payload using the selected template contract so stale MCP
- * keys from previous UI versions cannot leak into create or edit requests.
+ * Builds the submit payload using the selected template contract so stale
+ * capability keys from previous UI versions cannot leak into create or edit
+ * requests.
  */
 export function buildAgentFormSubmitPayload(
   form: FormState,
   selectedTemplate: AgentTemplateSummary | undefined,
 ): AgentFormPayload {
-  const lockedIds = (selectedTemplate?.mcp_servers ?? []).filter((server) => server.locked).map((server) => server.id);
-  const effectiveSelection =
-    form.selectedMcpServerIds === null ? null : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
+  // Only active capabilities are advertised by the template; drop selections and
+  // config slices for ids the template no longer exposes, and for capabilities
+  // that are not currently ticked, so deselected config never reaches the pod.
+  const availableCapabilityIds = new Set((selectedTemplate?.available_capabilities ?? []).map((cap) => cap.id));
+  const effectiveCapabilityIds = form.selectedCapabilityIds.filter((id) => availableCapabilityIds.has(id));
+  const effectiveCapabilityConfig = Object.fromEntries(
+    Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
+  );
 
   return {
     templateId: form.templateId,
     displayName: form.displayName.trim(),
     description: form.description.trim(),
     tuningFieldValues: form.tuningValues,
-    selectedMcpServerIds: effectiveSelection,
-    mcpConfigValues: sanitizeMcpConfigValuesForTemplate(form.mcpConfigValues, selectedTemplate?.mcp_servers ?? []),
+    selectedCapabilityIds: effectiveCapabilityIds,
+    capabilityConfigValues: effectiveCapabilityConfig,
+    templateHasCapabilities: availableCapabilityIds.size > 0,
   };
+}
+
+/**
+ * Unwraps the persisted per-capability `{schema_version, config}` envelopes into
+ * the flat `{ [capabilityId]: config }` shape the edit form renders and mutates.
+ */
+export function extractCapabilityConfigValues(
+  storedConfig: ManagedAgentInstanceSummary["capability_config"],
+): Record<string, Record<string, unknown>> {
+  if (!storedConfig) return {};
+  return Object.fromEntries(
+    Object.entries(storedConfig).map(([id, envelope]) => [
+      id,
+      (envelope as { config?: Record<string, unknown> })?.config ?? {},
+    ]),
+  );
 }
 
 export default function AgentFormModal({
@@ -113,8 +143,8 @@ export default function AgentFormModal({
     displayName: "",
     description: "",
     tuningValues: {},
-    selectedMcpServerIds: [],
-    mcpConfigValues: {},
+    selectedCapabilityIds: [],
+    capabilityConfigValues: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("settings");
@@ -131,9 +161,10 @@ export default function AgentFormModal({
         displayName: editInstance.display_name,
         description: editInstance.description ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
-        // Preserve tri-state: null = inherit default, [] = none, [...] = exact subset.
-        selectedMcpServerIds: editInstance.selected_mcp_server_ids ?? null,
-        mcpConfigValues: (editInstance.mcp_config_values as Record<string, Record<string, unknown>>) ?? {},
+        selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
+        // capability_config stores the {schema_version, config} envelope per id;
+        // the form edits the inner `config` object only.
+        capabilityConfigValues: extractCapabilityConfigValues(editInstance.capability_config),
       });
       setStep(2);
     } else {
@@ -142,8 +173,8 @@ export default function AgentFormModal({
         displayName: "",
         description: "",
         tuningValues: {},
-        selectedMcpServerIds: [],
-        mcpConfigValues: {},
+        selectedCapabilityIds: [],
+        capabilityConfigValues: {},
       });
       setStep(1);
     }
@@ -162,8 +193,8 @@ export default function AgentFormModal({
       displayName: tpl?.display_name ?? "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       tuningValues: defaultTuningValues,
-      selectedMcpServerIds: [],
-      mcpConfigValues: {},
+      selectedCapabilityIds: [],
+      capabilityConfigValues: {},
     });
     setActiveSection("settings");
     setSubmitAttempted(false);
@@ -174,12 +205,12 @@ export default function AgentFormModal({
     setForm((prev) => ({ ...prev, tuningValues: { ...prev.tuningValues, [key]: value } }));
   };
 
-  const handleMcpConfigChange = (serverId: string, key: string, value: unknown) => {
+  const handleCapabilityConfigChange = (capabilityId: string, key: string, value: unknown) => {
     setForm((prev) => ({
       ...prev,
-      mcpConfigValues: {
-        ...prev.mcpConfigValues,
-        [serverId]: { ...prev.mcpConfigValues[serverId], [key]: value },
+      capabilityConfigValues: {
+        ...prev.capabilityConfigValues,
+        [capabilityId]: { ...prev.capabilityConfigValues[capabilityId], [key]: value },
       },
     }));
   };
@@ -266,8 +297,8 @@ export default function AgentFormModal({
               displayName={form.displayName}
               description={form.description}
               tuningFieldValues={form.tuningValues}
-              selectedMcpServerIds={form.selectedMcpServerIds}
-              mcpConfigValues={form.mcpConfigValues}
+              selectedCapabilityIds={form.selectedCapabilityIds}
+              capabilityConfigValues={form.capabilityConfigValues}
               isSubmitting={isSubmitting}
               submitAttempted={submitAttempted}
               activeSection={activeSection}
@@ -278,8 +309,8 @@ export default function AgentFormModal({
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
               onTuningChange={handleTuningChange}
-              onMcpSelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedMcpServerIds: ids }))}
-              onMcpConfigChange={handleMcpConfigChange}
+              onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
+              onCapabilityConfigChange={handleCapabilityConfigChange}
             />
           )}
         </div>

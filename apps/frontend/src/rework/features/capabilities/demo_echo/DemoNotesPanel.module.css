@@ -1,0 +1,62 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+}
+
+.resultRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+}
+
+.resultRow dt {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.resultRow dd {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}

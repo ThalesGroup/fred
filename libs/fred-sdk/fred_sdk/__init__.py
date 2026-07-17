@@ -34,6 +34,10 @@ Human-in-the-loop
 -----------------
     from fred_sdk import HumanInputRequest, HumanChoiceOption
 
+Capabilities (modular agent features)
+-------------------------------------
+    from fred_sdk import AgentCapability, CapabilityManifest, CapabilityContext
+
 MCP server references
 ---------------------
     from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_CORPUS
@@ -73,6 +77,22 @@ from fred_sdk.authoring.knowledge_flow_mcp import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     MCPServerRef,
+)
+from fred_sdk.contracts.capability import (
+    AgentCapability,
+    AssetSlot,
+    CapabilityContext,
+    CapabilityIdentity,
+    CapabilityManifest,
+    ChatControlSpec,
+    EmptyModel,
+    HitlGateRequest,
+    HitlSpec,
+    SaveContext,
+    SidePanelSpec,
+    TeamScopePolicy,
+    UploadedFile,
+    chat_part_kind,
 )
 from fred_sdk.contracts.context import (
     AgentInvocationResult,
@@ -236,6 +256,21 @@ __all__ = [
     "ToolRefRequirement",
     "TuningScalar",
     "TuningValue",
+    # Capability authoring (#1973, RFC AGENT-CAPABILITY-RFC.md §3)
+    "AgentCapability",
+    "AssetSlot",
+    "CapabilityContext",
+    "CapabilityIdentity",
+    "CapabilityManifest",
+    "ChatControlSpec",
+    "EmptyModel",
+    "HitlGateRequest",
+    "HitlSpec",
+    "SaveContext",
+    "SidePanelSpec",
+    "TeamScopePolicy",
+    "UploadedFile",
+    "chat_part_kind",
     # Evaluation contracts (POST /agents/evaluate)
     "EvalStep",
     "EvalTrace",

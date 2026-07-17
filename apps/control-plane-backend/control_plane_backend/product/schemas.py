@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fred_core.common import TeamId
+from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
+from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
-    ManagedMcpServerRef,
 )
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
@@ -152,34 +153,15 @@ class AgentTemplateSummary(BaseModel):
             "Empty when the template declares no tunable fields."
         ),
     )
-    mcp_servers: list[ManagedMcpServerRef] = Field(
+    available_capabilities: list[CapabilityCatalogEntry] = Field(
         default_factory=list,
         description=(
-            "MCP server references advertised by this template. "
-            "Empty when the template declares no MCP dependencies."
-        ),
-    )
-
-
-class EffectiveChatOptions(BaseModel):
-    """Resolved chat options derived from the managed instance configuration."""
-
-    attach_files: bool = False
-    libraries_selection: bool = False
-    documents_selection: bool = False
-    search_policy_selection: bool = False
-    default_search_policy: Literal["strict", "hybrid", "semantic"] = "hybrid"
-    rag_scope_selection: bool = False
-    default_search_rag_scope: Literal["corpus_only", "hybrid", "general_only"] = (
-        "hybrid"
-    )
-    bound_library_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "When non-null, the agent is configured to use exactly these library IDs. "
-            "The frontend must render the library picker as read-only and send exactly "
-            "this list in RuntimeContext.selected_document_libraries_ids. "
-            "Null means the user can freely select from all available libraries."
+            "Capabilities installed on this template's source pod (#1974/#1978, "
+            "RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest "
+            "advertisement. MCP servers surface here as ordinary capabilities "
+            "keyed by their plain catalog server id (#1988). Drives the one "
+            "Tools tab in agent creation; config_fields render through the "
+            "metadata-driven form."
         ),
     )
 
@@ -193,6 +175,17 @@ class ManagedAgentInstanceSummary(BaseModel):
     display_name: str
     description: str | None = None
     status: Literal["enabled", "disabled"]
+    suspension_reason: SuspensionReason | None = Field(
+        default=None,
+        description=(
+            "Platform-forced suspension reason (#1975, RFC §3.9), or null when "
+            "the instance is not suspended. Distinct from `status` (the "
+            "editor's enable/disable toggle): a suspended instance is hidden "
+            "from chat-only members and shows editors a warning with a locked "
+            "enable toggle. One of capability_unavailable / "
+            "capability_access_revoked / capability_config_invalid."
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
     created_by: str | None = None
@@ -203,21 +196,21 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised."
         ),
     )
-    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
-        default_factory=dict,
-        description=(
-            "Per-server MCP configuration values keyed first by server id and "
-            "then by ManagedAgentFieldSpec.key. Empty when no MCP options have "
-            "been customised."
-        ),
-    )
-    selected_mcp_server_ids: list[str] | None = Field(
+    selected_capability_ids: list[str] | None = Field(
         default=None,
         description=(
-            "Admin-chosen MCP server activation policy for this instance. "
-            "Null means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset."
+            "Capability activation policy for this instance (#1974). Null "
+            "means inherit the template default selection; [] means no "
+            "capabilities; a non-empty list means exactly that set."
+        ),
+    )
+    capability_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability stored config envelopes "
+            "({'schema_version', 'config'}) keyed by capability id, as "
+            "validated by the pod at save time. The edit form re-renders the "
+            "capability's config_fields from the inner 'config' object."
         ),
     )
     runtime_status: Literal["ok", "unavailable"] = Field(
@@ -232,14 +225,6 @@ class ManagedAgentInstanceSummary(BaseModel):
         description=(
             "Non-empty when stored MCP server IDs are absent from the live pod catalog. "
             "Admin must delete and recreate the instance to resolve."
-        ),
-    )
-    effective_chat_options: EffectiveChatOptions = Field(
-        default_factory=EffectiveChatOptions,
-        description=(
-            "Resolved chat affordances for this instance, computed from active MCP "
-            "server config_fields and tuning values. Tells the frontend which composer "
-            "controls to show without waiting for prepare-execution."
         ),
     )
 
@@ -296,12 +281,16 @@ class ExecutionPreparation(BaseModel):
     supports_streaming: bool = True
     supports_hitl: bool = True
     supports_ui_parts: bool = True
-    effective_chat_options: EffectiveChatOptions = Field(
-        default_factory=EffectiveChatOptions,
+    chat_controls: list[ChatControlDescriptor] = Field(
+        default_factory=list,
         description=(
-            "Resolved chat-option surface derived from the stored managed-agent "
-            "configuration. The frontend should render only the affordances "
-            "enabled here rather than hard-code agent- or tool-specific rules."
+            "Computed chat-time composer controls for this instance (CAPAB-01 "
+            "#1976, RFC §3.3/§3.7), evaluated per capability on the pod at "
+            "session prep and flattened in capability-registration then "
+            "returned-list order. Supersedes the retired `effective_chat_options`: "
+            "the composer resolves each `widget` id against the owning "
+            "capability's plugin registry (§9) and silently skips unknown ids. "
+            "Never persisted — a cache-aside projection of stored config."
         ),
     )
     runtime_display_name: str | None = None
@@ -312,6 +301,16 @@ class ExecutionPreparation(BaseModel):
             "Resolved text of the session's context prompt, if one is set. "
             "The runtime injects this as a conversation-level context. "
             "Null when no context prompt is configured for the session."
+        ),
+    )
+    capability_base_urls: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Ingress-relative base URL of each selected capability's auto-mounted "
+            "router, keyed by capability id (AGENT-CAPABILITY-RFC §9.1, #1979). "
+            "The instance-bound (in-session) counterpart of the template catalog's "
+            "route_base_url: the frontend calls these pod routes directly (no "
+            "proxy), with the same bearer it already uses for execution."
         ),
     )
 
@@ -507,23 +506,24 @@ class CreateAgentInstanceRequest(BaseModel):
             "declared field type and constraints."
         ),
     )
-    mcp_config_values: dict[str, dict[str, TuningValue]] | None = Field(
+    capability_ids: list[str] | None = Field(
         default=None,
         description=(
-            "Optional per-server MCP configuration values keyed first by "
-            "server id and then by ManagedAgentFieldSpec.key. Only selected "
-            "or inherited-active servers may be configured; unknown server ids "
-            "or option keys are rejected with HTTP 422."
+            "Optional capability activation policy (#1974). None means "
+            "inherit the template default selection; [] means activate no "
+            "capabilities; a non-empty list means activate exactly that set. "
+            "IDs not advertised by the template's source pod are rejected "
+            "with HTTP 422."
         ),
     )
-    mcp_server_ids: list[str] | None = Field(
+    capability_config_values: dict[str, dict[str, Any]] | None = Field(
         default=None,
         description=(
-            "Optional MCP server activation policy for this instance. "
-            "None means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset. Unknown IDs are rejected "
-            "with HTTP 422."
+            "Optional per-capability configuration values keyed by capability "
+            "id (the capability's config_fields values). Each selected "
+            "capability's slice is round-tripped to the source pod for "
+            "validation; the pod-returned stored envelope is persisted "
+            "verbatim. Values for unselected capabilities are ignored."
         ),
     )
 
@@ -548,23 +548,24 @@ class UpdateAgentInstanceRequest(BaseModel):
             "clear the stored agent tuning values."
         ),
     )
-    mcp_config_values: dict[str, dict[str, TuningValue]] | None = Field(
+    capability_ids: list[str] | None = Field(
         default=None,
         description=(
-            "Replaces the stored per-server MCP configuration values. Omit the "
-            "field to leave the current MCP config unchanged; pass null to "
-            "clear all stored MCP config for the instance."
+            "Replaces the capability activation policy (#1974). Omit to leave "
+            "the current selection unchanged; pass null to reset to the "
+            "template default; pass [] to deactivate all capabilities; pass a "
+            "non-empty list to activate exactly that set. IDs not advertised "
+            "by the source pod are rejected with HTTP 422."
         ),
     )
-    mcp_server_ids: list[str] | None = Field(
+    capability_config_values: dict[str, dict[str, Any]] | None = Field(
         default=None,
         description=(
-            "Replaces the MCP server activation policy for this instance. "
-            "Omit the field to leave the current selection unchanged; pass "
-            "null to reset to the template default selection (all declared "
-            "servers active); pass [] to activate no MCP servers; pass a "
-            "non-empty list to activate exactly that subset. Unknown IDs are "
-            "rejected with HTTP 422."
+            "Replaces the per-capability configuration values (keyed by "
+            "capability id). Omit to keep the stored configs; pass null to "
+            "reset every selected capability to its defaults. Each selected "
+            "capability's effective config is re-validated by the source pod "
+            "and the returned stored envelope is persisted verbatim."
         ),
     )
 
@@ -580,3 +581,8 @@ class ManagedAgentRuntimeBinding(BaseModel):
     owner_team_id: TeamId
     enabled: bool = True
     tuning: ManagedAgentTuning
+    # Per-team enablement settings resolved at session prep (CAPAB-01 / #1980,
+    # RFC §8.2), keyed by capability id and restricted to the instance's
+    # selected capabilities. The pod carries each slice to its capability as
+    # `CapabilityContext.team_settings` — it never enters an LLM tool signature.
+    team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 import styles from "./Tooltip.module.scss";
 
 interface TooltipProps {
@@ -21,10 +21,19 @@ interface TooltipProps {
 }
 
 export const Tooltip = ({ text, children }: TooltipProps) => {
+  const tooltipId = useId();
+  // Single-element children get aria-describedby wired to the tooltip text so
+  // screen readers announce it for both hover and keyboard focus (the CSS
+  // already reveals the tooltip on :focus-within) — without this, role="tooltip"
+  // alone isn't programmatically linked to the element it describes.
+  const child = isValidElement(children)
+    ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })
+    : children;
+
   return (
     <span className={styles["tooltip-wrapper"]}>
-      {children}
-      <span className={styles["tooltip-content"]} role="tooltip">
+      {child}
+      <span id={tooltipId} className={styles["tooltip-content"]} role="tooltip">
         {text}
       </span>
     </span>

@@ -13,11 +13,13 @@
 // limitations under the License.
 
 import { useCallback, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { v4 as uuidv4 } from "uuid";
 
+import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { AwaitingHumanEvent, ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
-import type { EffectiveChatOptions } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
@@ -26,6 +28,7 @@ import type {
   NodeErrorRuntimeEvent,
   RuntimeContext,
   RuntimeErrorEvent,
+  RuntimeExecuteRequest,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
   ThoughtEndEvent,
@@ -110,6 +113,7 @@ export function useChatSse(
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const dispatch = useDispatch();
 
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -127,12 +131,28 @@ export function useChatSse(
   >(new Map());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
-  const [effectiveChatOptions, setEffectiveChatOptions] = useState<EffectiveChatOptions | null>(null);
+  // Chat-turn controls (CAPAB-01 #1976, RFC §3.3/§3.7) — supersedes the retired
+  // `effectiveChatOptions`. Populated by prepare-execution; the composer
+  // resolves each descriptor's `widget` id against the chat-turn-control
+  // registry (plugin first, then the capability-agnostic stock kit).
+  const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
     setMessages(next);
   }, []);
+
+  // Applies a prepare-execution response's session-scoped side effects, shared
+  // by the eager open-time prep, every send(), and HITL resume.
+  const applyPreparation = useCallback(
+    (prep: ExecutionPreparation) => {
+      setChatControls(prep.chat_controls ?? []);
+      // #1979: publish the instance-bound capability route base URLs so each
+      // capability's generated RTK slice can reach its pod routes directly.
+      dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
+    },
+    [dispatch],
+  );
 
   const reset = useCallback(() => {
     console.debug("[useChatSse] reset() called — clearing all state");
@@ -141,7 +161,7 @@ export function useChatSse(
     setWaitResponse(false);
     thoughtBufsRef.current.clear();
     setAll([]);
-    setEffectiveChatOptions(null);
+    setChatControls([]);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 
@@ -413,7 +433,7 @@ export function useChatSse(
 
   const streamToMessages = useCallback(
     async (
-      body: object,
+      body: RuntimeExecuteRequest,
       executeStreamUrl: string,
       token: string,
       exchangeId: string,
@@ -456,7 +476,12 @@ export function useChatSse(
   );
 
   const send = useCallback(
-    async (input: string, sessionId: string | null, runtimeContext?: RuntimeContext) => {
+    async (
+      input: string,
+      sessionId: string | null,
+      runtimeContext?: RuntimeContext,
+      turnOptions?: RuntimeExecuteRequest["turn_options"],
+    ) => {
       const sendId = Math.random().toString(36).slice(2, 8);
       console.debug(
         `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} input="${input.slice(0, 40)}"`,
@@ -492,7 +517,7 @@ export function useChatSse(
       console.debug(
         `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
       );
-      setEffectiveChatOptions(prep.effective_chat_options ?? null);
+      applyPreparation(prep);
 
       // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
       // team carried in runtime_context (no signed grant). Always include team_id.
@@ -527,6 +552,7 @@ export function useChatSse(
             input,
             session_id: sessionId,
             runtime_context: effectiveContext,
+            ...(turnOptions ? { turn_options: turnOptions } : {}),
           },
           prep.execute_stream_url,
           token,
@@ -553,7 +579,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites],
+    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites, applyPreparation],
   );
 
   const sendHitlResume = useCallback(
@@ -566,7 +592,7 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
 
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
-      setEffectiveChatOptions(prep.effective_chat_options ?? null);
+      applyPreparation(prep);
 
       const sessionId = pending.session_id;
       const exchangeId = uuidv4();
@@ -609,13 +635,33 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError],
+    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation],
+  );
+
+  // Eager prep (RFC §3.7): call prepare-execution at chat open — not only
+  // inside send() — so `chatControls` are populated before the first message
+  // and the composer isn't empty until the user sends something. Safe to call
+  // with no session yet (sessionId omitted); the composer's own state
+  // (selected libraries/policy/scope) is unaffected until a real send happens.
+  const prepareChatControls = useCallback(
+    async (sessionId?: string | null) => {
+      const prep = await prepareExecution({
+        teamId,
+        agentInstanceId,
+        lang,
+        ...(sessionId ? { sessionId } : {}),
+      }).unwrap();
+      applyPreparation(prep);
+      return prep;
+    },
+    [teamId, agentInstanceId, lang, prepareExecution, applyPreparation],
   );
 
   return {
     messages,
     waitResponse,
-    effectiveChatOptions,
+    chatControls,
+    prepareChatControls,
     send,
     sendHitlResume,
     abort,

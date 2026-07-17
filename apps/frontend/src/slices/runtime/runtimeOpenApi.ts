@@ -15,6 +15,25 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    evaluateChatControlsPodV1AgentsCapabilitiesChatControlsPost: build.mutation<
+      EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse,
+      EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/chat-controls`,
+        method: "POST",
+        body: queryArg.chatControlsRequest,
+      }),
+    }),
+    validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
+      ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
+      ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/validate-config`,
+        method: "POST",
+      }),
+    }),
     listCheckpointThreadsPodV1AgentsCheckpointsGet: build.query<
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse,
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg
@@ -117,6 +136,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    analyzePodV1CapabilitiesDemoEchoAnalyzePost: build.mutation<
+      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse,
+      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/capabilities/demo_echo/analyze`,
+        method: "POST",
+        body: queryArg.demoAnalyzeRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -127,6 +156,16 @@ export type GetAuditEventsPodV1AgentsAuditEventsGetApiResponse =
   /** status 200 Successful Response */ AuditEventRecord[];
 export type GetAuditEventsPodV1AgentsAuditEventsGetApiArg = {
   limit?: number;
+};
+export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse =
+  /** status 200 Successful Response */ ChatControlsResponse;
+export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
+  chatControlsRequest: ChatControlsRequest;
+};
+export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
+  /** status 200 Successful Response */ StoredCapabilityConfig;
+export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
+  capabilityId: string;
 };
 export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadSummary[];
@@ -222,6 +261,11 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
 };
+export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse =
+  /** status 200 Successful Response */ DemoAnalyzeResponse;
+export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg = {
+  demoAnalyzeRequest: DemoAnalyzeRequest;
+};
 export type AuditEventRecord = {
   agent_id?: string | null;
   agent_instance_id?: string | null;
@@ -239,6 +283,34 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type ChatControlItem = {
+  params?: {
+    [key: string]: any;
+  } | null;
+  widget: string;
+};
+export type ChatControlsResult = {
+  capability_id: string;
+  controls?: ChatControlItem[];
+  error?: string | null;
+  manifest_version?: string;
+};
+export type ChatControlsResponse = {
+  results?: ChatControlsResult[];
+};
+export type StoredCapabilityConfig = {
+  config?: {
+    [key: string]: any;
+  };
+  schema_version: string;
+};
+export type ChatControlsRequestItem = {
+  capability_id: string;
+  config_envelope?: StoredCapabilityConfig | null;
+};
+export type ChatControlsRequest = {
+  items?: ChatControlsRequestItem[];
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -364,6 +436,12 @@ export type RuntimeExecuteRequest = {
   runtime_context?: RuntimeContext | null;
   /** Session identifier for multi-turn continuity. Keep stable across turns. */
   session_id?: string | null;
+  /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
+  turn_options?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
 };
 export type AssistantDeltaRuntimeEvent = {
   delta: string;
@@ -437,6 +515,11 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
+export type DemoCardPart = {
+  body?: string;
+  title: string;
+  type?: "demo_card";
+};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -471,6 +554,9 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "demo_card";
+      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -531,6 +617,9 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
+    | ({
+        type: "demo_card";
+      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -677,7 +766,12 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
-export type ClientAuthMode = "user_token" | "no_token";
+export type AssetSlot = {
+  accepted_types: string[];
+  key: string;
+  max_count?: number | null;
+  min_count?: number;
+};
 export type UiHints = {
   group?: string | null;
   hide?: boolean;
@@ -743,6 +837,24 @@ export type FieldSpec = {
     | "url";
   ui?: UiHints;
 };
+export type TeamScopePolicy = "default_on" | "admin_gated";
+export type CapabilityCatalogEntry = {
+  assets?: AssetSlot[];
+  config_fields?: FieldSpec[];
+  /** i18n key */
+  description: string;
+  /** Material Symbols name; see CapabilityManifest.icon */
+  icon: string;
+  id: string;
+  kind?: "tool" | "agent";
+  /** i18n key */
+  name: string;
+  route_base_url?: string | null;
+  team_scope?: TeamScopePolicy;
+  team_settings_fields?: FieldSpec[];
+  version: string;
+};
+export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
   agent_instructions?: string | null;
@@ -769,40 +881,25 @@ export type McpServerConfiguration = {
   provider?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
   sse_read_timeout?: number | null;
+  /** Team scoping of the capability this server becomes (#1988): admin_gated (default) requires a platform admin to enable the server per team; default_on makes it usable by every team. */
+  team_scope?: TeamScopePolicy;
   /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
   transport?: string | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
 };
-export type McpServerRef = {
-  id: string;
-  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
-  locked?: boolean;
-  require_tools?: string[];
-};
 export type AgentTuning = {
+  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated envelope returned by validate_config, persisted verbatim — opaque to control-plane, validated against the capability's StoredConfigModel at agent-assembly time (lazy upgrade_config on schema_version mismatch, RFC §3.9). */
+  capability_config?: {
+    [key: string]: StoredCapabilityConfig;
+  };
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
-  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
-  mcp_servers?: McpServerRef[];
   /** The agent's mandatory role for discovery. */
   role: string;
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
+  /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */
+  selected_capability_ids?: string[] | null;
   tags?: string[];
   /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
   values?: {
@@ -819,6 +916,7 @@ export type AgentTuning = {
 };
 export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type AgentTemplateSummary = {
+  available_capabilities?: CapabilityCatalogEntry[];
   available_mcp_servers?: McpServerConfiguration[];
   default_tuning: AgentTuning;
   description: string;
@@ -829,11 +927,21 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
+export type DemoAnalyzeResponse = {
+  length: number;
+  original: string;
+  transformed: string;
+};
+export type DemoAnalyzeRequest = {
+  text: string;
+};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
+  useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
+  useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useGetCheckpointStorageStatsPodV1AgentsCheckpointsStatsGetQuery,
@@ -855,4 +963,5 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
+  useAnalyzePodV1CapabilitiesDemoEchoAnalyzePostMutation,
 } = injectedRtkApi;

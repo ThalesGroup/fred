@@ -114,12 +114,39 @@
       "search": "Search options"
     }
   },
+  "capability": {
+    "demo_echo": {
+      "cardAria": "Demo capability card",
+      "panel": {
+        "demo_notes": {
+          "title": "Demo notes",
+          "hint": "Call the demo capability's own /analyze route directly.",
+          "textPlaceholder": "text",
+          "analyze": "Analyze",
+          "error": "Request failed",
+          "original": "original",
+          "transformed": "transformed",
+          "length": "length"
+        }
+      }
+    },
+    "document_access": {
+      "name": "Document access",
+      "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
+    }
+  },
   "chatbot": {
     "artifactLinks": {
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
       "downloadFailed": "Could not download {{name}}",
       "fallbackName": "Download"
+    },
+    "uiParts": {
+      "ariaLabel": "Agent cards",
+      "geoAria": "Map data",
+      "geoSummary_one": "Map data ({{count}} feature)",
+      "geoSummary_other": "Map data ({{count}} features)"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
@@ -130,6 +157,17 @@
       "processing": "Processing",
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
+    },
+    "debugRaw": {
+      "title": "Debug — raw messages",
+      "scopeAria": "Message scope",
+      "scope": {
+        "lastExchange": "Last exchange",
+        "all": "All"
+      },
+      "count": "{{count}} msg",
+      "copy": "Copy JSON",
+      "copied": "Copied"
     },
     "contextPrompts": {
       "ariaLabel": "Attached prompts",
@@ -467,7 +505,7 @@
       },
       "search_documents": {
         "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)",
-        "name": "Search in documents"
+        "name": "Document access"
       },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
@@ -718,10 +756,76 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "admin": {
+      "capabilities": {
+        "title": "Capabilities",
+        "subtitle": "Platform capability catalog: per-team enablement, platform defaults, and health.",
+        "loading": "Loading capabilities…",
+        "loadError": "Could not load the capability catalog.",
+        "empty": "No capabilities are advertised by any runtime pod yet.",
+        "manageTeams": "Manage teams",
+        "kindFilter": {
+          "tool": "Tools",
+          "agent": "Agents",
+          "aria": "Filter by capability kind"
+        },
+        "emptyAgents": "No agent templates are registered by any runtime pod yet.",
+        "col": {
+          "capability": "Capability",
+          "enabledTeams": "Enabled teams",
+          "defaultOn": "Enabled for all",
+          "health": "Health",
+          "actions": "Actions"
+        },
+        "enabledTeams": {
+          "all": "All ({{count}})",
+          "inheritedHint": "Enabled for all teams by default. Teams that opted out are already subtracted.",
+          "unknown": "Unknown",
+          "unknownHint": "Enabled for all teams by default, but the team directory is unavailable so the exact count cannot be resolved."
+        },
+        "health": {
+          "suspended": "{{count}} suspended",
+          "pending": "Live per-capability health arrives with the suspension sweep."
+        },
+        "defaultOnToast": "Default-on enabled platform-wide.",
+        "defaultOffToast": "Default-on disabled platform-wide.",
+        "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
+        "defaultToggleError": "Could not change the default-on setting.",
+        "defaultOffConfirm": {
+          "title": "Disable default-on?",
+          "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this capability.",
+          "confirm": "Disable",
+          "cancel": "Cancel"
+        },
+        "matrix": {
+          "title": "{{name}} — team access",
+          "subtitle": "Set each team's access: enable with settings, disable explicitly, or leave it on the platform default. Dimmed teams cannot use this capability right now.",
+          "searchPlaceholder": "Search teams...",
+          "clearSearch": "Clear search",
+          "searchEmpty": "No team matches your search.",
+          "enable": "Enable",
+          "disable": "Disable",
+          "cancel": "Cancel",
+          "saveEnable": "Save & enable",
+          "enabledToast": "Capability enabled for {{team}}.",
+          "enableError": "Could not enable the capability.",
+          "disabledToast": "Capability disabled for {{team}}.",
+          "disabledSuspendedToast": "Disabled for {{team}} — {{count}} instance(s) suspended.",
+          "disableError": "Could not disable the capability.",
+          "default": "Default",
+          "defaultToast": "{{team}} now follows the platform default.",
+          "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
+          "defaultError": "Could not reset the capability to the platform default.",
+          "rowControlAria": "Access for {{team}}"
+        }
+      }
+    },
     "agentCard": {
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "noDescription": "No description yet.",
-      "startChat": "New chat"
+      "startChat": "New chat",
+      "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
+      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it."
     },
     "analytics": {
       "activeUsers": {
@@ -879,7 +983,8 @@
       "brandRelease": "{{brand}} release",
       "copied": "Copied!",
       "copy": "Copy",
-      "empty": "No release notes available."
+      "empty": "No release notes available.",
+      "versionsAria": "Release versions"
     },
     "resources": {
       "workspaceTitle": "Files",
@@ -1001,6 +1106,7 @@
         },
         "menu": {
           "analytics": "Analytics",
+          "capabilities": "Capabilities",
           "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Activity",
@@ -1020,7 +1126,6 @@
         "title": "Marketplace"
       },
       "team": {
-        "avatarAlt": "Team {{teamName}}",
         "marketplace": "Marketplace",
         "menu": {
           "resources": "Resources"
@@ -1258,7 +1363,8 @@
         "loading": "Loading {{agentsNicknamePlural}}...",
         "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
         "podFilter": {
-          "all": "All"
+          "all": "All",
+          "aria": "Filter by pod"
         },
         "title": "Chat with your {{agentsNicknamePlural}}"
       },
@@ -1284,6 +1390,20 @@
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
+        },
+        "sections": {
+          "aria": "Form sections",
+          "chat": "Chat",
+          "prompts": "Prompts",
+          "settings": "Settings",
+          "tools": "Tools"
+        },
+        "selectPlaceholder": "Select an option",
+        "suspended": {
+          "title": "This agent is suspended.",
+          "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
+          "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
+          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
         },
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
@@ -1320,7 +1440,9 @@
         "english": "English",
         "french": "French",
         "light": "Light",
-        "system": "System"
+        "system": "System",
+        "themeAria": "Theme",
+        "languageAria": "Language"
       },
       "conversationProfile": {
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",

@@ -43,7 +43,17 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
-from typing import ClassVar, Dict, List, Literal, Optional, Protocol, TypeAlias, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Protocol,
+    TypeAlias,
+    Union,
+)
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
@@ -114,6 +124,18 @@ class ClientAuthMode(str, Enum):
     NO_TOKEN = "no_token"  # nosec B105
 
 
+class TeamScopePolicy(str, Enum):
+    """How a capability becomes usable by a team (RFC §7, §8.3).
+
+    Lives here (not in `capability.manifest`) so `MCPServerConfiguration` can
+    declare a per-server `team_scope` without an import cycle; re-exported from
+    `capability.manifest` for its original import path.
+    """
+
+    DEFAULT_ON = "default_on"
+    ADMIN_GATED = "admin_gated"
+
+
 class MCPServerConfiguration(BaseModel):
     """Configuration for an MCP server."""
 
@@ -171,6 +193,14 @@ class MCPServerConfiguration(BaseModel):
             "Values flow into RuntimeContext as tuning field values at execution time."
         ),
     )
+    team_scope: TeamScopePolicy = Field(
+        TeamScopePolicy.ADMIN_GATED,
+        description=(
+            "Team scoping of the capability this server becomes (#1988): "
+            "admin_gated (default) requires a platform admin to enable the "
+            "server per team; default_on makes it usable by every team."
+        ),
+    )
 
 
 class MCPServerRef(BaseModel):
@@ -205,6 +235,24 @@ class MCPServerRef(BaseModel):
     )
 
 
+class StoredCapabilityConfig(BaseModel):
+    """
+    One persisted capability-config slice (RFC AGENT-CAPABILITY §3.8, §3.9).
+
+    Why this model exists:
+    - a capability instance's config is stored as the envelope
+      `{"schema_version": manifest.version, "config": {...}}`; the pod's
+      `validate_config` produces it and it is persisted verbatim — opaque to
+      control-plane, schema-owned by the pod
+    - `schema_version` is what lets agent assembly run the capability's lazy
+      `upgrade_config` hook when the stored shape predates the installed
+      capability version — never a mass row migration
+    """
+
+    schema_version: str = Field(min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentTuning(BaseModel):
     """Runtime-editable tuning surface for one agent."""
 
@@ -214,23 +262,29 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    mcp_servers: list[MCPServerRef] = Field(default_factory=list)
-    selected_mcp_server_ids: list[str] | None = Field(
+    # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
+    # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
+    # is now an `mcp:<server>` capability. Its activation is an entry in
+    # `selected_capability_ids` and its per-server config is an ordinary
+    # `capability_config` slice — one mechanism, not two.
+    selected_capability_ids: list[str] | None = Field(
         default=None,
         description=(
-            "Admin-chosen MCP server activation policy. "
-            "None means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset."
+            "Capability activation policy (RFC AGENT-CAPABILITY §3.8). "
+            "None means inherit the template default selection; [] means "
+            "activate no capabilities; a non-empty list means activate exactly "
+            "that set. Validated at save time against the capabilities the "
+            "instance's bound pod advertises."
         ),
     )
-    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
+    capability_config: dict[str, StoredCapabilityConfig] = Field(
         default_factory=dict,
         description=(
-            "Per-server MCP configuration values keyed first by server id and "
-            "then by FieldSpec.key. This stays distinct from generic agent "
-            "tuning so tool-owned options do not masquerade as prompts or "
-            "runtime settings."
+            "Per-capability stored config keyed by capability id. Each slice "
+            "is the pod-validated envelope returned by validate_config, "
+            "persisted verbatim — opaque to control-plane, validated against "
+            "the capability's StoredConfigModel at agent-assembly time (lazy "
+            "upgrade_config on schema_version mismatch, RFC §3.9)."
         ),
     )
     values: dict[str, TuningValue] = Field(

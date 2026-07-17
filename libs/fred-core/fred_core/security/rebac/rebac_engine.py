@@ -56,6 +56,16 @@ class RelationType(str, Enum):
     VIEWER = "viewer"
     PARENT = "parent"
     ORGANIZATION = "organization"
+    # Reverse index of team.organization (`organization:fred#team@team:<id>`).
+    # Never persisted — injected as a contextual tuple for team-subject checks
+    # (capability#can_use), since every team belongs to the singleton org.
+    TEAM = "team"
+
+    # Capability team-scoping structural relations (CAPAB-01 / #1980,
+    # RFC AGENT-CAPABILITY §8.1). Written only by the enablement API.
+    DEFAULT_ON = "default_on"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
     PUBLIC = "public"
 
     # AUTHZ-05 target platform roles (RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1).
@@ -211,6 +221,26 @@ class OrganizationPermission(str, Enum):
     IS_PLATFORM_OBSERVER = "platform_observer"
 
 
+class CapabilityPermission(str, Enum):
+    """Actions allowed on one agent capability (CAPAB-01 / #1980, RFC §8.1).
+
+    The target is always ``capability:<id>``. Callers check only these computed
+    permissions — never the structural relations (`enabled`/`disabled`/
+    `default_on`/`organization`), which are written solely by the enablement API.
+
+    - `CAN_USE`: may agents of one team select this capability? The check
+      SUBJECT IS THE TEAM (`Check(team:<id>, can_use, capability:<id>)`), never
+      a user — a user-subject check would leak a capability enabled for one of
+      the user's teams into every team context they browse. Answers the
+      tri-state (inherited via default-on / explicitly enabled / disabled).
+    - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
+      default-on marker? Org admin only.
+    """
+
+    CAN_USE = "can_use"
+    CAN_MANAGE = "can_manage"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
@@ -218,6 +248,7 @@ RebacPermission = (
     | TeamPermission
     | AgentPermission
     | OrganizationPermission
+    | CapabilityPermission
 )
 
 
@@ -240,6 +271,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.AGENT
     if isinstance(permission, OrganizationPermission):
         return Resource.ORGANIZATION
+    if isinstance(permission, CapabilityPermission):
+        return Resource.CAPABILITY
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 

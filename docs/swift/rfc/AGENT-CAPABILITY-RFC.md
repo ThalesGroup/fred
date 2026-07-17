@@ -121,7 +121,7 @@ A capability is one backend package + one frontend folder + one registration lin
 
 ```python
 class CapabilityManifest(BaseModel):
-    id: str                              # "ppt_filler", "document_access", "mcp:<server>"
+    id: str                              # "ppt_filler", "document_access", "mcp-bank-core-demo" (catalog server id, no prefix — #1988)
     version: str                         # bumped per release — cache key for computed surfaces (§3.7)
     name: str                            # i18n key
     description: str                     # i18n key
@@ -138,6 +138,17 @@ class CapabilityManifest(BaseModel):
 
     team_scope: TeamScopePolicy          # §7 — default_on | admin_gated (ReBAC)
 ```
+
+> **As implemented (2026-07-10, #1973 — `fred_sdk/contracts/capability/`).**
+> `config_fields` uses the SDK-owned `FieldSpec` (`fred_sdk.contracts.models`),
+> not control-plane's local `ManagedAgentFieldSpec` copy. `router` and `tables`
+> are typed `Any` — fred-sdk depends on neither fastapi nor sqlalchemy. One
+> added field: `state_models: list[type[BaseModel]]`, the per-capability
+> typed-state opt-in for the checkpointer msgpack allowlist (§5.2 spike rule);
+> the registry composes the entries into
+> `FredSqlCheckpointer(extra_msgpack_allowlist=...)`. The §3.5 `identity`
+> parameter is the model `CapabilityIdentity` (user/session/team/agent-instance
+> ids).
 
 ### 3.2 The capability class
 
@@ -363,6 +374,37 @@ Flow: **agent save** → pod `validate_config` → stored config persisted (§3.
 **session prep** → pod `chat_controls(config)` (version-keyed cache) →
 `ExecutionPreparation` → composer resolves widget ids (§9).
 
+> **As implemented (2026-07-11, #1976).** `AgentCapability.chat_controls(config)
+> -> list[ChatControlSpec]` (default `[]`) is evaluated on the pod by
+> `POST /agents/capabilities/chat-controls` (`evaluate_chat_controls_batch`,
+> same bearer as `/agents/*`), which returns one `ChatControlsResult` per
+> requested capability — its installed `manifest_version`, the JSON-safe
+> `ChatControlItem`s in returned-list order, or a per-entry `error` (an
+> uninstalled capability or an unresolvable stored slice, RFC §3.9, is skipped,
+> never a failed batch). Control-plane `_resolve_chat_controls` (in
+> `product/service.py`) resolves the instance's selected capabilities in the
+> pod-advertised catalog (registration) order, serves the in-process LRU keyed
+> `(capability_id, manifest.version, config_hash)`, batch-evaluates only the
+> misses, and — guarding a mid-deploy version skew (`key.version ==
+> result.manifest_version`) — caches nothing derived. The flattened
+> `ChatControlDescriptor`s (each tagged with `capability_id`) ship on
+> `ExecutionPreparation.chat_controls`, the slot the retired
+> `EffectiveChatOptions` occupied. **Retirement:** `EffectiveChatOptions`, the
+> control-plane `_resolve_effective_chat_options` resolver, and the
+> `chat_options.*` control-plane reader are removed; the projection now lives in
+> `McpCapability.chat_controls` (§3.3), which emits the stock widgets
+> `attach_files` / `document_scope` (carrying `bound_library_ids` as params) /
+> `search_policy` / `rag_scope` — restoring visibility/defaults/bound-ids
+> without rebuilding the bespoke interlocking UX #1978 dropped (the chosen
+> search values still travel on `RuntimeContext` Group C, not `turn_options`).
+> The `ManagedAgentInstanceSummary` chat-affordance hint is **dropped** (not
+> re-added as controls): chat controls are a session-prep projection, so the
+> composer fetches them via an eager prepare-execution at chat open, not off the
+> admin listing. `turn_options: dict[str, dict]` on the execute request is
+> validated at turn start by `validate_turn_options` against each capability's
+> `TurnOptionsModel` (unknown/unselected id or invalid slice → typed 422 before
+> streaming); each capability's middleware receives only its own typed slice.
+
 ### 3.8 Persistence — where a capability instance lives
 
 A **capability instance** — capability X enabled on agent instance Y with parameters Z — is
@@ -381,8 +423,9 @@ class ManagedAgentTuning(BaseModel):
     capability_config: dict[str, dict]          # capability_id -> {"schema_version": manifest.version,
                                               #   "config": StoredConfigModel dump} — opaque to control-plane (§3.9)
     # REMOVED (Tier 1): mcp_servers, selected_mcp_server_ids, mcp_config_values
-    #   — an MCP server is an `mcp:<server>` capability; its selection and per-server
-    #     config become ordinary capability slices. One mechanism, not two.
+    #   — an MCP server IS a capability, id == the catalog server id (no prefix,
+    #     #1988); its selection and per-server config become ordinary capability
+    #     slices. One mechanism, not two.
 ```
 
 Design points:
@@ -431,6 +474,90 @@ Design points:
   returned keys into the stored config (one per uploaded file, grouped by slot), and
   the upload bytes are discarded (§3.4).
 
+> **As implemented (2026-07-11, #1978 — `fred_runtime/capabilities/mcp.py`,
+> `fred_runtime/app/agent_app.py`, `control_plane_backend/product/service.py`,
+> alembic `f5b6c7d8e9a0`).** The MCP trio is retired. An MCP server is an
+> `mcp:<catalog id>` capability: `build_mcp_capability(server)` builds one
+> `McpCapability` per **enabled** `mcp_catalog.yaml` entry, registered at pod
+> boot by `boot_capability_registry(mcp_servers=...)` alongside entry-point
+> discovery, so a catalog id colliding with an installed capability still fails
+> boot loudly. The `mcp:<server>` id contract lives in
+> `fred_sdk.contracts.capability.mcp_ids` (shared by runtime + control-plane).
+> **Contained Tier-1 shape (execution loop untouched):** an `McpCapability`
+> contributes ONLY a prompt-fragment middleware carrying the catalog server's
+> `agent_instructions` (delivered through `awrap_model_call`, replacing the
+> `_apply_runtime_tuning` system-prompt append). Live MCP tool loading stays in
+> `FredMcpToolProvider`, now driven by `_PodAgentSettings.active_mcp_servers`
+> (not `AgentTuning.mcp_servers`), which agent assembly derives from the
+> selected `mcp:<id>` capabilities. **The `None` fix pinned by tests:** the
+> migration MATERIALIZES every MCP-bearing row's `selected_capability_ids` to an
+> exact set (never `None`, because `selected_mcp_server_ids=None` meant "all",
+> whereas `selected_capability_ids=None` means "none"), and the runtime maps a
+> `None` selection to `definition.default_mcp_servers` — that pair is what makes
+> "behaves identically after upgrade" true, and it also covers the direct /
+> inline-tuning execution paths (which synthesize a template-default tuning so
+> their grounding instructions survive). Per-server config moved from
+> `mcp_config_values[id]` to `capability_config["mcp:<id>"]`; it has no runtime
+> consumer, so the only reader is control-plane `_resolve_effective_chat_options`,
+> re-pointed to the `mcp:<id>` slices with declared defaults fetched from the
+> pod-advertised `CapabilityCatalogEntry.config_fields`. **Deviation:** the
+> catalog-default fallback there depends on the pod being reachable at read time;
+> the durable move of chat-option resolution to computed `chat_controls` (§3.3)
+> stays with the chat-controls sibling ticket.
+
+> **As implemented (2026-07-15, #1988 — amends #1978/#1980; supersedes the
+> `mcp:<id>` prefix everywhere it appears above and below).** Control-plane
+> startup crashed seeding capability defaults: MCP-derived capabilities carried
+> hardcoded `team_scope=DEFAULT_ON`, so the seeder wrote FGA tuples for them, but
+> `mcp:<server>` contains `:`, which OpenFGA rejects in object ids (HTTP 400).
+> Root cause was architectural, not a formatting bug: MCP capabilities had been
+> carved OUT of the FGA capability type, leaving fragile `is_mcp_capability_id`
+> skips scattered across every FGA path — the seeder simply missed its skip.
+> **Fix: MCP servers become first-class team-gated capabilities, not a
+> special-cased id shape.**
+> - **No more prefix.** Capability id == the MCP catalog server id verbatim
+>   (e.g. `mcp-bank-core-demo`). `fred_sdk.contracts.capability.mcp_ids` and all
+>   its helpers (`is_mcp_capability_id` included) are retired. `CapabilityManifest.id`
+>   now enforces `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe) so a bad
+>   id fails pod boot (still via `DuplicateCapabilityIdError` on collision with an
+>   installed capability id) instead of crashing control-plane tuple writes later.
+> - **`MCPServerConfiguration` gains `team_scope: default_on | admin_gated`**
+>   (default `admin_gated` — deployments must opt a server into `default_on`;
+>   this deliberately breaks the old "every MCP server usable by every team"
+>   retro-compat default). `TeamScopePolicy` moved to `fred_sdk.contracts.models`,
+>   re-exported from `capability/manifest.py`.
+> - **FGA now gates MCP capabilities exactly like any other**: `can_use` at
+>   agent save, catalog filtering, `default_on` seeding, admin per-team
+>   enable/disable, and disable → dependent-instance suspension
+>   (`CAPABILITY_ACCESS_REVOKED`) all apply uniformly. §8.1's "MCP capabilities
+>   are out of the FGA type's scope and never filtered" (below) no longer holds.
+> - **Nuance kept:** a catalog server *disabled* in the pod yaml stays
+>   warning-only (never availability-suspension — the live tool provider skips
+>   it at assembly); MCP-ness is now detected via the pod's MCP catalog fetch
+>   (control-plane) / registry membership (runtime), never by id sniffing. A
+>   server *removed* from the yaml now suspends dependents like any vanished
+>   capability — this reverses §3.9/#1975's "MCP selections never suspend"
+>   (below), which was itself downstream of the carve-out this issue fixes.
+> - **Data migration:** a follow-up alembic migration rewrites persisted
+>   `mcp:X` ids to `X` in agent-instance tuning (`selected_capability_ids` and
+>   `capability_config` keys).
+
+> **As implemented (2026-07-11, #1906 — `fred_runtime/capabilities/document_access/`,
+> `fred_sdk/contracts/runtime.py`, `fred_runtime/integrations/v2_runtime/adapters.py`,
+> `fred_runtime/app/agent_app.py`).** The #1906 pilot introduces the platform-service
+> seam capabilities use: **capabilities reach platform services only through typed
+> optional ports on `RuntimeServices`; the per-turn binding and the raw access token
+> never enter `CapabilityContext`.** `DocumentSearchPort` (a new optional, additive
+> field on the frozen `RuntimeServices` — RUNTIME-EXECUTION-CONTRACT §8.15) takes scope
+> PARAMETERS only; `DocumentSearchAdapter` captures the binding + token privately and
+> exposes only `search(...)`, wired in `_build_runtime_services` and reaching the
+> capability as `ctx.services.document_search`. Rejected alternatives: (a) passing the
+> binding into `CapabilityContext` (token-leak / security regression); (b)
+> `services.tool_invoker` with `tool_ref="knowledge.search"` (cannot express
+> per-capability config scoping — reads scope from `runtime_context`, not the payload).
+> Full as-implemented notes (scoping precedence, deferred tools, duplicate-tool story,
+> rename) are in §10.1.
+
 ### 3.9 Instance lifecycle — suspension and config upgrades (resolved 2026-07-09)
 
 Save-time validation (§3.8) covers saves, which are rare; pods deploy far more often.
@@ -478,6 +605,118 @@ raises → `suspended(capability_config_invalid)` ("parameters for capability X 
 longer valid — reset them and re-save the agent"). The convention keeping this rare:
 `StoredConfigModel` changes should be additive with defaults.
 
+> **As implemented (2026-07-11, #1974 — selection end-to-end across
+> `fred_sdk`, `fred_runtime/capabilities/` + `app/agent_app.py`,
+> `control_plane_backend/product/`, and `apps/frontend` TeamAgentsPage).**
+> The Tier 0 selection path is live end-to-end (create/edit → save-time
+> validation → assembly → execution) with these decisions, some deviating from
+> the prose above:
+> - **Wire models live once in fred-sdk** and are imported by both the pod and
+>   control-plane: `StoredCapabilityConfig` (the `{schema_version, config}`
+>   envelope) and `CapabilityCatalogEntry` (the JSON-safe manifest projection).
+>   No parallel type is declared in either backend or in the frontend (the
+>   frontend consumes the generated `CapabilityCatalogEntry`/`FieldSpec` types).
+> - **Catalog is advertised per template, not via a new endpoint.**
+>   `GET /agents/templates` gained `available_capabilities: list[CapabilityCatalogEntry]`
+>   (pod-scoped, mirrored per template like `available_mcp_servers`);
+>   control-plane aggregates it into `AgentTemplateSummary.available_capabilities`.
+>   No second catalog fetch on either the control-plane or the frontend.
+> - **`selected_capability_ids = None` currently means "no capabilities"**, not a
+>   non-empty template default: templates do not yet declare default capability
+>   sets, so `None`/`[]` are behaviourally equivalent today. The tri-state field
+>   is kept for forward-compatibility; the frontend always submits an explicit
+>   list, and omits the capability fields entirely for capability-less templates
+>   so a plain edit never triggers the live-pod re-validation.
+> - **"Typed 422" is the existing convention, not a structured field-error
+>   envelope.** Unknown-id and config-invalid failures surface as
+>   `EnrollmentError(..., http_status=422)` / `HTTPException(422, detail=...)`
+>   with the pod's plain-language wording propagated verbatim; no per-field error
+>   envelope exists anywhere in the stack, so none was introduced. Pod-unreachable
+>   on a capability write is a `503`; a malformed pod envelope is a `502`.
+> - **Asset-slot enforcement lives pod-side** in generic platform code
+>   (`enforce_asset_slots`, runs before capability code) with uniform 422 wording;
+>   control-plane propagates that wording. **Control-plane upload forwarding**
+>   (multipart agent save for asset-bearing capabilities) **is deferred to the
+>   first asset-bearing capability port (#1903 PPT filler)** — the pod-side
+>   `POST /agents/capabilities/{id}/validate-config` path is in place and
+>   test-covered; only the control-plane→pod multipart relay is pending.
+> - **Execution is ReAct-only.** A graph agent definition that carries a capability
+>   selection fails loudly with `CapabilityError` (§5.4 / §3.9 "never silently
+>   degrade"); typed contexts + the `HitlSpec` gate reach the tool loop through the
+>   #1973 middleware frame.
+
+> **As implemented (2026-07-11, #1975 — suspension lifecycle in
+> `control_plane_backend/agent_instances/suspension.py`, `product/service.py`,
+> the `agent_instance.suspension_reason` column, and `apps/frontend` AgentCard).**
+> The three-reason suspension state is live; decisions and deviations from the
+> prose above:
+> - **Storage is one nullable column, not a state machine.**
+>   `agent_instance.suspension_reason` (`VARCHAR(64)`, migration
+>   `a6b7c8d9e0f1`): `NULL` = not suspended; else a `SuspensionReason` value
+>   (`capability_unavailable` / `capability_access_revoked` /
+>   `capability_config_invalid`). It is orthogonal to the editor's `enabled`
+>   toggle — a dedicated `AgentInstanceStore.set_suspension(...)` writes it and
+>   deliberately does NOT bump `updated_at` (a platform sweep must not look like
+>   a user edit). Exposed read-only on `ManagedAgentInstanceSummary`.
+> - **Suspension is a pure control-plane product decision — not a checkpointer
+>   concern (per the #1971 spike).** The spike proved LangGraph surfaces no
+>   assembly/run-time signal and that capability state survives a capability-less
+>   turn through `FredSqlCheckpointer` (a missing-channel mismatch is silent, and
+>   state survives reinstall). Suspension therefore lives entirely in the
+>   control-plane: nothing is written to or read from the checkpointer, so a
+>   suspended-then-cleared instance resumes its existing thread unchanged.
+> - **Detection is proactive-first via a sweep, with the pod's typed 422 as the
+>   assembly-time verdict.** `run_capability_reconciliation_sweep(deps)` walks
+>   every instance and, per instance, runs availability
+>   (`reconcile_instance_suspension` — a selected non-MCP capability absent from
+>   the pod's advertised catalog → `capability_unavailable`) then config health
+>   (`reconcile_instance_config_health` — each active stored slice round-trips
+>   the pod's `validate-config`; a 422 → `SliceInvalid` → `capability_config_invalid`,
+>   which is exactly the typed error the pod raises at assembly, incl. a failing
+>   `upgrade_config`). A pod unreachable during the sweep skips its instances
+>   (never suspend on a transient outage). The sweep is intended to run on the
+>   `control-plane-lifecycle` Temporal queue on manifest change; wiring the
+>   Temporal activity is left to the lifecycle-worker slice — the callable is the
+>   contract.
+> - **MCP selections never suspend.** `mcp:<id>` selections are tolerated at
+>   assembly (the live tool provider skips unknown/disabled servers), so a missing
+>   MCP server is a catalog warning, mirroring the runtime's
+>   `_build_capability_block` — only real capabilities are loud. **Superseded by
+>   #1988** (§3.8 note): a server *removed* from the catalog now suspends
+>   dependents like any other capability; only a server *disabled* in the pod
+>   yaml stays warning-only.
+> - **One clearing mechanism: a successful save.** `update_agent_instance` clears
+>   any suspension after the save re-validated every active slice through the pod
+>   (untick-and-re-save is the fix path for all three reasons). An availability
+>   reconcile may additionally clear an availability suspension when the
+>   capability returns, but `capability_config_invalid` is cleared ONLY by a save
+>   — no second mechanism (RFC §3.9).
+> - **Enforcement: `prepare_execution` refuses a suspended instance with a typed
+>   409** before issuing any runtime URL — a broken agent fails loudly rather than
+>   degrading. Observability: a structured `[capability-suspension]` log + a
+>   `agent.suspended_total` / `agent.suspension_cleared_total` KPI counter
+>   (dims: team, instance, reason) per transition.
+> - **#1980 suspension-trigger entry-point contract (for ReBAC access-revocation,
+>   sequenced after #1975).** #1980 exposes no new mechanism: on enablement-tuple
+>   deletion it recomputes the capability ids the team may still use and calls
+>   the entry point #1975 exposes —
+>   `reconcile_instance_suspension(instance, store, available_capability_ids=<remaining>,
+>   revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED, kpi_writer=...)`
+>   (in `agent_instances/suspension.py`). #1975 performs NO ReBAC check itself; it
+>   only exposes this trigger. The `revoked_reason` default
+>   (`CAPABILITY_UNAVAILABLE`) is what the manifest-change sweep passes.
+> - **Frontend (TeamAgentsPage + AgentFormModal).** A suspended instance is
+>   hidden from chat-only members (`TeamAgentsPage` filters on `can_update_agents`)
+>   and shown to editors/owners with an error-token warning banner and a **locked**
+>   enable toggle (`AgentCard`); it never gets a chat `<Link>` even if its stored
+>   status is still `enabled`. The edit form (`AgentFormBody`) renders a
+>   plain-language error banner keyed off the reason with both fix paths — for the
+>   availability reasons it names the offending capability ids (derived: selected
+>   non-MCP ids the template no longer advertises), for `capability_config_invalid`
+>   it shows the generic "reset the parameters and re-save" wording (the pod's
+>   422 text is not carried on the instance summary). Untick/reset + save clears
+>   the suspension via the existing save path — no new frontend mechanism.
+
 ---
 
 ## 4. Registration collapses the scatter
@@ -502,6 +741,47 @@ The frontend mirror is one plugin object per capability (§8), registered in one
 Backend registration is one line — or zero: a capability package may declare a
 `fred.capabilities` Python entry point and be auto-discovered at pod startup (§7), so for
 an externally-authored package, *installing it is the registration*.
+
+> **As implemented (2026-07-10, #1973 — `fred_runtime/capabilities/`).**
+> `CapabilityRegistry` + `boot_capability_registry()` (called from the
+> `create_agent_app` lifespan) land the discovery and the four named boot
+> failures: `DuplicateCapabilityIdError`, `DuplicateChatPartKindError` (also
+> guards the builtin `link`/`geo` kinds), `MissingRequiredEnvError`,
+> `DefaultOnRequiredSettingsError`. Router mounting, table/alembic
+> registration, catalog publication, and the ReBAC scope are later slices
+> (#1974+) — the manifest already declares them.
+
+> **As implemented (2026-07-11, #1977 — chat parts land on the `UiPart` union).**
+> Five decisions that deviate from or refine the above:
+> 1. **Boot moved lifespan → app construction.** `boot_capability_registry()` now
+>    runs inside `create_agent_app` construction, before routes capture their
+>    response schemas. This is what makes the *offline* OpenAPI export
+>    (`scripts/generate_openapi.py`, which never runs the lifespan) include
+>    capability chat parts with zero hand edits. Failure is still "pod startup
+>    aborts"; `app.state.capability_registry` is set at construction, so any
+>    lifespan/route code that reads it (e.g. #1974's endpoints) still works.
+> 2. **Union rebuild mechanism** (`fred_sdk/contracts/ui_part_union.py`):
+>    `rebuild_ui_part_union(extra)` = base (`link`, `geo`) + extras, rebuilt from
+>    scratch every time (never cumulative; `rebuild_ui_part_union(())` restores the
+>    frozen contract). It swaps the `UiPart` alias in every importing module's
+>    globals **and** rewrites resolved `FieldInfo.annotation` objects before a
+>    topo-sorted `model_rebuild(force=True)` — `model_rebuild` alone does *not*
+>    pick up a swapped module global (pydantic 2.13 resolves annotations at class
+>    creation; verified empirically). Validators resolve the union lazily via
+>    `current_ui_part_union()` identity as a cache key.
+> 3. **`geo` got a builtin summary-chip renderer.** The RFC assumed `geo` already
+>    rendered; it did not (it was silently dropped). A builtin renderer was added
+>    alongside `link` so the registry dispatch is uniform across builtin and
+>    capability parts.
+> 4. **Frontend plugin index** (`src/rework/features/capabilities/index.ts`) ships
+>    with `partRenderers` strongly typed and the other three slots
+>    (configWidgets / chatTurnControls / sidePanels) typed loosely, to be tightened
+>    by their host slices in #1974+. Unknown part kinds are skip-at-render,
+>    retain-in-data; a duplicate renderer kind is first-wins + `console.warn`
+>    (the backend boot failure is the real guard).
+> 5. **Emission pattern** is a documented `cast(UiPart, ...)`: the static alias is
+>    the frozen base union, the runtime union is the extended one, so a capability
+>    emitting its own part casts through the base type deliberately.
 
 ---
 
@@ -595,6 +875,28 @@ rule "capability state is JSON-primitive, or registration extends the allowlist"
 mismatch case (checkpoint carries a channel from a capability no longer installed) also
 gets probed — its behavior feeds §3.9.
 
+> **Spike result (2026-07-10, #1971 —
+> `libs/fred-runtime/tests/test_spike_capability_state_1971.py`).** Validated on
+> SQLite and live Postgres, langgraph 1.2.5 / langgraph-checkpoint 4.1.1. The rule
+> holds as expected: **capability state is JSON-primitive, or registration extends
+> the msgpack allowlist.** Observations: (1) JSON-primitive channels round-trip
+> intact through rebuild, `interrupt()` and resume; reducers keep accumulating from
+> SQL-loaded state. (2) Pydantic channel values come back **degraded to a plain
+> dict** (raw constructor payload) with a logged
+> `Blocked deserialization of <module>.<name>` warning — no exception; the same
+> stored bytes are restored to the typed instance by
+> `serde.with_msgpack_allowlist([Model])`, so capability registration extending the
+> allowlist is a viable per-capability opt-in. (3) Mismatch: orphaned channels are
+> **silently hidden** at graph level (`aget_state` omits them, turns succeed with no
+> error) while the raw checkpoint keeps carrying their versions forward, so
+> reinstalling the capability **recovers the state**. Consequence for §3.9: LangGraph
+> provides *no* signal at assembly or run time — suspension detection must be Fred's
+> own (assembly-time manifest check), and because state survives a capability-less
+> turn, suspension is a product decision (silent degradation is the failure §3.9
+> forbids), not a technical necessity. Default SDK rule: capability `state_schema`
+> channels are JSON-primitive; allowlist extension at registration is the escape
+> hatch for typed channels.
+
 ### 5.3 Composition order (resolved 2026-07-09)
 
 Middleware list order is semantic in `create_agent` (`before_model` runs in list
@@ -614,6 +916,26 @@ order; `wrap_model_call` nests, first = outermost). The rule:
   reads another capability's state channels or depends on its prompt contributions. If
   a genuine cross-capability dependency ever appears, an explicit
   `run_before`/`run_after` declaration is future work — never implicit ordering.
+
+> **As implemented (2026-07-10, #1972 —
+> `libs/fred-runtime/fred_runtime/react/react_middleware.py`,
+> `build_react_platform_middleware_frame`).** The frame, in list order:
+> `CheckpointHygiene` → `ModelRouting` → `DynamicPrompt` → **capability block
+> slot** → `TracingKpi` → `FredHitl` → `ToolCallLimit` (only when
+> `max_tool_calls_per_turn` is set). Two deviations from the wording above,
+> both forced by behavior preservation:
+> (1) hygiene is a `wrap_model_call` request override, not a `before_model`
+> state hook — the legacy loop sanitized/trimmed/stripped the *model input
+> only*; a `before_model` state update would rewrite the checkpoint and
+> destroy history. As the first (outermost) wrap it still guarantees nothing
+> inside sees an unsanitized model request.
+> (2) `TracingKpi` is the *innermost* wrap, not outermost: the legacy wrapper
+> timed the bare `model.ainvoke(...)` after routing had already selected the
+> model, so span/KPI `model_name` dims record the routed model — an outermost
+> span would tag the pre-routing model and change operator-visible metrics.
+> `after_model` hooks run in reverse list order, so `ToolCallLimit` (last)
+> gates before `FredHitl` — over-limit calls are blocked before a human is
+> asked to approve them.
 
 ### 5.4 Tool approval (HITL) — resolved 2026-07-09 (§12 Q2)
 
@@ -638,6 +960,36 @@ Keep Fred's gate and wire format; make the *declaration* capability-owned:
   (`ToolApprovalPolicy.always_require_tools`, kept as the admin override), capability
   `HitlSpec`s, and the legacy name-prefix heuristics as fallback for non-capability
   tools — the heuristics retire at Tier 1, when every tool belongs to a capability.
+
+> **As implemented (2026-07-10, #1973 —
+> `FredHitlMiddleware._gate_decision`, `fred_runtime/capabilities/assembly.py`).**
+> Declaration surface: `HitlSpec.tool` names the gated tool and specs are
+> returned from `AgentCapability.hitl_specs()`; assembly binds each spec to its
+> capability's typed context + tool object (`CapabilityHitlBinding`) for the one
+> gate. Merge semantics pinned by tests: (1) for a declared tool the spec is
+> authoritative over the name-prefix heuristics; (2) a raising `when` fails
+> closed to interrupt; (3) the operator exact list still forces approval;
+> (4) **a capability's `require`/`when` gates even when the operator approval
+> toggle is disabled** — the toggle controls *platform* gating and does not
+> silence a capability author's own safety declaration (fail-closed reading of
+> "admin override": the override adds gates, it does not remove declared ones).
+> `HitlSpec.question` replaces the approval question verbatim (capability owns
+> its i18n); title, choices, and wire shape are unchanged.
+
+> **As implemented (2026-07-11, #1978 — `FredHitlMiddleware`,
+> `fred_runtime/support/tool_approval.py` deleted).** The legacy name-prefix
+> heuristics (`READ_ONLY_TOOL_PREFIXES` / `MUTATING_TOOL_PREFIXES`) are retired
+> at Tier 1. A tool that NO capability declares is now gated only by the operator
+> exact list: approval is required iff `approval_policy.enabled` AND the tool is
+> in `always_require_tools`. Capability `require`/`when` still gate regardless of
+> the toggle (per the #1973 note above). This is behavior-preserving for every
+> shipped configuration — no in-tree definition enables the approval toggle, so
+> the prefixes were latent. **Deviation from §5.4's premise:** under the
+> contained Tier-1 MCP design, MCP tools come from `FredMcpToolProvider` (not a
+> capability middleware), so they are not capability-`HitlSpec`-owned; for
+> deployments that had enabled the toggle, mutating-prefix tools are no longer
+> heuristically gated — the operator list and capability specs are the only
+> sources.
 
 ---
 
@@ -700,7 +1052,7 @@ author and share must be the capability, and mixing must be cheap.
 
 | Team need | What they author | Fred code written |
 | --- | --- | --- |
-| **Tools + config fields + prompt fragment** | An **MCP server**, registered in the catalog → it *is* an `mcp:<server>` capability (Tier 1) | **Zero.** Mixable with everything, on any pod — MCP is already a network protocol, so this lane federates across pods for free |
+| **Tools + config fields + prompt fragment** | An **MCP server**, registered in the catalog → it *is* a capability (Tier 1), id == the catalog server id (no prefix, #1988) | **Zero.** Mixable with everything, on any pod — MCP is already a network protocol, so this lane federates across pods for free |
 | **Full vertical** (`validate_config`, middleware, `router`, `tables`, team settings) | A **capability Python package** built on `fred-sdk` | The package only — no fred code copied or modified, same non-fork guarantee agents have |
 | **First-party** (document-access, PPT filler, WritableDocument) | Same package model — a `fred-capabilities-core` package installed in the shared `fred-agents` pod | In-tree |
 
@@ -753,6 +1105,18 @@ independently-versioned pip packages cannot produce a coherent history. Instead:
   keys** (core-table ids may be referenced as plain columns), so install/uninstall
   ordering stays free.
 
+> **As implemented (2026-07-11, #1979 — `fred_runtime/migrations.py`,
+> `fred_runtime/__main__.py`, `capabilities/registry.py`, `capabilities/demo_migrations/`).**
+> `AgentCapability.migrations_location()` returns a capability's own Alembic
+> script dir (default `None`); the demo capability ships one under
+> `cap_demo_echo_alembic_version`. `python -m fred_runtime migrate` upgrades
+> fred-runtime's tree, then every discovered capability's tree via
+> `CapabilityRegistry.migration_locations()`. Hygiene is a registry boot check
+> (`_validate_table_hygiene` → `CapabilityTableHygieneError`): the `cap_<id>_`
+> prefix and a **no-foreign-key** rule (stricter than "no cross-capability FK" —
+> core ids stay plain columns). The Helm `fred-agents` migration job overrides
+> `command`/`args` to `python -m fred_runtime migrate` (values.yaml).
+
 ### 7.2 Deployment secrets (resolved 2026-07-09)
 
 `manifest.required_env` lists the env vars a capability needs (e.g. a corporate-drive
@@ -778,19 +1142,24 @@ for capabilities. Once MCP servers are capabilities (Tier 1), that RFC's
 `tool_guardrails.allowed_mcp_server_ids` and capability enablement answer the same
 question; they must converge (see §12 Q4c).
 
-### 8.1 Schema (resolved 2026-07-09)
+### 8.1 Schema (resolved 2026-07-09; check subject corrected 2026-07-16)
 
 The `tag`/`document` `parent: [team]` pattern was considered and **rejected**: it models
 *ownership* of an object by one team, while a capability is one platform-wide object many
 teams are *enabled for*. With `parent: [team]`, default-on capabilities would require one
 tuple per (team × capability) plus team-creation and backfill hooks — exactly the
-drift-prone fan-out ReBAC is meant to eliminate. And listing gains nothing: the idiomatic
-query in both shapes is `ListObjects(user, can_use, capability)`.
+drift-prone fan-out ReBAC is meant to eliminate.
 
 The OpenFGA model (`fred-core/.../rebac/schema.fga`) has no capability type, but is a
 standard Zanzibar schema, extended as:
 
 ```
+type organization
+  relations
+    ...
+    define team: [team]   # reverse index of team.organization — supplied as a
+                          # CONTEXTUAL tuple at check time, never persisted
+
 type capability
   relations
     define organization: [organization]      # platform anchor — every capability has one
@@ -798,27 +1167,42 @@ type capability
     define enabled: [team]             # explicit per-team grant (admin-gated path)
     define disabled: [team]            # per-team opt-out of a default-on capability
 
-    define can_manage: admin from parent
-    define can_use: (member from enabled or viewer from default_on) but not member from disabled
+    define can_manage: platform_admin from organization  # amended 2026-07-16 (AUTHZ-05 merge, see below)
+    define can_use: (enabled or team from default_on) but not disabled
 ```
 
 Design notes:
 
-- `parent` is pure anchoring (admin management rights). It no longer doubles as the
-  default-on marker — `default_on` is its own relation so it is **runtime state**,
-  toggleable by writing/deleting one tuple, not a code property (§8.3).
-- `enabled`/`disabled` tuples name the team object
-  (`capability:ppt_filler#enabled@team:X`); the expansion to members happens inside
-  `can_use` (`member from enabled`), so checking `can_use` for a plain user works
-  directly.
+- **The `can_use` subject is the TEAM the agent belongs to, never a user**
+  (corrected 2026-07-16 — see the dated amendment below). Enablement is a
+  per-team fact; the original user-subject shape
+  (`member from enabled …`, queried as `ListObjects(user, can_use, capability)`)
+  answered "is this user in ANY enabled team" and therefore leaked a capability
+  enabled for one team into every team context its members browsed — visible in
+  the create-agent catalog of other teams and savable there. The user's
+  membership in the browsed team is already enforced by the route
+  (`get_team_by_id`); `can_use` only has to answer "may agents of team T use C".
+- `organization` on the capability is pure anchoring (admin management rights). It
+  does not double as the default-on marker — `default_on` is its own relation so it
+  is **runtime state**, toggleable by writing/deleting one tuple, not a code
+  property (§8.3).
+- The `default_on` path resolves through the organization's `team` reverse edge
+  (FGA cannot traverse `team.organization` backwards). The edge is **derived, not
+  stored**: every team belongs to the singleton organization, so callers inject
+  `organization:fred#team@team:{id}` as a contextual tuple on every team-subject
+  check — no per-team tuple writes, no backfill, and personal teams are covered
+  for free.
 - **Callers check `can_use`, never the structural relations.** UI listing =
-  `ListObjects(user, can_use, capability)`; enforcement at agent save and session prep =
-  `Check(user, can_use, capability:{id})`. Structural tuples are written only by the
-  enablement API (§8.5).
+  `ListObjects(team:{ctx}, can_use, capability)`; enforcement at agent save and
+  session prep = `Check(team:{ctx}, can_use, capability:{id})` — both with the
+  contextual reverse edge. Structural tuples are written only by the enablement
+  API (§8.5).
 - The `but not` exclusion is the one non-trivial construct; it exists solely to give
   the admin dashboard a tri-state (inherited-on / enabled / disabled). If the team
   prefers to avoid exclusion in v1, drop `disabled`: removing a default-on capability
-  from one team then requires flipping the capability to admin-gated.
+  from one team then requires flipping the capability to admin-gated. (With a team
+  subject the exclusion is over direct relations — none of OpenFGA's documented
+  userset-subject + exclusion caveats apply.)
 
 Flows through the existing `sync_schema_on_init` bootstrap.
 
@@ -890,6 +1274,34 @@ Recommendation:
    security-sensitive on-prem operators ignore manifest seeds and start everything
    admin-gated.
 
+> **Platform policy ratified (2026-07-17, CVSSI review).** This deployment
+> takes the "against" branch above for every capability, both kinds: no
+> manifest ever sets `team_scope: DEFAULT_ON`; every team's access to every
+> tool and every agent is an explicit, auditable admin grant
+> (`capabilities.default_policy` need not even be set to `explicit` — nothing
+> declares `DEFAULT_ON` in the first place, so `seed_registration_defaults`
+> has nothing to act on). The mechanism above is kept, not removed — a
+> genuinely benign future capability may still use it after a documented
+> security review, which is exactly what the guard tests below enforce
+> instead of a comment someone could miss: `kind="tool"` static manifests are
+> scanned for an un-allowlisted `DEFAULT_ON`
+> (`apps/fred-agents/tests/test_capability_team_scope_policy.py`); `kind="agent"`
+> projections have no such field to scan (`AgentDefinition` declares no
+> `team_scope`), so that guard is a narrow unit test asserting the projection
+> function hardcodes `ADMIN_GATED`
+> (`control-plane-backend/tests/test_capability_selection_1974.py::test_agent_projection_always_hardcodes_admin_gated`).
+>
+> **Known, accepted trade-off**: no team-creation-time capability seeding
+> hook exists (only `seed_registration_defaults`, at first capability
+> registration, and `seed_personal_team_capabilities`, at personal-space
+> first-touch — neither fires when a regular team is created). A brand-new
+> collaborative team gets zero working agents/tools until an admin grants
+> some. Extending the `capabilities.personal_defaults` pattern to regular
+> team creation would close this gap without reintroducing `DEFAULT_ON`
+> (grants only new teams, stays revocable, doesn't retroactively open
+> existing teams) — tracked as a separate, non-blocking follow-up, not solved
+> here.
+
 ### 8.4 Personal spaces
 
 Personal spaces are real teams (`personal-{uid}`, TEAM-PLATFORM-POLICY §12.3), so
@@ -928,6 +1340,228 @@ API sketch (control-plane, gated on `capability#can_manage`): `GET /admin/capabi
 `PUT`/`DELETE /admin/capabilities/{id}/teams/{team_id}` (enable-with-settings /
 disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 `CONTROL-PLANE-PRODUCT-CONTRACT` amendment when Tier 3 is picked up.
+
+> **As implemented (2026-07-11, #1980).** The backend of §8.1–§8.5 landed (the
+> admin dashboard UI remains its own issue).
+>
+> - **Schema (§8.1).** `type capability` added to `fred-core/.../rebac/schema.fga`
+>   with `organization` (anchor) / `default_on` / `enabled` / `disabled` and the
+>   computed `can_use` (the tri-state `difference`) + `can_manage`. Regenerated
+>   `schema.fga.json` via `make transform-openfga-schema`; flows through
+>   `sync_schema_on_init`. **Deviation:** `can_manage` is `admin from organization`
+>   (the anchor relation is named `organization`, not `parent` as the §8.1 snippet
+>   wrote) — **superseded 2026-07-16** (merge with swift): AUTHZ-05 retired the
+>   legacy `admin`/`editor`/`viewer` organization-role bridge before this branch
+>   merged, so `can_manage` is now `platform_admin from organization`; no other
+>   part of this deviation note changes. New `Resource.CAPABILITY`, `RelationType.{DEFAULT_ON,ENABLED,DISABLED}`,
+>   and `CapabilityPermission.{CAN_USE,CAN_MANAGE}`. Tri-state proven in fred-core's
+>   OpenFGA integration suite (offline structural test covers the generated schema).
+> - **Enforcement (§8.1).** Catalog listing filters each template's
+>   `available_capabilities` via `ListObjects(user, can_use, capability)`
+>   (`list_agent_templates(..., user=)`); agent save `Check`s `can_use` per selected
+>   non-MCP capability in `_apply_capability_selection` (403 on denial). MCP
+>   (`mcp:<id>`) capabilities are out of the FGA type's scope and never filtered.
+>   **This carve-out is the root cause of the #1988 startup crash and is
+>   reversed there: MCP capabilities are now first-class in the FGA type and
+>   `can_use`-filtered like any other** (§3.8 note above).
+> - **Settings (§8.2).** `team_capability_settings(team_id, capability_id, settings,
+>   updated_by, updated_at)` table + `TeamCapabilitySettingsStore`. The typed
+>   `TeamSettingsModel` is advertised on the wire as `manifest.team_settings_fields`
+>   (mirror of `config_fields`) so control-plane validates the enable-with-settings
+>   form against the field specs; the pod still re-validates against
+>   `TeamSettingsModel` at assembly. Write ordering enforced in
+>   `enable_capability_for_team` (settings row → tuple). Resolved settings ride
+>   `ManagedAgentRuntimeBinding.team_capability_settings` (restricted to selected
+>   caps) → `_ResolvedExecutionTarget.team_settings` → `build_capability_contexts` →
+>   `CapabilityContext.team_settings`; never in an LLM tool signature.
+> - **Revocation → suspension (#1975 seam).** `disable_capability_for_team` deletes
+>   the `enabled` tuple (keeps the settings row; writes a `disabled` opt-out for a
+>   default-on cap) then calls `reconcile_instance_suspension(...,
+>   revoked_reason=CAPABILITY_ACCESS_REVOKED)` for each dependent instance
+>   (available set = `selected − {revoked}`). `set_capability_default_on(False)`
+>   revokes inherited access team-by-team the same way.
+> - **Defaults (§8.3–§8.4).** `seed_registration_defaults` seeds the `default_on`
+>   tuple at first registration only (detected by the absence of the org anchor),
+>   gated by `platform.capabilities.default_policy: seed | explicit` and skipped for
+>   caps with required team settings. Personal-space seeding
+>   (`seed_personal_team_capabilities`, from `platform.capabilities.personal_defaults`)
+>   is wired at frontend-bootstrap first-touch (idempotent via the settings-row
+>   marker). **Deviation:** config lives under `platform.capabilities.*` rather than
+>   a top-level `capability_defaults` block.
+> - **API (§8.5).** Routes live under `control_plane_backend/capabilities/api.py`,
+>   each mutation gated on `capability#can_manage` (anchor-ensured first); the
+>   aggregate list gated on the equivalent org-admin relation. Generated
+>   control-plane client regenerated.
+
+> **Fixed (2026-07-17, PR review finding — closes an unmet #1980 acceptance
+> criterion: "Check at agent save AND session prep").** `selected_capability_ids
+> = None` (the default "no explicit selection" save — the common path, since
+> General Assistant and Sentinel both declare non-empty `default_mcp_servers`,
+> all `admin_gated`, none `default_on`-seeded) skipped `can_use` **entirely**:
+> `_apply_capability_selection`'s whole ReBAC block was nested inside `if
+> selected_ids is not None:`. The runtime pod then activated every template
+> default MCP server with zero authorization check — the exact "session prep"
+> enforcement #1980 promised and never shipped. A team could obtain an
+> admin-gated capability for free by submitting no selection at all.
+>
+> **Corrected semantics** — `None` is no longer a live-inheriting sentinel; it
+> is resolved **once, at save time**, into an explicit, ReBAC-filtered list:
+> `effective_ids = template_default_capability_ids ∩ usable_capability_ids(team)`,
+> filtered silently (no 403 — an implicit default degrades gracefully to
+> "whatever this team already has" rather than blocking every fresh team's
+> first save) and **always persisted as an explicit list**, never left `None`.
+> This is what lets the existing revocation sweeps (`suspend_dependent_instances`,
+> `set_capability_default_on`) — which scan `selected_capability_ids` and
+> previously skipped `None` rows silently — correctly track these instances
+> going forward. Explicit selections are unchanged (still 403 on denial).
+>
+> Threaded the runtime's per-template `available_mcp_servers` (already on the
+> `/agents/templates` wire, previously parsed and dropped by
+> `_RuntimeTemplatePayload.model_validate`) into control-plane as
+> `default_capability_ids`, so `_apply_capability_selection` knows what a
+> template's `None` case resolves to. A one-off backfill
+> (`materialize_default_capability_selections`) re-resolves any
+> already-persisted `None` row — required at/before deploy, not a follow-up;
+> "0 remaining NULL `selected_capability_ids` rows" is the closure proof, not
+> "the sweep ran once." **Operational consequence, not a code bug**: any team
+> without an explicit grant for a template's default capabilities will now see
+> that agent run with fewer/zero MCP tools until an admin grants them — correct
+> enforcement of the ReBAC model this RFC already specified, but a visible
+> behavior change at rollout. Whether to seed any of these `default_on` is a
+> deployment decision, not made here.
+
+> **Extended (2026-07-17, CAPAB-01 — agent templates join this same
+> capability model).** `CapabilityManifest`/`CapabilityCatalogEntry` gained
+> `kind: Literal["tool", "agent"] = "tool"`. Every mechanism on this page
+> (schema, `can_use`, enablement API, seeding, admin dashboard) now governs
+> BOTH kinds uniformly — no new FGA type, no parallel system. Agent templates
+> are projected control-plane side into `kind="agent"` catalog entries
+> (`product/service.py` `_agent_capabilities_for_source`), gated on
+> `list_agent_templates`/`enroll_agent_instance`, with their own required
+> compatibility migration (`grant_existing_teams_served_templates`). Full
+> design and rationale — including why the runtime pod's own capability
+> registry is deliberately NOT the projection target — lives in
+> `AGENT-VISIBILITY-RFC.md` §7.5, since it answers that RFC's §7.1 bullet 5
+> ("compatible with the caller's team capability"), not a new concern of this
+> one. Platform policy ratified the same day: this deployment never uses
+> `team_scope: DEFAULT_ON` (§8.3 below), for either kind — enforced by a
+> scan-based guard test for `kind="tool"` static manifests
+> (`apps/fred-agents/tests/test_capability_team_scope_policy.py`) and a
+> narrow unit test on the projection function for `kind="agent"` (which has
+> no `team_scope`-equivalent field to scan at all).
+
+> **As implemented (2026-07-11, #1981 — admin dashboard UI).** The management
+> surface deferred by #1980. A control-plane admin **Capabilities** page at
+> `/admin/capabilities` (`apps/frontend/src/rework/components/pages/admin/CapabilitiesPage/`),
+> reached from the admin sidebar and gated by the admin-role route guard (the
+> client-side equivalent of the backend's org-admin `can_manage` list gate).
+>
+> - **Catalog table.** One row per aggregated capability: icon + i18n name +
+>   version, the **enabled-team count** (`enabled_team_ids.length`), an inline
+>   **default-on toggle**, a **health** cell, and a "manage teams" action. Renders
+>   through the shared `DataTable`; loading / error / empty states use the
+>   existing page primitives. A **scope badge** column (the manifest
+>   `team_scope`) shipped initially but was dropped (2026-07-16, live-testing
+>   feedback): the manifest value is only the registration seed, and showing it
+>   next to the authoritative default-on toggle read as two conflicting
+>   defaults. Admins manage the live state; the seed stays visible in the
+>   manifest itself.
+> - **Team matrix** (`CapabilityTeamMatrixDrawer`, an `InlineDrawer`). One row per
+>   team with the tri-state badge (`enabled` / `on-by-default` / `off`) and the
+>   enable / disable actions. **Enable-with-settings** renders the capability's
+>   `team_settings_fields` through the shared metadata-driven `TuningFieldRenderer`
+>   — zero bespoke UI for scalar settings — then `PUT`s `{settings}`; disable
+>   `DELETE`s and toasts the returned suspended-instance delta.
+> - **Default-on toggle.** `PUT …/default-on`; turning it **off** is confirmed
+>   first (it revokes inherited access team-by-team and can suspend instances).
+> - **Data path.** Consumes only the generated hooks via the friendly aliases in
+>   `controlPlaneApiEnhancements.ts` (`useAdminCapabilitiesQuery`,
+>   `useEnableTeamCapabilityMutation`, `useDisableTeamCapabilityMutation`,
+>   `useSetCapabilityDefaultOnMutation`); a `ControlPlaneCapability` cache tag makes
+>   every mutation re-read the catalog. No hand-written fetch or response type.
+>   Contract fixed in `CONTROL-PLANE-PRODUCT-CONTRACT.md §14`.
+> - **Deferred (backend seams, not built here).** The **health column** shows only
+>   the mutation-reported suspended **delta** (session-scoped), not a resting
+>   per-capability count — the suspension row records a typed reason, not the
+>   causing capability id (needs the #1975 sweep to attribute + expose a count).
+>   The **explicit `disabled` opt-out** of a default-on capability is not
+>   distinguishable from inheritance in the matrix (the list response carries
+>   `enabled_team_ids` + `default_on` but no `disabled_team_ids`). The
+>   **personal-spaces default list** (§8.4) stays config-only
+>   (`platform.capabilities.personal_defaults`, changing it needs a backfill) — no
+>   read/write API exists to make it editable, so that half of the criterion is
+>   deferred rather than faked. All three are additive backend extensions; the
+>   dashboard consumes them the moment the fields land.
+
+> **As implemented (2026-07-16 — `can_use` team-subject fix).** Live testing of
+> #1980/#1988 surfaced a cross-team leak: a capability enabled for team A
+> appeared in (and was savable from) EVERY team its members browsed, because
+> `can_use` was checked with the USER as subject — a user-level FGA fact that
+> ignores the browsed team context. Fixed by re-shaping `can_use` to a
+> team-subject permission (§8.1 above, updated in place):
+>
+> - **Schema.** `capability#can_use` is now
+>   `(enabled or team from default_on) but not disabled`; `organization` gained
+>   the `team: [team]` reverse edge, injected as a **contextual tuple**
+>   (`organization:fred#team@team:{id}`) on every team-subject check — never
+>   persisted, so no backfill and personal teams are covered. New
+>   `RelationType.TEAM` in fred-core. `schema.fga.json` regenerated via
+>   `make transform-openfga-schema`; rolls out through `sync_schema_on_init`.
+> - **Enforcement.** `capabilities/authz.py` helpers now take the team id:
+>   catalog filtering = `lookup_resources(team:{ctx}, can_use, capability)`
+>   (`list_agent_templates` no longer takes `user`), agent save =
+>   `has_permission(team:{ctx}, can_use, capability:{id})` in
+>   `_apply_capability_selection` (403 unchanged). The write path
+>   (`enablement.py`) was already team-scoped and is untouched; the browsing
+>   user's membership stays enforced by the route (`get_team_by_id`).
+> - **Semantic shift.** A default-on capability is now "usable by every TEAM"
+>   rather than "usable by every org viewer" — save and session prep always
+>   run in a team context, so this is strictly more precise. Nested teams do
+>   not inherit `enabled` grants (explicit-grant philosophy).
+> - **Tests.** fred-core integration suite re-pins the tri-state with team
+>   subjects, the cross-team leak regression, and the
+>   contextual-edge-required behavior; the offline schema-shape test asserts
+>   the new `difference` tree; control-plane fakes assert the team-subject +
+>   contextual-edge check shape and a `team-a`-enabled / `team-b`-denied case.
+
+### 8.6 Agent templates as capabilities (CAPAB-01, 2026-07-17)
+
+`AGENT-VISIBILITY-RFC.md` needed the same "team-gated, admin-managed"
+treatment for agent template VISIBILITY that this section already built for
+tool ACTIVATION. Rather than a parallel FGA type + admin surface (rejected —
+see `AGENT-VISIBILITY-RFC.md` §7.5 for why), an agent template is a
+capability of `kind="agent"` in this exact same object space:
+
+- `kind: Literal["tool", "agent"] = "tool"` on `CapabilityManifest`/
+  `CapabilityCatalogEntry` — the only new field; every relation, API route,
+  and seeding path above governs both kinds unchanged.
+- Agent templates are never authored as `CapabilityManifest` — they stay
+  `AgentDefinition` at the SDK level (same non-unification precedent as MCP
+  servers, §3.8). Control-plane projects each registered template into a
+  `kind="agent"` `CapabilityCatalogEntry` purely for catalog/authz purposes
+  (`product/service.py` `_agent_capabilities_for_source`), deliberately NOT
+  by injecting them into the runtime pod's own capability registry (that
+  registry backs every template's `available_capabilities` tool picker,
+  shared identically across templates — see `AGENT-VISIBILITY-RFC.md` §7.5
+  for the concrete leak this avoids).
+- `id`: `template_capability_id(runtime_id, agent_id) ->
+  f"{runtime_id}__{agent_id}"` — colon-free (§3.8's `mcp:<id>` crash class,
+  applied to templates: `template_id`, used for routing, contains `:`).
+- `team_scope` is hardcoded `ADMIN_GATED` in the projection function, no
+  parameter to override — consistent with the §8.3 platform policy (never
+  `DEFAULT_ON`) and enforced by its own guard test (a template author cannot
+  even express `DEFAULT_ON`; `AgentDefinition` has no such field).
+- Enforcement reuses `list_agent_templates`/`enroll_agent_instance`'s
+  existing ReBAC call sites (`AGENT-VISIBILITY-RFC.md` §7.1/§7.2) rather than
+  adding new ones.
+- Compatibility migration (`grant_existing_teams_served_templates`) is
+  required, not optional, and companions Part 1's
+  `materialize_default_capability_selections` — see that RFC section for the
+  deploy-sequencing note.
+- Not built in this pass: `depends_on` (a capability declaring which others
+  it needs) and the admin-facing "refuse and tell me what's missing" UX when
+  enabling an agent without its tool dependencies granted. Tracked as a
+  fast-follow, not silently dropped.
 
 ---
 
@@ -1002,6 +1636,22 @@ router → regenerate that capability's slice in the same change.* This mechanis
 in-tree-only — which is exactly the v1 UI boundary below: external packages ship no
 custom components, and custom components are the only consumers of capability routes.
 
+> **As implemented (2026-07-11, #1979).** Routes: `create_agent_app` auto-mounts
+> each `manifest.router` under `{pod_base_url}/capabilities/{id}` with the same
+> bearer dependency as `/agents/*` (`_mount_capability_routers`, no proxy). The
+> template catalog carries `CapabilityCatalogEntry.route_base_url` (template-bound)
+> and control-plane `ExecutionPreparation.capability_base_urls` carries the same
+> ingress-relative URLs for the selected capabilities (instance-bound). Typed
+> client: `python -m fred_runtime dump-openapi <id>` wraps only that capability's
+> router in a throwaway `FastAPI()`; `features/capabilities/<id>/api/` holds the
+> codegen config + generated slice, whose base query resolves the URL from
+> `capabilityRoutingSlice` (populated on prepare-execution). Side panels: a typed
+> `sidePanels` plugin slot + `sidePanelRegistry` (mirror of the part-renderer
+> registry); `CapabilitySidePanelHost` mounts a session's active-capability panels
+> in a push `InlineDrawer`, keyed off `selected_capability_ids`. The `demo_echo`
+> capability exercises all three end-to-end (`/analyze` route, generated
+> `useAnalyzeAnalyzePostMutation`, `DemoNotesPanel`).
+
 **External capabilities and the UI boundary (v1).** The plugin registries above are
 build-time, in-tree code — so an externally-authored capability package (§7, lane 2)
 cannot ship custom widgets, parts, or panels in v1. It is bound to the **generated
@@ -1025,6 +1675,57 @@ further step for untrusted authors (§6 non-goal). Both belong to a future RFC.
 
 **#1906 is the pilot** — smallest surface, validates the abstraction (and the frontend
 registries) before #1903/#1905 build on it.
+
+### 10.1 As-implemented (CAPAB-01 #1906, July 2026)
+
+Shipped `DocumentAccessCapability`
+(`fred_runtime/capabilities/document_access/`) with ONLY the vector-search tool
+(`search_documents_using_vectorization`) wired live, registered via the
+`fred.capabilities` entry point (`document_access`; auto-discovered at app
+construction). It exercises: multiple-tools-from-one-capability (validated via
+assembly tests, not shipped mock tools), static `config_fields` scoping, and one
+computed `document_scope` chat-turn narrowing control (§3.3).
+
+**Platform-service doctrine (Tier-0 `RuntimeServices` extension).** Capabilities
+reach platform services ONLY through typed optional ports on `RuntimeServices`;
+**the per-turn binding and the raw access token never enter
+`CapabilityContext`.** The new `DocumentSearchPort` (`fred-sdk`,
+RUNTIME-EXECUTION-CONTRACT §8.15) takes scope PARAMETERS only; the runtime
+`DocumentSearchAdapter` captures the binding + token privately and exposes only
+`search(...)`. Rejected alternatives: (a) passing the binding into
+`CapabilityContext` (token-leak / security regression); (b)
+`services.tool_invoker` with `tool_ref="knowledge.search"` (cannot express
+per-capability config scoping — reads scope from `runtime_context`, not the
+payload).
+
+**Scoping precedence — `turn_option ⊆ capability_config ⊆ session_binding`,
+enforced across two seams.** The capability narrows its stored-config scope by
+the per-turn `document_scope` selection (`turn_option ⊆ capability_config`); the
+adapter then intersects the result with the session binding's own scope
+(`⊆ session_binding`). Both seams use one intersection primitive; covered by an
+end-to-end test through the real adapter.
+
+**Duplicate-search-tool story (pilot decision).** The builtin `knowledge.search`
+(`TOOL_REF_KNOWLEDGE_SEARCH`) and the inprocess `mcp-knowledge-flow-mcp-text`
+catalog server (capability id, no `mcp:` prefix since #1988) both still expose a
+vector-search tool that reads scope from
+`RuntimeContext` only. An instance that BOTH wires one of those AND selects this
+capability would get two vector-search tools with different scoping. For the
+pilot, `DocumentAccessCapability` is the forward path (it adds per-capability
+config + turn scoping the builtin cannot express); the builtin/catalog path
+stays reachable for back-compat and its retirement is a follow-up. Documented in
+the capability docstring; do NOT wire both on one instance.
+
+**Deferred: `list_document_tree` + `summarize_document`.** NOT registered
+(a registered tool the LLM can call but that returns "not implemented" erodes
+trust). They are blocked pending Knowledge Flow backend endpoints
+(`POST /documents/tree`; a synchronous `POST /documents/{uid}/summarize`) and
+pod-reachable session-attachment enumeration, none of which exist on Swift yet.
+Follow-up will add them once KF ships those endpoints.
+
+**Rename.** `mcp.servers.search_documents.name` → "Document access" (EN) /
+"Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`
+entry's display name.
 
 ---
 
@@ -1168,6 +1869,23 @@ prose drifts.
 The authoring guide and Skill are a **Tier 4 deliverable** (they formalize the authoring
 experience), but a first, deliberately-thin version should ship alongside the #1906 pilot
 so the pilot doubles as the reference example from day one.
+
+> **As implemented 2026-07-11 (#1982, CAPAB-01) — thin v1 shipped.** Both artifacts
+> landed against the merged capability surface, deliberately map-not-spec:
+> - `docs/swift/capabilities/AUTHORING.md` — the ~1-page map: mental model (manifest +
+>   middleware), the four typed models, the §5.1 hook table, the three lanes, registration
+>   + boot invariants, the ships-a-router API-slice workflow (#1979), testing, and the hard
+>   should-nots. It links the SDK contracts (`fred-sdk/contracts/capability/`,
+>   `contracts/runtime.py`) and the `document_access` pilot / `demo.py` tracer by path
+>   rather than restating fields.
+> - `.claude/skills/add-fred-capability/SKILL.md` — the model-facing Skill (repo
+>   instruction-file convention, same as `add-kpi-to-dashboard`): lane selector, the four
+>   models, the §5.1 hook map, entry-point registration + boot rules, the router API-slice
+>   step, and the refuse-these should-nots. Points at the live reference capability, not a
+>   frozen copy.
+> Both are tier-tagged (`[T0]…[T4]`). The Step 6 doc-update checklist (`CLAUDE.md`) gained
+> the *capability authoring surface changed* row. When Tier 4 formalizes the `fred-sdk`
+> capability surface, both artifacts move beside it and update in the same change.
 
 ---
 

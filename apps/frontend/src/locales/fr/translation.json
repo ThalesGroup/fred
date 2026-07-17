@@ -114,12 +114,39 @@
       "search": "Options de recherche"
     }
   },
+  "capability": {
+    "demo_echo": {
+      "cardAria": "Carte de la capacité de démonstration",
+      "panel": {
+        "demo_notes": {
+          "title": "Notes de démonstration",
+          "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
+          "textPlaceholder": "texte",
+          "analyze": "Analyser",
+          "error": "Échec de la requête",
+          "original": "original",
+          "transformed": "transformé",
+          "length": "longueur"
+        }
+      }
+    },
+    "document_access": {
+      "name": "Accès aux documents",
+      "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+    }
+  },
   "chatbot": {
     "artifactLinks": {
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
       "downloadFailed": "Téléchargement de {{name}} impossible",
       "fallbackName": "Télécharger"
+    },
+    "uiParts": {
+      "ariaLabel": "Cartes de l'agent",
+      "geoAria": "Données cartographiques",
+      "geoSummary_one": "Données cartographiques ({{count}} entité)",
+      "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
@@ -130,6 +157,17 @@
       "processing": "Traitement",
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
+    },
+    "debugRaw": {
+      "title": "Débogage — messages bruts",
+      "scopeAria": "Portée des messages",
+      "scope": {
+        "lastExchange": "Dernier échange",
+        "all": "Tous"
+      },
+      "count": "{{count}} msg",
+      "copy": "Copier le JSON",
+      "copied": "Copié"
     },
     "contextPrompts": {
       "ariaLabel": "Prompts attachés",
@@ -467,7 +505,7 @@
       },
       "search_documents": {
         "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)",
-        "name": "Rechercher dans les documents"
+        "name": "Accès aux documents"
       },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
@@ -718,10 +756,76 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "admin": {
+      "capabilities": {
+        "title": "Capacités",
+        "subtitle": "Catalogue des capacités de la plateforme : activation par équipe, valeurs par défaut et état.",
+        "loading": "Chargement des capacités…",
+        "loadError": "Impossible de charger le catalogue des capacités.",
+        "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
+        "manageTeams": "Gérer les équipes",
+        "kindFilter": {
+          "tool": "Outils",
+          "agent": "Agents",
+          "aria": "Filtrer par type de capacité"
+        },
+        "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
+        "col": {
+          "capability": "Capacité",
+          "enabledTeams": "Équipes activées",
+          "defaultOn": "Activé pour tous",
+          "health": "État",
+          "actions": "Actions"
+        },
+        "enabledTeams": {
+          "all": "Toutes ({{count}})",
+          "inheritedHint": "Activée par défaut pour toutes les équipes. Les équipes qui s'en sont exclues sont déjà déduites.",
+          "unknown": "Inconnu",
+          "unknownHint": "Activée par défaut pour toutes les équipes, mais l'annuaire des équipes est indisponible : le nombre exact ne peut pas être déterminé."
+        },
+        "health": {
+          "suspended": "{{count}} suspendue(s)",
+          "pending": "L'état par capacité en temps réel arrive avec le balayage de suspension."
+        },
+        "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
+        "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
+        "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
+        "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
+        "defaultOffConfirm": {
+          "title": "Désactiver l'activation par défaut ?",
+          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette capacité.",
+          "confirm": "Désactiver",
+          "cancel": "Annuler"
+        },
+        "matrix": {
+          "title": "{{name}} — accès des équipes",
+          "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette capacité actuellement.",
+          "searchPlaceholder": "Rechercher une équipe...",
+          "clearSearch": "Effacer la recherche",
+          "searchEmpty": "Aucune équipe ne correspond à votre recherche.",
+          "enable": "Activer",
+          "disable": "Désactiver",
+          "cancel": "Annuler",
+          "saveEnable": "Enregistrer et activer",
+          "enabledToast": "Capacité activée pour {{team}}.",
+          "enableError": "Impossible d'activer la capacité.",
+          "disabledToast": "Capacité désactivée pour {{team}}.",
+          "disabledSuspendedToast": "Désactivée pour {{team}} — {{count}} instance(s) suspendue(s).",
+          "disableError": "Impossible de désactiver la capacité.",
+          "default": "Défaut",
+          "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
+          "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
+          "defaultError": "Impossible de remettre la capacité au défaut de la plateforme.",
+          "rowControlAria": "Accès pour {{team}}"
+        }
+      }
+    },
     "agentCard": {
       "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
       "noDescription": "Pas encore de description.",
-      "startChat": "Nouveau chat"
+      "startChat": "Nouveau chat",
+      "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
+      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver."
     },
     "analytics": {
       "activeUsers": {
@@ -879,7 +983,8 @@
       "brandRelease": "Version {{brand}}",
       "copied": "Copié !",
       "copy": "Copier",
-      "empty": "Aucune note de version disponible."
+      "empty": "Aucune note de version disponible.",
+      "versionsAria": "Versions des notes de version"
     },
     "resources": {
       "workspaceTitle": "Fichiers",
@@ -1001,6 +1106,7 @@
         },
         "menu": {
           "analytics": "Analytiques",
+          "capabilities": "Capacités",
           "migration": "Données plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
@@ -1020,7 +1126,6 @@
         "title": "Marketplace"
       },
       "team": {
-        "avatarAlt": "Équipe {{teamName}}",
         "marketplace": "Marketplace",
         "menu": {
           "resources": "Ressources"
@@ -1258,7 +1363,8 @@
         "loading": "Chargement des {{agentsNicknamePlural}}...",
         "noAgent": "Créez votre premier {{agentsNicknameSingular}} pour commencer.",
         "podFilter": {
-          "all": "Tous"
+          "all": "Tous",
+          "aria": "Filtrer par pod"
         },
         "title": "Sollicitez vos {{agentsNicknamePlural}}"
       },
@@ -1284,6 +1390,20 @@
           "removeTagAria": "Retirer {{tag}}",
           "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
           "writeFromScratch": "Rédiger depuis zéro"
+        },
+        "sections": {
+          "aria": "Sections du formulaire",
+          "chat": "Discussion",
+          "prompts": "Prompts",
+          "settings": "Paramètres",
+          "tools": "Outils"
+        },
+        "selectPlaceholder": "Sélectionner une option",
+        "suspended": {
+          "title": "Cet agent est suspendu.",
+          "unavailable": "Une capacité qu'il utilise n'est plus disponible ({{capabilities}}). Décochez-la et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
+          "accessRevoked": "L'accès de votre équipe à une capacité qu'il utilise a été révoqué ({{capabilities}}). Décochez-la et réenregistrez l'agent, ou contactez un administrateur de la plateforme.",
+          "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme."
         },
         "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
@@ -1320,7 +1440,9 @@
         "english": "Anglais",
         "french": "Français",
         "light": "Clair",
-        "system": "Système"
+        "system": "Système",
+        "themeAria": "Thème",
+        "languageAria": "Langue"
       },
       "conversationProfile": {
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",

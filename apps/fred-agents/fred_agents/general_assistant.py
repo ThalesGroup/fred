@@ -24,8 +24,9 @@ Why this module exists:
 Key design:
 - declares ALL enabled catalog servers in `default_mcp_servers` so the Tools
   tab in the enrollment form shows every available tool
-- all servers are active by default (selected_mcp_server_ids = null); the
-  operator unchecks the ones they do not need
+- all servers are active by default (selected_capability_ids = null → the
+  template's default MCP servers, #1978, #1988); each server is an
+  capability the operator unchecks in the Tools tab when not needed
 - one `prompts.system` field lets operators specialise the role without creating
   a new agent template
 - system prompt handles both the tool-equipped and no-tool cases
@@ -95,7 +96,8 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
 
     Key design choices:
     - `default_mcp_servers` lists every enabled server in the pod catalog;
-      `selected_mcp_server_ids = null` (default) means all are active, and the
+      `selected_capability_ids = null` (default) activates the template's
+      default MCP servers (each a capability keyed by its server id, #1988), and the
       operator unchecks servers they don't want
     - system prompt handles both the fully-equipped and no-tool cases so the
       agent never claims unavailable capabilities
