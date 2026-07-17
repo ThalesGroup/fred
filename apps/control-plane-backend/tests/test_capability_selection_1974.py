@@ -44,7 +44,6 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
-from control_plane_backend.product.service import _RuntimeTemplatePayload
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import FieldSpec, TeamScopePolicy
 from httpx import ASGITransport, AsyncClient
@@ -85,8 +84,8 @@ _PROBE_ENTRY = CapabilityCatalogEntry(
 
 def _template_payload(
     default_capability_ids: list[str] | None = None,
-) -> _RuntimeTemplatePayload:
-    return _RuntimeTemplatePayload(
+) -> service._RuntimeTemplatePayload:
+    return service._RuntimeTemplatePayload(
         template_agent_id="rags.sample.echo",
         title="Echo Agent",
         description="Echo template description",
