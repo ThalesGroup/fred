@@ -61,6 +61,34 @@ async def test_list_users_returns_empty_without_keycloak_m2m() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_users_by_ids_falls_back_to_id_only_summaries() -> None:
+    """Without Keycloak M2M, every requested id resolves to an id-only summary
+    (same shape callers get for deleted users), deduplicated and sorted."""
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            "/control-plane/v1/users/by-ids",
+            params=[("ids", "u-2"), ("ids", "u-1"), ("ids", "u-1")],
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == [{"id": "u-1"}, {"id": "u-2"}]
+
+
+@pytest.mark.asyncio
+async def test_get_users_by_ids_requires_ids() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/users/by-ids")
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_user_requires_keycloak_m2m() -> None:
     app = create_app()
     async with AsyncClient(

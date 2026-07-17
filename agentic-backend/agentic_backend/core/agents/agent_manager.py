@@ -117,10 +117,15 @@ class AgentManager:
             return [s for s in get_mcp_configuration().servers if s.enabled]
 
     async def create_dynamic_agent(
-        self, agent_settings: AgentSettings, agent_tuning: AgentTuning
+        self,
+        agent_settings: AgentSettings,
+        agent_tuning: AgentTuning,
+        actor_uid: str | None = None,
     ) -> None:
         """
         Creates a new dynamic agent and persists it to the store.
+
+        ``actor_uid`` stamps created_by/updated_by; None for system writes.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
@@ -141,12 +146,16 @@ class AgentManager:
                 exc_info=True,
             )
 
-        await self.store.save(agent_settings, agent_tuning)
+        await self.store.save(agent_settings, agent_tuning, actor_uid=actor_uid)
         logger.info("[AGENTS] agent=%s registered as dynamic agent.", agent_settings.id)
 
-    async def update_agent(self, new_settings: AgentSettings) -> bool:
+    async def update_agent(
+        self, new_settings: AgentSettings, actor_uid: str | None = None
+    ) -> bool:
         """
         Updates an agent's settings and tuning in the persistent store.
+
+        ``actor_uid`` stamps updated_by; None for system writes (audit columns untouched).
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
@@ -166,7 +175,7 @@ class AgentManager:
                 exc_info=True,
             )
         try:
-            await self.store.save(new_settings, tunings)
+            await self.store.save(new_settings, tunings, actor_uid=actor_uid)
         except Exception:
             logger.exception(
                 "Failed to persist agent '%s'.",
