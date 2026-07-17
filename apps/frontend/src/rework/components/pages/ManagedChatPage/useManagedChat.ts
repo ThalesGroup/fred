@@ -262,12 +262,22 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // `document_scope`'s params carry the same `bound_library_ids` the retired
     // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
     // MCP-server-bound library scope the picker cannot override.
+    const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
     const boundLibraryIds =
-      (
-        chatControls.find((c) => c.widget === "document_scope")?.params as
-          | { bound_library_ids?: string[] | null }
-          | undefined
-      )?.bound_library_ids ?? null;
+      (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
+    // The picker's per-turn selection must reach the OWNING capability's typed
+    // `turn_options[capability_id]` slice (RFC §3.5) — `document_access` reads
+    // its narrowing there, never from `runtime_context` (PR review,
+    // chatgpt-codex-connector). `documentScopeControl.capability_id` keys it
+    // correctly regardless of which capability actually surfaced the widget.
+    const turnOptions = documentScopeControl
+      ? {
+          [documentScopeControl.capability_id]: {
+            library_tag_ids: composer.selectedLibraryIds,
+            document_uids: composer.selectedDocumentUids,
+          },
+        }
+      : undefined;
     send(
       text,
       sid,
@@ -279,6 +289,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         boundLibraryIds,
         attachmentsMarkdown: attachmentContext,
       }),
+      turnOptions,
     );
     attachments.clearReadyAttachments();
   }, [
