@@ -74,6 +74,7 @@
     "@vitest/coverage-v8": "^4.1.7",
     "dayjs": "^1.11.13",
     "eslint": "^10.0.1",
+    "happy-dom": "^20.10.6",
     "prettier": "3.5.3",
     "prettier-plugin-css-order": "^2.2.0",
     "rollup-plugin-visualizer": "^7.0.0",
