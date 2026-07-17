@@ -189,4 +189,7 @@ export const {
     useDisableTeamCapabilityMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation:
     useSetCapabilityDefaultOnMutation,
+  // Fired on demand from the disable-confirmation dialog (lazy — not on render).
+  useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
+    useLazyCapabilityRevokeImpactQuery,
 } = enhancedControlPlaneApi;

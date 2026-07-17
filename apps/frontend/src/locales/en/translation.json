@@ -785,7 +785,9 @@
         },
         "health": {
           "suspended": "{{count}} suspended",
-          "pending": "Live per-capability health arrives with the suspension sweep."
+          "unknown": "{{count}} unknown",
+          "unknownHint": "The runtime pod was unreachable, so this capability's health can't be determined right now.",
+          "healthy": "OK"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
         "defaultOffToast": "Default-on disabled platform-wide.",
@@ -795,7 +797,13 @@
           "title": "Disable default-on?",
           "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this capability.",
           "confirm": "Disable",
-          "cancel": "Cancel"
+          "cancel": "Cancel",
+          "impact": "This will suspend {{count}} agent(s) that currently work.",
+          "impactNone": "No running agents will be affected.",
+          "impactUnknown": "{{count}} agent(s) could not be checked — their pod was unreachable, so the impact is unknown.",
+          "showAffected": "Show affected agents",
+          "hideAffected": "Hide affected agents",
+          "affectedAgent": "{{name}} (team {{team}})"
         },
         "matrix": {
           "title": "{{name}} — team access",

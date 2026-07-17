@@ -51,8 +51,6 @@ interface CapabilityTeamMatrixDrawerProps {
   teams: Team[];
   open: boolean;
   onClose: () => void;
-  /** Bubble up the count of instances a revoke suspended, for the health column. */
-  onSuspended: (capabilityId: string, count: number) => void;
 }
 
 /** Segment order of the tri-state control; index ↔ choice for `ButtonGroup`. */
@@ -78,13 +76,7 @@ const OFF_TOAST_KEYS = {
   },
 } as const;
 
-export function CapabilityTeamMatrixDrawer({
-  capability,
-  teams,
-  open,
-  onClose,
-  onSuspended,
-}: CapabilityTeamMatrixDrawerProps) {
+export function CapabilityTeamMatrixDrawer({ capability, teams, open, onClose }: CapabilityTeamMatrixDrawerProps) {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
   const [enableCapability, { isLoading: isEnabling }] = useEnableTeamCapabilityMutation();
@@ -207,7 +199,6 @@ export function CapabilityTeamMatrixDrawer({
     try {
       const result = await disableCapability({ capabilityId: capability.id, teamId, mode }).unwrap();
       const suspended = result.suspended_instances ?? 0;
-      onSuspended(capability.id, suspended);
       if (suspended > 0) {
         showWarn({ summary: t(keys.suspended, { team: teamLabel(teamId), count: suspended }) });
       } else {

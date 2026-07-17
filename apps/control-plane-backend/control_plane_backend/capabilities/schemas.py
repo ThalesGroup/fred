@@ -23,6 +23,14 @@ from fred_sdk.contracts.models import FieldSpec
 from pydantic import BaseModel, Field
 
 
+class ImpactedInstanceSummary(BaseModel):
+    """One agent instance affected by a capability change (admin drill-down)."""
+
+    agent_instance_id: str
+    team_id: str
+    display_name: str
+
+
 class CapabilityEnablementItem(BaseModel):
     """One capability's admin-facing scope + enablement state (RFC §8.5)."""
 
@@ -67,6 +75,28 @@ class CapabilityEnablementItem(BaseModel):
             " explicit admin grant, exactly like a tool."
         ),
     )
+    suspended_instances: int = Field(
+        default=0,
+        description=(
+            "Agent instances this capability breaks AT REST, across every team "
+            "(#1975 health). DERIVED per request — `suspension_reason` records "
+            "why an instance is suspended, never which capability did it, so an "
+            "instance broken by capa1 while also selecting capa2 must not count "
+            "against capa2. An instance is counted when it selects this "
+            "capability AND its team lacks `can_use` on it OR its pod no longer "
+            "advertises it."
+        ),
+    )
+    health_unknown_instances: int = Field(
+        default=0,
+        description=(
+            "Instances selecting this capability whose runtime pod was "
+            "unreachable, so their health is UNKNOWN rather than broken. Kept "
+            "separate from `suspended_instances`: the reconciliation sweep skips "
+            "an unreachable pod rather than suspending on a transient outage "
+            "(#1975, RFC §3.9), and this count reports the same way."
+        ),
+    )
 
 
 class CapabilityEnablementList(BaseModel):
@@ -92,9 +122,44 @@ class TeamCapabilityEnablementResult(BaseModel):
         default=0,
         description="Dependent agent instances suspended by this change (#1975).",
     )
+    revived_instances: int = Field(
+        default=0,
+        description=(
+            "Dependent agent instances whose suspension this GRANT cleared "
+            "(#1975). Only availability suspensions are cleared; an instance "
+            "still missing another capability stays suspended, and a "
+            "`capability_config_invalid` one is never touched here (RFC §3.9)."
+        ),
+    )
 
 
 class CapabilityDefaultOnResult(BaseModel):
     capability_id: str
     default_on: bool
     suspended_instances: int = 0
+    revived_instances: int = Field(
+        default=0,
+        description="Dependent instances revived by turning default-on ON (#1975).",
+    )
+
+
+class CapabilityImpactPreview(BaseModel):
+    """What a pending revoke WOULD break — the pre-disable dialog (#1975)."""
+
+    capability_id: str
+    suspended_instances: int = Field(
+        default=0,
+        description=(
+            "Agents that work today and would be suspended by this change. "
+            "Excludes agents already broken by this capability — revoking it "
+            "again does not newly break them."
+        ),
+    )
+    health_unknown_instances: int = Field(
+        default=0,
+        description="Selecting instances whose pod is unreachable (impact unknown).",
+    )
+    instances: list[ImpactedInstanceSummary] = Field(
+        default_factory=list,
+        description="The affected agents, for the admin drill-down.",
+    )
