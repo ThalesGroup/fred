@@ -72,7 +72,12 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 len(trimmed),
                 self._max_history_messages,
             )
-            messages = trimmed
+            # Trimming can itself cut a pair in half (no HumanMessage boundary
+            # found inside the trimmed window falls back to a raw slice) and
+            # front the result with an orphaned ToolMessage sanitize never saw —
+            # it already ran on the untrimmed list above. Re-run it: idempotent
+            # on an already-clean list, closes the gap on a freshly-cut one.
+            messages = sanitize_dangling_tool_calls(trimmed)
         # Strip provider-native reasoning from replayed assistant messages
         # (RUNTIME-05 Layer 2c): reasoning-capable models (Mistral via the
         # OpenAI-compatible client, Claude extended thinking) leave reasoning

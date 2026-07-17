@@ -500,6 +500,32 @@ async def test_sanitize_dangling_tool_calls_from_poisoned_history() -> None:
     assert human_contents == ["earlier question", "new question after the crash"]
 
 
+@pytest.mark.asyncio
+async def test_sanitize_drops_orphaned_leading_tool_message() -> None:
+    """#1999: a ToolMessage with no preceding AIMessage(tool_calls) at all
+    (e.g. left fronting the window by an earlier sanitize/trim pass) must be
+    dropped — passing it through crashes the next model call with
+    "Unexpected role 'tool' after role '<previous>'"."""
+
+    model = RecordingModel(script=[AIMessage(content="recovered fine")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    poisoned: list[BaseMessage] = [
+        HumanMessage("earlier question"),
+        ToolMessage(
+            content="orphaned result", tool_call_id="c-orphan", name="get_info"
+        ),
+        HumanMessage("new question after the crash"),
+    ]
+    await _drive(agent, {"messages": poisoned}, "t-orphan-tool")
+
+    assert len(model.calls) == 1
+    model_input = model.calls[0]
+    assert not any(isinstance(m, ToolMessage) for m in model_input)
+    human_contents = [m.content for m in model_input if isinstance(m, HumanMessage)]
+    assert human_contents == ["earlier question", "new question after the crash"]
+
+
 # ---------------------------------------------------------------------------
 # (c) Mistral reasoning-strip on replay
 # ---------------------------------------------------------------------------

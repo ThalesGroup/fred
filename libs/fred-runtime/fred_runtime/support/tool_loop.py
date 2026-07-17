@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     """
     Remove any AIMessage(tool_calls=...) whose call_ids are not all answered
-    by immediately-following ToolMessages.
+    by immediately-following ToolMessages, and any ToolMessage left with no
+    AIMessage(tool_calls) claiming it at all.
 
     Why this exists:
     - When a turn crashes mid-flight (e.g. OpenAI 400 on a previous call), the
@@ -55,12 +56,18 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
       request, but never the tool result. Every subsequent turn then loads that
       poisoned checkpoint state and OpenAI rejects the payload with:
         "tool_call_ids did not have response messages: <id>"
+    - Symmetrically, a ToolMessage can end up with no AIMessage in front of it
+      at all (its request was dropped by an earlier sanitize pass, or history
+      windowing cut a pair in half) — providers reject that too, with
+      "Unexpected role 'tool' after role '<previous>'".
     - Sanitizing here is the only safe place: it covers both the in-memory
       and persisted checkpoint paths, regardless of whether history restore
       ran or was skipped.
 
     What it does:
     - Walk through messages in order.
+    - A bare ToolMessage (reached without following an AIMessage's own
+      tool_calls) is orphaned — drop it.
     - For each AIMessage with tool_calls, check that every call_id has a
       matching ToolMessage immediately following it.
     - If ANY call_id is unmatched, drop the AIMessage AND any partial
@@ -72,6 +79,20 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     i = 0
     while i < len(messages):
         msg = messages[i]
+        # A ToolMessage reached here was never preceded by an AIMessage(tool_calls)
+        # claiming it — the branch below only ever advances `i` past an
+        # AIMessage's own ToolMessages, so this one is orphaned (e.g. a prior
+        # AIMessage that requested it was trimmed away, or history windowing cut
+        # a pair in half). Providers reject a lone `tool` role with no matching
+        # request, so drop it rather than pass it through unchanged.
+        if isinstance(msg, ToolMessage):
+            logger.warning(
+                "[TOOL_LOOP] Dropped orphaned ToolMessage at index %d "
+                "(no preceding AIMessage(tool_calls) claims it).",
+                i,
+            )
+            i += 1
+            continue
         tool_calls = (
             getattr(msg, "tool_calls", None) if isinstance(msg, AIMessage) else None
         )
