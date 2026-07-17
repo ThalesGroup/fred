@@ -431,6 +431,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/capabilities` }),
     }),
+    getCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGet: build.query<
+      GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiResponse,
+      GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/revoke-impact`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: build.mutation<
       PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse,
       PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg
@@ -990,6 +1001,13 @@ export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
   /** status 200 Successful Response */ CapabilityEnablementList;
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
+export type GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiResponse =
+  /** status 200 Successful Response */ CapabilityImpactPreview;
+export type GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiArg = {
+  capabilityId: string;
+  /** Preview one team's disable. Omit for a platform-wide default-off preview. */
+  teamId?: string | null;
+};
 export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse =
   /** status 200 Successful Response */ TeamCapabilityEnablementResult;
 export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg = {
@@ -1862,9 +1880,27 @@ export type CapabilityEnablementItem = {
   team_settings_fields?: FieldSpec[];
   /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. */
   kind?: "tool" | "agent";
+  /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
+  suspended_instances?: number;
+  /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
+  health_unknown_instances?: number;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
+};
+export type ImpactedInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  display_name: string;
+};
+export type CapabilityImpactPreview = {
+  capability_id: string;
+  /** Agents that work today and would be suspended by this change. Excludes agents already broken by this capability — revoking it again does not newly break them. */
+  suspended_instances?: number;
+  /** Selecting instances whose pod is unreachable (impact unknown). */
+  health_unknown_instances?: number;
+  /** The affected agents, for the admin drill-down. */
+  instances?: ImpactedInstanceSummary[];
 };
 export type TeamCapabilityEnablementResult = {
   capability_id: string;
@@ -1875,6 +1911,8 @@ export type TeamCapabilityEnablementResult = {
   };
   /** Dependent agent instances suspended by this change (#1975). */
   suspended_instances?: number;
+  /** Dependent agent instances whose suspension this GRANT cleared (#1975). Only availability suspensions are cleared; an instance still missing another capability stays suspended, and a `capability_config_invalid` one is never touched here (RFC §3.9). */
+  revived_instances?: number;
 };
 export type EnableTeamCapabilityRequest = {
   settings?: {
@@ -1885,6 +1923,8 @@ export type CapabilityDefaultOnResult = {
   capability_id: string;
   default_on: boolean;
   suspended_instances?: number;
+  /** Dependent instances revived by turning default-on ON (#1975). */
+  revived_instances?: number;
 };
 export type SetCapabilityDefaultOnRequest = {
   default_on: boolean;
@@ -2240,6 +2280,8 @@ export const {
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
+  useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,

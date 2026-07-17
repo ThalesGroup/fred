@@ -1029,7 +1029,12 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
         capability_service, "count_all_collaborative_teams", _fake_count
     )
 
-    deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+    # No instances enrolled → the resting-health pass returns nothing and the
+    # list still renders (an empty store short-circuits before any pod fetch).
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+    )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
         deps=deps,  # type: ignore[arg-type]
@@ -1042,3 +1047,6 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
     assert item.total_team_count == 12
     # 12 teams inherit it, 1 opted out → the dashboard renders 11.
     assert item.total_team_count - len(item.disabled_team_ids) == 11
+    # No enrolled instances → nothing broken, nothing unknown.
+    assert item.suspended_instances == 0
+    assert item.health_unknown_instances == 0

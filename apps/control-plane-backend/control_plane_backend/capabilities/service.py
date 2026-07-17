@@ -40,12 +40,20 @@ from control_plane_backend.capabilities.enablement import (
     enable_capability_for_team,
     ensure_capability_anchor,
     reset_capability_for_team,
+    revive_dependent_instances,
     set_capability_default_on,
+)
+from control_plane_backend.capabilities.impact import (
+    compute_capability_impact,
+    preview_revoke_impact,
+    resolve_availability_for_team,
 )
 from control_plane_backend.capabilities.schemas import (
     CapabilityDefaultOnResult,
     CapabilityEnablementItem,
     CapabilityEnablementList,
+    CapabilityImpactPreview,
+    ImpactedInstanceSummary,
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -120,6 +128,11 @@ async def list_capability_enablement(
     # Platform-wide denominator for default-on inheritance (§8.5). Fetched once
     # for the whole list — it is the same for every capability.
     total_team_count = await count_all_collaborative_teams(deps.team_dependencies)
+    # Resting health for the WHOLE catalog in one pass (#1975): one ReBAC
+    # `ListObjects` per team holding instances plus one template fetch per pod,
+    # rather than a lookup per row. Admin-only screen, so the extra round-trips
+    # buy the most accurate answer available.
+    impact = await compute_capability_impact(deps)
     items: list[CapabilityEnablementItem] = []
     for entry in catalog.values():
         items.append(
@@ -139,6 +152,12 @@ async def list_capability_enablement(
                 total_team_count=total_team_count,
                 team_settings_fields=list(entry.team_settings_fields),
                 kind=entry.kind,
+                suspended_instances=(
+                    impact[entry.id].suspended_instances if entry.id in impact else 0
+                ),
+                health_unknown_instances=(
+                    impact[entry.id].skipped_unreachable if entry.id in impact else 0
+                ),
             )
         )
     items.sort(key=lambda item: item.id)
@@ -153,6 +172,39 @@ async def _require_manage_any(rebac: RebacEngine, user: KeycloakUser) -> None:
 
     await rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+
+
+async def _revive_after_grant(
+    *,
+    capability_id: str,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> int:
+    """Clear the suspensions a fresh grant resolves (the #1980 → #1975 seam).
+
+    Runs AFTER the enabling tuple write so the `can_use` lookup observes the new
+    grant. Every grant path funnels through here: without it a revoked-then-
+    re-enabled capability leaves its agents suspended forever, because the only
+    other clear path is the reconciliation sweep — which has no scheduled host
+    yet (#1975 names the Temporal lifecycle queue as the intended one).
+    """
+
+    agent_instance_store = deps.get_agent_instance_store()
+    instances = await agent_instance_store.list_by_team(team_id)
+    source_runtime_ids = {instance.source_runtime_id for instance in instances}
+    if not source_runtime_ids:
+        return 0
+    usable_ids, available_by_source = await resolve_availability_for_team(
+        deps, team_id=team_id, source_runtime_ids=source_runtime_ids
+    )
+    return await revive_dependent_instances(
+        agent_instance_store=agent_instance_store,
+        capability_id=capability_id,
+        usable_capability_ids=usable_ids,
+        available_by_source=available_by_source,
+        team_id=team_id,
+        kpi_writer=deps.get_kpi_writer(),
     )
 
 
@@ -176,11 +228,15 @@ async def enable_team_capability(
         settings=settings,
         updated_by=user.uid,
     )
+    revived = await _revive_after_grant(
+        capability_id=capability_id, team_id=team_id, deps=deps
+    )
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
         team_id=str(team_id),
         enabled=True,
         settings=validated,
+        revived_instances=revived,
     )
 
 
@@ -234,11 +290,22 @@ async def reset_team_capability(
         default_on=default_on,
         kpi_writer=deps.get_kpi_writer(),
     )
+    # Reset onto a default-ON platform is a GRANT (the team keeps access by
+    # inheritance), so it must revive exactly like an explicit enable — the
+    # reset path previously bare-returned 0 here and stranded its dependents.
+    revived = (
+        await _revive_after_grant(
+            capability_id=capability_id, team_id=team_id, deps=deps
+        )
+        if default_on
+        else 0
+    )
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
         team_id=str(team_id),
         enabled=default_on,
         suspended_instances=suspended,
+        revived_instances=revived,
     )
 
 
@@ -260,10 +327,63 @@ async def set_default_on(
         on=default_on,
         kpi_writer=deps.get_kpi_writer(),
     )
+    # Turning default-on ON grants inherited access platform-wide, so it revives
+    # across EVERY team holding dependents — not one team like the enable path.
+    # Teams with an explicit `disabled` opt-out keep their suspension: the
+    # per-team `can_use` lookup below still answers False for them, so the
+    # reconcile re-suspends rather than clears. That is the tri-state working,
+    # not a special case.
+    revived = 0
+    if default_on:
+        agent_instance_store = deps.get_agent_instance_store()
+        team_ids = {
+            instance.team_id
+            for instance in await agent_instance_store.list_all()
+            if capability_id in (instance.tuning.selected_capability_ids or [])
+        }
+        for team_id in team_ids:
+            revived += await _revive_after_grant(
+                capability_id=capability_id, team_id=team_id, deps=deps
+            )
     return CapabilityDefaultOnResult(
         capability_id=capability_id,
         default_on=default_on,
         suspended_instances=suspended,
+        revived_instances=revived,
+    )
+
+
+async def preview_capability_revoke(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    team_id: TeamId | None,
+    deps: ProductServiceDependencies,
+) -> CapabilityImpactPreview:
+    """Preview what revoking a capability would break (the confirm dialog).
+
+    `team_id=None` previews a platform-wide default-off; a team id previews that
+    one team's disable. Read-only — same `can_manage` gate as the mutation it
+    precedes, so the preview never reveals more than the admin may already do.
+    """
+
+    rebac = _rebac(deps)
+    await _require_can_manage(rebac, user, capability_id)
+    impact = await preview_revoke_impact(
+        deps, capability_id=capability_id, team_id=team_id
+    )
+    return CapabilityImpactPreview(
+        capability_id=capability_id,
+        suspended_instances=impact.suspended_instances,
+        health_unknown_instances=impact.skipped_unreachable,
+        instances=[
+            ImpactedInstanceSummary(
+                agent_instance_id=item.agent_instance_id,
+                team_id=item.team_id,
+                display_name=item.display_name,
+            )
+            for item in impact.instances
+        ],
     )
 
 
@@ -275,5 +395,6 @@ __all__ = [
     "enable_team_capability",
     "disable_team_capability",
     "reset_team_capability",
+    "preview_capability_revoke",
     "set_default_on",
 ]

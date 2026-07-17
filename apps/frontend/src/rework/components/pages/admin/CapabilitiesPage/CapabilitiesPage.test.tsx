@@ -43,6 +43,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useAdminCapabilitiesQuery: () => h.list,
   useListTeamsQuery: () => ({ data: [] }),
   useSetCapabilityDefaultOnMutation: () => [vi.fn(), { isLoading: false }],
+  useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -95,7 +96,7 @@ describe("CapabilitiesPage states", () => {
 });
 
 describe("CapabilitiesPage catalog rows", () => {
-  it("renders each capability with enabled-team count and neutral health", () => {
+  it("renders each capability with enabled-team count and a healthy resting state", () => {
     h.list = {
       data: {
         items: [cap({ id: "web_search", team_scope: "admin_gated", default_on: false, enabled_team_ids: ["nb"] })],
@@ -108,12 +109,44 @@ describe("CapabilitiesPage catalog rows", () => {
     // A non-default-on capability counts explicit grants only.
     expect(html).toContain(">1<");
 
-    // Health is neutral (no resting per-capability count until the sweep, #1975).
-    expect(html).toContain("rework.admin.capabilities.health.pending");
+    // Resting health with no suspended/unknown instances reads as healthy (#1975).
+    expect(html).toContain("rework.admin.capabilities.health.healthy");
     expect(html).not.toContain("rework.admin.capabilities.health.suspended");
+    expect(html).not.toContain("rework.admin.capabilities.health.unknown");
 
     // Manage-teams action is offered per row.
     expect(html).toContain("rework.admin.capabilities.manageTeams");
+  });
+
+  it("shows the resting suspended count from the row when the capability breaks agents", () => {
+    h.list = {
+      data: { items: [cap({ id: "web_search", enabled_team_ids: ["nb"], suspended_instances: 3 })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // The count comes from the row (`suspended_instances`), not session state.
+    expect(html).toContain("rework.admin.capabilities.health.suspended:3");
+    expect(html).not.toContain("rework.admin.capabilities.health.healthy");
+  });
+
+  it("shows a neutral unknown indicator when a pod was unreachable but nothing is broken", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "web_search", enabled_team_ids: ["nb"], suspended_instances: 0, health_unknown_instances: 2 }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // Unknown (unreachable pod) is distinct from suspended (broken).
+    expect(html).toContain("rework.admin.capabilities.health.unknown:2");
+    expect(html).not.toContain("rework.admin.capabilities.health.suspended");
+    expect(html).not.toContain("rework.admin.capabilities.health.healthy");
   });
 
   it("counts a default-on capability from the roster minus opt-outs, not its grants", () => {

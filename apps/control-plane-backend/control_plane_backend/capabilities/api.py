@@ -38,6 +38,7 @@ from control_plane_backend.capabilities.enablement import (
 from control_plane_backend.capabilities.schemas import (
     CapabilityDefaultOnResult,
     CapabilityEnablementList,
+    CapabilityImpactPreview,
     EnableTeamCapabilityRequest,
     SetCapabilityDefaultOnRequest,
     TeamCapabilityEnablementResult,
@@ -74,6 +75,36 @@ async def get_admin_capabilities(
 ) -> CapabilityEnablementList:
     try:
         return await capability_service.list_capability_enablement(user=user, deps=deps)
+    except (AuthorizationError, CapabilityNotFound) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/admin/capabilities/{capability_id}/revoke-impact",
+    response_model=CapabilityImpactPreview,
+    summary="Preview which agents revoking a capability would suspend.",
+)
+async def get_capability_revoke_impact(
+    capability_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    team_id: Annotated[
+        TeamId | None,
+        Query(
+            description=(
+                "Preview one team's disable. Omit for a platform-wide "
+                "default-off preview."
+            )
+        ),
+    ] = None,
+    user: KeycloakUser = Depends(get_current_user),
+) -> CapabilityImpactPreview:
+    try:
+        return await capability_service.preview_capability_revoke(
+            user=user,
+            capability_id=capability_id,
+            team_id=team_id,
+            deps=deps,
+        )
     except (AuthorizationError, CapabilityNotFound) as exc:
         raise _map_error(exc) from exc
 

@@ -32,6 +32,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAdminCapabilitiesQuery,
+  useLazyCapabilityRevokeImpactQuery,
   useListTeamsQuery,
   useSetCapabilityDefaultOnMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -55,12 +56,15 @@ export default function CapabilitiesPage() {
   const { data: teams = [] } = useListTeamsQuery();
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
 
-  // Session-observed suspended-instance counts per capability, sourced from the
-  // enablement mutations (revoke / default-off). The aggregate list carries no
-  // resting per-capability health count yet — that data lands with #1975.
-  const [suspendedByCapability, setSuspendedByCapability] = useState<Record<string, number>>({});
+  // Live impact preview fired on demand when the disable-confirmation dialog
+  // opens — a platform-wide (no teamId) preview of what turning default-on off
+  // would break right now. The resting per-capability health count in the
+  // table itself comes straight from the aggregate list (#1975), not from here.
+  const [fetchRevokeImpact, revokeImpact] = useLazyCapabilityRevokeImpactQuery();
+
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
+  const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent">("tool");
 
   const allCapabilities = data?.items ?? [];
@@ -75,10 +79,6 @@ export default function CapabilitiesPage() {
   // behind it updates.
   const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
 
-  const recordSuspended = (capabilityId: string, count: number) => {
-    setSuspendedByCapability((prev) => ({ ...prev, [capabilityId]: count }));
-  };
-
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
     try {
       const result = await setDefaultOn({
@@ -86,7 +86,6 @@ export default function CapabilitiesPage() {
         setCapabilityDefaultOnRequest: { default_on: nextValue },
       }).unwrap();
       const suspended = result.suspended_instances ?? 0;
-      recordSuspended(capability.id, suspended);
       if (suspended > 0) {
         showWarn({ summary: t("rework.admin.capabilities.defaultOffSuspendedToast", { count: suspended }) });
       } else {
@@ -104,11 +103,70 @@ export default function CapabilitiesPage() {
   const onToggleDefault = (capability: CapabilityEnablementItem) => {
     if (capability.default_on) {
       // Turning default-on off revokes inherited access team-by-team and can
-      // suspend dependent instances — confirm before firing.
+      // suspend dependent instances — confirm before firing, and preview the
+      // platform-wide impact (no teamId) so the admin sees what breaks.
       setPendingDefaultOff(capability);
+      setShowAffected(false);
+      void fetchRevokeImpact({ capabilityId: capability.id });
     } else {
       void applyDefaultOn(capability, true);
     }
+  };
+
+  const impact = revokeImpact.data;
+  const impactSuspended = impact?.suspended_instances ?? 0;
+  const impactUnknown = impact?.health_unknown_instances ?? 0;
+  const impactInstances = impact?.instances ?? [];
+
+  // Concrete impact for the disable-confirmation dialog: how many working agents
+  // this default-off would suspend, plus the affected-agent drill-down. While
+  // the preview is still loading we render nothing extra — the dialog keeps its
+  // generic message and stays actionable.
+  const renderImpactDetails = () => {
+    if (revokeImpact.isFetching || !impact) return null;
+    return (
+      <div className={styles.impact}>
+        <p className={impactSuspended > 0 ? styles.impactWarn : styles.impactNone}>
+          {impactSuspended > 0
+            ? t("rework.admin.capabilities.defaultOffConfirm.impact", { count: impactSuspended })
+            : t("rework.admin.capabilities.defaultOffConfirm.impactNone")}
+        </p>
+        {impactUnknown > 0 && (
+          <p className={styles.impactUnknown}>
+            {t("rework.admin.capabilities.defaultOffConfirm.impactUnknown", { count: impactUnknown })}
+          </p>
+        )}
+        {impactInstances.length > 0 && (
+          <>
+            <Button
+              color="on-surface"
+              variant="text"
+              size="small"
+              onClick={() => setShowAffected((prev) => !prev)}
+              aria-expanded={showAffected}
+            >
+              {t(
+                showAffected
+                  ? "rework.admin.capabilities.defaultOffConfirm.hideAffected"
+                  : "rework.admin.capabilities.defaultOffConfirm.showAffected",
+              )}
+            </Button>
+            {showAffected && (
+              <ul className={styles.affectedList}>
+                {impactInstances.map((instance) => (
+                  <li key={instance.agent_instance_id} className={styles.affectedItem}>
+                    {t("rework.admin.capabilities.defaultOffConfirm.affectedAgent", {
+                      name: instance.display_name,
+                      team: instance.team_id,
+                    })}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+    );
   };
 
   const columns: DataTableColumn<CapabilityEnablementItem>[] = [
@@ -171,18 +229,27 @@ export default function CapabilitiesPage() {
       label: t("rework.admin.capabilities.col.health"),
       size: "1fr",
       cellRenderer: (cap) => {
-        const suspended = suspendedByCapability[cap.id];
+        // Resting health straight from the aggregate list (#1975): agents this
+        // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
+        // was unreachable so their health can't be determined
+        // (`health_unknown_instances`) — kept visually distinct.
+        const suspended = cap.suspended_instances ?? 0;
+        const unknown = cap.health_unknown_instances ?? 0;
         return (
           <div className={styles.centered}>
-            {suspended && suspended > 0 ? (
+            {suspended > 0 ? (
               <span className={styles.healthWarn}>
                 <Icon category="outlined" type="warning" />
                 {t("rework.admin.capabilities.health.suspended", { count: suspended })}
               </span>
-            ) : (
-              <Tooltip text={t("rework.admin.capabilities.health.pending")}>
-                <span className={styles.healthNeutral}>—</span>
+            ) : unknown > 0 ? (
+              <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
+                <span className={styles.healthNeutral}>
+                  {t("rework.admin.capabilities.health.unknown", { count: unknown })}
+                </span>
               </Tooltip>
+            ) : (
+              <span className={styles.healthNeutral}>{t("rework.admin.capabilities.health.healthy")}</span>
             )}
           </div>
         );
@@ -250,13 +317,13 @@ export default function CapabilitiesPage() {
         teams={teams}
         open={matrixCapability !== null}
         onClose={() => setMatrixCapabilityId(null)}
-        onSuspended={recordSuspended}
       />
 
       <ConfirmationDialog
         open={pendingDefaultOff !== null}
         title={t("rework.admin.capabilities.defaultOffConfirm.title")}
         message={t("rework.admin.capabilities.defaultOffConfirm.message")}
+        details={renderImpactDetails()}
         confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
         cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
         criticalAction

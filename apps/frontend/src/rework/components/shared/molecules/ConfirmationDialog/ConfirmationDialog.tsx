@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import styles from "./ConfirmationDialog.module.css";
@@ -21,6 +21,8 @@ interface ConfirmationDialogProps {
   open: boolean;
   title: string;
   message?: string;
+  /** Extra content rendered under the message — e.g. an impact drill-down. */
+  details?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   criticalAction?: boolean;
@@ -32,6 +34,7 @@ export function ConfirmationDialog({
   open,
   title,
   message,
+  details,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   criticalAction = false,
@@ -64,6 +67,7 @@ export function ConfirmationDialog({
               {title}
             </p>
             {message && <p className={styles.message}>{message}</p>}
+            {details}
           </div>
           <div className={styles.actions}>
             <Button color="on-surface" variant="outlined" size="medium" onClick={onCancel}>

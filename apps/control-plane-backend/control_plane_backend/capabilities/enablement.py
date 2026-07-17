@@ -181,6 +181,11 @@ async def enable_capability_for_team(
     Write ordering: the settings row is persisted FIRST, then the `enabled`
     tuple — so a crash between the two leaves the capability disabled, never
     enabled-without-settings.
+
+    Reviving the instances this grant unblocks is the CALLER's second step (see
+    `revive_dependent_instances`): it needs the live ReBAC + pod facts, which
+    this module deliberately does not fetch, and it must run AFTER the tuple
+    write below so the `can_use` lookup observes the new grant.
     """
 
     validated = validate_team_settings(
@@ -337,6 +342,82 @@ async def suspend_dependent_instances(
         if reason is not None:
             suspended += 1
     return suspended
+
+
+async def revive_dependent_instances(
+    *,
+    agent_instance_store: AgentInstanceStore,
+    capability_id: str,
+    usable_capability_ids: set[str] | None,
+    available_by_source: Mapping[str, frozenset[str] | None],
+    team_id: TeamId | None = None,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> int:
+    """Clear the suspensions a capability GRANT resolves — the inverse of
+    `suspend_dependent_instances` (the missing half of the #1980 → #1975 seam).
+
+    Why this cannot mirror the revoke path's shortcut: `suspend_dependent_
+    instances` fakes the available set as `selected - {capability_id}` because a
+    revoke knows exactly what it removed. A grant knows only what it ADDED — it
+    cannot conclude the instance is healthy, because a SECOND capability may
+    still be revoked or missing from the pod. So the caller must supply the real
+    availability facts and let `reconcile_instance_suspension` decide: it clears
+    only when NOTHING is missing, and re-suspends otherwise.
+
+    Safe on the reasons it must not touch: the reconcile clears only
+    `AVAILABILITY_REASONS`, so a `capability_config_invalid` suspension survives
+    untouched — only a successful save clears that (RFC §3.9). Passing the real
+    sets rather than a synthetic one is what makes that guarantee hold here.
+
+    `usable_capability_ids=None` means ReBAC is disabled (no scoping). An
+    instance whose runtime is absent from `available_by_source` (or maps to
+    None) has an unreachable pod and is SKIPPED rather than revived — the same
+    fail-to-unknown rule the reconciliation sweep applies (#1975). Returns the
+    number of instances whose suspension was cleared.
+    """
+
+    instances = (
+        await agent_instance_store.list_by_team(team_id)
+        if team_id is not None
+        else await agent_instance_store.list_all()
+    )
+    revived = 0
+    for instance in instances:
+        selected = set(instance.tuning.selected_capability_ids or [])
+        # Only instances that selected the granted capability can be revived by
+        # this grant; an unrelated suspension is never touched.
+        if capability_id not in selected:
+            continue
+        if not instance.is_suspended:
+            continue
+        available_ids = available_by_source.get(instance.source_runtime_id)
+        if available_ids is None:
+            continue
+        # The real available set: what the team may use AND the pod ships. The
+        # reconcile clears only if EVERY selected capability is in it.
+        effective = (
+            selected & available_ids
+            if usable_capability_ids is None
+            else selected & usable_capability_ids & available_ids
+        )
+        updated = await reconcile_instance_suspension(
+            instance=instance,
+            store=agent_instance_store,
+            available_capability_ids=effective,
+            revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            kpi_writer=kpi_writer,
+        )
+        # A None return means "no AVAILABILITY reason" — NOT necessarily
+        # cleared: a `capability_config_invalid` instance also returns None
+        # while `clear_suspension` deliberately leaves its reason intact
+        # (RFC §3.9). Re-read the record and count only a real transition to
+        # unsuspended, so config-invalid instances are never miscounted.
+        if updated is not None:
+            continue
+        fresh = await agent_instance_store.get(instance.agent_instance_id)
+        if fresh is not None and not fresh.is_suspended:
+            revived += 1
+    return revived
 
 
 async def set_capability_default_on(
