@@ -24,12 +24,14 @@ from control_plane_backend.agent_instances.store import (
     AgentInstanceStore,
 )
 from control_plane_backend.app.dependencies import get_application_container_from_app
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -44,19 +46,20 @@ from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import (
-    KeycloakGroupSummary,
     Team,
     TeamWithPermissions,
 )
 from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     KeycloakUser,
+    OrganizationPermission,
     RelationType,
     SessionSchema,
     TeamPermission,
     get_current_user,
 )
 from fred_core.common import TeamId, personal_team_id
+from fred_core.security import oidc
 from fred_core.teams.metadata_store import TeamMetadata
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
@@ -66,7 +69,6 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.models import FieldSpec
 from httpx import ASGITransport, AsyncClient
-from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -565,7 +567,7 @@ async def _fake_get_team_by_id(
         name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
         member_count=1,
         is_private=True,
-        owners=[],
+        admins=[],
         permissions=[],
     )
 
@@ -705,7 +707,12 @@ async def test_delete_user_requires_keycloak_m2m() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
+async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty() -> (
+    None
+):
+    """AUTHZ-05 review item 9: `list_teams` now sources collaborative teams from
+    `team_metadata_store.list_all()` instead of Keycloak root groups — with an
+    empty registry (nothing created yet), only the reserved personal team shows."""
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -718,7 +725,7 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
             "id": _PERSONAL_TEAM_ID,
             "name": "Equipe personnelle",
             "member_count": 1,
-            "owners": [],
+            "admins": [],
             "is_member": False,
             "is_private": True,
             "max_resources_storage_size": 5368709120,
@@ -746,8 +753,182 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
     assert "ui_settings" not in payload
-    assert "agents:read" in payload["permissions"]["items"]
-    assert payload["permissions"]["can_manage_team_agents"] is True
+    # AUTHZ-05 review item 11: `permissions` only ever carries the two
+    # OpenFGA-derived flags now — the Keycloak-role-derived `items` list and
+    # its six always-empty `can_*` booleans were removed as dead weight.
+    assert set(payload["permissions"]) == {"is_platform_admin", "is_platform_observer"}
+    # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
+    assert payload["permissions"]["is_platform_admin"] is True
+    assert payload["permissions"]["is_platform_observer"] is True
+
+
+@pytest.mark.asyncio
+async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 review item 4: `is_platform_admin` must come from the OpenFGA
+    `platform_admin` relation (via `CAN_MANAGE_PLATFORM`), not from the caller's
+    Keycloak roles. A user with no Keycloak `admin` role but an OpenFGA
+    `platform_admin` relation must still see `is_platform_admin=True`, and a
+    distinct `CAN_READ_KPI` check must drive `is_platform_observer` independently.
+    """
+
+    class _FakePlatformAdminRebac:
+        async def has_user_permission(
+            self, _user, permission, _resource_id, *, consistency_token=None
+        ) -> bool:
+            return permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+
+        # AUTHZ-05 review item 9: `_list_teams` (called from bootstrap's team
+        # listing) now also touches these two collaborators.
+        async def ensure_team_organization_relations(self, _team_ids) -> str | None:
+            return None
+
+        async def lookup_user_resources(
+            self, _user, _permission, *, consistency_token=None
+        ):
+            from fred_core import RebacDisabledResult
+
+            return RebacDisabledResult()
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: _FakePlatformAdminRebac(),
+    )
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/bootstrap")
+    app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    permissions = resp.json()["permissions"]
+    assert permissions["is_platform_admin"] is True
+    assert permissions["is_platform_observer"] is False
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_platform_admin_returns_401_without_bearer_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real route — not just the service function — must enforce
+    authentication. With Keycloak genuinely enabled and no bearer token
+    supplied, the real `get_current_user` (not the no-security mock admin
+    every other route in this test config gets by default) must reject the
+    call with 401 before the bootstrap service ever runs (AUTHZ-07)."""
+    app = create_app()
+    # create_app() calls initialize_user_security() from the loaded test
+    # config (security.user.enabled=False), so KEYCLOAK_ENABLED must be
+    # flipped *after* create_app(), not before — otherwise create_app()
+    # overwrites it right back to False.
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
+    container = get_application_container_from_app(app)
+    container.configuration.security.user.enabled = True
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/bootstrap/platform-admin",
+            json={"token": "irrelevant-but-16-chars"},
+        )
+
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_platform_admin_returns_503_when_auth_disabled(
+    tmp_path: Path,
+) -> None:
+    """`BootstrapAuthDisabledError` end-to-end through the real route, not just
+    the service function. With a correctly configured secret (so the token
+    check itself passes) but `security.user.enabled=False`, the route must
+    surface 503 with the fail-closed message rather than falling through to a
+    grant (AUTHZ-07, RFC Part 8 §42.1)."""
+    token_path = tmp_path / "token"
+    token_path.write_text("secret-token-9f3a2b1c")
+
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.app.bootstrap_token_file = str(token_path)
+    container.configuration.security.user.enabled = False
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/control-plane/v1/bootstrap/platform-admin",
+                json={"token": "secret-token-9f3a2b1c"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 503
+    assert "Authentication is disabled" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_platform_admin_happy_path_through_real_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One minimal proof that the real route, dependency wiring, and
+    registered exception handlers cooperate end-to-end on success — the
+    business logic itself (token comparison, self-promotion-only, durable
+    marker, write ordering, ...) is already covered exhaustively at the
+    service-function level in test_bootstrap_platform_admin.py (AUTHZ-07)."""
+
+    class _FakeRebac:
+        enabled = True
+
+        def __init__(self) -> None:
+            self.added_relations: list[object] = []
+
+        async def add_relation(self, relation):
+            self.added_relations.append(relation)
+            return None
+
+    fake_rebac = _FakeRebac()
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: fake_rebac,
+    )
+
+    token_path = tmp_path / "token"
+    token_path.write_text("secret-token-9f3a2b1c")
+
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.app.bootstrap_token_file = str(token_path)
+    container.configuration.security.user.enabled = True
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="carol-sub", username="carol", roles=[]
+    )
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/control-plane/v1/bootstrap/platform-admin",
+                json={"token": "secret-token-9f3a2b1c"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["user_id"] == "carol-sub"
+    assert payload["username"] == "carol"
+    assert len(fake_rebac.added_relations) == 1
 
 
 @pytest.mark.asyncio
@@ -816,6 +997,249 @@ async def test_frontend_config_exposes_gcu_version_when_gating_enabled() -> None
 
 
 @pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_completed_false_on_fresh_store(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_completed` is False when root bootstrap (AUTHZ-07) has
+    never run on this deployment, mirroring `PlatformBootstrapStore.is_completed()`
+    on a store with no durable marker row.
+
+    Uses a dedicated per-test engine (same real-SQLite-engine pattern as
+    `test_metadata_stores.py`'s `test_platform_bootstrap_store_*` tests) rather
+    than the shared container engine: `test_bootstrap_platform_admin_happy_path_through_real_route`
+    permanently completes bootstrap on that shared store within the same test
+    session, so asserting "fresh" against it would be order-dependent.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-fresh.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        assert resp.json()["root_bootstrap_completed"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_completed_true_after_mark_completed(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_completed` flips to True once the durable
+    `PlatformBootstrapStore` marker has been set — same real-SQLite-engine
+    pattern as `test_metadata_stores.py`'s `test_platform_bootstrap_store_*`
+    tests, wired through `create_app()`'s container so the assertion goes
+    through the actual public `/frontend/config` route rather than calling
+    `build_frontend_config` directly. A dedicated per-test engine (rather than
+    the shared container engine) keeps this test from leaking the permanent
+    marker into the rest of the suite."""
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-completed.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        assert resp.json()["root_bootstrap_completed"] is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_required_true_when_auth_and_rebac_enabled_and_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`root_bootstrap_required` is the authoritative frontend gating decision:
+    true only when auth is enabled, ReBAC is enabled, and root bootstrap has
+    never completed — the one case where `POST /bootstrap/platform-admin` can
+    actually succeed."""
+
+    class _FakeEnabledRebac:
+        enabled = True
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-required-true.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        monkeypatch.setattr(
+            "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+            lambda _self: _FakeEnabledRebac(),
+        )
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_once_completed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once root bootstrap has durably completed, `root_bootstrap_required`
+    flips to False even though auth and ReBAC remain enabled — the guard must
+    stop gating once the one-time grant has happened."""
+
+    class _FakeEnabledRebac:
+        enabled = True
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-required-completed.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="dana-sub")
+
+        monkeypatch.setattr(
+            "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+            lambda _self: _FakeEnabledRebac(),
+        )
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is True
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_when_auth_disabled(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_required` stays False when user authentication is
+    disabled — `POST /bootstrap/platform-admin` refuses with 503 there, so the
+    guard must never trap this deployment on a form that can never succeed,
+    even though the durable `root_bootstrap_completed` marker is False.
+
+    Uses a dedicated per-test engine (same rationale as the
+    `root_bootstrap_completed` tests above): the shared container store can
+    carry a permanent `True` marker left by other tests in the same session.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-not-required-auth-disabled.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = False
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_root_bootstrap_not_required_when_rebac_disabled(
+    tmp_path: Path,
+) -> None:
+    """`root_bootstrap_required` stays False when ReBAC is disabled — the test
+    container's default `NoopRebacEngine` (`enabled=False`) mirrors the same
+    deployment shape `POST /bootstrap/platform-admin` refuses with 503, so the
+    guard must not trap this deployment either.
+
+    Uses a dedicated per-test engine for the same reason as the sibling test
+    above — the shared container store is not safe to assert "fresh" against
+    once other tests have run in the same session.
+    """
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'root-bootstrap-not-required-rebac-disabled.sqlite3'}"
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CPBase.metadata.create_all)
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        app = create_app()
+        container = get_application_container_from_app(app)
+        container.configuration.security.user.enabled = True
+        container.get_platform_bootstrap_store = lambda: store  # type: ignore[method-assign]
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/control-plane/v1/frontend/config")
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["root_bootstrap_completed"] is False
+        assert payload["root_bootstrap_required"] is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_get_personal_team_returns_shared_system_team_contract() -> None:
     app = create_app()
     async with AsyncClient(
@@ -828,7 +1252,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "id": _PERSONAL_TEAM_ID,
         "name": "Equipe personnelle",
         "member_count": 1,
-        "owners": [],
+        "admins": [],
         "is_member": False,
         "is_private": True,
         "permissions": [
@@ -1125,7 +1549,7 @@ async def test_agent_instance_mutations_require_can_update_agents(
             name=str(team_id),
             member_count=1,
             is_private=False,
-            owners=[],
+            admins=[],
             permissions=[],
         )
 
@@ -2205,6 +2629,7 @@ def _build_erasure_deps(
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
         get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
+        get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
     )
 
 
@@ -3216,7 +3641,9 @@ async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
         # The team explicitly set a retention window (≤ the platform cap).
         team_metadata_store=_FakeTeamMetadataStore(
-            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+            TeamMetadata(
+                id=TeamId("northbridge"), name="Northbridge", team_delete_grace="P30D"
+            )
         ),
         purge_queue_store=queue,
     )
@@ -3275,7 +3702,9 @@ async def test_deferred_delete_retry_does_not_duplicate_erasure_task() -> None:
         _FakeSessionAttachmentStore([]),
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
         team_metadata_store=_FakeTeamMetadataStore(
-            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+            TeamMetadata(
+                id=TeamId("northbridge"), name="Northbridge", team_delete_grace="P30D"
+            )
         ),
         purge_queue_store=queue,
         task_service=task_service,
@@ -3340,7 +3769,9 @@ async def test_deferred_delete_recreates_erasure_task_when_missing() -> None:
         _FakeSessionAttachmentStore([]),
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
         team_metadata_store=_FakeTeamMetadataStore(
-            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+            TeamMetadata(
+                id=TeamId("northbridge"), name="Northbridge", team_delete_grace="P30D"
+            )
         ),
         purge_queue_store=queue,
         task_service=task_service,
@@ -3365,7 +3796,9 @@ async def test_deferred_delete_recreates_erasure_task_when_missing() -> None:
         _FakeSessionAttachmentStore([]),
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
         team_metadata_store=_FakeTeamMetadataStore(
-            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+            TeamMetadata(
+                id=TeamId("northbridge"), name="Northbridge", team_delete_grace="P30D"
+            )
         ),
         purge_queue_store=queue,
         task_service=already,
@@ -4015,9 +4448,10 @@ async def test_teams_preflight_options_is_handled_by_cors() -> None:
 @pytest.mark.parametrize(
     ("relation", "expected_permission"),
     [
-        ("member", TeamPermission.CAN_ADMINISTER_MEMBERS),
-        ("manager", TeamPermission.CAN_ADMINISTER_MANAGERS),
-        ("owner", TeamPermission.CAN_ADMINISTER_OWNERS),
+        ("team_member", TeamPermission.CAN_ADMINISTER_MEMBERS),
+        ("team_editor", TeamPermission.CAN_ADMINISTER_EDITORS),
+        ("team_analyst", TeamPermission.CAN_ADMINISTER_ANALYSTS),
+        ("team_admin", TeamPermission.CAN_ADMINISTER_ADMINS),
     ],
 )
 async def test_add_team_member_checks_permission_for_target_relation(
@@ -4025,10 +4459,6 @@ async def test_add_team_member_checks_permission_for_target_relation(
     relation: str,
     expected_permission: TeamPermission,
 ) -> None:
-    class _FakeKeycloakAdmin:
-        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
-            return None
-
     captured_permissions: list[list[TeamPermission]] = []
 
     async def _fake_validate_team_and_check_permission(
@@ -4037,7 +4467,7 @@ async def test_add_team_member_checks_permission_for_target_relation(
     ):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
+        return TeamMetadata(id=TeamId("thales"), name="Thales"), None
 
     async def _fake_add_team_member_relation(*_args, **_kwargs):
         return None
@@ -4077,11 +4507,7 @@ async def test_update_team_checks_can_update_info_permission(
 
         async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
-            return TeamMetadata(id=TeamId(team_id))
-
-    class _FakeKeycloakAdmin:
-        async def a_get_group_members(self, _team_id: str, _query: dict) -> list[dict]:
-            return []
+            return TeamMetadata(id=TeamId(team_id), name="Thales")
 
     fake_metadata_store = _FakeMetadataStore()
     captured_permissions: list[list[TeamPermission]] = []
@@ -4089,12 +4515,12 @@ async def test_update_team_checks_can_update_info_permission(
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, "token"
+        return TeamMetadata(id=TeamId("thales"), name="Thales"), "token"
 
     async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
         return [TeamPermission.CAN_UPDATE_INFO]
 
-    async def _fake_enrich_groups_with_team_data(*_args, **_kwargs):
+    async def _fake_enrich_teams_with_membership(*_args, **_kwargs):
         return [Team(id=TeamId("thales"), name="Thales")]
 
     monkeypatch.setattr(
@@ -4106,8 +4532,8 @@ async def test_update_team_checks_can_update_info_permission(
         _fake_get_team_permissions_for_user,
     )
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._enrich_groups_with_team_data",
-        _fake_enrich_groups_with_team_data,
+        "control_plane_backend.teams.service._enrich_teams_with_membership",
+        _fake_enrich_teams_with_membership,
     )
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
@@ -4142,34 +4568,20 @@ async def test_update_team_checks_can_update_info_permission(
 
 
 @pytest.mark.asyncio
-async def test_enrich_groups_uses_team_metadata_store(
+async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """AUTHZ-05 review item 9: `_enrich_teams_with_membership` renders directly off
+    the `TeamMetadata` rows it's handed (description/is_private/banner) — there is
+    no separate Keycloak-group-summary type or admin fetch anymore."""
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
-    from control_plane_backend.teams.service import _enrich_groups_with_team_data
-
-    class _FakeMetadataStore:
-        async def get_by_team_ids(
-            self, _team_ids: list[TeamId], session=None
-        ) -> dict[TeamId, TeamMetadata]:
-            return {
-                TeamId("team-1"): TeamMetadata(
-                    id=TeamId("team-1"),
-                    description="desc",
-                    is_private=False,
-                    banner_object_storage_key="teams/team-1/banner-1.png",
-                )
-            }
+    from control_plane_backend.teams.service import _enrich_teams_with_membership
 
     class _FakeContentStore:
         def get_presigned_url(self, key: str, expires=None) -> str:
             _ = expires
             assert key == "teams/team-1/banner-1.png"
             return "https://example.test/banner.png"
-
-    class _FakeAdmin:
-        async def a_get_group_members(self, _group_id: str, _query: dict) -> list[dict]:
-            return [{"id": "user-1"}]
 
     async def _fake_get_team_users_by_relation(*_args, **_kwargs):
         return set()
@@ -4192,8 +4604,7 @@ async def test_enrich_groups_uses_team_metadata_store(
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
-        create_keycloak_admin_client=cast(Any, lambda: object()),
-        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
+        get_team_metadata_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
         get_session_store=cast(Any, lambda: object()),
         get_purge_queue_store=cast(Any, lambda: object()),
@@ -4202,14 +4613,19 @@ async def test_enrich_groups_uses_team_metadata_store(
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
 
-    teams = await _enrich_groups_with_team_data(
-        cast(Any, _FakeAdmin()),
-        rebac=cast(
+    teams = await _enrich_teams_with_membership(
+        cast(
             Any, object()
-        ),  # unused due monkeypatching _get_team_users_by_relation
+        ),  # rebac unused due to monkeypatched _get_team_users_by_relation
         user=cast(Any, type("User", (), {"uid": "user-1"})()),
-        groups=[
-            KeycloakGroupSummary(id=TeamId("team-1"), name="Team 1", member_count=0)
+        teams_metadata=[
+            TeamMetadata(
+                id=TeamId("team-1"),
+                name="Team 1",
+                description="desc",
+                is_private=False,
+                banner_object_storage_key="teams/team-1/banner-1.png",
+            )
         ],
         deps=fake_deps,
     )
@@ -4221,27 +4637,20 @@ async def test_enrich_groups_uses_team_metadata_store(
 
 
 @pytest.mark.asyncio
-async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
+async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Admin dedupe still applies: legacy relations naming a username alongside
+    newer relations naming the canonical user id must render as one admin, even
+    though admin ids now resolve purely through `_get_team_users_by_relation`."""
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
-    from control_plane_backend.teams.service import _enrich_groups_with_team_data
-
-    class _FakeMetadataStore:
-        async def get_by_team_ids(
-            self, _team_ids: list[TeamId], session=None
-        ) -> dict[TeamId, TeamMetadata]:
-            return {}
+    from control_plane_backend.teams.service import _enrich_teams_with_membership
 
     class _FakeContentStore:
         def get_presigned_url(self, key: str, expires=None) -> str:
             _ = key
             _ = expires
             raise AssertionError("No banner lookup expected in this test.")
-
-    class _FakeAdmin:
-        async def a_get_group_members(self, _group_id: str, _query: dict) -> list[dict]:
-            return [{"id": "user-1"}]
 
     async def _fake_get_team_users_by_relation(*_args, **_kwargs):
         return {"user-1", "marc"}
@@ -4267,8 +4676,7 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
-        create_keycloak_admin_client=cast(Any, lambda: object()),
-        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
+        get_team_metadata_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
         get_session_store=cast(Any, lambda: object()),
         get_purge_queue_store=cast(Any, lambda: object()),
@@ -4277,18 +4685,15 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
 
-    teams = await _enrich_groups_with_team_data(
-        cast(Any, _FakeAdmin()),
-        rebac=cast(Any, object()),
+    teams = await _enrich_teams_with_membership(
+        cast(Any, object()),
         user=cast(Any, type("User", (), {"uid": "user-1"})()),
-        groups=[
-            KeycloakGroupSummary(id=TeamId("team-1"), name="fredlab", member_count=0)
-        ],
+        teams_metadata=[TeamMetadata(id=TeamId("team-1"), name="fredlab")],
         deps=fake_deps,
     )
 
     assert len(teams) == 1
-    assert [owner.username or owner.id for owner in teams[0].owners] == ["marc"]
+    assert [admin.username or admin.id for admin in teams[0].admins] == ["marc"]
 
 
 @pytest.mark.asyncio
@@ -4308,7 +4713,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
 
         async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
-            return TeamMetadata(id=TeamId(team_id))
+            return TeamMetadata(id=TeamId(team_id), name="Thales")
 
     fake_content_store = _FakeContentStore()
     fake_metadata_store = _FakeMetadataStore()
@@ -4317,7 +4722,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return object(), {"id": "thales", "name": "Thales"}, None
+        return TeamMetadata(id=TeamId("thales"), name="Thales"), None
 
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
@@ -4406,69 +4811,7 @@ async def test_upload_team_banner_rejects_file_too_large(
 
 
 @pytest.mark.asyncio
-async def test_add_team_member_returns_clear_error_when_keycloak_forbids_operation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class _FakeKeycloakAdmin:
-        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
-            raise KeycloakPutError(
-                error_message="HTTP 403 Forbidden",
-                response_code=403,
-                response_body=b'{"error":"HTTP 403 Forbidden"}',
-            )
-
-    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
-
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service._validate_team_and_check_permission",
-        _fake_validate_team_and_check_permission,
-    )
-
-    app = create_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/thales/members",
-            json={"user_id": "user-001", "relation": "member"},
-        )
-
-    assert resp.status_code == 403
-    assert (
-        resp.json()["detail"]
-        == "Control Plane is not allowed to manage team membership in Keycloak. "
-        "Ask platform admin to grant realm-management/manage-users "
-        "to the 'control-plane' client service account."
-    )
-
-
-@pytest.mark.asyncio
-async def test_delete_team_member_requires_keycloak_m2m() -> None:
-    app = create_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.delete(
-            "/control-plane/v1/teams/contractors/members/user-001",
-        )
-
-    assert resp.status_code == 503
-    payload = resp.json()
-    assert (
-        payload["detail"] == "Keycloak M2M is disabled; cannot perform team operations."
-    )
-
-
-@pytest.mark.asyncio
 async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -> None:
-    class _FakeKeycloakAdmin:
-        async def a_get_group(self, _group_id: str) -> dict[str, str]:
-            return {"id": "swiftpost", "name": "SwiftPost"}
-
-        async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
-            return None
-
     class _FakeRebac:
         def __init__(self) -> None:
             self.delete_relations_calls = 0
@@ -4515,17 +4858,17 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     fake_rebac = _FakeRebac()
     fake_queue = _FakeQueueStore()
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
         from control_plane_backend.teams.schemas import UserTeamRelation
 
-        return UserTeamRelation.MEMBER
+        return {UserTeamRelation.TEAM_MEMBER}
 
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        return _FakeKeycloakAdmin(), {"id": "swiftpost", "name": "SwiftPost"}, None
+        return TeamMetadata(id=TeamId("swiftpost"), name="SwiftPost"), None
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
@@ -4581,10 +4924,6 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from fred_core.scheduler import SchedulerBackend
 
-    class _FakeKeycloakAdmin:
-        async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
-            return None
-
     class _FakeRebac:
         async def delete_relations(self, _relations) -> None:
             return None
@@ -4620,13 +4959,13 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     fake_session_store = _FakeSessionStore()
     fake_queue_store = _FakeQueueStore()
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
         from control_plane_backend.teams.schemas import UserTeamRelation
 
-        return UserTeamRelation.MEMBER
+        return {UserTeamRelation.TEAM_MEMBER}
 
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        return _FakeKeycloakAdmin(), {"id": "temp-lab", "name": "Temp Lab"}, None
+        return TeamMetadata(id=TeamId("temp-lab"), name="Temp Lab"), None
 
     async def _fake_run_lifecycle_manager_once_in_memory(_input_data):
         lifecycle_calls.append(1)
@@ -4651,7 +4990,6 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
-        create_keycloak_admin_client=cast(Any, lambda: _FakeKeycloakAdmin()),
         get_team_metadata_store=lambda: cast(Any, object()),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
@@ -4666,8 +5004,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         lambda *_args, **_kwargs: fake_team_deps,
     )
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
@@ -4737,26 +5075,28 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
 
 
 @pytest.mark.asyncio
-async def test_update_team_member_blocks_last_owner_demotion(
+async def test_revoke_team_member_role_blocks_last_admin_demotion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """AUTHZ-06 (RFC Part 7 §35): revoking `team_admin` from the sole admin is
+    blocked the same way the old single-role PATCH used to be."""
     from control_plane_backend.teams.schemas import UserTeamRelation
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
-        return UserTeamRelation.OWNER
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
+        return {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.TEAM_EDITOR}
 
     async def _fake_get_team_users_by_relation(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
     ) -> set[str]:
-        if relation == RelationType.OWNER:
+        if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
@@ -4767,39 +5107,38 @@ async def test_update_team_member_blocks_last_owner_demotion(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.patch(
-            "/control-plane/v1/teams/thales/members/user-001",
-            json={"relation": "manager"},
+        resp = await client.delete(
+            "/control-plane/v1/teams/thales/members/user-001/roles/team_admin",
         )
 
     assert resp.status_code == 409
     assert (
         resp.json()["detail"]
-        == "Operation denied: a team must keep at least one owner."
+        == "Operation denied: a team must keep at least one team_admin."
     )
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_blocks_removing_last_owner(
+async def test_remove_team_member_blocks_removing_last_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from control_plane_backend.teams.schemas import UserTeamRelation
 
-    async def _fake_get_user_role_in_team(*_args, **_kwargs):
-        return UserTeamRelation.OWNER
+    async def _fake_get_user_roles_in_team(*_args, **_kwargs):
+        return {UserTeamRelation.TEAM_ADMIN}
 
     async def _fake_get_team_users_by_relation(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
     ) -> set[str]:
-        if relation == RelationType.OWNER:
+        if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_user_role_in_team",
-        _fake_get_user_role_in_team,
+        "control_plane_backend.teams.service._get_user_roles_in_team",
+        _fake_get_user_roles_in_team,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
@@ -4815,7 +5154,7 @@ async def test_remove_team_member_blocks_removing_last_owner(
     assert resp.status_code == 409
     assert (
         resp.json()["detail"]
-        == "Operation denied: a team must keep at least one owner."
+        == "Operation denied: a team must keep at least one team_admin."
     )
 
 
@@ -5471,7 +5810,12 @@ async def test_enrolling_internal_template_is_admin_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-public template (AGENT-VISIBILITY-RFC) must not be enrollable by a
-    non-admin who guesses its id; admins can enroll it."""
+    non-admin who guesses its id; a real OpenFGA `platform_admin` can enroll it.
+    AUTHZ-05 review finding: this used to check the Keycloak `admin` role
+    directly (the same anti-pattern already fixed on the read-side
+    `get_team_agent_templates`'s `include_non_public`) — it must go through
+    `CAN_MANAGE_PLATFORM` like everywhere else, so a bare Keycloak role with no
+    OpenFGA `platform_admin` relation is not sufficient."""
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
@@ -5485,6 +5829,24 @@ async def test_enrolling_internal_template_is_admin_only(
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch_internal,
     )
+
+    class _FakePlatformAdminOnlyRebac:
+        """Grants CAN_MANAGE_PLATFORM to `alice` only — mirrors a real OpenFGA
+        `platform_admin` relation decoupled from any Keycloak role."""
+
+        async def has_user_permission(
+            self, user, permission, _resource_id, *, consistency_token=None
+        ) -> bool:
+            return (
+                permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+                and user.uid == "alice"
+            )
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: _FakePlatformAdminOnlyRebac(),
+    )
+
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -5498,9 +5860,10 @@ async def test_enrolling_internal_template_is_admin_only(
     ]
     body = {"template_id": "runtime-a:rags.sample.mcp", "display_name": "x"}
 
-    # Non-admin: the hidden template resolves to nothing -> 404 (as if it did not exist).
+    # Keycloak `admin` role but no OpenFGA `platform_admin` relation: the hidden
+    # template resolves to nothing -> 404 (as if it did not exist).
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="bob", username="bob", roles=[]
+        uid="bob", username="bob", roles=["admin"]
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -5510,9 +5873,9 @@ async def test_enrolling_internal_template_is_admin_only(
         )
     assert denied.status_code == 404
 
-    # Admin: the hidden template resolves and enrollment succeeds.
+    # Real OpenFGA `platform_admin`, no Keycloak role needed: enrollment succeeds.
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="alice", username="alice", roles=["admin"]
+        uid="alice", username="alice", roles=[]
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -6874,6 +7237,7 @@ class _FakeRetentionMetadataStore:
         base = self.record.model_dump() if self.record is not None else {}
         base.update(values)
         base["id"] = TeamId(str(team_id))
+        base.setdefault("name", "Northbridge")
         self.record = TeamMetadata(**base)
         return self.record
 
@@ -6887,17 +7251,13 @@ def _patch_team_retention(
 ) -> list[list[TeamPermission]]:
     """Wire the team GET/PATCH path with fakes; return the captured permissions.
 
-    Bypasses Keycloak/ReBAC exactly like the existing team-update test, but keeps
+    Bypasses ReBAC exactly like the existing team-update test, but keeps
     the real retention resolution (metadata store + policy catalog) under test.
     """
     from fred_core import AuthorizationError
     from fred_core.security.models import Resource
 
     captured: list[list[TeamPermission]] = []
-
-    class _FakeKeycloakAdmin:
-        async def a_get_group_members(self, _team_id: str, _query: dict) -> list[dict]:
-            return []
 
     async def _fake_validate(*_args: Any, **_kwargs: Any) -> Any:
         required = _args[3]
@@ -6908,7 +7268,7 @@ def _patch_team_retention(
                 action=str(deny_permission.value),
                 resource=Resource.TEAM,
             )
-        return _FakeKeycloakAdmin(), {"id": "northbridge", "name": "Northbridge"}, "tok"
+        return TeamMetadata(id=TeamId("northbridge"), name="Northbridge"), "tok"
 
     async def _fake_permissions(*_args: Any, **_kwargs: Any) -> list[TeamPermission]:
         return permissions
@@ -6925,7 +7285,7 @@ def _patch_team_retention(
         _fake_permissions,
     )
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._enrich_groups_with_team_data",
+        "control_plane_backend.teams.service._enrich_teams_with_membership",
         _fake_enrich,
     )
     monkeypatch.setattr(
@@ -6982,6 +7342,7 @@ async def test_get_team_embeds_retention_with_value_flips_to_team(
 
     record = TeamMetadata(
         id=TeamId("northbridge"),
+        name="Northbridge",
         team_delete_grace="P7D",
         max_idle="P90D",  # above the P60D cap -> clamped
         retention_updated_by="owner-1",
@@ -7065,6 +7426,7 @@ async def test_patch_team_retention_partial_overlay(
     value; an explicit null clears it (partial semantics)."""
     existing = TeamMetadata(
         id=TeamId("northbridge"),
+        name="Northbridge",
         team_delete_grace="P7D",
         max_idle="P30D",
         retention_updated_by="prior",
@@ -7245,7 +7607,9 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
         _FakeSessionAttachmentStore([]),
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
         team_metadata_store=_FakeTeamMetadataStore(
-            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+            TeamMetadata(
+                id=TeamId("northbridge"), name="Northbridge", team_delete_grace="P30D"
+            )
         ),
         purge_queue_store=_FakePurgeQueueStore(),
         task_service=task_service,
@@ -7268,3 +7632,94 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     assert task.target is not None
     assert task.target.id == "session-1"
     assert task.target.label == "Q3 pricing"
+
+
+@pytest.mark.asyncio
+async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 item 3: `platform_stats` already checked CAN_MANAGE_PLATFORM, so
+    `compute_platform_stats` must show every real team's row — even for a
+    platform_admin who personally belongs to none of them, i.e. whose CAN_READ
+    (`list_teams`) view of the world would be empty."""
+    from control_plane_backend.import_export.stats import compute_platform_stats
+    from control_plane_backend.teams.schemas import TeamMember, UserTeamRelation
+
+    real_teams = [
+        Team(
+            id=TeamId("thales"),
+            name="Thales",
+            member_count=1,
+            is_member=False,
+            is_private=True,
+            max_resources_storage_size=5368709120,
+            current_resources_storage_size=0,
+        ),
+        Team(
+            id=TeamId("fredlab"),
+            name="Fredlab",
+            member_count=1,
+            is_member=False,
+            is_private=False,
+            max_resources_storage_size=5368709120,
+            current_resources_storage_size=0,
+        ),
+    ]
+
+    async def _fake_list_all_teams_unfiltered(_user: Any, _deps: Any) -> list[Team]:
+        # Real Keycloak root groups exist regardless of the caller's CAN_READ view.
+        return real_teams
+
+    async def _fake_list_teams_can_read_filtered(_user: Any, _deps: Any) -> list[Team]:
+        # A platform_admin with zero personal team membership: CAN_READ surfaces
+        # nothing. If `compute_platform_stats` regressed to calling `list_teams`
+        # (the filtered function) instead of the unfiltered one, this empty
+        # result would make the assertions below fail.
+        return []
+
+    async def _fake_list_team_members(
+        _user: Any, team_id: TeamId, _deps: Any
+    ) -> list[TeamMember]:
+        return [
+            TeamMember(
+                user=UserSummary(id=f"admin-of-{team_id}"),
+                relations=[UserTeamRelation.TEAM_ADMIN],
+            )
+        ]
+
+    async def _fake_counts_by_team(
+        _engine: Any,
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        return {"thales": 2, "fredlab": 1}, {"thales": 3, "fredlab": 0}
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.stats.list_all_teams_unfiltered",
+        _fake_list_all_teams_unfiltered,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.list_teams",
+        _fake_list_teams_can_read_filtered,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.stats.list_team_members_unfiltered",
+        _fake_list_team_members,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.stats._counts_by_team",
+        _fake_counts_by_team,
+    )
+
+    stats = await compute_platform_stats(
+        user=cast(Any, type("User", (), {"uid": "platform-admin-no-team"})()),
+        team_deps=cast(Any, object()),
+        engine=cast(Any, object()),
+    )
+
+    assert stats.teams == 2
+    assert {team.team_id for team in stats.per_team} == {"thales", "fredlab"}
+    assert stats.total_agents == 3
+    assert stats.total_prompts == 3
+    thales_row = next(t for t in stats.per_team if t.team_id == "thales")
+    assert thales_row.admins == 1
+    assert thales_row.agents == 2
+    assert thales_row.prompts == 3

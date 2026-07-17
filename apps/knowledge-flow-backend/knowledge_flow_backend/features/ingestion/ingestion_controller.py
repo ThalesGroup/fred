@@ -337,23 +337,16 @@ class IngestionController:
         del user, storage_key
         return await self._delete_fast_vectors(document_uid=document_uid)
 
-    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
-        if not tags:
-            return
+    async def _resolve_tag_owners(self, tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
+        """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
 
-        total_upload_size = 0
-        for f in files:
-            file_size = getattr(f, "size", None)
-            if file_size is not None:
-                total_upload_size += file_size
-            else:
-                f.file.seek(0, 2)
-                total_upload_size += f.file.tell()
-                f.file.seek(0)
-
-        if total_upload_size <= 0:
-            return
-
+        Team ownership prefers ReBAC (`lookup_subjects`), falling back to a team
+        metadata lookup by `tag.owner_id` when ReBAC is disabled or errors. A tag
+        that resolves to neither is treated as personal, owned by `user` if the
+        tag itself carries no resolvable owner. Shared by quota enforcement
+        (`_check_quota_before_upload`) and task `team_id` tagging
+        (`_stream_upload_process`) so both agree on tag ownership from one path.
+        """
         tag_store = ApplicationContext.get_instance().get_tag_store()
         rebac = ApplicationContext.get_instance().get_rebac_engine()
 
@@ -406,6 +399,27 @@ class IngestionController:
                 elif owner_id.startswith("personal-"):
                     owner_id = owner_id[len("personal-") :]
                 user_ids.add(owner_id)
+
+        return team_ids, user_ids
+
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+        if not tags:
+            return
+
+        total_upload_size = 0
+        for f in files:
+            file_size = getattr(f, "size", None)
+            if file_size is not None:
+                total_upload_size += file_size
+            else:
+                f.file.seek(0, 2)
+                total_upload_size += f.file.tell()
+                f.file.seek(0)
+
+        if total_upload_size <= 0:
+            return
+
+        team_ids, user_ids = await self._resolve_tag_owners(tags, user)
 
         cfg = ApplicationContext.get_instance().get_config()
 
@@ -462,6 +476,19 @@ class IngestionController:
         last_error: str | None = None
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
+
+        # Resolve once (tags are constant for the whole call) so every created
+        # task_run row carries the destination team_id — without it, the task is
+        # created with team_id=NULL and never matches a team-scoped Activity
+        # query (`WHERE team_id = :team_id` never matches NULL), even though it
+        # correctly shows up for a platform admin (no team_id filter at all).
+        # Ambiguous (tags spanning more than one team) or personal-space uploads
+        # deliberately leave it None rather than guess.
+        owning_team_id: str | None = None
+        if scheduler_task_service is not None:
+            team_ids, _ = await self._resolve_tag_owners(tags, user)
+            if len(team_ids) == 1:
+                owning_team_id = next(iter(team_ids))
 
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
@@ -544,7 +571,7 @@ class IngestionController:
                                 id=metadata.document_uid,
                                 label=metadata.document_name or metadata.document_uid,
                             )
-                            resp = await task_svc.start(req, created_by=user.uid, target=target)
+                            resp = await task_svc.start(req, created_by=user.uid, team_id=owning_team_id, target=target)
                             file_task_id = resp.task_id
                     except Exception:
                         logger.warning("OPS-04: could not create task_run for %s — tray tracking disabled", filename, exc_info=True)
@@ -772,7 +799,7 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
-            kpi_actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+            kpi_actor = KPIActor(type="human", user_id=user.uid)
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
@@ -820,7 +847,9 @@ class IngestionController:
             fmt: str = Query("json", alias="format", description="Response format: 'json' or 'text'"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: stateless extraction, nothing persisted or
+            # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
+            # removed (item 8a); authentication alone is sufficient.
             # Validate extension
             filename = file.filename or "uploaded"
 
@@ -919,7 +948,9 @@ class IngestionController:
             - Upload one file plus optional `options_json`, `session_id`, and `scope`.
             - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: session-scoped chat-attachment vectors, not
+            # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
+            # removed (item 8a); authentication alone is sufficient.
             filename = file.filename or "uploaded"
 
             # Parse options

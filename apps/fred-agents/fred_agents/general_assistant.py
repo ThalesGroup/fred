@@ -130,7 +130,7 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     system_prompt_template: str = _SYSTEM_PROMPT
 
     # Core Knowledge Flow servers that are part of the standard platform deployment.
-    # Demo servers and optional KF services (neo4j, statistics) are omitted here
+    # Demo servers and optional KF services (statistics) are omitted here
     # because they are not guaranteed to be running — an unreachable declared server
     # crashes the agent turn. Operators who have those services running should create
     # a custom instance and add them via the control-plane agent form.

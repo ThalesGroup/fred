@@ -41,7 +41,7 @@ async def query_sessions_by_scope(
         get_application_container(request)
         .get_rebac_engine()
         .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID
+            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
         )
     )
 

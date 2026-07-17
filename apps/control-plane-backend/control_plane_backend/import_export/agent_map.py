@@ -1,7 +1,9 @@
 """Kea→Swift agent template mapping (MIGR-05).
 
 Maps a kea-exported agent to its swift template, so the import can create the
-equivalent managed `agent_instance`. See docs/swift/rfc/PLATFORM-IMPORT-RFC.md §7.
+equivalent managed `agent_instance`. Kea-import-path only (§8 of
+docs/swift/rfc/PLATFORM-IMPORT-RFC.md) — swift-native imports carry
+`agent_instance` rows directly and never go through this mapping.
 
 The mapping table is the single control point. Every exported agent is classified
 into exactly one outcome:

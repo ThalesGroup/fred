@@ -34,7 +34,7 @@ from fred_core.security.rebac.rebac_engine import (
     Relation,
     RelationType,
 )
-from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
+from fred_core.security.structure import OpenFgaRebacConfig
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -72,13 +72,10 @@ class OpenFgaRebacEngine(RebacEngine):
     def __init__(
         self,
         config: OpenFgaRebacConfig,
-        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
-        super().__init__(m2m_security)
-
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
@@ -193,8 +190,12 @@ class OpenFgaRebacEngine(RebacEngine):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # Only used to sync Keycloakc groups with the rebac engine. Not needed
-        # with OpenFGA as we handle this with contextual tuples.
+        # No current caller needs a bulk tuple read: every authorization
+        # decision goes through `has_permission`, `lookup_resources`, or
+        # `lookup_subjects` instead, each backed by a persisted OpenFGA tuple
+        # (never Keycloak-derived). Implemented by 2 other engines and
+        # exercised elsewhere; this OpenFGA-backed stub stays a stub until a
+        # real caller needs it.
         raise NotImplementedError(
             "OpenFGA relation listing is not implemented as it is not needed"
         )
@@ -255,6 +256,30 @@ class OpenFgaRebacEngine(RebacEngine):
             OpenFgaRebacEngine._openfga_user_to_reference(user)
             for user in response.users
         ]
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # A fully-specified tuple key (user + relation + object) queried via
+        # the raw `Read` API returns only literally-persisted tuples — unlike
+        # `Check`/`ListUsers`, it does not expand userset rewrites (e.g.
+        # schema.fga's `team_member: [user] or team_admin or team_editor or
+        # team_analyst`). This is the same primitive already used by
+        # `delete_all_relations_of_reference` for a bulk tuple read.
+        client = await self.get_client()
+        body = ReadRequestTupleKey(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+            relation=relation.value,
+            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+        )
+        options = self._build_options(consistency=consistency_token)
+        response = await client.read(body, options)
+        return len(response.tuples) > 0
 
     async def has_permission(
         self,

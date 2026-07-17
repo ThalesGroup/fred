@@ -32,6 +32,7 @@ import { ComposerControlSlot } from "../../../features/capabilities/ComposerCont
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -94,8 +95,8 @@ export default function ManagedChatPage() {
   const isPersonalTeam = teamId === activeTeam?.id;
   const { data: fetchedTeam } = useGetTeamQuery({ teamId }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
-  const isAdmin =
-    isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
+  const { canAdministerAdmins } = useTeamCapabilities(team);
+  const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();

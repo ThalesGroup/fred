@@ -54,10 +54,27 @@ class TemporalClientProvider:
                 self._config.host,
                 self._config.namespace,
             )
-            # temporalio Client.connect is async
-            self._client = await Client.connect(
+            # temporalio Client.connect is async and exposes no per-call rpc_timeout of
+            # its own — bound it ourselves so an unreachable/slow Temporal frontend
+            # cannot hang every caller of get_client() indefinitely.
+            connect_call = Client.connect(
                 self._config.host,
                 namespace=self._config.namespace,
                 data_converter=pydantic_data_converter,
             )
+            timeout = self._config.connect_timeout_seconds
+            try:
+                self._client = (
+                    await asyncio.wait_for(connect_call, timeout=timeout)
+                    if timeout
+                    else await connect_call
+                )
+            except TimeoutError:
+                logger.error(
+                    "[TEMPORAL] Connect to host=%s namespace=%s timed out after %ss",
+                    self._config.host,
+                    self._config.namespace,
+                    timeout,
+                )
+                raise
             return self._client

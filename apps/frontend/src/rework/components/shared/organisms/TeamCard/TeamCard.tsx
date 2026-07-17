@@ -55,8 +55,8 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
 
   const handleJoinTeam = (e: React.MouseEvent<HTMLButtonElement>, team: Team): void => {
     e.preventDefault();
-    if (team.owners.length === 0) return;
-    const recipients = team.owners.map((o) => o.email).join(";");
+    if (!team.admins || team.admins.length === 0) return;
+    const recipients = team.admins.map((o) => o.email).join(";");
     const subject = `[${siteTitle} ${siteSubtitle}] Demande pour rejoindre l'équipe ${team.name}`;
     const teamUrl = `${window.location.origin}/team/${team.id}/agents`;
     const body = `Bonjour,\n\nJe souhaite rejoindre l'équipe ${team.name} sur ${siteTitle} ${siteSubtitle}.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;
@@ -117,7 +117,7 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
         </div>
         {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
         <div className={styles.teamCardFooter}>
-          <AvatarGroup avatars={team.owners.map((o) => ({ name: o.first_name + " " + o.last_name }))} />
+          <AvatarGroup avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))} />
           {canJoin && (
             <Button
               color={"primary"}

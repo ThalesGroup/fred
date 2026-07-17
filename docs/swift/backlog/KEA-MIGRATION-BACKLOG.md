@@ -55,11 +55,19 @@ in how they move and who owns them. Do not blur them.
   from the object path.
 
 **Identity sub-facts (settled):**
-- A Keycloak **group id = the team id = `teammetadata.id` = OpenFGA `team:<groupid>`**. Preserving
-  group IDs is as critical as preserving user `sub`.
-- **Team membership is NOT stored in OpenFGA** — it is derived from Keycloak group claims at
-  request time. Membership therefore travels entirely with the realm; there are **no `user→team`
-  tuples to import**.
+- Preserving user `sub` is critical — everything is keyed on it (identity topic, MIGR-04).
+- **Migration note — teams are no longer Keycloak groups (2026-07-10).** This section previously
+  asserted "a Keycloak group id = the team id" and "membership derives from Keycloak group claims,
+  no `user→team` tuples to import." Both are now false for the swift target: AUTHZ-05 review item 9
+  (`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6, `platform/REBAC.md`) made a team a
+  `team_metadata` row (independently generated id, plus a required `name` column) with membership
+  as **explicit** OpenFGA relation tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
+  — no Keycloak group backs it. This was still true for kea itself (chapter 1 of the detailed
+  runbook, kea↔kea, unaffected), and swift's `team_metadata.id` can still reuse a kea team's old
+  group-id string (opaque to swift), but the **metadata** topic (MIGR-02/MIGR-05) must now write
+  `user→team` tuples explicitly for every migrated team — see `PLATFORM-IMPORT-RFC.md` §2/§4 and
+  `ops/MIGRATION-CASTLE-TO-S3NS.html` §"Migration model" for the corrected plan. Concrete import
+  mechanics (source-team enumeration, tuple-writing order) are not yet designed.
 
 ---
 
@@ -83,19 +91,8 @@ OpenFGA tuples) is imported into a target environment. Owned by platform/ops.
 
 ## §0bis Platform import service (MIGR-05)
 
-Rock-solid swift-side **import** counterpart to kea's throwaway export. Temporal-backed,
-observable via the task/event stream, with an admin progress UI. Scope confirmed:
-**config graph only** (agents, prompts/resources, tags, document metadata, MCP, team/users,
-OpenFGA tuples), **fresh target only** (refuse if populated). Document blobs/vectors and
-conversations are out of scope (re-ingest separately). RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md).
-
-> **Status (2026-06-27): core import shipped, reviewed + live-tested.** Architecture deviated from the
-> Temporal design — see RFC §0 "Implementation note". The importer is an **atomic SQLAlchemy
-> transaction in a FastAPI BackgroundTask**: agents + tags + document metadata commit together or roll
-> back together, idempotent by primary key. Module is `import_export/` (not `migration/`); endpoints are
-> `import` / `export` / `reset` / `stats` under `/control-plane/v1/import-export/`. Validation path:
-> **export from kea first, then import with swift.** Governing principle: **dumb export / smart import**.
-> Next gap to close: **agent prompt transfer (05.11)**.
+Full contract: [`PLATFORM-IMPORT-RFC.md`](../rfc/PLATFORM-IMPORT-RFC.md) — swift-native path
+shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tracked below.
 
 - [x] **MIGR-05.01** — Bundle reader + manifest parse (`format_version 1`, kea + swift formats) — `import_export/bundle.py`
 - [x] **MIGR-05.02** — Atomic import service (FastAPI `BackgroundTask` + single SQLAlchemy transaction; **not** Temporal): validate manifest → import agents → tags → metadata, all-or-nothing rollback, idempotent by PK — `import_export/importer.py` + `api.py`. *(Temporal design preserved in RFC §5 for future scale; fresh-target preflight + verify superseded by idempotent-by-PK + reset.)*
@@ -103,11 +100,12 @@ conversations are out of scope (re-ingest separately). RFC: [`PLATFORM-IMPORT-RF
 - [ ] **MIGR-05.04** — OpenFGA tuple restore with identity/team validation + personal-team reconciliation. *Deferred: handled by ops bulk-copy at cutover (Option A); `reset` leaves tuples intact so ownership survives re-test.*
 - [x] **MIGR-05.05** — `MigrationTaskEvent` populated (`step`/`progress`/`MigrationDetail`) + control-plane wired into frontend task rehydration & SSE sources (tasks survive reload)
 - [x] **MIGR-05.06** — Admin UI import page (upload zip → launch → task-atom progress, admin-only) — *fully wired to the live backend; page renamed **Platform data***
-- [ ] **MIGR-05.07** — Stage reconciliation (dumb-export/smart-import): on restore, reset each doc's
-  `VECTORIZED`/`SQL_INDEXED` → `NOT_STARTED`, conditionally reset `PREVIEW_READY`; consumed by MIGR-07
-  re-vectorize. *Inert without the MIGR-07 trigger — two ends of one flow.*
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) "Canonical contract"
-  — depends on: MIGR-04 (identity bootstrap), reuses TASK-EVENT-STREAM task/event infra
+- [x] **MIGR-05.07** — Stage reconciliation: reset each restored document's `VECTORIZED`/
+  `SQL_INDEXED` → `NOT_STARTED` (never transported), `PREVIEW_READY` untouched. Closed by
+  MIGR-05.13 (`importer.py::_reset_transported_stages`) — the metadata-import phase is shared code,
+  not swift-only, so this applies to both the swift-native and kea-import paths. *Still inert until
+  MIGR-07's re-vectorize trigger actually consumes the reset — two ends of one flow.*
+  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §5
 - [x] **MIGR-05.08** — Tags + document-metadata import phases (atomic, shared generic loop) — `import_export/importer.py`; new `fred_core/documents/tag_models.py` `TagRow`
 - [x] **MIGR-05.09** — Swift-native **export** (`GET /import-export/export`) + re-import branch (`source_platform=swift`, bypasses `agent_map`) — `import_export/exporter.py`
 - [x] **MIGR-05.10** — Atomic **reset** (`POST /import-export/reset`) — wipes agents+tags+metadata in one transaction; enables export → reset → import test cycles (object store / Keycloak / OpenFGA untouched)
@@ -120,6 +118,14 @@ conversations are out of scope (re-ingest separately). RFC: [`PLATFORM-IMPORT-RF
   imported agents. — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
 - [x] **MIGR-05.12** — Platform-data stats dashboard (`GET /import-export/stats`): teams, members by
   role, agents, prompts; personal spaces (`personal-*`) aggregated into one row — `import_export/stats.py`
+- [x] **MIGR-05.13** — Manifest contract hardening: `SnapshotManifest` → Pydantic + enforced
+  `format_version`/`users_schema_version` (reject unknown, no silent default) — `bundle.py`; honest
+  `content_keys` (populated on export, surfaced as a single count-warning on import — not a
+  per-document content-store probe, that's a future MIGR-06-side improvement) instead of an
+  always-`[]` placeholder — `exporter.py`/`importer.py`. Also closed MIGR-05.07 (stage
+  reconciliation) as a side effect, since it touched the same shared metadata-import phase. Tests:
+  `tests/test_import_export_manifest.py` (5 new). — RFC:
+  [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §4–§5
 
 ---
 

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { TaskState, TaskTarget } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { MigrationResult } from "../../../slices/controlPlane/controlPlaneOpenApi";
 export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
@@ -71,6 +72,10 @@ export interface MigrationTaskEvent {
     processed: number;
     total: number;
     failed: number;
+    // Reuses the generated `MigrationResult` (controlPlaneOpenApi.ts) — this one
+    // field IS on the OpenAPI schema (`MigrationDetail.result`), so it is imported,
+    // never hand-mirrored like the rest of this file's SSE-only detail shapes.
+    result?: MigrationResult | null;
   } | null;
 }
 

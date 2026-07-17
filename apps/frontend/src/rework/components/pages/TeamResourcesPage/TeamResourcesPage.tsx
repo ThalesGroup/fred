@@ -20,6 +20,8 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
@@ -51,6 +53,8 @@ export default function TeamResourcesPage() {
   const userRoot = `teams/${fsTeamId}/users/${userId}`;
   const sharedRoot = `teams/${fsTeamId}/shared`;
   const corpusRef = useRef<DocumentWorkspaceHandle>(null);
+  const { data: team } = useGetTeamQuery({ teamId });
+  const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -88,15 +92,17 @@ export default function TeamResourcesPage() {
           meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
           defaultOpen
           action={
-            <IconButton
-              color="on-surface"
-              variant="outlined"
-              size="xs"
-              icon={{ category: "outlined", type: "create_new_folder" }}
-              aria-label={t("rework.resources.menu.newFolder")}
-              title={t("rework.resources.menu.newFolder")}
-              onClick={() => corpusRef.current?.openNewFolder()}
-            />
+            canCreateFolder ? (
+              <IconButton
+                color="on-surface"
+                variant="outlined"
+                size="xs"
+                icon={{ category: "outlined", type: "create_new_folder" }}
+                aria-label={t("rework.resources.menu.newFolder")}
+                title={t("rework.resources.menu.newFolder")}
+                onClick={() => corpusRef.current?.openNewFolder()}
+              />
+            ) : undefined
           }
         >
           <DocumentWorkspace ref={corpusRef} teamId={teamId} isPersonalTeam={isPersonalTeam} />

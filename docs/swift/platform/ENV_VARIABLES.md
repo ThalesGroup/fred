@@ -60,8 +60,7 @@ Note:
 > (ADC) / Workload Identity and require **no secret in `.env`**. On GKE, bind the
 > Kubernetes SA to a Google SA (Workload Identity); locally, run
 > `gcloud auth application-default login`. `GOOGLE_APPLICATION_CREDENTIALS` (§3.1)
-> remains an optional dev-only escape hatch pointing at a JSON key. See
-> [`DEPLOYMENT_GUIDE_GKE.md`](./DEPLOYMENT_GUIDE_GKE.md).
+> remains an optional dev-only escape hatch pointing at a JSON key.
 
 ### 1.5 Observability / Tracing
 

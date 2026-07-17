@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.models.base import Base
+from control_plane_backend.models.bootstrap_models import (
+    SINGLETON_ID,
+    PlatformBootstrapRow,
+)
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
@@ -25,7 +30,7 @@ from fred_core.teams.metadata_store import (
     TeamMetadataPatch,
     TeamMetadataStore,
 )
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
 async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
@@ -78,10 +83,13 @@ async def test_team_metadata_store_empty_upsert_returns_default_without_write(
     tmp_path: Path,
 ) -> None:
     """
-    Verify an empty team-metadata upsert returns the default projection only.
+    Verify an empty team-metadata upsert on a nonexistent team is a pure no-op.
 
     Why this test exists:
-    - no-op updates should stay cheap and must not create a DB row
+    - no-op updates should stay cheap and must not create a DB row. AUTHZ-05
+      review item 9: `name` is now required at creation (via `store.create`),
+      so an upsert can no longer synthesize a default row for a team that was
+      never created — it returns `None` instead, exactly like `get_by_team_id`.
 
     How to use it:
     - run with the offline `control-plane-backend` test suite
@@ -96,12 +104,88 @@ async def test_team_metadata_store_empty_upsert_returns_default_without_write(
         store = TeamMetadataStore(engine)
         result = await store.upsert(TeamId("fredlab"), TeamMetadataPatch())
 
-        assert result.id == "fredlab"
-        assert result.description is None
-        assert result.is_private is True
-        assert result.banner_object_storage_key is None
+        assert result is None
         assert await store.get_by_team_id(TeamId("fredlab")) is None
         assert await store.get_by_team_ids([]) == {}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_metadata_store_create_list_all_get_by_name_and_delete(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify the AUTHZ-05 review item 9 registry primitives round-trip.
+
+    Why this test exists:
+    - `create`/`list_all`/`get_by_name`/`delete` replace the Keycloak
+      root-group enumeration and per-group CRUD as the team registry's only
+      source of truth (RFC Part 6 §29-32)
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "team-registry.sqlite3")
+
+    try:
+        store = TeamMetadataStore(engine)
+
+        created = await store.create(TeamId("team-alpha"), "Alpha")
+        assert created.id == "team-alpha"
+        assert created.name == "Alpha"
+        assert created.description is None
+
+        await store.create(TeamId("team-beta"), "Beta")
+
+        all_teams = await store.list_all()
+        assert {t.id for t in all_teams} == {"team-alpha", "team-beta"}
+        assert {t.name for t in all_teams} == {"Alpha", "Beta"}
+
+        found = await store.get_by_name("Alpha")
+        assert found is not None
+        assert found.id == "team-alpha"
+        assert await store.get_by_name("nonexistent") is None
+
+        await store.delete(TeamId("team-alpha"))
+        # Deleting a nonexistent id is a no-op, not an error.
+        await store.delete(TeamId("team-alpha"))
+
+        remaining = await store.list_all()
+        assert {t.id for t in remaining} == {"team-beta"}
+        assert await store.get_by_team_id(TeamId("team-alpha")) is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_metadata_store_advisory_lock_is_a_no_op_on_sqlite(
+    tmp_path: Path,
+) -> None:
+    """`advisory_lock` must degrade gracefully on non-Postgres dialects.
+
+    Why this test exists:
+    - AUTHZ-05 post-implementation review finding: `rescue_team_admin` holds
+      this lock around its check-then-write against OpenFGA, since OpenFGA
+      cannot express a conditional write. On Postgres it issues
+      `pg_advisory_xact_lock`; SQLite (used by every other offline test in
+      this file) has no such primitive, so the lock must skip that statement
+      rather than error — this locks in that the dialect check actually
+      guards the call, not just that the happy path works on Postgres.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "team-advisory-lock.sqlite3")
+
+    try:
+        store = TeamMetadataStore(engine)
+        entered = False
+        async with store.advisory_lock("rescue_team_admin:fredlab"):
+            entered = True
+        assert entered
     finally:
         await engine.dispose()
 
@@ -128,6 +212,7 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
 
     try:
         store = TeamMetadataStore(engine)
+        await store.create(TeamId("fredlab"), "Fredlab")
         created = await store.upsert(
             TeamId("fredlab"),
             TeamMetadataPatch(
@@ -142,9 +227,11 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
         )
         fetched = await store.get_by_team_ids([TeamId("fredlab"), TeamId("missing")])
 
+        assert created is not None
         assert created.description == "Operations team"
         assert created.is_private is False
         assert created.banner_object_storage_key == "teams/fredlab/banner-v1.png"
+        assert updated is not None
         assert updated.description == "Operations team"
         assert updated.is_private is False
         assert updated.banner_object_storage_key == "teams/fredlab/banner-v2.png"
@@ -294,6 +381,8 @@ async def test_team_metadata_retention_round_trips(
         # No row yet → retention fields default to None.
         assert await store.get_by_team_id(team) is None
 
+        await store.create(team, "Swiftpost")
+
         created = await store.upsert(
             team,
             TeamMetadataPatch(
@@ -302,6 +391,7 @@ async def test_team_metadata_retention_round_trips(
                 retention_updated_by="alice",
             ),
         )
+        assert created is not None
         assert created.team_delete_grace == "P7D"
         assert created.max_idle == "P30D"
         assert created.retention_updated_by == "alice"
@@ -316,6 +406,7 @@ async def test_team_metadata_retention_round_trips(
                 retention_updated_by="bob",
             ),
         )
+        assert cleared is not None
         assert cleared.team_delete_grace == "P1D"
         assert cleared.max_idle is None  # explicit null → cleared
         assert cleared.retention_updated_by == "bob"
@@ -323,6 +414,7 @@ async def test_team_metadata_retention_round_trips(
         # An edit that does not touch retention preserves the retention fields
         # (omitted fields keep their stored value).
         after_desc = await store.upsert(team, TeamMetadataPatch(description="hi"))
+        assert after_desc is not None
         assert after_desc.team_delete_grace == "P1D"
         assert after_desc.max_idle is None
         assert after_desc.retention_updated_by == "bob"
@@ -825,5 +917,98 @@ async def test_prompt_store_rejects_duplicate_name_within_same_team(
                     created_by="alice",
                 )
             )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_is_completed_toggles_after_mark_completed(
+    tmp_path: Path,
+) -> None:
+    """`is_completed()` is False before any write and True once `mark_completed()`
+    has run, against a real (SQLite) engine.
+
+    Why this test exists:
+    - AUTHZ-07 test coverage gap: every existing bootstrap test drives
+      `_FakeBootstrapStore` (`tests/test_bootstrap_platform_admin.py`); this is
+      the first test exercising `PlatformBootstrapStore` itself against a real
+      engine, not a hand-rolled fake.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+
+        assert await store.is_completed() is False
+
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        assert await store.is_completed() is True
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_mark_completed_persists_completed_by_and_timestamp(
+    tmp_path: Path,
+) -> None:
+    """`mark_completed()` durably persists `completed_by` and a `completed_at`
+    timestamp, not just a bare "row exists" flag.
+
+    Why this test exists:
+    - the AUTHZ-07 durable marker (RFC Part 8 §42.3) records who completed root
+      bootstrap and when; a real read-back proves those fields actually reach
+      the row rather than being silently dropped by the ORM mapping.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap-fields.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        await store.mark_completed(completed_by="benjamin-sub")
+
+        async with AsyncSession(engine) as session:
+            row = await session.get(PlatformBootstrapRow, SINGLETON_ID)
+
+        assert row is not None
+        assert row.completed_by == "benjamin-sub"
+        assert row.completed_at is not None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_store_advisory_lock_is_a_no_op_on_sqlite(
+    tmp_path: Path,
+) -> None:
+    """`advisory_lock` must degrade gracefully on non-Postgres dialects.
+
+    Why this test exists:
+    - `PlatformBootstrapStore.advisory_lock` explicitly checks
+      `self._engine.dialect.name == "postgresql"` before issuing
+      `pg_advisory_xact_lock` (same primitive and rationale as
+      `TeamMetadataStore.advisory_lock`'s `rescue_team_admin` pattern); SQLite
+      (used by every other offline test in this file) has no such primitive,
+      so the lock must skip that statement rather than error.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "platform-bootstrap-lock.sqlite3")
+
+    try:
+        store = PlatformBootstrapStore(engine)
+        entered = False
+        async with store.advisory_lock():
+            entered = True
+        assert entered
     finally:
         await engine.dispose()

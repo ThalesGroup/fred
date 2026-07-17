@@ -140,11 +140,12 @@ which uses `PyJWT` (MIT), not `jwcrypto`.
 
 `jwcrypto` arrives purely as a **transitive** dependency of `python-keycloak`.
 Fred's code only uses `python-keycloak`'s `KeycloakAdmin` class, for Keycloak
-admin-API operations (create/list/delete users, list/manage group membership)
-in 7 files: `keycloack_admin_client.py`, `teams/service.py`,
-`teams/dependencies.py`, `users/service.py`, `users/dependencies.py`
-(`control-plane-backend`), `keycloak_rebac_sync.py`, `users_service.py`
-(`knowledge-flow-backend`). But `python-keycloak`'s `keycloak_admin.py` module
+admin-API user-directory operations (create/list/delete users) in 4 files:
+`keycloack_admin_client.py`, `users/service.py`, `users/dependencies.py`
+(`control-plane-backend`), `users_service.py`
+(`knowledge-flow-backend`). AUTHZ-05 removed the last group-membership calls
+(`teams/service.py`/`teams/dependencies.py` no longer touch `KeycloakAdmin` at
+all — team membership is OpenFGA-only). But `python-keycloak`'s `keycloak_admin.py` module
 imports `openid_connection.py`, which imports `keycloak_openid.py`, which does
 `from jwcrypto import jwk, jwt` unconditionally at module load time — so the
 import happens as soon as `KeycloakAdmin` is used, even though nothing in Fred
@@ -182,14 +183,13 @@ Keycloak's Admin REST API via `httpx` (already a Fred dependency), including
 the client-credentials token acquisition
 (`POST /realms/{realm}/protocol/openid-connect/token`).
 
-Scope is bounded: only **9 distinct `KeycloakAdmin` methods** are called
-anywhere in the codebase — `a_get_user(s)`, `a_create_user`, `a_delete_user`,
-`a_get_group(s)`, `a_get_group_members`, `a_group_user_add`,
-`a_group_user_remove` — each a well-documented standard Keycloak Admin REST
-endpoint. This is a mechanical port (one REST call per existing method call,
-no business-logic change) across the 7 files listed above, but it does touch
-production security-path code, so it is tracked as its own item rather than
-bundled into this disclosure change.
+Scope is bounded: only **4 distinct `KeycloakAdmin` methods** are called
+anywhere in the codebase — `a_get_user(s)`, `a_create_user`, `a_delete_user`
+— each a well-documented standard Keycloak Admin REST endpoint. This is a
+mechanical port (one REST call per existing method call, no business-logic
+change) across the 4 files listed above, but it does touch production
+security-path code, so it is tracked as its own item rather than bundled into
+this disclosure change.
 
 Tracked in: **GitHub issue [#1949](https://github.com/ThalesGroup/fred/issues/1949)**
 — no RFC planned, since this is a like-for-like dependency substitution with

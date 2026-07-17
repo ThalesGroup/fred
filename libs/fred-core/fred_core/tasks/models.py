@@ -113,11 +113,45 @@ class TaskLogEvent(_TaskEventBase):
     detail: TaskLogDetail
 
 
+class MigrationResult(BaseModel):
+    """Structured outcome of a platform import (AUTHZ-07 Step 3).
+
+    A typed public projection of `import_export/importer.py::MigrationReport`
+    (control-plane-internal) — converted via `importer.py::to_migration_result`,
+    never re-derived — so the terminal `succeeded` event and `GET /tasks` can
+    both carry it. A non-empty `warnings` list is what makes a partial
+    reconciliation distinguishable from full success; the state stays
+    `succeeded` either way (RFC TASK-EVENT-STREAM-RFC.md — no new TaskState).
+    """
+
+    import_id: str
+    source_platform: str
+    identities_created: int = 0
+    users_processed: int = 0
+    users_skipped: list[str] = Field(default_factory=list)
+    teams_imported: int = 0
+    teams_skipped: int = 0
+    teams_provisioned: int = 0
+    team_roles_granted: int = 0
+    team_roles_skipped: int = 0
+    platform_roles_granted: int = 0
+    agents_imported: int = 0
+    agents_skipped: int = 0
+    agents_gap: int = 0
+    tags_imported: int = 0
+    tags_skipped: int = 0
+    docs_imported: int = 0
+    docs_skipped: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
 class MigrationDetail(BaseModel):
     step_id: str
     processed: int
     total: int
     failed: int
+    # Populated only on the terminal `succeeded` event (AUTHZ-07 Step 3).
+    result: MigrationResult | None = None
 
 
 class MigrationTaskEvent(_TaskEventBase):
@@ -240,6 +274,18 @@ class TaskSummary(BaseModel):
     # admin see the *schedule* — the pipeline of upcoming erasures with dates —
     # not just what is running right now.
     scheduled_for: datetime | None = None
+    # The last persisted per-kind detail (AUTHZ-07 Step 3) — so a result does not
+    # vanish on reload. Typed per `kind` (a sibling field callers already narrow
+    # on, same pattern as `TaskEvent`); None for a kind with no detail model
+    # (`log`) or an older task recorded before this field existed.
+    detail: (
+        IngestionDetail
+        | EvaluationDetail
+        | TaskLogDetail
+        | MigrationDetail
+        | ErasureDetail
+        | None
+    ) = None
 
 
 class TaskListResponse(BaseModel):

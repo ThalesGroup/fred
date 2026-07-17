@@ -258,6 +258,12 @@ export type EvaluationDataset = {
   version?: string | null;
   cases: EvaluationCaseInput[];
 };
+export type CustomMetric = {
+  name: string;
+  criteria: string;
+  parameters: string[];
+  threshold?: number;
+};
 export type EvaluationExecutionOptions = {
   max_concurrency?: number;
   case_timeout_seconds?: number;
@@ -269,6 +275,7 @@ export type CreateEvaluationCampaignRequest = {
   dataset: EvaluationDataset;
   profile?: string;
   judge_profile_id: string;
+  custom_metrics?: CustomMetric[];
   execution?: EvaluationExecutionOptions;
 };
 export type EvaluationCampaignResponse = {

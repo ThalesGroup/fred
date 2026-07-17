@@ -1167,7 +1167,7 @@ type capability
     define enabled: [team]             # explicit per-team grant (admin-gated path)
     define disabled: [team]            # per-team opt-out of a default-on capability
 
-    define can_manage: admin from organization
+    define can_manage: platform_admin from organization  # amended 2026-07-16 (AUTHZ-05 merge, see below)
     define can_use: (enabled or team from default_on) but not disabled
 ```
 
@@ -1322,7 +1322,10 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   `schema.fga.json` via `make transform-openfga-schema`; flows through
 >   `sync_schema_on_init`. **Deviation:** `can_manage` is `admin from organization`
 >   (the anchor relation is named `organization`, not `parent` as the §8.1 snippet
->   wrote). New `Resource.CAPABILITY`, `RelationType.{DEFAULT_ON,ENABLED,DISABLED}`,
+>   wrote) — **superseded 2026-07-16** (merge with swift): AUTHZ-05 retired the
+>   legacy `admin`/`editor`/`viewer` organization-role bridge before this branch
+>   merged, so `can_manage` is now `platform_admin from organization`; no other
+>   part of this deviation note changes. New `Resource.CAPABILITY`, `RelationType.{DEFAULT_ON,ENABLED,DISABLED}`,
 >   and `CapabilityPermission.{CAN_USE,CAN_MANAGE}`. Tri-state proven in fred-core's
 >   OpenFGA integration suite (offline structural test covers the generated schema).
 > - **Enforcement (§8.1).** Catalog listing filters each template's

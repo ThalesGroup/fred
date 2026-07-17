@@ -1020,7 +1020,8 @@
   <section id="roles">
     <h2>Role model</h2>
     <p>
-      Fred enforces two orthogonal role axes. Platform roles are global (Keycloak groups).
+      Fred enforces two orthogonal role axes. Platform roles are global (stored OpenFGA
+      relations on <code>organization:fred</code> — never Keycloak groups or roles).
       Team roles are per-relationship (OpenFGA tuples). Neither axis grants access to the
       other's surfaces — this is enforced at the API layer, not only in the UI.
     </p>

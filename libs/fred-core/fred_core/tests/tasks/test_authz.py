@@ -35,7 +35,7 @@ from fred_core.tasks.authz import (
 
 
 def _user(uid: str = "u", roles: list[str] | None = None) -> KeycloakUser:
-    return KeycloakUser(uid=uid, username=uid, email=None, roles=roles or [], groups=[])
+    return KeycloakUser(uid=uid, username=uid, email=None, roles=roles or [])
 
 
 def _run(*, created_by: str | None, team_id: str | None) -> Any:

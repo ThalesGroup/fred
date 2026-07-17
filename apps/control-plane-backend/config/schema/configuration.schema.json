@@ -39,6 +39,32 @@
           "default": null,
           "title": "Gcu Version"
         },
+        "bootstrap_token_env_var": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the environment variable holding the one-time root platform-admin bootstrap secret (AUTHZ-07) \u2014 same pattern as SecurityConfiguration.m2m.secret_env_var. The value comes from a Kubernetes Secret populated by the deployment's own secrets pipeline (git-ignored file at C1, SOPS/sealed-secrets or a cloud secret manager at C2, an external Vault at C3 \u2014 RFC-0001 \u00a76's existing 'secrets source' knob, not a new one). Fred never generates or logs this value. Checked before bootstrap_token_file.",
+          "title": "Bootstrap Token Env Var"
+        },
+        "bootstrap_token_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the one-time root platform-admin bootstrap secret, for local dev only (AUTHZ-07). Must be provided explicitly (e.g. `make bootstrap-token`) \u2014 Fred never generates or logs this value itself, in any environment. Ignored if bootstrap_token_env_var is set. None disables the POST /bootstrap/platform-admin endpoint.",
+          "title": "Bootstrap Token File"
+        },
         "default_team_max_resources_storage_size": {
           "anyOf": [
             {
@@ -882,6 +908,19 @@
           ],
           "default": 5,
           "title": "Connect Timeout Seconds"
+        },
+        "rpc_timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 10,
+          "description": "Deadline applied to individual Temporal RPC calls (start_workflow, describe) so a stuck Temporal frontend cannot hang the caller indefinitely.",
+          "title": "Rpc Timeout Seconds"
         },
         "ingestion_workflow_parallelism": {
           "default": 3,

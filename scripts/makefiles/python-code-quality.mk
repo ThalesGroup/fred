@@ -2,6 +2,7 @@ BASELINE_DIR ?= $(CURDIR)/.baseline
 
 BANDIT_BASELINE_FILE ?= ${BASELINE_DIR}/bandit-baseline.json
 DETECT_SECRET_BASELINE_FILE ?= ${BASELINE_DIR}/detect-secret-baseline.json
+DETECT_SECRET_EXCLUDE_FILES ?= detect-secret-baseline\.json
 BASEDPYRIGHT_BASELINE_FILE ?= ${BASELINE_DIR}/basedpyright-baseline.json
 
 BANDIT_IGNORED_RULES ?= B101,B108
@@ -48,7 +49,9 @@ sast: dev ## Run bandit
 
 .PHONY: detect-secret
 detect-secret: dev ## Run a secret detection tool
-	cd .. && git ls-files -z ${CURDIR} | xargs -0 ${VENV}/bin/detect-secrets-hook --baseline ${DETECT_SECRET_BASELINE_FILE}
+	cd .. && git ls-files -z ${CURDIR} | xargs -0 ${VENV}/bin/detect-secrets-hook \
+		--baseline ${DETECT_SECRET_BASELINE_FILE} \
+		--exclude-files '${DETECT_SECRET_EXCLUDE_FILES}'
 
 .PHONY: type-check
 type-check: dev ## Run type checker (basedpyright)

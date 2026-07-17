@@ -58,14 +58,9 @@ spec:
           args:
 {{ toYaml (default (list "upgrade" "head") .app.migration.args) | nindent 12 }}
 
-          {{- if or .app.env .app.extraEnvVars }}
+          {{- if .app.env }}
           env:
-            {{- if .app.env }}
 {{ toYaml .app.env | nindent 12 }}
-            {{- end }}
-            {{- if .app.extraEnvVars }}
-{{ toYaml .app.extraEnvVars | nindent 12 }}
-            {{- end }}
           {{- end }}
 
           {{- if .app.envFrom }}

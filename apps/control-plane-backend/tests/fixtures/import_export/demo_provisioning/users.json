@@ -1,0 +1,226 @@
+[
+  {
+    "username": "alice",
+    "email": "alice@app.com",
+    "first_name": "Alice",
+    "last_name": "Watson",
+    "password": "Azerty123_",
+    "teams": [],
+    "team_roles": {},
+    "platform_roles": [
+      "admin"
+    ]
+  },
+  {
+    "username": "bob",
+    "email": "bob@app.com",
+    "first_name": "Bob",
+    "last_name": "Rigg",
+    "password": "Azerty123_",
+    "teams": [
+      "northbridge",
+      "fredlab"
+    ],
+    "team_roles": {
+      "team_editor": [
+        "northbridge",
+        "fredlab"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "phil",
+    "email": "phil@app.com",
+    "first_name": "Phil",
+    "last_name": "Woods",
+    "password": "Azerty123_",
+    "teams": [
+      "northbridge",
+      "swiftpost"
+    ],
+    "team_roles": {
+      "team_member": [
+        "northbridge",
+        "swiftpost"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "zoe",
+    "email": "zoe@app.com",
+    "first_name": "Zoe",
+    "last_name": "Martin",
+    "password": "Azerty123_",
+    "teams": [
+      "fredlab"
+    ],
+    "team_roles": {
+      "team_member": [
+        "fredlab"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "liam",
+    "email": "liam@app.com",
+    "first_name": "Liam",
+    "last_name": "Dupont",
+    "password": "Azerty123_",
+    "teams": [
+      "swiftpost"
+    ],
+    "team_roles": {
+      "team_member": [
+        "swiftpost"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "sophia",
+    "email": "sophia@app.com",
+    "first_name": "Sophia",
+    "last_name": "Carter",
+    "password": "Azerty123_",
+    "teams": [
+      "northbridge"
+    ],
+    "team_roles": {
+      "team_admin": [
+        "northbridge"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "marc",
+    "email": "marc@app.com",
+    "first_name": "Marc",
+    "last_name": "Delorme",
+    "password": "Azerty123_",
+    "teams": [
+      "fredlab"
+    ],
+    "team_roles": {
+      "team_admin": [
+        "fredlab"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "elena",
+    "email": "elena@app.com",
+    "first_name": "Elena",
+    "last_name": "Cruz",
+    "password": "Azerty123_",
+    "teams": [
+      "fredlab"
+    ],
+    "team_roles": {
+      "team_analyst": [
+        "fredlab"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "nadia",
+    "email": "nadia@app.com",
+    "first_name": "Nadia",
+    "last_name": "Bennett",
+    "password": "Azerty123_",
+    "teams": [
+      "swiftpost"
+    ],
+    "team_roles": {
+      "team_admin": [
+        "swiftpost"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "oscar",
+    "email": "oscar@app.com",
+    "first_name": "Oscar",
+    "last_name": "Reyes",
+    "password": "Azerty123_",
+    "teams": [],
+    "team_roles": {},
+    "platform_roles": []
+  },
+  {
+    "username": "nina",
+    "email": "nina@app.com",
+    "first_name": "Nina",
+    "last_name": "Okafor",
+    "password": "Azerty123_",
+    "teams": [],
+    "team_roles": {},
+    "platform_roles": []
+  },
+  {
+    "username": "derek",
+    "email": "derek@app.com",
+    "first_name": "Derek",
+    "last_name": "Voss",
+    "password": "Azerty123_",
+    "teams": [
+      "northbridge"
+    ],
+    "team_roles": {
+      "team_editor": [
+        "northbridge"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "priya",
+    "email": "priya@app.com",
+    "first_name": "Priya",
+    "last_name": "Nair",
+    "password": "Azerty123_",
+    "teams": [
+      "fredlab"
+    ],
+    "team_roles": {
+      "team_admin": [
+        "fredlab"
+      ],
+      "team_editor": [
+        "fredlab"
+      ],
+      "team_analyst": [
+        "fredlab"
+      ]
+    },
+    "platform_roles": []
+  },
+  {
+    "username": "quinn",
+    "email": "quinn@app.com",
+    "first_name": "Quinn",
+    "last_name": "Ahmadi",
+    "password": "Azerty123_",
+    "teams": [],
+    "team_roles": {},
+    "platform_roles": []
+  },
+  {
+    "username": "gabriel",
+    "email": "gabriel@app.com",
+    "first_name": "Gabriel",
+    "last_name": "Moreau",
+    "password": "Azerty123_",
+    "teams": [],
+    "team_roles": {},
+    "platform_roles": [
+      "observer"
+    ]
+  }
+]

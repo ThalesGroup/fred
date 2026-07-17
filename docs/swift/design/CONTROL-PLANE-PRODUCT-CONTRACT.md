@@ -127,14 +127,23 @@ branding channel in control-plane.
 Permissions are exposed via:
 
 - `PermissionSummary`
-  - `items`
-  - flattened booleans such as `can_manage_team_agents`
+  - `is_platform_admin`, `is_platform_observer` — the only fields, both
+    OpenFGA-derived (organization `platform_admin`/`platform_observer`
+    relations). See Contract Note §14 (AUTHZ-05 review item 11): the former
+    `items` flattened-permission list and six unwired `can_*` booleans were
+    removed — they were Keycloak-role-derived and had gone permanently empty
+    once AUTHZ-05 removed Keycloak app roles.
   - no raw RBAC/REBAC graph internals
 
-Permission booleans must reflect the product actor model defined in
-`docs/swift/platform/REBAC.md §Product authorization model`. In particular:
-the owner/manager split is orthogonal — a flag that is true for owner must not
-imply it is also true for manager, and vice versa.
+Org-level gating stops at these two booleans. Team-scoped gating (agents,
+resources, member administration, evaluation, …) does not belong on
+`PermissionSummary` at all — it is exposed per team on
+`TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
+by every team-fetching endpoint. Permission booleans/lists must reflect the
+product actor model defined in `docs/swift/platform/REBAC.md §Product
+authorization model`. In particular: `team_admin` and `team_editor` are
+orthogonal — a flag true for one must not imply it is also true for the
+other.
 
 Keep this contract small and frontend-oriented. If it becomes insufficient,
 extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
@@ -180,6 +189,69 @@ and standalone/dev deployments are never routed to the acceptance screen.
 CLI display) and must **not** be used to gate the UI. See
 `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
+
+#### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-15)
+
+- `POST /control-plane/v1/bootstrap/platform-admin` → `BootstrapPlatformAdminResponse`
+  - Request: `{ token: str }`, `min_length=16` (422 below the floor) — no
+    `identifier` field. The grant always targets the calling JWT's own
+    `sub`; this endpoint cannot promote a third party under any input.
+  - Response: `{ user_id: str, username: str }` — the caller's own identity,
+    now `platform_admin`.
+
+**Requires authentication** (`get_current_user` — a valid Keycloak JWT) **and**
+the deploy-time secret. Neither alone is sufficient: the JWT proves a real
+identity in this realm, the secret proves legitimate deploy-time access. This
+does not reopen the bootstrap chicken-and-egg — Keycloak authentication
+depends on nothing Fred/OpenFGA owns, only *authorization* did, and there is
+none here. The secret is never generated or logged by Fred, in any
+environment: it is supplied externally, via `bootstrap_token_env_var` (an
+environment variable sourced from a Kubernetes Secret — the deployment's
+existing secrets pipeline, RFC-0001 §6) or `bootstrap_token_file` (local dev
+only, created explicitly with `make bootstrap-token`).
+
+Permanently refuses (409) once root bootstrap has ever completed — a durably
+persisted marker (`PlatformBootstrapStore`), **not** a live count of
+`platform_admin` relations. Removing every `platform_admin` later must not
+silently reopen this endpoint; that is a separate, deliberate break-glass
+recovery procedure, not a side effect of bootstrap. Refuses (503) if ReBAC is
+disabled in this deployment — checked before the durable marker is written,
+since granting would otherwise be a silent no-op that still burns the
+one-time completion. Also refuses (503) if authentication (Keycloak/OIDC) is
+disabled in this deployment — checked even before the ReBAC guard, since a
+mocked identity would make the JWT proof meaningless. See
+`docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
+the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
+ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
+Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — replaces the config-seeded
+`platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
+from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
+role from deployment config anymore; the only other path is the declarative
+platform import (`PLATFORM-IMPORT-RFC.md` §10).
+Endpoint authorization matrix entry:
+`docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
+
+**`FrontendConfig` gating fields (revised 2026-07-15).** `GET /frontend/config`
+(§3.1.1) carries two distinct root-bootstrap booleans — do not conflate them:
+
+- `root_bootstrap_completed` — the truthful **durable historical marker**.
+  True once `POST /bootstrap/platform-admin` has ever succeeded, permanently,
+  per §3.1.2 above (`PlatformBootstrapStore`). Never reinterpreted based on
+  live `security.user`/ReBAC state.
+- `root_bootstrap_required` — the **authoritative frontend gating decision**
+  for `BootstrapGuard`. Computed by `build_frontend_config()` as
+  `security.user.enabled AND security.rebac.enabled AND NOT
+  root_bootstrap_completed`.
+
+These necessarily diverge on deployments where user authentication or ReBAC is
+disabled: `root_bootstrap_completed` stays `false` on a fresh database (no one
+has ever bootstrapped it), but `POST /bootstrap/platform-admin` deliberately
+refuses with 503 there (auth-disabled and ReBAC-disabled guards above), so the
+bootstrap form can never succeed. Before this revision, `BootstrapGuard` gated
+directly on `NOT root_bootstrap_completed` and was permanently trapped on that
+unusable form on such deployments (the default insecure/dev configuration
+included). `root_bootstrap_required` is the fix: the frontend must gate on it
+exclusively and must not re-derive the auth/ReBAC predicate itself.
 
 ### 3.2 Managed agent discovery
 
@@ -934,15 +1006,124 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
 
-## 14. Contract Notes — CAPAB-01 (July 2026)
+## 14. Contract Notes — AUTHZ-05 review item 11 (2026-07-11)
+
+### `PermissionSummary` shrunk to its two OpenFGA-derived booleans
+
+**2026-07-11 — Decision (AUTHZ-05 post-implementation review, item 11):**
+`PermissionSummary` dropped `items: list[str]` and six always-empty booleans
+(`can_view_team_agents`, `can_manage_team_agents`, `can_manage_mcp_servers`,
+`can_view_feedback`, `can_submit_feedback`, `can_create_sessions`). Both were
+populated by `list_display_permissions()` (`fred_core/security/permission_catalog.py`,
+now deleted), which iterated **Keycloak app roles** — removed platform-wide by
+AUTHZ-05 review item 8a, so every seeded user had `app_roles: []` and these
+fields were permanently empty/`false` for everyone, including `platform_admin`.
+Live impact before the fix: 6 frontend routes and 3 in-page controls were
+unreachable/disabled for all users.
+
+`PermissionSummary` now carries exactly `is_platform_admin` and
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item
+4. Team-scoped gating was never this field's job; it goes through
+`TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
+by every team-fetching endpoint and unaffected by this change.
+
+`controlPlaneOpenApi.ts` was regenerated (`PermissionSummary` loses the 7
+removed fields; no other change). Frontend consumption pattern documented in
+[`docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`](../platform/FRONTEND-AUTHZ-PATTERN.md).
+
+## 15. Contract Notes — AUTHZ-06, cumulative team roles (2026-07-12)
+
+### `TeamMember.relation` (singular) → `relations` (list)
+
+**2026-07-12 — Decision (RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 7,
+§33-39):** a team member may now hold `team_admin`, `team_editor`, and
+`team_analyst` on the same team simultaneously (e.g. a small team's sole
+admin who is also its editor and evaluator) — the product's write path
+previously enforced exactly one role per user per team. `schema.fga` did not
+change: OpenFGA already permitted multiple relation tuples per user per
+object; the exclusivity was a service-layer convention only.
+
+`TeamMember.relation: UserTeamRelation` becomes
+`TeamMember.relations: list[UserTeamRelation]` — the full set of roles the
+member currently holds, priority-ordered (`team_admin` first, then
+`team_editor`, then `team_analyst`, falling back to `[team_member]` when none
+of the three elevated roles apply). Returned by `GET /teams/{team_id}/members`
+and by `control_plane_backend/cli/main.py`'s member table.
+
+### `PATCH /teams/{team_id}/members/{user_id}` retired
+
+Replaced by two granular endpoints — grant/revoke one role at a time, never a
+bulk role-set replace, so every change stays an individually
+permission-checked, auditable action (same principle applied throughout this
+RFC):
+
+- `POST /teams/{team_id}/members/{user_id}/roles` — body
+  `{"relation": UserTeamRelation}` (`GrantTeamMemberRoleRequest`, replaces
+  `UpdateTeamMemberRequest`). Grants one additional role. Checked against
+  `can_administer_{admins,editors,analysts,members}` for the granted role,
+  exactly as before.
+- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` — revokes one
+  role, leaving any other role the member holds untouched. Refuses to revoke
+  a role not currently held (`404`) or a member's only remaining role
+  (`409`, `TeamMemberLastRoleError` — that is a removal, not a role change;
+  use `DELETE /teams/{team_id}/members/{user_id}` instead). The "team must
+  keep at least one `team_admin`" guard applies exactly when `team_admin` is
+  the role being revoked, by either this endpoint or a full member removal.
+
+`AddTeamMemberRequest` (`POST /teams/{team_id}/members`, for a brand-new
+member) and `DELETE /teams/{team_id}/members/{user_id}` (full removal) are
+unchanged.
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`):
+`TeamMember.relation` → `relations`, `UpdateTeamMemberRequest` replaced by
+`GrantTeamMemberRoleRequest`, the PATCH member-role hook replaced by grant/
+revoke hooks. `TeamSettingsMembersTable.tsx` (the only frontend consumer)
+updated in the same change. Design detail: RFC Part 7 (§33-39).
+
+## 16. Contract Notes — AUTHZ-07 Step 3, `TaskSummary.detail` (2026-07-14)
+
+**Decision:** `TaskSummary` (`GET /tasks`) gains an optional `detail` field —
+the last persisted per-kind detail (`IngestionDetail | EvaluationDetail |
+TaskLogDetail | MigrationDetail | ErasureDetail | None`), typed per the
+sibling `kind` field exactly like the existing per-kind `TaskEvent` union.
+`None` for a kind with no detail model (`log`) or a task recorded before this
+field existed — backward compatible, no migration. Rationale and full
+backend/frontend design: `PLATFORM-IMPORT-RFC.md` §11,
+`AUTHZ-MIGRATION-BACKLOG.md` Step 3.
+
+`MigrationDetail.result: MigrationResult | None = None` is populated only on
+the terminal `succeeded` event of a platform import — a typed projection of
+the import's internal `MigrationReport` (every counter named in
+`AUTHZ-MIGRATION-BACKLOG.md`'s Step 3 exit gate, plus `warnings: list[str]`).
+A non-empty `warnings` list is what distinguishes a partial reconciliation
+from full success; the task `state` stays `succeeded` either way — no new
+`TaskState` value.
+
+**`POST /import-export/import` — `ImportLaunchResponse.target: TaskTarget`
+(2026-07-14, close-out amendment):** the launch response now returns the
+exact `TaskTarget` the backend created the task with
+(`type="platform_import"`, `id=import_id`, `label=` trimmed operator label →
+uploaded filename → `"Platform import"` fallback — computed once in
+`_import_target()`, never re-derived). Frontend consumers must register the
+task with this returned `target` value, not reconstruct one locally — the
+backend is the single source of truth for the target's precedence rules.
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`): new
+`MigrationResult`/`MigrationDetail`/`ErasureDetail` schemas, `TaskSummary.detail`,
+`ImportLaunchResponse.target`. Frontend: `TaskActivity.tsx` (the shared task/
+activity surface, OPS-04 §3.4) narrows `detail` on `task.kind === "migration"`
+to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
+`ImportLaunchResponse.target` directly (no hand-built duplicate).
+
+## 17. Contract Notes — CAPAB-01 (July 2026)
 
 ### Admin capability-enablement routes
 
 **2026-07-11 — Routes fixed (CAPAB-01 / RFC `AGENT-CAPABILITY-RFC.md` §8.5;
 backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
-capability enablement model. All routes are org-admin-gated: the mutations check
-`capability#can_manage` (the capability is anchored first, idempotently); the
-aggregate list checks the equivalent `organization#can_manage_platform`.
+capability enablement model. All routes are platform-admin-gated: the mutations
+check `capability#can_manage` (the capability is anchored first, idempotently);
+the aggregate list checks the equivalent `organization#can_manage_platform`.
 Structural FGA tuples (`enabled` / `disabled` / `default_on`) are written **only**
 through this surface — every other caller checks the computed `can_use`.
 Implemented in `control_plane_backend/capabilities/api.py`, mounted under
@@ -977,3 +1158,11 @@ no **resting** per-capability suspended-instance count (only the mutation delta
 exists — the suspension row records a typed reason, not the causing capability
 id), and no read/write API for the config-only `platform.capabilities.personal_defaults`
 list (changing it needs a backfill, RFC §8.4).
+
+**2026-07-16 (merge with swift) — `can_manage` re-anchored to `platform_admin`.**
+AUTHZ-05 removed the legacy Keycloak `admin`/`editor`/`viewer` organization-role
+bridge before this branch merged; `capability#can_manage` (`schema.fga`) is
+updated in the same change from `admin from organization` to `platform_admin
+from organization`, matching every other org-admin-tier capability. No route
+shape or request/response change — enforcement now resolves through
+`platform_admin` instead of the retired `admin` relation.

@@ -724,6 +724,26 @@ Create mode: template browser → display name → description → tuning fields
 
 ---
 
+### `TeamUsagePage`
+
+**Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
+**Status:** `Functional`
+
+Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b). Reuses `AnalyticsPage`'s chart
+primitives (`TimeSeriesLineChart`, `BarChart`, `TimeRangeSelector`, `ServiceNotice`) at
+`team/:teamId/usage`: a timeline of the requesting user's own token consumption plus
+breakdowns by agent and by model, all self-scoped server-side (no team/agent picker). Entry
+point is a new gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same
+slot team settings uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the
+two are mutually exclusive.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
+  `AnalyticsPage` but haven't been checked against a live stack with real token data.
+
+---
+
 ---
 
 ## CHAT-05 atoms (Wave 1 + additions)
@@ -1155,6 +1175,36 @@ descriptions sourced from `useEnumOptionDescriptions()`.
   the server. With config fields expanded below, the boundary between "click to toggle" and
   "interact with a field" is not visually clear. Validate with Maxime whether a separator or
   explicit toggle zone is needed.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+## OPS-04 / AUTHZ-07 organisms
+
+### `TaskActivity`
+
+**Location:** `src/rework/components/shared/organisms/TaskActivity/TaskActivity.tsx`
+**Status:** `Functional`
+
+The one shared task/activity surface (OPS-04 §3.4), rendered identically for platform
+and team admins: scheduled/running/completed groups for every task kind, driven by
+`GET /tasks`. A `succeeded` migration (platform import) whose structured result carries
+warnings shows an explicit "With warnings" flag next to the state badge, plus a
+per-row `Disclosure` (AUTHZ-07 Step 3) listing the principal non-zero counters —
+including every `*_skipped` counter and `users_processed`, not just the
+granted/imported ones (AUTHZ-07 Step 3 close-out) — and the full warning list, open
+by default when warnings are present. A `failed` task renders `task.error` inline.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — implemented and covered by unit tests
+  (`TaskActivity.test.tsx`), but no designer/product-owner pass has validated the
+  counter disclosure's layout, the "With warnings" flag's visual weight against the
+  state badge, or density once a migration result has most of its ~15 counters
+  populated at once.
 
 #### Resolved
 

@@ -480,6 +480,11 @@ Acceptance:
 
 ### FRONT-09.E — Detail drawer and polish
 
+> Native PDF rendering and an assistant side panel for the drawer's preview/open action
+> are tracked separately as `FRONT-13` (`docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`) —
+> wire the preview action to that shared `DocumentViewer` component once it lands, rather
+> than building a second one here.
+
 - [ ] Add `DocumentDetailDrawer`.
 - [ ] Show metadata, processing stages, summary/keywords, size, dates, owner, and actions.
 - [ ] Make row and drawer states consistent after mutations.

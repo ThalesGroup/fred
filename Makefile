@@ -65,6 +65,12 @@ test: ## Run non-integration test suites in all submodules and print coverage su
 	done
 	@echo "  ───────────────────────────────────────────────────────────────"
 
+##@ Validation
+
+.PHONY: validation-report
+validation-report: ## Run the live cross-app validation suite (requires infra + running apps - see validation/README.md)
+	$(MAKE) -C validation validation-report
+
 ##@ Run
 
 .PHONY: run-frontend

@@ -209,7 +209,6 @@ class MetricsProvider:
         name: str,
         *,
         dims: dict[str, str | None] | None = None,
-        groups: list[str] | None = None,
     ) -> Generator[dict[str, str | None], None, None]:
         """Time a block. Yields a mutable dims dict callers can annotate."""
         yield dict(dims) if dims else {}
@@ -238,7 +237,6 @@ class LoggingMetricsProvider(MetricsProvider):
         name: str,
         *,
         dims: dict[str, str | None] | None = None,
-        groups: list[str] | None = None,
     ) -> Generator[dict[str, str | None], None, None]:
         import time as _time
 
@@ -258,7 +256,6 @@ class LoggingMetricsProvider(MetricsProvider):
                         "name": name,
                         "dims": d,
                         "duration_ms": round((_time.perf_counter() - start) * 1000, 2),
-                        "groups": groups,
                     }
                 },
             )
@@ -305,7 +302,6 @@ class InMemoryMetricsProvider(MetricsProvider):
         name: str,
         *,
         dims: dict[str, str | None] | None = None,
-        groups: list[str] | None = None,
     ) -> Generator[dict[str, str | None], None, None]:
         import time as _time
 

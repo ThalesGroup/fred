@@ -104,9 +104,9 @@ def test_organization_declares_team_reverse_edge() -> None:
     assert team_types == [{"type": "team"}]
 
 
-def test_can_manage_is_org_admin() -> None:
+def test_can_manage_is_platform_admin() -> None:
     cap = _capability_type()
     can_manage = cap["relations"]["can_manage"]
     ttu = can_manage["tupleToUserset"]
     assert ttu["tupleset"]["relation"] == "organization"
-    assert ttu["computedUserset"]["relation"] == "admin"
+    assert ttu["computedUserset"]["relation"] == "platform_admin"

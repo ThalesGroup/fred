@@ -14,9 +14,7 @@
 
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
-import { OptionModel } from "@models/Option.model.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,16 +24,25 @@ import {
   UserTeamRelation,
 } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  useGrantTeamMemberRoleMutation,
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
-  useUpdateTeamMemberMutation,
+  useRevokeTeamMemberRoleMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import styles from "./TeamSettingsMembersTable.module.scss";
 
-const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
+// AUTHZ-06 (RFC Part 7 §34): a member may hold several of these at once (e.g.
+// a small team's sole admin who is also its editor and analyst) — each is
+// granted/revoked as its own independent, permission-checked action, never a
+// bulk role-set replace. `team_member` is deliberately excluded: it is the
+// implicit baseline when none of the three apply, not a toggle of its own.
+const ELEVATED_ROLES: UserTeamRelation[] = ["team_admin", "team_editor", "team_analyst"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
-  owner: 0,
-  manager: 1,
-  member: 2,
+  team_admin: 0,
+  team_editor: 1,
+  team_analyst: 2,
+  team_member: 3,
 };
 
 function compareStrings(valA: string | null | undefined, valB: string | null | undefined): number {
@@ -55,29 +62,35 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const { runMutationAction } = useMutationAction();
 
   const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
-  const [updateTeamMember] = useUpdateTeamMemberMutation();
+  const [grantTeamMemberRole] = useGrantTeamMemberRoleMutation();
+  const [revokeTeamMemberRole] = useRevokeTeamMemberRoleMutation();
   const [removeTeamMember] = useRemoveTeamMemberMutation();
 
-  const can_administer_members = team.permissions?.includes("can_administer_members");
-  const can_administer_managers = team.permissions?.includes("can_administer_managers");
-  const can_administer_owners = team.permissions?.includes("can_administer_owners");
+  const {
+    canAdministerMembers: can_administer_members,
+    canAdministerEditors: can_administer_editors,
+    canAdministerAnalysts: can_administer_analysts,
+    canAdministerAdmins: can_administer_admins,
+  } = useTeamCapabilities(team);
 
-  const can_administer_anyone = can_administer_members || can_administer_managers || can_administer_owners;
+  const can_administer_anyone =
+    can_administer_members || can_administer_editors || can_administer_analysts || can_administer_admins;
 
   function getAdministerPermissionForTeamRole(target: UserTeamRelation): boolean | undefined {
-    if (target === "manager") return can_administer_managers;
-    if (target === "owner") return can_administer_owners;
+    if (target === "team_editor") return can_administer_editors;
+    if (target === "team_analyst") return can_administer_analysts;
+    if (target === "team_admin") return can_administer_admins;
     return can_administer_members;
   }
 
-  const handleRoleChange = useCallback(
-    async (userId: string, newRelation: UserTeamRelation) => {
+  const handleGrantRole = useCallback(
+    async (userId: string, relation: UserTeamRelation) => {
       await runMutationAction({
         action: () =>
-          updateTeamMember({
+          grantTeamMemberRole({
             teamId: team.id,
             userId,
-            updateTeamMemberRequest: { relation: newRelation },
+            grantTeamMemberRoleRequest: { relation },
           }).unwrap(),
         onError: (error) =>
           notifyApiError(error, {
@@ -88,7 +101,23 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
           }),
       });
     },
-    [runMutationAction, updateTeamMember, team.id, notifyApiError, t],
+    [runMutationAction, grantTeamMemberRole, team.id, notifyApiError, t],
+  );
+
+  const handleRevokeRole = useCallback(
+    async (userId: string, relation: UserTeamRelation) => {
+      await runMutationAction({
+        action: () => revokeTeamMemberRole({ teamId: team.id, userId, relation }).unwrap(),
+        onError: (error) =>
+          notifyApiError(error, {
+            summary: t("rework.teamSettings.members.errors.updateRoleSummary", {}),
+            fallbackDetail: t("rework.teamSettings.members.errors.updateRoleDetail", {}),
+            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {}),
+            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {}),
+          }),
+      });
+    },
+    [runMutationAction, revokeTeamMemberRole, team.id, notifyApiError, t],
   );
 
   const handleRemoveMember = useCallback(
@@ -114,7 +143,8 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const sortedMembers = useMemo(() => {
     return (
       teamMembers?.slice().sort((a, b) => {
-        const roleDiff = ROLE_PRIORITY[a.relation] - ROLE_PRIORITY[b.relation];
+        const roleDiff =
+          Math.min(...a.relations.map((r) => ROLE_PRIORITY[r])) - Math.min(...b.relations.map((r) => ROLE_PRIORITY[r]));
         if (roleDiff !== 0) return roleDiff;
 
         return (
@@ -142,30 +172,30 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
       },
       {
         label: t("rework.teamSettings.members.table.role"),
-        cellRenderer: (teamMember) => {
-          const can_administer_this_member = getAdministerPermissionForTeamRole(teamMember.relation);
-
-          const roleSelectedOption = TEAM_ROLES.map(
-            (role): OptionModel => ({
-              label: t(`rework.teamRoles.${role}`),
-              value: role,
-              key: role,
-            }),
-          );
-          return can_administer_this_member ? (
-            <Select
-              options={roleSelectedOption}
-              value={teamMember.relation}
-              onChange={function (value: UserTeamRelation): void {
-                handleRoleChange(teamMember.user.id, value);
-              }}
-              compact={true}
-              size={"medium"}
-            ></Select>
-          ) : (
-            <div>{teamMember.relation}</div>
-          );
-        },
+        size: "1.5fr",
+        cellRenderer: (teamMember) => (
+          <div className={styles.roleChips} role="group">
+            {ELEVATED_ROLES.map((role) => {
+              const held = teamMember.relations.includes(role);
+              const canAdminister = Boolean(getAdministerPermissionForTeamRole(role));
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  className={styles.roleChip}
+                  data-active={held}
+                  aria-pressed={held}
+                  disabled={!canAdminister}
+                  onClick={() =>
+                    held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
+                  }
+                >
+                  {t(`rework.teamRoles.${role}`)}
+                </button>
+              );
+            })}
+          </div>
+        ),
       },
     ];
     if (can_administer_anyone) {
@@ -199,10 +229,12 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   }, [
     t,
     can_administer_anyone,
-    can_administer_managers,
-    can_administer_owners,
+    can_administer_editors,
+    can_administer_analysts,
+    can_administer_admins,
     can_administer_members,
-    handleRoleChange,
+    handleGrantRole,
+    handleRevokeRole,
     handleRemoveMember,
   ]);
 

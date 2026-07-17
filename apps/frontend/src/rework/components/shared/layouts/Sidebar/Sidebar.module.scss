@@ -22,8 +22,11 @@
 }
 
 .user-profile-container {
+  display: flex;
   position: absolute;
   bottom: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
   padding: 0 var(--spacing-xs) var(--spacing-xs);
   width: 100%;
 }

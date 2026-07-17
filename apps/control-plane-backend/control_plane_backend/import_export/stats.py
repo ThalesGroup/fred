@@ -8,12 +8,13 @@ Counts are sourced authoritatively:
 - agents / prompts → grouped by ``team_id`` straight from the DB (one query each),
   which captures every team including per-user personal spaces (``personal-*``).
 - teams + members  → teams.service (Keycloak + ReBAC); members bucketed by role
-  (OWNER / MANAGER / MEMBER).
+  (TEAM_ADMIN / TEAM_EDITOR / TEAM_ANALYST / TEAM_MEMBER).
 
 Personal spaces are per-user (one ``personal-{uid}`` team each), so they are NOT
-real teams. ``list_teams`` only surfaces the caller's own personal team, which is
-not representative — so personal spaces are excluded from the real-team rows and
-folded into a single aggregate "Espaces personnels" row instead.
+real teams. ``list_all_teams_unfiltered`` only surfaces the caller's own personal
+team (system teams are always caller-scoped), which is not representative — so
+personal spaces are excluded from the real-team rows and folded into a single
+aggregate "Espaces personnels" row instead.
 """
 
 from __future__ import annotations
@@ -30,7 +31,10 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.prompt_models import PromptRow
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
-from control_plane_backend.teams.service import list_team_members, list_teams
+from control_plane_backend.teams.service import (
+    list_all_teams_unfiltered,
+    list_team_members_unfiltered,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +44,9 @@ _PERSONAL_ROW_NAME = "Espaces personnels"
 class TeamStats(BaseModel):
     team_id: str
     name: str
-    owners: int
-    managers: int
+    admins: int
+    editors: int
+    analysts: int
     members: int
     total_members: int
     agents: int
@@ -86,7 +91,10 @@ async def compute_platform_stats(
 ) -> PlatformStats:
     agents_by_team, prompts_by_team = await _counts_by_team(engine)
 
-    teams = await list_teams(user, team_deps)
+    # SECURITY: the caller (`platform_stats`) already checked CAN_MANAGE_PLATFORM,
+    # so this intentionally lists every real team, not just the ones the
+    # caller could personally read.
+    teams = await list_all_teams_unfiltered(user, team_deps)
     real_teams = [t for t in teams if not _is_personal(str(t.id))]
 
     per_team: list[TeamStats] = []
@@ -94,10 +102,15 @@ async def compute_platform_stats(
 
     for team in real_teams:
         try:
-            members = await list_team_members(user, team.id, team_deps)
+            # `_unfiltered`: the caller already verified `CAN_MANAGE_PLATFORM`
+            # above `compute_platform_stats`. The per-team `CAN_READ_MEMEBERS`
+            # check would 403 on every real team the admin isn't personally a
+            # member of — the common case, since platform_admin carries no
+            # standing team relation (AUTHZ-05 review item 14).
+            members = await list_team_members_unfiltered(user, team.id, team_deps)
         except Exception as exc:
-            # A team the operator cannot read members of must not break the whole
-            # summary — degrade that row's member counts to zero and carry on.
+            # A genuinely broken team (e.g. deleted mid-computation) must not
+            # break the whole summary — degrade that row's counts to zero.
             logger.warning(
                 "[import-export] stats: cannot read members of team %s: %s",
                 team.id,
@@ -105,9 +118,22 @@ async def compute_platform_stats(
             )
             members = []
 
-        owners = sum(1 for m in members if m.relation == UserTeamRelation.OWNER)
-        managers = sum(1 for m in members if m.relation == UserTeamRelation.MANAGER)
-        plain = sum(1 for m in members if m.relation == UserTeamRelation.MEMBER)
+        # AUTHZ-06 (RFC Part 7 §37): a member may hold several roles at once —
+        # this platform-wide aggregate stays a strict partition (one column
+        # per member, summing to total_members) by counting each member under
+        # their primary role only (`relations[0]`, already priority-ordered
+        # admin > editor > analyst > member by `_list_team_members`). The full
+        # set of roles a member holds remains visible in the team's own
+        # member-management table, not diluted here.
+        primary_roles = [m.relations[0] for m in members]
+        admins = sum(1 for role in primary_roles if role == UserTeamRelation.TEAM_ADMIN)
+        editors = sum(
+            1 for role in primary_roles if role == UserTeamRelation.TEAM_EDITOR
+        )
+        analysts = sum(
+            1 for role in primary_roles if role == UserTeamRelation.TEAM_ANALYST
+        )
+        plain = sum(1 for role in primary_roles if role == UserTeamRelation.TEAM_MEMBER)
         for m in members:
             distinct_users.add(m.user.id)
 
@@ -116,8 +142,9 @@ async def compute_platform_stats(
             TeamStats(
                 team_id=tid,
                 name=team.name,
-                owners=owners,
-                managers=managers,
+                admins=admins,
+                editors=editors,
+                analysts=analysts,
                 members=plain,
                 total_members=len(members),
                 agents=agents_by_team.get(tid, 0),
@@ -127,7 +154,7 @@ async def compute_platform_stats(
 
     # Aggregate every personal space (one per user) into a single row. The number
     # of distinct personal team ids = number of users with personal data, shown in
-    # the Owners column (each user owns their own personal space).
+    # the Admins column (each user administers their own personal space).
     personal_ids = {
         tid for tid in set(agents_by_team) | set(prompts_by_team) if _is_personal(tid)
     }
@@ -138,8 +165,9 @@ async def compute_platform_stats(
             TeamStats(
                 team_id="personal",
                 name=_PERSONAL_ROW_NAME,
-                owners=len(personal_ids),
-                managers=0,
+                admins=len(personal_ids),
+                editors=0,
+                analysts=0,
                 members=0,
                 total_members=len(personal_ids),
                 agents=personal_agents,

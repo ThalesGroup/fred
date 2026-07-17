@@ -251,9 +251,9 @@ x-kf-content-storage: &kf-content-storage
   # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
   # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
   # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
-  # See docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md and deploy/charts/fred/values-gcp.yaml
+  # See deploy/charts/fred/values-gcp.yaml
   # type: gcs
-  # bucket_name: fredlab-content   # suffixed at runtime → -documents / -objects / -files (all must exist)
+  # bucket_name: <GCP_PROJECT_ID>-content   # suffixed at runtime → -documents / -objects / -files (all must exist)
   # project_id: ""                 # optional; inferred from ADC when empty
 
 x-kf-document-sources: &kf-document-sources
@@ -338,7 +338,6 @@ x-kf-mcp: &kf-mcp
   filesystem_enabled: false
   opensearch_ops_enabled: false
   prometheus_ops_enabled: false
-  neo4j_enabled: false
 
 x-kf-filesystem: &kf-filesystem
   type: local
@@ -348,9 +347,9 @@ x-kf-filesystem: &kf-filesystem
   # bucket_name: filesystem
   # secure: false
   # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
-  # See docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md and deploy/charts/fred/values-gcp.yaml
+  # See deploy/charts/fred/values-gcp.yaml
   # type: gcs
-  # bucket_name: fredlab-fs
+  # bucket_name: <GCP_PROJECT_ID>-fs
   # prefix: ""                     # optional; lets several logical roots share one bucket
   # project_id: ""                 # optional; inferred from ADC when empty
 
@@ -1542,6 +1541,33 @@ applications:
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
+    # ── Root platform-admin bootstrap secret (AUTHZ-07 Part 8 §40-42) ───────
+    # Control Plane is the only pod that ever needs this token: it validates
+    # POST /control-plane/v1/bootstrap/platform-admin. This chart never
+    # creates the Secret, never carries a literal value, and never mounts a
+    # bootstrap_token_file inside Kubernetes — the instance overlay (a real
+    # deployment factory) supplies a reference to a Secret it already owns.
+    # `extraEnvVars` only reaches this application's Deployment, never the
+    # Alembic migration Job (`hook-migration.yaml` renders `.app.env` only) —
+    # the migration Job has no need for the bootstrap token:
+    #
+    #   extraEnvVars:
+    #     - name: FRED_BOOTSTRAP_TOKEN
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: <existing Secret name, owned by the instance's Foundation>
+    #           key: <bootstrap token key>
+    #           optional: false
+    #
+    # `configuration.app.bootstrap_token_env_var` below already names the
+    # variable Control Plane reads; leaving this list empty (the chart
+    # default) means no bootstrap secret is wired and the backend's own
+    # fail-closed logic (`bootstrap/service.py::_read_configured_token`)
+    # makes the endpoint explicitly unavailable rather than silently open.
+    # `optional: false` on a configured reference makes Kubernetes itself
+    # refuse to start the pod if the named Secret/key does not exist —
+    # fail-closed at the platform level too, not just the application level.
+    extraEnvVars: []
     ports:
       - name: http
         containerPort: 8222
@@ -1655,6 +1681,13 @@ applications:
         address: "127.0.0.1"
         port: 8222
         log_level: "info"
+        # Env var Control Plane reads the one-time root bootstrap secret from
+        # (AUTHZ-07 Part 8 §40-42). Just a variable name, never a secret value
+        # — see `extraEnvVars` above for how the instance overlay supplies the
+        # real value via a Kubernetes Secret reference. Never set
+        # `bootstrap_token_file` here: that path is local-dev only and is
+        # never rendered into a Kubernetes deployment by this chart.
+        bootstrap_token_env_var: "FRED_BOOTSTRAP_TOKEN"
 
       observability:
         kpi:

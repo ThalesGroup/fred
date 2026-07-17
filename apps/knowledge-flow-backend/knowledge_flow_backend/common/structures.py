@@ -597,10 +597,6 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose Prometheus operational endpoints and the corresponding MCP server.",
     )
-    neo4j_enabled: bool = Field(
-        default=False,
-        description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
-    )
     filesystem_enabled: bool = Field(
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",

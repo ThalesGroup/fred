@@ -504,7 +504,12 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
     }),
     corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/corpus/capabilities` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/capabilities`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     corpusBuildToc: build.mutation<CorpusBuildTocApiResponse, CorpusBuildTocApiArg>({
       query: (queryArg) => ({
@@ -1329,7 +1334,10 @@ export type MkdirApiArg = {
   path: string;
 };
 export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
-export type CorpusCapabilitiesApiArg = void;
+export type CorpusCapabilitiesApiArg = {
+  /** Team to check corpus-tool access for. */
+  teamId: string;
+};
 export type CorpusBuildTocApiResponse = /** status 200 Successful Response */ any;
 export type CorpusBuildTocApiArg = {
   buildCorpusTocRequestV1: BuildCorpusTocRequestV1;
@@ -1721,6 +1729,62 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
+export type IngestionDetail = {
+  processed: number;
+  total: number;
+  failed: number;
+  preview: number;
+  vectorized: number;
+  sql_indexed: number;
+};
+export type EvaluationDetail = {
+  campaign_id: string;
+  completed: number;
+  total: number;
+  passed: number;
+  failed: number;
+  execution_errors: number;
+  scoring_errors: number;
+};
+export type TaskLogDetail = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export type MigrationResult = {
+  import_id: string;
+  source_platform: string;
+  identities_created?: number;
+  users_processed?: number;
+  users_skipped?: string[];
+  teams_imported?: number;
+  teams_skipped?: number;
+  teams_provisioned?: number;
+  team_roles_granted?: number;
+  team_roles_skipped?: number;
+  platform_roles_granted?: number;
+  agents_imported?: number;
+  agents_skipped?: number;
+  agents_gap?: number;
+  tags_imported?: number;
+  tags_skipped?: number;
+  docs_imported?: number;
+  docs_skipped?: number;
+  warnings?: string[];
+};
+export type MigrationDetail = {
+  step_id: string;
+  processed: number;
+  total: number;
+  failed: number;
+  result?: MigrationResult | null;
+};
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type ErasureDetail = {
+  reason?: ErasureReason | null;
+  stores_ok?: number;
+  stores_total?: number;
+  attempts?: number;
+};
 export type TaskSummary = {
   task_id: string;
   kind: string;
@@ -1734,6 +1798,7 @@ export type TaskSummary = {
   created_at: string;
   updated_at: string;
   scheduled_for?: string | null;
+  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
@@ -2273,6 +2338,7 @@ export type BuildCorpusTocRequestV1 = {
   scope: CorpusScopeV1;
   options?: TocBuildOptionsV1;
   title?: string | null;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };
@@ -2285,6 +2351,7 @@ export type RevectorizeCorpusRequestV1 = {
   version?: "v1";
   scope: CorpusScopeV1;
   options?: RevectorizeOptionsV1;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };
@@ -2296,14 +2363,17 @@ export type PurgeVectorsRequestV1 = {
   version?: "v1";
   scope: CorpusScopeV1;
   options?: PurgeVectorsOptionsV1;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };
 export type TaskGetRequestV1 = {
   task_id: string;
+  team_id: string;
 };
 export type TaskResultRequestV1 = {
   task_id: string;
+  team_id: string;
 };
 export type TaskListRequestV1 = {
   thread_id?: string | null;
@@ -2311,6 +2381,7 @@ export type TaskListRequestV1 = {
   operation?: string | null;
   status?: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
   limit?: number;
+  team_id: string;
 };
 export type LogEventDto = {
   ts: number;
@@ -2517,6 +2588,8 @@ export type WriteReportRequest = {
   title: string;
   /** Canonical Markdown content (stored as-is) */
   markdown: string;
+  /** Tag (library) this report belongs to */
+  tag_id: string;
   /** Optional template identifier for traceability */
   template_id?: string | null;
   /** UI tags (chips) */

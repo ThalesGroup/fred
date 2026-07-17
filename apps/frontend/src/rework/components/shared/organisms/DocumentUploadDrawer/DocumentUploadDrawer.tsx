@@ -21,8 +21,9 @@ import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Select from "@shared/molecules/Select/Select";
-import { usePermissions } from "../../../../../security/usePermissions";
-import { streamUploadOrProcessDocument } from "../../../../../slices/streamDocumentUpload";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
 import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
@@ -37,6 +38,48 @@ interface DocumentUploadDrawerProps {
   teamId?: string;
   /** Destination folder path shown prominently in the header, e.g. "CIR" or "CIR/Sub". */
   destinationPath?: string;
+}
+
+/**
+ * Waits only until `file` is scheduled (its task_id known, via `onDiscovered`) or
+ * its request settles with no task at all (upload-only mode, or a failure before
+ * any task existed) — never until the file's full ingestion pipeline finishes.
+ * The underlying request keeps running in the background regardless; a later
+ * failure is reported by the failed task in the tray (once a task_id existed) or
+ * by `onBackgroundError` (if it failed before one ever did).
+ */
+export function scheduleFile(
+  file: File,
+  uploadMode: "upload" | "process",
+  requestMetadata: Record<string, unknown>,
+  onDiscovered: (task: ScheduledTask) => void,
+  onBackgroundError: (message: string) => void,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let taskDiscovered = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    streamUploadOrProcessDocument(file, uploadMode, requestMetadata, (task) => {
+      taskDiscovered = true;
+      onDiscovered(task);
+      settle();
+    })
+      .then(() => settle())
+      .catch((err) => {
+        settle();
+        // A task_id already known means the backend fails that task explicitly
+        // (visible in the tray/Activity) — reporting it here too would double it up.
+        // Only surface a toast for a failure that happened before any task existed.
+        if (!taskDiscovered) {
+          onBackgroundError(err instanceof Error ? err.message : String(err));
+        }
+      });
+  });
 }
 
 function formatBytes(bytes: number): string {
@@ -56,8 +99,7 @@ export function DocumentUploadDrawer({
   destinationPath,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
-  const { can } = usePermissions();
-  const canSelectProfile = can("document", "update");
+  const { showError } = useToast();
 
   const dispatch = useDispatch();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
@@ -98,6 +140,7 @@ export function DocumentUploadDrawer({
 
   const resolvedTeamId = teamId ?? "personal";
   const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
+  const { canUpdateResources: canSelectProfile } = useTeamCapabilities(team);
 
   const newFilesSize = useMemo(() => files.reduce((acc, f) => acc + f.size, 0), [files]);
 
@@ -137,16 +180,24 @@ export function DocumentUploadDrawer({
         const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
         // Register each task the instant the server first reports its id (the first
         // line of the stream), not after the whole upload finishes — so the tray
-        // lights up and starts its SSE subscription while the upload streams.
-        await streamUploadOrProcessDocument(file, uploadMode, requestMetadata, ({ taskId, documentUid }) => {
-          dispatch(
-            taskRegistered({
-              taskId,
-              kind: "ingestion",
-              target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
-            }),
-          );
-        });
+        // lights up and starts its SSE subscription while the upload streams. The
+        // drawer itself only waits for that signal (see `scheduleFile`), not for
+        // the file's full ingestion pipeline, so it can close promptly.
+        await scheduleFile(
+          file,
+          uploadMode,
+          requestMetadata,
+          ({ taskId, documentUid }) => {
+            dispatch(
+              taskRegistered({
+                taskId,
+                kind: "ingestion",
+                target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
+              }),
+            );
+          },
+          (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
+        );
       }
       onUploadComplete?.();
     } finally {

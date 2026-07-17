@@ -147,8 +147,7 @@ class VectorSearchService:
         }
 
     def _kpi_actor(self, *, user: Optional[KeycloakUser] = None) -> KPIActor:
-        groups = user.groups if user else None
-        return KPIActor(type="system", groups=groups)
+        return KPIActor(type="system")
 
     def _phase_timer(
         self,

@@ -181,4 +181,6 @@ See §2.3 rationale.  The route approach is strictly better for shareability and
 - Source de-duplication across multiple `knowledge.search` calls — follow-up
 - Accurate citation-to-source mapping when the LLM skips indices — follow-up
 - `SourceDetailModal` link for `repo_url` (external git links) — follow-up
-- PDF viewer route (`/documents/:uid` serves markdown only for now) — follow-up
+- Native PDF rendering and an assistant side panel on `/documents/:uid` — superseded by
+  `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md` (`FRONT-13`); this RFC's route serves
+  markdown only, by design, for every format until that phase lands.

@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-07-09"
+  last_updated: "2026-07-14"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -62,7 +62,7 @@ items:
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
     notes: >
       Additive permissions on the existing organization type (can_read_kpi/logs/
-      metrics/opensearch/knowledge_graph → viewer; can_administer_users/
+      metrics/opensearch → viewer; can_administer_users/
       can_manage_platform/can_run_benchmark → admin); regenerate schema.fga.json;
       add DocumentPermission.PROCESS + OrganizationPermission members.
 
@@ -97,19 +97,410 @@ items:
 
   - id: AUTHZ-05
     title: "Fred-owned authorization target model and legacy compatibility bridge"
-    status: proposed
+    status: in_progress
     owner: Dimitri
     parent: AUTHZ-01
     refs:
       rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      pr: "https://github.com/ThalesGroup/fred/pull/1957"
     notes: >
       Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
       stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
       resource permissions, evaluation permissions, and service-principal
-      authorization. Platform roles never imply team data visibility. Defines
-      bootstrap options for first PlatformAdmin and a temporary audited legacy
-      bridge for existing Keycloak roles / team owner-manager-member relations.
+      authorization. Platform roles never imply team data visibility.
+      First pass (2026-07-09, RFC §24, fred-core 3.4.2): closed the live
+      `team.owner = [user] or admin from organization` escalation, added
+      stored `platform_admin`/`platform_observer` relations + config-seeded
+      bootstrap. A narrow `platform_admin`-only exception for team first-owner
+      assignment was tried the same day and reverted immediately (RFC §24.7,
+      PR #1957 review, P1) — it was the same escalation through a different
+      door; `platform_admin` carries no team relation of any kind.
+      Second pass (2026-07-09, RFC §26-28): renamed the team-role vocabulary
+      `owner`->`team_admin`, `manager`->`team_editor`, added `team_analyst`
+      (matching the `fredlab-authz-migrate-swift.py` migration tool's existing
+      defaults, not the RFC's original `team_manager`); fixed the org-scoped
+      `can_read_content`/`can_process_content` bypass (RFC §25a/§27) for every
+      site where team-scoping is mechanically meaningful; resolved the
+      previously-open team-bootstrap problem with a one-shot, platform-admin-
+      gated `POST /teams` endpoint (RFC §28). Verified end-to-end against a
+      live stack via fred's own validation/ suite and against a
+      live OpenFGA instance (fred-core integration tests) — see
+      validation/report.md.
+      Post-review pass (2026-07-09/10, triggered by
+      human review of PR #1957): all findings closed except item 8b. Cut
+      `can_create_team` to `platform_admin`-only (item 5, no other caller
+      depended on the legacy `admin` bridge). Item 8a (2026-07-10): removed the
+      legacy Keycloak `admin`/`editor`/`viewer` organization relations from
+      `schema.fga` entirely — no role bridge of any kind survives; admin-tier
+      capabilities are `platform_admin`-only, the "any connected user" tier
+      (`can_read_content` et al.) is deleted outright with no replacement
+      relation. Item 9 (RFC Part 6 §29-32, 2026-07-10): teams decoupled from
+      Keycloak completely — a team is now a `team_metadata` row + OpenFGA
+      relations only, `POST /teams` no longer creates a Keycloak group, zero
+      Keycloak calls remain anywhere in `teams/service.py`. Added 3
+      platform-admin-only team-registry-governance capabilities
+      (`can_list_all_teams`, `can_delete_team`, `can_rescue_team_admin` — the
+      last one guarded to only ever act on a team with zero `team_admin`, never
+      a standing grant). Item 8b closed 2026-07-13: removed
+      `groups_list_to_relations`/`_user_contextual_relations` (the
+      Keycloak-`groups`-claim-derived `team_member` fallback) entirely from
+      `RebacEngine`, and the direct call from
+      `teams/service.py::_get_team_permissions_for_user`. Closed on an
+      explicit waiver from Dimitri, not a confirmed production-data
+      migration: `fred-deployment-factory` is being rebuilt clean, with no
+      production membership data to preserve, and the migration itself is
+      tracked separately there. `RebacEngine.__init__`/`keycloak_client`
+      (only used to build this fallback) removed too, along with the
+      now-unused `m2m_security` parameter on `OpenFgaRebacEngine`/
+      `rebac_factory.py`. Every team_member relation must now be a persisted
+      OpenFGA tuple. Known scope note: the same method also carried a
+      non-`groups`-derived personal-team self-membership contextual relation
+      (`user.uid` → `team:personal-<uid>`, never persisted) — removed too on
+      explicit instruction to follow the literal scope; traced call sites
+      suggest this is low-risk (personal-space resources are user-owned
+      directly, and `build_personal_team` never calls ReBAC) but was not
+      exhaustively proven safe — flagged as a live-validation watch item.
+      Live-campaign findings (2026-07-11, found while standing up the
+      fred-deployment-factory validation campaign). Item 10:
+      `promote_prompt` checked `CAN_UPDATE_RESOURCES` on the source team only
+      — the target team was never resolved or permission-checked, letting a
+      team_editor copy a prompt's text into any team_id, including one they
+      held no relation to. Fixed by resolving the target team under the same
+      capability as the source. Item 11: the frontend had a second, dead
+      permission system (`usePermissions`/`PermissionSummary.items`, Keycloak-
+      role-derived) sitting alongside the correct OpenFGA-derived one — since
+      AUTHZ-05 removed Keycloak app roles, it had gone permanently empty,
+      silently disabling 6 routes and 3 in-page controls for everyone,
+      including platform_admin. Replaced with a single two-tier hook pattern
+      (`useUserCapabilities`/`useTeamCapabilities`) documented in the new
+      `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`; `PermissionSummary`
+      shrunk to its two OpenFGA-derived booleans (frozen-contract note:
+      `CONTROL-PLANE-PRODUCT-CONTRACT.md` §14). Also added a live
+      "authorization self-test" to `/admin/self-test`, runnable against the
+      current admin's own session or any other account (Keycloak
+      direct-grant, dev/test realms only), so "does the UI honor the
+      authorization model" has a self-service, in-browser answer going
+      forward. AUTHZ-05 remains the in-progress parent while AUTHZ-07's
+      consolidated Step 6 follow-up remains open.
+      Live-campaign findings continued (2026-07-11/12, items 12-17): item 12,
+      `GET /teams/all` leaked the caller's own personal
+      space into the registry (false positive in the self-test, not a
+      cross-tenant leak) — filtered out. Item 13, the frontend route guard
+      `Protected` decided before `/frontend/bootstrap` had loaded, redirecting
+      every reload to `/unauthorized` with no way back — now waits on
+      `isLoading`. Item 14, `compute_platform_stats` 403'd reading team
+      members as the calling `platform_admin` (who holds no team relation on
+      most real teams) — new `list_team_members_unfiltered`. Items 15-16,
+      `platform_observer` had no reachable KPI dashboard: after a first,
+      wrong attempt (widening `/admin/analytics`'s route guard alone, which
+      still 403'd server-side), found `can_read_kpi_global` was a legacy,
+      platform_admin-only duplicate of `can_observe_platform` never actually
+      asked for by this RFC (`§6.1`) — retired, `/admin/analytics` and
+      `/monitoring/kpis` both now gate on `can_observe_platform`, so
+      `platform_admin` and `platform_observer` see the same platform-wide
+      recap. Item 17, enriched the browser authorization self-test
+      (`/admin/self-test`) with a real, cleaned-up write probe
+      (`team-write-access`) so it verifies a granted `can_update_resources`
+      actually works, not just that denials are denied.
+      Cleanup (2026-07-13): removed the obsolete 15-minute periodic Keycloak
+      groups→ReBAC reconciliation task from knowledge-flow-backend's lifespan
+      (`security/keycloak_rebac_sync.py` deleted) and the now-unused
+      `RebacEngine.need_keycloak_sync` property — with OpenFGA, that property
+      was already hardcoded `False`, so the task ran every 15 minutes and
+      always no-opped. Mechanical deletion of a dead path already contrary to
+      the AUTHZ-05 target model (Keycloak identity-only); no RFC change, same
+      PR #1957 / branch. `RebacEngine.list_relations` kept (still abstract,
+      implemented by 2 engines, tested elsewhere) — its OpenFGA stub still
+      raises `NotImplementedError`; the misleading "OpenFGA resolves group
+      membership through contextual tuples" comment on it was NOT actually
+      fixed as this note claimed — corrected for real 2026-07-13 (see below).
+      Final mechanical sweep (2026-07-13, same PR/branch, no new ID):
+      deleted `KeycloakUser.groups`, the `payload.get("groups", [])` read in
+      `oidc.py::decode_jwt`, `KPIActor.groups` and its OpenSearch mapping, the
+      `MetricsProvider.timer(groups=...)` parameter across
+      `fred_core/portable/observability.py` and fred-runtime's
+      `_MetricsTimerAdapter`, and `RuntimeContext.user_groups`
+      (`fred-sdk/contracts/context.py`) after confirming it had zero real
+      producer (only `ctx.get("user_groups")`, a dict key nothing ever set).
+      Regenerated `fred-runtime/openapi.json` and
+      `apps/frontend/src/slices/runtime/runtimeOpenApi.ts` for the
+      `RuntimeContext` field removal; documented in
+      `RUNTIME-EXECUTION-CONTRACT.md` §8.13. Fixed the `openfga_engine.py`
+      comment above, plus stale "Keycloak group membership" docstrings/README
+      text in `control-plane-backend` and the `KeycloakAdmin` method/file
+      counts in `COPYLEFT-DEPENDENCIES.md`. `KEYCLOAK.md`/`REBAC.md`/
+      `FEATURES.html` updated to stop asking for or claiming Keycloak-groups
+      config. Verified offline: fred-core 256, fred-sdk 186, fred-runtime
+      417, knowledge-flow-backend 356, control-plane-backend 277 all passed;
+      `make code-quality` clean on all five; frontend `tsc --noEmit` clean.
+      Item 8b watch item materialized and closed (2026-07-13): the browser
+      self-test (item 17) reproduced the flagged risk exactly — personal-space
+      setup passed (14 steps) but all 4 direct runtime executions 403'd.
+      Root cause: the removed contextual `team:personal-<uid>` relation had
+      been the only thing OpenFGA's `CAN_READ` check on a personal space ever
+      passed. Fix (runtime-local, no Keycloak fallback restored):
+      `agent_app.py::_authorize_execution_or_raise` now authorizes a personal
+      space by exact identity match against `personal_team_id(authenticated_
+      user.uid)` before the OpenFGA branch (audited
+      `personal_space_owner_authorized`), and explicitly denies any other
+      `personal-*` id or the bare `"personal"` alias (audited
+      `personal_space_denied`, 403, never reaching OpenFGA). Collaborative
+      teams unchanged. `service_agent` execution unchanged. New tests in
+      `libs/fred-runtime/tests/test_agent_app.py`. Verified offline:
+      fred-runtime 420 passed, `make code-quality` clean. Documented in
+      `RUNTIME-EXECUTION-CONTRACT.md` §2.2 + new dated entry;
+      `AUTHZ-MIGRATION-BACKLOG.md`. Remaining live acceptance is tracked by
+      AUTHZ-07's candidate-hardening workplan.
+
+  - id: AUTHZ-06
+    title: "Cumulative team roles (team_admin + team_editor + team_analyst on one team)"
+    status: in_progress
+    owner: Dimitri
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 7 (§33-39)"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      design: "docs/swift/platform/REBAC.md"
+      pr: "https://github.com/ThalesGroup/fred/pull/1957"
+    notes: >
+      Found live (2026-07-12): the small-team shape — one person who is
+      simultaneously governance authority, content editor, and evaluation
+      operator, plus a few plain members — is structurally unreachable today.
+      `update_team_member` enforces exactly one role per user per team
+      (remove-all-then-add-one), compounded by item 7's orthogonal
+      `team_admin`/`team_editor` split (full governance, zero content
+      authority, and the reverse). OpenFGA itself needs zero schema changes
+      — nothing prevents one user holding multiple relation tuples on the
+      same team object; the exclusivity is a service-layer convention, not a
+      model constraint. Decision (developer-confirmed): additive roles,
+      granted/revoked one at a time (never a bulk replace), same
+      per-role permission checks as today
+      (`can_administer_{admins,editors,analysts}` unchanged). Explicitly not
+      in scope: any cap on how many people hold a role, any change to which
+      capabilities each role carries. Contract change: `TeamMember.relation`
+      (singular) -> `relations` (list) — frozen-contract entry in
+      `CONTROL-PLANE-PRODUCT-CONTRACT.md` §15. Code-complete 2026-07-12
+      (backend + frontend, tests green); remaining validation acceptance is
+      tracked by the AUTHZ-07 candidate-hardening workplan.
+
+  - id: AUTHZ-07
+    title: "Root bootstrap and declarative platform provisioning"
+    status: in_progress
+    owner: Dimitri
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 8 (§40-42)"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      design: "docs/swift/platform/REBAC.md"
+      execution: "branch 1989-follow-up-review-and-consolidation-of-candidate-release"
+    notes: >
+      Supersedes §24.3's config-seeded platform_admin_subjects. Two
+      mechanisms, no CRUD, no identity ever in deployment config: (1) a
+      secret-gated POST /bootstrap/platform-admin, revised 2026-07-14 (§42)
+      after a review pass found two gaps in the first pass before any K8s
+      templating: an attacker holding only the deploy secret could name any
+      Keycloak user as identifier and grant them platform_admin without
+      consent, and the live lookup_subjects zero-admin check was the same bug
+      shape as the reverted §24.7 escalation (true only "for now", not a
+      durable guarantee). Corrected: request now carries only {token}, no
+      identifier — the grant always targets the calling JWT's own sub
+      (get_current_user now required, in addition to the secret; two
+      independent proofs, does not reopen the bootstrap chicken-and-egg since
+      Keycloak auth depends on nothing Fred/OpenFGA owns). Guard is now a
+      durably persisted marker (new PlatformBootstrapStore, fred-core,
+      table platformbootstrap, migration 6e4149d46705), written before the
+      OpenFGA tuple under the same advisory-lock primitive as
+      rescue_team_admin — surviving even a later loss of every
+      platform_admin (explicit non-goal: recovery from total admin loss is a
+      separate break-glass procedure, §41). Secret read via
+      bootstrap_token_env_var (Kubernetes Secret, checked first) or
+      bootstrap_token_file (local dev only, created explicitly via `make
+      bootstrap-token` — Fred never generates or logs it, in any
+      environment). Keycloak Admin client dependency dropped entirely from
+      this endpoint. Registered in authz-endpoint-matrix.yaml
+      (external_or_public); documented in CONTROL-PLANE-PRODUCT-CONTRACT.md
+      §3.1.2 and REBAC.md. Verified offline: fred-core 256 passed,
+      control-plane-backend 290 passed (9 in test_bootstrap_platform_admin.py,
+      incl. the load-bearing regression proving the durable marker blocks
+      reuse after simulated total platform_admin loss), make code-quality
+      clean on both. Same shape as Kubernetes' cluster-admin bootstrap,
+      ArgoCD's argocd-initial-admin-secret, Rancher's bootstrap password,
+      Keycloak's own KC_BOOTSTRAP_ADMIN_* variables. Pre-existing, unrelated
+      finding flagged (not fixed here): alembic/env.py's
+      fred_core.documents.document_models import registers metadata/tag
+      tables with no migration in this app's own chain (introduced
+      2026-07-07, 565d884f) — make db-check-sqlite/db-check-postgres fail on
+      this independent of AUTHZ-07. (2) one declarative
+      platform-provisioning operation for teams/roles/users — likely a
+      hardened, generalized PLATFORM-IMPORT-RFC.md rather than a new bulk
+      endpoint — flagged as open here; closed 2026-07-14, see "Part (2)
+      closed" below.
+
+      Hardening pass, same day (2026-07-14), before the first local-docker
+      test: 9 findings fixed one at a time with developer sign-off (5 from an
+      independent review, re-derived against the code before being accepted;
+      4 found while implementing/testing the first 5). Empty/trivial
+      configured secret no longer accepted (secrets.compare_digest("","")
+      is True — min_length=16 on the request schema, and any configured
+      secret under that floor now treated as unconfigured). make
+      bootstrap-token rewritten atomic + fail-closed (was fail-open on
+      openssl failure). Write order swapped — OpenFGA tuple before the
+      durable marker, not after — since a transient OpenFGA failure under
+      the old order permanently bricked bootstrap with no admin ever
+      granted and no recovery path; safe because add_relation is already
+      idempotent (on_duplicate_writes=IGNORE). Env-var-configured-but-absent
+      no longer falls back to the file. New fail-closed guards for ReBAC
+      disabled and for Keycloak/OIDC disabled (the latter found while
+      testing the former, not in the original review — a mocked identity
+      would otherwise degrade "two independent proofs" to one).
+      PlatformBootstrapStore/PlatformBootstrapRow moved out of fred-core
+      (zero consumers outside control-plane-backend, unlike
+      TeamMetadataStore) into control_plane_backend/bootstrap/store.py +
+      control_plane_backend/models/bootstrap_models.py, switched to the
+      local Base — zero Alembic drift, verified. Test coverage gaps closed:
+      a real-SQLite PlatformBootstrapStore test, route-level 401/503/200
+      tests through the real ASGI app, and a genuine concurrency test
+      proving the advisory lock serializes two racing callers. OpenAPI
+      client regenerated, plus explicit 403/409/503 responses declared on
+      the route. Verified offline: control-plane-backend 304 passed (full
+      suite), fred-core 256 passed offline (17 pre-existing OpenFGA-live
+      integration failures, unrelated, no local OpenFGA in this
+      environment), frontend tsc --noEmit clean. make code-quality not run
+      this session — outstanding before merge. Not yet done (unchanged):
+      manual end-to-end re-validation on fred-deployment-factory's
+      docker-up, Kubernetes Secret templating for GKE/GCP then AKS, and
+      part (2) above.
+
+      Part (2) closed 2026-07-14: declarative team/platform role
+      provisioning for already-existing Keycloak identities, implemented as
+      a new users.json bundle entry in import_export (PLATFORM-IMPORT-RFC.md
+      §10), not a new bulk endpoint — the option flagged above. Read-only
+      username-to-sub resolution (find_user_sub_by_username, never creates a
+      Keycloak identity); a single new private helper grants platform roles
+      to a third party, reachable only through the existing
+      CAN_MANAGE_PLATFORM-gated import route; team-scoped role grants stay
+      bounded by the existing team_admin-only permission model (no
+      schema.fga change, no reopening of the reverted §24.7 escalation) — a
+      brand-new team's initial team_admin(s) can be seeded at creation, any
+      other team-scoped grant is skipped and reported if the importing
+      platform_admin does not already hold team_admin there. Verified
+      offline: tests/test_import_export_users.py (8 tests), full
+      control-plane-backend suite 314 passed, frontend tsc --noEmit clean.
+
+      Step 1 (live observation, 2026-07-14): the real demo bundle import on a
+      fresh platform produced 3 teams, 4 team_admin grants, 10 team roles
+      ignored, terminal state succeeded anyway; root make validation-report
+      came back 0 passed / 227 error, all cascading from that one missing
+      relation. Root cause: every non-admin team-scoped grant was routed
+      through the ordinary team_admin-gated grant_team_member_role, which the
+      importing platform_admin can never satisfy by design — so the
+      "skipped and reported, never forced through" design above was, in
+      practice, every non-admin grant in any real bundle. Step 2 fix (same
+      day, this PR): new private _grant_team_role_via_import primitive
+      (importer.py) writes these grants directly via RebacEngine.add_relation,
+      mirroring the pre-existing _grant_platform_role — no schema.fga change,
+      ordinary team APIs unchanged and still team_admin-gated (regression
+      test proves grant_team_member_role still refuses the same importer).
+      teams/team_roles fallback semantics formalized
+      (_effective_team_relations): explicit roles win and are cumulative;
+      teams with no explicit role fall back to one direct team_member tuple,
+      suppressed when an explicit role exists. Reconciliation is now
+      fail-closed (BundleProvisioningError aborts the users phase) on an
+      unknown role name, an unresolved identity, or an unprovisionable team,
+      instead of warn-then-succeed. Verified offline: 17 tests in
+      tests/test_import_export_users.py (was 8), full control-plane-backend
+      suite green, make code-quality clean; PLATFORM-IMPORT-RFC.md §10
+      updated in the same change. Live-verified 2026-07-14: the operator
+      re-imported the same bundle onto the live stack, then re-ran root
+      make validation-report — 225 passed, 0 failed, 0 errors, 2 skipped
+      (expected), the prior 227-error cascade gone.
+
+      Step 3 (2026-07-14, same PR): import outcome made observable and
+      truthful — task started with a canonical TaskTarget instead of a raw
+      UUID, terminal succeeded event carries the full structured
+      MigrationResult, TaskActivity shows an explicit "with warnings" flag,
+      failed-task error text, and a disclosure with counters/warnings. Full
+      detail: AUTHZ-MIGRATION-BACKLOG.md Step 3.
+
+      Close-out hardening pass (2026-07-14, same issue #1912 / PR #1957):
+      four findings fixed — ImportLaunchResponse now returns the backend's
+      own target (frontend's buildImportTarget/IMPORT_TARGET_TYPE deleted,
+      no more independently-reconstructed target); taskTypes.ts's
+      MigrationResult mirror deleted in favor of the generated type;
+      TaskActivity's counter disclosure extended to every *_skipped counter
+      and users_processed; this note and AUTHZ-MIGRATION-BACKLOG.md's Step 2
+      "not yet live-verified" claims corrected to match the live-verified
+      state above.
+
+      Step 4 (fred-deployment-factory commits 05dda9e/65090fd, live-validated
+      2026-07-15): factory reduced to pure identity/authz infrastructure —
+      tracked realm templates carry zero users/groups, legacy app
+      admin/editor/viewer roles removed (service_agent kept for M2M), the
+      k3d OpenFGA seed and the direct fredlab-authz-migrate-swift.py script
+      deleted, factory-owned validation targets removed in favor of
+      fred/validation, preflight now requires service_agent and rejects
+      admin/editor/viewer. Offline: check-pure-infrastructure, helm
+      lint/template, docker compose config, bash -n, OpenFGA sync all green.
+      Live 2026-07-15: full from-scratch restart, Keycloak
+      self-registration, bootstrap secret submission, first platform_admin,
+      entry into Fred, demo-provisioning-bundle import — all succeeded;
+      empty factory -> registration -> Fred bootstrap -> Fred import is
+      confirmed as the one tested path. Scope recadrage confirmed 2026-07-15,
+      corrected same day (91e10bb4's AKS-inclusive framing overstated this
+      candidate's delivered scope): today's concrete, live-testable target is
+      one fresh installation on GKE. There is no AKS overlay in fred or
+      fred-deployment-factory and none is created here -- AKS/Flux is a
+      future instance for a separate workshop with Benjamin, reusing the same
+      portable chart contract. No Swift-to-Swift pre-marker upgrade
+      compatibility is required or to be invented; the sole migration is KEA
+      export -> fresh Swift bootstrap -> canonical platform import. Step 5
+      closed offline 2026-07-15: portable bootstrap-secret contract
+      (bootstrap_token_env_var + secretKeyRef) in deploy/charts/fred, wired to
+      the GKE/ArgoCD reference deployment in fred-deployment-factory, plus a
+      documented (not implemented) AKS/Flux contract in deploy/README.md. Same
+      pass also closed Step 6's config-seeded-platform-role removal
+      (platform_admin_subjects/platform_observer_subjects +
+      _bootstrap_platform_roles deleted outright, see
+      AUTHZ-MIGRATION-BACKLOG.md's Step 6 entry for the file list). AUTHZ-07
+      stays in_progress: the rest of Step 6 (durable/recoverable import
+      execution, bootstrap-page UX gaps) remains open, out of this task's
+      scope; live GKE fresh-install validation is Dimitri's post-merge
+      acceptance step, not a merge-gate prerequisite.
+
+      Cross-platform hardening review, 2026-07-15 (ahead of the GKE C1
+      fresh-install redeploy and a joint review with Benjamin (AKS/TDP) and
+      Sébastien/Arthur (S3NS/GKE C3)): implementation read end-to-end and
+      judged sound enough to proceed (two independent proofs, self-promotion
+      only, durable marker not a re-derived OpenFGA count, constant-time
+      secret comparison, fail-closed on every degraded config). Four
+      candidates recorded, not fixed, under Step 6 in
+      AUTHZ-MIGRATION-BACKLOG.md: no rate-limit/audit-trail on failed
+      bootstrap attempts; no break-glass path if the last platform_admin is
+      lost (RFC §41 non-goal, unrevisited for production); fresh-install-only
+      scope not yet reconciled with S3NS being a migration target; AKS/TDP
+      secret-transport source not yet chosen (contract documented, no
+      concrete overlay).
+
+      v2.1.1 consolidated follow-up review, 2026-07-15: no high finding and
+      the root-bootstrap backend is accepted. AUTHZ-07 Step 6 is the single
+      workplan for two chart release gates (the bootstrap secret copied into
+      the migration Job; the required Control Plane migration disabled by
+      default), durable/recoverable import execution, exact-versus-additive
+      provisioning semantics, OpenAPI and canonical-role vocabulary cleanup,
+      a proven-unused-path/dead-code sweep, bootstrap UI
+      accessibility/responsiveness/tests, terminal team-list
+      refresh, failed-attempt audit/rate-limit and break-glass decisions, and
+      GKE/AKS/S3NS rollout clarification. Temporary root NOTES files are
+      retired into the AUTHZ-07 and OPS-04 canonical backlogs.
+
+      Step 6 "Chart secret boundary" release gate closed, 2026-07-15:
+      hook-migration.yaml no longer copies .app.extraEnvVars into the Alembic
+      migration Job (.app.env still flows to it as before). CI's rendered
+      bootstrap-secret contract check now also renders with the migration Job
+      enabled and proves the token reaches the Deployment, not the Job. helm
+      lint/render clean; remaining Step 6 chart gate (migration disabled by
+      default) still open.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
@@ -228,9 +619,8 @@ items:
       DuckDB/httpfs error messages. Browser-facing get_presigned_url stays
       unsupported (app-level HMAC tokens). Deliverables: config models + factory
       wiring, configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml,
-      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md, regenerated config + chart
-      values JSON schema. No Alembic impact. Remaining: live GKE validation
-      (RFC §1bis merge gate).
+      regenerated config + chart values JSON schema. No Alembic impact.
+      Remaining: live GKE validation (RFC §1bis merge gate).
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -316,12 +706,11 @@ items:
     notes: >
       Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
       MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
-      No signed URLs needed — Keycloak auth handles the knowledge-flow API calls.
-      Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
-      (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
-      Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
-      MermaidBlock + hr suppression. Rendering spec RFC created: CHAT-RENDERING-SPEC.md.
-      Manual end-to-end verification pending live pod.
+      Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the RFC — not repeated
+      here. Manual end-to-end verification pending live pod (one unchecked item in
+      CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's confirmed. Native PDF
+      rendering and an assistant panel deferred to FRONT-13
+      (docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md).
 
   - id: CHAT-09
     title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
@@ -533,8 +922,9 @@ items:
 
   - id: CTRLP-10
     title: "Per-user personal space isolation — replace shared personal team identifier"
-    status: in_progress
+    status: done
     owner: Dimitri
+    closed: "2026-07-15"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §6.4.F"
       rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
@@ -547,23 +937,12 @@ items:
       bare "personal" alias to fred-runtime (which doesn't resolve it, unlike
       control-plane), causing a 403 on first message for any user landing on
       /team/personal/... before bootstrap resolved the real team id. See
-      BACKLOG §6.4.F. The nav-link placeholder that produces the alias is
-      still open.
-
-  - id: CTRLP-11
-    title: "Suppression Keycloak admin pour CRUD users et listing teams — source de vérité PostgreSQL"
-    status: in_progress
-    owner: Thomas
-    refs:
-      rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
-    notes: >
-      Remplace les appels KeycloakAdmin (a_get_users, a_create_user, a_delete_user,
-      a_get_groups, a_get_group) par des requêtes SQLAlchemy directes sur PostgreSQL.
-      L'authentification JWT/OIDC reste Keycloak. La relation users↔teams reste OpenFA.
-      Périmètre : control-plane-backend users/ et teams/ (listing uniquement) +
-      knowledge-flow-backend users_service.py (via HTTP control-plane).
-      Phases : (1) migration Alembic, (2) modèles, (3) service users,
-      (4) service teams listing, (5) knowledge-flow-backend.
+      BACKLOG §6.4.F. 2026-07-15: fixed the last residual — the nav-link
+      placeholder itself. router.tsx's index route statically redirected to
+      "/team/personal/agents" and never resolved to personal-{uid}, so the
+      URL stayed on the alias for the whole session and TeamSelectionNavbar's
+      selected check (pathname vs activeTeam.id) desynced once bootstrap
+      resolved, dropping the sidebar highlight. See BACKLOG §6.4.F.
 
   - id: CTRLP-12
     title: "Fred 2.0.2 — RGPD-ready increment (complete erasure + team-governed retention + governed evaluation)"
@@ -777,6 +1156,21 @@ items:
       rework code, and backend browse contracts that remain fast for users with
       hundreds of files.
 
+  - id: FRONT-13
+    title: "Unified document viewer — native PDF rendering + AI assistant side panel"
+    status: draft
+    owner: TBD
+    refs:
+      rfc: "docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §19"
+    notes: >
+      Consolidates the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
+      (FRONT-09) document preview flows into one DocumentViewer component. Restores
+      native PDF rendering (PdfStreamingDocumentViewer exists but is currently unwired
+      from both entry points — a UX regression from kea, tracked on GitHub issue #1956).
+      Adds an assistant side panel reusing the existing selected_document_uids
+      chat-scoping mechanism (no new backend endpoint). RFC-proposed, not started.
+
   # ── INGEST ────────────────────────────────────────────────────────────
 
   - id: INGEST-01
@@ -893,7 +1287,7 @@ items:
     owner: fmuller
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
-      backlog: "docs/swift/backlog/BACKLOG.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §7b"
 
   # ── OPS ───────────────────────────────────────────────────────────────
 
@@ -962,8 +1356,17 @@ items:
       journal, and a central table owned by control-plane (producers record via RemoteTaskClient
       → single-source frontend). Folds in EVAL-02 (→ tombstone) and the CTRLP-13 display half;
       reverses the erasure-widget-in-settings anti-pattern → /admin/activity + /team/:id/activity
-      via one component. Shipped (branch fixes): the shared TaskActivity UI. Pending: the
-      central-table/RemoteTaskClient backend consolidation (deferred to after finalization).
+      via one component. Shipped (branch fixes): the shared TaskActivity UI. Shipped (2026-07-12,
+      §OPS-04 P4): the ingestion live-feedback wiring found missing via live testing — TaskTray
+      was never mounted, the upload drawer waited for full per-file completion instead of
+      scheduling, and a brand-new document had no refetch trigger (see BACKLOG.md §OPS-04 P4).
+      Same-day live verification of P4 surfaced two further gaps, both fixed: the progress
+      ring froze at a fixed 30% (no interim telemetry between scheduling and completion —
+      simplified to stay indeterminate instead of instrumenting sub-steps), and team admins
+      saw an empty Activity page because ingestion tasks were created with team_id=NULL
+      (tag→team resolution existed for quota checks but was never reused to tag the task).
+      Pending: the central-table/RemoteTaskClient backend consolidation (deferred to after
+      finalization).
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
@@ -1475,15 +1878,15 @@ items:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
-      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. SHIPPED
-      (reviewed + live-tested): atomic import of agents+tags+document-metadata (single SQLAlchemy
-      transaction in a FastAPI BackgroundTask — NOT Temporal; idempotent by PK), swift-native export
-      (re-importable), atomic reset (test cycle), and a Platform-data stats dashboard. Module is
-      import_export/ under /control-plane/v1/import-export/ (import|export|reset|stats). DEFERRED:
-      agent prompt transfer (05.11 — next gap; agents land with default tuning, no prompt content),
-      OpenFGA tuple restore (05.04 — ops bulk-copy Option A), stage reconciliation (05.07 → MIGR-07).
-      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07; conversations out of scope.
-      Architecture deviation from the Temporal design recorded in PLATFORM-IMPORT-RFC §0.
+      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. Full current
+      contract: PLATFORM-IMPORT-RFC.md (rewritten 2026-07-16 to state the current contract only —
+      history is in git log, not inline). SHIPPED: atomic import of agents+tags+document-metadata+
+      team-metadata (single SQLAlchemy transaction in a FastAPI BackgroundTask, idempotent by PK),
+      swift-native export/reset, Platform-data stats dashboard, declarative users.json team/platform
+      role provisioning (fail-closed), validated+versioned manifest, honest content_keys + stage
+      reconciliation (05.13). DEFERRED (kea-import path only): OpenFGA tuple restore (05.04 — ops
+      bulk-copy Option A), agent prompt transfer (05.11). Document binaries move via MIGR-06;
+      embeddings rebuilt by MIGR-07 (re-vectorize trigger after import not yet wired).
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"

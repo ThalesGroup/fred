@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, RebacReference, Relation, RelationType, Resource
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -32,6 +32,7 @@ class ReportsService:
         ctx = ApplicationContext.get_instance()
         self._content_store = ctx.get_content_store()
         self._metadata_store = ctx.get_metadata_store()
+        self._rebac = ctx.get_rebac_engine()
         self._renderer = RenderingService()
 
     async def write_report(
@@ -40,6 +41,7 @@ class ReportsService:
         user: KeycloakUser,
         title: str,
         markdown: str,
+        tag_id: str,
         tags: List[str] | None = None,
         template_id: Optional[str] = None,
         render_html: bool = False,
@@ -117,5 +119,17 @@ class ReportsService:
         )
 
         await self._metadata_store.save_metadata(metadata)
+
+        # AUTHZ-05 §27: reports previously had no team association in ReBAC at
+        # all (only the free-text `tags` UI chips above) — a report document
+        # was effectively unowned. `tag_id` gives every report a real team-
+        # scoped parent, same as any other ingested document.
+        await self._rebac.add_relation(
+            Relation(
+                subject=RebacReference(Resource.TAGS, tag_id),
+                relation=RelationType.PARENT,
+                resource=RebacReference(Resource.DOCUMENTS, document_uid),
+            )
+        )
 
         return document_uid, md_url, html_url, pdf_url

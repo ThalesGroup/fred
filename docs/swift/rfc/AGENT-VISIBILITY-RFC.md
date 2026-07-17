@@ -117,7 +117,7 @@ Owns platform admission:
 
 PlatformAdmin does **not** gain team data visibility from this role.
 
-### TeamManager
+### TeamAdmin
 
 Owns team adoption inside platform constraints:
 
@@ -128,7 +128,7 @@ Owns team adoption inside platform constraints:
 
 ### TeamEditor
 
-May instantiate or configure agents only when TeamManager/platform policy delegates that
+May instantiate or configure agents only when TeamAdmin/platform policy delegates that
 capability. TeamEditor is not the platform admission authority.
 
 ### TeamMember

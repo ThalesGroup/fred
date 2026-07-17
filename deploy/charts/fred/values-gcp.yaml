@@ -14,8 +14,6 @@
 # GKE (Autopilot) overlay — native Google Cloud Storage via Workload Identity.
 # =============================================================================
 #
-# Full setup (buckets, GSA/KSA binding, IAM): docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md
-#
 # Auth model: Application Default Credentials (ADC) through Workload Identity.
 # NO service-account JSON key is committed or mounted.
 #
@@ -48,7 +46,7 @@ applications:
       # bucket_name is suffixed at runtime → -documents / -objects / -files.
       content_storage:
         type: gcs
-        bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. fredlab-content
+        bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-content
         project_id: "" # optional; inferred from ADC when empty
         # Required: service account used to sign V4 signed URLs for tabular
         # Parquet reads via IAM signBlob (keyless). Startup fails clearly if unset.
@@ -59,7 +57,7 @@ applications:
       # --- Virtual filesystem: native GCS ---
       filesystem:
         type: gcs
-        bucket_name: "<FS_BUCKET>" # e.g. fredlab-fs
+        bucket_name: "<FS_BUCKET>" # e.g. <GCP_PROJECT_ID>-fs
         prefix: "" # optional; lets several logical roots share one bucket
         project_id: "" # optional; inferred from ADC when empty
 

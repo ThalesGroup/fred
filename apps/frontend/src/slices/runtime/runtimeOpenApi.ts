@@ -405,7 +405,6 @@ export type RuntimeContext = {
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
-  user_groups?: string[] | null;
   user_id?: string | null;
 };
 export type RuntimeExecuteRequest = {

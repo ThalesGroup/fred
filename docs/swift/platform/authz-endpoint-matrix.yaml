@@ -1,0 +1,1069 @@
+# AUTHZ-05 endpoint authorization matrix.
+#
+# This file is the canonical review ledger for HTTP authorization decisions.
+# The first invariant is coverage: every published backend operation must appear
+# here exactly once. The initial entries are deliberately marked
+# `pending_review`; a route is not approved just because it is listed.
+#
+# Review status values:
+# - pending_review: route is inventoried but its exact permission is not approved yet.
+# - approved: route permission was reviewed and locked by focused tests.
+# - external_or_public: route intentionally does not use Fred user ReBAC.
+#
+# Required permission values should converge on concrete Fred permissions, for
+# example `organization.can_manage_platform`, `team.can_update_agents`,
+# `tag.update`, or `document.read`.
+
+version: 1
+operations:
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/evaluation-campaigns
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/evaluation-campaigns
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/evaluation-campaigns/{campaign_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/evaluation-campaigns/{campaign_id}/cases
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/evaluation-campaigns/{campaign_id}/cases/{case_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/frontend/bootstrap
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/frontend/config
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/gcu
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/healthz
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/import-export/export
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/import-export/import
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/import-export/reset
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/import-export/stats
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/active_users_over_time
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/agent_prompt_length_distribution
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/agents_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/documents_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/messages_over_time
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/sessions_by_scope
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/sessions_over_time
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/top_agents_by_conversations
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/top_teams_by_sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/unique_users_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_token_usage_by_model
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_token_usage_over_time
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/lifecycle/run-once
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/policies/purge
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/policies/purge/resolve
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/ready
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/tasks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/tasks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/tasks/{task_id}/cancel
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/tasks/{task_id}/events
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/all
+    review_status: approved
+    required_permission: can_list_all_teams
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}
+    review_status: approved
+    required_permission: can_delete_team
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/rescue-admin
+    review_status: approved
+    required_permission: can_rescue_team_admin
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/runtime
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-templates
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/banner
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/members
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/members
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/members/{user_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/members/{user_id}/roles
+    review_status: approved
+    required_permission: can_administer_{admins,editors,analysts,members} (per granted role)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/members/{user_id}/roles/{relation}
+    review_status: approved
+    required_permission: can_administer_{admins,editors,analysts,members} (per revoked role)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/prompts
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/prompts/context
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/promote
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/use
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/runtimes/{runtime_id}/agents/{agent_id}/prepare-execution
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/attachments
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/attachments
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/user
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/{user_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/bootstrap/platform-admin
+    review_status: external_or_public
+    required_permission: bootstrap_token # authenticated (Keycloak JWT required) but not ReBAC-gated — grants only the caller's own sub, gated by a deploy-time secret (RFC Part 8, AUTHZ-07); permanently inert once a durable completion marker is set (not a live platform_admin count)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/capabilities
+    review_status: approved
+    required_permission: can_manage_platform # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_platform (_require_manage_any)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+
+  - service: knowledge-flow
+    method: GET
+    path: /healthz
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /ready
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/audio/transcriptions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/build-toc
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/corpus/capabilities
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/purge-vectors
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/revectorize
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/tasks/get
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/tasks/list
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/corpus/tasks/result
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/document/metadata/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/audit
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/audit/fix
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/by-label/{label}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/labels
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/metadata/browse
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/metadata/search
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/metadata/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/processing/graph
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/{document_uid}/chunks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/documents/{document_uid}/chunks/{chunk_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/{document_uid}/chunks/{chunk_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/documents/{document_uid}/labels/{label}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/{document_uid}/labels/{label}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/documents/{document_uid}/vectors
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/fast/delete/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fast/ingest
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fast/text
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/cat/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/copy-to-shared/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/fs/delete/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/download/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/edit/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/glob
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/grep
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/list
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/mkdir/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/page/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/share/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/stat/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/upload/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/write/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/kpi/query
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/logs/query
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/markdown/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/markdown/{document_uid}/artifact/{artifact_path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/markdown/{document_uid}/media/{media_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/mcp/reports/write
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/allocation/explain
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cat/allocation
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cat/nodes
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cat/thread_pool
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cluster/settings
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cluster/state
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/cluster/stats
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/diagnostics
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/health
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/index/{index}/mapping
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/index/{index}/recovery
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/index/{index}/settings
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/index/{index}/stats
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/indices
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/nodes/hot_threads
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/nodes/info
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/nodes/stats
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/pending_tasks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/recovery
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/shards
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/tasks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/os/tasks/{task_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/process-documents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/process-library
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/labels
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/labels/{label_name}/values
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/metadata
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/metrics
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/metrics_catalog
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/prometheus/query
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/prometheus/query_range
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/prometheus/series
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/prometheus/targets
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/raw_content/stream/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/raw_content/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/resources
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/resources
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/resources/schema
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/resources/{resource_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/resources/{resource_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/resources/{resource_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/schemas/echo
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/correlations
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/describe
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/detect_outliers
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/detect_outliers_ml
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/evaluate
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/head
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/list_datasets
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/list_models
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/load_model
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/pca
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/plot/histogram
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/plot/scatter
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/predict_row
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/save_model
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/set_dataset
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/stat/test_distribution
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/stat/train
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tabular/datasets
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tabular/datasets/{document_uid}/schema
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tabular/query
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tags
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tags
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tags/rebac/backfill
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/tags/{tag_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tags/{tag_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/tags/{tag_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tags/{tag_id}/members
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tags/{tag_id}/share
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/tags/{tag_id}/share/{target_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tasks
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tasks/{task_id}/cancel
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tasks/{task_id}/events
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/upload-documents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/upload-process-documents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/vector/rerank
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/vector/search
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/vector/similarity-search
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/vector/test
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/vector/visual-evidence-artifact
+    review_status: pending_review
+    required_permission: pending_review

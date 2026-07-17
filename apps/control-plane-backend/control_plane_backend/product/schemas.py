@@ -20,15 +20,37 @@ from control_plane_backend.users.schemas import UserSummary
 
 
 class PermissionSummary(BaseModel):
-    """Frontend-friendly permission projection for product bootstrap flows."""
+    """Frontend-friendly permission projection for product bootstrap flows.
 
-    items: list[str] = Field(default_factory=list)
-    can_view_team_agents: bool = False
-    can_manage_team_agents: bool = False
-    can_manage_mcp_servers: bool = False
-    can_view_feedback: bool = False
-    can_submit_feedback: bool = False
-    can_create_sessions: bool = False
+    AUTHZ-05 review item 11: this used to also carry `items` (a flattened
+    `resource:action` list from `list_display_permissions()`, itself derived
+    from Keycloak app roles) plus six always-`False` placeholder booleans
+    (`can_view_team_agents`, `can_manage_team_agents`, `can_manage_mcp_servers`,
+    `can_view_feedback`, `can_submit_feedback`, `can_create_sessions`). Both
+    were dead: Keycloak app roles were removed platform-wide in item 8a, so
+    `items` was permanently `[]` for every user, and the six booleans were
+    never populated by anything. Org-scoped gating is exactly the two fields
+    below; team-scoped gating goes through `TeamWithPermissions.permissions`
+    (already OpenFGA-derived, see `teams/service.py::_get_team_permissions_for_user`)
+    instead of a bespoke org-level flag per feature.
+    """
+
+    is_platform_admin: bool = Field(
+        default=False,
+        description=(
+            "OpenFGA-derived platform-admin flag (organization `can_manage_platform`). "
+            "The single source of truth for gating admin-only UI surfaces — never "
+            "derive admin UI access from Keycloak roles directly."
+        ),
+    )
+    is_platform_observer: bool = Field(
+        default=False,
+        description=(
+            "OpenFGA-derived platform-observer flag (organization `platform_observer` "
+            "relation, checked directly). Grants read-only platform observability "
+            "surfaces without full platform-admin rights."
+        ),
+    )
 
 
 class FrontendBootstrap(BaseModel):
@@ -76,6 +98,37 @@ class FrontendConfig(BaseModel):
     value is `None` whenever gating is effectively disabled (user auth off, per
     `security.user.enabled`, or `app.gcu_version` unset), so deployments without
     CGU are never routed to the acceptance screen."""
+    root_bootstrap_completed: bool = Field(
+        ...,
+        description=(
+            "Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever "
+            "succeeded on this deployment. True once the durable "
+            "PlatformBootstrapStore marker is set, permanently — never "
+            "re-derived from live OpenFGA state, so removing every "
+            "platform_admin relation later does not flip this back to False "
+            "(same rationale as BootstrapAlreadyCompletedError). Not "
+            "sensitive: it reveals only 'has anyone ever bootstrapped this "
+            "instance', never who, never the secret, never any identity — "
+            "safe on this public/unauthenticated surface, same as gcu_version."
+        ),
+    )
+    root_bootstrap_required: bool = Field(
+        ...,
+        description=(
+            "The authoritative frontend gating decision for BootstrapGuard — "
+            "true only when `security.user.enabled AND security.rebac.enabled "
+            "AND NOT root_bootstrap_completed`. Deliberately distinct from "
+            "`root_bootstrap_completed`, which stays the truthful durable "
+            "historical marker and is never reinterpreted: on deployments "
+            "where user authentication or ReBAC is disabled, "
+            "`root_bootstrap_completed` is still False on a fresh database "
+            "even though `POST /bootstrap/platform-admin` deliberately "
+            "refuses with 503 there, so the frontend must not treat "
+            "'not completed' alone as 'must show the bootstrap page'. The "
+            "frontend must gate on this field, not re-derive the ReBAC/auth "
+            "predicate itself."
+        ),
+    )
 
 
 class AgentTemplateSummary(BaseModel):

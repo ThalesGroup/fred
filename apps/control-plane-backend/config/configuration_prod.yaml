@@ -2,6 +2,13 @@
 app:
   name: Control Plane Backend
   base_url: /control-plane/v1
+
+  # one-time root platform-admin bootstrap secret,
+  # for this docker/local config only — real K8s deployments use
+  # bootstrap_token_env_var + a Secret instead. Run `make bootstrap-token`
+  # to create it; Fred never generates or logs it itself.
+  bootstrap_token_file: target/bootstrap-token
+
   address: 0.0.0.0
   port: 8222
   log_level: info

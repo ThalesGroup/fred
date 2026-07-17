@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import ORGANIZATION_ID, BaseUserStore, OrganizationPermission, UserRow, get_config
+from fred_core import BaseUserStore, UserRow, get_config
 from fred_core.users.store.postgres_user_store import get_user_store
 
 from knowledge_flow_backend import main as main_module
@@ -31,10 +31,13 @@ def _build_prometheus_app(application_context, base_url: str = "") -> TestClient
     return TestClient(app)
 
 
-def test_prometheus_query_checks_metrics_permission_and_returns_payload(
+def test_prometheus_query_requires_authentication_only_and_returns_payload(
     app_context: ApplicationContext,
     monkeypatch,
 ) -> None:
+    """AUTHZ-05 review item 8a: the org-level CAN_READ_METRICS capability was
+    removed entirely — authentication alone (via `get_current_user`) now
+    gates this endpoint, no ReBAC check is issued."""
     app_context.configuration.integrations = IntegrationsConfig(
         prometheus=PrometheusConfig(
             base_url="http://prometheus:9090",
@@ -44,16 +47,10 @@ def test_prometheus_query_checks_metrics_permission_and_returns_payload(
     )
     observed: dict[str, object] = {}
 
-    class _FakeRebacEngine:
-        async def check_user_permission_or_raise(self, user, permission, resource_id, **kwargs) -> None:
-            observed["permission"] = permission
-            observed["resource_id"] = resource_id
-
     async def fake_instant_query(self, body):
         observed["query"] = body.query
         return {"status": "success", "data": {"resultType": "vector", "result": []}}
 
-    monkeypatch.setattr(prom_controller_module, "get_rebac_engine", lambda: _FakeRebacEngine())
     monkeypatch.setattr(
         prom_controller_module.PrometheusOpsService,
         "instant_query",
@@ -65,11 +62,7 @@ def test_prometheus_query_checks_metrics_permission_and_returns_payload(
 
     assert response.status_code == 200
     assert response.json()["status"] == "success"
-    assert observed == {
-        "permission": OrganizationPermission.CAN_READ_METRICS,
-        "resource_id": ORGANIZATION_ID,
-        "query": "up",
-    }
+    assert observed == {"query": "up"}
 
 
 def test_prometheus_query_rejects_blank_query(
@@ -241,7 +234,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
         "TabularController",
         "StatisticController",
         "OpenSearchOpsController",
-        "Neo4jController",
         "SchedulerController",
     ]:
         monkeypatch.setattr(main_module, attr_name, lambda *args, **kwargs: None)

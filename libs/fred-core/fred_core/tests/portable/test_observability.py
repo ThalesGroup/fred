@@ -79,7 +79,7 @@ def test_logging_tracer_emits_parent_and_runtime_attributes(
     assert cast(int, span["duration_ms"]) >= 0
 
 
-def test_logging_metrics_provider_emits_ok_status_and_groups(
+def test_logging_metrics_provider_emits_ok_status(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     logger = logging.getLogger("fred_core.tests.metrics")
@@ -89,7 +89,6 @@ def test_logging_metrics_provider_emits_ok_status_and_groups(
         with provider.timer(
             "tool.call",
             dims={"tool": "search"},
-            groups=["chat"],
         ) as dims:
             dims["agent_id"] = "demo"
 
@@ -102,7 +101,6 @@ def test_logging_metrics_provider_emits_ok_status_and_groups(
         "agent_id": "demo",
         "status": "ok",
     }
-    assert metric["groups"] == ["chat"]
     assert cast(float, metric["duration_ms"]) >= 0
 
 

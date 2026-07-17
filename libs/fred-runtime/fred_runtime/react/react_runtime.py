@@ -321,7 +321,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     "agent_instance_id": baggage.get("agent_instance_id"),
                     "template_agent_id": baggage.get("template_agent_id"),
                 },
-                groups=self._binding.runtime_context.user_groups,
             )
         else:
             phase_timer_ctx = nullcontext()

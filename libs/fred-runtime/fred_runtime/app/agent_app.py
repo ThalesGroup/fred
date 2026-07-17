@@ -57,6 +57,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
+from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -1241,6 +1242,12 @@ async def _authorize_execution_or_raise(
     - security disabled (no authenticated user) → skip (dev/local).
     - ReBAC engine absent or disabled (Noop) → skip (identity-only dev posture);
       the C3 profile guarantees an enabled engine in classified deployments.
+    - a personal space (`personal-<uid>`) is intrinsic ownership, not a stored
+      OpenFGA tuple: a human caller acting on their own canonical
+      `personal_team_id(authenticated_user.uid)` is authorized without an OpenFGA
+      call; any other `personal-*` id (another user's space, or the bare
+      `"personal"` alias) is explicitly denied — never routed to OpenFGA (AUTHZ-05
+      item 8b watch item).
     - otherwise require the caller to hold `CAN_READ` on the requested team — the
       same relation the control-plane required before it would mint a grant. The
       team is caller-supplied but safe: OpenFGA only authorizes teams the user
@@ -1316,6 +1323,36 @@ async def _authorize_execution_or_raise(
             agent_instance_id=request.agent_instance_id,
         )
         return
+    if team_id == "personal" or is_personal_team_id(team_id):
+        # Personal spaces are intrinsic ownership (AUTHZ-05 item 8b): the id is
+        # derived from the JWT subject via `personal_team_id`, is never persisted
+        # as an OpenFGA tuple, and must never be resolved by OpenFGA. Only an
+        # exact match against the caller's own canonical id is authorized; any
+        # other personal-* id (another user's space) or the bare "personal"
+        # alias (ambiguous once ReBAC is active) is denied here, before OpenFGA
+        # ever sees it.
+        if team_id == personal_team_id(authenticated_user.uid):
+            _emit_audit_event(
+                container,
+                "info",
+                "personal_space_owner_authorized",
+                user_id=authenticated_user.uid,
+                team_id=team_id,
+                agent_instance_id=request.agent_instance_id,
+            )
+            return
+        _emit_audit_event(
+            container,
+            "warning",
+            "personal_space_denied",
+            user_id=authenticated_user.uid,
+            team_id=team_id,
+            agent_instance_id=request.agent_instance_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"user {authenticated_user.uid!r} is not authorized for team {team_id!r}",
+        )
     try:
         await rebac.check_user_team_permission_or_raise(
             authenticated_user, TeamPermission.CAN_READ, team_id
@@ -2387,7 +2424,6 @@ async def _iterate_runtime_event_payloads(
         checkpoint_id=resolved_checkpoint_id,
         user_id=ctx.get("user_id"),
         team_id=resolved_team_id,
-        user_groups=ctx.get("user_groups"),
         language=ctx.get("language"),
         access_token=access_token,
         refresh_token=ctx.get("refresh_token"),
@@ -2657,11 +2693,19 @@ def _build_agent_router(
         - developers need to validate KPI emission from the CLI without
           Grafana or Prometheus; this exposes the pod-local ring buffer
         - max 200 entries retained in memory (oldest evicted automatically)
+
+        AUTHZ-05 review finding: item 8a's org-level CAN_READ_METRICS removal
+        does not apply here — unlike the tier-2 capability it replaced
+        (near-universal, protected nothing specific), this buffer holds
+        cross-user/cross-team data (session_id, exchange_id, user_id, team_id,
+        token counts) for every caller that has hit this pod, not just the
+        caller's own. Gated the same way as the sibling `get_audit_events`
+        below, on `CAN_MANAGE_PLATFORM`, not deleted outright.
         """
         rebac = get_runtime_context().config.rebac_engine
         if caller is not None and rebac is not None and rebac.enabled:
             await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID
+                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
             )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
@@ -3572,8 +3616,10 @@ def _build_agent_router(
           stream closes. Do not rely on it as an end-of-turn signal here.
 
         Security:
-        - For managed execution (agent_instance_id), an execution_grant issued by
-          control-plane is required. The runtime validates it structurally.
+        - There is no ExecutionGrant. Identity is the caller's Keycloak JWT; for
+          managed execution (agent_instance_id) the runtime authorizes each request
+          itself with a per-request ReBAC (OpenFGA) check on runtime_context.team_id.
+          The control plane issues no signed grant or capability token.
         - RBAC via Keycloak and REBAC via OpenFGA protect this endpoint.
 
         Architectural note:

@@ -118,8 +118,8 @@ class RuntimeContext(BaseModel):
       selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
       include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids.
       These are the core fields — set by the frontend per turn, read by retrieval logic.
-    - Group D (content/preferences): language, user_groups, attachments_markdown.
-      Will migrate to session preferences / identity over time.
+    - Group D (content/preferences): language, attachments_markdown. Will
+      migrate to session preferences / identity over time.
     """
 
     # Group A — Identity (managed execution authorizes on team_id via pod-side OpenFGA)
@@ -152,7 +152,6 @@ class RuntimeContext(BaseModel):
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None
-    user_groups: list[str] | None = None
     attachments_markdown: Optional[str] = None
 
 

@@ -1,0 +1,49 @@
+// AUTHZ-06 (RFC Part 7 §37): one independently togglable chip per elevated
+// team role (admin/editor/analyst) — a member may hold several at once, so
+// this is a multi-select toggle group, not the single-select `FilterChips`
+// pattern. Visual language kept consistent with it (outlined pill, fills
+// with `--primary` when active).
+.roleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+}
+
+.roleChip {
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    color 100ms ease;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  white-space: nowrap;
+
+  &:hover:not([data-active="true"]):not(:disabled) {
+    border-color: var(--outline);
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+  }
+
+  &[data-active="true"] {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+
+  &:disabled {
+    cursor: default;
+    border-color: var(--outline-variant);
+    color: var(--state-text-disabled);
+  }
+
+  &[data-active="true"]:disabled {
+    border-color: var(--outline-variant);
+    background: var(--state-on-surface-disabled);
+    color: var(--state-text-disabled);
+  }
+}

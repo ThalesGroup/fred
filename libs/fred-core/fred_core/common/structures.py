@@ -40,6 +40,11 @@ class TemporalSchedulerConfig(BaseModel):
     task_queue: str = "default"
     workflow_id_prefix: str = "task"
     connect_timeout_seconds: Optional[int] = 5
+    rpc_timeout_seconds: Optional[int] = Field(
+        default=10,
+        description="Deadline applied to individual Temporal RPC calls (start_workflow, describe) "
+        "so a stuck Temporal frontend cannot hang the caller indefinitely.",
+    )
     ingestion_workflow_parallelism: int = Field(
         default=3,
         ge=1,

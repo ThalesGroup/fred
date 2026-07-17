@@ -484,10 +484,6 @@
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)",
         "name": "MCP local (stdio)"
       },
-      "neo4j": {
-        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j",
-        "name": "Accès Neo4j"
-      },
       "prometheus": {
         "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
         "name": "Accès à Prometheus"
@@ -881,7 +877,40 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "Ma consommation de tokens",
+      "tokensOverTime": {
+        "title": "Consommation de tokens dans le temps",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "Aucune consommation d'agent sur cette période.",
+        "title": "Consommation par agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "Aucune consommation de modèle sur cette période.",
+        "title": "Consommation par modèle",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Retour",
+    "bootstrap": {
+      "continue": "Continuer",
+      "description": "Ce déploiement n'a pas encore d'administrateur de plateforme. Saisissez le secret de démarrage défini au déploiement pour devenir le premier administrateur.",
+      "errors": {
+        "alreadyCompleted": "Le démarrage racine a déjà été effectué pour ce déploiement.",
+        "forbidden": "Ce secret de démarrage n'est pas valide. Veuillez réessayer.",
+        "generic": "Une erreur est survenue. Veuillez réessayer."
+      },
+      "reload": "Recharger",
+      "submit": "Devenir administrateur de la plateforme",
+      "successMessage": "Vous êtes maintenant administrateur de la plateforme, {{username}}.",
+      "title": "Configuration de l'administrateur de la plateforme",
+      "tokenExplanation": "Le secret de démarrage défini au déploiement, fourni par la personne ayant déployé cette plateforme.",
+      "tokenLabel": "Secret de démarrage",
+      "tokenPlaceholder": "Saisissez le secret de démarrage"
+    },
     "cancel": "Annuler",
     "collapse": "Réduire",
     "create": "Créer",
@@ -1084,14 +1113,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Auto-test",
-        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
-        "run": "Lancer la campagne",
+        "title": "Auto-test"
+      },
+      "report": {
         "running": "En cours…",
-        "empty": "Aucune exécution. Cliquez sur « Lancer la campagne » pour valider la stack.",
+        "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
+      },
+      "functional": {
+        "title": "Auto-test fonctionnel",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
+        "run": "Lancer la campagne"
+      },
+      "authz": {
+        "title": "Auto-test d'autorisation",
+        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
+        "runSelf": "Lancer pour moi-même",
+        "testProfile": {
+          "title": "Tester un autre profil",
+          "usernameLabel": "Compte",
+          "usernamePlaceholder": "Choisir un compte",
+          "passwordLabel": "Mot de passe",
+          "run": "Lancer",
+          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm — déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau — ça rapporte simplement ce que ce compte peut déjà faire.",
+          "disabledInsecure": "Non disponible sur ce déploiement — aucun vrai realm Keycloak à interroger."
+        }
       }
     },
     "tasks": {
@@ -1142,9 +1190,10 @@
           "prompts": "Prompts",
           "col": {
             "team": "Équipe",
-            "owners": "Owners",
-            "managers": "Managers",
-            "members": "Members",
+            "admins": "Administrateurs",
+            "editors": "Éditeurs",
+            "analysts": "Analystes",
+            "members": "Membres",
             "agents": "Agents",
             "prompts": "Prompts"
           }
@@ -1192,14 +1241,40 @@
         "inDays": "dans {{count}} j"
       }
     },
+    "adminTeams": {
+      "existingTeams": {
+        "title": "Équipes existantes",
+        "empty": "Aucune équipe pour l'instant.",
+        "table": {
+          "name": "Équipe",
+          "admins": "Administrateur(s)"
+        }
+      },
+      "createTeam": {
+        "title": "Créer une équipe",
+        "nameLabel": "Nom de l'équipe",
+        "namePlaceholder": "ex. swiftpost",
+        "adminsLabel": "Administrateur(s) initial(aux)",
+        "adminsPlaceholder": "Rechercher des utilisateurs...",
+        "submit": "Créer l'équipe",
+        "successSummary": "Équipe créée",
+        "errors": {
+          "summary": "Échec de la création de l'équipe",
+          "fallbackDetail": "Impossible de créer l'équipe. Veuillez réessayer.",
+          "conflictDetail": "Une équipe portant ce nom existe déjà.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour créer des équipes."
+        }
+      }
+    },
     "teamCard": {
       "join": "Rejoindre",
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "manager": "Editeur",
-      "member": "Membre",
-      "owner": "Propriétaire"
+      "team_admin": "Administrateur",
+      "team_editor": "Editeur",
+      "team_analyst": "Analyste",
+      "team_member": "Membre"
     },
     "teamSettings": {
       "members": {
@@ -1208,7 +1283,7 @@
         },
         "errors": {
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
-          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "removeMemberSummary": "Échec de la suppression du membre",
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
@@ -1456,6 +1531,19 @@
         "timeout": {
           "label": "Délai par cas (s)"
         },
+        "metrics": {
+          "label": "Métriques personnalisées",
+          "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
+          "add": "Ajouter un critère",
+          "remove": "Retirer le critère",
+          "n": "Critère {{n}}",
+          "name": "Nom",
+          "namePlaceholder": "ex. ancrage_source",
+          "criteria": "Critère à évaluer",
+          "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
+          "parameters": "Champs évalués par le juge",
+          "threshold": "Seuil de réussite"
+        },
         "recap": {
           "title": "Récapitulatif",
           "campaign": "Campagne",
@@ -1470,6 +1558,7 @@
           "judge": "Juge",
           "concurrency": "Concurrence",
           "timeout": "Délai",
+          "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
           "profileAuto": "Automatique"
         },
@@ -1562,7 +1651,30 @@
       "failedOn": "Échec {{when}}",
       "cancelledOn": "Annulée {{when}}",
       "stalled": "Bloqué",
-      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention."
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
+      "withWarnings": "Avec avertissements",
+      "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "migration": {
+        "detailsTitle": "Détail de l'import",
+        "warningsTitle": "Avertissements ({{count}})",
+        "counter": {
+          "identities_created": "Identités créées",
+          "users_processed": "Utilisateurs traités",
+          "teams_imported": "Équipes trouvées dans le paquet",
+          "teams_provisioned": "Équipes créées",
+          "teams_skipped": "Équipes ignorées",
+          "team_roles_granted": "Rôles d'équipe accordés",
+          "team_roles_skipped": "Rôles d'équipe ignorés",
+          "platform_roles_granted": "Rôles plateforme accordés",
+          "agents_imported": "Agents importés",
+          "agents_skipped": "Agents ignorés",
+          "agents_gap": "Agents sans modèle correspondant",
+          "tags_imported": "Tags importés",
+          "tags_skipped": "Tags ignorés",
+          "docs_imported": "Documents importés",
+          "docs_skipped": "Documents ignorés"
+        }
+      }
     }
   },
   "runtime": {

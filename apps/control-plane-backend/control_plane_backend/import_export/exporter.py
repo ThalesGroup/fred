@@ -39,6 +39,10 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 logger = logging.getLogger(__name__)
 
 FORMAT_VERSION = 1
+# This export never writes users.json, but manifest.json's users_schema_version
+# is required on every bundle regardless (bundle.py::SnapshotManifest) — declare
+# it so a re-import of this exact export never fails on a missing field.
+USERS_SCHEMA_VERSION = 1
 SOURCE_PLATFORM = "swift"
 
 
@@ -91,6 +95,7 @@ def _metadata_to_dict(row: DocumentMetadataRow) -> dict:
 def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
     return {
         "id": row.id,
+        "name": row.name,
         "description": row.description,
         "is_private": row.is_private,
         "banner_object_storage_key": row.banner_object_storage_key,
@@ -135,6 +140,7 @@ async def run_export(engine: AsyncEngine) -> bytes:
 
     manifest = {
         "format_version": FORMAT_VERSION,
+        "users_schema_version": USERS_SCHEMA_VERSION,
         "source_platform": SOURCE_PLATFORM,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "tables": {
@@ -145,7 +151,10 @@ async def run_export(engine: AsyncEngine) -> bytes:
         },
         "tuple_count": 0,
         "realm_exported": False,
-        "content_keys": [],
+        # Every exported document's binary is expected to already be mirrored
+        # into the target's object store (MIGR-06) — this import never
+        # transports content, only declares what it assumes is there.
+        "content_keys": [m["document_uid"] for m in metadata],
     }
 
     buffer = io.BytesIO()

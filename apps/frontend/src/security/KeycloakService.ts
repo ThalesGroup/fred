@@ -304,6 +304,32 @@ const GetTokenParsed = (): any => {
   return keycloakInstance?.tokenParsed ?? null;
 };
 
+export interface KeycloakRealmConfig {
+  url: string;
+  realm: string;
+  clientId: string;
+}
+
+/**
+ * The realm/client coordinates `createKeycloakInstance` already resolved,
+ * exposed for callers that need to talk to Keycloak directly (outside the
+ * normal login/refresh flow) — e.g. the admin self-test's "log in as another
+ * account" diagnostic, which needs the token endpoint URL to perform its own
+ * short-lived password-grant login.
+ *
+ * `null` in insecure/dev-token mode: there is no real Keycloak to target.
+ */
+const GetKeycloakRealmConfig = (): KeycloakRealmConfig | null => {
+  if (!isSecurityEnabled || !keycloakInstance) return null;
+  const { authServerUrl, realm, clientId } = keycloakInstance as unknown as {
+    authServerUrl?: string;
+    realm?: string;
+    clientId?: string;
+  };
+  if (!authServerUrl || !realm || !clientId) return null;
+  return { url: authServerUrl.endsWith("/") ? authServerUrl : `${authServerUrl}/`, realm, clientId };
+};
+
 export const KeyCloakService = {
   CallLogin: Login,
   CallLogout: Logout,
@@ -318,4 +344,5 @@ export const KeyCloakService = {
   GetTokenParsed,
   ensureFreshToken,
   GetRefreshToken,
+  GetKeycloakRealmConfig,
 };

@@ -268,6 +268,73 @@ jobs:
             --set-string applications.control-plane-worker.image.tag=swift-dev \
             --set-string applications.frontend.image.tag=swift-dev
 
+      - name: Check chart - root bootstrap secret contract (AUTHZ-07)
+        run: |
+          set -euo pipefail
+
+          # No overlay reference configured: the chart's own default must never
+          # inject FRED_BOOTSTRAP_TOKEN (root bootstrap stays explicitly unavailable).
+          helm template fred deploy/charts/fred \
+            --set-string applications.control-plane-backend.image.tag=swift-dev \
+            > /tmp/rendered-default.yaml
+          if grep -q "name: FRED_BOOTSTRAP_TOKEN" /tmp/rendered-default.yaml; then
+            echo "FAIL: FRED_BOOTSTRAP_TOKEN must not be injected with no overlay reference configured"
+            exit 1
+          fi
+
+          # An overlay-supplied Secret reference must render as a bare secretKeyRef,
+          # fail-closed (optional: false), never a literal value, never bootstrap_token_file.
+          # Migration Job is enabled here too, so this one render also proves
+          # extraEnvVars stays a Deployment-only extension point (never copied
+          # into the Alembic migration Job, which only needs .app.env).
+          helm template fred deploy/charts/fred \
+            --set-string applications.control-plane-backend.image.tag=swift-dev \
+            --set applications.control-plane-backend.migration.enabled=true \
+            --set-string applications.control-plane-backend.extraEnvVars[0].name=FRED_BOOTSTRAP_TOKEN \
+            --set-string applications.control-plane-backend.extraEnvVars[0].valueFrom.secretKeyRef.name=fake-foundation-secret \
+            --set-string applications.control-plane-backend.extraEnvVars[0].valueFrom.secretKeyRef.key=bootstrap-token \
+            --set applications.control-plane-backend.extraEnvVars[0].valueFrom.secretKeyRef.optional=false \
+            > /tmp/rendered-bootstrap.yaml
+
+          grep -q "secretKeyRef:" /tmp/rendered-bootstrap.yaml
+          grep -A5 "name: FRED_BOOTSTRAP_TOKEN" /tmp/rendered-bootstrap.yaml | grep -q "optional: false"
+          if grep -q "bootstrap_token_file" /tmp/rendered-bootstrap.yaml; then
+            echo "FAIL: bootstrap_token_file must never be rendered into a Kubernetes manifest"
+            exit 1
+          fi
+          if grep -qE "value: .*fake-foundation-secret.*\bbootstrap-token\b" /tmp/rendered-bootstrap.yaml; then
+            echo "FAIL: a literal bootstrap secret value leaked into a rendered manifest"
+            exit 1
+          fi
+
+          # bootstrap_token_env_var (Control Plane's own config) must name the exact
+          # same variable the Deployment injects — one canonical variable, not two.
+          grep -q "bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN" /tmp/rendered-bootstrap.yaml
+
+          # Only control-plane-backend's Deployment env may receive the token; no
+          # other app/worker, and no migration Job, gets it (this render has the
+          # migration Job enabled — see above).
+          env_entries=$(grep -c "^\s*- name: FRED_BOOTSTRAP_TOKEN$" /tmp/rendered-bootstrap.yaml)
+          if [ "$env_entries" -ne 1 ]; then
+            echo "FAIL: expected exactly one FRED_BOOTSTRAP_TOKEN env entry, found $env_entries"
+            exit 1
+          fi
+
+          # Per-document proof of *which* object owns that single entry: the
+          # Deployment, never the migration Job.
+          awk -v RS='\n---\n' '
+            /kind: Job/ && /name: control-plane-backend-migration-/ && /FRED_BOOTSTRAP_TOKEN/ {
+              print "FAIL: FRED_BOOTSTRAP_TOKEN leaked into the control-plane-backend migration Job"; err=1
+            }
+            /kind: Deployment/ && /app: control-plane-backend/ {
+              seen=1
+              if (!/FRED_BOOTSTRAP_TOKEN/) { print "FAIL: FRED_BOOTSTRAP_TOKEN missing from the control-plane-backend Deployment"; err=1 }
+            }
+            END { if (!seen) { print "FAIL: control-plane-backend Deployment document not found"; err=1 } exit err+0 }
+          ' /tmp/rendered-bootstrap.yaml
+
+          echo "Rendered bootstrap-secret contract checks passed."
+
   # Job to check fred-agents app startup
   fred-agents-checks:
     runs-on: ubuntu-24.04

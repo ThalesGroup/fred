@@ -13,11 +13,12 @@
 // limitations under the License.
 
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ImportLaunchResponse } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ImportLaunchResponse, TaskTarget } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 export interface PlatformImportLaunch {
   taskId: string;
   importId: string;
+  target: TaskTarget;
 }
 
 // Uploads a kea export .zip to the control-plane migration import endpoint and
@@ -45,5 +46,5 @@ export async function launchPlatformImport(file: File, label?: string): Promise<
   }
 
   const data = (await response.json()) as ImportLaunchResponse;
-  return { taskId: data.task_id, importId: data.import_id };
+  return { taskId: data.task_id, importId: data.import_id, target: data.target };
 }

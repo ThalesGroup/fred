@@ -27,6 +27,18 @@
 > shipped in CTRLP-12 but were never added to §2 — they are documented here now. The
 > confirmed core (envelope, tables, endpoints, reconciliation) is unchanged; rev. 2 only
 > *adds* the audit dimension (§3.3–§3.6) and the shared surface (§3.4).
+>
+> **Amendment (2026-07-14, AUTHZ-07 Step 3 — `PLATFORM-IMPORT-RFC.md` §11).** Two additive,
+> backward-compatible contract changes, both documented in §2.1/§2.7 below: (1) `MigrationDetail`
+> gained an optional `result: MigrationResult | None` field — populated only on the terminal
+> `succeeded` event, `None` on every intermediate progress event exactly as before — so a
+> partial reconciliation (non-empty `result.warnings`) is distinguishable from full success
+> without a new `TaskState`; (2) `TaskSummary` (the `GET /tasks` response shape) gained an
+> optional `detail` field, typed per `kind` the same way `TaskEvent.detail` already is, so the
+> last-persisted detail (already retained by `record_event`'s "keep the last non-null detail"
+> rule, §2.6) survives a reload instead of being dropped at the list-endpoint boundary. Neither
+> change adds a table, an endpoint, or a parallel model — see `PLATFORM-IMPORT-RFC.md` §11 for
+> the full rationale and the producer-side wiring (`import_export/api.py`).
 
 ---
 
@@ -80,8 +92,19 @@ class TaskState(str, Enum):
 
 # ── per-kind detail models ───────────────────────────────────────────────────
 
+class MigrationResult(BaseModel):    # terminal-only structured outcome (AUTHZ-07 Step 3)
+    import_id: str; source_platform: str
+    identities_created: int; users_processed: int; users_skipped: list[str]
+    teams_imported: int; teams_skipped: int; teams_provisioned: int
+    team_roles_granted: int; team_roles_skipped: int; platform_roles_granted: int
+    agents_imported: int; agents_skipped: int; agents_gap: int
+    tags_imported: int; tags_skipped: int
+    docs_imported: int; docs_skipped: int
+    warnings: list[str]
+
 class MigrationDetail(BaseModel):
     step_id: str; processed: int; total: int; failed: int
+    result: MigrationResult | None = None   # populated only on the terminal `succeeded` event
 
 class IngestionDetail(BaseModel):
     processed: int; total: int; failed: int
@@ -292,7 +315,12 @@ POST /api/v1/tasks               Body: StartTaskRequest (oneOf by kind) → 202 
 GET  /api/v1/tasks               ?scope=platform|team|user (default platform), ?team_id=, ?kind=, ?state=
                                  → 200 { tasks: TaskSummary[] }  | 403 if caller lacks visibility (§3.2)
                                  TaskSummary: { task_id, kind, state, progress, step, error, target,
-                                                owner, team_id, scheduled_for, created_at, updated_at }
+                                                owner, team_id, scheduled_for, created_at, updated_at,
+                                                detail }  # detail: last-persisted per-kind detail
+                                                          # (typed per `kind`, e.g. MigrationDetail),
+                                                          # None for kinds with no summary detail model
+                                                          # or a task recorded before this field existed
+                                                          # (AUTHZ-07 Step 3)
                                  Current state only — no history/SSE. scope=user returns created_by == caller,
                                  ordered created_at DESC, terminal states excluded unless ?state= given.
                                  Admin scopes (platform|team) return terminal tasks too — the audit view is

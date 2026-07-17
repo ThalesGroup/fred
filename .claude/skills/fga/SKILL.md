@@ -112,11 +112,11 @@ When the user asks **why** a user has a permission, follow this process:
 
 Example output format:
 ```
-user:alice → member of → team:engineering → owner of → tag:docs → read (via "member from owner" rule)
+user:alice → team_member of → team:engineering → owner of → tag:docs → read (via "team_member from owner" rule)
 ```
 
 ## Notes
 
 - Types in the schema: `user`, `organization`, `team`, `agent`, `tag`, `document`, `resource`
-- Common relations: `owner`, `editor`, `viewer`, `member`, `manager`, `admin`, `parent`
+- Common relations: `owner`, `editor`, `viewer`, `parent` (tag/agent/resource ownership); `team_admin`, `team_editor`, `team_analyst`, `team_member` (team roles, AUTHZ-05); `admin`, `platform_admin`, `platform_observer` (organization)
 - Common permissions: `read`, `update`, `delete`, `share`, `process`

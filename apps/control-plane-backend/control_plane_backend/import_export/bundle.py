@@ -6,19 +6,44 @@ import io
 import json
 import zipfile
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
 
-@dataclass(frozen=True)
-class SnapshotManifest:
+from control_plane_backend.import_export.schemas import BundleUserEntry
+
+# Canonical contract — swift-native baseline (PLATFORM-IMPORT-RFC.md). Two
+# independent version numbers because they change at different rates:
+# format_version is the container's own shape (which top-level files/tables
+# exist); users_schema_version is BundleUserEntry's field set, which already
+# grew once (identity fields) without a container version bump.
+SUPPORTED_FORMAT_VERSIONS: frozenset[int] = frozenset({1})
+SUPPORTED_USERS_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
+
+
+class UnsupportedBundleFormatError(ValueError):
+    """manifest.json declares a format/schema version this importer doesn't understand."""
+
+
+class SnapshotManifest(BaseModel):
+    """Typed, validated `manifest.json` — parity with `BundleUserEntry`.
+
+    Replaces the previous hand-built `@dataclass` populated via
+    `raw.get(key, default)`, which accepted any JSON shape silently.
+    `format_version`/`users_schema_version` are checked against the supported
+    sets in `open_bundle()` — no other field changes behavior.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
     format_version: int
-    source_platform: str
-    created_at: str
-    tables: dict[str, int]
-    tuple_count: int
-    realm_exported: bool
-    content_keys: list[str]
+    users_schema_version: int
+    source_platform: str = "kea"
+    created_at: str = ""
+    tables: dict[str, int] = Field(default_factory=dict)
+    tuple_count: int = 0
+    realm_exported: bool = False
+    content_keys: list[str] = Field(default_factory=list)
 
 
 class KBundle:
@@ -54,21 +79,45 @@ class KBundle:
         except KeyError:
             return []
 
+    def demo_users(self) -> list[BundleUserEntry]:
+        """Return the typed users.json provisioning list, empty list if absent.
+
+        AUTHZ-07 Part 8 §40.2 / PLATFORM-IMPORT-RFC.md §6: declarative platform
+        provisioning for identities/teams/roles/users. Unlike `postgres/<table>.jsonl`
+        rows, these entries are not Postgres rows — each one describes an optional
+        Keycloak identity to create (email/first_name/last_name/password) plus the
+        desired Fred-side authorization state (team membership, team roles, platform
+        roles) for that identity. See `importer.py`'s users phase (identity creation,
+        then role provisioning) for how each entry is applied.
+        """
+        try:
+            raw = json.loads(self._zf.read("users.json"))
+        except KeyError:
+            return []
+        return [BundleUserEntry.model_validate(entry) for entry in raw]
+
     def close(self) -> None:
         self._zf.close()
 
 
 def open_bundle(data: bytes) -> KBundle:
-    """Open a kea snapshot zip from raw bytes and parse its manifest."""
+    """Open a snapshot zip from raw bytes, parse and validate its manifest.
+
+    Rejects a bundle whose `format_version`/`users_schema_version` isn't in
+    the supported set — no silent default when the key is absent or wrong,
+    per the canonical contract in `PLATFORM-IMPORT-RFC.md`.
+    """
     zf = zipfile.ZipFile(io.BytesIO(data))
     raw = json.loads(zf.read("manifest.json"))
-    manifest = SnapshotManifest(
-        format_version=raw.get("format_version", 1),
-        source_platform=raw.get("source_platform", "kea"),
-        created_at=raw.get("created_at", ""),
-        tables=raw.get("tables", {}),
-        tuple_count=raw.get("tuple_count", 0),
-        realm_exported=raw.get("realm_exported", False),
-        content_keys=raw.get("content_keys", []),
-    )
+    manifest = SnapshotManifest.model_validate(raw)
+    if manifest.format_version not in SUPPORTED_FORMAT_VERSIONS:
+        raise UnsupportedBundleFormatError(
+            f"Unsupported bundle format_version {manifest.format_version}; "
+            f"this importer understands {sorted(SUPPORTED_FORMAT_VERSIONS)}"
+        )
+    if manifest.users_schema_version not in SUPPORTED_USERS_SCHEMA_VERSIONS:
+        raise UnsupportedBundleFormatError(
+            f"Unsupported users.json schema version {manifest.users_schema_version}; "
+            f"this importer understands {sorted(SUPPORTED_USERS_SCHEMA_VERSIONS)}"
+        )
     return KBundle(zf, manifest)

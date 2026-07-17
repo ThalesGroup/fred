@@ -484,10 +484,6 @@
         "description": "Run a local MCP server over stdio (process-based tools)",
         "name": "Local stdio MCP"
       },
-      "neo4j": {
-        "description": "Allow your agent to interact with Neo4j graph databases",
-        "name": "Neo4j access"
-      },
       "prometheus": {
         "description": "Allow your agent to query Prometheus metrics and execute PromQL requests",
         "name": "Prometheus access"
@@ -881,7 +877,40 @@
         "valueLabel": "Conversations"
       }
     },
+    "teamUsage": {
+      "title": "My token usage",
+      "tokensOverTime": {
+        "title": "Token usage over time",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "No agent usage in this period.",
+        "title": "Usage by agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "No model usage in this period.",
+        "title": "Usage by model",
+        "valueLabel": "Tokens"
+      }
+    },
     "back": "Back",
+    "bootstrap": {
+      "continue": "Continue",
+      "description": "This deployment has no platform administrator yet. Enter the deploy-time bootstrap secret to become the first one.",
+      "errors": {
+        "alreadyCompleted": "Root bootstrap has already been completed for this deployment.",
+        "forbidden": "This bootstrap secret is not valid. Please try again.",
+        "generic": "Something went wrong. Please try again."
+      },
+      "reload": "Reload",
+      "submit": "Become platform administrator",
+      "successMessage": "You are now the platform administrator, {{username}}.",
+      "title": "Platform administrator setup",
+      "tokenExplanation": "The deploy-time bootstrap secret, provided by whoever deployed this platform.",
+      "tokenLabel": "Bootstrap secret",
+      "tokenPlaceholder": "Enter the bootstrap secret"
+    },
     "cancel": "Cancel",
     "collapse": "Collapse",
     "create": "Create",
@@ -1084,14 +1113,33 @@
     },
     "selftest": {
       "page": {
-        "title": "Self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
-        "run": "Run campaign",
+        "title": "Self-test"
+      },
+      "report": {
         "running": "Running…",
-        "empty": "No run yet. Press “Run campaign” to validate the live stack.",
+        "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
         "copy": "Copy report",
         "copied": "Copied"
+      },
+      "functional": {
+        "title": "Functional self-test",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "run": "Run campaign"
+      },
+      "authz": {
+        "title": "Authorization self-test",
+        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
+        "runSelf": "Run for myself",
+        "testProfile": {
+          "title": "Test another profile",
+          "usernameLabel": "Account",
+          "usernamePlaceholder": "Select an account",
+          "passwordLabel": "Password",
+          "run": "Run",
+          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
+          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+        }
       }
     },
     "tasks": {
@@ -1142,8 +1190,9 @@
           "prompts": "Prompts",
           "col": {
             "team": "Team",
-            "owners": "Owners",
-            "managers": "Managers",
+            "admins": "Admins",
+            "editors": "Editors",
+            "analysts": "Analysts",
             "members": "Members",
             "agents": "Agents",
             "prompts": "Prompts"
@@ -1192,14 +1241,40 @@
         "inDays": "in {{count}}d"
       }
     },
+    "adminTeams": {
+      "existingTeams": {
+        "title": "Existing teams",
+        "empty": "No teams yet.",
+        "table": {
+          "name": "Team",
+          "admins": "Admin(s)"
+        }
+      },
+      "createTeam": {
+        "title": "Create team",
+        "nameLabel": "Team name",
+        "namePlaceholder": "e.g. swiftpost",
+        "adminsLabel": "Initial team admin(s)",
+        "adminsPlaceholder": "Search users...",
+        "submit": "Create team",
+        "successSummary": "Team created",
+        "errors": {
+          "summary": "Failed to create team",
+          "fallbackDetail": "Could not create the team. Please try again.",
+          "conflictDetail": "A team with this name already exists.",
+          "forbiddenDetail": "You are not allowed to create teams."
+        }
+      }
+    },
     "teamCard": {
       "join": "Apply to join",
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
-      "manager": "Editor",
-      "member": "Member",
-      "owner": "Owner"
+      "team_admin": "Admin",
+      "team_editor": "Editor",
+      "team_analyst": "Analyst",
+      "team_member": "Member"
     },
     "teamSettings": {
       "members": {
@@ -1208,7 +1283,7 @@
         },
         "errors": {
           "forbiddenDetail": "You are not allowed to perform this action.",
-          "lastOwnerDetail": "A team must keep at least one owner.",
+          "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",
           "removeMemberSummary": "Failed to remove member",
           "updateRoleDetail": "Could not update member role.",
@@ -1456,6 +1531,19 @@
         "timeout": {
           "label": "Case timeout (s)"
         },
+        "metrics": {
+          "label": "Custom metrics",
+          "help": "Natural-language criteria, judged alongside the built-in metrics",
+          "add": "Add a criterion",
+          "remove": "Remove criterion",
+          "n": "Criterion {{n}}",
+          "name": "Name",
+          "namePlaceholder": "e.g. cites_source",
+          "criteria": "Criterion to evaluate",
+          "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
+          "parameters": "Fields the judge may read",
+          "threshold": "Pass threshold"
+        },
         "recap": {
           "title": "Summary",
           "campaign": "Campaign",
@@ -1470,6 +1558,7 @@
           "judge": "Judge",
           "concurrency": "Concurrency",
           "timeout": "Timeout",
+          "customMetrics": "Custom metrics",
           "profile": "Profile",
           "profileAuto": "Automatic"
         },
@@ -1562,7 +1651,30 @@
       "failedOn": "Failed {{when}}",
       "cancelledOn": "Cancelled {{when}}",
       "stalled": "Stalled",
-      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention."
+      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
+      "withWarnings": "With warnings",
+      "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "migration": {
+        "detailsTitle": "Import details",
+        "warningsTitle": "Warnings ({{count}})",
+        "counter": {
+          "identities_created": "Identities created",
+          "users_processed": "Users processed",
+          "teams_imported": "Teams found in the bundle",
+          "teams_provisioned": "Teams created",
+          "teams_skipped": "Teams skipped",
+          "team_roles_granted": "Team roles granted",
+          "team_roles_skipped": "Team roles skipped",
+          "platform_roles_granted": "Platform roles granted",
+          "agents_imported": "Agents imported",
+          "agents_skipped": "Agents skipped",
+          "agents_gap": "Agents needing a template",
+          "tags_imported": "Tags imported",
+          "tags_skipped": "Tags skipped",
+          "docs_imported": "Documents imported",
+          "docs_skipped": "Documents skipped"
+        }
+      }
     }
   },
   "runtime": {

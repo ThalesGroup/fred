@@ -32,7 +32,7 @@ import { TokenUsageChart } from "./TokenUsageChart";
 
 // to allow admin to have a view all KPIs mode
 import { FormControlLabel, Switch, Typography } from "@mui/material";
-import { useAuth } from "../../../security/AuthContext";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 
 // KPI query client
 import {
@@ -151,7 +151,15 @@ const useProcessHistoryRows = ({
  */
 export default function KpiDashboard() {
   const now = dayjs();
-  const isAdmin = useAuth().roles.includes("admin");
+  // AUTHZ-05 review item 4: platform-admin gating must come from the OpenFGA-derived
+  // bootstrap flag, not a raw Keycloak role check — same single source of truth as
+  // AdminProtectedRoute (useUserCapabilities().canAdmin).
+  const { canAdmin: isAdmin, canObservePlatform: isObserver } = useUserCapabilities();
+  // platform_observer's whole purpose on this page is the global view — an
+  // observer who could reach the dashboard but only ever saw their own
+  // personal KPIs would see nothing useful. Backed by CAN_OBSERVE_PLATFORM
+  // server-side (kpi_controller.py), scoped to this endpoint only.
+  const canViewGlobal = isAdmin || isObserver;
   const { t } = useTranslation();
   const [viewGlobal, setViewGlobal] = useState(false);
   // Range state (top-level owns it)
@@ -216,7 +224,7 @@ export default function KpiDashboard() {
   /* ---------------------------------------------------------------------- */
   /* KPI: process CPU/memory history (max per bucket)                        */
   /* ---------------------------------------------------------------------- */
-  const processViewGlobal = viewGlobal || isAdmin;
+  const processViewGlobal = viewGlobal || canViewGlobal;
 
   const cpuHistoryRowsAgentic = useProcessHistoryRows({
     metricName: "process.cpu.percent",
@@ -403,7 +411,7 @@ export default function KpiDashboard() {
               </FormControl>
             </Box>
             <Box flex="1 1 240px" display="flex" justifyContent="flex-end">
-              {isAdmin && (
+              {canViewGlobal && (
                 <FormControlLabel
                   control={
                     <Switch

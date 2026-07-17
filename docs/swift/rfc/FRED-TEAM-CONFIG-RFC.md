@@ -57,6 +57,33 @@ This RFC is design authority only.
 
 ---
 
+> **Terminology and scope correction (2026-07-10), read before the rest of this
+> RFC.** Two things changed since this RFC was drafted (2026-05-23), both from
+> `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` (AUTHZ-05):
+>
+> 1. **Rename** (§26): `owner` → `team_admin`, `manager` → `team_editor`,
+>    `member` → `team_member`. Below, "team owner"/"Owner" means `team_admin`;
+>    "team manager"/"Manager" means `team_editor`.
+> 2. **Scope split this RFC did not anticipate.** §4.3 below originally called
+>    the team-governance actor "Platform admin" and gave it both team creation
+>    *and* ongoing role assignment. AUTHZ-05 introduced a real, separate,
+>    org-level `platform_admin` role (`organization:fred`-scoped, RFC §6.1) —
+>    and its locked design rule (`platform/REBAC.md` "Hard cross-write rule",
+>    RFC §24.2/§24.7) is that **`platform_admin` carries no team relation of any
+>    kind, full stop, not even for team creation.** The two capabilities this
+>    RFC bundled into one "Platform admin" actor are therefore now split:
+>    - **Team creation** is a one-shot, org-level `platform_admin`-gated
+>      bootstrap action (`POST /teams`, RFC §28/Part 6) — real `platform_admin`,
+>      no standing relation gained.
+>    - **Everything else §4.3 originally described** (assign/revoke team roles,
+>      define `TeamPlatformPolicy`) is `team_admin` (team-level, was "owner") —
+>      **not** `platform_admin`. A `platform_admin` cannot do any of this on an
+>      existing team without also holding `team_admin` on it explicitly.
+>
+> §4.3, §6, §7.2, and §12 below are corrected in place to reflect this split;
+> §13.2's "Platform admin task dashboard" was already describing the real
+> org-level role and needed no change.
+
 ## 4. Actor model
 
 Fred team configuration uses four product actors.
@@ -82,7 +109,7 @@ Cannot:
 The operator responsible for how the team's agents behave from a business point
 of view.
 
-Target mapping in Fred: team `manager`.
+Target mapping in Fred: `team_editor`.
 
 Can:
 
@@ -95,16 +122,18 @@ Cannot:
 
 - relax or override platform guardrails defined for the team
 
-### 4.3 Platform admin
+### 4.3 Team admin
 
-The operator responsible for team governance and platform-level safety.
+The operator responsible for team governance and platform-level safety
+*within their own team*.
 
-Target mapping in Fred: team `owner`.
+Target mapping in Fred: `team_admin`.
 
 Can:
 
-- create a team and define its initial metadata
-- assign and revoke the team manager role
+- assign and revoke `team_admin`/`team_editor`/`team_analyst`/`team_member` on
+  their team (after the team's first `team_admin` was set at creation — see
+  §4.5)
 - define and update `TeamPlatformPolicy` (quotas, allowlists, enforced limits)
 - read any team configuration surface for audit purposes
 
@@ -113,6 +142,8 @@ Cannot:
 - create, edit, or delete agent instances
 - create, edit, or delete shared or personal prompts
 - set or update `TeamRoutingPolicy`
+- create a team, or become `team_admin` of a team without an explicit relation
+  — that is §4.5's action, not a standing capability this role holds
 
 ### 4.4 Deployment admin
 
@@ -120,10 +151,23 @@ The deployment-level administrator outside one single team.
 
 This actor is out of scope for day-to-day product UI.
 
-Note: team creation and manager assignment are product actions performed by the
-platform admin (§4.3) through the product UI. They are not assumed to require
-a deployment script. Deployment scripts bootstrap the very first platform admin
-relation only.
+### 4.5 Platform admin (team-registry bootstrap only)
+
+The org-level operator who creates teams. Target mapping in Fred:
+`platform_admin` (`organization:fred`-scoped — see the terminology correction
+above). This is deliberately **not** the same actor as §4.3's team admin.
+
+Can:
+
+- create a team via the one-shot `POST /teams` bootstrap endpoint, naming its
+  initial `team_admin`(s) — gains no standing relation on the created team by
+  doing so (RFC §24.2/§24.7)
+
+Cannot:
+
+- read, write, or administer anything on a team it did not name itself into at
+  creation time — every ongoing team-scoped action is §4.3's `team_admin`, not
+  this role
 
 Design rule for this track:
 
@@ -141,12 +185,12 @@ even if legacy schema details are corrected later.
 
 Fred team configuration is split into four distinct objects.
 
-| Object               | Purpose                                                            | Primary owner                                         |
-| -------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
-| `TeamMetadata`       | Basic presentation metadata: name, description, banner, visibility | owner                                                 |
-| `TeamPlatformPolicy` | Platform-enforced limits and allowlists                            | owner                                                 |
-| `TeamRoutingPolicy`  | Team-wide model-routing behavior for managed execution             | manager                                               |
-| `TeamPromptLibrary`  | Reusable prompts outside agents, both personal and shared          | manager for shared prompts, user for personal prompts |
+| Object               | Purpose                                                            | Primary owner                                              |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `TeamMetadata`       | Basic presentation metadata: name, description, banner, visibility | `team_admin`                                                |
+| `TeamPlatformPolicy` | Platform-enforced limits and allowlists                            | `team_admin`                                                |
+| `TeamRoutingPolicy`  | Team-wide model-routing behavior for managed execution             | `team_editor`                                               |
+| `TeamPromptLibrary`  | Reusable prompts outside agents, both personal and shared          | `team_editor` for shared prompts, user for personal prompts |
 
 These objects must stay separate.
 
@@ -205,22 +249,22 @@ The library remains independent from agents:
 
 ## 6. Ownership matrix
 
-| Surface                         | Member read                       | Manager write      | Owner write        | Notes                                                      |
-| ------------------------------- | --------------------------------- | ------------------ | ------------------ | ---------------------------------------------------------- |
-| Team metadata                   | Yes, if team visible              | No                 | Yes                | Existing metadata-only surface                             |
-| Team platform policy            | No direct self-service            | No                 | Yes                | Owner-managed guardrails                                   |
-| Team routing policy             | No direct self-service            | Yes                | **No**             | Routing policy is manager-owned; owner has no write access |
-| Team shared prompt CRUD         | Read when visible in team context | Yes                | Yes                | Business-owned shared library                              |
-| Personal prompt CRUD            | Own prompts only                  | N/A                | N/A                | User-owned, never shared by write permission               |
-| Prompt score                    | No                                | Yes                | Yes                | Team prompts only                                          |
-| Prompt promote personal -> team | No                                | Yes on target team | Yes on target team | Target-team curation action                                |
-| Prompt promote team -> team     | No                                | Yes on both teams  | Yes on both teams  | Copy-by-value between curated spaces                       |
+| Surface                         | Member read                       | `team_editor` write | `team_admin` write | Notes                                                            |
+| -------------------------------- | --------------------------------- | ------------------- | ------------------- | ----------------------------------------------------------------- |
+| Team metadata                   | Yes, if team visible              | No                   | Yes                  | Existing metadata-only surface                                   |
+| Team platform policy            | No direct self-service            | No                   | Yes                  | `team_admin`-managed guardrails                                  |
+| Team routing policy             | No direct self-service            | Yes                  | **No**               | Routing policy is `team_editor`-owned; `team_admin` has no write access |
+| Team shared prompt CRUD         | Read when visible in team context | Yes                  | Yes                  | Business-owned shared library                                    |
+| Personal prompt CRUD            | Own prompts only                  | N/A                  | N/A                  | User-owned, never shared by write permission                     |
+| Prompt score                    | No                                 | Yes                  | Yes                  | Team prompts only                                                 |
+| Prompt promote personal -> team | No                                 | Yes on target team    | Yes on target team    | Target-team curation action                                      |
+| Prompt promote team -> team     | No                                 | Yes on both teams     | Yes on both teams     | Copy-by-value between curated spaces                              |
 
 The key rule is:
 
-- platform policy is owner-owned
-- routing policy is manager-owned
-- shared prompts are manager-owned
+- platform policy is `team_admin`-owned
+- routing policy is `team_editor`-owned
+- shared prompts are `team_editor`-owned
 - personal prompts are user-owned
 
 ---
@@ -232,20 +276,25 @@ The key rule is:
 Any team-scoped write added for this track must require the correct explicit team
 permission. Membership or public readability must never be enough.
 
-### 7.2 Owner and manager are orthogonal, not hierarchical
+### 7.2 `team_admin` and `team_editor` are orthogonal, not hierarchical
 
-This is the most important rule in this RFC.
+This is the most important rule in this RFC. (Confirmed as the shipped design
+in `platform/REBAC.md`'s "hard cross-write rule" — this RFC's original
+`team_admin`/team-creation conflation is corrected here, see the terminology
+note at the top of §4: team creation itself is the separate, org-level
+`platform_admin` bootstrap action, RFC §28/Part 6 — not part of `team_admin`'s
+ongoing authority.)
 
-- Owner has full authority over governance (`TeamPlatformPolicy`, team creation,
-  manager assignment) and **zero write authority** over agents, prompts, and
-  routing policy.
-- Manager has full authority over the business surface (`TeamRoutingPolicy`,
-  agent instances, shared prompts) and **zero write authority** over platform
-  policy.
+- `team_admin` has full authority over governance (`TeamPlatformPolicy`, team
+  role assignment/revocation) and **zero write authority** over agents,
+  prompts, and routing policy.
+- `team_editor` has full authority over the business surface
+  (`TeamRoutingPolicy`, agent instances, shared prompts) and **zero write
+  authority** over platform policy.
 
-There is no "owner supersedes manager" escalation on the business surface.
-Owner can only constrain what manager is allowed to do (via platform policy
-limits), not override their decisions directly.
+There is no "`team_admin` supersedes `team_editor`" escalation on the business
+surface. `team_admin` can only constrain what `team_editor` is allowed to do
+(via platform policy limits), not override their decisions directly.
 
 This must be enforced at the API layer, not only in the UI.
 
@@ -253,10 +302,10 @@ This must be enforced at the API layer, not only in the UI.
 
 Before introducing new permission names, the initial mapping is:
 
-- owner-only surfaces map to the same trust boundary as `can_update_info`
-- manager-owned agent and routing surfaces map to the same trust boundary as
-  `can_update_agents`
-- manager-owned shared prompt curation maps to the same trust boundary as
+- `team_admin`-only surfaces map to the same trust boundary as `can_update_info`
+- `team_editor`-owned agent and routing surfaces map to the same trust boundary
+  as `can_update_agents`
+- `team_editor`-owned shared prompt curation maps to the same trust boundary as
   `can_update_resources`
 
 TEAM-02 will produce the frozen permission table. Until then, §7.2 is the
@@ -264,7 +313,7 @@ authoritative rule; the names above are provisional.
 
 ### 7.4 Policy tightening does not immediately break existing configuration
 
-When a platform admin tightens `TeamPlatformPolicy` (removes a model profile,
+When a team admin tightens `TeamPlatformPolicy` (removes a model profile,
 lowers a quota, removes an MCP server from the allowlist):
 
 - existing agent instances that reference a now-disallowed value are flagged
@@ -274,7 +323,7 @@ lowers a quota, removes an MCP server from the allowlist):
 - new enrollments and updates must pass the current policy at write time
 - it is the responsibility of TEAM-04 to enforce this at the boundary
 
-This fail-soft-flag approach prevents platform admin changes from silently
+This fail-soft-flag approach prevents team admin changes from silently
 breaking live team operations while still enforcing policy on all new writes.
 
 ### 7.5 Personal scope is never represented by shared team membership
@@ -343,14 +392,19 @@ stable backend contracts.
 
 ## 12. Team creation lifecycle
 
-Team creation is the entry point for the whole configuration track. It is
-specified in full in `TEAM-PLATFORM-POLICY-RFC.md §13`. Key points reproduced
-here for navigability:
+**Updated 2026-07-10 for consistency with the shipped implementation and the
+terminology correction at the top of §4** — see `TEAM-PLATFORM-POLICY-RFC.md
+§13` for the authoritative, current spec. Key points reproduced here for
+navigability:
 
-- Platform admin creates a team via `POST /control-plane/v1/teams` with an
-  initial platform policy (optional; deployment defaults apply if omitted).
-- The designated `admin_user_id` receives the `owner` ReBAC relation and is
-  added to the Keycloak group in the same call.
+- The real, org-level `platform_admin` (§4.5) creates a team via
+  `POST /control-plane/v1/teams { name, initial_team_admin_ids }` — no
+  platform-policy write at creation yet (`TeamPlatformPolicy` itself is not
+  implemented, tracked separately in `BACKLOG.md` §TEAM-03).
+- Each id in `initial_team_admin_ids` receives the `team_admin` OpenFGA
+  relation directly. There is no Keycloak group — a team is a `team_metadata`
+  row plus OpenFGA relations, full stop (AUTHZ-05 review item 9). The calling
+  `platform_admin` gains no relation on the team unless they name themselves.
 - Personal teams are created automatically on user creation; the same creation
   logic applies but uses `personal` defaults and `max_users = 1` (immutable).
 
@@ -358,24 +412,26 @@ here for navigability:
 
 | Actor | Responsibility |
 |---|---|
-| Platform admin | chooses team name, designates team admin, optionally overrides platform policy |
-| Team admin (designated) | receives owner role; can immediately configure routing policy |
-| System | creates Keycloak group, inserts ReBAC relations, writes resolved platform policy |
+| Platform admin (§4.5, org-level, one-shot) | chooses team name, names initial `team_admin`(s) |
+| Team admin (named at creation) | receives `team_admin` relation; can immediately configure platform policy (once implemented) — routing policy is `team_editor`'s surface, not theirs (§7.2) |
+| System | creates the `team_metadata` row, inserts the `team_admin` relation(s) |
 
 ### 12.2 Post-creation configuration flow
 
 ```
 Team created
     │
-    ├─► Platform admin: PATCH /teams/{id}/platform-policy   (optional tuning)
+    ├─► Team admin:  PATCH /teams/{id}/platform-policy   (once TeamPlatformPolicy ships, TEAM-03)
     │
-    └─► Team admin:     PATCH /teams/{id}/routing-policy    (business settings)
-                        GET   /teams/{id}/platform-policy   (read-only view)
+    └─► Team editor: PATCH /teams/{id}/routing-policy    (business settings)
+                      GET   /teams/{id}/platform-policy   (read-only view)
 ```
 
 The two surfaces are independent: routing policy can be configured before
 platform policy is tuned, and vice versa. Both read from the same resolved
-policy at enforcement time.
+policy at enforcement time. Note neither surface is the org-level
+`platform_admin` (§4.5) — that role's only team-facing action is creation
+itself.
 
 ---
 
@@ -387,7 +443,7 @@ task carries a `team_id` that determines who can see it.
 
 ### 13.1 Team activity view
 
-Team admins (owner or manager) see all tasks scoped to their team via
+`team_admin`/`team_editor` see all tasks scoped to their team via
 `GET /api/v1/tasks?scope=team&team_id={id}`. This covers:
 
 - document ingestion tasks triggered by any team member
@@ -398,15 +454,15 @@ text. Step labels and error messages are operational metadata (see OPS-04 RFC
 §7.3 content boundary rule).
 
 Route: `/settings/team/activity`  
-Owner: team admin (owner or manager)
+Owner: `team_admin`/`team_editor`
 
 ### 13.2 Platform admin task dashboard
 
-Platform admins see all tasks across all teams via
+The real, org-level `platform_admin` (§4.5) sees all tasks across all teams via
 `GET /api/v1/tasks?scope=platform`. This adds:
 
 - platform-level tasks (migration steps, `team_id = NULL`)
-- the same team-scoped tasks visible to each team admin
+- the same team-scoped tasks visible to each team's `team_admin`/`team_editor`
 
 Route: `/admin/tasks`  
 Owner: platform admin only

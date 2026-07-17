@@ -28,7 +28,7 @@ jobs:
     steps:
       # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install yq
         run: |
@@ -36,7 +36,7 @@ jobs:
           sudo apt-get install -y yq
 
       - name: Setup Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v5
 
       - name: Login to Helm registry
         run: |
@@ -48,7 +48,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           #images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
           images: dummy                   # We do not care about the image, we just want the version, NOTE : we exclure initial "v" from the version
@@ -119,14 +119,14 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: dummy  # We do not care the image name, we just want to extract the version
           tags: |
               type=match,pattern=chart/v?(.*),group=1
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Helm Charts Release ${{ steps.meta.outputs.version }}

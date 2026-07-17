@@ -1,3 +1,71 @@
+**v2.1.3** — 2026-07-16
+
+- **Summary**
+
+This release hardens the import swift contract in order to safely be used a first production release.
+
+- **Improvement**
+
+  - make the swift import production ready (#1993)
+
+**v2.1.2** — 2026-07-16
+
+- **Summary**
+
+  Follow-up hardening on the v2.1.1 bootstrap/provisioning candidate. Closes the AUTHZ-07
+  chart secret-boundary release gate and consolidates its remaining review notes into the
+  canonical AUTHZ-07/OPS-04 backlogs. No application behavior change. (AUTHZ-07, #1991)
+
+- **Security**
+
+  - The Control Plane's Alembic migration Job no longer receives `FRED_BOOTSTRAP_TOKEN` (or any other app-only `extraEnvVars`) — scoped to the Deployment only, with CI now proving exactly one rendering location (AUTHZ-07, #1991)
+
+**v2.1.1** — 2026-07-15
+
+- **Summary**
+
+  Root platform-admin bootstrap and declarative platform provisioning. A fresh Fred
+  deployment now creates its first `platform_admin` through a one-time, secret-gated
+  bootstrap page instead of a config-seeded subject list, and every subsequent
+  platform/team role can be provisioned declaratively via a `users.json` import bundle.
+  (AUTHZ-07, #1986, #1987)
+
+- **Features**
+
+  - Root platform-admin bootstrap: a one-time, deploy-secret-gated flow (env var or file, Kubernetes-Secret-safe) grants the very first `platform_admin`, replacing the removed config-seeded `platform_admin_subjects`/`platform_observer_subjects` path (AUTHZ-07, #1987)
+  - Declarative platform provisioning: a `users.json` import bundle grants platform and cumulative team roles directly, reconciling roles on both new and pre-existing teams (AUTHZ-07, #1987)
+  - Platform import outcomes are now visible in Activity — a partial "with warnings" import is distinguishable from full success, with per-phase granted/skipped/processed counters (AUTHZ-07, #1987)
+
+- **Bug Fixes**
+
+  - Fix `BootstrapGuard` trapping auth/ReBAC-disabled deployments (the default insecure/dev config) on a bootstrap form that could never succeed (AUTHZ-07, #1987)
+  - Fail closed instead of silently succeeding when a `users.json` import runs with ReBAC disabled (AUTHZ-07, #1987)
+  - Normalize the env-sourced bootstrap secret (strip trailing newline) so Kubernetes-Secret-backed tokens compare correctly (AUTHZ-07, #1987)
+
+**v2.1.0** — 2026-07-13
+
+- **Summary**
+
+  Authorization milestone. Fred's authorization model is now fully self-owned: Keycloak
+  authenticates identity only (login, JWT, stable `sub`), and every platform and team
+  permission — `platform_admin`/`platform_observer`, `team_admin`/`team_editor`/`team_analyst`/
+  `team_member` — is a stored OpenFGA relation, never derived from a Keycloak role or group.
+  Team roles are now cumulative (one person can hold several roles on the same team at once),
+  and teams are no longer backed by Keycloak groups at all — a team is purely an
+  OpenFGA-governed registry entry. (AUTHZ-05, AUTHZ-06, #1957)
+
+- **Features**
+
+  - Keycloak is identity-only; Fred/OpenFGA owns all platform and team authorization, with no legacy role/group bridge remaining (AUTHZ-05, #1957)
+  - Team roles are cumulative — a user may hold `team_admin`, `team_editor`, and `team_analyst` on the same team at once, each granted and revoked independently (AUTHZ-06, #1957)
+  - Teams fully decoupled from Keycloak — team creation, membership, and role management are pure OpenFGA operations (AUTHZ-05, #1957)
+  - Platform-admin-gated team registry governance: list every team, delete a team, rescue an orphaned team left with no admin (AUTHZ-05, #1957)
+
+- **Security**
+
+  - Closed a live escalation where any Keycloak `admin` role holder implicitly became `owner` of every team (AUTHZ-05, #1957)
+  - Closed an organization-level content bypass that let any global `editor` role holder read or process any team's content (AUTHZ-05, #1957)
+
 **v2.0.2** — 2026-07-06
 
 - **Summary**

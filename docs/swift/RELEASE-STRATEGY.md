@@ -10,16 +10,19 @@ swift ────────────────────────�
 eagle ──────────────────────────────────── v3.0.0 ──► HEAD
 ```
 
+Each labeled point above is actually a pair of Git tags on the same commit
+(`code/vX.Y.Z` + `chart/vX.Y.Z` — see "Tagging a release" below), not a single tag.
+
 ---
 
 ## Branch model
 
-| Concept                        | Mechanism                                     |
-| ------------------------------ | --------------------------------------------- |
-| Current release in development | `HEAD` of the release branch                  |
-| Shipped release                | Git tag on the release branch (e.g. `v2.1.0`) |
-| Previous release maintenance   | Commits and tags stay on their branch         |
-| Branch naming                  | Short codename: `swift`, `eagle`, `kea`, …    |
+| Concept                        | Mechanism                                                          |
+| ------------------------------- | ------------------------------------------------------------------- |
+| Current release in development | `HEAD` of the release branch                                       |
+| Shipped release                | A pair of Git tags on the release branch: `code/vX.Y.Z` + `chart/vX.Y.Z` |
+| Previous release maintenance   | Commits and tags stay on their branch                              |
+| Branch naming                  | Short codename: `swift`, `eagle`, `kea`, …                         |
 
 **There are no merge-back flows between release branches.** Each branch is
 fully autonomous. Bug fixes that apply to multiple releases are **cherry-picked**
@@ -124,9 +127,25 @@ apply it manually to `docs/eagle/` in the same commit or a follow-up commit.
 
 ## Tagging a release
 
+A release is **two Git tags on the same commit**, not one — each drives its own CI
+workflow:
+
+- `code/vX.Y.Z` — triggers `.github/workflows/Build-and-push-docker.yml`, which
+  builds and pushes `fred-agents`, `knowledge-flow-backend`, `control-plane-backend`,
+  and `frontend` images to `ghcr.io/thalesgroup/fred-agent/*`, tagged `vX.Y.Z`.
+- `chart/vX.Y.Z` — triggers `.github/workflows/Package-and-push-charts.yml`, which
+  injects `version`/`appVersion: vX.Y.Z` into `deploy/charts/fred/Chart.yaml` at
+  build time (the value committed in `Chart.yaml` itself is not used and does not
+  need to be bumped by hand), packages the chart, and pushes it to
+  `oci://ghcr.io/thalesgroup/fred-helm/fred`.
+
+A tag with neither prefix (a bare `vX.Y.Z`) matches neither workflow's trigger and
+publishes nothing.
+
 ```bash
 git checkout swift
-git tag -a v2.1.0 -m "Release v2.1.0"
+git tag -a code/v2.1.0 -m "Release v2.1.0 — images"
+git tag -a chart/v2.1.0 -m "Release v2.1.0 — chart"
 git push origin swift --tags
 ```
 
@@ -137,19 +156,19 @@ or expected.
 
 ## Branch lifecycle
 
-| Phase              | Action                                                |
-| ------------------ | ----------------------------------------------------- |
-| Active development | Commits flow freely on the branch                     |
-| Release candidate  | Tag `vX.Y.0-rc1`, run full validation                 |
-| Released           | Tag `vX.Y.0`                                          |
-| Maintenance        | Bug fixes only; each fix tagged as `vX.Y.Z`           |
-| End of life        | Branch archived (no deletion — tags remain reachable) |
+| Phase              | Action                                                          |
+| ------------------ | ------------------------------------------------------------------ |
+| Active development | Commits flow freely on the branch                               |
+| Release candidate  | Tag `code/vX.Y.0-rc1` + `chart/vX.Y.0-rc1`, run full validation |
+| Released           | Tag `code/vX.Y.0` + `chart/vX.Y.0`                              |
+| Maintenance        | Bug fixes only; each fix tagged as `code/vX.Y.Z` + `chart/vX.Y.Z` |
+| End of life        | Branch archived (no deletion — tags remain reachable)           |
 
 ---
 
 ## Current release branches
 
-| Branch  | Status                    | Latest tag | Doc tree               |
-| ------- | ------------------------- | ---------- | ---------------------- |
-| `swift` | Active — v2.x development | —          | `docs/swift/`          |
-| `eagle` | Not yet created           | —          | `docs/eagle/` (future) |
+| Branch  | Status                    | Latest tag                        | Doc tree               |
+| ------- | ------------------------- | ---------------------------------- | ---------------------- |
+| `swift` | Active — v2.x development | `code/v2.1.2` + `chart/v2.1.2` (2026-07-16) | `docs/swift/`          |
+| `eagle` | Not yet created           | —                                  | `docs/eagle/` (future) |

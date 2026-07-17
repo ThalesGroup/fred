@@ -12,7 +12,12 @@ from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
 
 import httpx
-from fred_core import KeycloakUser, list_display_permissions
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacEngine,
+)
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
@@ -223,26 +228,38 @@ class _RuntimeTemplatePayload:
         )
 
 
-def _build_permission_summary(user: KeycloakUser) -> PermissionSummary:
-    items = list_display_permissions(user)
-    allowed = set(items)
+async def _build_permission_summary(
+    user: KeycloakUser, rebac: RebacEngine
+) -> PermissionSummary:
+    """Build the frontend permission projection.
+
+    `is_platform_admin`/`is_platform_observer` are derived from OpenFGA via the
+    same `RebacEngine.has_user_permission` used to gate the platform-level
+    endpoints themselves, so the frontend never re-derives admin access from
+    Keycloak roles independently (AUTHZ-05 review item 4). `is_platform_observer`
+    checks the raw `platform_observer` relation directly (`IS_PLATFORM_OBSERVER`)
+    rather than a capability, since the "any connected user" capability tier it
+    used to piggyback on (`can_read_kpi`) was removed entirely in review item 8a.
+
+    Team-scoped gating (agents, resources, MCP servers, feedback, sessions...)
+    does not belong here at all — it goes through
+    `TeamWithPermissions.permissions` (`_get_team_permissions_for_user`), which
+    is already OpenFGA-derived per team. This function used to also carry a
+    Keycloak-role-derived `items` list plus six always-empty `can_*` booleans
+    computed from it; both were removed in review item 11 once Keycloak app
+    roles disappeared platform-wide and left them permanently unpopulated.
+    """
+    is_platform_admin, is_platform_observer = await asyncio.gather(
+        rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        ),
+        rebac.has_user_permission(
+            user, OrganizationPermission.IS_PLATFORM_OBSERVER, ORGANIZATION_ID
+        ),
+    )
     return PermissionSummary(
-        items=items,
-        can_view_team_agents="agents:read" in allowed,
-        can_manage_team_agents=bool(
-            {"agents:create", "agents:update", "agents:delete"} & allowed
-        ),
-        can_manage_mcp_servers=bool(
-            {
-                "mcp_servers:create",
-                "mcp_servers:update",
-                "mcp_servers:delete",
-            }
-            & allowed
-        ),
-        can_view_feedback="feedback:read" in allowed,
-        can_submit_feedback="feedback:create" in allowed,
-        can_create_sessions="sessions:create" in allowed,
+        is_platform_admin=is_platform_admin,
+        is_platform_observer=is_platform_observer,
     )
 
 
@@ -262,13 +279,14 @@ async def build_frontend_bootstrap(
     Example:
     - `payload = await build_frontend_bootstrap(user, deps)`
     """
-    active_team, available_teams = await asyncio.gather(
+    active_team, available_teams, permissions = await asyncio.gather(
         get_team_by_id_from_service(
             user,
             personal_team_id(user.uid),
             deps.team_dependencies,
         ),
         list_teams_from_service(user, deps.team_dependencies),
+        _build_permission_summary(user, deps.team_dependencies.rebac),
     )
     # First-touch personal-space capability seeding (CAPAB-01 / #1980, RFC §8.4):
     # a no-op unless `platform.capabilities.personal_defaults` is configured, and
@@ -281,7 +299,7 @@ async def build_frontend_bootstrap(
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
-        permissions=_build_permission_summary(user),
+        permissions=permissions,
     )
 
 
@@ -317,7 +335,7 @@ async def _seed_personal_capability_defaults(
         )
 
 
-def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
+async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     """Build the public pre-auth frontend config from `security.user`.
 
     Why this function exists:
@@ -329,7 +347,7 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     - call from the public `/frontend/config` endpoint at Stage 0 of startup
 
     Example:
-    - `config = build_frontend_config(deps)`
+    - `config = await build_frontend_config(deps)`
     """
     user_security = deps.configuration.security.user
     # Mirror the enforcement predicate in `fred_core` `get_current_user`: CGU
@@ -338,6 +356,17 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     # frontend guard from showing an acceptance screen the backend never
     # enforces (e.g. standalone / dev deployments without Keycloak).
     gcu_version = deps.configuration.app.gcu_version if user_security.enabled else None
+    root_bootstrap_completed = await deps.get_platform_bootstrap_store().is_completed()
+    # Mirrors the refusal predicate `POST /bootstrap/platform-admin` enforces
+    # (auth disabled or ReBAC disabled -> 503): `root_bootstrap_completed`
+    # alone is not "must show BootstrapGuard" on those deployments, since the
+    # durable marker stays False forever there while the endpoint can never
+    # succeed. `root_bootstrap_completed` itself stays untouched and truthful.
+    root_bootstrap_required = (
+        user_security.enabled
+        and deps.team_dependencies.rebac.enabled
+        and not root_bootstrap_completed
+    )
     if user_security.enabled:
         return FrontendConfig(
             user_auth=FrontendUserAuthConfig(
@@ -346,10 +375,14 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
                 client_id=user_security.client_id,
             ),
             gcu_version=gcu_version,
+            root_bootstrap_completed=root_bootstrap_completed,
+            root_bootstrap_required=root_bootstrap_required,
         )
     return FrontendConfig(
         user_auth=FrontendUserAuthConfig(enabled=False),
         gcu_version=gcu_version,
+        root_bootstrap_completed=root_bootstrap_completed,
+        root_bootstrap_required=root_bootstrap_required,
     )
 
 
@@ -1530,10 +1563,18 @@ async def enroll_agent_instance(
 
     agent_instance_id = str(uuid4())
     # Internal (non-public) templates are admin-only to enroll: resolve with the
-    # caller's privilege so a non-admin who guesses a hidden template_id simply
-    # gets "template not found" (404) below, exactly as if it did not exist.
+    # caller's OpenFGA platform_admin privilege (same check as the read-side
+    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
+    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
+    # template_id simply gets "template not found" (404) below, exactly as if
+    # it did not exist.
+    can_see_non_public_templates = (
+        await deps.team_dependencies.rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
     runtime_templates = await _fetch_runtime_templates(
-        source.base_url, include_non_public=("admin" in user.roles)
+        source.base_url, include_non_public=can_see_non_public_templates
     )
     template = next(
         (

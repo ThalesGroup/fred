@@ -24,7 +24,6 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
-    groups: list[str] = []
 
 
 # Keycloak app role carried by backend service identities (agentic, knowledge-flow,

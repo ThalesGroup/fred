@@ -1,0 +1,25 @@
+[project]
+name = "fred-platform-validation"
+version = "0.1.0"
+description = "Black-box validation of a RUNNING Fred platform: Keycloak identity, OpenFGA team isolation, and no-grant runtime authorization (RUNTIME-07 rev. 2). Acts as the deployment-factory users (alice/bob/...) against the live stack."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+
+# The harness intentionally depends only on shared Fred libraries, not app internals:
+# - fred-core: Keycloak password-grant login used by the CLI machinery
+# - fred-sdk: public RuntimeExecuteRequest / RuntimeContext contracts
+# - fred-runtime: installed for compatibility with the runtime client surface; tests
+#   stay black-box and call the running pod over HTTP.
+dependencies = [
+  "fred-core>=3.3.0",
+  "fred-sdk>=3.3.0",
+  "fred-runtime>=3.3.0",
+  "httpx>=0.28.1",
+  "pyyaml>=6.0",
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["scenarios"]
+addopts = "-v -ra"
