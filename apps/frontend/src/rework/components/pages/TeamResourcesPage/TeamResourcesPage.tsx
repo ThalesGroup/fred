@@ -133,9 +133,9 @@ export default function TeamResourcesPage() {
             title={t("rework.resources.roots.team")}
             hint={t("rework.resources.hints.team")}
             meta={<FsRootMeta root={sharedRoot} />}
-            action={<FsRootAddMenu root={sharedRoot} />}
+            action={canCreateFolder ? <FsRootAddMenu root={sharedRoot} /> : undefined}
           >
-            <TeamFilesystemBrowser root={sharedRoot} />
+            <TeamFilesystemBrowser root={sharedRoot} canWrite={canCreateFolder} />
           </WorkspaceRoot>
         )}
 

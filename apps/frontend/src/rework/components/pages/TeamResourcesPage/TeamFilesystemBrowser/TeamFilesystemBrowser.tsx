@@ -91,6 +91,10 @@ interface TeamFilesystemBrowserProps {
   /** Indent depth of this root's entries. Lets a nested context (the Agents tree) render its
    * files one level under the agent folder rather than flush against it. Defaults to 0. */
   baseDepth?: number;
+  /** Whether upload/new-folder/delete actions are shown. Private areas (Mon espace, Agents)
+   * are always writable by their owner; only the shared area is gated by CAN_UPDATE_RESOURCES.
+   * Defaults to true so existing private-root call sites are unaffected. */
+  canWrite?: boolean;
 }
 
 /**
@@ -99,20 +103,21 @@ interface TeamFilesystemBrowserProps {
  * Folders expand in place; each folder carries upload + new-folder actions; files carry
  * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
  */
-export default function TeamFilesystemBrowser({ root, baseDepth = 0 }: TeamFilesystemBrowserProps) {
+export default function TeamFilesystemBrowser({ root, baseDepth = 0, canWrite = true }: TeamFilesystemBrowserProps) {
   const { refetch } = useLsQuery({ path: root });
-  return <FsLevel path={root} depth={baseDepth} onChanged={() => void refetch()} />;
+  return <FsLevel path={root} depth={baseDepth} canWrite={canWrite} onChanged={() => void refetch()} />;
 }
 
 interface FsLevelProps {
   path: string;
   depth: number;
+  canWrite: boolean;
   /** refetch of the directory that owns these entries (so deletes here update the list). */
   onChanged: () => void;
 }
 
 /** Renders the entries of one directory; recurses into expanded folders. */
-function FsLevel({ path, depth, onChanged }: FsLevelProps) {
+function FsLevel({ path, depth, canWrite, onChanged }: FsLevelProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { data } = useLsQuery({ path });
@@ -147,7 +152,16 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
       {sortEntries(entries).map((entry) => {
         const childPath = `${path}/${entry.path}`;
         if (isDirectory(entry.type)) {
-          return <FsFolder key={childPath} path={childPath} name={entry.path} depth={depth} onDeleted={onChanged} />;
+          return (
+            <FsFolder
+              key={childPath}
+              path={childPath}
+              name={entry.path}
+              depth={depth}
+              canWrite={canWrite}
+              onDeleted={onChanged}
+            />
+          );
         }
         const originLabelKey = entry.origin ? ORIGIN_LABEL_KEY[entry.origin] : undefined;
         return (
@@ -172,11 +186,15 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
                       },
                     ]
                   : []),
-                {
-                  id: "delete",
-                  label: t("rework.resources.action.delete"),
-                  onSelect: () => confirmDelete(entry.path),
-                },
+                ...(canWrite
+                  ? [
+                      {
+                        id: "delete",
+                        label: t("rework.resources.action.delete"),
+                        onSelect: () => confirmDelete(entry.path),
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
@@ -190,12 +208,13 @@ interface FsFolderProps {
   path: string;
   name: string;
   depth: number;
+  canWrite: boolean;
   /** refetch of the directory that owns this folder, so deleting it updates the parent list. */
   onDeleted: () => void;
 }
 
 /** One folder row + its lazily-listed children when expanded. Owns upload / new-folder / delete. */
-function FsFolder({ path, name, depth, onDeleted }: FsFolderProps) {
+function FsFolder({ path, name, depth, canWrite, onDeleted }: FsFolderProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [expanded, setExpanded] = useState(false);
@@ -246,13 +265,13 @@ function FsFolder({ path, name, depth, onDeleted }: FsFolderProps) {
           name={CONVENTIONAL_FOLDER_KEY[name] ? t(CONVENTIONAL_FOLDER_KEY[name]) : name}
           expanded={expanded}
           onToggle={() => setExpanded((value) => !value)}
-          onUpload={() => fileInputRef.current?.click()}
-          onCreateSubfolder={() => setNewFolderOpen(true)}
-          onDelete={confirmDeleteFolder}
+          onUpload={canWrite ? () => fileInputRef.current?.click() : undefined}
+          onCreateSubfolder={canWrite ? () => setNewFolderOpen(true) : undefined}
+          onDelete={canWrite ? confirmDeleteFolder : undefined}
         />
       </div>
 
-      {expanded && <FsLevel path={path} depth={depth + 1} onChanged={() => void refetch()} />}
+      {expanded && <FsLevel path={path} depth={depth + 1} canWrite={canWrite} onChanged={() => void refetch()} />}
 
       <input
         ref={fileInputRef}
