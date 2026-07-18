@@ -393,6 +393,7 @@ class ContextAwareTool(BaseTool):
                 return normalize_mcp_content(result)
             except Exception as e:
                 # 1. Metrics & Logging
+                kpi_dims["status"] = "error"
                 kpi_dims["error_code"] = type(e).__name__
                 kpi_dims["exception_type"] = type(e).__name__
 
@@ -445,6 +446,7 @@ class ContextAwareTool(BaseTool):
                 return normalize_mcp_content(result)
             except Exception as e:
                 # 1. Metrics & Logging
+                kpi_dims["status"] = "error"
                 kpi_dims["error_code"] = type(e).__name__
                 kpi_dims["exception_type"] = type(e).__name__
 
