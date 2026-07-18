@@ -60,7 +60,7 @@ from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.logs.log_setup import log_setup
+from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
@@ -167,7 +167,7 @@ from .dependencies import (
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
-_audit_logger = logging.getLogger("fred.security.audit")
+_audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
 
 def _emit_audit_event(

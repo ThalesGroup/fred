@@ -14,10 +14,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fred_core.logs.base_log_store import LogEventDTO
-from fred_core.logs.log_setup import UvicornSensitiveQueryFilter, log_setup
+from fred_core.logs.log_setup import (
+    AUDIT_LOGGER_NAME,
+    CompactJsonFormatter,
+    UvicornSensitiveQueryFilter,
+    log_setup,
+)
 from fred_core.logs.log_structures import LogQuery, LogQueryResult
 
 
@@ -69,3 +75,75 @@ def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:
 
     assert logger.level == logging.WARNING
     assert logger.propagate is False
+
+
+def test_compact_json_formatter_surfaces_extra_fields() -> None:
+    """extra={...} on a logging call must survive into the JSON payload — this
+    is what StoreEmitHandler/LogEventDTO already expect (they read payload
+    "extra"), and what audit events depend on to carry their structured
+    fields instead of being reduced to a bare message string."""
+    logger = logging.getLogger("test-compact-json-formatter")
+    logger.propagate = False
+    logger.handlers.clear()
+    lines: list[str] = []
+
+    class _CapturingHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            lines.append(self.format(record))
+
+    handler = _CapturingHandler()
+    handler.setFormatter(CompactJsonFormatter("test-service"))
+    logger.addHandler(handler)
+
+    logger.info(
+        "[SECURITY] %s",
+        "authz_denied",
+        extra={"audit_event": "authz_denied", "user_id": "u-1", "team_id": "t-1"},
+    )
+
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["msg"] == "[SECURITY] authz_denied"
+    assert payload["extra"] == {
+        "audit_event": "authz_denied",
+        "user_id": "u-1",
+        "team_id": "t-1",
+    }
+
+
+def test_compact_json_formatter_omits_extra_key_when_absent() -> None:
+    logger = logging.getLogger("test-compact-json-formatter-no-extra")
+    logger.propagate = False
+    logger.handlers.clear()
+    lines: list[str] = []
+
+    class _CapturingHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            lines.append(self.format(record))
+
+    handler = _CapturingHandler()
+    handler.setFormatter(CompactJsonFormatter("test-service"))
+    logger.addHandler(handler)
+
+    logger.info("plain message")
+
+    payload = json.loads(lines[0])
+    assert "extra" not in payload
+
+
+def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler() -> (
+    None
+):
+    log_setup(
+        service_name="test-log-setup-audit",
+        log_level="INFO",
+        store=_StubLogStore(),
+        include_uvicorn=False,
+        use_rich=False,
+    )
+
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+
+    assert audit_logger.propagate is False
+    assert len(audit_logger.handlers) == 1
+    assert isinstance(audit_logger.handlers[0].formatter, CompactJsonFormatter)
