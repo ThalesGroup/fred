@@ -16,17 +16,18 @@ General-purpose assistant ReAct agent — the default Fred agent.
 
 Why this module exists:
 - provides the blank-slate agent that operators configure freely at enrollment
-  time: they see every MCP server available in the pod catalog and select the
+  time: they see every capability available in the pod catalog and select the
   ones they need
-- replaces the former split between `simple_assistant` (no MCP) and the old
+- replaces the former split between `simple_assistant` (no tools) and the old
   `general_assistant` (all KF MCP servers by default), which was confusing
 
 Key design:
-- declares ALL enabled catalog servers in `default_mcp_servers` so the Tools
-  tab in the enrollment form shows every available tool
-- all servers are active by default (selected_capability_ids = null → the
-  template's default MCP servers, #1978, #1988); each server is an
-  capability the operator unchecks in the Tools tab when not needed
+- declares its core capabilities in `default_mcp_servers` (MCP-backed and
+  native alike, RFC §2) so the Tools tab in the enrollment form shows every
+  available one
+- all of them are active by default (selected_capability_ids = null → the
+  template's default capabilities, #1978, #1988); each is a capability the
+  operator unchecks in the Tools tab when not needed
 - one `prompts.system` field lets operators specialise the role without creating
   a new agent template
 - system prompt handles both the tool-equipped and no-tool cases
@@ -46,7 +47,6 @@ from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -89,16 +89,16 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
 
     Why this class exists:
     - single entry point for operators who want to build a custom agent from
-      scratch: they see every available MCP tool, pick what they need, and write
-      their own system prompt
-    - exposes all enabled catalog servers so the Tools tab is fully populated at
+      scratch: they see every available capability, pick what they need, and
+      write their own system prompt
+    - exposes its core capabilities so the Tools tab is fully populated at
       enrollment time without requiring any code change
 
     Key design choices:
-    - `default_mcp_servers` lists every enabled server in the pod catalog;
-      `selected_capability_ids = null` (default) activates the template's
-      default MCP servers (each a capability keyed by its server id, #1988), and the
-      operator unchecks servers they don't want
+    - `default_mcp_servers` lists this template's default capabilities, MCP-backed
+      and native alike; `selected_capability_ids = null` (default) activates
+      them (each keyed by its capability id, #1988), and the operator unchecks
+      the ones they don't want
     - system prompt handles both the fully-equipped and no-tool cases so the
       agent never claims unavailable capabilities
     - one `prompts.system` field lets operators specialise the role without
@@ -129,13 +129,21 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
 
-    # Core Knowledge Flow servers that are part of the standard platform deployment.
+    # Core capabilities that are part of the standard platform deployment —
+    # MCP-backed and native alike (RFC §2, no distinction at this level).
     # Demo servers and optional KF services (statistics) are omitted here
     # because they are not guaranteed to be running — an unreachable declared server
     # crashes the agent turn. Operators who have those services running should create
     # a custom instance and add them via the control-plane agent form.
+    #
+    # Document search: `document_access` (native, #1906 pilot) rather than the
+    # legacy inprocess `mcp-knowledge-flow-mcp-text` — this is the forward path
+    # under live A/B evaluation against `react_rag_mcp`, which stays on the
+    # legacy capability on purpose as the comparison baseline. Do not select
+    # both on one instance (duplicate vector-search tool, see
+    # `document_access/capability.py`'s module docstring).
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),

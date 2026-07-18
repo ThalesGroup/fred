@@ -235,12 +235,14 @@ class _RuntimeTemplatePayload:
                 if isinstance(entry, dict)
             ],
             # Ids of `definition.default_mcp_servers` (the servers activated when
-            # `selected_capability_ids is None`) — same namespace as
-            # `available_capabilities` ids (#1988).
+            # `selected_capability_ids is None`) — MCP-derived and native ids
+            # alike (RFC §2), read verbatim off the pod's own wire field rather
+            # than derived from `available_mcp_servers`, which is MCP-only and
+            # silently omits native capability ids.
             default_capability_ids=[
-                entry["id"]
-                for entry in data.get("available_mcp_servers", [])
-                if isinstance(entry, dict) and entry.get("id")
+                cid
+                for cid in data.get("default_capability_ids", [])
+                if isinstance(cid, str) and cid
             ],
         )
 

@@ -88,7 +88,22 @@ capability declares its whole vertical surface, in one place." Concretely:
 - **MCP is not special.** A remote MCP server is a *generic capability* (`McpCapability`)
   parameterized by a server config. Built-in tools, authored toolsets, PPT filler,
   WritableDocument, and document-access are all capabilities too. One registry, one
-  product contract, one Tools tab.
+  product contract, one Tools tab. Whether an MCP server happens to be operated by
+  Knowledge Flow or by a third party is likewise invisible above the capability
+  boundary — both are the exact same `McpCapability` mechanism, gated and cataloged
+  identically. Today a capability's vertical is realized by exactly one of two
+  mechanisms — a call to an MCP server, or native code — and later, per the RFC's
+  horizon (§13), by a full app; the mechanism is a private implementation detail the
+  catalog, the authorization model, and a template's declared defaults never see.
+- **A template's defaults are just capability ids, resolved uniformly.** An agent
+  template's `default_mcp_servers` list is not an MCP-only lookup — each id is
+  checked at boot against the same pod capability registry that backs the catalog,
+  whether the id names an MCP-derived capability or a native one. An id the pod has
+  genuinely never heard of fails boot loudly (`UnknownCapabilityError`), the same
+  doctrine already applied to a duplicate id or a missing `required_env` (§4) — never
+  a silently-dropped tool. A server merely *disabled* in the MCP catalog stays the
+  already-documented tolerated state (warning-only, §3.8) — boot only rejects an id
+  absent from both the capability registry and the MCP catalog.
 - **A capability owns its whole vertical**: the tools it exposes, its agent-creation and
   chat-time fields, the custom chat parts it emits (§3.6), its side panel, its routes,
   its tables, and its per-team enablement policy — declared together, registered once.

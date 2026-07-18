@@ -133,7 +133,11 @@ from fred_runtime.capabilities import (
     evaluate_chat_controls_batch,
     validate_turn_options,
 )
-from fred_runtime.capabilities.errors import CapabilityError, TurnOptionsInvalidError
+from fred_runtime.capabilities.errors import (
+    CapabilityError,
+    TurnOptionsInvalidError,
+    UnknownCapabilityError,
+)
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -920,6 +924,13 @@ class _AgentTemplateSummary(BaseModel):
     # same way available_mcp_servers is, so control-plane aggregation and the
     # agent-creation UI need no second fetch.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # This template's declared default capability ids (RFC §2), verbatim from
+    # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
+    # filtering. `available_mcp_servers` above stays MCP-only (it carries full
+    # `MCPServerConfiguration` details a native capability has no equivalent
+    # for); this field is the one control-plane reads to resolve what a
+    # `selected_capability_ids = None` instance activates (#1980).
+    default_capability_ids: list[str] = Field(default_factory=list)
 
 
 class _McpCatalogEntry(BaseModel):
@@ -2802,6 +2813,9 @@ def _build_agent_router(
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
                 available_capabilities=available_capabilities,
+                default_capability_ids=[
+                    ref.id for ref in definition.default_mcp_servers
+                ],
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
@@ -3742,6 +3756,35 @@ def create_agent_app(
     capability_registry = boot_capability_registry(
         mcp_servers=_boot_mcp_config.servers if _boot_mcp_config is not None else None
     )
+    # A template's `default_mcp_servers` names capability ids uniformly (RFC
+    # §2) — MCP-derived and native alike. Resolve every one now, at boot,
+    # instead of letting an unresolvable id disappear silently the first time
+    # a request lists templates. A server *disabled* in the MCP catalog is a
+    # separate, already-documented tolerated state (warning-only, never
+    # boot-fatal — the live tool provider just skips it at assembly, RFC
+    # §3.8); only an id the pod has genuinely never heard of — neither an
+    # installed capability nor a catalog entry at all, enabled or not — fails
+    # boot. `_LoadedMcpConfiguration.get_server` filters to enabled servers
+    # only (a different, narrower contract), so the raw server list is
+    # checked here instead.
+    _known_mcp_ids = (
+        {server.id for server in _boot_mcp_config.servers}
+        if _boot_mcp_config is not None
+        else set()
+    )
+    for _definition in registry.values():
+        for _server_ref in _definition.default_mcp_servers:
+            if (
+                _server_ref.id in capability_registry
+                or _server_ref.id in _known_mcp_ids
+            ):
+                continue
+            raise UnknownCapabilityError(
+                f"Agent template '{_definition.agent_id}' declares "
+                f"default_mcp_servers id '{_server_ref.id}', which is neither "
+                "an installed capability nor a known MCP catalog entry on "
+                "this pod."
+            )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

@@ -234,6 +234,30 @@ async def test_templates_expose_pod_capability_catalog(
     assert entries[0]["version"] == "0.1.0"
 
 
+def test_runtime_template_payload_parses_default_capability_ids() -> None:
+    """
+    `_RuntimeTemplatePayload.model_validate` reads `default_capability_ids`
+    straight off the pod's wire field (RFC §2) — MCP-derived and native ids
+    alike — rather than deriving it from `available_mcp_servers`, which is
+    MCP-only and silently drops native capability ids.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+            "default_capability_ids": ["document_access", "mcp-knowledge-flow-fs"],
+        }
+    )
+    assert payload.default_capability_ids == [
+        "document_access",
+        "mcp-knowledge-flow-fs",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Enrollment
 # ---------------------------------------------------------------------------
