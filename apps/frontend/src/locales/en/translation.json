@@ -496,8 +496,8 @@
         "name": "Prometheus access"
       },
       "search_documents": {
-        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)",
-        "name": "Document access"
+        "description": "Legacy semantic document search (pre-capability MCP path, no per-agent scoping). Superseded by the Document access capability — do not enable both on the same agent.",
+        "name": "Document search (legacy)"
       },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",

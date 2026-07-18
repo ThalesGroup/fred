@@ -496,8 +496,8 @@
         "name": "Accès à Prometheus"
       },
       "search_documents": {
-        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)",
-        "name": "Accès aux documents"
+        "description": "Recherche documentaire sémantique historique (chemin MCP pré-capability, sans scoping par agent). Remplacée par la capability Accès aux documents — ne pas activer les deux sur le même agent.",
+        "name": "Recherche documentaire (historique)"
       },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
