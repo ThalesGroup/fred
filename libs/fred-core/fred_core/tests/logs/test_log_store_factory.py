@@ -44,7 +44,7 @@ def test_build_log_store_returns_ram_for_explicit_in_memory_config() -> None:
         opensearch_config=OpenSearchStoreConfig(
             host="http://opensearch:9200",
             username="admin",
-            password="admin",  # nosec B106
+            password="admin",  # nosec B106  # pragma: allowlist secret
         ),
     )
     assert isinstance(store, RamLogStore)
@@ -70,7 +70,7 @@ def test_build_log_store_builds_opensearch_when_configured(
         opensearch_config=OpenSearchStoreConfig(
             host="http://opensearch:9200",
             username="admin",
-            password="admin",  # nosec B106
+            password="admin",  # nosec B106  # pragma: allowlist secret
         ),
     )
     assert isinstance(store, OpenSearchLogStore)
