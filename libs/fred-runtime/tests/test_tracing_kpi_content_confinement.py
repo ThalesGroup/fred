@@ -33,9 +33,11 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
-SECRET_QUESTION = "what is my confidential account balance of $1,000,000"
-SECRET_ANSWER = "your confidential account balance is one million dollars"
-SECRET_ARG_VALUE = "sk-super-secret-tool-argument-value"
+SECRET_QUESTION = (
+    "what is my confidential account balance of $1,000,000"  # pragma: allowlist secret
+)
+SECRET_ANSWER = "your confidential account balance is one million dollars"  # pragma: allowlist secret
+SECRET_ARG_VALUE = "sk-super-secret-tool-argument-value"  # pragma: allowlist secret
 
 
 def test_log_model_call_never_logs_message_content(caplog) -> None:
