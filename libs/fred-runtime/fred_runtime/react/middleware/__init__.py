@@ -42,17 +42,27 @@ The frame, in `create_agent` middleware list order:
        `v2.react.model` span, `llm.call_latency_ms` KPI timer, and the
        `[LLM][CALL]`/`[LLM][RESPONSE]` logs measure/describe the bare model
        call, exactly as the legacy `reasoner` node did.
-    6. FredHitlMiddleware            — `after_model`: filesystem tool-argument
+    6. ToolObservabilityMiddleware   — `wrap_tool_call`: `agent.tool_latency_ms`
+       / `agent.tool_failed_total` KPI and `agent.tool.invocation.
+       {started,completed}` audit events for EVERY tool call the tool node
+       executes — MCP-catalog tools and capability-native tools alike (#2011).
+       Placed next to TracingKpiMiddleware (same job, the other axis: model
+       calls vs tool calls).
+    7. FredHitlMiddleware            — `after_model`: filesystem tool-argument
        rewrite + the human tool-approval gate (RFC §5.4). Sequential per-call
        `interrupt()`s with the legacy `HumanInputRequest` payload; cancel jumps
        back to the model without executing tools.
-    7. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
+    8. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
        `after_model` hooks run in REVERSE list order, so the limit blocks
        over-limit calls BEFORE a human is asked to approve them.
 
 Hook-order cheat sheet (`create_agent` semantics):
 - `wrap_model_call`: first in list = outermost.
+- `wrap_tool_call`: first in list = outermost (same convention); only
+  `ToolObservabilityMiddleware` implements it today, so ordering relative to
+  other frame entries is moot — it always measures the real tool execution
+  because it wraps `handler(request)` directly.
 - `before_model`: list order. `after_model`: reverse list order.
 
 How to use:
@@ -73,6 +83,7 @@ from .hitl import (
     build_tool_approval_request,
 )
 from .model_routing import ModelRoutingMiddleware
+from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
 __all__ = [
@@ -81,6 +92,7 @@ __all__ = [
     "DynamicPromptMiddleware",
     "FredHitlMiddleware",
     "ModelRoutingMiddleware",
+    "ToolObservabilityMiddleware",
     "TracingKpiMiddleware",
     "build_react_platform_middleware_frame",
     "build_tool_approval_request",

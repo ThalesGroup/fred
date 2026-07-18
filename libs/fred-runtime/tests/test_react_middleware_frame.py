@@ -43,6 +43,7 @@ from fred_runtime.react.middleware import (
     DynamicPromptMiddleware,
     FredHitlMiddleware,
     ModelRoutingMiddleware,
+    ToolObservabilityMiddleware,
     TracingKpiMiddleware,
     build_react_platform_middleware_frame,
 )
@@ -349,6 +350,7 @@ def test_frame_order_is_fixed() -> None:
         ModelRoutingMiddleware,
         DynamicPromptMiddleware,
         TracingKpiMiddleware,
+        ToolObservabilityMiddleware,
         FredHitlMiddleware,
     ]
 
@@ -365,6 +367,7 @@ def test_frame_reserves_the_capability_slot() -> None:
         DynamicPromptMiddleware,
         _DummyCapabilityMiddleware,
         TracingKpiMiddleware,
+        ToolObservabilityMiddleware,
         FredHitlMiddleware,
     ]
 

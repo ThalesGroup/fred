@@ -8,8 +8,6 @@ from typing import Any, Callable, Optional
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
-from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.logs.audit_log import emit_audit_log
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
@@ -19,7 +17,6 @@ from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
 )
-from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -318,240 +315,71 @@ class ContextAwareTool(BaseTool):
         """Ensure mapping input and drop explicit null values."""
         return {k: v for k, v in (kwargs or {}).items() if v is not None}
 
-    def _kpi_base_dims(self, *, context) -> dict[str, Optional[str]]:
-        dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
-        session_id = getattr(context, "session_id", None) if context else None
-        if session_id:
-            dims["session_id"] = str(session_id)
-        user_id = getattr(context, "user_id", None) if context else None
-        if user_id:
-            dims["user_id"] = str(user_id)
-        team_id = getattr(context, "team_id", None) if context else None
-        if team_id:
-            dims["team_id"] = str(team_id)
-        agent_instance_id = (
-            getattr(context, "agent_instance_id", None) if context else None
-        )
-        if agent_instance_id:
-            dims["agent_instance_id"] = str(agent_instance_id)
-        template_agent_id = (
-            getattr(context, "template_agent_id", None) if context else None
-        )
-        if template_agent_id:
-            dims["template_agent_id"] = str(template_agent_id)
-        checkpoint_id = getattr(context, "checkpoint_id", None) if context else None
-        if checkpoint_id:
-            dims["checkpoint_id"] = str(checkpoint_id)
-        trace_id = getattr(context, "trace_id", None) if context else None
-        if trace_id:
-            dims["trace_id"] = str(trace_id)
-        correlation_id = getattr(context, "correlation_id", None) if context else None
-        if correlation_id:
-            dims["correlation_id"] = str(correlation_id)
-        execution_action = (
-            getattr(context, "execution_action", None) if context else None
-        )
-        if execution_action:
-            dims["execution_action"] = str(execution_action)
-        exchange_id = getattr(context, "exchange_id", None) if context else None
-        if exchange_id:
-            dims["exchange_id"] = str(exchange_id)
-        try:
-            runtime_id = get_runtime_context().config.service_name
-            if runtime_id:
-                dims["runtime_id"] = runtime_id
-        except Exception as exc:
-            logger.debug("[KPI] Could not resolve runtime_id: %s", exc)
-        return dims
-
-    def _kpi_timer(self, *, context) -> tuple[Any, Any, dict[str, Optional[str]]]:
-        """
-        Return KPI writer + timer context for tool execution.
-
-        Why this exists:
-        - tool latency tracking should use the shared runtime KPI writer
-
-        How to use it:
-        - call inside tool execution paths to get a `timer` context manager
-        """
-        kpi = get_runtime_context().get_kpi_writer()
-        dims = self._kpi_base_dims(context=context)
-        timer = kpi.timer(
-            "agent.tool_latency_ms",
-            dims=dims,
-            actor=KPIActor(type="system"),
-        )
-        return kpi, timer, dims
-
-    def _emit_tool_call_audit(
-        self,
-        event_name: str,
-        base_dims: dict[str, Optional[str]],
-        *,
-        outcome: Optional[str] = None,
-        **extra: Optional[str],
-    ) -> None:
-        """Emit one agent.tool.invocation.{started,completed} audit event.
-
-        Why this exists:
-        - a tool call is a security-relevant action, distinct from the KPI
-          timer above (which feeds Prometheus and OBSERV-02's product
-          analytics) — this is the durable "who invoked what, with what
-          outcome" record, on the shared audit logger (see
-          docs/swift/platform/OBSERVABILITY-AND-AUDIT.md).
-        - this method is only ever reached once the runtime has already
-          decided to actually call the tool (HITL/authorization already
-          passed) — its invocation is itself the "this really happened"
-          signal; a refused proposal never reaches here, so it never
-          produces a "started" event.
-
-        Never pass tool arguments, tool results, or any secret here — only
-        the identity/correlation dims already computed for the KPI timer,
-        plus bounded outcome/error fields.
-        """
-        emit_audit_log(
-            event_name,
-            outcome=outcome,
-            **base_dims,
-            **extra,
-        )
-
     def _run(self, **kwargs: Any) -> Any:
-        """Sync execution with context injection + robust HTTP(401) tracing."""
-        context = self.context_provider()
+        """Sync execution with context injection + robust HTTP(401) tracing.
+
+        KPI timing (`agent.tool_latency_ms`) and the
+        `agent.tool.invocation.{started,completed}` audit events used to be
+        emitted from here directly; they now come from the platform-wide
+        `ToolObservabilityMiddleware` (`react/middleware/tool_observability.py`,
+        #2011), which wraps every tool call — MCP-catalog tools AND
+        capability-native tools alike — through `awrap_tool_call`. Emitting
+        them here too would double-count every MCP tool call.
+        """
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
-        kpi, timer, base_dims = self._kpi_timer(context=context)
-        with timer as kpi_dims:
-            self._emit_tool_call_audit("agent.tool.invocation.started", base_dims)
-            try:
-                result = self.base_tool._run(**kwargs)
-            except Exception as e:
-                # 1. Metrics & Logging
-                kpi_dims["status"] = "error"
-                kpi_dims["error_code"] = type(e).__name__
-                kpi_dims["exception_type"] = type(e).__name__
+        try:
+            result = self.base_tool._run(**kwargs)
+        except Exception as e:
+            # Check for HTTP status in the exception chain for better logs
+            inner = _unwrap_httpx_status_error(e)
 
-                # Check for HTTP status in the exception chain for better logs
-                inner = _unwrap_httpx_status_error(e)
-                status_code = (
-                    inner.response.status_code if inner and inner.response else None
-                )
-
-                if status_code:
-                    kpi_dims["http_status"] = str(status_code)
-
-                kpi.count(
-                    "agent.tool_failed_total",
-                    1,
-                    dims={
-                        **base_dims,
-                        "status": "error",
-                        "error_code": type(e).__name__,
-                        "exception_type": type(e).__name__,
-                        "http_status": str(status_code) if status_code else None,
-                    },
-                    actor=KPIActor(type="system"),
-                )
-
-                # 2. Logging
-                if inner:
-                    _log_http_error(self.name, inner)
-                else:
-                    logger.exception(
-                        "[MCP][%s] Tool execution failed (captured)", self.name
-                    )
-                self._emit_tool_call_audit(
-                    "agent.tool.invocation.completed",
-                    base_dims,
-                    outcome="failed",
-                    error_code=type(e).__name__,
-                    exception_type=type(e).__name__,
-                    http_status=str(status_code) if status_code else None,
-                )
-
-                # 3. CRITICAL: Return error as text to preserve chat history integrity.
-                # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
-                msg = _build_tool_error_message(e, inner)
-                if getattr(self, "response_format", None) == "content_and_artifact":
-                    return msg, None
-                return msg
+            if inner:
+                _log_http_error(self.name, inner)
             else:
-                self._emit_tool_call_audit(
-                    "agent.tool.invocation.completed", base_dims, outcome="succeeded"
+                logger.exception(
+                    "[MCP][%s] Tool execution failed (captured)", self.name
                 )
-                return normalize_mcp_content(result)
+
+            # CRITICAL: Return error as text to preserve chat history integrity.
+            # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
+            msg = _build_tool_error_message(e, inner)
+            if getattr(self, "response_format", None) == "content_and_artifact":
+                return msg, None
+            return msg
+        else:
+            return normalize_mcp_content(result)
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
-        """Async execution with context injection + robust HTTP(401) tracing."""
-        context = self.context_provider()
+        """Async execution with context injection + robust HTTP(401) tracing.
+
+        See `_run`'s docstring: KPI/audit emission moved to
+        `ToolObservabilityMiddleware` (#2011).
+        """
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
-        kpi, timer, base_dims = self._kpi_timer(context=context)
-        with timer as kpi_dims:
-            self._emit_tool_call_audit("agent.tool.invocation.started", base_dims)
-            try:
-                result = await self.base_tool._arun(config=config, **kwargs)
-            except asyncio.CancelledError:
-                # Never swallow cancellation — record it as its own terminal
-                # outcome (distinct from "failed", see
-                # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5) and
-                # re-raise so asyncio's cancellation semantics stay intact.
-                self._emit_tool_call_audit(
-                    "agent.tool.invocation.completed", base_dims, outcome="cancelled"
-                )
-                raise
-            except Exception as e:
-                # 1. Metrics & Logging
-                kpi_dims["status"] = "error"
-                kpi_dims["error_code"] = type(e).__name__
-                kpi_dims["exception_type"] = type(e).__name__
+        try:
+            result = await self.base_tool._arun(config=config, **kwargs)
+        except asyncio.CancelledError:
+            # Never swallow cancellation — re-raise so asyncio's cancellation
+            # semantics stay intact. `ToolObservabilityMiddleware` records the
+            # "cancelled" outcome around the whole call, including this one.
+            raise
+        except Exception as e:
+            # Check for HTTP status in the exception chain for better logs
+            inner = _unwrap_httpx_status_error(e)
 
-                # Check for HTTP status in the exception chain for better logs
-                inner = _unwrap_httpx_status_error(e)
-                status_code = (
-                    inner.response.status_code if inner and inner.response else None
-                )
-
-                if status_code:
-                    kpi_dims["http_status"] = str(status_code)
-
-                kpi.count(
-                    "agent.tool_failed_total",
-                    1,
-                    dims={
-                        **base_dims,
-                        "status": "error",
-                        "error_code": type(e).__name__,
-                        "exception_type": type(e).__name__,
-                        "http_status": str(status_code) if status_code else None,
-                    },
-                    actor=KPIActor(type="system"),
-                )
-
-                # 2. Logging
-                if inner:
-                    _log_http_error(self.name, inner)
-                else:
-                    logger.exception(
-                        "[MCP][%s] Tool execution failed (captured)", self.name
-                    )
-                self._emit_tool_call_audit(
-                    "agent.tool.invocation.completed",
-                    base_dims,
-                    outcome="failed",
-                    error_code=type(e).__name__,
-                    exception_type=type(e).__name__,
-                    http_status=str(status_code) if status_code else None,
-                )
-
-                # 3. CRITICAL: Return error as text to preserve chat history integrity.
-                msg = _build_tool_error_message(e, inner)
-                if getattr(self, "response_format", None) == "content_and_artifact":
-                    return msg, None
-                return msg
+            if inner:
+                _log_http_error(self.name, inner)
             else:
-                self._emit_tool_call_audit(
-                    "agent.tool.invocation.completed", base_dims, outcome="succeeded"
+                logger.exception(
+                    "[MCP][%s] Tool execution failed (captured)", self.name
                 )
-                return normalize_mcp_content(result)
+
+            # CRITICAL: Return error as text to preserve chat history integrity.
+            msg = _build_tool_error_message(e, inner)
+            if getattr(self, "response_format", None) == "content_and_artifact":
+                return msg, None
+            return msg
+        else:
+            return normalize_mcp_content(result)
