@@ -2394,6 +2394,7 @@ export type LogEventDto = {
   extra?: {
     [key: string]: any;
   } | null;
+  category?: "application" | "kpi" | "security" | "audit";
 };
 export type LogQueryResult = {
   events?: LogEventDto[];
@@ -2403,6 +2404,7 @@ export type LogFilter = {
   logger_like?: string | null;
   service?: string | null;
   text_like?: string | null;
+  category?: ("application" | "kpi" | "security" | "audit") | null;
 };
 export type LogQuery = {
   /** ISO or 'now-10m' */

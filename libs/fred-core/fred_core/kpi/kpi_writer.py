@@ -36,10 +36,11 @@ from fred_core.kpi.kpi_writer_structures import (
     Quantities,
     Trace,
 )
+from fred_core.logs.log_setup import KPI_LOGGER_NAME
 from fred_core.security.structure import KeycloakUser
 
 logger = logging.getLogger(__name__)
-summary_logger = logging.getLogger("KPI")
+summary_logger = logging.getLogger(KPI_LOGGER_NAME)
 
 
 @dataclass

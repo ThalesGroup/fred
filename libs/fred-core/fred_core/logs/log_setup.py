@@ -23,6 +23,7 @@ import threading
 from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
+from fred_core.logs.log_structures import LogCategory
 
 try:
     from rich.logging import RichHandler
@@ -36,6 +37,12 @@ logger = logging.getLogger(__name__)
 # every call site that emits an audit event (authz decisions, tool-call
 # invocations), so both sides can never drift out of sync on the string.
 AUDIT_LOGGER_NAME = "fred.security.audit"
+
+# Single source of truth for the reserved KPI-summary logger name — shared by
+# StoreEmitHandler (which derives LogEventDTO.category from it) and
+# kpi_writer.py's periodic rollup lines, so both sides can never drift out of
+# sync on the string (mirrors AUDIT_LOGGER_NAME above).
+KPI_LOGGER_NAME = "KPI"
 
 LEVEL_MAP = {
     "DETAIL": "DEBUG",
@@ -117,6 +124,15 @@ class StoreEmitHandler(logging.Handler):
             else:
                 mapped_level = record.levelname
 
+            # Closed, structural classification — derived from the LogRecord's
+            # own logger identity, never from message text (a message that
+            # happens to contain "[KPI]" does not become that category; only
+            # a record actually emitted on the reserved KPI logger does). See
+            # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6.
+            category: LogCategory = (
+                "kpi" if record.name == KPI_LOGGER_NAME else "application"
+            )
+
             e = LogEventDTO(
                 ts=payload.get("ts", record.created) if payload else record.created,
                 level=mapped_level,  # type: ignore
@@ -130,6 +146,7 @@ class StoreEmitHandler(logging.Handler):
                 if payload
                 else self.service,
                 extra=payload.get("extra") if payload else None,
+                category=category,
             )
 
             # Never block the app on logging:

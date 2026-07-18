@@ -22,6 +22,17 @@ from fred_core.common import OpenSearchIndexConfig
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
+# Closed, structurally-derived classification for the generic app-log store
+# (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6). Only "application"
+# and "kpi" are ever populated here — "security"/"audit" are listed for
+# documentation and forward-compatibility but never appear: the security/audit
+# trail (fred.security.audit) is structurally excluded from this store by
+# StoreEmitHandler, never merged into it. Computed once, in StoreEmitHandler,
+# from the emitting LogRecord's logger name — never inferred from message
+# text, so a message that happens to contain "[KPI]" or "[AUDIT]" cannot be
+# mistaken for that category.
+LogCategory = Literal["application", "kpi", "security", "audit"]
+
 
 class InMemoryLogStorageConfig(BaseModel):
     type: Literal["in_memory"]
@@ -43,6 +54,7 @@ class LogFilter(BaseModel):
     logger_like: Optional[str] = None  # substring on logger name
     service: Optional[str] = None  # agentic-backend | knowledge-flow | etc.
     text_like: Optional[str] = None  # free-text contains on message
+    category: Optional[LogCategory] = None  # exact match, closed vocabulary
 
 
 class LogQuery(BaseModel):
@@ -63,6 +75,7 @@ class LogEventDTO(BaseModel):
     msg: str
     service: Optional[str] = None
     extra: Dict[str, Any] | None = None
+    category: LogCategory = "application"
 
 
 class LogQueryResult(BaseModel):

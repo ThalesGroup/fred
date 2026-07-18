@@ -42,6 +42,7 @@ def _event(
     level: LogLevel = "INFO",
     logger: str = "app",
     service: str | None = None,
+    category: str = "application",
 ) -> LogEventDTO:
     return LogEventDTO(
         ts=ts if ts is not None else time.time(),
@@ -51,6 +52,7 @@ def _event(
         line=1,
         msg=msg,
         service=service,
+        category=category,  # type: ignore[arg-type]
     )
 
 
@@ -62,6 +64,7 @@ def _query(
     logger_like: str | None = None,
     service: str | None = None,
     text_like: str | None = None,
+    category: str | None = None,
     limit: int = 500,
     order: "Literal['asc', 'desc']" = "asc",
 ) -> LogQuery:
@@ -73,6 +76,7 @@ def _query(
             logger_like=logger_like,
             service=service,
             text_like=text_like,
+            category=category,  # type: ignore[arg-type]
         ),
         limit=limit,
         order=order,
@@ -231,6 +235,14 @@ class TestRamLogStoreQueryFilters:
                     logger="app.error",
                     service="svc-b",
                 ),
+                _event(
+                    "kpi rollup",
+                    ts=now,
+                    level="INFO",
+                    logger="KPI",
+                    service="svc-a",
+                    category="kpi",
+                ),
             ]
         )
         return store
@@ -265,10 +277,16 @@ class TestRamLogStoreQueryFilters:
         assert len(result.events) == 1
         assert result.events[0].msg == "warn msg"
 
+    def test_category_exact_match(self) -> None:
+        store = self._populated_store()
+        result = store.query(_query(category="kpi"))
+        assert len(result.events) == 1
+        assert result.events[0].logger == "KPI"
+
     def test_no_filters_returns_all(self) -> None:
         store = self._populated_store()
         result = store.query(_query())
-        assert len(result.events) == 4
+        assert len(result.events) == 5
 
 
 # ---------------------------------------------------------------------------

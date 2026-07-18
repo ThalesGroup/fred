@@ -60,6 +60,7 @@ LOG_INDEX_MAPPING: Dict[str, Any] = {
             "file": {"type": "keyword"},
             "line": {"type": "integer"},
             "msg": {"type": "text"},
+            "category": {"type": "keyword"},  # application | kpi (closed set)
             "extra": {"type": "object", "enabled": True},
         },
     },
@@ -119,6 +120,7 @@ def _doc_from_event(ev: LogEventDTO) -> Dict[str, Any]:
         "file": ev.file,
         "line": ev.line,
         "msg": ev.msg,
+        "category": ev.category,
         "extra": ev.extra,
     }
 
@@ -219,6 +221,7 @@ class OpenSearchLogStore(BaseLogStore):
                     msg=s.get("msg", ""),
                     service=s.get("service"),
                     extra=s.get("extra"),
+                    category=s.get("category", "application"),
                 )
             )
         return LogQueryResult(events=events)
@@ -232,6 +235,7 @@ class OpenSearchLogStore(BaseLogStore):
         - level_at_least: severity >= threshold
         - logger_like: wildcard on logger (keyword) using *contains*
         - service: exact term
+        - category: exact term (closed vocabulary, keyword field)
         - text_like: match_phrase on msg (fast, low-surprise). Switch to SQS if needed.
         Ordering + limit are applied at top level.
         """
@@ -258,6 +262,8 @@ class OpenSearchLogStore(BaseLogStore):
         if f.logger_like:
             # "contains" on keyword via wildcard; case-sensitive. For case-insensitive, store a lowercase subfield.
             filters.append({"wildcard": {"logger": f"*{f.logger_like}*"}})
+        if f.category:
+            filters.append({"term": {"category": f.category}})
         # message text filter: keep it optional and independent from filter context
         must: List[Dict[str, Any]] = []
         if f.text_like:

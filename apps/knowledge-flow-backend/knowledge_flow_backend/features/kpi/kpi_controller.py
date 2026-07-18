@@ -47,11 +47,15 @@ class KPIController:
                 # review item 16) — one relation, same platform-wide recap for
                 # both platform_admin and platform_observer.
                 await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
-                logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
+                # Plain message, no "[KPI]" tag: this logger isn't the reserved
+                # KPI-summary logger (see fred_core.logs.log_setup.KPI_LOGGER_NAME),
+                # so it categorizes honestly as "application" — the bracket was
+                # exactly the decorative-tag pattern OBSERV-03 stopped elsewhere.
+                logger.info("Global KPI view requested by user_id=%s. Not applying user filter.", user.uid)
             else:
                 # AUTHZ-05 review item 8a: the org-level CAN_READ_KPI capability
                 # was removed — any authenticated user may query their own KPIs.
-                logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
+                logger.info("Applying user filter for KPI query, user_id=%s", user.uid)
                 body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 
             # logger.info("XXX KPI_QUERY_BODY %s", body.model_dump())

@@ -100,6 +100,7 @@ class RamLogStore(BaseLogStore):
         logger_like = (f.logger_like or "").strip() if f else ""
         service = (f.service or "").strip() if f else ""
         text_like = (f.text_like or "").lower().strip() if f else ""
+        category = (f.category or "").strip() if f else ""
 
         with self._lock:
             items = list(self._q)
@@ -113,6 +114,8 @@ class RamLogStore(BaseLogStore):
             if logger_like and logger_like not in e.logger:
                 return False
             if service and service != (e.service or ""):
+                return False
+            if category and category != e.category:
                 return False
             if text_like and text_like not in e.msg.lower():
                 return False

@@ -196,3 +196,49 @@ def test_store_emit_handler_indexes_ordinary_records() -> None:
 
     assert len(store.indexed) == 1
     assert store.indexed[0].logger == "some.ordinary.module"
+
+
+def test_store_emit_handler_category_cannot_be_spoofed_by_message_text() -> None:
+    """Issue #2009: category is derived from the LogRecord's logger identity,
+    never from message text — a line that merely *contains* "[AUDIT]" or
+    "[KPI]" on an ordinary module logger must not be classified as that
+    category."""
+    store = _StubLogStore()
+    handler = StoreEmitHandler(service_name="test-service", store=store)
+    handler.setFormatter(CompactJsonFormatter("test-service"))
+
+    record = logging.LogRecord(
+        name="some.ordinary.module",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="[AUDIT] fake, not on the real audit logger; also mentions [KPI]",
+        args=(),
+        exc_info=None,
+    )
+
+    handler.emit(record)
+
+    assert len(store.indexed) == 1
+    assert store.indexed[0].category == "application"
+
+
+def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
+    store = _StubLogStore()
+    handler = StoreEmitHandler(service_name="test-service", store=store)
+    handler.setFormatter(CompactJsonFormatter("test-service"))
+
+    record = logging.LogRecord(
+        name="KPI",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="periodic rollup summary",
+        args=(),
+        exc_info=None,
+    )
+
+    handler.emit(record)
+
+    assert len(store.indexed) == 1
+    assert store.indexed[0].category == "kpi"

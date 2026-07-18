@@ -49,6 +49,7 @@ from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, StoreEmitHandler, log_se
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
+    LogCategory,
     LogEventDTO,
     LogFilter,
     LogQuery,
@@ -137,6 +138,7 @@ from .users import (
 
 __all__ = [
     "BaseLogStore",
+    "LogCategory",
     "LogEventDTO",
     "LogFilter",
     "LogQuery",
