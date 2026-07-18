@@ -1,0 +1,176 @@
+# Observability, KPI & Audit Architecture
+
+Audience: architects and security officers (RSSI) reviewing or accepting Fred's logging and
+audit posture. For implementation detail (file/line references, phased commits), see the
+tracking GitHub issue linked from `OBSERV-03` in `docs/swift/data/id-legend.yaml` — this document
+describes the target state and its guarantees, not the diff to get there.
+
+> Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
+> reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
+
+## 1. The problem this solves
+
+Fred previously routed three unrelated kinds of signal through one code path and called all of it
+"KPI": platform health, product usage, and security evidence. That conflation made it impossible
+to answer, with confidence, questions like *"prove that agent X invoked tool Y for user Z, and
+that this record cannot be quietly lost or altered."* This document defines three separated data
+streams, each with an explicit purpose, audience, retention model, and privacy boundary.
+
+## 2. The three streams, at a glance
+
+| Stream | Answers | Destination | Audience | Contains identity? |
+|---|---|---|---|---|
+| **Operational metrics** | Is the platform healthy? | Prometheus, scraped by Google Managed Prometheus, visualized in Grafana | Platform SREs | No — user/session/team identity is structurally excluded |
+| **Product analytics** | How is the platform used, by whom, how much? | OpenSearch, queried through Fred's own authorization-scoped API | Org admins, team owners, individual users (each sees only their own scope) | Yes, but access is scoped server-side per viewer |
+| **Security & audit trail** | Who did what, when, with what outcome? | Structured log line → the platform's log pipeline (Cloud Logging at C1/C2, sovereign equivalent at C3) | Security/incident response, compliance | Yes — this is its entire purpose |
+
+A fourth, lower-stakes stream — generic application/debug logging — is covered in §6.
+
+## 3. Stream 1 — Operational metrics (Prometheus / Grafana)
+
+**Purpose.** Answer "is the platform healthy" — latency, error rates, throughput — for the team
+operating the infrastructure. Not a product-usage or audit tool.
+
+**What is captured.** A bounded, explicitly-allow-listed set of dimensions per metric: which
+tool or route, success/failure/error-code, which model, which agent *type* (the catalog
+blueprint — e.g. "customer-support-bot" — not a specific team's configured copy of it), which
+pod/service.
+
+**What is structurally excluded — by design, enforced in code, not by operator discipline:**
+- User identity (`user_id`), session identity (`session_id`, `exchange_id`).
+- Per-call correlation identifiers (`trace_id`, `correlation_id`, `checkpoint_id`) — these carry
+  no aggregate value for a dashboard and would otherwise let someone with Grafana access pivot
+  from an aggregate panel into a specific raw log entry.
+- Team identity (`team_id`) and a specific configured agent instance (`agent_instance_id`) — not
+  because they are directly personal data, but because "usage by team/agent instance" is a
+  product-analytics question with its own authorization-scoped answer (Stream 2) — duplicating it
+  here would mean maintaining a second, unsynchronized access-control model for the same fact.
+
+**Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
+Fred-specific retention requirement, since nothing identifying reaches this stream.
+
+## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
+
+Usage questions — active users, conversations per team, top agents by usage, token consumption
+per team/user — are answered by Fred's own analytics surface (`/admin/analytics` and related team
+and personal dashboards), not by Grafana. This surface resolves the caller's authorization scope
+**server-side, before querying**: an org admin sees platform-wide aggregates, a team owner sees
+only their own teams, an individual user sees only their own consumption. It is backed by
+OpenSearch and — deliberately — carries full identity (including `user_id`) in that store, because
+without it the per-viewer scoping in the paragraph above could not be enforced.
+
+This stream is specified and owned by a separate design document (`OBSERV-02` in
+`id-legend.yaml`); this document does not modify it. The only fact this document depends on is
+that it exists and must not be broken by changes to Stream 1 or Stream 3.
+
+## 5. Stream 3 — Security & audit trail
+
+**Purpose.** An unambiguous, durable record that a given action was actually taken — the answer to
+"prove this happened" for incident response, security review, and compliance.
+
+**What is recorded, per event:**
+- The acting principal (human user or service identity).
+- What was done: an authorization decision (granted/denied) or a tool invocation, identified by a
+  stable, finite vocabulary of event names — not free text.
+- The outcome: `succeeded`, `failed`, `cancelled`, or `timed_out` (kept distinct — a timeout does
+  not prove the target system produced no effect, and collapsing it into "failed" or "succeeded"
+  would misrepresent that uncertainty).
+- Correlation identifiers (session, exchange, trace) sufficient to relate the event to the rest of
+  the platform's telemetry for the same interaction.
+- Bounded error information (an error code, an exception class name, an HTTP status) — never a raw
+  exception message or stack trace.
+
+**What is never recorded, under any circumstance:**
+- Full tool arguments or tool results/content.
+- Prompts or user messages.
+- Document content or attachments.
+- Bearer tokens, cookies, authentication headers, signed URLs, or any other secret.
+- Raw stack traces or unbounded exception text.
+- Directly identifying data (name, email) where an opaque platform identifier already suffices.
+
+**A proposal is not an action.** A tool call the model proposed but that was refused — by
+human-in-the-loop confirmation or by an authorization check — before execution never produces an
+audit event. The audit trail records what Fred actually did, not what a model suggested.
+
+**Where it goes, and why this is the harder design question.** Fred emits this as a structured,
+single-line JSON entry through its normal logging output — it never makes a direct, synchronous
+network call to a cloud logging service as part of executing a request (that would make an
+external outage a Fred outage). What happens to that JSON line downstream is a deployment
+concern, and it is **not identical across classification levels**:
+
+- At C1 and C2 (public/restricted GKE on GCP), the platform's standard Kubernetes log collection
+  forwards pod output to Cloud Logging. Structured JSON output means these entries can, in
+  principle, be selected and routed to a dedicated, access-restricted, long-retention destination
+  independently of routine application noise — this is an infrastructure/IAM configuration
+  decision made by the platform team operating the cluster, not something Fred's code controls or
+  assumes.
+- At C3, the target hosting platform is a sovereign cloud, not GCP — there is no guarantee an
+  equivalent "Cloud Logging" API exists at all. The one component the deployment pattern commits
+  to keeping identical at every classification level is the platform's own OpenSearch (part of
+  the shared stateful backbone, deployed the same way everywhere). Fred's audit trail is therefore
+  designed to be equally at home landing in OpenSearch as in a cloud provider's log service —
+  **the guarantee Fred's code provides is a correctly-shaped, privacy-safe, structured event; the
+  guarantee of where it durably lives, for how long, and who can read it, is a deployment-level
+  responsibility that must be established per classification level, not assumed from the C1
+  reference sample.**
+
+**What Fred does not claim.** Fred does not implement a tamper-proof storage layer itself (no
+custom WORM store, no in-app immutability guarantee). Tamper-evidence and long-term integrity are
+properties of wherever the platform team routes and locks these events downstream (a locked log
+bucket, an access-restricted OpenSearch index with its own retention policy, or equivalent) — a
+compromised application pod should not be able to rewrite history, which is precisely why this is
+an infrastructure guarantee, not an application one.
+
+## 6. Generic application / diagnostic logs
+
+Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
+sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
+index from — product analytics, with no special access control beyond what already protects
+OpenSearch itself, and no long-retention requirement. Their diagnostic value decreases over time;
+they are not an audit or compliance artifact and should never be treated as one.
+
+## 7. Data protection summary
+
+| Field category | Example fields | Where it may appear |
+|---|---|---|
+| Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
+| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3) — never in operational metrics (Stream 1) |
+| Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control |
+| Secrets | tokens, cookies, signed URLs | **Nowhere**, ever |
+| Technical/bounded | tool name, error code, HTTP status, model name | All streams as relevant — none of this is personal data |
+
+**Practical reading for an RSSI:** the only stream that intentionally carries user identity is
+Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
+entire purpose is to attribute an action to a principal). Stream 1 (what a platform-wide Grafana
+audience can see) is designed to never carry it at all — not filtered as an afterthought, but
+structurally excluded before a metric is ever labeled.
+
+## 8. Cross-classification portability (C1 / C2 / C3)
+
+Per the deployment pattern's own classification model, three things change with classification —
+secrets source, network segmentation, and hosting/sovereignty (C3 = sovereign cloud, not GCP) —
+and nothing else does. This observability architecture is designed against that constraint:
+
+- Stream 1 (Prometheus/Grafana) and Stream 4 (OpenSearch) use only platform-native mechanisms
+  present at every level.
+- Stream 3 (audit) is designed so its correctness (privacy-safe, correctly-shaped JSON) does not
+  depend on any GCP-specific feature — only its *durable delivery target* changes per platform,
+  which is expected and tracked as a deployment responsibility, not a code branch.
+- Stream 2 is unaffected by classification — it is Fred's own API surface, backed by the
+  Foundation-layer OpenSearch present identically everywhere.
+
+## 9. Maturity — target vs. what is true today
+
+| Guarantee | Status |
+|---|---|
+| Operational metrics exclude direct identity | **True today** — enforced in code |
+| Operational metrics exclude all per-call correlation and team/agent-instance identifiers | **Target, not yet enforced** — the current filter excludes direct identity only |
+| Product analytics scoped per viewer via authorization | **True today**, shipped |
+| Every tool invocation produces a durable audit record | **Target, not yet true** — today only authorization decisions are recorded, and only in an in-memory buffer lost on restart |
+| Audit records are valid structured JSON on the log output | **Target, not yet true** — today's output is human-readable text, not machine-parseable |
+| Generic logs land in durable, queryable storage | **Target, not yet true** — today they are either lost on restart or discarded entirely, depending on the service |
+| Downstream retention/access/integrity for the audit trail | **Deployment responsibility, not yet established at any classification level** — requires action by whoever operates the target cluster, independent of Fred's own code |
+
+This table is the honest current state as of 2026-07-18. It should be updated as each guarantee
+moves from target to true, and treated as the canonical status reference for this topic — do not
+let a parallel status document drift from it.

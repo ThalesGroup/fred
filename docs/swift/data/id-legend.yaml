@@ -1348,19 +1348,23 @@ items:
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
-    status: draft
+    status: in_progress
     owner: Dimitri
     parent: OBSERV-01
     refs:
-      rfc: "docs/swift/rfc/AGENT-TOOL-CALL-AUDIT-RFC.md"
+      doc: "docs/swift/platform/OBSERVABILITY-AND-AUDIT.md"
     notes: >
-      Extends OBSERV-01's structured KPI/audit logging channels rather than
-      adding a new one: closes the gap where only failed tool calls become
-      structured log events (successes only hit the Prometheus histogram),
-      wires the already-defined but unused KPIWriter.log_llm() for outbound
-      LLM calls, and adds GCP Log Router sink + locked bucket guidance for
-      tamper-evident, backed-up audit storage. No backlog phase or
-      implementation started yet — pending developer confirmation.
+      2026-07-18: target architecture confirmed after checking the live C1
+      GCP/GKE reference deployment, not just application code — three
+      distinct streams (ops metrics → Prometheus/Grafana with an allow-list,
+      product analytics → OpenSearch/OBSERV-02 unchanged, security/audit trail
+      → structured JSON log line, new). Explicitly does not touch OBSERV-02's
+      OpenSearch KPI delegate (AnalyticsPage depends on it). No prior RFC
+      draft is kept — the target-state doc above is canonical; implementation
+      detail belongs on the tracking GitHub issue (not yet opened) once work
+      starts. Supersedes and folds in the formerly-`ignored/`
+      ISSUE-AGENT-TOOL-LOGGING.md and ISSUE-AUDIT-LOG-DELIVERY.md and the
+      short-lived AGENT-TOOL-CALL-AUDIT-RFC.md; do not recreate any of them.
 
   # ── OPS ───────────────────────────────────────────────────────────────
 
