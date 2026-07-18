@@ -57,6 +57,26 @@
   min-width: 0;
 }
 
+/* The synthetic "All personal spaces" row (RFC §8.4): a class control, not a
+ * team, pinned above the roster. A tinted surface + accent border set it apart
+ * from ordinary team rows so it never reads as one particular team. */
+.personalRow {
+  border-color: var(--primary);
+  background: var(--surface-container-high);
+}
+
+.personalMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.personalSub {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
 .teamName {
   overflow: hidden;
   color: var(--on-surface);

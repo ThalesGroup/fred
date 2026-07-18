@@ -41,15 +41,21 @@ from control_plane_backend.capabilities.enablement import (
     ensure_capability_anchor,
     reset_capability_for_team,
     set_capability_default_on,
+    set_capability_personal_scope,
 )
 from control_plane_backend.capabilities.schemas import (
     CapabilityDefaultOnResult,
     CapabilityEnablementItem,
     CapabilityEnablementList,
+    CapabilityPersonalScopeResult,
+    PersonalScope,
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from control_plane_backend.teams.service import count_all_collaborative_teams
+from control_plane_backend.teams.service import (
+    count_all_collaborative_teams,
+    count_all_personal_spaces,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +112,31 @@ async def _is_default_on(rebac: RebacEngine, capability_id: str) -> bool:
     return any(ref.id == ORGANIZATION_ID for ref in subjects)
 
 
+async def _has_org_relation(
+    rebac: RebacEngine, capability_id: str, relation: RelationType
+) -> bool:
+    from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
+
+    subjects = await rebac.lookup_subjects(
+        _cap_ref(capability_id), relation, Resource.ORGANIZATION
+    )
+    if isinstance(subjects, RebacDisabledResult):
+        return False
+    return any(ref.id == ORGANIZATION_ID for ref in subjects)
+
+
+async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> PersonalScope:
+    """Derive the personal-space class tri-state from the two org-subject tuples
+    (RFC §8.4). `enabled` wins if both are somehow present (matches the FGA
+    setter, which never leaves both)."""
+
+    if await _has_org_relation(rebac, capability_id, RelationType.PERSONAL_ON):
+        return "enabled"
+    if await _has_org_relation(rebac, capability_id, RelationType.PERSONAL_DISABLED):
+        return "disabled"
+    return "default"
+
+
 async def list_capability_enablement(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> CapabilityEnablementList:
@@ -117,9 +148,11 @@ async def list_capability_enablement(
     await _require_manage_any(rebac, user)
 
     catalog = await aggregate_capability_catalog(deps)
-    # Platform-wide denominator for default-on inheritance (§8.5). Fetched once
-    # for the whole list — it is the same for every capability.
+    # Platform-wide denominators, fetched once for the whole list — they are the
+    # same for every capability: collaborative teams for default-on inheritance
+    # (§8.5), personal spaces (= users) for personal-class access (§8.4).
     total_team_count = await count_all_collaborative_teams(deps.team_dependencies)
+    total_personal_space_count = await count_all_personal_spaces(deps.team_dependencies)
     items: list[CapabilityEnablementItem] = []
     for entry in catalog.values():
         items.append(
@@ -137,6 +170,8 @@ async def list_capability_enablement(
                     rebac, entry.id, RelationType.DISABLED
                 ),
                 total_team_count=total_team_count,
+                total_personal_space_count=total_personal_space_count,
+                personal_scope=await _read_personal_scope(rebac, entry.id),
                 team_settings_fields=list(entry.team_settings_fields),
                 kind=entry.kind,
             )
@@ -267,6 +302,33 @@ async def set_default_on(
     )
 
 
+async def set_personal_scope(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    scope: PersonalScope,
+    deps: ProductServiceDependencies,
+) -> CapabilityPersonalScopeResult:
+    """Set the personal-space class tri-state for a capability (RFC §8.4)."""
+
+    rebac = _rebac(deps)
+    await _require_can_manage(rebac, user, capability_id)
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    suspended = await set_capability_personal_scope(
+        rebac=rebac,
+        agent_instance_store=deps.get_agent_instance_store(),
+        catalog_entry=entry,
+        scope=scope,
+        kpi_writer=deps.get_kpi_writer(),
+    )
+    return CapabilityPersonalScopeResult(
+        capability_id=capability_id,
+        scope=scope,
+        suspended_instances=suspended,
+    )
+
+
 # `TeamScopePolicy` re-exported for callers that build items without importing
 # from fred_sdk directly.
 __all__ = [
@@ -276,4 +338,5 @@ __all__ = [
     "disable_team_capability",
     "reset_team_capability",
     "set_default_on",
+    "set_personal_scope",
 ]

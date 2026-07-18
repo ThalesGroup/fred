@@ -12033,7 +12033,7 @@
                       "additionalProperties": false
                     },
                     "capabilities": {
-                      "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3\u2013\u00a78.4. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds; `personal_defaults` lists capability\nids seeded as `enabled` for each personal space at first materialization.",
+                      "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds.\n\nThe personal-space class position is now pure FGA runtime state, admin-\ntoggleable via `PUT /admin/capabilities/{id}/personal-scope` (RFC \u00a78.4,\namended 2026-07-16 \u2014 the former `personal_defaults` config-seeding list is\nwithdrawn).",
                       "properties": {
                         "default_policy": {
                           "default": "seed",
@@ -12044,14 +12044,6 @@
                           ],
                           "title": "Default Policy",
                           "type": "string"
-                        },
-                        "personal_defaults": {
-                          "description": "Capability ids enabled for every personal space at first materialization (RFC \u00a78.4). Changing later needs a backfill.",
-                          "items": {
-                            "type": "string"
-                          },
-                          "title": "Personal Defaults",
-                          "type": "array"
                         }
                       },
                       "title": "CapabilitiesConfig",
@@ -13747,7 +13739,7 @@
                       "additionalProperties": false
                     },
                     "capabilities": {
-                      "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3\u2013\u00a78.4. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds; `personal_defaults` lists capability\nids seeded as `enabled` for each personal space at first materialization.",
+                      "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds.\n\nThe personal-space class position is now pure FGA runtime state, admin-\ntoggleable via `PUT /admin/capabilities/{id}/personal-scope` (RFC \u00a78.4,\namended 2026-07-16 \u2014 the former `personal_defaults` config-seeding list is\nwithdrawn).",
                       "properties": {
                         "default_policy": {
                           "default": "seed",
@@ -13758,14 +13750,6 @@
                           ],
                           "title": "Default Policy",
                           "type": "string"
-                        },
-                        "personal_defaults": {
-                          "description": "Capability ids enabled for every personal space at first materialization (RFC \u00a78.4). Changing later needs a backfill.",
-                          "items": {
-                            "type": "string"
-                          },
-                          "title": "Personal Defaults",
-                          "type": "array"
                         }
                       },
                       "title": "CapabilitiesConfig",

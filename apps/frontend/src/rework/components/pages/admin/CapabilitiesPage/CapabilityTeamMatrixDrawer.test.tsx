@@ -40,6 +40,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useEnableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
   useDisableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
+  useSetCapabilityPersonalScopeMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -114,9 +115,13 @@ describe("CapabilityTeamMatrixDrawer team-registry states", () => {
 describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
   const CHOICES = ["disabled", "default", "enabled"];
 
-  /** One HTML chunk per `<li>` team row, in render order (see file-level note on why order == input order here). */
+  /**
+   * One HTML chunk per `<li>` team row, in render order (see file-level note on
+   * why order == input order here). Excludes the pinned "All personal spaces"
+   * row (RFC §8.4) — it is not a team, and these tests assert on per-team rows.
+   */
   function rowsInOrder(html: string): string[] {
-    return html.split("<li ").slice(1);
+    return html.split("<li ").slice(1).filter((row) => !row.includes("_personalRow_"));
   }
 
   /** Index of the row's `<button role="radio">` carrying `aria-checked="true"`. */

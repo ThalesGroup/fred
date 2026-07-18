@@ -39,7 +39,7 @@ import logging
 from typing import Iterable, Sequence
 
 from fred_core import CapabilityPermission, RebacDisabledResult
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -56,16 +56,25 @@ logger = logging.getLogger(__name__)
 def _team_subject_and_context(
     team_id: TeamId,
 ) -> tuple[RebacReference, list[Relation]]:
-    """Team check subject + the contextual `organization#team` reverse edge."""
+    """Team check subject + the contextual `organization#team` reverse edge.
+
+    For a PERSONAL space (`personal-{uid}`) the personal-only
+    `organization#personal_team` edge is injected too, so the personal-space
+    capability class (`personal_on`/`personal_disabled`, RFC §8.4) resolves for
+    that subject and no regular team ever picks up the class position.
+    """
 
     team_ref = RebacReference(type=Resource.TEAM, id=str(team_id))
-    context = [
-        Relation(
-            subject=team_ref,
-            relation=RelationType.TEAM,
-            resource=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
+    if is_personal_team_id(str(team_id)):
+        context.append(
+            Relation(
+                subject=team_ref,
+                relation=RelationType.PERSONAL_TEAM,
+                resource=org_ref,
+            )
         )
-    ]
     return team_ref, context
 
 

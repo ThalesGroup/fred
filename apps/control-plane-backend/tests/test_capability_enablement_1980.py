@@ -22,7 +22,7 @@ Covers the acceptance criteria that hold WITHOUT a live OpenFGA (the tri-state
   leaves it disabled, never enabled-without-settings);
 - disable → suspension of dependent instances (`CAPABILITY_ACCESS_REVOKED`);
 - default-on registration seeding + the `default_policy` flag;
-- personal-space seeding.
+- personal-space class scope (`personal_on`/`personal_disabled`, RFC §8.4).
 """
 
 # pyright: reportArgumentType=false
@@ -710,49 +710,225 @@ async def test_default_on_toggle_rejects_required_settings() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Personal-space seeding (AC5)
+# Personal-space class scope (RFC §8.4, #1961)
 # ---------------------------------------------------------------------------
 
+_PERSONAL_ON = "personal_on"
+_PERSONAL_DISABLED = "personal_disabled"
 
-@pytest.mark.asyncio
-async def test_personal_seeding_enables_and_is_idempotent() -> None:
-    rebac = _FakeRebac()
-    settings = _FakeSettingsStore()
-    catalog = {"doc_access": _entry("doc_access")}
 
-    seeded = await seeding.seed_personal_team_capabilities(
-        rebac=rebac,
-        settings_store=settings,
-        catalog=catalog,
-        personal_defaults=["doc_access"],
-        team_id="personal-u1",
-    )
-    assert seeded == ["doc_access"]
-    assert ("team:personal-u1", "enabled", "capability:doc_access") in rebac.tuples
-
-    # Second pass: a settings row already exists → skip (no re-write).
-    seeded_again = await seeding.seed_personal_team_capabilities(
-        rebac=rebac,
-        settings_store=settings,
-        catalog=catalog,
-        personal_defaults=["doc_access"],
-        team_id="personal-u1",
-    )
-    assert seeded_again == []
+def _org_tuple(relation: str, cap_id: str = "corp_drive") -> tuple[str, str, str]:
+    return (f"organization:{ORGANIZATION_ID}", relation, f"capability:{cap_id}")
 
 
 @pytest.mark.asyncio
-async def test_personal_seeding_skips_unknown_capability() -> None:
+@pytest.mark.parametrize(
+    ("scope", "present", "absent"),
+    [
+        ("enabled", _PERSONAL_ON, _PERSONAL_DISABLED),
+        ("disabled", _PERSONAL_DISABLED, _PERSONAL_ON),
+    ],
+)
+async def test_personal_scope_writes_exactly_one_class_tuple(
+    scope: str, present: str, absent: str
+) -> None:
     rebac = _FakeRebac()
-    settings = _FakeSettingsStore()
-    seeded = await seeding.seed_personal_team_capabilities(
-        rebac=rebac,
-        settings_store=settings,
-        catalog={},
-        personal_defaults=["ghost"],
-        team_id="personal-u1",
+    store = _FakeAgentInstanceStore([])
+    entry = _entry()
+
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope=scope
     )
-    assert seeded == []
+
+    assert _org_tuple(present) in rebac.tuples
+    assert _org_tuple(absent) not in rebac.tuples
+    # Anchored so can_manage/can_use resolve.
+    assert _org_tuple("organization") in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_default_clears_both_class_tuples() -> None:
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    entry = _entry()
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="enabled"
+    )
+
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="default"
+    )
+
+    assert _org_tuple(_PERSONAL_ON) not in rebac.tuples
+    assert _org_tuple(_PERSONAL_DISABLED) not in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_is_idempotent() -> None:
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    entry = _entry()
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="enabled"
+    )
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="enabled"
+    )
+    # Still exactly the grant tuple, no opt-out.
+    assert _org_tuple(_PERSONAL_ON) in rebac.tuples
+    assert _org_tuple(_PERSONAL_DISABLED) not in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_enabled_rejects_required_settings() -> None:
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    entry = _entry(
+        team_settings_fields=[
+            FieldSpec(key="root_folder", type="string", title="R", required=True)
+        ]
+    )
+    with pytest.raises(enablement.PersonalScopeNotAllowed):
+        await enablement.set_capability_personal_scope(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=entry,
+            scope="enabled",
+        )
+    # disabled/default must still be allowed for the same capability.
+    await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="disabled"
+    )
+    assert _org_tuple(_PERSONAL_DISABLED) in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_off_suspends_only_personal_dependents() -> None:
+    """enabled → disabled revokes the class grant: personal-space instances
+    selecting the capability are suspended, but a regular team's instance and a
+    personal instance whose team holds an explicit `enabled` grant are not."""
+
+    rebac = _FakeRebac()
+    store_seed = _FakeAgentInstanceStore([])
+    entry = _entry()
+    await enablement.set_capability_personal_scope(
+        rebac=rebac,
+        agent_instance_store=store_seed,
+        catalog_entry=entry,
+        scope="enabled",
+    )
+    # A personal team with an explicit `enabled` grant keeps access.
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.TEAM, id="personal-keep"),
+            relation=RelationType.ENABLED,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+
+    revoked = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    revoked.tuning = revoked.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    kept = _make_record(agent_instance_id="p2", team_id="personal-keep")
+    kept.tuning = kept.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    regular = _make_record(agent_instance_id="r1", team_id="team-a")
+    regular.tuning = regular.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([revoked, kept, regular])
+
+    suspended = await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="disabled"
+    )
+
+    assert suspended == 1
+    assert revoked.suspension_reason == "capability_access_revoked"
+    # Explicit-grant personal team and the regular team are untouched.
+    assert kept.suspension_reason is None
+    assert regular.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_default_with_default_on_keeps_access() -> None:
+    """enabled → default while the capability is default-on: personal spaces
+    keep access by inheritance, so nothing is suspended."""
+
+    rebac = _FakeRebac()
+    store_seed = _FakeAgentInstanceStore([])
+    entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
+    # default-on marker + personal_on grant.
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            relation=RelationType.DEFAULT_ON,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+    await enablement.set_capability_personal_scope(
+        rebac=rebac,
+        agent_instance_store=store_seed,
+        catalog_entry=entry,
+        scope="enabled",
+    )
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([dependent])
+
+    suspended = await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="default"
+    )
+
+    assert suspended == 0
+    assert dependent.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_default_to_disabled_with_default_on_suspends() -> None:
+    """default → disabled while default-on: the class opt-out subtracts the
+    inherited access, so personal-space dependents are suspended."""
+
+    rebac = _FakeRebac()
+    entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            relation=RelationType.DEFAULT_ON,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([dependent])
+
+    suspended = await enablement.set_capability_personal_scope(
+        rebac=rebac, agent_instance_store=store, catalog_entry=entry, scope="disabled"
+    )
+
+    assert suspended == 1
+    assert dependent.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
+async def test_authz_injects_personal_team_edge_only_for_personal_teams() -> None:
+    """A personal-space subject gets BOTH the `team` and `personal_team`
+    contextual edges; a regular team gets only `team` (RFC §8.4)."""
+
+    from control_plane_backend.capabilities.authz import _team_subject_and_context
+
+    _, personal_ctx = _team_subject_and_context("personal-u1")
+    relations = {r.relation.value for r in personal_ctx}
+    assert relations == {"team", "personal_team"}
+
+    _, regular_ctx = _team_subject_and_context("team-a")
+    assert {r.relation.value for r in regular_ctx} == {"team"}
 
 
 # ---------------------------------------------------------------------------
@@ -944,6 +1120,7 @@ def test_admin_capability_routes_are_mounted(_use_test_configuration) -> None:
     assert f"{base}/admin/capabilities" in paths
     assert f"{base}/admin/capabilities/{{capability_id}}/teams/{{team_id}}" in paths
     assert f"{base}/admin/capabilities/{{capability_id}}/default-on" in paths
+    assert f"{base}/admin/capabilities/{{capability_id}}/personal-scope" in paths
 
 
 @pytest.mark.asyncio
@@ -1015,6 +1192,9 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
             resource=cap,
         )
     )
+    await rebac.add_relation(
+        Relation(subject=org, relation=RelationType.PERSONAL_ON, resource=cap)
+    )
 
     async def _fake_catalog(_deps):
         return {"doc_access": _entry("doc_access")}
@@ -1022,11 +1202,17 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
     async def _fake_count(_team_deps):
         return 12
 
+    async def _fake_personal_count(_team_deps):
+        return 40
+
     monkeypatch.setattr(
         capability_service, "aggregate_capability_catalog", _fake_catalog
     )
     monkeypatch.setattr(
         capability_service, "count_all_collaborative_teams", _fake_count
+    )
+    monkeypatch.setattr(
+        capability_service, "count_all_personal_spaces", _fake_personal_count
     )
 
     deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
@@ -1042,3 +1228,51 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
     assert item.total_team_count == 12
     # 12 teams inherit it, 1 opted out → the dashboard renders 11.
     assert item.total_team_count - len(item.disabled_team_ids) == 11
+    # The personal-space class grant is surfaced (RFC §8.4), with the
+    # platform-wide personal-space denominator (= user count).
+    assert item.personal_scope == "enabled"
+    assert item.total_personal_space_count == 40
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("relation", "expected"),
+    [
+        (None, "default"),
+        (RelationType.PERSONAL_ON, "enabled"),
+        (RelationType.PERSONAL_DISABLED, "disabled"),
+    ],
+)
+async def test_aggregate_list_derives_personal_scope(
+    monkeypatch, relation, expected
+) -> None:
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    cap = RebacReference(type=Resource.CAPABILITY, id="doc_access")
+    org = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    if relation is not None:
+        await rebac.add_relation(Relation(subject=org, relation=relation, resource=cap))
+
+    async def _fake_catalog(_deps):
+        return {"doc_access": _entry("doc_access")}
+
+    async def _fake_count(_team_deps):
+        return 3
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    monkeypatch.setattr(
+        capability_service, "count_all_collaborative_teams", _fake_count
+    )
+    monkeypatch.setattr(capability_service, "count_all_personal_spaces", _fake_count)
+
+    deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+    result = await capability_service.list_capability_enablement(
+        user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
+        deps=deps,  # type: ignore[arg-type]
+    )
+    assert result.items[0].personal_scope == expected

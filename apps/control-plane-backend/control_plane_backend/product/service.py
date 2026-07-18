@@ -307,11 +307,6 @@ async def build_frontend_bootstrap(
         list_teams_from_service(user, deps.team_dependencies),
         _build_permission_summary(user, deps.team_dependencies.rebac),
     )
-    # First-touch personal-space capability seeding (CAPAB-01 / #1980, RFC §8.4):
-    # a no-op unless `platform.capabilities.personal_defaults` is configured, and
-    # idempotent (a capability already carrying a settings row for this personal
-    # team is skipped), so a repeated bootstrap does not re-write tuples.
-    await _seed_personal_capability_defaults(user, deps)
     return FrontendBootstrap(
         current_user=UserSummary.from_keycloak_user(user),
         active_team=active_team,
@@ -320,38 +315,6 @@ async def build_frontend_bootstrap(
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
     )
-
-
-async def _seed_personal_capability_defaults(
-    user: KeycloakUser, deps: ProductServiceDependencies
-) -> None:
-    """Seed the configured personal-space default capabilities for this user's
-    personal team (CAPAB-01 / #1980, RFC §8.4). Best-effort: never breaks
-    bootstrap, and a no-op when nothing is configured."""
-
-    personal_defaults = deps.configuration.platform.capabilities.personal_defaults
-    if not personal_defaults:
-        return
-    try:
-        from control_plane_backend.capabilities.catalog import (
-            aggregate_capability_catalog,
-        )
-        from control_plane_backend.capabilities.seeding import (
-            seed_personal_team_capabilities,
-        )
-
-        catalog = await aggregate_capability_catalog(deps)
-        await seed_personal_team_capabilities(
-            rebac=deps.team_dependencies.rebac,
-            settings_store=deps.get_team_capability_settings_store(),
-            catalog=catalog,
-            personal_defaults=personal_defaults,
-            team_id=personal_team_id(user.uid),
-        )
-    except Exception:  # noqa: BLE001 — seeding must never break bootstrap
-        logger.exception(
-            "[capability-seeding] personal-space seeding failed for %s", user.uid
-        )
 
 
 async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
