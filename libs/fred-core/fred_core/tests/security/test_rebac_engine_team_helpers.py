@@ -35,7 +35,7 @@ class _RecordingRebacEngine(RebacEngine):
         self.added_relations: list[Relation] = []
         self.checked_permissions: list[tuple[RebacPermission, str, str | None]] = []
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def _persist_relation(self, relation: Relation) -> str | None:
         self.added_relations.append(relation)
         return str(len(self.added_relations))
 
@@ -122,7 +122,7 @@ class _ContextualRelationsSpyEngine(RebacEngine):
     def __init__(self) -> None:
         self.received_contextual_relations: list[object] = []
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def _persist_relation(self, relation: Relation) -> str | None:
         return None
 
     async def delete_relation(self, relation: Relation) -> str | None:

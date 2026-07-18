@@ -97,7 +97,7 @@ class OpenFgaRebacEngine(RebacEngine):
     # Public RebacEngine methods
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def _persist_relation(self, relation: Relation) -> str | None:
         client = await self.get_client()
 
         body = ClientWriteRequest(
