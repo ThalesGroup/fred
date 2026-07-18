@@ -25,6 +25,18 @@ class KeycloakUser(BaseModel):
     roles: list[str]
     email: str | None = None
 
+    def __repr_args__(self):
+        # Directly identifying data must never reach a log line, and an
+        # f-string/log call interpolating this model (or anything containing
+        # it) goes through repr — not model_dump() — so redacting here, not
+        # only at each log call site, is what actually closes the leak
+        # (docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7: "Directly
+        # identifying | user email, full name | Nowhere"). Explicit `.email`
+        # access for a genuine need (e.g. sending mail) is unaffected — this
+        # only changes str()/repr().
+        for name, value in super().__repr_args__():
+            yield (name, "<redacted>" if name == "email" and value else value)
+
 
 # Keycloak app role carried by backend service identities (agentic, knowledge-flow,
 # control-plane, and the evaluation worker). Identity marker, not a ReBAC relation:
