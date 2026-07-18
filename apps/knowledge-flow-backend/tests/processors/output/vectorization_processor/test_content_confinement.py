@@ -34,7 +34,7 @@ from knowledge_flow_backend.core.processors.output.vectorization_processor.seman
     SemanticSplitter,
 )
 
-SECRET_MARKER = "SUPER-SECRET-DOCUMENT-CONTENT-MARKER-42"
+SECRET_MARKER = "SUPER-SECRET-DOCUMENT-CONTENT-MARKER-42"  # pragma: allowlist secret
 
 
 def test_semantic_chunking_never_logs_document_content(caplog) -> None:
