@@ -2522,6 +2522,20 @@ async def _iterate_runtime_event_payloads(
             turn_options=getattr(request, "turn_options", None) or None,
             team_settings=team_settings,
         )
+        # Cheap correctness trace for "agent has no tools" reports: names each
+        # link (registry present? selection? block built? how many middleware?)
+        # so a missing capability tool is diagnosable from logs alone, without
+        # re-deriving this chain by hand every time (see git history for the
+        # investigation that established these fields).
+        logger.debug(
+            "[V2][CAPABILITY] agent=%s registry_is_none=%s selected=%s "
+            "block_is_none=%s middleware_count=%s",
+            definition.agent_id,
+            capability_registry is None,
+            tuning.selected_capability_ids if tuning is not None else None,
+            capability_block is None,
+            len(capability_block.middleware) if capability_block is not None else None,
+        )
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
                 definition=definition,

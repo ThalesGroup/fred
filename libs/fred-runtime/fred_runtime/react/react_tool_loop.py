@@ -29,6 +29,7 @@ History note (#1972):
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 
 from fred_core.kpi import BaseKPIWriter
@@ -42,6 +43,8 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from .middleware import CapabilityHitlBinding, build_react_platform_middleware_frame
+
+logger = logging.getLogger(__name__)
 
 # Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
 # and prevents unbounded LangGraph checkpointer growth from contaminating queries.
@@ -105,6 +108,19 @@ def build_tool_loop_compiled_react_agent(
         max_tool_calls_per_turn=max_tool_calls_per_turn,
         capability_middleware=capability_middleware,
         capability_hitl=capability_hitl,
+    )
+    # Names, per middleware, exactly what tools reach `create_agent` — the
+    # boundary past which tool binding is LangChain's own responsibility, not
+    # ours. Pairs with `[V2][CAPABILITY]` (agent_app.py) to localize a missing
+    # tool to either side of that boundary from logs alone.
+    logger.debug(
+        "[V2][TOOL_LOOP] agent=%s static_tools=%s middleware=%s",
+        definition.agent_id,
+        [t.name for t in tools],
+        [
+            (type(m).__name__, [t.name for t in getattr(m, "tools", [])])
+            for m in middleware
+        ],
     )
     return create_agent(
         model=model,
