@@ -469,18 +469,6 @@
     "title": "Create new folder",
     "validationError": "Validation Error"
   },
-  "logs": {
-    "allCategories": "All",
-    "content": "log content",
-    "copyAll": "Copy All ({{count}})",
-    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
-    "empty": "No logs in this window.",
-    "error": "Failed to load logs.",
-    "file": "logger file",
-    "live": "Live",
-    "loading": "Loading logs…",
-    "title": "Log Console"
-  },
   "mcp": {
     "servers": {
       "corpus": {

@@ -37,19 +37,15 @@ import inspect
 import json
 import logging
 import os
-import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol, TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
 import httpx
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.store.vector_search import VectorSearchHit
@@ -81,14 +77,12 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
-    TOOL_REF_LOGS_QUERY,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
-from fred_runtime.common.kf_logs_client import KfLogsClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -108,10 +102,6 @@ from fred_runtime.runtime_support import (
 
 logger = logging.getLogger(__name__)
 
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-_LEVEL_ORDER: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-_DEFAULT_LOG_MAX_GROUPS = 8
-_DEFAULT_LOG_SAMPLES = 20
 _TRACE_MODEL_SPAN_NAMES = frozenset({"v2.graph.model", "v2.react.model"})
 _TRACE_AWAIT_HUMAN_SPAN_NAMES = frozenset({"v2.graph.await_human"})
 _TRACE_TOOL_SPAN_NAMES = frozenset(
@@ -405,29 +395,6 @@ class CompositeToolInvoker(ToolInvokerPort):
         return await self._fallback.invoke(request)
 
 
-@dataclass(frozen=True)
-class _LogEventSnapshot:
-    source: str
-    ts: float
-    level: str
-    logger: str
-    file: str
-    line: int
-    msg: str
-    extra: dict[str, object] | None
-
-
-class _GroupedLogEvent(TypedDict):
-    source: str
-    level: str
-    file: str
-    line: int
-    msg: str
-    count: int
-    first_ts: float
-    last_ts: float
-
-
 class _TraceAggregate(TypedDict):
     name: str
     count: int
@@ -460,12 +427,8 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self._search_client = VectorSearchClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
-        self._logs_client = KfLogsClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
-        )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
-            TOOL_REF_LOGS_QUERY: self._invoke_logs_query,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
@@ -563,49 +526,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=tuple(hits),
-        )
-
-    async def _invoke_logs_query(
-        self, request: ToolInvocationRequest
-    ) -> ToolInvocationResult:
-        payload = request.payload
-        window_minutes = _positive_int(payload.get("window_minutes"), default=5)
-        limit = _positive_int(payload.get("limit"), default=500, maximum=5000)
-        max_events = _positive_int(payload.get("max_events"), default=200, maximum=1000)
-        min_level_raw = payload.get("min_level")
-        if not isinstance(min_level_raw, str) or min_level_raw not in _LEVEL_ORDER:
-            min_level: LogLevel = "WARNING"
-        else:
-            min_level = cast(LogLevel, min_level_raw)
-        include_agentic = bool(payload.get("include_agentic", True))
-        include_knowledge_flow = bool(payload.get("include_knowledge_flow", True))
-
-        log_query = _build_log_query(
-            window_minutes=window_minutes,
-            limit=limit,
-            min_level=min_level,
-        )
-        events, warnings = await self._fetch_logs(
-            log_query=log_query,
-            include_agentic=include_agentic,
-            include_knowledge_flow=include_knowledge_flow,
-        )
-        digest = _build_log_digest(
-            events=events,
-            warnings=warnings,
-            window_minutes=window_minutes,
-            max_events=max_events,
-        )
-
-        return ToolInvocationResult(
-            tool_ref=request.tool_ref,
-            blocks=(
-                ToolContentBlock(
-                    kind=ToolContentKind.JSON,
-                    data=digest,
-                ),
-            ),
-            sources=(),
         )
 
     async def _invoke_traces_summarize_conversation(
@@ -786,49 +706,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             ),
             ui_parts=(geo_part,),
         )
-
-    async def _fetch_logs(
-        self,
-        *,
-        log_query: LogQuery,
-        include_agentic: bool,
-        include_knowledge_flow: bool,
-    ) -> tuple[list[_LogEventSnapshot], list[str]]:
-        """
-        Fetch log events from agentic and/or knowledge-flow stores.
-
-        Why this exists:
-        - logs.query spans multiple backends, so we gather both in one helper
-
-        How to use it:
-        - pass the resolved LogQuery and toggle which backends to include
-        """
-        events: list[_LogEventSnapshot] = []
-        warnings: list[str] = []
-
-        if include_agentic:
-            try:
-                store = get_runtime_context().get_log_store()
-                if store is None:
-                    warnings.append("agentic log store not configured.")
-                else:
-                    result = await asyncio.to_thread(store.query, log_query)
-                    events.extend(_snap_log_events("agentic", result))
-            except Exception as exc:
-                logger.warning("v2 logs.query: agentic logs query failed: %s", exc)
-                warnings.append(f"agentic logs query failed: {exc}")
-
-        if include_knowledge_flow:
-            try:
-                result = await self._logs_client.query(log_query)
-                events.extend(_snap_log_events("knowledge_flow", result))
-            except Exception as exc:
-                logger.warning(
-                    "v2 logs.query: knowledge-flow logs query failed: %s", exc
-                )
-                warnings.append(f"knowledge-flow logs query failed: {exc}")
-
-        return events, warnings
 
 
 def _narrow_scope_ids(
@@ -1341,186 +1218,6 @@ def _positive_int(value: object, *, default: int, maximum: int | None = None) ->
     if maximum is not None and value > maximum:
         return maximum
     return value
-
-
-def _build_log_query(
-    *, window_minutes: int, limit: int, min_level: LogLevel
-) -> LogQuery:
-    now = datetime.now(UTC)
-    since = (now - timedelta(minutes=window_minutes)).isoformat()
-    until = now.isoformat()
-    return LogQuery(
-        since=since,
-        until=until,
-        limit=limit,
-        order="desc",
-        filters=LogFilter(level_at_least=min_level),
-    )
-
-
-def _snap_log_events(source: str, result: LogQueryResult) -> list[_LogEventSnapshot]:
-    snapshots: list[_LogEventSnapshot] = []
-    for event in result.events:
-        snapshots.append(
-            _LogEventSnapshot(
-                source=source,
-                ts=event.ts,
-                level=event.level,
-                logger=event.logger,
-                file=event.file,
-                line=event.line,
-                msg=event.msg,
-                extra=event.extra,
-            )
-        )
-    return snapshots
-
-
-def _fmt_ts(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _normalize_log_msg(msg: str, max_len: int = 180) -> str:
-    trimmed = re.sub(r"\s+", " ", msg or "").strip()
-    return trimmed[:max_len]
-
-
-def _summarize_log_counts(
-    events: list[_LogEventSnapshot],
-) -> list[dict[str, object]]:
-    counts: dict[str, dict[str, int]] = {}
-    for event in events:
-        counts.setdefault(event.source, {})
-        counts[event.source][event.level] = counts[event.source].get(event.level, 0) + 1
-
-    summaries: list[dict[str, object]] = []
-    for source in sorted(counts):
-        level_counts = counts[source]
-        ordered_counts = {
-            level: level_counts[level]
-            for level in _LEVEL_ORDER
-            if level in level_counts
-        }
-        summaries.append({"source": source, "levels": ordered_counts})
-    return summaries
-
-
-def _group_log_events(events: list[_LogEventSnapshot]) -> list[_GroupedLogEvent]:
-    groups: dict[tuple[str, str, str, int, str], _GroupedLogEvent] = {}
-    for event in events:
-        msg_key = _normalize_log_msg(event.msg)
-        key = (event.source, event.level, event.file, event.line, msg_key)
-        if key not in groups:
-            groups[key] = {
-                "source": event.source,
-                "level": event.level,
-                "file": event.file,
-                "line": event.line,
-                "msg": msg_key,
-                "count": 1,
-                "first_ts": event.ts,
-                "last_ts": event.ts,
-            }
-        else:
-            group = groups[key]
-            group["count"] += 1
-            group["first_ts"] = min(group["first_ts"], event.ts)
-            group["last_ts"] = max(group["last_ts"], event.ts)
-
-    return sorted(
-        groups.values(),
-        key=lambda group: (-group["count"], -group["last_ts"]),
-    )
-
-
-def _log_rule_hints(events: list[_LogEventSnapshot]) -> list[str]:
-    hints: list[str] = []
-    seen: set[str] = set()
-
-    for event in events:
-        blob = (event.msg or "").lower()
-        if event.extra:
-            try:
-                blob += " " + json.dumps(event.extra).lower()
-            except Exception:
-                logger.warning("v2 logs.query: failed to json.dumps log extra")
-
-        if (
-            ("401" in blob or "unauthorized" in blob)
-            and ("rebac" in blob or "permission" in blob or "forbidden" in blob)
-            and "rebac" not in seen
-        ):
-            seen.add("rebac")
-            hints.append(
-                f"Missing ReBAC permission (evidence: {_fmt_ts(event.ts)} {event.file}:{event.line} {event.msg})"
-            )
-        if (
-            "connection refused" in blob or "connection reset" in blob
-        ) and "conn" not in seen:
-            seen.add("conn")
-            hints.append(
-                f"Downstream service connectivity issue (evidence: {_fmt_ts(event.ts)} {event.file}:{event.line} {event.msg})"
-            )
-        if ("timeout" in blob or "timed out" in blob) and "timeout" not in seen:
-            seen.add("timeout")
-            hints.append(
-                f"Timeout from dependency or upstream (evidence: {_fmt_ts(event.ts)} {event.file}:{event.line} {event.msg})"
-            )
-
-    return hints
-
-
-def _build_log_digest(
-    *,
-    events: list[_LogEventSnapshot],
-    warnings: list[str],
-    window_minutes: int,
-    max_events: int,
-) -> dict[str, object]:
-    if not events:
-        return {
-            "window_minutes": window_minutes,
-            "event_count": 0,
-            "warnings": warnings,
-            "counts_by_source": [],
-            "top_groups": [],
-            "sample_lines": [],
-            "rule_hints": [],
-            "note": "No log events in this window.",
-        }
-
-    events_sorted = sorted(events, key=lambda event: event.ts)
-    if len(events_sorted) > max_events:
-        events_sorted = events_sorted[-max_events:]
-
-    grouped = _group_log_events(events_sorted)[:_DEFAULT_LOG_MAX_GROUPS]
-    samples = events_sorted[-_DEFAULT_LOG_SAMPLES:]
-    return {
-        "window_minutes": window_minutes,
-        "event_count": len(events),
-        "warnings": warnings,
-        "counts_by_source": _summarize_log_counts(events_sorted),
-        "top_groups": [
-            {
-                **group,
-                "first_ts": _fmt_ts(group["first_ts"]),
-                "last_ts": _fmt_ts(group["last_ts"]),
-            }
-            for group in grouped
-        ],
-        "sample_lines": [
-            {
-                "timestamp": _fmt_ts(event.ts),
-                "source": event.source,
-                "level": event.level,
-                "file": event.file,
-                "line": event.line,
-                "msg": event.msg,
-            }
-            for event in samples
-        ],
-        "rule_hints": _log_rule_hints(events_sorted),
-    }
 
 
 def _render_trace_digest_summary(digest: dict[str, object]) -> str:

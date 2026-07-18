@@ -16,8 +16,8 @@
 (issue #2009).
 
 `TracingKpiMiddleware._log_model_call`/`_log_model_response` feed the shared
-app logger — which flows into the generic, now-durable log store queried by
-the UI's Log Console (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7:
+app logger — which flows into the generic, durable log store explorable via
+OpenSearch Dashboards (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7:
 "Content ... Nowhere in any observability or audit stream"). Lock in that
 only lengths/names/counts are logged, never message/argument/answer text.
 """

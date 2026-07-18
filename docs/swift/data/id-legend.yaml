@@ -1376,6 +1376,22 @@ items:
       last decorative `[KPI]` text-tag use), sink fail-open/circuit-breaker
       so an OpenSearch outage can't break or stall a business request, and
       drops the frontend's dead "agentic" log-service option.
+      2026-07-18 (issue #2009): reversed the same day — product decision is
+      that Fred does not maintain its own log viewer at all; OpenSearch
+      Dashboards is now the sole log exploration surface. Removed the UI Log
+      Console (`pages/Logs.tsx`, `components/monitoring/logs/*`), the
+      `/logs/query` Knowledge Flow endpoint, the `logs.query` built-in agent
+      tool (`TOOL_REF_LOGS_QUERY` in fred-sdk's builtin catalog) and its
+      fred-runtime wiring (`KfLogsClient`, `_fetch_logs`), and the now-dead
+      `LogQuery`/`LogFilter`/`LogQueryResult`/`TailFileResponse` types and
+      `BaseLogStore.query()` read path in fred_core. Emission/storage
+      (`StoreEmitHandler`, `RamLogStore`/`OpenSearchLogStore` writes,
+      `log_setup`) and the `category` field are untouched — this only
+      removes ways to read logs back through Fred; `storage.log_store:
+      opensearch` plus OpenSearch Dashboards is now the recommended path
+      for anyone who needs to explore them. Raw OpenSearch Ops surface
+      (cluster health/indices/shards) is unaffected and stays behind
+      `CAN_OBSERVE_PLATFORM`.
 
   # ── OPS ───────────────────────────────────────────────────────────────
 

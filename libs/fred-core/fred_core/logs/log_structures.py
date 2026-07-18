@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -23,15 +23,16 @@ from fred_core.common import OpenSearchIndexConfig
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 # Closed, structurally-derived classification for the generic app-log store
-# (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6). Only "application"
-# and "kpi" are ever populated here — "security"/"audit" are listed for
-# documentation and forward-compatibility but never appear: the security/audit
-# trail (fred.security.audit) is structurally excluded from this store by
-# StoreEmitHandler, never merged into it. Computed once, in StoreEmitHandler,
-# from the emitting LogRecord's logger name — never inferred from message
-# text, so a message that happens to contain "[KPI]" or "[AUDIT]" cannot be
-# mistaken for that category.
-LogCategory = Literal["application", "kpi", "security", "audit"]
+# (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6). This is a closed
+# vocabulary of exactly what this store can ever hold — "security"/"audit"
+# are deliberately not members: the security/audit trail (fred.security.audit)
+# is structurally excluded from this store by StoreEmitHandler, never merged
+# into it, so a type that included those values would misrepresent what can
+# actually appear here. Computed once, in StoreEmitHandler, from the emitting
+# LogRecord's logger name — never inferred from message text, so a message
+# that happens to contain "[KPI]" or "[AUDIT]" cannot be mistaken for that
+# category.
+LogCategory = Literal["application", "kpi"]
 
 
 class InMemoryLogStorageConfig(BaseModel):
@@ -48,24 +49,6 @@ LogStorageConfig = Annotated[
 ]
 
 
-class LogFilter(BaseModel):
-    # Why these: they match what we actually filter by in prod incidents.
-    level_at_least: Optional[LogLevel] = None
-    logger_like: Optional[str] = None  # substring on logger name
-    service: Optional[str] = None  # agentic-backend | knowledge-flow | etc.
-    text_like: Optional[str] = None  # free-text contains on message
-    category: Optional[LogCategory] = None  # exact match, closed vocabulary
-
-
-class LogQuery(BaseModel):
-    # Same shape as KPI: time range + filters + limit/order.
-    since: str = Field(..., description="ISO or 'now-10m'")
-    until: Optional[str] = None
-    filters: LogFilter = Field(default_factory=LogFilter)
-    limit: int = Field(500, ge=1, le=5000)
-    order: Literal["asc", "desc"] = "asc"  # time order
-
-
 class LogEventDTO(BaseModel):
     ts: float
     level: LogLevel
@@ -76,17 +59,3 @@ class LogEventDTO(BaseModel):
     service: Optional[str] = None
     extra: Dict[str, Any] | None = None
     category: LogCategory = "application"
-
-
-class LogQueryResult(BaseModel):
-    events: List[LogEventDTO] = Field(default_factory=list)
-
-
-class TailFileResponse(BaseModel):
-    """
-    Why a dedicated response:
-    - Tail returns raw JSON lines (already formatted by our file handler).
-    - The UI can decide to parse lazily or show plain text.
-    """
-
-    lines: list[str] = Field(default_factory=list)

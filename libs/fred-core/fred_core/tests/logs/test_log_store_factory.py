@@ -28,6 +28,15 @@ def _fake_opensearch_client(*args: object, **kwargs: object) -> object:
         def exists(self, index: str) -> bool:
             return True
 
+        def get_mapping(self, index: str) -> dict:
+            # Already has `category` — ensure_ready's migration is a no-op;
+            # the migration itself is covered by
+            # test_opensearch_log_store_ensure_ready.py.
+            return {index: {"mappings": {"properties": {"category": {"type": "keyword"}}}}}
+
+        def put_mapping(self, index: str, body: dict) -> None:
+            raise AssertionError("must not migrate a mapping that already has category")
+
     class _Client:
         indices = _Indices()
 

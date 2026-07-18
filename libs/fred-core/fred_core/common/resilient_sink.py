@@ -29,11 +29,14 @@ Why this exists:
   repeatedly, so a known-down cluster stops being hammered from the hot path.
 
 How to use:
-- `ResilientSinkStore(wrapped_store)` — same shape as the store it wraps
-  (`ensure_ready`/`index_event`/`bulk_index`/`query`), so it's a drop-in
-  decorator. `ensure_ready()` and `query()` pass straight through: startup
-  provisioning and reads are not this decorator's concern, only the
-  steady-state write path is.
+- `ResilientSinkStore(wrapped_store)` — same write shape as the store it
+  wraps (`ensure_ready`/`index_event`/`bulk_index`), so it's a drop-in
+  decorator. `ensure_ready()` passes straight through: startup provisioning
+  is not this decorator's concern, only the steady-state write path is.
+  `query()` also passes through, best-effort, for wrapped stores that
+  support it (KPI stores do; the log store no longer does since Fred stopped
+  exposing its own log-query surface — OpenSearch Dashboards reads that
+  index directly instead).
 """
 
 from __future__ import annotations
@@ -53,8 +56,6 @@ class _WritableStore(Protocol):
     def index_event(self, event: Any) -> None: ...
 
     def bulk_index(self, events: list[Any]) -> None: ...
-
-    def query(self, q: Any) -> Any: ...
 
 
 class _CircuitBreaker:
@@ -136,7 +137,14 @@ class ResilientSinkStore:
         self._wrapped.ensure_ready()
 
     def query(self, q: Any) -> Any:
-        return self._wrapped.query(q)
+        """Best-effort passthrough for wrapped stores that support querying
+        (KPI stores do; the log store no longer does)."""
+        query_fn = getattr(self._wrapped, "query", None)
+        if query_fn is None:
+            raise AttributeError(
+                f"{type(self._wrapped).__name__} does not support query()"
+            )
+        return query_fn(q)
 
     # -- writes: bounded, non-blocking, fail-open ------------------------------
     def index_event(self, event: Any) -> None:

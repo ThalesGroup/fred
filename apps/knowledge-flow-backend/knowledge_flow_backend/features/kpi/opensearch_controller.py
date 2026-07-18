@@ -37,8 +37,8 @@ class OpenSearchOpsController:
         Cluster health, indices, mappings, shard allocation, and diagnostics
         are platform-wide infrastructure visibility, not personal-scope data —
         there is no "my own" subset the way KPIs have. Same capability as
-        KPIController's `view_global` branch and logs_controller's
-        `/logs/query` (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6).
+        KPIController's `view_global` branch (see
+        docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6).
         Called before each route's own try/except so an AuthorizationError
         reaches FastAPI's registered handler as a 403, not this file's
         TransportError-aware `err()` translation.

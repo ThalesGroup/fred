@@ -51,11 +51,7 @@ from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
     LogCategory,
     LogEventDTO,
-    LogFilter,
-    LogQuery,
-    LogQueryResult,
     LogStorageConfig,
-    TailFileResponse,
 )
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.logs.opensearch_log_store import OpenSearchLogStore
@@ -140,16 +136,12 @@ __all__ = [
     "BaseLogStore",
     "LogCategory",
     "LogEventDTO",
-    "LogFilter",
-    "LogQuery",
-    "LogQueryResult",
     "OpenSearchLogStore",
     "AUDIT_LOGGER_NAME",
     "RamLogStore",
     "StoreEmitHandler",
     "build_log_store",
     "emit_audit_log",
-    "TailFileResponse",
     "log_setup",
     "LogStorageConfig",
     "InMemoryLogStorageConfig",

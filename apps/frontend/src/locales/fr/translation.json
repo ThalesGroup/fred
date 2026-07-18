@@ -469,18 +469,6 @@
     "title": "Créer un nouveau dossier",
     "validationError": "Erreur de validation"
   },
-  "logs": {
-    "allCategories": "Tout",
-    "content": "contenu du log",
-    "copyAll": "Copier tout ({{count}})",
-    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
-    "empty": "Aucun log dans cette fenêtre.",
-    "error": "Échec du chargement des logs.",
-    "file": "fichier de log",
-    "live": "En direct",
-    "loading": "Chargement des logs…",
-    "title": "Console de logs"
-  },
   "mcp": {
     "servers": {
       "corpus": {

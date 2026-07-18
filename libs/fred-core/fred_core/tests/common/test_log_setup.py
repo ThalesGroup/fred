@@ -25,7 +25,6 @@ from fred_core.logs.log_setup import (
     UvicornSensitiveQueryFilter,
     log_setup,
 )
-from fred_core.logs.log_structures import LogQuery, LogQueryResult
 
 
 class _StubLogStore:
@@ -40,9 +39,6 @@ class _StubLogStore:
 
     def bulk_index(self, events: list[LogEventDTO]) -> None:
         return None
-
-    def query(self, q: LogQuery) -> LogQueryResult:
-        raise NotImplementedError
 
 
 def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:

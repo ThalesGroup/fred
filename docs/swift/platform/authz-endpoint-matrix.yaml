@@ -648,11 +648,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/logs/query
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/markdown/{document_uid}
     review_status: pending_review

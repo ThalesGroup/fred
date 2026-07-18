@@ -553,12 +553,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.taskListRequestV1,
       }),
     }),
-    queryLogsKnowledgeFlowV1LogsQueryPost: build.mutation<
-      QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse,
-      QueryLogsKnowledgeFlowV1LogsQueryPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
-    }),
     listProcessorsKnowledgeFlowV1DevBenchProcessorsGet: build.query<
       ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse,
       ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg
@@ -1361,10 +1355,6 @@ export type CorpusTasksResultApiArg = {
 export type CorpusTasksListApiResponse = /** status 200 Successful Response */ any;
 export type CorpusTasksListApiArg = {
   taskListRequestV1: TaskListRequestV1;
-};
-export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
-export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
-  logQuery: LogQuery;
 };
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
   /** status 200 Successful Response */ ProcessorDescriptor[];
@@ -2383,37 +2373,6 @@ export type TaskListRequestV1 = {
   limit?: number;
   team_id: string;
 };
-export type LogEventDto = {
-  ts: number;
-  level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
-  logger: string;
-  file: string;
-  line: number;
-  msg: string;
-  service?: string | null;
-  extra?: {
-    [key: string]: any;
-  } | null;
-  category?: "application" | "kpi" | "security" | "audit";
-};
-export type LogQueryResult = {
-  events?: LogEventDto[];
-};
-export type LogFilter = {
-  level_at_least?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
-  logger_like?: string | null;
-  service?: string | null;
-  text_like?: string | null;
-  category?: ("application" | "kpi" | "security" | "audit") | null;
-};
-export type LogQuery = {
-  /** ISO or 'now-10m' */
-  since: string;
-  until?: string | null;
-  filters?: LogFilter;
-  limit?: number;
-  order?: "asc" | "desc";
-};
 export type ProcessorDescriptor = {
   id: string;
   name: string;
@@ -2742,7 +2701,6 @@ export const {
   useCorpusTasksGetMutation,
   useCorpusTasksResultMutation,
   useCorpusTasksListMutation,
-  useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useLazyListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useRunKnowledgeFlowV1DevBenchRunPostMutation,

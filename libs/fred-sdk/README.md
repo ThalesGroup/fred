@@ -235,7 +235,6 @@ class MyAgent(ReActAgent):
 | `TOOL_REF_RESOURCES_FETCH_TEXT`          | Fetch document content as text                |
 | `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`        | Publish a text artifact to the workspace      |
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
-| `TOOL_REF_LOGS_QUERY`                    | Query audit logs                              |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 
 ---

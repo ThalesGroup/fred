@@ -28,8 +28,6 @@ Why this module exists:
 Exact built-in list today:
 - `knowledge.search`: Fred's native RAG retrieval tool. It searches the current
   libraries, corpus, and session attachments and returns grounded snippets.
-- `logs.query`: troubleshooting tool for recent backend logs from Agentic and
-  Knowledge Flow.
 - `traces.summarize_conversation`: observability tool that summarizes the recent
   execution trace of one Fred conversation.
 - `geo.render_points`: UI helper that turns latitude/longitude points into a map
@@ -64,12 +62,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
-TOOL_REF_LOGS_QUERY = "logs.query"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
 TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
@@ -86,7 +82,7 @@ class BuiltinToolBackend(str, Enum):
       conditionals spread across the codebase
 
     Current mapping:
-    - `TOOL_INVOKER`: `knowledge.search`, `logs.query`,
+    - `TOOL_INVOKER`: `knowledge.search`,
       `traces.summarize_conversation`, `geo.render_points`
     - `WORKSPACE_WRITE`: `artifacts.publish_text`
     - `WORKSPACE_READ`: `resources.fetch_text`
@@ -108,39 +104,6 @@ class KnowledgeSearchToolArgs(BaseModel):
         ge=1,
         le=20,
         description="Maximum number of retrieved snippets to return.",
-    )
-
-
-class LogsQueryToolArgs(BaseModel):
-    window_minutes: int = Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="How far back to scan logs.",
-    )
-    limit: int = Field(
-        default=500,
-        ge=1,
-        le=5000,
-        description="Maximum number of events to fetch per backend.",
-    )
-    min_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="WARNING",
-        description="Minimum log level to include in the query.",
-    )
-    include_agentic: bool = Field(
-        default=True,
-        description="Whether to include Agentic backend logs.",
-    )
-    include_knowledge_flow: bool = Field(
-        default=True,
-        description="Whether to include Knowledge Flow logs.",
-    )
-    max_events: int = Field(
-        default=200,
-        ge=50,
-        le=1000,
-        description="Cap the events kept in the returned triage digest.",
     )
 
 
@@ -267,7 +230,6 @@ class BuiltinToolSpec:
 
     Exact tools described by this catalog today:
     - `knowledge.search`: native Fred retrieval / RAG tool
-    - `logs.query`: backend log triage tool
     - `traces.summarize_conversation`: conversation trace summary tool
     - `geo.render_points`: map-rendering helper
     - `artifacts.publish_text`: text artifact publishing helper
@@ -297,12 +259,6 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "Search the selected document libraries and session attachments and "
             "return grounded snippets."
         ),
-    ),
-    TOOL_REF_LOGS_QUERY: BuiltinToolSpec(
-        tool_ref=TOOL_REF_LOGS_QUERY,
-        args_schema=LogsQueryToolArgs,
-        backend=BuiltinToolBackend.TOOL_INVOKER,
-        default_description="Query recent Agentic and Knowledge Flow logs.",
     ),
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: BuiltinToolSpec(
         tool_ref=TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,

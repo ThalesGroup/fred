@@ -15,7 +15,7 @@
 # OpenSearch-backed LOG store mirroring OpenSearchKPIStore design:
 # - Single index with explicit mapping (stable fields)
 # - Writes: index_event / bulk_index
-# - Reads: query(LogQuery) -> LogQueryResult
+# - Reads: none from Fred — OpenSearch Dashboards queries this index directly
 #
 # Notes for future devs:
 # - We store both textual level (INFO) *and* numeric severity (0..4) to support fast "level_at_least".
@@ -31,8 +31,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 
-from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO, LogQuery
-from fred_core.logs.log_structures import LogFilter, LogQueryResult
+from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -130,7 +129,8 @@ def _doc_from_event(ev: LogEventDTO) -> Dict[str, Any]:
 # =============================================================================
 class OpenSearchLogStore(BaseLogStore):
     """
-    OpenSearch-backed LOG store (writes + simple filtered reads).
+    OpenSearch-backed LOG store (writes only — reads are done directly in
+    OpenSearch Dashboards, not through Fred).
     Mirrors OpenSearchKPIStore patterns for familiarity.
     """
 
@@ -162,11 +162,31 @@ class OpenSearchLogStore(BaseLogStore):
                 logger.info("[OPENSEARCH][LOG] created index '%s'.", self.index)
             else:
                 logger.info("[OPENSEARCH][LOG] index '%s' already exists.", self.index)
+                # `category` was added to LOG_INDEX_MAPPING after some indices
+                # were already created. Existing indices predate it, so add it
+                # additively (put_mapping) — otherwise `category` silently
+                # falls under dynamic="false" and is never indexed for search.
+                self._ensure_category_mapping()
                 # If you have a generic validator like KPI does, call it here:
                 # validate_index_mapping(self.client, self.index, LOG_INDEX_MAPPING)
         except OpenSearchException as e:
             logger.error("[OPENSEARCH][LOG] ensure_ready failed: %s", e)
             raise
+
+    def _ensure_category_mapping(self) -> None:
+        try:
+            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
+            current_mapping = current_mapping_resp.get(self.index, {}).get(
+                "mappings", {}
+            )
+            top_level_props = current_mapping.get("properties", {})
+            if "category" in top_level_props:
+                return
+            body = {"properties": {"category": {"type": "keyword"}}}
+            self.client.indices.put_mapping(index=self.index, body=body)
+            logger.info("[OPENSEARCH][LOG] added category mapping")
+        except OpenSearchException as e:
+            logger.warning("[OPENSEARCH][LOG] failed to add category mapping: %s", e)
 
     # -- writes ----------------------------------------------------------------
     def index_event(self, event: LogEventDTO) -> None:
@@ -192,91 +212,3 @@ class OpenSearchLogStore(BaseLogStore):
         except OpenSearchException as e:
             logger.error("[OPENSEARCH][LOG] bulk_index failed: %s", e)
             raise
-
-    # -- reads -----------------------------------------------------------------
-    def query(self, q: LogQuery) -> LogQueryResult:
-        body = self._build_os_query(q)
-        # print("\n[DEBUG][OpenSearchLogStore] === query body ===")
-        # import json
-        # print(json.dumps(body, indent=2))
-        resp = self.client.search(index=self.index, body=body)
-        hits = resp.get("hits", {}).get("hits", [])
-        events: List[LogEventDTO] = []
-        # print(f"[DEBUG][OpenSearchLogStore] hits: {len(hits)}")
-        for h in hits:
-            s = h.get("_source", {})
-            raw_ts = s.get("@timestamp", 0)
-            try:
-                ts_sec = _to_epoch_millis(raw_ts) / 1000.0
-            except Exception:
-                # Fallback to 0 if the doc is malformed
-                ts_sec = 0.0
-            events.append(
-                LogEventDTO(
-                    ts=ts_sec,
-                    level=s.get("level", "INFO"),
-                    logger=s.get("logger", ""),
-                    file=s.get("file", ""),
-                    line=int(s.get("line") or 0),
-                    msg=s.get("msg", ""),
-                    service=s.get("service"),
-                    extra=s.get("extra"),
-                    category=s.get("category", "application"),
-                )
-            )
-        return LogQueryResult(events=events)
-
-    # ---- internal: build precise OS query -----------------------------------
-    def _build_os_query(self, q: LogQuery) -> Dict[str, Any]:
-        """
-        Exact OpenSearch JSON returned to the cluster for transparency and debugging.
-        Filters implemented:
-        - time range: since..until on @timestamp
-        - level_at_least: severity >= threshold
-        - logger_like: wildcard on logger (keyword) using *contains*
-        - service: exact term
-        - category: exact term (closed vocabulary, keyword field)
-        - text_like: match_phrase on msg (fast, low-surprise). Switch to SQS if needed.
-        Ordering + limit are applied at top level.
-        """
-
-        def _opt_iso(v):
-            return _to_iso_utc(v) if v is not None else None
-
-        since_iso = _opt_iso(q.since)
-        until_iso = _opt_iso(q.until)
-        filters: List[Dict[str, Any]] = [
-            {
-                "range": {
-                    "@timestamp": {
-                        k: v for k, v in (("gte", since_iso), ("lte", until_iso)) if v
-                    }
-                }
-            }
-        ]
-        f = q.filters or LogFilter()
-        if f.level_at_least:
-            filters.append({"range": {"severity": {"gte": _sev(f.level_at_least)}}})
-        if f.service:
-            filters.append({"term": {"service": f.service}})
-        if f.logger_like:
-            # "contains" on keyword via wildcard; case-sensitive. For case-insensitive, store a lowercase subfield.
-            filters.append({"wildcard": {"logger": f"*{f.logger_like}*"}})
-        if f.category:
-            filters.append({"term": {"category": f.category}})
-        # message text filter: keep it optional and independent from filter context
-        must: List[Dict[str, Any]] = []
-        if f.text_like:
-            must.append({"match_phrase": {"msg": f.text_like}})
-
-        body: Dict[str, Any] = {
-            "size": q.limit,
-            "query": {
-                "bool": {
-                    "filter": filters,
-                    **({"must": must} if must else {}),
-                }
-            },
-            "sort": [{"@timestamp": {"order": q.order}}],
-        }
-        return body

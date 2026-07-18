@@ -129,13 +129,16 @@ index from — product analytics, with no long-retention requirement. Their diag
 decreases over time; they are not an audit or compliance artifact and should never be treated as
 one.
 
-This stream carries no content (§7) — but it is still queryable platform-wide (across users,
-across services) by whoever can call its query endpoint, which is a meaningfully different
-exposure than "an individual user's own data." Both the query surface for this stream (the Log
-Console, `/logs/query`) and the raw OpenSearch Ops surface it sits next to (cluster health,
-indices, mappings, shards) therefore require `CAN_OBSERVE_PLATFORM` — the same platform-wide
-observation capability Stream 2's `view_global` branch already requires (§4) — enforced
-server-side, not only hidden behind a frontend route guard.
+This stream carries no content (§7). Fred does not expose its own query surface for these logs —
+there is no Log Console UI and no `/logs/query` endpoint or agent tool. Consultation and
+exploration happen directly against the backing OpenSearch index via **OpenSearch Dashboards**,
+outside Fred's authorization model; that index is a meaningfully different exposure than "an
+individual user's own data," so access to Dashboards itself is an infrastructure/deployment
+concern, not something Fred's API mediates. The raw OpenSearch Ops surface this stream sits next
+to (cluster health, indices, mappings, shards) is a separate, still-Fred-exposed admin surface and
+requires `CAN_OBSERVE_PLATFORM` — the same platform-wide observation capability Stream 2's
+`view_global` branch already requires (§4) — enforced server-side, not only hidden behind a
+frontend route guard.
 
 Each event carries a closed, structurally-derived `category` (`application` or `kpi`) — never
 inferred from message text (a message that happens to contain the literal string `"[KPI]"` or
@@ -183,9 +186,10 @@ and nothing else does. This observability architecture is designed against that 
 | Product analytics scoped per viewer via authorization | **True today**, shipped |
 | Every tool invocation produces an audit-channel event | **True today** — `agent.tool.invocation.{started,completed}` emitted on the security/audit logger for every actually-executed tool call; the pod-local ring buffer backing `/agents/audit-events` remains scoped to authz decisions and is not the durability guarantee (see the row below) |
 | Audit records are valid structured JSON on the log output | **True today** |
-| Generic logs land in durable, queryable storage | **True today** where a service's `storage.log_store` is set to `opensearch` — still `RamLogStore` (in-memory, lost on restart) where it isn't; flipping the C1 reference deployment's config is a separate, infra-only follow-up |
+| Generic logs land in durable storage, explorable via OpenSearch Dashboards | **True today** where a service's `storage.log_store` is set to `opensearch` — still `RamLogStore` (in-memory, lost on restart) where it isn't; flipping the C1 reference deployment's config is a separate, infra-only follow-up |
 | Generic logs contain no prompt/response/tool-argument/document content | **True today** — fixed 2026-07-18 (issue #2009); several logger call sites (`tracing_kpi.py`, `react_runtime.py`, the vectorization pipeline) previously logged raw content previews into this store |
-| Generic-log and OpenSearch-Ops query endpoints require `CAN_OBSERVE_PLATFORM` server-side | **True today** — fixed 2026-07-18 (issue #2009); previously gated only by authentication (logs) or only by the frontend route (both) |
+| Fred exposes no log-query surface of its own (no Log Console UI, no `/logs/query` endpoint, no `logs.query` agent tool) | **True today** — reversed 2026-07-18: the Log Console UI, its backend endpoint, and the `logs.query` built-in agent tool (all shipped earlier the same day under issue #2009) were removed the same day in favor of OpenSearch Dashboards as the sole log exploration surface |
+| The remaining OpenSearch Ops surface (cluster health, indices, mappings, shards) requires `CAN_OBSERVE_PLATFORM` server-side | **True today** — fixed 2026-07-18 (issue #2009); previously gated only by the frontend route |
 | Generic-log `category` is a closed, structurally-derived field | **True today** — fixed 2026-07-18 (issue #2009); previously only a decorative `[KPI]`-text convention with no queryable field |
 | A KPI/log sink outage cannot fail or stall a business request | **True today** — fixed 2026-07-18 (issue #2009); writes are now fail-open with a bounded queue and circuit breaker in front of the OpenSearch-backed stores |
 | Downstream retention/access/integrity for the audit trail | **Deployment responsibility, not yet established at any classification level** — requires action by whoever operates the target cluster, independent of Fred's own code |
