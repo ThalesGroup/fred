@@ -209,7 +209,15 @@ class KPIWriter(BaseKPIWriter):
             trace=(Trace(**trace) if trace else None),
         )
         self._record_summary(event)
-        self.store.index_event(event)
+        # Fail-open: a KPI sink outage (e.g. OpenSearch down) must never break
+        # or propagate into the business request that triggered this metric —
+        # see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6.
+        try:
+            self.store.index_event(event)
+        except Exception:
+            logger.warning(
+                "KPI store write failed; dropping event %r", name, exc_info=True
+            )
 
     # ---- simple helpers ------------------------------------------------------
     def count(

@@ -23,10 +23,17 @@ They drive ``build_executor`` for both ReAct and Deep and capture the
 call is observed directly without pulling in the real model/tool machinery. The
 tool pipeline, the executor, and the compile call are stubbed; nothing about the
 runtime's own prompt assembly is patched.
+
+Also covers issue #2009: the same ``build_executor`` call used to log a
+200-char preview of the (fully composed, context-injected) system prompt at
+DEBUG level — content that flows into the generic, now-durable app-log store
+(see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7). Reuses the fixtures
+above rather than duplicating them.
 """
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import cast
 
@@ -162,3 +169,26 @@ async def test_deep_build_executor_injects_context_prompt_into_compiled_agent(
     # The Deep runtime shares the canonical composer, so the same guarantee holds.
     assert _CTX_MARKER in captured["system_prompt"]
     assert captured["system_prompt"].startswith("BASE-TEMPLATE")
+
+
+@pytest.mark.asyncio
+async def test_react_build_executor_never_logs_system_prompt_content(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _fake_compile(**kwargs: object) -> object:
+        return object()
+
+    _stub_tool_pipeline(monkeypatch, react_mod)
+    monkeypatch.setattr(react_mod, "_create_compiled_react_agent", _fake_compile)
+
+    runtime = react_mod.ReActRuntime(
+        definition=_fake_definition(), services=RuntimeServices()
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    with caplog.at_level(logging.DEBUG, logger=react_mod.__name__):
+        await runtime.build_executor(_binding())
+
+    for record in caplog.records:
+        assert _CTX_MARKER not in record.getMessage()
+        assert "BASE-TEMPLATE" not in record.getMessage()

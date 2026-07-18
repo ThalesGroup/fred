@@ -93,6 +93,13 @@ class StoreEmitHandler(logging.Handler):
         self._tls = threading.local()
 
     def emit(self, record: logging.LogRecord) -> None:
+        # Hard drop, independent of the audit logger's own propagate=False:
+        # real security/audit events (fred.security.audit) must never land in
+        # the generic app-log store, even if a future refactor accidentally
+        # reattaches a handler or flips propagate to True (see
+        # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6).
+        if record.name == AUDIT_LOGGER_NAME:
+            return
         if getattr(self._tls, "in_emit", False):
             return
         self._tls.in_emit = True

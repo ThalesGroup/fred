@@ -140,33 +140,35 @@ class TracingKpiMiddleware(AgentMiddleware):
 
     @staticmethod
     def _log_model_call(request: ModelRequest) -> None:
+        # Never log message/question content here — this logger feeds the
+        # generic app-log store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md
+        # §7: "Content ... Nowhere in any observability or audit stream").
+        # Lengths and counts only.
         messages = list(request.messages)
         sys_text = request.system_prompt or ""
         tail = ", ".join(
             f"{type(m).__name__[0]}:{len(str(m.content))}c" for m in messages[-6:]
         )
-        last_human = next(
+        last_human_len = next(
             (
-                (
-                    m.content[:120]
-                    if isinstance(m.content, str)
-                    else str(m.content)[:120]
-                )
+                len(m.content) if isinstance(m.content, str) else len(str(m.content))
                 for m in reversed(messages)
                 if isinstance(m, HumanMessage)
             ),
-            "—",
+            None,
         )
         logger.info(
-            "[LLM][CALL] sys=%dc total_msgs=%d hist_tail=[%s] question=%r",
+            "[LLM][CALL] sys=%dc total_msgs=%d hist_tail=[%s] question_len=%s",
             len(sys_text),
             len(messages) + (1 if request.system_message is not None else 0),
             tail,
-            last_human,
+            last_human_len,
         )
 
     @staticmethod
     def _log_model_response(response: ModelResponse) -> None:
+        # Same rule as _log_model_call: no tool-argument values, no answer
+        # text — names, keys, and lengths only.
         ai_message = next(
             (m for m in reversed(response.result) if isinstance(m, AIMessage)),
             None,
@@ -182,12 +184,9 @@ class TracingKpiMiddleware(AgentMiddleware):
                         "name": tc.get("name")
                         if isinstance(tc, dict)
                         else getattr(tc, "name", "?"),
-                        "args": {
-                            k: (str(v)[:60] if isinstance(v, str) else v)
-                            for k, v in (
-                                (tc.get("args") or {}) if isinstance(tc, dict) else {}
-                            ).items()
-                        },
+                        "arg_keys": list(
+                            (tc.get("args") or {}) if isinstance(tc, dict) else {}
+                        ),
                     }
                     for tc in tool_calls
                 ],
@@ -199,7 +198,6 @@ class TracingKpiMiddleware(AgentMiddleware):
                 else str(ai_message.content)
             )
             logger.info(
-                "[LLM][RESPONSE] final answer=%dc: %r",
+                "[LLM][RESPONSE] final answer_len=%d",
                 len(text),
-                text[:150] + ("…" if len(text) > 150 else ""),
             )

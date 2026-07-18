@@ -658,12 +658,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             agent_id=self.definition.agent_id,
             extra_tokens=tuning_tokens or None,
         )
-        logger.debug(
-            "[V2][EXECUTOR] system_prompt_preview=%r",
-            (system_prompt[:200] + "...")
-            if len(system_prompt) > 200
-            else system_prompt,
-        )
+        # No content preview here — this logger feeds the generic app-log
+        # store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7:
+        # "Content ... Nowhere in any observability or audit stream").
+        logger.debug("[V2][EXECUTOR] system_prompt_len=%d", len(system_prompt))
         system_prompt = _compose_system_prompt(
             system_prompt,
             binding=binding,
@@ -672,10 +670,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
         )
         logger.debug(
-            "[LLM][SYSTEM PROMPT] agent=%s total=%dc preview=%r",
+            "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",
             self.definition.agent_id,
             len(system_prompt),
-            system_prompt[:200] + ("…" if len(system_prompt) > 200 else ""),
         )
         available_tool_names = {
             bound_tool.runtime_name
