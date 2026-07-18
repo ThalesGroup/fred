@@ -15,12 +15,23 @@
 
 .page {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
+  /* DataTable's own root sets height:100%/overflow:auto so its sticky column
+   * header and row scroll are self-contained (DataTable.module.scss). Without
+   * a definite height here, that 100% is self-referential against this
+   * auto-sized container: the table silently becomes its own disconnected
+   * scroll region and the header/filters above it become unreachable — the
+   * mouse only scrolls "inside the capabilities area". `flex: 1` claims
+   * `.content`'s (MainLayout) real available height so the 100% below
+   * resolves to something concrete; `min-height: 0` lets this flex item
+   * actually shrink to that height instead of growing to fit all rows. */
+  min-height: 0;
 }
 
 .header {
