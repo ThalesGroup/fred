@@ -129,7 +129,8 @@ class ReportsService:
                 subject=RebacReference(Resource.TAGS, tag_id),
                 relation=RelationType.PARENT,
                 resource=RebacReference(Resource.DOCUMENTS, document_uid),
-            )
+            ),
+            actor_uid=user.uid,
         )
 
         return document_uid, md_url, html_url, pdf_url

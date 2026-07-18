@@ -204,7 +204,8 @@ class TagService:
                     subject=RebacReference(type=Resource.TEAM, id=team_id),
                     relation=RelationType.OWNER,
                     resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                )
+                ),
+                actor_uid=user.uid,
             )
         else:
             await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
@@ -218,7 +219,8 @@ class TagService:
                         subject=RebacReference(type=Resource.TAGS, id=parent_tag.id),
                         relation=RelationType.PARENT,
                         resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                    )
+                    ),
+                    actor_uid=user.uid,
                 )
             else:
                 logger.warning(
@@ -297,7 +299,8 @@ class TagService:
                 subject=RebacReference(type=target_type, id=target_id),
                 relation=relation.to_relation(),
                 resource=RebacReference(type=Resource.TAGS, id=tag_id),
-            )
+            ),
+            actor_uid=user.uid,
         )
 
     async def unshare_tag_with_user(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
@@ -376,7 +379,8 @@ class TagService:
                         subject=RebacReference(type=Resource.USER, id=tag.owner_id),
                         relation=RelationType.OWNER,
                         resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                    )
+                    ),
+                    actor_uid=user.uid,
                 )
                 tag_owner_relations_created += 1
             except Exception as exc:
@@ -401,7 +405,8 @@ class TagService:
                                 subject=RebacReference(type=Resource.TAGS, id=tag.id),
                                 relation=RelationType.PARENT,
                                 resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
-                            )
+                            ),
+                            actor_uid=user.uid,
                         )
                         tag_parent_relations_created += 1
                     except Exception as exc:
@@ -423,7 +428,8 @@ class TagService:
                                 subject=RebacReference(type=Resource.TAGS, id=tag.id),
                                 relation=RelationType.PARENT,
                                 resource=RebacReference(type=Resource.RESOURCES, id=res.id),
-                            )
+                            ),
+                            actor_uid=user.uid,
                         )
                         tag_parent_relations_created += 1
                     except Exception as exc:

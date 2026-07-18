@@ -483,7 +483,7 @@ class MetadataService:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
                 await self.metadata_store.save_metadata(metadata)
-                await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid)
+                await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{user.uid}'")
             else:
@@ -828,7 +828,7 @@ class MetadataService:
 
             if metadata.tags and metadata.tags.tag_ids:
                 for tag_id in metadata.tags.tag_ids:
-                    await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+                    await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid, actor_uid=user.uid)
 
             old_size = prev_metadata.file.file_size_bytes or 0 if prev_metadata and prev_metadata.file else 0
             new_size = metadata.file.file_size_bytes or 0 if metadata.file else 0
@@ -1033,11 +1033,11 @@ class MetadataService:
         except Exception as e:
             logger.warning(f"Failed to update tag timestamps: {e}")
 
-    async def _set_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
+    async def _set_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str, *, actor_uid: str | None = None) -> None:
         """
         Add a relation in the ReBAC engine between a tag and a document.
         """
-        await self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+        await self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, document_uid), actor_uid=actor_uid)
 
     async def _remove_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
         """

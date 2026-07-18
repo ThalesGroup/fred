@@ -30,7 +30,7 @@ class ResourceService:
 
         resource = build_resource_from_create(payload, library_tag_id, user.uid)
         res = await self._resource_store.create_resource(resource=resource)
-        await self._set_tag_as_parent_in_rebac(library_tag_id, res.id)
+        await self._set_tag_as_parent_in_rebac(library_tag_id, res.id, actor_uid=user.uid)
         logger.info(f"[RESOURCES] Created resource {res.id} of kind {res.kind} for user {user.uid}")
         return res
 
@@ -78,7 +78,7 @@ class ResourceService:
             res.library_tags.append(tag_id)
             res.updated_at = utc_now()
             res = await self._resource_store.update_resource(resource_id=res.id, resource=res)
-            await self._set_tag_as_parent_in_rebac(tag_id, res.id)
+            await self._set_tag_as_parent_in_rebac(tag_id, res.id, actor_uid=user.uid)
         return res
 
     async def remove_tag_from_resource(self, user: KeycloakUser, resource_id: str, tag_id: str, *, delete_if_orphan: bool = True) -> None:
@@ -95,8 +95,8 @@ class ResourceService:
                 await self._resource_store.update_resource(resource_id=res.id, resource=res)
         await self._remove_tag_as_parent_in_rebac(tag_id, res.id)
 
-    async def _set_tag_as_parent_in_rebac(self, tag_id: str, resource_id: str) -> None:
-        await self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, resource_id))
+    async def _set_tag_as_parent_in_rebac(self, tag_id: str, resource_id: str, *, actor_uid: str | None = None) -> None:
+        await self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, resource_id), actor_uid=actor_uid)
 
     async def _remove_tag_as_parent_in_rebac(self, tag_id: str, resource_id: str) -> None:
         await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, resource_id))
