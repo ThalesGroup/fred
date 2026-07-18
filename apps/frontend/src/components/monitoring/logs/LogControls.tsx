@@ -28,7 +28,7 @@ import {
 } from "@mui/material";
 import { t } from "i18next";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
-import { Level, LEVELS, SERVICE_OPTIONS, ServiceId } from "./logType";
+import { Category, CATEGORY_OPTIONS, Level, LEVELS } from "./logType";
 
 const H = 24;
 const FS = "0.7rem";
@@ -66,8 +66,8 @@ const fieldSx = {
 export type LogControlsProps = {
   minLevel: Level;
   setMinLevel: React.Dispatch<React.SetStateAction<Level>>;
-  service: ServiceId;
-  setService: React.Dispatch<React.SetStateAction<ServiceId>>;
+  category: Category | "";
+  setCategory: React.Dispatch<React.SetStateAction<Category | "">>;
   loggerLike: string;
   setLoggerLike: React.Dispatch<React.SetStateAction<string>>;
   textLike: string;
@@ -78,8 +78,8 @@ export type LogControlsProps = {
 export function LogControls({
   minLevel,
   setMinLevel,
-  service,
-  setService,
+  category,
+  setCategory,
   loggerLike,
   setLoggerLike,
   textLike,
@@ -119,13 +119,13 @@ export function LogControls({
         ))}
       </Select>
 
-      {/* Service toggle */}
+      {/* Category toggle — closed, structured field (never inferred from message text) */}
       <ToggleButtonGroup
         size="small"
         color="primary"
         exclusive
-        value={service}
-        onChange={(_, v) => v && setService(v as ServiceId)}
+        value={category}
+        onChange={(_, v) => setCategory((v ?? "") as Category | "")}
         sx={{
           "& .MuiToggleButton-root": {
             height: H,
@@ -137,7 +137,8 @@ export function LogControls({
           },
         }}
       >
-        {SERVICE_OPTIONS.map((opt) => (
+        <ToggleButton value="">{t("logs.allCategories")}</ToggleButton>
+        {CATEGORY_OPTIONS.map((opt) => (
           <ToggleButton key={opt.id} value={opt.id}>
             {opt.label}
           </ToggleButton>

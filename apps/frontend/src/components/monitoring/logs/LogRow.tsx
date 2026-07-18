@@ -30,8 +30,11 @@ import { Box, Chip, IconButton, Stack, useTheme } from "@mui/material";
 import { useCallback, useState } from "react";
 
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { LogEventDto } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+
+dayjs.extend(utc);
 
 type Level = LogEventDto["level"];
 const levelColor: Record<Level, "default" | "success" | "info" | "warning" | "error"> = {
@@ -58,7 +61,9 @@ function LvlChip({ lvl }: { lvl: Level }) {
   );
 }
 
-const fmtTs = (ts: number) => dayjs(ts).format("YYYY-MM-DD HH:mm:ss");
+// Explicit UTC, matching LogConsoleTile.copyAll's UTC ISO output — a local,
+// unlabeled timestamp here would silently disagree with the copied text.
+const fmtTs = (ts: number) => dayjs.utc(ts).format("YYYY-MM-DD HH:mm:ss") + " UTC";
 
 export function LogRow({ e }: { e: LogEventDto }) {
   const theme = useTheme();

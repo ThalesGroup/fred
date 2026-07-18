@@ -4,9 +4,8 @@
 // - Parent owns time (incl. "Live"); tile never polls on its own.
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { Box, Button, Divider, Stack } from "@mui/material";
+import { Box, Button, CircularProgress, Divider, Stack, Typography } from "@mui/material";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryLogsAgenticV1LogsQueryPostMutation } from "../../../slices/agentic/agenticOpenApi";
 import {
   LogEventDto,
   LogQuery,
@@ -17,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { LogControls } from "./LogControls";
 import { LogRow } from "./LogRow";
-import type { ServiceId } from "./logType";
+import type { Category } from "./logType";
 
 type Level = LogEventDto["level"];
 const MAX_EVENTS = 1000;
@@ -34,26 +33,16 @@ function useDebounced<T>(value: T, delay = 350): T {
   return v;
 }
 
-function useLogApis(service: ServiceId) {
-  const [postQueryKF, queryStateKF] = useQueryLogsKnowledgeFlowV1LogsQueryPostMutation();
-  const [postQueryAB, queryStateAB] = useQueryLogsAgenticV1LogsQueryPostMutation();
-  const postQuery = service === "knowledge-flow" ? postQueryKF : postQueryAB;
-  const queryState = service === "knowledge-flow" ? queryStateKF : queryStateAB;
-  return { postQuery, queryState };
-}
-
 export function LogConsoleTile({
   start,
   end, // ← now REQUIRED
   height = 260,
-  defaultService = "knowledge-flow",
   fillParent = true,
   initialTextLike = "",
 }: {
   start: Date;
   end: Date; // ← no "until now" here; parent always passes a value
   height?: number;
-  defaultService?: string;
   devTail?: boolean;
   fillParent?: boolean;
   initialTextLike?: string;
@@ -61,14 +50,14 @@ export function LogConsoleTile({
   const { t } = useTranslation();
   // ---- UI filter state ----
   const [minLevel, setMinLevel] = useState<Level>("INFO");
-  const [service, setService] = useState<ServiceId>(defaultService as ServiceId);
+  const [category, setCategory] = useState<Category | "">("");
   const [loggerLike, setLoggerLike] = useState("");
   const [textLike, setTextLike] = useState(initialTextLike);
   const dLoggerLike = useDebounced(loggerLike, 350);
   const dTextLike = useDebounced(textLike, 350);
 
   // ---- API ----
-  const { postQuery, queryState } = useLogApis(service);
+  const [postQuery, queryState] = useQueryLogsKnowledgeFlowV1LogsQueryPostMutation();
 
   // ---- Sticky scroll-to-bottom ----
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -99,12 +88,12 @@ export function LogConsoleTile({
       order: "desc",
       filters: {
         level_at_least: minLevel,
-        service: service || undefined,
+        category: category || undefined,
         logger_like: dLoggerLike || undefined,
         text_like: dTextLike || undefined,
       },
     }),
-    [start, end, minLevel, service, dLoggerLike, dTextLike],
+    [start, end, minLevel, category, dLoggerLike, dTextLike],
   );
 
   const fetchQuery = useCallback(() => {
@@ -166,8 +155,8 @@ export function LogConsoleTile({
         <LogControls
           minLevel={minLevel}
           setMinLevel={setMinLevel}
-          service={service}
-          setService={setService}
+          category={category}
+          setCategory={setCategory}
           loggerLike={loggerLike}
           setLoggerLike={setLoggerLike}
           textLike={textLike}
@@ -203,9 +192,23 @@ export function LogConsoleTile({
           scrollbarGutter: "stable",
         }}
       >
-        {events.length === 0 ? (
+        {queryState.isLoading ? (
+          <Stack
+            direction="row"
+            gap={1}
+            alignItems="center"
+            sx={{ p: 1, fontSize: (t) => t.typography.caption.fontSize, color: "text.secondary" }}
+          >
+            <CircularProgress size={14} />
+            <Typography variant="caption">{t("logs.loading")}</Typography>
+          </Stack>
+        ) : queryState.isError ? (
+          <Box sx={{ p: 1, fontSize: (t) => t.typography.caption.fontSize, color: "error.main" }}>
+            {t("logs.error")}
+          </Box>
+        ) : events.length === 0 ? (
           <Box sx={{ p: 1, fontSize: (t) => t.typography.caption.fontSize, color: "text.secondary" }}>
-            No logs in this window.
+            {t("logs.empty")}
           </Box>
         ) : (
           <Stack divider={<Divider />} sx={{ py: 0.25 }}>

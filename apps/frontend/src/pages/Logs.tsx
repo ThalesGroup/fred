@@ -98,7 +98,6 @@ export default function Logs() {
           start={new Date(alignedStartIso)}
           end={rawEnd.toDate()}
           height={560}
-          defaultService="knowledge-flow"
           devTail={false}
           fillParent={true}
         />
