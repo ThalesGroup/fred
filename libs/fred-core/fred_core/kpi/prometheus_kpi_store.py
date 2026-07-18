@@ -26,11 +26,46 @@ from fred_core.kpi.kpi_writer_structures import KPIEvent
 
 logger = logging.getLogger(__name__)
 
-PROMETHEUS_HIGH_CARDINALITY_LABELS = frozenset(
+# Explicit allow-list, not a deny-list: Prometheus/Grafana serves platform
+# operators, not team- or user-scoped product analytics (that's OBSERV-02's
+# job, ReBAC-scoped, backed by OpenSearch — see
+# docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §3.1). A deny-list only
+# protects against the specific fields someone remembered to list; any new
+# per-call or per-user dim added to a KPI event later would silently leak
+# into a scraped, platform-wide-visible label unless it's caught here too.
+# An allow-list fails safe: a new dim needs a deliberate decision to appear
+# as a label at all.
+#
+# Deliberately excluded, and why:
+# - user_id, session_id, exchange_id: direct/pseudonymous identity.
+# - team_id, agent_instance_id, agent_instance_name, agent_id: "usage by
+#   team/agent instance" is a product-analytics question already answered,
+#   correctly scoped, by OBSERV-02's presets — duplicating it here would
+#   mean a second, unsynchronized access-control model for the same fact.
+# - trace_id, correlation_id, checkpoint_id, doc_uid, scope_id: unique per
+#   call/resource, no aggregate value as a label, and a pivot vector from a
+#   wide-audience dashboard back into raw logs.
+PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
-        "session_id",
-        "user_id",
-        "exchange_id",
+        "tool_name",
+        "status",
+        "error_code",
+        "exception_type",
+        "http_status",
+        "template_agent_id",
+        "model",
+        "model_name",
+        "finish_reason",
+        "runtime_id",
+        "source_runtime_id",
+        "service",
+        "env",
+        "cluster",
+        "route",
+        "method",
+        "actor_type",
+        "file_type",
+        "agent_step",
     }
 )
 
@@ -54,21 +89,19 @@ def _prometheus_label_dims(event: KPIEvent) -> Dict[str, str]:
     Return the bounded subset of KPI dims that may become Prometheus labels.
 
     Why this exists:
-    - KPI events can carry per-user/per-turn identifiers for structured stores,
-      but Prometheus labels must stay low-cardinality.
+    - KPI events can carry per-user/per-team/per-turn identifiers for
+      structured stores (OpenSearch), but Prometheus labels must stay both
+      low-cardinality and free of anything RGPD-relevant — see
+      PROMETHEUS_ALLOWED_LABELS above for the reasoning per field.
 
     How to use it:
     - call before resolving or emitting Prometheus labels; do not mutate the
       original event because delegates such as OpenSearch still need full dims.
-
-    Example:
-    - `_prometheus_label_dims(event)` drops `session_id`, `user_id`, and
-      `exchange_id` from the label candidate set.
     """
     return {
         k: str(v)
         for k, v in (event.dims or {}).items()
-        if v is not None and k not in PROMETHEUS_HIGH_CARDINALITY_LABELS
+        if v is not None and k in PROMETHEUS_ALLOWED_LABELS
     }
 
 
