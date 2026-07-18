@@ -21,6 +21,7 @@ from .config_loader import (
 from .env import coerce_bool, read_env_bool
 from .fastapi_handlers import register_exception_handlers
 from .lru_cache import ThreadSafeLRUCache
+from .resilient_sink import ResilientSinkStore
 from .structures import (
     BaseModelWithId,
     DuckdbStoreConfig,
@@ -60,6 +61,7 @@ __all__ = [
     "TeamId",
     "is_personal_team_id",
     "personal_team_id",
+    "ResilientSinkStore",
     "TemporalSchedulerConfig",
     "ThreadSafeLRUCache",
     "coerce_bool",

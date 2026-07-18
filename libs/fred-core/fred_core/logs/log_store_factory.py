@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from fred_core.common.resilient_sink import ResilientSinkStore
 from fred_core.common.structures import OpenSearchIndexConfig, OpenSearchStoreConfig
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_structures import InMemoryLogStorageConfig, LogStorageConfig
@@ -59,13 +60,19 @@ def build_log_store(
             )
         # OpenSearchStoreConfig's own validator already fails config loading
         # closed if a password is missing — no need to re-check it here.
-        return OpenSearchLogStore(
-            host=opensearch_config.host,
-            index=log_store_config.index,
-            username=opensearch_config.username,
-            password=opensearch_config.password,
-            secure=opensearch_config.secure,
-            verify_certs=opensearch_config.verify_certs,
+        # ResilientSinkStore: writes are handed to a background thread via a
+        # bounded queue and short-circuited on repeated failure, so a
+        # slow/down OpenSearch cluster can never block or fail the business
+        # request that triggered a log line (issue #2009).
+        return ResilientSinkStore(  # type: ignore[return-value]
+            OpenSearchLogStore(
+                host=opensearch_config.host,
+                index=log_store_config.index,
+                username=opensearch_config.username,
+                password=opensearch_config.password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+            )
         )
     if log_store_config is None or isinstance(
         log_store_config, InMemoryLogStorageConfig

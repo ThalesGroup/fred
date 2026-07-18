@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from fred_core.common.resilient_sink import ResilientSinkStore
 from fred_core.common.structures import KpiObservabilityConfig, OpenSearchStoreConfig
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
@@ -65,13 +66,19 @@ def build_kpi_writer(
                 "— falling back to log sink"
             )
         else:
-            base_store = OpenSearchKPIStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=opensearch_config.password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=os_cfg.index,
+            # ResilientSinkStore: writes are handed to a background thread via
+            # a bounded queue and short-circuited on repeated failure, so a
+            # slow/down OpenSearch cluster can never block or fail the
+            # business request that triggered a metric (issue #2009).
+            base_store = ResilientSinkStore(  # type: ignore[assignment]
+                OpenSearchKPIStore(
+                    host=opensearch_config.host,
+                    username=opensearch_config.username,
+                    password=opensearch_config.password,
+                    secure=opensearch_config.secure,
+                    verify_certs=opensearch_config.verify_certs,
+                    index=os_cfg.index,
+                )
             )
 
     if base_store is None and log_cfg.enabled:

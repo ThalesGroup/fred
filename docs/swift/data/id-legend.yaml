@@ -1353,6 +1353,7 @@ items:
     parent: OBSERV-01
     refs:
       doc: "docs/swift/platform/OBSERVABILITY-AND-AUDIT.md"
+      execution: "GitHub issue #2009"
     notes: >
       2026-07-18: target architecture confirmed after checking the live C1
       GCP/GKE reference deployment, not just application code — three
@@ -1361,10 +1362,20 @@ items:
       → structured JSON log line, new). Explicitly does not touch OBSERV-02's
       OpenSearch KPI delegate (AnalyticsPage depends on it). No prior RFC
       draft is kept — the target-state doc above is canonical; implementation
-      detail belongs on the tracking GitHub issue (not yet opened) once work
-      starts. Supersedes and folds in the formerly-`ignored/`
+      detail belongs on the tracking GitHub issue once work starts.
+      Supersedes and folds in the formerly-`ignored/`
       ISSUE-AGENT-TOOL-LOGGING.md and ISSUE-AUDIT-LOG-DELIVERY.md and the
       short-lived AGENT-TOOL-CALL-AUDIT-RFC.md; do not recreate any of them.
+      2026-07-18 (issue #2009): next slice — generic app logs now durably
+      land in OpenSearch (previous commit) and are queried by the UI Log
+      Console, which surfaced two live gaps: prompt/response/tool-arg/
+      document-content fragments were leaking into that store via several
+      logger call sites, and neither `/logs/query` nor the raw OpenSearch
+      Ops surface had a platform-permission gate (frontend-only). Also adds
+      a closed `category` field to `LogEventDTO`/`LogFilter` (replacing the
+      last decorative `[KPI]` text-tag use), sink fail-open/circuit-breaker
+      so an OpenSearch outage can't break or stall a business request, and
+      drops the frontend's dead "agentic" log-service option.
 
   # ── OPS ───────────────────────────────────────────────────────────────
 

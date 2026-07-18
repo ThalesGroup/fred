@@ -125,9 +125,24 @@ an infrastructure guarantee, not an application one.
 
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
-index from — product analytics, with no special access control beyond what already protects
-OpenSearch itself, and no long-retention requirement. Their diagnostic value decreases over time;
-they are not an audit or compliance artifact and should never be treated as one.
+index from — product analytics, with no long-retention requirement. Their diagnostic value
+decreases over time; they are not an audit or compliance artifact and should never be treated as
+one.
+
+This stream carries no content (§7) — but it is still queryable platform-wide (across users,
+across services) by whoever can call its query endpoint, which is a meaningfully different
+exposure than "an individual user's own data." Both the query surface for this stream (the Log
+Console, `/logs/query`) and the raw OpenSearch Ops surface it sits next to (cluster health,
+indices, mappings, shards) therefore require `CAN_OBSERVE_PLATFORM` — the same platform-wide
+observation capability Stream 2's `view_global` branch already requires (§4) — enforced
+server-side, not only hidden behind a frontend route guard.
+
+Each event carries a closed, structurally-derived `category` (`application` or `kpi`) — never
+inferred from message text (a message that happens to contain the literal string `"[KPI]"` or
+`"[AUDIT]"` does not become that category; only an event actually emitted on the reserved `KPI`
+logger does). Real audit events (Stream 3) never appear in this store at all — enforced doubly:
+`fred.security.audit` does not propagate to the root logger, and the store's ingestion handler
+independently drops any record from that logger by name.
 
 ## 7. Data protection summary
 
@@ -164,13 +179,26 @@ and nothing else does. This observability architecture is designed against that 
 | Guarantee | Status |
 |---|---|
 | Operational metrics exclude direct identity | **True today** — enforced in code |
-| Operational metrics exclude all per-call correlation and team/agent-instance identifiers | **Target, not yet enforced** — the current filter excludes direct identity only |
+| Operational metrics exclude all per-call correlation and team/agent-instance identifiers | **True today** — `PROMETHEUS_ALLOWED_LABELS` is an explicit allow-list; a new dim needs a deliberate decision to become a label |
 | Product analytics scoped per viewer via authorization | **True today**, shipped |
-| Every tool invocation produces a durable audit record | **Target, not yet true** — today only authorization decisions are recorded, and only in an in-memory buffer lost on restart |
-| Audit records are valid structured JSON on the log output | **Target, not yet true** — today's output is human-readable text, not machine-parseable |
-| Generic logs land in durable, queryable storage | **Target, not yet true** — today they are either lost on restart or discarded entirely, depending on the service |
+| Every tool invocation produces an audit-channel event | **True today** — `agent.tool.invocation.{started,completed}` emitted on the security/audit logger for every actually-executed tool call; the pod-local ring buffer backing `/agents/audit-events` remains scoped to authz decisions and is not the durability guarantee (see the row below) |
+| Audit records are valid structured JSON on the log output | **True today** |
+| Generic logs land in durable, queryable storage | **True today** where a service's `storage.log_store` is set to `opensearch` — still `RamLogStore` (in-memory, lost on restart) where it isn't; flipping the C1 reference deployment's config is a separate, infra-only follow-up |
+| Generic logs contain no prompt/response/tool-argument/document content | **True today** — fixed 2026-07-18 (issue #2009); several logger call sites (`tracing_kpi.py`, `react_runtime.py`, the vectorization pipeline) previously logged raw content previews into this store |
+| Generic-log and OpenSearch-Ops query endpoints require `CAN_OBSERVE_PLATFORM` server-side | **True today** — fixed 2026-07-18 (issue #2009); previously gated only by authentication (logs) or only by the frontend route (both) |
+| Generic-log `category` is a closed, structurally-derived field | **True today** — fixed 2026-07-18 (issue #2009); previously only a decorative `[KPI]`-text convention with no queryable field |
+| A KPI/log sink outage cannot fail or stall a business request | **True today** — fixed 2026-07-18 (issue #2009); writes are now fail-open with a bounded queue and circuit breaker in front of the OpenSearch-backed stores |
 | Downstream retention/access/integrity for the audit trail | **Deployment responsibility, not yet established at any classification level** — requires action by whoever operates the target cluster, independent of Fred's own code |
 
 This table is the honest current state as of 2026-07-18. It should be updated as each guarantee
 moves from target to true, and treated as the canonical status reference for this topic — do not
 let a parallel status document drift from it.
+
+**Known follow-up, deliberately not done in issue #2009 (mechanical-scope discipline, same
+reasoning as `26ae63e6`'s note on the 26 `[AUTH]` renames):** `opensearch_kpi_store.py`'s
+`query()` still logs four `"[KPI][QUERY] ..."` lines on its own module logger (not the reserved
+`KPI` logger) — a decorative reuse of the same tag `26ae63e6` stopped elsewhere. Not a content or
+authorization gap (the values logged are query filter dims already carried in the KPI store's own
+identity fields, and `category` resolves correctly to `application` regardless of the tag text) —
+just hygiene. Renaming to a non-reserved tag (e.g. `[KPI-STORE]`) or dropping the bracket entirely
+is a good follow-up.

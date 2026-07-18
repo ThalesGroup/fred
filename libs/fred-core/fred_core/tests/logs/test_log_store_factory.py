@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import pytest
+from fred_core.common.resilient_sink import ResilientSinkStore
 from fred_core.common.structures import OpenSearchIndexConfig, OpenSearchStoreConfig
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.log_structures import InMemoryLogStorageConfig
@@ -73,5 +74,9 @@ def test_build_log_store_builds_opensearch_when_configured(
             password="admin",  # nosec B106  # pragma: allowlist secret
         ),
     )
-    assert isinstance(store, OpenSearchLogStore)
-    assert store.index == "logs-index"
+    # issue #2009: OpenSearch-backed log stores are wrapped in a
+    # ResilientSinkStore so a cluster outage can never block/fail the
+    # business request that triggered a log line.
+    assert isinstance(store, ResilientSinkStore)
+    assert isinstance(store.wrapped, OpenSearchLogStore)
+    assert store.wrapped.index == "logs-index"
