@@ -24,16 +24,20 @@ Covers the two things the health/impact work turns on:
   reconciliation sweep could clear them.
 """
 
+# pyright: reportArgumentType=false
+# ^ these tests pass a lightweight SimpleNamespace/_FakeAgentInstanceStore fake
+#   in place of ProductServiceDependencies/AgentInstanceStore, and a plain str
+#   in place of TeamId, on purpose (same convention as
+#   test_capability_selection_1974.py / test_capability_enablement_1980.py).
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import pytest
-from test_main import _FakeAgentInstanceStore, _make_record
-
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capabilities import impact as impact_mod
 from control_plane_backend.capabilities.enablement import revive_dependent_instances
+from test_main import _FakeAgentInstanceStore, _make_record
 
 
 def _record_with(
