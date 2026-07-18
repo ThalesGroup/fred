@@ -85,7 +85,7 @@ class _FakeRebac:
             return [RebacReference(Resource.USER, uid) for uid in self.team_admin_ids]
         return []
 
-    async def add_relation(self, relation: Relation):
+    async def add_relation(self, relation: Relation, **kwargs: object):
         self.added_relations.append(relation)
         return None
 

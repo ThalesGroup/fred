@@ -80,7 +80,7 @@ class _FakeRebac:
             f"{relation.resource.type.value}:{relation.resource.id}",
         )
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def add_relation(self, relation: Relation, **kwargs: object) -> str | None:
         key = self._key(relation)
         self.tuples.add(key)
         self.write_log.append(("add", key))
@@ -566,10 +566,12 @@ async def test_seed_registration_isolates_per_entry_failure() -> None:
     # One bad entry (e.g. an id the FGA store rejects) must not starve the
     # rest of the catalog of their first-registration seed.
     class _RejectingRebac(_FakeRebac):
-        async def add_relation(self, relation: Relation) -> str | None:
+        async def add_relation(
+            self, relation: Relation, **kwargs: object
+        ) -> str | None:
             if relation.resource.id == "bad_cap":
                 raise RuntimeError("HTTP 400 Invalid tuple")
-            return await super().add_relation(relation)
+            return await super().add_relation(relation, **kwargs)
 
     rebac = _RejectingRebac()
     catalog = [

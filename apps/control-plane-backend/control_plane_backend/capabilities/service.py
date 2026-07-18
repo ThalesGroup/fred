@@ -308,6 +308,7 @@ async def disable_team_capability(
         catalog_entry=entry,
         team_id=team_id,
         kpi_writer=deps.get_kpi_writer(),
+        updated_by=user.uid,
     )
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
@@ -376,6 +377,7 @@ async def set_default_on(
         catalog_entry=entry,
         on=default_on,
         kpi_writer=deps.get_kpi_writer(),
+        updated_by=user.uid,
     )
     # Turning default-on ON grants inherited access platform-wide, so it revives
     # across EVERY team holding dependents — not one team like the enable path.
@@ -456,6 +458,7 @@ async def set_personal_scope(
         catalog_entry=entry,
         scope=scope,
         kpi_writer=deps.get_kpi_writer(),
+        updated_by=user.uid,
     )
     return CapabilityPersonalScopeResult(
         capability_id=capability_id,

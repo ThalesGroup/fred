@@ -57,7 +57,7 @@ class _FakeRebac:
         self.added_relations: list[Relation] = []
         self._call_order = call_order
 
-    async def add_relation(self, relation: Relation):
+    async def add_relation(self, relation: Relation, **kwargs: object):
         self.added_relations.append(relation)
         if self._call_order is not None:
             self._call_order.append("add_relation")
@@ -421,7 +421,7 @@ class _FailingRebac:
 
     enabled = True
 
-    async def add_relation(self, relation: Relation):
+    async def add_relation(self, relation: Relation, **kwargs: object):
         raise RuntimeError("openfga unavailable")
 
 

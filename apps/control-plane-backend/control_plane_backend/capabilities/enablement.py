@@ -219,7 +219,8 @@ async def enable_capability_for_team(
             subject=_team_ref(team_id),
             relation=RelationType.ENABLED,
             resource=_cap_ref(catalog_entry.id),
-        )
+        ),
+        actor_uid=updated_by,
     )
     logger.info(
         "[capability-enablement] enabled capability=%s team=%s by=%s",
@@ -238,6 +239,7 @@ async def disable_capability_for_team(
     catalog_entry: CapabilityCatalogEntry,
     team_id: TeamId,
     kpi_writer: BaseKPIWriter | None = None,
+    updated_by: str | None = None,
 ) -> int:
     """Disable one capability for one team and suspend its dependents (§8.2, #1975).
 
@@ -262,7 +264,8 @@ async def disable_capability_for_team(
             subject=_team_ref(team_id),
             relation=RelationType.DISABLED,
             resource=_cap_ref(catalog_entry.id),
-        )
+        ),
+        actor_uid=updated_by,
     )
     del settings_store  # settings row is intentionally retained (re-enable restores)
     return await suspend_dependent_instances(
@@ -434,6 +437,7 @@ async def set_capability_default_on(
     catalog_entry: CapabilityCatalogEntry,
     on: bool,
     kpi_writer: BaseKPIWriter | None = None,
+    updated_by: str | None = None,
 ) -> int:
     """Toggle a capability's platform-wide `default_on` marker (RFC §8.3).
 
@@ -456,7 +460,8 @@ async def set_capability_default_on(
                 subject=_ORG_REF,
                 relation=RelationType.DEFAULT_ON,
                 resource=_cap_ref(catalog_entry.id),
-            )
+            ),
+            actor_uid=updated_by,
         )
         return 0
 
@@ -495,6 +500,7 @@ async def set_capability_personal_scope(
     catalog_entry: CapabilityCatalogEntry,
     scope: Literal["enabled", "disabled", "default"],
     kpi_writer: BaseKPIWriter | None = None,
+    updated_by: str | None = None,
 ) -> int:
     """Set the personal-space class position for a capability (RFC §8.4).
 
@@ -549,7 +555,11 @@ async def set_capability_personal_scope(
     want_on = scope == "enabled"
     want_disabled = scope == "disabled"
     await _apply_personal_scope_tuples(
-        rebac, catalog_entry.id, want_on=want_on, want_disabled=want_disabled
+        rebac,
+        catalog_entry.id,
+        want_on=want_on,
+        want_disabled=want_disabled,
+        updated_by=updated_by,
     )
     has_access = (want_on or default_on) and not want_disabled
 
@@ -564,7 +574,12 @@ async def set_capability_personal_scope(
 
 
 async def _apply_personal_scope_tuples(
-    rebac: RebacEngine, capability_id: str, *, want_on: bool, want_disabled: bool
+    rebac: RebacEngine,
+    capability_id: str,
+    *,
+    want_on: bool,
+    want_disabled: bool,
+    updated_by: str | None = None,
 ) -> None:
     """Write/delete the two org-subject class tuples so exactly the requested
     state holds (at most one present). Idempotent."""
@@ -580,10 +595,10 @@ async def _apply_personal_scope_tuples(
         resource=_cap_ref(capability_id),
     )
     if want_on:
-        await rebac.add_relation(on_relation)
+        await rebac.add_relation(on_relation, actor_uid=updated_by)
         await rebac.delete_relation(disabled_relation)
     elif want_disabled:
-        await rebac.add_relation(disabled_relation)
+        await rebac.add_relation(disabled_relation, actor_uid=updated_by)
         await rebac.delete_relation(on_relation)
     else:  # default → clear both
         await rebac.delete_relation(on_relation)

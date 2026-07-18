@@ -423,7 +423,8 @@ async def create_team(
                     resource=RebacReference(Resource.TEAM, team_id),
                 )
                 for admin_user_id in request.initial_team_admin_ids
-            ]
+            ],
+            actor_uid=user.uid,
         )
     except Exception:
         logger.warning(

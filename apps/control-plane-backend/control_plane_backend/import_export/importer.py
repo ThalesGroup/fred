@@ -355,7 +355,11 @@ async def _run_phase(
 
 
 async def _grant_platform_role(
-    rebac: RebacEngine, user_sub: str, relation: RelationType
+    rebac: RebacEngine,
+    user_sub: str,
+    relation: RelationType,
+    *,
+    actor_uid: str | None = None,
 ) -> None:
     """Grant one org-level platform role to a third party (AUTHZ-07 Part 8 §40.2).
 
@@ -373,7 +377,8 @@ async def _grant_platform_role(
             subject=RebacReference(Resource.USER, user_sub),
             relation=relation,
             resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-        )
+        ),
+        actor_uid=actor_uid,
     )
 
 
@@ -382,6 +387,8 @@ async def _grant_team_role_via_import(
     user_sub: str,
     relation: UserTeamRelation,
     team_id: TeamId,
+    *,
+    actor_uid: str | None = None,
 ) -> None:
     """Grant one team-scoped role directly (AUTHZ-07 Step 2 — the fix).
 
@@ -414,7 +421,8 @@ async def _grant_team_role_via_import(
             subject=RebacReference(Resource.USER, user_sub),
             relation=relation.to_relation(),
             resource=RebacReference(Resource.TEAM, team_id),
-        )
+        ),
+        actor_uid=actor_uid,
     )
 
 
@@ -659,6 +667,7 @@ async def _apply_bundle_user_roles(
     task_service: TaskService,
     task_id: str,
     report: MigrationReport,
+    platform_admin: KeycloakUser,
 ) -> None:
     """Grant each resolved user's declared team roles and platform roles.
 
@@ -689,12 +698,16 @@ async def _apply_bundle_user_roles(
         for team_name, relations in _effective_team_relations(entry).items():
             team_id = team_ids_by_name[team_name]
             for relation in relations:
-                await _grant_team_role_via_import(rebac, sub, relation, team_id)
+                await _grant_team_role_via_import(
+                    rebac, sub, relation, team_id, actor_uid=platform_admin.uid
+                )
                 report.team_roles_granted += 1
 
         for role in entry.platform_roles:
             relation = _PLATFORM_ROLE_RELATIONS[role]  # validated upfront
-            await _grant_platform_role(rebac, sub, relation)
+            await _grant_platform_role(
+                rebac, sub, relation, actor_uid=platform_admin.uid
+            )
             report.platform_roles_granted += 1
 
         processed += 1
@@ -773,6 +786,7 @@ async def _run_users_phase(
         task_service=task_service,
         task_id=task_id,
         report=report,
+        platform_admin=platform_admin,
     )
 
 

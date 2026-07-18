@@ -867,7 +867,7 @@ class _FakeTemplateGrantRebac:
     ) -> bool:
         return resource.id in self.already_granted.get(subject.id, set())
 
-    async def add_relation(self, relation) -> str | None:
+    async def add_relation(self, relation, **kwargs: object) -> str | None:
         if relation.relation.value == "enabled":
             self.enabled_writes.append((relation.subject.id, relation.resource.id))
         return None
