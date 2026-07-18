@@ -32,7 +32,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAdminCapabilitiesQuery,
-  useListTeamsQuery,
+  useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -52,7 +52,10 @@ export default function CapabilitiesPage() {
   const { showSuccess, showError, showWarn } = useToast();
 
   const { data, isLoading, isError } = useAdminCapabilitiesQuery();
-  const { data: teams = [] } = useListTeamsQuery();
+  // The registry-governance view (`can_list_all_teams`), not the caller-scoped
+  // `/teams` list — a platform admin managing per-team enablement must see
+  // every team, including ones they don't personally belong to (#1981).
+  const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
 
   // Session-observed suspended-instance counts per capability, sourced from the
@@ -248,6 +251,8 @@ export default function CapabilitiesPage() {
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}
         teams={teams}
+        teamsLoading={isTeamsLoading}
+        teamsError={isTeamsError}
         open={matrixCapability !== null}
         onClose={() => setMatrixCapabilityId(null)}
         onSuspended={recordSuspended}

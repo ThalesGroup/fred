@@ -25,6 +25,12 @@
   font: var(--font-body-small);
 }
 
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
 .teamList {
   display: flex;
   flex-direction: column;

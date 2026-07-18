@@ -23,6 +23,7 @@ import {
   sortTeamsForMatrix,
   teamCapabilityChoice,
   teamCapabilityState,
+  teamMatrixStatus,
 } from "./capabilityEnablement";
 
 describe("teamCapabilityState (RFC §8.5 tri-state)", () => {
@@ -215,5 +216,46 @@ describe("filterTeamsByName (matrix drawer search)", () => {
 
   it("returns an empty list when nothing matches", () => {
     expect(filterTeamsByName(teams, "zzz")).toEqual([]);
+  });
+
+  it("finds a team from the global registry the caller doesn't belong to (e.g. fredlab)", () => {
+    // Regression: the drawer used to source its team list from the caller-scoped
+    // `/teams` endpoint, so a team the admin wasn't a member of (like `fredlab`)
+    // never reached this filter at all and a search for it always came up empty.
+    const registry = [...teams, { name: "fredlab" }];
+    expect(filterTeamsByName(registry, "fredlab")).toEqual([{ name: "fredlab" }]);
+    expect(filterTeamsByName(registry, "FredLab")).toEqual([{ name: "fredlab" }]);
+  });
+});
+
+describe("teamMatrixStatus (drawer loading/error/empty precedence)", () => {
+  const base = { teamsLoading: false, teamsError: false, registryEmpty: false, hasQuery: false, visibleCount: 3 };
+
+  it("is 'ready' when the registry loaded with teams and no active search", () => {
+    expect(teamMatrixStatus(base)).toBe("ready");
+  });
+
+  it("is 'loading' while the registry query is in flight, above every other state", () => {
+    expect(teamMatrixStatus({ ...base, teamsLoading: true })).toBe("loading");
+    expect(teamMatrixStatus({ ...base, teamsLoading: true, teamsError: true, registryEmpty: true })).toBe("loading");
+  });
+
+  it("is 'error' when the registry query failed, and never silently becomes an empty list", () => {
+    expect(teamMatrixStatus({ ...base, teamsError: true })).toBe("error");
+    expect(teamMatrixStatus({ ...base, teamsError: true, registryEmpty: true })).toBe("error");
+  });
+
+  it("is 'registryEmpty' when no team exists at all, distinct from a search yielding nothing", () => {
+    expect(teamMatrixStatus({ ...base, registryEmpty: true })).toBe("registryEmpty");
+    // Even with a stray query typed in, "no teams exist" outranks "no match".
+    expect(teamMatrixStatus({ ...base, registryEmpty: true, hasQuery: true, visibleCount: 0 })).toBe("registryEmpty");
+  });
+
+  it("is 'searchEmpty' only when teams exist but the active search matches none", () => {
+    expect(teamMatrixStatus({ ...base, hasQuery: true, visibleCount: 0 })).toBe("searchEmpty");
+  });
+
+  it("is not 'searchEmpty' when a query is active but still matches something", () => {
+    expect(teamMatrixStatus({ ...base, hasQuery: true, visibleCount: 1 })).toBe("ready");
   });
 });

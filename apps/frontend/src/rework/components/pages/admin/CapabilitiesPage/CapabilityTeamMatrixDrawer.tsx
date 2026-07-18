@@ -43,12 +43,17 @@ import {
   seedSettingsFromFields,
   sortTeamsForMatrix,
   teamCapabilityChoice,
+  teamMatrixStatus,
   type TeamCapabilityChoice,
 } from "./capabilityEnablement";
 
 interface CapabilityTeamMatrixDrawerProps {
   capability: CapabilityEnablementItem | null;
   teams: Team[];
+  /** `useListAllTeamsQuery` in flight — the roster isn't `teams.length === 0`, it's unknown yet. */
+  teamsLoading: boolean;
+  /** `useListAllTeamsQuery` failed — must read as an error, never as an empty registry. */
+  teamsError: boolean;
   open: boolean;
   onClose: () => void;
   /** Bubble up the count of instances a revoke suspended, for the health column. */
@@ -81,6 +86,8 @@ const OFF_TOAST_KEYS = {
 export function CapabilityTeamMatrixDrawer({
   capability,
   teams,
+  teamsLoading,
+  teamsError,
   open,
   onClose,
   onSuspended,
@@ -166,6 +173,17 @@ export function CapabilityTeamMatrixDrawer({
 
   const hasQuery = teamQuery.trim() !== "";
   const visibleTeams = filterTeamsByName(orderedTeams, teamQuery);
+  // `teams`, not the sorted snapshot: the registry-empty check must reflect
+  // the live query result immediately, not wait for the sort effect to
+  // re-run — otherwise a freshly-loaded roster can flash "no teams" for a frame.
+  const registryEmpty = teams.length === 0;
+  const status = teamMatrixStatus({
+    teamsLoading,
+    teamsError,
+    registryEmpty,
+    hasQuery,
+    visibleCount: visibleTeams.length,
+  });
 
   // Toasts name the team; ids are opaque (Keycloak group ids), so resolve.
   const teamLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
@@ -240,83 +258,113 @@ export function CapabilityTeamMatrixDrawer({
       {capability && (
         <div className={styles.body}>
           <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
-          <SearchField
-            value={teamQuery}
-            onChange={setTeamQuery}
-            placeholder={t("rework.admin.capabilities.matrix.searchPlaceholder")}
-            clearAriaLabel={t("rework.admin.capabilities.matrix.clearSearch")}
-            autoFocus
-          />
-          {hasQuery && visibleTeams.length === 0 && (
-            <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
+
+          {status === "loading" && (
+            <p className={styles.hint} role="status">
+              {t("rework.admin.capabilities.matrix.teamsLoading")}
+            </p>
           )}
-          <ul className={styles.teamList}>
-            {visibleTeams.map((team) => {
-              const choice = teamCapabilityChoice(capability, team.id);
-              const off = !isCapabilityOnForTeam(capability, team.id);
-              const isEditing = editingTeamId === team.id;
-              // While a change is in flight the segment shows the admin's
-              // click, not the not-yet-refetched server state.
-              const pendingChoice = pendingByTeam[team.id];
-              const isPending = pendingChoice !== undefined;
-              const displayChoice = pendingChoice ?? choice;
-              return (
-                <li
-                  key={team.id}
-                  className={`${styles.teamRow} ${off && !isEditing && !isPending ? styles.dimmed : ""}`}
-                  aria-busy={isPending}
-                >
-                  <div className={styles.teamMain}>
-                    <span className={styles.teamName} title={team.name}>
-                      {team.name}
-                    </span>
-                  </div>
-                  <div className={styles.teamActions}>
-                    {isPending && <span className={styles.spinner} aria-hidden="true" />}
-                    <ButtonGroup
-                      size="small"
-                      color="primary"
-                      variant="radio"
-                      aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: team.name })}
-                      selectedIndex={CHOICES.indexOf(displayChoice)}
-                      onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
-                      items={CHOICES.map((target) => ({
-                        label: t(CHOICE_LABEL_KEY[target]),
-                        disabled: busy || (target === "enabled" && isEditing),
-                      }))}
-                    />
-                  </div>
-                  {isEditing && (
-                    <form
-                      className={styles.settingsForm}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void submitEnable(team.id, formValues);
-                      }}
-                    >
-                      {fields.map((field) => (
-                        <TuningFieldRenderer
-                          key={field.key}
-                          field={field as ManagedAgentFieldSpec}
-                          value={formValues[field.key]}
-                          onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
-                          disabled={busy}
-                        />
-                      ))}
-                      <div className={styles.settingsActions}>
-                        <Button color="on-surface" variant="text" size="small" onClick={() => setEditingTeamId(null)}>
-                          {t("rework.admin.capabilities.matrix.cancel")}
-                        </Button>
-                        <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
-                          {t("rework.admin.capabilities.matrix.saveEnable")}
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+
+          {status === "error" && (
+            <p className={styles.error} role="alert">
+              {t("rework.admin.capabilities.matrix.teamsError")}
+            </p>
+          )}
+
+          {status !== "loading" && status !== "error" && (
+            <>
+              <SearchField
+                value={teamQuery}
+                onChange={setTeamQuery}
+                placeholder={t("rework.admin.capabilities.matrix.searchPlaceholder")}
+                clearAriaLabel={t("rework.admin.capabilities.matrix.clearSearch")}
+                autoFocus
+              />
+
+              {status === "registryEmpty" && (
+                <p className={styles.hint}>{t("rework.admin.capabilities.matrix.noTeams")}</p>
+              )}
+
+              {status === "searchEmpty" && (
+                <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
+              )}
+
+              {status === "ready" && (
+                <ul className={styles.teamList}>
+                  {visibleTeams.map((team) => {
+                    const choice = teamCapabilityChoice(capability, team.id);
+                    const off = !isCapabilityOnForTeam(capability, team.id);
+                    const isEditing = editingTeamId === team.id;
+                    // While a change is in flight the segment shows the admin's
+                    // click, not the not-yet-refetched server state.
+                    const pendingChoice = pendingByTeam[team.id];
+                    const isPending = pendingChoice !== undefined;
+                    const displayChoice = pendingChoice ?? choice;
+                    return (
+                      <li
+                        key={team.id}
+                        className={`${styles.teamRow} ${off && !isEditing && !isPending ? styles.dimmed : ""}`}
+                        aria-busy={isPending}
+                      >
+                        <div className={styles.teamMain}>
+                          <span className={styles.teamName} title={team.name}>
+                            {team.name}
+                          </span>
+                        </div>
+                        <div className={styles.teamActions}>
+                          {isPending && <span className={styles.spinner} aria-hidden="true" />}
+                          <ButtonGroup
+                            size="small"
+                            color="primary"
+                            variant="radio"
+                            aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: team.name })}
+                            selectedIndex={CHOICES.indexOf(displayChoice)}
+                            onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
+                            items={CHOICES.map((target) => ({
+                              label: t(CHOICE_LABEL_KEY[target]),
+                              disabled: busy || (target === "enabled" && isEditing),
+                            }))}
+                          />
+                        </div>
+                        {isEditing && (
+                          <form
+                            className={styles.settingsForm}
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void submitEnable(team.id, formValues);
+                            }}
+                          >
+                            {fields.map((field) => (
+                              <TuningFieldRenderer
+                                key={field.key}
+                                field={field as ManagedAgentFieldSpec}
+                                value={formValues[field.key]}
+                                onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
+                                disabled={busy}
+                              />
+                            ))}
+                            <div className={styles.settingsActions}>
+                              <Button
+                                color="on-surface"
+                                variant="text"
+                                size="small"
+                                onClick={() => setEditingTeamId(null)}
+                              >
+                                {t("rework.admin.capabilities.matrix.cancel")}
+                              </Button>
+                              <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
+                                {t("rework.admin.capabilities.matrix.saveEnable")}
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       )}
     </InlineDrawer>

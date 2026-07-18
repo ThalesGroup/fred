@@ -153,6 +153,29 @@ export function filterTeamsByName<T extends { name: string }>(teams: T[], query:
 }
 
 /**
+ * Which message (if any) the team matrix drawer should show above/instead of
+ * the team list — priority order matters: a fetch in flight beats a fetch
+ * error beats "the registry has no teams at all" beats "your search matched
+ * nothing". Centralized so the component can't accidentally show two of
+ * these at once, or collapse a real error into a silent empty list.
+ */
+export type TeamMatrixStatus = "loading" | "error" | "registryEmpty" | "searchEmpty" | "ready";
+
+export function teamMatrixStatus(params: {
+  teamsLoading: boolean;
+  teamsError: boolean;
+  registryEmpty: boolean;
+  hasQuery: boolean;
+  visibleCount: number;
+}): TeamMatrixStatus {
+  if (params.teamsLoading) return "loading";
+  if (params.teamsError) return "error";
+  if (params.registryEmpty) return "registryEmpty";
+  if (params.hasQuery && params.visibleCount === 0) return "searchEmpty";
+  return "ready";
+}
+
+/**
  * Seed the enable-with-settings form values from the field specs' declared
  * defaults. Existing settings (rare on the admin surface) override the defaults.
  */
