@@ -74,7 +74,6 @@ function render(props: Partial<ComponentProps<typeof CapabilityTeamMatrixDrawer>
       teamsError={false}
       open
       onClose={vi.fn()}
-      onSuspended={vi.fn()}
       {...props}
     />,
   );
@@ -121,7 +120,10 @@ describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
    * row (RFC §8.4) — it is not a team, and these tests assert on per-team rows.
    */
   function rowsInOrder(html: string): string[] {
-    return html.split("<li ").slice(1).filter((row) => !row.includes("_personalRow_"));
+    return html
+      .split("<li ")
+      .slice(1)
+      .filter((row) => !row.includes("_personalRow_"));
   }
 
   /** Index of the row's `<button role="radio">` carrying `aria-checked="true"`. */

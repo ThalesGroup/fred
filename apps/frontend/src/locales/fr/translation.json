@@ -787,7 +787,15 @@
         },
         "health": {
           "suspended": "{{count}} suspendue(s)",
-          "pending": "L'état par capacité en temps réel arrive avec le balayage de suspension."
+          "suspendedAction": "Afficher les {{count}} agent(s) suspendu(s), groupés par équipe",
+          "unknown": "{{count}} inconnu(s)",
+          "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
+          "healthy": "OK"
+        },
+        "suspendedDrawer": {
+          "title": "{{name}} — agents suspendus",
+          "subtitle": "Agents que cette capacité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
         "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
@@ -797,7 +805,13 @@
           "title": "Désactiver l'activation par défaut ?",
           "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette capacité.",
           "confirm": "Désactiver",
-          "cancel": "Annuler"
+          "cancel": "Annuler",
+          "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
+          "impactNone": "Aucun agent en cours d'exécution ne sera affecté.",
+          "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés — leur pod était injoignable, l'impact est donc inconnu.",
+          "showAffected": "Afficher les agents concernés",
+          "hideAffected": "Masquer les agents concernés",
+          "affectedAgent": "{{name}} (équipe {{team}})"
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",

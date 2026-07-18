@@ -1215,7 +1215,12 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
         capability_service, "count_all_personal_spaces", _fake_personal_count
     )
 
-    deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+    # No instances enrolled → the resting-health pass returns nothing and the
+    # list still renders (an empty store short-circuits before any pod fetch).
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+    )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
         deps=deps,  # type: ignore[arg-type]
@@ -1232,6 +1237,9 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
     # platform-wide personal-space denominator (= user count).
     assert item.personal_scope == "enabled"
     assert item.total_personal_space_count == 40
+    # No enrolled instances → nothing broken, nothing unknown.
+    assert item.suspended_instances == 0
+    assert item.health_unknown_instances == 0
 
 
 @pytest.mark.asyncio
@@ -1270,7 +1278,12 @@ async def test_aggregate_list_derives_personal_scope(
     )
     monkeypatch.setattr(capability_service, "count_all_personal_spaces", _fake_count)
 
-    deps = SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+    # No enrolled instances → the resting-health pass short-circuits before any
+    # pod fetch (#1975).
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+    )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
         deps=deps,  # type: ignore[arg-type]

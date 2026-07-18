@@ -407,6 +407,11 @@ operations:
     review_status: approved
     required_permission: can_manage_platform # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_platform (_require_manage_any)
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — read-only revoke-impact preview gated on capability#can_manage, same as the disable mutation it precedes (preview_capability_revoke)
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
