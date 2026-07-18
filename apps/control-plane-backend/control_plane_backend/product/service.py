@@ -594,7 +594,13 @@ async def _agent_capabilities_for_source(
     """
 
     try:
-        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+        # Non-public templates (e.g. the internal self-test harness agent,
+        # `AgentDefinition.public=False`) must never surface as a selectable
+        # `kind="agent"` capability — same policy as the tool-picker they are
+        # already hidden from (AGENT-VISIBILITY-RFC). Unlike other callers of
+        # `_fetch_runtime_templates`, this one intentionally does NOT pass
+        # `include_non_public=True`.
+        templates = await _fetch_runtime_templates(base_url)
     except Exception as exc:
         logger.warning(
             "[capability-catalog] failed to fetch agent templates from %s: %s",

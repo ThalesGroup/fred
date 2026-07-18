@@ -742,6 +742,34 @@ async def test_agent_projection_always_hardcodes_admin_gated(
 
 
 @pytest.mark.asyncio
+async def test_agent_projection_never_requests_non_public_templates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression (capabilities audit, 2026-07-18): `_agent_capabilities_for_source`
+    used to call `_fetch_runtime_templates(..., include_non_public=True)`, so an
+    internal/hidden template (`AgentDefinition.public=False`, e.g. the self-test
+    harness agent) was projected into the admin capabilities catalog as a normal
+    `kind="agent"` entry. AGENT-VISIBILITY-RFC hides those from the default
+    catalog for a reason — no team can knowingly select them, so they have no
+    business appearing as a gateable capability. Assert the call never opts in.
+    """
+
+    seen: dict[str, bool] = {}
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        seen["include_non_public"] = include_non_public
+        return [_template_payload(default_capability_ids=["demo_echo"])]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    await service._agent_capabilities_for_source("http://runtime-a/pod/v1", "runtime-a")
+    assert seen["include_non_public"] is False
+
+
+@pytest.mark.asyncio
 async def test_agent_projection_returns_none_when_pod_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
