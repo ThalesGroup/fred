@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Sequence
 from typing import Any, List
 
@@ -22,6 +24,7 @@ from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
+from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_context import (
     RuntimeConfig,
@@ -231,3 +234,108 @@ async def test_context_aware_tool_arun_failure_sets_error_status() -> None:
     await wrapper._arun(question="hello")
 
     assert _latency_event(store).dims["status"] == "error"
+
+
+class _CancellingTool(BaseTool):
+    name: str = "fake.cancelling"
+    description: str = "Tool whose async path raises CancelledError."
+    args_schema: ArgsSchema | None = _SearchArgs
+
+    def _run(self, *args: Any, **kwargs: Any) -> str:
+        raise NotImplementedError
+
+    async def _arun(self, *args: Any, **kwargs: Any) -> str:
+        raise asyncio.CancelledError
+
+
+class _AuditEvents:
+    """Captures every record emitted on the fred.security.audit logger."""
+
+    def __init__(self) -> None:
+        self.records: List[logging.LogRecord] = []
+
+    def __enter__(self) -> "_AuditEvents":
+        self._logger = logging.getLogger(AUDIT_LOGGER_NAME)
+        self._previous_handlers = list(self._logger.handlers)
+        self._previous_propagate = self._logger.propagate
+        self._logger.handlers.clear()
+        self._logger.propagate = False
+        self._logger.setLevel(logging.INFO)
+
+        class _Capture(logging.Handler):
+            def emit(_self, record: logging.LogRecord) -> None:  # noqa: N805
+                self.records.append(record)
+
+        self._logger.addHandler(_Capture())
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._logger.handlers.clear()
+        for h in self._previous_handlers:
+            self._logger.addHandler(h)
+        self._logger.propagate = self._previous_propagate
+
+    def event_names(self) -> list[str]:
+        return [r.audit_event for r in self.records]  # type: ignore[attr-defined]
+
+
+def test_context_aware_tool_run_success_emits_started_and_completed_audit() -> None:
+    _install_recording_kpi_writer()
+    wrapper = ContextAwareTool(
+        base_tool=_FakeSearchTool(),
+        context_provider=lambda: RuntimeContext(session_id="s1"),
+        agent_settings_provider=_FakeAgentSettings,
+    )
+
+    with _AuditEvents() as audit:
+        wrapper._run(question="hello")
+
+    assert audit.event_names() == [
+        "agent.tool.invocation.started",
+        "agent.tool.invocation.completed",
+    ]
+    completed = audit.records[1]
+    assert completed.outcome == "succeeded"  # type: ignore[attr-defined]
+    assert completed.tool_name == "fake.search"  # type: ignore[attr-defined]
+    # Privacy: no tool arguments or results anywhere in the audit payload.
+    assert "hello" not in str(vars(completed))
+
+
+def test_context_aware_tool_run_failure_emits_completed_with_failed_outcome() -> None:
+    _install_recording_kpi_writer()
+    wrapper = ContextAwareTool(
+        base_tool=_FailingTool(),
+        context_provider=lambda: RuntimeContext(session_id="s1"),
+        agent_settings_provider=_FakeAgentSettings,
+    )
+
+    with _AuditEvents() as audit:
+        wrapper._run(question="hello")
+
+    assert audit.event_names() == [
+        "agent.tool.invocation.started",
+        "agent.tool.invocation.completed",
+    ]
+    completed = audit.records[1]
+    assert completed.outcome == "failed"  # type: ignore[attr-defined]
+    assert completed.error_code == "RuntimeError"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_context_aware_tool_arun_cancelled_emits_cancelled_and_reraises() -> None:
+    _install_recording_kpi_writer()
+    wrapper = ContextAwareTool(
+        base_tool=_CancellingTool(),
+        context_provider=lambda: RuntimeContext(session_id="s1"),
+        agent_settings_provider=_FakeAgentSettings,
+    )
+
+    with _AuditEvents() as audit:
+        with pytest.raises(asyncio.CancelledError):
+            await wrapper._arun(question="hello")
+
+    assert audit.event_names() == [
+        "agent.tool.invocation.started",
+        "agent.tool.invocation.completed",
+    ]
+    assert audit.records[1].outcome == "cancelled"  # type: ignore[attr-defined]

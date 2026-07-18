@@ -1,6 +1,7 @@
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 
+import asyncio
 import logging
 from typing import Any, Callable, Optional
 
@@ -8,6 +9,7 @@ import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
@@ -381,6 +383,39 @@ class ContextAwareTool(BaseTool):
         )
         return kpi, timer, dims
 
+    def _emit_tool_call_audit(
+        self,
+        event_name: str,
+        base_dims: dict[str, Optional[str]],
+        *,
+        outcome: Optional[str] = None,
+        **extra: Optional[str],
+    ) -> None:
+        """Emit one agent.tool.invocation.{started,completed} audit event.
+
+        Why this exists:
+        - a tool call is a security-relevant action, distinct from the KPI
+          timer above (which feeds Prometheus and OBSERV-02's product
+          analytics) — this is the durable "who invoked what, with what
+          outcome" record, on the shared audit logger (see
+          docs/swift/platform/OBSERVABILITY-AND-AUDIT.md).
+        - this method is only ever reached once the runtime has already
+          decided to actually call the tool (HITL/authorization already
+          passed) — its invocation is itself the "this really happened"
+          signal; a refused proposal never reaches here, so it never
+          produces a "started" event.
+
+        Never pass tool arguments, tool results, or any secret here — only
+        the identity/correlation dims already computed for the KPI timer,
+        plus bounded outcome/error fields.
+        """
+        emit_audit_log(
+            event_name,
+            outcome=outcome,
+            **base_dims,
+            **extra,
+        )
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
@@ -388,9 +423,9 @@ class ContextAwareTool(BaseTool):
         kwargs = self._sanitize_tool_kwargs(kwargs)
         kpi, timer, base_dims = self._kpi_timer(context=context)
         with timer as kpi_dims:
+            self._emit_tool_call_audit("agent.tool.invocation.started", base_dims)
             try:
                 result = self.base_tool._run(**kwargs)
-                return normalize_mcp_content(result)
             except Exception as e:
                 # 1. Metrics & Logging
                 kpi_dims["status"] = "error"
@@ -426,6 +461,14 @@ class ContextAwareTool(BaseTool):
                     logger.exception(
                         "[MCP][%s] Tool execution failed (captured)", self.name
                     )
+                self._emit_tool_call_audit(
+                    "agent.tool.invocation.completed",
+                    base_dims,
+                    outcome="failed",
+                    error_code=type(e).__name__,
+                    exception_type=type(e).__name__,
+                    http_status=str(status_code) if status_code else None,
+                )
 
                 # 3. CRITICAL: Return error as text to preserve chat history integrity.
                 # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
@@ -433,6 +476,11 @@ class ContextAwareTool(BaseTool):
                 if getattr(self, "response_format", None) == "content_and_artifact":
                     return msg, None
                 return msg
+            else:
+                self._emit_tool_call_audit(
+                    "agent.tool.invocation.completed", base_dims, outcome="succeeded"
+                )
+                return normalize_mcp_content(result)
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing."""
@@ -441,9 +489,18 @@ class ContextAwareTool(BaseTool):
         kwargs = self._sanitize_tool_kwargs(kwargs)
         kpi, timer, base_dims = self._kpi_timer(context=context)
         with timer as kpi_dims:
+            self._emit_tool_call_audit("agent.tool.invocation.started", base_dims)
             try:
                 result = await self.base_tool._arun(config=config, **kwargs)
-                return normalize_mcp_content(result)
+            except asyncio.CancelledError:
+                # Never swallow cancellation — record it as its own terminal
+                # outcome (distinct from "failed", see
+                # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5) and
+                # re-raise so asyncio's cancellation semantics stay intact.
+                self._emit_tool_call_audit(
+                    "agent.tool.invocation.completed", base_dims, outcome="cancelled"
+                )
+                raise
             except Exception as e:
                 # 1. Metrics & Logging
                 kpi_dims["status"] = "error"
@@ -479,9 +536,22 @@ class ContextAwareTool(BaseTool):
                     logger.exception(
                         "[MCP][%s] Tool execution failed (captured)", self.name
                     )
+                self._emit_tool_call_audit(
+                    "agent.tool.invocation.completed",
+                    base_dims,
+                    outcome="failed",
+                    error_code=type(e).__name__,
+                    exception_type=type(e).__name__,
+                    http_status=str(status_code) if status_code else None,
+                )
 
                 # 3. CRITICAL: Return error as text to preserve chat history integrity.
                 msg = _build_tool_error_message(e, inner)
                 if getattr(self, "response_format", None) == "content_and_artifact":
                     return msg, None
                 return msg
+            else:
+                self._emit_tool_call_audit(
+                    "agent.tool.invocation.completed", base_dims, outcome="succeeded"
+                )
+                return normalize_mcp_content(result)

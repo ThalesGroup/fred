@@ -60,7 +60,8 @@ from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, log_setup
+from fred_core.logs.audit_log import emit_audit_log
+from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
@@ -167,7 +168,6 @@ from .dependencies import (
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
-_audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 
 
 def _emit_audit_event(
@@ -176,7 +176,14 @@ def _emit_audit_event(
     name: str,
     **fields: object,
 ) -> None:
-    """Append one security audit event to the container ring buffer and audit logger."""
+    """Append one security audit event to the container ring buffer and audit logger.
+
+    The ring buffer is this pod's own short-lived view, backing the
+    `/agents/audit-events` admin endpoint — the durable record is the log line,
+    written via the shared `emit_audit_log` primitive (fred_core.logs.audit_log)
+    so every audit-worthy event across the runtime (this one, and tool-call
+    invocations in ContextAwareTool) lands identically shaped.
+    """
     event = cast(
         AuditEventRecord,
         {
@@ -187,7 +194,7 @@ def _emit_audit_event(
     )
     with container._audit_events_lock:
         container.audit_events_buffer.append(event)
-    getattr(_audit_logger, level)("[SECURITY] %s", name, extra=dict(event))
+    emit_audit_log(name, level, **fields)
 
 
 def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfig]:
