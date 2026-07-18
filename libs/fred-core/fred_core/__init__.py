@@ -46,6 +46,7 @@ from fred_core.filesystem.structures import (
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, StoreEmitHandler, log_setup
+from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
     LogEventDTO,
@@ -144,6 +145,7 @@ __all__ = [
     "AUDIT_LOGGER_NAME",
     "RamLogStore",
     "StoreEmitHandler",
+    "build_log_store",
     "emit_audit_log",
     "TailFileResponse",
     "log_setup",

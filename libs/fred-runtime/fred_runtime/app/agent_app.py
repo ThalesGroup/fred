@@ -62,7 +62,7 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
-from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.rebac.rebac_engine import (
@@ -3757,7 +3757,10 @@ def create_agent_app(
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
-            store=RamLogStore(),
+            store=build_log_store(
+                log_store_config=config.storage.log_store,
+                opensearch_config=config.storage.opensearch,
+            ),
         )
         container = build_pod_container(config)
         container.initialize_kpi_writer()

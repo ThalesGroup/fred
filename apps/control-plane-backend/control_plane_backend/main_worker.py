@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fred_core import log_setup
-from fred_core.logs.null_log_store import NullLogStore
+from fred_core import build_log_store, log_setup
 from fred_core.scheduler import SchedulerBackend
 
 from control_plane_backend.app.container import (
@@ -43,7 +42,10 @@ async def main() -> None:
     log_setup(
         service_name="control-plane-worker",
         log_level=configuration.app.log_level,
-        store=NullLogStore(),
+        store=build_log_store(
+            log_store_config=configuration.storage.log_store,
+            opensearch_config=configuration.storage.opensearch,
+        ),
         use_rich=False,  # Temporal workflow sandbox disallows Rich imports.
     )
 

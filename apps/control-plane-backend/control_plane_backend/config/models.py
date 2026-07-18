@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Union
 
 from fred_core import (
+    LogStorageConfig,
     SecurityConfiguration,
 )
 from fred_core.common import (
@@ -304,6 +305,7 @@ class StorageConfig(BaseModel):
         default_factory=_default_content_storage
     )
     opensearch: Optional[OpenSearchStoreConfig] = None
+    log_store: Optional[LogStorageConfig] = None
 
 
 class Configuration(BaseModel):
