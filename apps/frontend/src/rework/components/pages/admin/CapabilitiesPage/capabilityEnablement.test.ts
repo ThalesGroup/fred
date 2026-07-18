@@ -15,10 +15,15 @@
 import { describe, expect, it } from "vitest";
 import type { FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  PERSONAL_SCOPE_ROW_ID,
+  capabilityPersonalScopeChoice,
   enabledTeamCount,
+  excludePersonalTeams,
   filterTeamsByName,
   isCapabilityOnForTeam,
   isCapabilityUnused,
+  isPersonalTeamId,
+  personalSpaceCount,
   seedSettingsFromFields,
   sortTeamsForMatrix,
   teamCapabilityChoice,
@@ -78,6 +83,37 @@ describe("teamCapabilityChoice (explicit tri-state position)", () => {
   it("lets the opt-out beat the grant (FGA: disable overrides enable)", () => {
     const cap = { default_on: false, enabled_team_ids: ["nb"], disabled_team_ids: ["nb"] };
     expect(teamCapabilityChoice(cap, "nb")).toBe("disabled");
+  });
+});
+
+describe("capabilityPersonalScopeChoice (RFC §8.4 personal-space class)", () => {
+  it("reflects the capability's personal_scope tri-state", () => {
+    expect(capabilityPersonalScopeChoice({ personal_scope: "enabled" })).toBe("enabled");
+    expect(capabilityPersonalScopeChoice({ personal_scope: "disabled" })).toBe("disabled");
+    expect(capabilityPersonalScopeChoice({ personal_scope: "default" })).toBe("default");
+  });
+
+  it("defaults to `default` when the field is absent (older payloads)", () => {
+    expect(capabilityPersonalScopeChoice({})).toBe("default");
+  });
+});
+
+describe("isPersonalTeamId / excludePersonalTeams", () => {
+  it("recognizes the personal-space id prefix", () => {
+    expect(isPersonalTeamId("personal-abc")).toBe(true);
+    expect(isPersonalTeamId("team-a")).toBe(false);
+    expect(isPersonalTeamId(undefined)).toBe(false);
+    expect(isPersonalTeamId(null)).toBe(false);
+  });
+
+  it("drops every personal space from the roster", () => {
+    const teams = [{ id: "team-a" }, { id: "personal-u1" }, { id: "team-b" }, { id: "personal-u2" }];
+    expect(excludePersonalTeams(teams).map((t) => t.id)).toEqual(["team-a", "team-b"]);
+  });
+
+  it("uses a reserved synthetic row id that no team id can collide with", () => {
+    expect(PERSONAL_SCOPE_ROW_ID).toBe("__personal_scope__");
+    expect(isPersonalTeamId(PERSONAL_SCOPE_ROW_ID)).toBe(false);
   });
 });
 
@@ -146,6 +182,66 @@ describe("enabledTeamCount", () => {
   it("never goes negative when opt-outs outnumber the roster", () => {
     expect(enabledTeamCount({ default_on: true, disabled_team_ids: ["a", "b", "c"], total_team_count: 2 })).toBe(0);
   });
+
+  it("ignores personal-space tuples — those belong to personalSpaceCount", () => {
+    // Explicit personal grants (e.g. leftovers from the withdrawn
+    // personal_defaults seeding) must not inflate the TEAM count…
+    expect(enabledTeamCount({ default_on: false, enabled_team_ids: ["a", "personal-u1", "personal-u2"] })).toBe(1);
+    // …and personal opt-outs must not subtract from a roster that never
+    // contained them.
+    expect(enabledTeamCount({ default_on: true, disabled_team_ids: ["personal-u1", "b"], total_team_count: 12 })).toBe(
+      11,
+    );
+  });
+});
+
+describe("personalSpaceCount (RFC §8.4 personal-space class)", () => {
+  it("counts the whole personal roster when the class is enabled", () => {
+    expect(personalSpaceCount({ default_on: false, personal_scope: "enabled", total_personal_space_count: 40 })).toBe(
+      40,
+    );
+  });
+
+  it("subtracts explicit per-space opt-outs from a class-on roster", () => {
+    expect(
+      personalSpaceCount({
+        default_on: false,
+        personal_scope: "enabled",
+        disabled_team_ids: ["personal-u1", "legal"],
+        total_personal_space_count: 40,
+      }),
+    ).toBe(39);
+  });
+
+  it("inherits default-on when the class position is default", () => {
+    expect(personalSpaceCount({ default_on: true, personal_scope: "default", total_personal_space_count: 40 })).toBe(
+      40,
+    );
+    expect(personalSpaceCount({ default_on: true, total_personal_space_count: 40 })).toBe(40);
+  });
+
+  it("returns null (unknown) when the class is on but the user directory is unavailable", () => {
+    expect(
+      personalSpaceCount({ default_on: false, personal_scope: "enabled", total_personal_space_count: 0 }),
+    ).toBeNull();
+    expect(personalSpaceCount({ default_on: true, personal_scope: "default" })).toBeNull();
+  });
+
+  it("counts only explicit per-space grants when the class is off", () => {
+    // Explicit grants survive both class-off and personal_disabled (FGA:
+    // `enabled` is outside the `but not personal_block` subtraction).
+    expect(
+      personalSpaceCount({
+        default_on: true,
+        personal_scope: "disabled",
+        enabled_team_ids: ["personal-u1", "ops"],
+        total_personal_space_count: 40,
+      }),
+    ).toBe(1);
+    expect(personalSpaceCount({ default_on: false, personal_scope: "default", total_personal_space_count: 40 })).toBe(
+      0,
+    );
+  });
 });
 
 describe("isCapabilityUnused", () => {
@@ -167,8 +263,31 @@ describe("isCapabilityUnused", () => {
     expect(isCapabilityUnused({ default_on: true, total_team_count: 0 })).toBe(false);
   });
 
-  it("is true for a default-on capability every team opted out of", () => {
-    expect(isCapabilityUnused({ default_on: true, disabled_team_ids: ["a", "b"], total_team_count: 2 })).toBe(true);
+  it("stays false when every team opted out but personal spaces still inherit default-on", () => {
+    expect(isCapabilityUnused({ default_on: true, disabled_team_ids: ["a", "b"], total_team_count: 2 })).toBe(false);
+  });
+
+  it("is true for a default-on capability every team opted out of, once personal spaces are blocked too", () => {
+    expect(
+      isCapabilityUnused({
+        default_on: true,
+        disabled_team_ids: ["a", "b"],
+        total_team_count: 2,
+        personal_scope: "disabled",
+        total_personal_space_count: 40,
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when only the personal-space class reaches anyone", () => {
+    expect(
+      isCapabilityUnused({
+        default_on: false,
+        enabled_team_ids: [],
+        personal_scope: "enabled",
+        total_personal_space_count: 40,
+      }),
+    ).toBe(false);
   });
 });
 

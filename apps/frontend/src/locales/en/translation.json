@@ -778,10 +778,12 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "all": "All ({{count}})",
+          "teams": "{{count}} team(s)",
           "inheritedHint": "Enabled for all teams by default. Teams that opted out are already subtracted.",
           "unknown": "Unknown",
-          "unknownHint": "Enabled for all teams by default, but the team directory is unavailable so the exact count cannot be resolved."
+          "unknownHint": "Enabled for all teams by default, but the team directory is unavailable so the exact count cannot be resolved.",
+          "personal": "{{count}} personal space(s)",
+          "personalUnknown": "personal spaces"
         },
         "health": {
           "suspended": "{{count}} suspended",
@@ -816,7 +818,19 @@
           "defaultToast": "{{team}} now follows the platform default.",
           "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
           "defaultError": "Could not reset the capability to the platform default.",
-          "rowControlAria": "Access for {{team}}"
+          "rowControlAria": "Access for {{team}}",
+          "personal": {
+            "label": "All personal spaces",
+            "hint": "Applies to every user's personal space at once — past, future, and users who never log in.",
+            "enabledToast": "Enabled for all personal spaces.",
+            "enableError": "Could not enable the capability for personal spaces.",
+            "disabledToast": "Disabled for all personal spaces.",
+            "disabledSuspendedToast": "Disabled for all personal spaces — {{count}} instance(s) suspended.",
+            "disableError": "Could not disable the capability for personal spaces.",
+            "defaultToast": "Personal spaces now follow the platform default.",
+            "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
+            "defaultError": "Could not reset the personal-space default."
+          }
         }
       }
     },

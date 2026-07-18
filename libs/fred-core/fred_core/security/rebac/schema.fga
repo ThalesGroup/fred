@@ -17,6 +17,13 @@ type organization
     # the singleton organization, so the edge is derived, not stored state.
     define team: [team]
 
+    # Reverse index restricted to PERSONAL spaces (`personal-{uid}` teams).
+    # Never persisted: injected as a CONTEXTUAL tuple only when the subject team
+    # is personal, so `capability#personal_grant`/`personal_block` apply the
+    # personal-space class position to all personal teams and no others
+    # (CAPAB-01 / #1961, RFC AGENT-CAPABILITY §8.4).
+    define personal_team: [team]
+
   # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
   # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
   # gains no ongoing relation on the created team from this capability alone.
@@ -241,17 +248,37 @@ type capability
     # tri-state: inherited-on / enabled / disabled).
     define disabled: [team]
 
+    # Personal-space class position (CAPAB-01 / #1961, RFC §8.4). One
+    # platform-wide tuple each, subject the singleton organization:
+    #   personal_on       => enabled for ALL personal spaces;
+    #   personal_disabled => disabled for ALL personal spaces.
+    # They apply to a team only through the contextual `organization#personal_team`
+    # reverse edge, which the caller injects solely for `personal-{uid}` subjects
+    # — so the class reaches every personal space and no regular team, with no
+    # per-team tuple persisted.
+    define personal_on: [organization]
+    define personal_disabled: [organization]
+    define personal_grant: personal_team from personal_on
+    define personal_block: personal_team from personal_disabled
+
     # --------------- Permissions (computed relations) ---------------
     # Can manage (enable/disable/toggle default-on) —
     # -> platform admin only (AUTHZ-05 retired the legacy `admin` organization
     # relation; every org-admin-tier capability is `platform_admin`-only now)
     define can_manage: platform_admin from organization
 
+    # Inherited (non-explicit) access: the org-wide `default_on` marker OR the
+    # personal-space class grant, minus the personal-space class opt-out. The
+    # intermediate relation exists so `personal_block` subtracts ONLY from the
+    # inherited layer — never from a per-space explicit `enabled` grant.
+    define inherited: (team from default_on or personal_grant) but not personal_block
+
     # Can use this capability in an agent. The SUBJECT IS THE TEAM the agent
     # belongs to (`Check(team:X, can_use, capability:C)`), never a user: a
     # user-subject check would answer "is this user in ANY enabled team" and
-    # leak the capability into every team the user belongs to. The team is
-    # explicitly enabled, OR the capability is default-on for the organization
-    # (resolved through the contextual `organization#team` reverse edge),
-    # UNLESS the team explicitly opted out.
-    define can_use: (enabled or team from default_on) but not disabled
+    # leak the capability into every team the user belongs to. Precedence, most
+    # specific wins: a team's explicit `enabled`/`disabled` beats the
+    # personal-space class position, which beats `default_on`. The `default_on`
+    # and personal-class edges resolve through the contextual
+    # `organization#team` / `organization#personal_team` reverse edges.
+    define can_use: (enabled or inherited) but not disabled

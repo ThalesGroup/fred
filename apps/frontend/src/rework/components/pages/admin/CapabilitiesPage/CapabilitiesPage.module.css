@@ -82,6 +82,14 @@
   font: var(--font-body-medium);
 }
 
+/* Team reach and personal-space reach are different denominators, so they get
+ * one line each rather than an inline "A + B" that reads as a single count. */
+.countStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 /* Muted like the neutral health cell: this is an absent value, not a number. */
 .countUnknown {
   color: var(--on-surface-muted);

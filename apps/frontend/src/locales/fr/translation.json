@@ -778,10 +778,12 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "all": "Toutes ({{count}})",
+          "teams": "{{count}} équipe(s)",
           "inheritedHint": "Activée par défaut pour toutes les équipes. Les équipes qui s'en sont exclues sont déjà déduites.",
           "unknown": "Inconnu",
-          "unknownHint": "Activée par défaut pour toutes les équipes, mais l'annuaire des équipes est indisponible : le nombre exact ne peut pas être déterminé."
+          "unknownHint": "Activée par défaut pour toutes les équipes, mais l'annuaire des équipes est indisponible : le nombre exact ne peut pas être déterminé.",
+          "personal": "{{count}} espace(s) personnel(s)",
+          "personalUnknown": "espaces personnels"
         },
         "health": {
           "suspended": "{{count}} suspendue(s)",
@@ -816,7 +818,19 @@
           "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
           "defaultError": "Impossible de remettre la capacité au défaut de la plateforme.",
-          "rowControlAria": "Accès pour {{team}}"
+          "rowControlAria": "Accès pour {{team}}",
+          "personal": {
+            "label": "Tous les espaces personnels",
+            "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
+            "enabledToast": "Activée pour tous les espaces personnels.",
+            "enableError": "Impossible d'activer la capacité pour les espaces personnels.",
+            "disabledToast": "Désactivée pour tous les espaces personnels.",
+            "disabledSuspendedToast": "Désactivée pour tous les espaces personnels — {{count}} instance(s) suspendue(s).",
+            "disableError": "Impossible de désactiver la capacité pour les espaces personnels.",
+            "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
+            "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
+            "defaultError": "Impossible de remettre le défaut des espaces personnels."
+          }
         }
       }
     },

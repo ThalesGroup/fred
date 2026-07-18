@@ -421,6 +421,11 @@ operations:
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
     required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
+    review_status: approved
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (platform_admin from organization)
 
   - service: knowledge-flow
     method: GET

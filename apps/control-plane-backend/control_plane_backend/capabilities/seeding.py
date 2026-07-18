@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Capability default seeding (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.3–§8.4).
+Capability default seeding (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.3).
 
-Two seed points, both idempotent:
+One seed point, idempotent:
 
 - **Registration seeding** — a `manifest.team_scope: default_on` capability gets
   its `default_on` tuple written the FIRST time it is registered (detected by
@@ -23,19 +23,20 @@ Two seed points, both idempotent:
   owned by admins, so seeding never re-writes it. The `default_policy: explicit`
   deployment flag skips all seeds; a capability with required team settings can
   never be default-on (§8.2).
-- **Personal-space seeding** — each capability id in
-  `capabilities.personal_defaults` is enabled for a personal space the first
-  time it is materialized (guarded by the absence of a settings row so repeated
-  bootstraps do not re-write tuples).
+
+Personal-space seeding (formerly `seed_personal_team_capabilities`, driven by
+`capabilities.personal_defaults`) was withdrawn by the 2026-07-16 §8.4
+amendment: the personal-space class is now pure FGA runtime state
+(`personal_on`/`personal_disabled`), admin-toggleable via
+`PUT /admin/capabilities/{id}/personal-scope`. No seeding, no backfill.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Mapping
+from typing import Iterable
 
 from fred_core import RebacDisabledResult
-from fred_core.common import TeamId
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -48,12 +49,8 @@ from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from control_plane_backend.capabilities.enablement import (
     _ORG_REF,
     _cap_ref,
-    enable_capability_for_team,
     ensure_capability_anchor,
     team_settings_has_required_fields,
-)
-from control_plane_backend.capabilities.settings_store import (
-    TeamCapabilitySettingsStore,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,53 +122,3 @@ def _default_on_relation(capability_id: str):
         relation=RelationType.DEFAULT_ON,
         resource=_cap_ref(capability_id),
     )
-
-
-async def seed_personal_team_capabilities(
-    *,
-    rebac: RebacEngine,
-    settings_store: TeamCapabilitySettingsStore,
-    catalog: Mapping[str, CapabilityCatalogEntry],
-    personal_defaults: Iterable[str],
-    team_id: TeamId,
-    updated_by: str | None = "system",
-) -> list[str]:
-    """Enable the configured personal-space default capabilities for one personal
-    team (RFC §8.4). Idempotent: a capability already carrying a settings row for
-    the team is skipped, so repeated personal-space bootstraps do not re-write.
-
-    Returns the ids seeded this pass. Best-effort per capability: an unknown id
-    or a validation failure is logged and skipped, never fatal to bootstrap.
-    """
-
-    seeded: list[str] = []
-    for cap_id in personal_defaults:
-        entry = catalog.get(cap_id)
-        if entry is None:
-            logger.warning(
-                "[capability-seeding] personal default %s not in catalog; skipped",
-                cap_id,
-            )
-            continue
-        existing = await settings_store.get(team_id=team_id, capability_id=cap_id)
-        if existing is not None:
-            continue
-        try:
-            await enable_capability_for_team(
-                rebac=rebac,
-                settings_store=settings_store,
-                catalog_entry=entry,
-                team_id=team_id,
-                settings={},
-                updated_by=updated_by,
-            )
-        except Exception as exc:  # noqa: BLE001 — best-effort per capability
-            logger.warning(
-                "[capability-seeding] failed to seed personal default %s for %s: %s",
-                cap_id,
-                team_id,
-                exc,
-            )
-            continue
-        seeded.append(cap_id)
-    return seeded
