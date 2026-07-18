@@ -80,7 +80,7 @@ def is_expired_httpx_status_error(err: httpx.HTTPStatusError) -> bool:
             return True
     except Exception:
         logger.warning(
-            "[SECURITY][HTTP] Error checking www-authenticate header for token expiry",
+            "[AUTH][HTTP] Error checking www-authenticate header for token expiry",
             exc_info=True,
         )
     try:
@@ -88,7 +88,7 @@ def is_expired_httpx_status_error(err: httpx.HTTPStatusError) -> bool:
             return True
     except Exception:
         logger.warning(
-            "[SECURITY][HTTP] Error checking response body for token expiry",
+            "[AUTH][HTTP] Error checking response body for token expiry",
             exc_info=True,
         )
     return False
@@ -102,7 +102,7 @@ def is_expired_httpx_response(resp: httpx.Response | None) -> bool:
             return True
     except Exception:
         logger.warning(
-            "[SECURITY][HTTP] Error checking www-authenticate header for token expiry",
+            "[AUTH][HTTP] Error checking www-authenticate header for token expiry",
             exc_info=True,
         )
     try:
@@ -110,7 +110,7 @@ def is_expired_httpx_response(resp: httpx.Response | None) -> bool:
             return True
     except Exception:
         logger.warning(
-            "[SECURITY][HTTP] Error checking response body for token expiry",
+            "[AUTH][HTTP] Error checking response body for token expiry",
             exc_info=True,
         )
     return False

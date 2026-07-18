@@ -252,8 +252,13 @@ def log_setup(
 
     # 1) Human console (Rich or plain)
     formatter = logging.Formatter(
-        # Include process ID, task name, and thread name for concurrency diagnostics.
-        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
+        # Include process ID, task name, thread name, and the logger's own
+        # dotted module name for concurrency diagnostics *and* provenance —
+        # %(name)s is why a message needs no hand-invented [TAG] to say where
+        # it came from. Reserve bracket prefixes in message text for the two
+        # real routed channels ([SECURITY] via emit_audit_log, [KPI] via
+        # logging.getLogger("KPI")); everything else should rely on this.
+        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     if use_rich and RichHandler is not None:

@@ -35,7 +35,7 @@ def rebac_factory(security_config: SecurityConfiguration) -> RebacEngine:
 
     if isinstance(rebac_config, OpenFgaRebacConfig):
         logger.info(
-            "[SECURITY] Initializing OpenFGA ReBAC engine (api_url=%s, store_name=%s)",
+            "[AUTH] Initializing OpenFGA ReBAC engine (api_url=%s, store_name=%s)",
             rebac_config.api_url,
             rebac_config.store_name,
         )
