@@ -41,6 +41,14 @@ storage:
   content_storage:
     type: local
     root_path: "~/.fred/control-plane/content-storage"
+  opensearch:
+    host: "https://localhost:9200"
+    username: "admin"
+    secure: true
+    verify_certs: false
+  log_store:
+    type: opensearch
+    index: app-logs-index
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml

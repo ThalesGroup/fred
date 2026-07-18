@@ -12746,6 +12746,78 @@
                         }
                       ],
                       "default": null
+                    },
+                    "log_store": {
+                      "anyOf": [
+                        {
+                          "discriminator": {
+                            "mapping": {
+                              "in_memory": "#/$defs/InMemoryLogStorageConfig",
+                              "opensearch": "#/$defs/OpenSearchIndexConfig",
+                              "stdout": "#/$defs/StdoutLogStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "InMemoryLogStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "stdout",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "StdoutLogStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "index"
+                              ],
+                              "title": "OpenSearchIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Log Store"
                     }
                   },
                   "title": "StorageConfig",
@@ -14452,6 +14524,78 @@
                         }
                       ],
                       "default": null
+                    },
+                    "log_store": {
+                      "anyOf": [
+                        {
+                          "discriminator": {
+                            "mapping": {
+                              "in_memory": "#/$defs/InMemoryLogStorageConfig",
+                              "opensearch": "#/$defs/OpenSearchIndexConfig",
+                              "stdout": "#/$defs/StdoutLogStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "InMemoryLogStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "stdout",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "StdoutLogStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "index"
+                              ],
+                              "title": "OpenSearchIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Log Store"
                     }
                   },
                   "title": "StorageConfig",

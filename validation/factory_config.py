@@ -37,7 +37,7 @@ CP_URL = os.getenv(
 RUNTIME_PUBLIC_BASE = os.getenv("FRED_RUNTIME_PUBLIC_BASE", "http://localhost:8000").rstrip("/")
 # knowledge-flow-backend, started manually per validation/README.md like the other
 # swift apps. Default matches its documented standalone port/base_url (README.md,
-# configuration_local_mock.yaml): 8111 / "/knowledge-flow/v1".
+# configuration_prod.yaml): 8111 / "/knowledge-flow/v1".
 KF_URL = os.getenv("FRED_KNOWLEDGE_FLOW_URL", "http://localhost:8111/knowledge-flow/v1").rstrip("/")
 # Same-repo sibling now that validation/ lives inside `fred` itself - no more
 # cross-repo env-var indirection needed for this file. This is the single source

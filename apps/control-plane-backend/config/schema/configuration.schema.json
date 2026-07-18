@@ -143,6 +143,21 @@
       "type": "object",
       "additionalProperties": false
     },
+    "InMemoryLogStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "in_memory",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "InMemoryLogStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "KpiLogSinkConfig": {
       "properties": {
         "enabled": {
@@ -475,6 +490,27 @@
         "api_url"
       ],
       "title": "OpenFgaRebacConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "OpenSearchIndexConfig": {
+      "properties": {
+        "type": {
+          "const": "opensearch",
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "description": "OpenSearch index name",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "index"
+      ],
+      "title": "OpenSearchIndexConfig",
       "type": "object",
       "additionalProperties": false
     },
@@ -857,6 +893,21 @@
       "type": "object",
       "additionalProperties": false
     },
+    "StdoutLogStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "stdout",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StdoutLogStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "StorageConfig": {
       "properties": {
         "postgres": {
@@ -890,6 +941,36 @@
             }
           ],
           "default": null
+        },
+        "log_store": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "in_memory": "#/$defs/InMemoryLogStorageConfig",
+                  "opensearch": "#/$defs/OpenSearchIndexConfig",
+                  "stdout": "#/$defs/StdoutLogStorageConfig"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/InMemoryLogStorageConfig"
+                },
+                {
+                  "$ref": "#/$defs/StdoutLogStorageConfig"
+                },
+                {
+                  "$ref": "#/$defs/OpenSearchIndexConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Log Store"
         }
       },
       "title": "StorageConfig",

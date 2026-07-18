@@ -56,6 +56,9 @@ storage:
     username: "admin"
     secure: true
     verify_certs: false
+  log_store:
+    type: opensearch
+    index: app-logs-index
 
 scheduler:
   enabled: false

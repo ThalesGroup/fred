@@ -64,10 +64,9 @@ pipeline (`lite_pdf_to_md_processor.py`, `lite2_pdf_to_md_processor.py`,
 wired in every config profile with no extractor switch) and the PPTX
 slide-rendering path (`pptx_slide_renderer.py`). It is actively invoked in
 production. The main pipeline (`pdf_markdown_processor.py`) already defaults
-to the MIT-licensed `docling` extractor in nearly every config profile (one
-remaining profile in `configuration_postgres.yaml` still selects `pymupdf`
-explicitly), with a code-level fallback that itself still defaults to
-`pymupdf` when the config value is missing/unrecognized.
+to the MIT-licensed `docling` extractor in every config profile, with a
+code-level fallback that itself still defaults to `pymupdf` when the config
+value is missing/unrecognized.
 
 Why this is more serious than the others in this document: AGPL's
 network-use clause can require source disclosure for a networked service that
