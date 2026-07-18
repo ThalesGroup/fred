@@ -126,12 +126,10 @@ EXTENSION_CATEGORY = {
 logger = logging.getLogger(__name__)
 
 
-def _mask(value: Optional[str], left: int = 4, right: int = 4) -> str:
-    if not value:
-        return "<empty>"
-    if len(value) <= left + right:
-        return "<hidden>"
-    return f"{value[:left]}…{value[-right:]}"
+def _mask(value: Optional[str]) -> str:
+    """Never reveal any character of a secret — a partial preview is still a leak
+    (a short secret's `left`/`right` window can cover most of its length)."""
+    return "<empty>" if not value else "<redacted>"
 
 
 def get_configuration() -> Configuration:
