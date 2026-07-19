@@ -214,9 +214,11 @@ class _SpyNoopRebac(NoopRebacEngine):
     def __init__(self) -> None:
         self.add_relation_calls: list[Relation] = []
 
-    async def add_relation(self, relation: Relation, **kwargs: object) -> str | None:
+    async def add_relation(
+        self, relation: Relation, *, actor_uid: str | None = None
+    ) -> str | None:
         self.add_relation_calls.append(relation)
-        return await super().add_relation(relation, **kwargs)
+        return await super().add_relation(relation, actor_uid=actor_uid)
 
 
 class _FakeKeycloakAdmin:
