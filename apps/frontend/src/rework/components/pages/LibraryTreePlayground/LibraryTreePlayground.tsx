@@ -14,10 +14,10 @@
 
 import React from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { taskRegistered, taskEventReceived, taskEvicted, selectActiveTasks } from "../rework/features/tasks/taskSlice";
-import { FolderRow } from "../rework/components/shared/molecules/FolderRow/FolderRow";
-import { DocRow } from "../rework/components/shared/molecules/DocRow/DocRow";
-import type { DocStatus } from "../rework/components/shared/atoms/DocStatusBadge/DocStatusBadge";
+import { taskRegistered, taskEventReceived, taskEvicted, selectActiveTasks } from "@rework/features/tasks/taskSlice";
+import { FolderRow } from "@shared/molecules/FolderRow/FolderRow";
+import { DocRow } from "@shared/molecules/DocRow/DocRow";
+import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge";
 import styles from "./LibraryTreePlayground.module.css";
 
 /**
