@@ -424,6 +424,9 @@ async def test_stream_promotes_mistral_reasoning_to_thought_events() -> None:
     assert starts[0].title == "Model reasoning"
     assert len(ends) == 1
     assert ends[0].thought_id == starts[0].thought_id
+    # Regression: duration_ms must be a real elapsed value, not always None.
+    assert ends[0].duration_ms is not None
+    assert ends[0].duration_ms >= 0
 
     # All reasoning fragments arrive as deltas of that block.
     assert "".join(d.delta for d in deltas) == "Plan: use no tools. Done."
@@ -444,6 +447,41 @@ async def test_stream_promotes_mistral_reasoning_to_thought_events() -> None:
     first_answer_idx = collected.index(answer[0])
     end_idx = collected.index(ends[0])
     assert end_idx < first_answer_idx
+
+
+@pytest.mark.asyncio
+async def test_stream_reports_real_duration_ms_for_tool_use_thought() -> None:
+    """
+    Regression: `ThoughtEndEvent.duration_ms` must be a real elapsed value, not
+    always `None`.
+
+    Why this exists:
+    - before this fix, every THOUGHT_END emitted by the ReAct executor left
+      `duration_ms` unset, so the frontend could never show how long a tool
+      call actually took (spotted live while reviewing a "Calling read query"
+      thought bubble with no useful detail).
+    """
+
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+    )
+    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    final_message = AIMessage(content="done")
+
+    events = [
+        ("updates", {"agent": {"messages": [tool_call]}}),
+        ("updates", {"tools": {"messages": [tool_result]}}),
+        ("updates", {"agent": {"messages": [final_message]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    ends = [e for e in collected if isinstance(e, ThoughtEndEvent)]
+    assert len(ends) == 1
+    assert ends[0].conclusion == "Done"
+    assert ends[0].duration_ms is not None
+    assert ends[0].duration_ms >= 0
 
 
 @pytest.mark.asyncio
