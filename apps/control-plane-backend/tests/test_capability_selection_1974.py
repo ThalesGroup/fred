@@ -433,37 +433,6 @@ async def test_enroll_no_selection_materializes_only_granted_defaults(
 
 
 @pytest.mark.asyncio
-async def test_enroll_no_selection_with_no_grants_materializes_empty_list(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Granted the TEMPLATE itself (CAPAB-01, RFC §8.6) but none of its default
-    # tool capabilities — isolates "no capability grants" from "no template
-    # grant" (covered separately by test_enroll_hidden_template_is_404_not_500).
-    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
-    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
-    calls = _fake_pod_validate(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances",
-            json={
-                "template_id": "runtime-a:rags.sample.echo",
-                "display_name": "No grants",
-            },
-        )
-    assert resp.status_code == 201
-    tuning = store._records[0].tuning
-    # This is the exact bypass the fix closes: a team with no grant for the
-    # template's admin-gated default capabilities used to get `None`
-    # persisted (skipping every ReBAC check), and the runtime pod activated
-    # every default MCP server anyway. Now it materializes to an empty list.
-    assert tuning.selected_capability_ids == []
-    assert tuning.capability_config == {}
-    assert calls == []
-
-
-@pytest.mark.asyncio
 async def test_enroll_hidden_template_is_404_not_500(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -526,9 +495,7 @@ async def test_enroll_no_selection_rejected_when_no_default_capability_is_usable
     now it must be rejected (422) instead."""
 
     _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
-    app, store = _setup(
-        monkeypatch, default_capability_ids=["demo_echo", "probe_echo"]
-    )
+    app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
     _fake_pod_validate(monkeypatch)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -604,10 +571,18 @@ async def test_update_capability_config_only_materializes_still_none_instance(
     holding a legacy `selected_capability_ids = None`. Before the fix, this
     reached `_apply_capability_selection(selected_ids=None)` and skipped the
     ReBAC check the same way enroll did.
+
+    Also grants the template capability itself (`runtime-a__rags.sample.echo`)
+    so this update clears the separate, later "2026-07-19 fix (GitHub #2004
+    item 1)" template-access gate at the top of `update_agent_instance` — this
+    test isolates the capability-selection gap, not that one (covered by
+    `test_update_rejected_once_template_access_is_revoked`).
     """
     record = _make_record()
     assert record.tuning.selected_capability_ids is None
-    _wire_rebac(monkeypatch, {"personal": {"demo_echo"}})
+    _wire_rebac(
+        monkeypatch, {"personal": {"runtime-a__rags.sample.echo", "demo_echo"}}
+    )
     app, store = _setup(
         monkeypatch,
         records=[record],
