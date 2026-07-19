@@ -70,6 +70,23 @@ Recommended order:
 3. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
    no hard ordering constraint otherwise.
 
+**Opportunistic legacy cleanup (Dimitri, ongoing — no FRONT-ID, not RFC-backed):**
+Chipping away at `src/components`/`src/pages` dead code and legacy retirement in
+small verified commits, separate from FRONT-05/FRONT-09. Landed 2026-07-19 on
+`2004-capab-01-agent-template-capability-gating-gaps`: dead `monitoringApi` slice
++ 6 unused npm deps removed; `Protected` + `ConfirmationDialogProvider` moved into
+rework (closed the only legacy→rework reverse-coupling); `PageError`/
+`PageUnauthorized` ported off MUI; `LibraryTreePlayground` relocated (already
+MUI-free, pure move). Still legacy, each needs its own session, not a quick
+relocation: `TaskPlayground` (no rework Select/Slider atom yet), `ComingSoon`
+(squashing into `PageEmptyState` would drop the branded per-site icon),
+`LoadingWithProgress` (rework's `ProgressBar` atom has no indeterminate mode),
+and the monitoring/`tools` pages (`Kpis`, `Runtime`, `DataHub`, `RebacBackfill`,
+`ProcessorBench`, `ProcessorRunDetail`, `McpHub`) — real pages with their own
+legacy UI kit, not pure relocations. Full tree still not reachable regardless:
+also blocked on the missing evaluation UI (#1892) and the disabled PDF viewer
+(FRONT-13).
+
 ## 3 Explicit Non-Goals
 
 Do not spend migration time on:
