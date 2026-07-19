@@ -28,6 +28,8 @@ import logging
 
 from knowledge_flow_backend.core.processors.output.vectorization_processor import (
     semantic_splitter as semantic_splitter_module,
+)
+from knowledge_flow_backend.core.processors.output.vectorization_processor import (
     vectorization_processor as vectorization_processor_module,
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import (
