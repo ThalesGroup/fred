@@ -57,18 +57,17 @@ Frozen frontend invariants:
 | ID | Owner | Status | Backlog section | Execution |
 | --- | --- | --- | --- | --- |
 | FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | issue #1840 |
-| FRONT-08 | Simon | In progress, implemented on branch and pending review | §14 | GitHub issue #1748 / branch `1748-front-08-frontend-auth-config` |
+| FRONT-08 | Simon | Done — merged (PR #1750, 2026-06-16) | §14 | GitHub issue #1748 (closed) |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
 | FRONT-13 | TBD | RFC proposed | §19 | TBD |
 
 Recommended order:
 
-1. Land FRONT-08 or confirm its final contract.
-2. Keep FRONT-05 narrow: remove remaining `agenticOpenApi` usage without reviving
+1. Keep FRONT-05 narrow: remove remaining `agenticOpenApi` usage without reviving
    deprecated surfaces.
-3. Start FRONT-09 with a v2 route and backend browse hardening; keep old
+2. Start FRONT-09 with a v2 route and backend browse hardening; keep old
    resource/library pages until parity.
-4. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
+3. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
    no hard ordering constraint otherwise.
 
 ## 3 Explicit Non-Goals
@@ -185,9 +184,9 @@ if a future migration slice needs additional primitives.
 
 ## 14 Phase FRONT-08 — Backend-Driven Frontend Auth Config
 
-**ID:** FRONT-08  **Owner:** Simon  **Status:** In progress, implemented on branch and pending review
+**ID:** FRONT-08  **Owner:** Simon  **Status:** Done — merged (PR #1750, 2026-06-16)
 **RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`
-**Execution:** GitHub issue #1748 / branch `1748-front-08-frontend-auth-config`
+**Execution:** GitHub issue #1748 (closed)
 
 Goal: move the frontend "is user security enabled?" decision out of
 `apps/frontend/public/config.json` and onto a public control-plane endpoint.
@@ -213,9 +212,7 @@ Implementation checklist:
 - [x] Validate `make code-quality` and `make test` in control-plane and
       frontend.
 
-Remaining:
-
-- [ ] Review/merge branch `1748-front-08-frontend-auth-config`.
+Remaining: none — merged via PR #1750.
 
 ## 15 Phase FRONT-09 — Rework Knowledge Workspace
 
