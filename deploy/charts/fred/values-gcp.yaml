@@ -80,7 +80,7 @@ applications:
           artifacts_prefix: "tabular/datasets"
           format: "parquet"
           compression: "snappy"
-          pointer_chunks_enabled: true
+          pointer_chunks_enabled: false
           query:
             engine: "duckdb"
             # Tabular SQL preview reads Parquet through backend-internal V4 signed

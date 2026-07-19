@@ -320,7 +320,7 @@ x-kf-storage: &kf-storage
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
     compression: "snappy"
-    pointer_chunks_enabled: true
+    pointer_chunks_enabled: false
     query:
       engine: "duckdb"
       access_mode: "presigned_url"
