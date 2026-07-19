@@ -483,10 +483,6 @@
         "description": "Permet à votre agent d'interagir avec Jira",
         "name": "Accès Jira"
       },
-      "kubernetes": {
-        "description": "Permet à votre agent d'interagir avec les clusters Kubernetes",
-        "name": "Accès Kubernetes"
-      },
       "local_stdio": {
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)",
         "name": "MCP local (stdio)"

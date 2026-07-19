@@ -573,10 +573,6 @@ class MCPConfig(BaseModel):
         default=True,
         description="Expose the Tabular MCP server for SQL/table exploration.",
     )
-    statistic_enabled: bool = Field(
-        default=True,
-        description="Expose the Statistical MCP server for data analysis helpers.",
-    )
     text_enabled: bool = Field(
         default=True,
         description="Expose the Text MCP server for semantic vector search.",

@@ -93,7 +93,7 @@ then gates global endpoints; `require_admin` sites map to the matching `admin`-l
   team vs org scope).
 - **B — collections/search** via existing `lookup_user_resources`: most are **already** ReBAC at the service
   layer (`metadata`, `tabular`, `vector_search.search`, `tag list_all_tags`) → just drop the residual
-  `@authorize`. To wire: `resources list_resources_by_kind`, runtime `list_agents`, `statistic /stat/*`.
+  `@authorize`. To wire: `resources list_resources_by_kind`, runtime `list_agents`.
 - **C — org-level** (uses §3.1): opensearch, prometheus/metrics, kpi (kf + cp), logs, users CRUD,
   import/export, policies/lifecycle, store audit/fix, rebac backfill, benchmark.
 - **D — already ReBAC / ownership / public** (no change): filesystem (team-scoped; drop redundant

@@ -47,9 +47,6 @@ dependencies = [
   "uv",
   "chromadb>=0.5",
   "python-keycloak>=5.8.1",
-  "joblib>=1.5.2",
-  "matplotlib>=3.10.7",
-  "scikit-learn>=1.7.2",
   # ClickHouse client
   "clickhouse-connect>=0.8.0",
   # MarkItDown extras: ensure .docx support is available for the lite DOCX path

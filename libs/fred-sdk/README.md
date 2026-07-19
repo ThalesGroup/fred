@@ -213,7 +213,6 @@ Built-in MCP server constants:
 | `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`         | Document search and retrieval |
 | `MCP_SERVER_KNOWLEDGE_FLOW_FS`             | Workspace file system         |
 | `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`        | Tabular data / CSV            |
-| `MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS`     | Statistical analysis          |
 | `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch operations         |
 
 ---

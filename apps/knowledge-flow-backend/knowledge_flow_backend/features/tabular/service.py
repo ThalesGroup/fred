@@ -138,8 +138,9 @@ class TabularService:
       exposing every ingested table globally.
 
     How to use:
-    - The controller calls `list_datasets`, `describe_dataset`, `read_dataset_frame`,
-      and `query_read`.
+    - The controller calls `list_datasets`, `describe_dataset`, and `query_read`.
+      `read_dataset_frame` is available for other in-process callers that need
+      an in-memory DataFrame.
     - Every method filters datasets through document-level permissions before
       exposing schema or data.
     """
@@ -247,7 +248,7 @@ class TabularService:
         Load one authorized dataset into a pandas DataFrame.
 
         Why this exists:
-        - The statistic feature still operates on in-memory pandas DataFrames.
+        - Some callers need in-memory pandas DataFrames rather than SQL results.
         - Reusing the dataset-centric resolver keeps those reads aligned with
           the same document-level permissions as SQL queries.
         - Team/personal scoping must also apply to these DataFrame reads.

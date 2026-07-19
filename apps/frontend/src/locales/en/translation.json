@@ -483,10 +483,6 @@
         "description": "Allow your agent to interact with Jira",
         "name": "Jira access"
       },
-      "kubernetes": {
-        "description": "Allow your agent to interact with Kubernetes clusters",
-        "name": "Kubernetes access"
-      },
       "local_stdio": {
         "description": "Run a local MCP server over stdio (process-based tools)",
         "name": "Local stdio MCP"
