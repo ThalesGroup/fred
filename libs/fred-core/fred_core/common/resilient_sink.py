@@ -50,12 +50,17 @@ from typing import Any, Protocol
 logger = logging.getLogger(__name__)
 
 
+# fmt: off
 class _WritableStore(Protocol):
-    def ensure_ready(self) -> None: ...
+    def ensure_ready(self) -> None:
+        ...
 
-    def index_event(self, event: Any) -> None: ...
+    def index_event(self, event: Any) -> None:
+        ...
 
-    def bulk_index(self, events: list[Any]) -> None: ...
+    def bulk_index(self, events: list[Any]) -> None:
+        ...
+# fmt: on
 
 
 class _CircuitBreaker:

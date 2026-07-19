@@ -918,6 +918,304 @@ async def test_personal_scope_default_to_disabled_with_default_on_suspends() -> 
     assert dependent.suspension_reason == "capability_access_revoked"
 
 
+# ---------------------------------------------------------------------------
+# Personal-scope grant revive — the missing inverse of the suspend sweep above
+# (#1975, mirrors `_revive_after_grant`/`set_default_on`'s revive in service.py)
+# ---------------------------------------------------------------------------
+
+
+def _availability_deps(
+    monkeypatch: pytest.MonkeyPatch,
+    store: "_FakeAgentInstanceStore",
+    rebac: "_FakeRebac",
+    *,
+    available_by_source: dict,
+    usable_ids: set[str] | None,
+):
+    """A `service.set_personal_scope`-shaped deps object with the live-fact
+    fetches (`_available_capability_ids_by_source` / `usable_capability_ids`)
+    stubbed the same way `test_capability_impact.py::_patch_availability`
+    stubs them for the impact module."""
+
+    from types import SimpleNamespace
+
+    import control_plane_backend.capabilities.impact as impact_mod
+    import control_plane_backend.product.service as product_service
+
+    async def _fake_available(_deps):
+        return available_by_source
+
+    async def _fake_usable(_rebac, _team_id):
+        return usable_ids
+
+    monkeypatch.setattr(
+        product_service, "_available_capability_ids_by_source", _fake_available
+    )
+    monkeypatch.setattr(impact_mod, "usable_capability_ids", _fake_usable)
+
+    return SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        get_agent_instance_store=lambda: store,
+        get_kpi_writer=lambda: None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_disabled_to_enabled_revives_suspended_dependents(
+    monkeypatch,
+) -> None:
+    """disabled -> enabled must revive a personal-space agent suspended by the
+    earlier access loss — the team/default-on grant paths already do this
+    (`_revive_after_grant`); personal scope silently returned 0 instead. Fails
+    on the old behavior, which never called any revive path for personal
+    scope."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry()
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    dependent.suspension_reason = "capability_access_revoked"
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        scope="enabled",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 1
+    assert result.suspended_instances == 0
+    assert dependent.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_disabled_to_default_with_default_on_revives(
+    monkeypatch,
+) -> None:
+    """disabled -> default while the capability is default-on ALSO grants
+    personal-space access by inheritance, so it must revive exactly like
+    disabled -> enabled."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry(team_scope=TeamScopePolicy.DEFAULT_ON)
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            relation=RelationType.DEFAULT_ON,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            relation=RelationType.PERSONAL_DISABLED,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    dependent.suspension_reason = "capability_access_revoked"
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        scope="default",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 1
+    assert dependent.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_revive_never_touches_config_invalid(
+    monkeypatch,
+) -> None:
+    """A `capability_config_invalid` suspension is cleared only by a successful
+    save (RFC §3.9) — the personal-scope grant revive must leave it alone even
+    when personal-space access returns."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry()
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    dependent.suspension_reason = "capability_config_invalid"
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        scope="enabled",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 0
+    assert dependent.suspension_reason == "capability_config_invalid"
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_revive_skips_unreachable_pod(monkeypatch) -> None:
+    """An unreachable pod means UNKNOWN — the personal-scope grant revive must
+    not clear a suspension it cannot prove is resolved."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry()
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    dependent.suspension_reason = "capability_access_revoked"
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": None},  # pod unreachable
+        usable_ids={"corp_drive"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        scope="enabled",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 0
+    assert dependent.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_enabled_to_disabled_does_not_revive(
+    monkeypatch,
+) -> None:
+    """A transition that only LOSES access (enabled -> disabled) must not
+    report a revive — `had_access and not has_access` is the suspend path
+    covered above, never the grant path."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry()
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+            relation=RelationType.PERSONAL_ON,
+            resource=RebacReference(type=Resource.CAPABILITY, id="corp_drive"),
+        )
+    )
+
+    dependent = _make_record(agent_instance_id="p1", team_id="personal-u1")
+    dependent.tuning = dependent.tuning.model_copy(
+        update={"selected_capability_ids": ["corp_drive"]}
+    )
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        scope="disabled",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 0
+    assert result.suspended_instances == 1
+    assert dependent.suspension_reason == "capability_access_revoked"
+
+
 @pytest.mark.asyncio
 async def test_authz_injects_personal_team_edge_only_for_personal_teams() -> None:
     """A personal-space subject gets BOTH the `team` and `personal_team`

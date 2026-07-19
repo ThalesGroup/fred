@@ -60,11 +60,20 @@ def _record_with(
     return record
 
 
+class _NoOpRebac:
+    """Stands in for `ReBAC` in tests that never exercise a real lookup — the
+    platform-wide preview now reads `_explicitly_enabled_team_ids`, so a bare
+    `object()` no longer suffices as the `rebac` stand-in."""
+
+    async def lookup_subjects(self, *_args: object, **_kwargs: object) -> list:
+        return []
+
+
 def _deps_with(store: _FakeAgentInstanceStore) -> SimpleNamespace:
     return SimpleNamespace(
         get_agent_instance_store=lambda: store,
         get_kpi_writer=lambda: None,
-        team_dependencies=SimpleNamespace(rebac=object()),
+        team_dependencies=SimpleNamespace(rebac=_NoOpRebac()),
     )
 
 
@@ -245,6 +254,97 @@ async def test_preview_excludes_already_broken_instances(monkeypatch) -> None:
 
     assert result.suspended_instances == 1
     assert {i.agent_instance_id for i in result.instances} == {"works"}
+
+
+@pytest.mark.asyncio
+async def test_preview_default_off_excludes_explicitly_enabled_teams(
+    monkeypatch,
+) -> None:
+    """`set_capability_default_on(False)` skips teams that already carry an
+    explicit `enabled` grant — they keep `can_use` by their own tuple, not by
+    inheritance, so the mutation never touches them. The platform-wide preview
+    (`team_id=None`) must agree, or the confirmation dialog overstates impact
+    by counting an agent that will not actually be suspended. This fails on the
+    old behavior, which counted every team that currently works."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="inherits",
+                team_id="team-inherits",
+                selected=["capa1"],
+            ),
+            _record_with(
+                agent_instance_id="explicit",
+                team_id="team-explicit",
+                selected=["capa1"],
+            ),
+        ]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset({"capa1"})},
+        usable_by_team={
+            "team-inherits": {"capa1"},
+            "team-explicit": {"capa1"},
+        },
+    )
+
+    async def _fake_explicitly_enabled(_rebac, _capability_id):
+        return {"team-explicit"}
+
+    import control_plane_backend.capabilities.enablement as enablement_mod
+
+    monkeypatch.setattr(
+        enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
+    )
+
+    result = await impact_mod.preview_revoke_impact(
+        _deps_with(store), capability_id="capa1", team_id=None
+    )
+
+    assert result.suspended_instances == 1
+    assert {i.agent_instance_id for i in result.instances} == {"inherits"}
+
+
+@pytest.mark.asyncio
+async def test_preview_single_team_disable_ignores_explicit_enabled_exclusion(
+    monkeypatch,
+) -> None:
+    """A single-team preview (`team_id` given) previews an explicit disable for
+    THAT team alone — the explicit-enabled exclusion is a platform-wide-preview
+    concept only and must not suppress this team's own impact."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="explicit",
+                team_id="team-explicit",
+                selected=["capa1"],
+            ),
+        ]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset({"capa1"})},
+        usable_by_team={"team-explicit": {"capa1"}},
+    )
+
+    async def _fake_explicitly_enabled(_rebac, _capability_id):
+        return {"team-explicit"}
+
+    import control_plane_backend.capabilities.enablement as enablement_mod
+
+    monkeypatch.setattr(
+        enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
+    )
+
+    result = await impact_mod.preview_revoke_impact(
+        _deps_with(store), capability_id="capa1", team_id="team-explicit"
+    )
+
+    assert result.suspended_instances == 1
+    assert {i.agent_instance_id for i in result.instances} == {"explicit"}
 
 
 # ---------------------------------------------------------------------------

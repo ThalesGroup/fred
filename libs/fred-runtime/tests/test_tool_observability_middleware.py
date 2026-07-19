@@ -117,9 +117,11 @@ class _AuditEvents:
         self._logger.propagate = False
         self._logger.setLevel(logging.INFO)
 
+        owner = self
+
         class _Capture(logging.Handler):
-            def emit(_self, record: logging.LogRecord) -> None:  # noqa: N805
-                self.records.append(record)
+            def emit(self, record: logging.LogRecord) -> None:
+                owner.records.append(record)
 
         self._logger.addHandler(_Capture())
         return self

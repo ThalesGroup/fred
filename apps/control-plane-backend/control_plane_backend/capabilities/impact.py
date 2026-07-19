@@ -44,7 +44,6 @@ outage (#1975, RFC §3.9), and this read reports the same way. Telling an admin
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 
 from fred_core.common import TeamId
@@ -55,8 +54,6 @@ from control_plane_backend.agent_instances.store import (
 )
 from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -237,8 +234,18 @@ async def preview_revoke_impact(
     one team's disable. Instances whose pod is unreachable are reported via
     `skipped_unreachable` rather than counted — same fail-open-to-unknown rule
     as `compute_capability_impact`.
+
+    A platform-wide preview (`team_id=None`) must converge with what
+    `set_capability_default_on(False)` actually does: that mutation skips teams
+    that already carry an explicit `enabled` grant (they keep `can_use` by
+    their own tuple, not by inheritance), so this preview excludes them too —
+    otherwise the confirmation dialog overstates impact by counting agents that
+    will not actually be suspended.
     """
 
+    from control_plane_backend.capabilities.enablement import (
+        _explicitly_enabled_team_ids,
+    )
     from control_plane_backend.product.service import (
         _available_capability_ids_by_source,
     )
@@ -255,6 +262,15 @@ async def preview_revoke_impact(
         for instance in instances
         if capability_id in (instance.tuning.selected_capability_ids or [])
     ]
+    if team_id is None and instances:
+        enabled_team_ids = await _explicitly_enabled_team_ids(
+            deps.team_dependencies.rebac, capability_id
+        )
+        instances = [
+            instance
+            for instance in instances
+            if str(instance.team_id) not in enabled_team_ids
+        ]
     if not instances:
         return CapabilityImpact()
 

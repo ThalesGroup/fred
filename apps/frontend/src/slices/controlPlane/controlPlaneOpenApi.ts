@@ -1956,6 +1956,8 @@ export type CapabilityPersonalScopeResult = {
   scope: "enabled" | "disabled" | "default";
   /** Dependent PERSONAL-space instances suspended by this change (#1975). */
   suspended_instances?: number;
+  /** Dependent PERSONAL-space instances whose suspension this GRANT cleared (#1975). Only availability suspensions are cleared; an instance still missing another capability stays suspended, and a `capability_config_invalid` one is never touched here (RFC §3.9). */
+  revived_instances?: number;
 };
 export type SetCapabilityPersonalScopeRequest = {
   scope: "enabled" | "disabled" | "default";

@@ -26,7 +26,7 @@ import logging
 from typing import Any, Mapping
 
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import RebacEngine, RelationType
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
@@ -439,6 +439,36 @@ async def preview_capability_revoke(
     )
 
 
+async def _revive_personal_after_grant(
+    *, capability_id: str, deps: ProductServiceDependencies
+) -> int:
+    """Clear the personal-space suspensions a personal-scope GRANT resolves —
+    the personal-class counterpart of `_revive_after_grant` above (#1975 seam).
+
+    Runs AFTER the class tuple write. Scoped to PERSONAL-space teams that hold
+    a suspended dependent selecting the capability, revived one team at a time
+    through `_revive_after_grant` so the real per-team availability facts
+    (ReBAC `can_use` + pod manifest) decide each instance, never a synthetic
+    set — the same guarantee that leaves a `capability_config_invalid`
+    suspension or an unreachable-pod instance untouched.
+    """
+
+    agent_instance_store = deps.get_agent_instance_store()
+    personal_team_ids = {
+        instance.team_id
+        for instance in await agent_instance_store.list_all()
+        if instance.is_suspended
+        and is_personal_team_id(str(instance.team_id))
+        and capability_id in (instance.tuning.selected_capability_ids or [])
+    }
+    revived = 0
+    for team_id in personal_team_ids:
+        revived += await _revive_after_grant(
+            capability_id=capability_id, team_id=team_id, deps=deps
+        )
+    return revived
+
+
 async def set_personal_scope(
     *,
     user: KeycloakUser,
@@ -452,6 +482,16 @@ async def set_personal_scope(
     await _require_can_manage(rebac, user, capability_id)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
+
+    # Peeked BEFORE the write (same "peek, mutate, decide" shape as
+    # `reset_team_capability`'s `default_on` read above) so the grant/revoke
+    # transition can be told apart afterward. `default_on` does not move
+    # during this call — only the two personal-class tuples do — so one read
+    # covers both the before and after side of the access formula.
+    scope_before = await _read_personal_scope(rebac, capability_id)
+    default_on = await _is_default_on(rebac, capability_id)
+    had_access = scope_before == "enabled" or (scope_before == "default" and default_on)
+
     suspended = await set_capability_personal_scope(
         rebac=rebac,
         agent_instance_store=deps.get_agent_instance_store(),
@@ -460,10 +500,23 @@ async def set_personal_scope(
         kpi_writer=deps.get_kpi_writer(),
         updated_by=user.uid,
     )
+
+    # Mirrors the team/default-on grant paths above: a transition that GRANTS
+    # personal-space access must revive the suspensions it resolves, or an
+    # agent suspended by an earlier scope loss stays suspended until an
+    # unrelated reconciliation or manual save.
+    has_access = scope == "enabled" or (scope == "default" and default_on)
+    revived = (
+        await _revive_personal_after_grant(capability_id=capability_id, deps=deps)
+        if not had_access and has_access
+        else 0
+    )
+
     return CapabilityPersonalScopeResult(
         capability_id=capability_id,
         scope=scope,
         suspended_instances=suspended,
+        revived_instances=revived,
     )
 
 
