@@ -514,6 +514,37 @@ async def test_enroll_no_selection_with_rebac_disabled_takes_all_defaults(
 
 
 @pytest.mark.asyncio
+async def test_enroll_no_selection_rejected_when_no_default_capability_is_usable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-07-19 fix B (GitHub #2004 item 5, `depends_on` fast-follow defense
+    in depth): the team is granted the TEMPLATE itself (so enrollment reaches
+    `_apply_capability_selection`) but none of its default tool capabilities
+    — the exact live bug (an agent template capability enabled for a team
+    whose default MCP tool capability was never granted). Before this fix the
+    instance would be silently created with `selected_capability_ids=[]`;
+    now it must be rejected (422) instead."""
+
+    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    app, store = _setup(
+        monkeypatch, default_capability_ids=["demo_echo", "probe_echo"]
+    )
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "Toolless agent",
+            },
+        )
+    assert resp.status_code == 422
+    assert store._records == []
+
+
+@pytest.mark.asyncio
 async def test_enroll_explicit_selection_denied_by_rebac_is_403(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -536,6 +567,31 @@ async def test_enroll_explicit_selection_denied_by_rebac_is_403(
     assert resp.status_code == 403
     assert "CAPAB-01" in resp.json()["detail"]
     assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_update_rejected_once_template_access_is_revoked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-07-19 fix (GitHub #2004 item 1): once a team's grant on an
+    instance's own agent-TEMPLATE capability is revoked, `update_agent_instance`
+    must refuse every edit — not just re-validate the *tool* capabilities the
+    instance selected — closing "the team can still freely reconfigure them"
+    gap. A bare rename (no capability fields touched) is rejected too, since
+    the check runs before the `tuning_fields_set` branching."""
+
+    record = _make_record()
+    _wire_rebac(monkeypatch, {"personal": set()})  # template itself not usable
+    app, store = _setup(monkeypatch, records=[record])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"display_name": "Renamed while revoked"},
+        )
+    assert resp.status_code == 403
+    assert store._records[0].display_name == record.display_name  # unchanged
 
 
 @pytest.mark.asyncio
@@ -840,32 +896,34 @@ async def test_list_agent_templates_shows_template_when_granted(
 
 class _FakeTemplateGrantRebac:
     """
-    Combines the two interfaces `grant_existing_teams_served_templates` needs:
-    `lookup_resources`/`has_permission` (read side, `usable_capability_ids`)
-    seeded from `already_granted`, and `add_relation`/`delete_relation` (write
-    side, `enable_capability_for_team`) — records every `enabled` tuple write
-    for assertions, ignores the rest (anchor, settings-related opt-out clear).
+    Combines the interfaces `grant_existing_teams_served_templates` needs:
+    `has_direct_relation` (read side, literal-tuple check — 2026-07-19, GitHub
+    #2004 item 2: distinguishes "explicitly enabled" from "explicitly
+    disabled" from "no decision at all", seeded from `already_granted` /
+    `already_disabled`) and `add_relation`/`delete_relation` (write side,
+    `enable_capability_for_team`) — records every `enabled` tuple write for
+    assertions, ignores the rest (anchor, settings-related opt-out clear).
     """
 
-    def __init__(self, already_granted: dict[str, set[str]] | None = None) -> None:
+    def __init__(
+        self,
+        already_granted: dict[str, set[str]] | None = None,
+        already_disabled: dict[str, set[str]] | None = None,
+    ) -> None:
         self.already_granted = already_granted or {}
+        self.already_disabled = already_disabled or {}
         self.enabled_writes: list[tuple[str, str]] = []
 
-    async def lookup_resources(
-        self, subject, permission, resource_type, *, contextual_relations=None
-    ):
-        from fred_core.security.rebac.rebac_engine import RebacReference
-
-        team_id = subject.id
-        return [
-            RebacReference(type=resource_type, id=cap_id)
-            for cap_id in self.already_granted.get(team_id, set())
-        ]
-
-    async def has_permission(
-        self, subject, permission, resource, *, contextual_relations=None
+    async def has_direct_relation(
+        self, subject, relation, resource, *, consistency_token=None
     ) -> bool:
-        return resource.id in self.already_granted.get(subject.id, set())
+        team_id = subject.id
+        cap_id = resource.id
+        if relation.value == "enabled":
+            return cap_id in self.already_granted.get(team_id, set())
+        if relation.value == "disabled":
+            return cap_id in self.already_disabled.get(team_id, set())
+        return False
 
     async def add_relation(self, relation, **kwargs: object) -> str | None:
         if relation.relation.value == "enabled":
@@ -945,6 +1003,69 @@ async def test_grant_existing_teams_served_templates_migration(
     assert summary.already_granted == 1
     assert summary.grants_written == 1
     assert rebac.enabled_writes == [("team-needs-grant", "runtime-a__rags.sample.echo")]
+
+
+@pytest.mark.asyncio
+async def test_grant_existing_teams_served_templates_migration_preserves_explicit_disable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-07-19, GitHub #2004 item 2: an admin's explicit `disabled` decision
+    on a template must survive a re-run of this migration — it must never be
+    silently re-enabled just because the team has no `enabled` tuple."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.settings_store import (
+        TeamCapabilitySettings,
+    )
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        return [_template_payload()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+
+    class _FakeSettings:
+        async def upsert(self, *, team_id, capability_id, settings, updated_by):
+            return TeamCapabilitySettings(
+                team_id=team_id,
+                capability_id=capability_id,
+                settings=dict(settings),
+                updated_by=updated_by,
+                updated_at=None,
+            )
+
+    rebac = _FakeTemplateGrantRebac(
+        already_disabled={"team-explicitly-disabled": {"runtime-a__rags.sample.echo"}}
+    )
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(
+            rebac=rebac,
+            get_team_metadata_store=lambda: _FakeTeamMetadataStoreForMigration(
+                ["team-explicitly-disabled"]
+            ),
+        ),
+        get_team_capability_settings_store=lambda: _FakeSettings(),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-a",
+                        base_url="http://runtime-a/pod/v1",
+                        enabled=True,
+                    )
+                ]
+            )
+        ),
+    )
+
+    summary = await service.grant_existing_teams_served_templates(deps)
+
+    assert summary.already_granted == 1
+    assert summary.grants_written == 0
+    assert rebac.enabled_writes == []
 
 
 @pytest.mark.asyncio

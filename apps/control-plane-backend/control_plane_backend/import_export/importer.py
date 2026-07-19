@@ -103,6 +103,11 @@ from control_plane_backend.import_export.agent_map import (
 from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product.service import (
+    grant_existing_teams_served_templates,
+    materialize_default_capability_selections,
+)
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     CreateTeamRequest,
@@ -801,6 +806,7 @@ async def run_import(
     platform_admin: KeycloakUser | None = None,
     user_deps: UserServiceDependencies | None = None,
     team_deps: TeamServiceDependencies | None = None,
+    product_deps: ProductServiceDependencies | None = None,
 ) -> MigrationReport:
     source_platform = bundle.manifest.source_platform
     report = MigrationReport(
@@ -1071,6 +1077,36 @@ async def run_import(
             task_service=task_service,
             task_id=task_id,
             report=report,
+        )
+
+    # ── Phase 6: capability compatibility sweeps (GitHub #2004 item 3) ────────
+    # Imported agent rows are written directly (kea rows via a bare
+    # `ManagedAgentTuning(...)`, swift-native rows via the bundle's raw
+    # `tuning_json`), never through `enroll_agent_instance` /
+    # `_apply_capability_selection`. Both paths can persist
+    # `selected_capability_ids=None` — the exact sentinel #1980 already closed
+    # for the live enroll/update path, which the runtime still trusts as
+    # "activate every template default" with no ReBAC check. Re-running the
+    # same two sweeps used at CAPAB-01/CTRLP-14 deploy time, scoped to just the
+    # teams this import touched, closes the gap for every import instead of
+    # relying on an operator to remember a manual follow-up.
+    imported_team_ids: set[TeamId] = {record.team_id for record in to_create_agents} | {
+        TeamId(row["team_id"]) for row in raw_native_agents
+    }
+    if product_deps is not None and imported_team_ids:
+        grant_summary = await grant_existing_teams_served_templates(
+            product_deps, team_ids=imported_team_ids
+        )
+        materialize_summary = await materialize_default_capability_selections(
+            product_deps, team_ids=imported_team_ids
+        )
+        logger.info(
+            "[import-export] import %s capability sweeps: granted=%d "
+            "materialized=%d (teams=%d)",
+            import_id,
+            grant_summary.grants_written,
+            materialize_summary.materialized,
+            len(imported_team_ids),
         )
 
     # ── Non-DB warnings ───────────────────────────────────────────────────────

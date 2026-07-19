@@ -20,6 +20,8 @@ from fred_core import (
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.models import Resource
+from fred_core.security.rebac.rebac_engine import RebacReference, RelationType
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.tasks import ErasureReason
@@ -582,6 +584,7 @@ async def _agent_capabilities_for_source(
             icon="smart_toy",
             kind="agent",
             team_scope=TeamScopePolicy.ADMIN_GATED,
+            default_capability_ids=tuple(template.default_capability_ids),
         )
         for template in templates
     ]
@@ -1019,6 +1022,22 @@ async def _apply_capability_selection(
             )
         else:
             effective_ids = candidate_ids
+        # 2026-07-19 fix B (GitHub #2004 item 5, depends_on fast-follow
+        # defense-in-depth): the template declared defaults, but every one of
+        # them got filtered out by the team's ReBAC grants — persisting `[]`
+        # here would silently create/save a working-looking instance with
+        # zero tools. This is the residual case Fix A (the enable-time gate
+        # in `capabilities/enablement.py`) cannot catch: a dependency
+        # capability disabled for this team AFTER the agent capability was
+        # already granted. Reject instead of degrading silently.
+        if candidate_ids and not effective_ids:
+            raise EnrollmentError(
+                f"Cannot complete {context_label}: none of this template's "
+                f"default capabilities ({sorted(candidate_ids)!r}) are usable "
+                "by this team. Ask an admin to enable at least one of them "
+                "for this team, or select capabilities explicitly.",
+                http_status=422,
+            )
 
     async def _build_envelope(cap_id: str) -> tuple[str, dict[str, Any]]:
         if submitted_values is not None and cap_id in submitted_values:
@@ -1419,6 +1438,7 @@ async def materialize_default_capability_selections(
     deps: ProductServiceDependencies,
     *,
     dry_run: bool = False,
+    team_ids: set[TeamId] | None = None,
 ) -> CapabilityMaterializationSummary:
     """
     One-off backfill: resolve every already-persisted instance whose
@@ -1441,6 +1461,10 @@ async def materialize_default_capability_selections(
       build the application container, then call this with the resulting
       `ProductServiceDependencies`)
     - `dry_run=True` reports what WOULD be materialized without writing
+    - `team_ids`, when given, restricts the sweep to those teams' instances
+      only — used by `import_export/importer.py::run_import` (#2004 item 3)
+      to fix up just the rows an import just wrote, instead of re-scanning
+      every instance on the platform on every restore/backup-copy
     - treat "0 remaining NULL `selected_capability_ids` rows" as the proof of
       closure, not "the sweep ran" — an unreachable pod during the sweep
       leaves its instances untouched (`skipped_unreachable`), so re-run until
@@ -1453,6 +1477,8 @@ async def materialize_default_capability_selections(
 
     summary = CapabilityMaterializationSummary()
     for record in await store.list_all():
+        if team_ids is not None and record.team_id not in team_ids:
+            continue
         if record.tuning.selected_capability_ids is not None:
             continue
         summary.checked += 1
@@ -1506,12 +1532,20 @@ class TemplateGrantMigrationSummary:
     grants_written: int = 0
     already_granted: int = 0
     skipped_unreachable_sources: int = 0
+    # 2026-07-19, GitHub #2004 item 5: a grant this sweep WOULD have written is
+    # instead skipped (not raised) when the template's default tool
+    # capabilities aren't usable by the team yet (the `depends_on` gate,
+    # `enable_capability_for_team`) — granting anyway would just reproduce the
+    # exact "agent enabled, zero working tools" bug this fast-follow closes.
+    # Re-run this sweep after enabling the missing tool capability(ies).
+    skipped_dependency_not_satisfied: int = 0
 
 
 async def grant_existing_teams_served_templates(
     deps: ProductServiceDependencies,
     *,
     dry_run: bool = False,
+    team_ids: set[TeamId] | None = None,
 ) -> TemplateGrantMigrationSummary:
     """
     Required compatibility migration (CAPAB-01, RFC §8.6) — a companion to
@@ -1529,6 +1563,14 @@ async def grant_existing_teams_served_templates(
     disabled) — an admin who has already dialed a specific agent down for a
     specific team is not overridden by this sweep.
 
+    2026-07-19 fix (GitHub #2004 item 2): "already explicit" is checked via
+    `has_direct_relation` (a literal-tuple read) for BOTH `enabled` and
+    `disabled`, never via `usable_capability_ids` (the effective, computed
+    `can_use`) — the two are not the same test. `can_use` is false for a team
+    with an explicit `disabled` tuple, so the previous usable-based check
+    treated "explicitly disabled" identically to "never granted" and
+    re-enabled it on every re-run.
+
     How to use it:
     - run once, at/before deploy, alongside `materialize_default_capability_selections`
       — see the CAPAB-01 plan's deploy-sequencing note: each sweep must
@@ -1536,9 +1578,14 @@ async def grant_existing_teams_served_templates(
       should be rehearsed against a copy of real data before the actual
       go-live, not attempted for the first time in production
     - `dry_run=True` reports what WOULD be granted without writing
+    - `team_ids`, when given, restricts the sweep to those teams only — used
+      by `import_export/importer.py::run_import` (#2004 item 3) to grant just
+      the teams an import just touched, instead of re-granting the whole
+      platform on every restore/backup-copy
     """
 
     from control_plane_backend.capabilities.enablement import (
+        agent_capability_missing_dependencies,
         enable_capability_for_team,
     )
 
@@ -1565,11 +1612,36 @@ async def grant_existing_teams_served_templates(
 
     teams = await deps.team_dependencies.get_team_metadata_store().list_all()
     for team in teams:
+        if team_ids is not None and team.id not in team_ids:
+            continue
         summary.teams_checked += 1
-        usable_ids = await usable_capability_ids(rebac, team.id)
+        team_ref = RebacReference(type=Resource.TEAM, id=str(team.id))
         for template_id, entry in template_entries.items():
-            if usable_ids is not None and template_id in usable_ids:
+            cap_ref = RebacReference(type=Resource.CAPABILITY, id=template_id)
+            has_explicit_decision = await rebac.has_direct_relation(
+                team_ref, RelationType.ENABLED, cap_ref
+            ) or await rebac.has_direct_relation(
+                team_ref, RelationType.DISABLED, cap_ref
+            )
+            if has_explicit_decision:
                 summary.already_granted += 1
+                continue
+            missing_deps = await agent_capability_missing_dependencies(
+                rebac, entry, team.id
+            )
+            if missing_deps:
+                # Granting anyway would just reproduce the "agent enabled,
+                # zero working tools" bug this depends_on gate closes (#2004
+                # item 5) — skip and let an operator re-run after enabling
+                # the missing tool capability(ies) for this team.
+                summary.skipped_dependency_not_satisfied += 1
+                logger.warning(
+                    "[template-grant-migration] skipped team=%s template=%s: "
+                    "missing dependency capability id(s) %r",
+                    team.id,
+                    template_id,
+                    missing_deps,
+                )
                 continue
             summary.grants_written += 1
             if not dry_run:
@@ -1585,13 +1657,14 @@ async def grant_existing_teams_served_templates(
     logger.info(
         "[template-grant-migration] sweep done dry_run=%s teams_checked=%d "
         "templates_checked=%d grants_written=%d already_granted=%d "
-        "skipped_unreachable_sources=%d",
+        "skipped_unreachable_sources=%d skipped_dependency_not_satisfied=%d",
         dry_run,
         summary.teams_checked,
         summary.templates_checked,
         summary.grants_written,
         summary.already_granted,
         summary.skipped_unreachable_sources,
+        summary.skipped_dependency_not_satisfied,
     )
     return summary
 
@@ -2044,6 +2117,25 @@ async def update_agent_instance(
     record = await store.get_for_team(agent_instance_id, team_id)
     if record is None:
         return None
+
+    # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
+    # this instance's own `kind="agent"` template capability, the same gate
+    # `enroll_agent_instance` already applies at creation time. Without this,
+    # a team whose template grant was revoked (or a `default_on`/personal-
+    # scope withdrawal) could keep freely reconfiguring an instance that
+    # `suspend_dependent_instances`/`set_capability_default_on` already
+    # suspended for exactly that reason — unenroll (delete) is still always
+    # allowed, only editing is blocked.
+    if not await can_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        template_capability_id(record.source_runtime_id, record.source_agent_id),
+    ):
+        raise EnrollmentError(
+            "This agent's template access has been revoked for your team; it "
+            "can no longer be edited (unenroll is still allowed).",
+            http_status=403,
+        )
 
     tuning_fields_set = request.model_fields_set
     new_tuning: ManagedAgentTuning | None = None

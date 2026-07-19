@@ -48,11 +48,16 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import FieldSpec
 
-from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentInstanceStore,
+)
 from control_plane_backend.agent_instances.suspension import (
     SuspensionReason,
     reconcile_instance_suspension,
+    suspend_instance,
 )
+from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
@@ -85,6 +90,91 @@ class PersonalScopeNotAllowed(Exception):
     personal spaces — nobody has filled the settings (RFC §8.4, mirrors §8.2)."""
 
     http_status = 409
+
+
+class AgentCapabilityDependencyNotSatisfied(Exception):
+    """A `kind="agent"` capability's default tool capabilities are not all
+    usable yet by the team/personal-scope being granted (RFC §8.6, 2026-07-19
+    `depends_on` fast-follow, GitHub #2004 item 5)."""
+
+    http_status = 409
+
+
+async def agent_capability_missing_dependencies(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry, team_id: TeamId
+) -> list[str]:
+    """Ids in `catalog_entry.default_capability_ids` NOT yet `can_use` for
+    `team_id` — the `depends_on` fast-follow's pure predicate (RFC §8.6,
+    2026-07-19, GitHub #2004 item 5).
+
+    Reuses `default_capability_ids` — the template's own declared MCP-server
+    defaults, projected onto the catalog entry by `_agent_capabilities_for_source`
+    — as the sole source of truth for "what this agent needs." Always empty
+    for `kind="tool"` entries (no defaults by construction) and when ReBAC is
+    disabled (`usable_capability_ids` returns `None`, meaning no scoping
+    applies). Exposed as a public, non-raising predicate so a caller that
+    needs to SKIP-AND-REPORT rather than reject (e.g. the
+    `grant_existing_teams_served_templates` compatibility sweep, which must
+    stay best-effort even in `dry_run`) doesn't have to catch an exception to
+    get the same answer `enable_capability_for_team` rejects on below.
+    """
+
+    if catalog_entry.kind != "agent" or not catalog_entry.default_capability_ids:
+        return []
+    usable = await usable_capability_ids(rebac, team_id)
+    if usable is None:
+        return []
+    return [cid for cid in catalog_entry.default_capability_ids if cid not in usable]
+
+
+async def _require_agent_capability_dependencies_usable_by_team(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry, team_id: TeamId
+) -> None:
+    """Fix A of the `depends_on` fast-follow: refuse to grant a `kind="agent"`
+    capability to one team unless every id in its `default_capability_ids` is
+    already `can_use` for that same team."""
+
+    missing = await agent_capability_missing_dependencies(rebac, catalog_entry, team_id)
+    if missing:
+        raise AgentCapabilityDependencyNotSatisfied(
+            f"Cannot enable agent capability {catalog_entry.id!r} for team "
+            f"{team_id!r}: its default tool capability id(s) {missing!r} are "
+            "not usable by this team yet. Enable them for this team first."
+        )
+
+
+async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
+) -> None:
+    """Personal-scope counterpart of the check above: refuse to class-enable a
+    `kind="agent"` capability for every personal space unless each of its
+    `default_capability_ids` already has org-level personal access — i.e. is
+    itself `personal_on` or `default_on` (and not `personal_disabled`).
+
+    There is no single concrete team to run `usable_capability_ids` against
+    here (the grant applies to every personal space at once), so this reads
+    the same org-subject markers `set_capability_personal_scope` itself reads
+    to decide `had_access`/`has_access` for the capability being toggled.
+    """
+
+    if catalog_entry.kind != "agent" or not catalog_entry.default_capability_ids:
+        return
+    missing: list[str] = []
+    for cap_id in catalog_entry.default_capability_ids:
+        personal_on = await _has_org_relation(rebac, cap_id, RelationType.PERSONAL_ON)
+        default_on = await _has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON)
+        personal_disabled = await _has_org_relation(
+            rebac, cap_id, RelationType.PERSONAL_DISABLED
+        )
+        if not ((personal_on or default_on) and not personal_disabled):
+            missing.append(cap_id)
+    if missing:
+        raise AgentCapabilityDependencyNotSatisfied(
+            f"Cannot class-enable agent capability {catalog_entry.id!r} for all "
+            f"personal spaces: its default tool capability id(s) {missing!r} "
+            "are not usable by every personal space yet. Enable them for "
+            "personal spaces (or default-on) first."
+        )
 
 
 def _cap_ref(capability_id: str) -> RebacReference:
@@ -197,6 +287,9 @@ async def enable_capability_for_team(
 
     validated = validate_team_settings(
         list(catalog_entry.team_settings_fields), settings
+    )
+    await _require_agent_capability_dependencies_usable_by_team(
+        rebac, catalog_entry, team_id
     )
     # 1. Settings row first (configuration half).
     await settings_store.upsert(
@@ -320,6 +413,64 @@ async def reset_capability_for_team(
     )
 
 
+async def _suspend_instance_for_revoked_capability(
+    *,
+    agent_instance_store: AgentInstanceStore,
+    instance: AgentInstanceRecord,
+    capability_id: str,
+    kpi_writer: BaseKPIWriter | None,
+) -> bool:
+    """Suspend one instance for a revoked capability, whichever way it
+    depends on it: as a selected TOOL, or — since 2026-07-19, GitHub #2004
+    item 1 — by BEING an instance of `capability_id` when it is a
+    `kind="agent"` template capability.
+
+    Why the agent-template case cannot reuse `reconcile_instance_suspension`
+    as-is: that entry point (and the `unavailable_capabilities` diff it
+    calls) only ever looks at `instance.tuning.selected_capability_ids` — an
+    agent template's own id is never added there (only *tool* capabilities an
+    instance activated are), so removing it from `available_capability_ids`
+    is a no-op the diff would never notice. This suspends directly instead,
+    with the same idempotent-on-reason guard `reconcile_instance_suspension`
+    applies internally.
+
+    Returns True on a fresh transition into `capability_access_revoked`
+    (False if unmatched, or already suspended for that exact reason).
+    """
+
+    from control_plane_backend.product.service import template_capability_id
+
+    is_this_template = capability_id == template_capability_id(
+        instance.source_runtime_id, instance.source_agent_id
+    )
+    if is_this_template:
+        if (
+            instance.suspension_reason
+            == SuspensionReason.CAPABILITY_ACCESS_REVOKED.value
+        ):
+            return False
+        await suspend_instance(
+            agent_instance_store,
+            instance,
+            SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            capabilities=[capability_id],
+            kpi_writer=kpi_writer,
+        )
+        return True
+
+    selected = set(instance.tuning.selected_capability_ids or [])
+    if capability_id not in selected:
+        return False
+    reason = await reconcile_instance_suspension(
+        instance=instance,
+        store=agent_instance_store,
+        available_capability_ids=selected - {capability_id},
+        revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+        kpi_writer=kpi_writer,
+    )
+    return reason is not None
+
+
 async def suspend_dependent_instances(
     *,
     agent_instance_store: AgentInstanceStore,
@@ -327,29 +478,23 @@ async def suspend_dependent_instances(
     capability_id: str,
     kpi_writer: BaseKPIWriter | None = None,
 ) -> int:
-    """Suspend every one of a team's instances that selected `capability_id`
-    (the #1980 revocation → #1975 suspension seam).
+    """Suspend every one of a team's instances that depends on `capability_id`
+    — selected it as a tool, or ARE an instance of it as a `kind="agent"`
+    template (the #1980 revocation → #1975 suspension seam; agent-template
+    half added 2026-07-19, GitHub #2004 item 1).
 
-    Only instances that actually select the revoked capability are touched, so
-    an unrelated availability suspension is never clobbered. For each, the
-    reduced available set is exactly `selected - {capability_id}`, which the
-    reconcile reads as "this capability is gone" and suspends with
-    `CAPABILITY_ACCESS_REVOKED`.
+    Only dependent instances are touched, so an unrelated availability
+    suspension is never clobbered.
     """
 
     suspended = 0
     for instance in await agent_instance_store.list_by_team(team_id):
-        selected = set(instance.tuning.selected_capability_ids or [])
-        if capability_id not in selected:
-            continue
-        reason = await reconcile_instance_suspension(
+        if await _suspend_instance_for_revoked_capability(
+            agent_instance_store=agent_instance_store,
             instance=instance,
-            store=agent_instance_store,
-            available_capability_ids=selected - {capability_id},
-            revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            capability_id=capability_id,
             kpi_writer=kpi_writer,
-        )
-        if reason is not None:
+        ):
             suspended += 1
     return suspended
 
@@ -472,23 +617,20 @@ async def set_capability_default_on(
             resource=_cap_ref(catalog_entry.id),
         )
     )
-    # Teams with an explicit grant keep access; everyone else loses inherited use.
+    # Teams with an explicit grant keep access; everyone else loses inherited
+    # use — whether they used it as a tool or as a `kind="agent"` template
+    # (2026-07-19, GitHub #2004 item 1).
     enabled_teams = await _explicitly_enabled_team_ids(rebac, catalog_entry.id)
     suspended = 0
     for instance in await agent_instance_store.list_all():
-        selected = set(instance.tuning.selected_capability_ids or [])
-        if catalog_entry.id not in selected:
-            continue
         if str(instance.team_id) in enabled_teams:
             continue
-        reason = await reconcile_instance_suspension(
+        if await _suspend_instance_for_revoked_capability(
+            agent_instance_store=agent_instance_store,
             instance=instance,
-            store=agent_instance_store,
-            available_capability_ids=selected - {catalog_entry.id},
-            revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            capability_id=catalog_entry.id,
             kpi_writer=kpi_writer,
-        )
-        if reason is not None:
+        ):
             suspended += 1
     return suspended
 
@@ -532,6 +674,10 @@ async def set_capability_personal_scope(
         raise PersonalScopeNotAllowed(
             f"Capability {catalog_entry.id!r} has required team settings and "
             "cannot be class-enabled for all personal spaces."
+        )
+    if scope == "enabled":
+        await _require_agent_capability_dependencies_usable_by_all_personal_spaces(
+            rebac, catalog_entry
         )
 
     await ensure_capability_anchor(rebac, catalog_entry.id)
@@ -630,8 +776,10 @@ async def _suspend_personal_dependents(
     capability_id: str,
     kpi_writer: BaseKPIWriter | None = None,
 ) -> int:
-    """Suspend PERSONAL-space instances selecting `capability_id` whose team
-    lacks an explicit `enabled` grant (the personal-class revocation sweep).
+    """Suspend PERSONAL-space instances that depend on `capability_id` —
+    selected it as a tool, or ARE an instance of it as a `kind="agent"`
+    template (2026-07-19, GitHub #2004 item 1) — whose team lacks an explicit
+    `enabled` grant (the personal-class revocation sweep).
 
     A per-space explicit `enabled` grant survives the class change (it keeps
     `can_use`), so those instances are never touched."""
@@ -641,19 +789,14 @@ async def _suspend_personal_dependents(
     for instance in await agent_instance_store.list_all():
         if not is_personal_team_id(str(instance.team_id)):
             continue
-        selected = set(instance.tuning.selected_capability_ids or [])
-        if capability_id not in selected:
-            continue
         if str(instance.team_id) in enabled_teams:
             continue
-        reason = await reconcile_instance_suspension(
+        if await _suspend_instance_for_revoked_capability(
+            agent_instance_store=agent_instance_store,
             instance=instance,
-            store=agent_instance_store,
-            available_capability_ids=selected - {capability_id},
-            revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
+            capability_id=capability_id,
             kpi_writer=kpi_writer,
-        )
-        if reason is not None:
+        ):
             suspended += 1
     return suspended
 

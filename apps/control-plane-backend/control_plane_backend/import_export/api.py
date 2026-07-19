@@ -61,6 +61,10 @@ from control_plane_backend.import_export.stats import (
     compute_platform_stats,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.product.dependencies import (
+    ProductServiceDependencies,
+    get_product_service_dependencies,
+)
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -168,6 +172,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         user_deps: Annotated[
             UserServiceDependencies, Depends(get_user_service_dependencies)
         ],
+        product_deps: Annotated[
+            ProductServiceDependencies, Depends(get_product_service_dependencies)
+        ],
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
@@ -208,6 +215,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                     platform_admin=user,
                     user_deps=user_deps,
                     team_deps=team_deps,
+                    product_deps=product_deps,
                 )
                 await task_service.record(
                     MigrationTaskEvent(

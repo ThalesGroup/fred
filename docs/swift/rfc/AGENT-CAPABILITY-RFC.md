@@ -1633,6 +1633,78 @@ capability of `kind="agent"` in this exact same object space:
   enabling an agent without its tool dependencies granted. Tracked as a
   fast-follow, not silently dropped.
 
+> **2026-07-19 — `depends_on` fast-follow + CAPAB-01/CTRLP-14 gating gaps
+> closed (GitHub #2004, CTRLP-14).** Found live: an admin can enable a
+> `kind="agent"` template for a team (e.g. "Tabular SQL expert") without its
+> default MCP-backed tool capability (e.g. "Tabular data access") also being
+> usable by that team. Nothing rejects this — `enable_capability_for_team`
+> treats every capability id as independent, and
+> `_apply_capability_selection`'s `selected_ids=None` default path (§8.1
+> amendment) silently narrows the template's `default_capability_ids` to the
+> empty set rather than erroring. Net effect: the agent instance exists and
+> looks enabled, but has zero working tools — no signal to the admin or the
+> team about why.
+>
+> Rejected: a general `depends_on` graph field on `CapabilityCatalogEntry`
+> (over-engineering — every current dependency IS already exactly a
+> template's `default_capability_ids`, computed from `AgentDefinition.
+> default_mcp_servers`; no capability today needs an *optional* vs *required*
+> distinction, so a new field would model something the data already
+> expresses). Rejected: teaching this into `capabilities/authz.py`'s generic
+> `can_use_capability`/`usable_capability_ids` — those are kind-agnostic
+> primitives reused by every capability, tool or agent; special-casing
+> "agents depend on tools" inside them would leak a `kind="agent"`-specific
+> concept into code that must stay kind-agnostic for every other caller
+> (listing, suspension sweeps, `default_on`/`personal_scope`).
+>
+> **Fix (two parts, reusing `default_capability_ids` — the existing
+> SDK-declared source of truth, no new modeling):**
+>
+> - **A — gate at grant time.** `enable_capability_for_team`
+>   (`capabilities/enablement.py`) rejects (409) enabling a `kind="agent"`
+>   catalog entry for a team/personal-scope unless `usable_capability_ids`
+>   for that team already covers every id in the template's
+>   `default_capability_ids`. Mirrors the existing `DefaultOnNotAllowed`/
+>   `PersonalScopeNotAllowed` guard shape. Prevents the misconfiguration at
+>   its only write path.
+> - **B — reject-on-empty at save time (defense in depth).**
+>   `_apply_capability_selection`'s template-default path
+>   (`product/service.py`) now raises `EnrollmentError(422)` instead of
+>   silently persisting `selected_capability_ids=[]` when
+>   `default_capability_ids` was non-empty but narrows to nothing usable —
+>   covers the residual case where a tool capability is disabled (or
+>   `default_on` withdrawn) for a team *after* its dependent agent capability
+>   was already granted, since A only fires on the grant transition.
+>
+> Also closed under the same GitHub #2004 review (backend robustness gaps in
+> the `kind="agent"` capability path, not new design):
+>
+> - Revoking a team's (or a `default_on`/personal-scope) grant on an agent
+>   template now suspends its dependent instances too:
+>   `suspend_dependent_instances`, `set_capability_default_on`, and
+>   `_suspend_personal_dependents` match an instance against a revoked
+>   capability id via `capability_id in selected_capability_ids OR
+>   capability_id == template_capability_id(instance.source_runtime_id,
+>   instance.source_agent_id)` — previously only the first half, so an agent
+>   template's own id was never recognized as something an instance
+>   "depends on." `update_agent_instance` also re-checks
+>   `can_use(team, template_capability_id)` before accepting any edit, so a
+>   team whose template grant was revoked can no longer keep reconfiguring
+>   the instance (unenroll is still always allowed).
+> - `grant_existing_teams_served_templates` no longer overwrites an admin's
+>   explicit `disabled` decision on re-run: it now checks for an existing
+>   explicit tuple (enabled OR disabled) directly, rather than inferring
+>   "already granted" from effective `can_use` — the two are not the same
+>   test, since `can_use` also reflects `disabled`.
+> - The Kea→Swift bulk import (`import_export/importer.py::run_import`) runs
+>   `materialize_default_capability_selections` and (once the previous point
+>   landed) `grant_existing_teams_served_templates` as a post-commit step, so
+>   an imported row can never persist with the `selected_capability_ids=None`
+>   sentinel #1980 already closed for the live enroll/update path.
+>
+> Not in this pass: `kind="tool"`/`kind="agent"` catalog-id namespace
+> separation (#2004 item 4, low likelihood, opportunistic).
+
 ---
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)

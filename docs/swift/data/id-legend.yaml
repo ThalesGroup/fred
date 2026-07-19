@@ -1044,6 +1044,11 @@ items:
       stays a manual admin decision via the new UI, made after this ships. Deferred:
       `depends_on` capability-dependency declarations + refuse-and-signal UX when
       enabling an agent without its tool dependencies granted.
+      2026-07-19: the deferred `depends_on` fast-follow, plus three backend
+      robustness gaps found reviewing this work (revoke-doesn't-suspend,
+      migration idempotency, import bypass), are being closed together under
+      GitHub #2004 on branch `2004-capab-01-agent-template-capability-gating-gaps`.
+      See `AGENT-CAPABILITY-RFC.md` §8.6's 2026-07-19 dated entry for the design.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 

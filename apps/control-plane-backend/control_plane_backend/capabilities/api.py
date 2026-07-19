@@ -31,6 +31,7 @@ from fred_core.security.models import AuthorizationError
 
 from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.enablement import (
+    AgentCapabilityDependencyNotSatisfied,
     CapabilityNotFound,
     CapabilitySettingsInvalid,
     DefaultOnNotAllowed,
@@ -137,6 +138,7 @@ async def put_team_capability(
         CapabilityNotFound,
         CapabilitySettingsInvalid,
         DefaultOnNotAllowed,
+        AgentCapabilityDependencyNotSatisfied,
     ) as exc:
         raise _map_error(exc) from exc
 
@@ -229,5 +231,6 @@ async def put_capability_personal_scope(
         AuthorizationError,
         CapabilityNotFound,
         PersonalScopeNotAllowed,
+        AgentCapabilityDependencyNotSatisfied,
     ) as exc:
         raise _map_error(exc) from exc

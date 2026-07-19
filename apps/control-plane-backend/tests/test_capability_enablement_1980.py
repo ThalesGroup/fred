@@ -35,11 +35,14 @@ from typing import Any
 import pytest
 from control_plane_backend.capabilities import enablement, seeding
 from control_plane_backend.capabilities.enablement import (
+    AgentCapabilityDependencyNotSatisfied,
     CapabilitySettingsInvalid,
     DefaultOnNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
     reset_capability_for_team,
+    set_capability_personal_scope,
+    suspend_dependent_instances,
     validate_team_settings,
 )
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
@@ -112,12 +115,41 @@ class _FakeRebac:
                 out.append(RebacReference(type=subject_type, id=user.split(":", 1)[1]))
         return out
 
+    async def lookup_resources(
+        self, subject, permission, resource_type, *, contextual_relations=None
+    ):
+        """Simplified `can_use` ListObjects for the `depends_on` gate tests
+        (2026-07-19, GitHub #2004 item 5): `(enabled OR default_on) AND NOT
+        disabled`, read straight off the recorded tuples — close enough to
+        the real `capability#can_use` formula for these offline checks (the
+        real tri-state is exercised in fred-core's OpenFGA integration suite)."""
+
+        if not self._enabled:
+            return RebacDisabledResult()
+        team_key = f"{subject.type.value}:{subject.id}"
+        org_key = f"organization:{ORGANIZATION_ID}"
+
+        def _ids(user: str, rel: str) -> set[str]:
+            return {
+                o.split(":", 1)[1]
+                for (u, r, o) in self.tuples
+                if u == user and r == rel and o.startswith("capability:")
+            }
+
+        enabled_ids = _ids(team_key, "enabled")
+        disabled_ids = _ids(team_key, "disabled")
+        default_on_ids = _ids(org_key, "default_on")
+        usable = (enabled_ids | default_on_ids) - disabled_ids
+        return [RebacReference(type=resource_type, id=cid) for cid in usable]
+
 
 def _entry(
     cap_id: str = "corp_drive",
     *,
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED,
     team_settings_fields: list[FieldSpec] | None = None,
+    kind: str = "tool",
+    default_capability_ids: tuple[str, ...] = (),
 ) -> CapabilityCatalogEntry:
     return CapabilityCatalogEntry(
         id=cap_id,
@@ -127,6 +159,8 @@ def _entry(
         icon="Icon",
         team_scope=team_scope,
         team_settings_fields=team_settings_fields or [],
+        kind=kind,
+        default_capability_ids=default_capability_ids,
     )
 
 
@@ -318,6 +352,178 @@ async def test_disable_suspends_dependent_instances_with_access_revoked() -> Non
     # `enabled` tuple gone, settings row KEPT (re-enable restores).
     assert ("team:team-a", "enabled", "capability:corp_drive") not in rebac.tuples
     assert ("team-a", "corp_drive") in settings._rows
+
+
+@pytest.mark.asyncio
+async def test_enable_capability_for_team_rejects_agent_capability_missing_tool_dependency() -> (
+    None
+):
+    """2026-07-19, GitHub #2004 item 5 (`depends_on` fast-follow, fix A): an
+    admin cannot grant a `kind="agent"` template to a team unless the team
+    already `can_use` every id in the template's `default_capability_ids` —
+    the exact live bug (SQL agent enabled for teams whose "Tabular data
+    access" tool capability stayed disabled everywhere)."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    sql_expert = _entry(
+        "runtime-a__sql_expert",
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await enable_capability_for_team(
+            rebac=rebac,
+            settings_store=settings,
+            catalog_entry=sql_expert,
+            team_id="team-a",
+            settings={},
+            updated_by="admin",
+        )
+
+    # Rejected before any write: no tuple, no settings row.
+    assert rebac.tuples == set()
+    assert ("team-a", "runtime-a__sql_expert") not in settings._rows
+
+
+@pytest.mark.asyncio
+async def test_enable_capability_for_team_allows_agent_capability_when_tool_dependency_usable() -> (
+    None
+):
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        "runtime-a__sql_expert",
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    # Enable the dependency for the team FIRST.
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=tool_entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+    # Now the agent capability grant succeeds.
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=sql_expert,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+
+    assert (
+        "team:team-a",
+        "enabled",
+        "capability:runtime-a__sql_expert",
+    ) in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_disable_agent_template_capability_suspends_its_instances() -> None:
+    """2026-07-19, GitHub #2004 item 1: revoking a team's access to an agent
+    TEMPLATE capability must suspend instances of that template — even though
+    the template's own id is never in `selected_capability_ids` (only tool
+    capabilities an instance activated live there)."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    sql_expert = _entry("runtime-a__sql_expert", kind="agent")
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=sql_expert,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+    instance = _make_record(
+        agent_instance_id="sql-1",
+        team_id="team-a",
+        source_runtime_id="runtime-a",
+        source_agent_id="sql_expert",
+    )
+    unrelated = _make_record(
+        agent_instance_id="other",
+        team_id="team-a",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.echo",
+    )
+    store = _FakeAgentInstanceStore([instance, unrelated])
+
+    suspended = await disable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        team_id="team-a",
+    )
+
+    assert suspended == 1
+    assert instance.suspension_reason == "capability_access_revoked"
+    assert unrelated.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_suspend_dependent_instances_is_idempotent_for_agent_template() -> None:
+    """Re-running the revoke sweep must not double-count an instance already
+    suspended for the same reason (mirrors the existing tool-capability
+    idempotency guarantee in `reconcile_instance_suspension`)."""
+
+    instance = _make_record(
+        agent_instance_id="sql-1",
+        team_id="team-a",
+        source_runtime_id="runtime-a",
+        source_agent_id="sql_expert",
+    )
+    store = _FakeAgentInstanceStore([instance])
+
+    first = await suspend_dependent_instances(
+        agent_instance_store=store,
+        team_id="team-a",
+        capability_id="runtime-a__sql_expert",
+    )
+    second = await suspend_dependent_instances(
+        agent_instance_store=store,
+        team_id="team-a",
+        capability_id="runtime-a__sql_expert",
+    )
+
+    assert first == 1
+    assert second == 0
+    assert instance.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_enabled_rejects_agent_capability_missing_tool_dependency() -> (
+    None
+):
+    """Personal-scope counterpart of fix A: class-enabling a `kind="agent"`
+    template for every personal space is refused unless its default tool
+    capabilities already have org-level personal access."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    sql_expert = _entry(
+        "runtime-a__sql_expert",
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await set_capability_personal_scope(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=sql_expert,
+            scope="enabled",
+        )
 
 
 @pytest.mark.asyncio
