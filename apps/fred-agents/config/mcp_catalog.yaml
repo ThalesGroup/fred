@@ -109,15 +109,6 @@ servers:
     enabled: true
     auth_mode: "user_token"
 
-  - id: "mcp-kubernetes-server"
-    name: "mcp.servers.kubernetes.name"
-    description: "mcp.servers.kubernetes.description"
-    enabled: false
-    transport: "streamable_http"
-    url: "http://localhost:8081/mcp"
-    sse_read_timeout: 2000
-    auth_mode: "user_token"
-
   - id: "mcp-atlassian-jira-server"
     name: "mcp.servers.jira.name"
     description: "mcp.servers.jira.description"
@@ -192,15 +183,6 @@ servers:
     transport: "inprocess"
     provider: "web_github_readonly"
     auth_mode: "no_token"
-
-  - id: "mcp-knowledge-flow-statistics"
-    name: "mcp-knowledge-flow-statistics"
-    description: "mcp.servers.statistics.description"
-    enabled: true
-    transport: "streamable_http"
-    url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
-    sse_read_timeout: 2000
-    auth_mode: "user_token"
 
   - id: "mcp-knowledge-flow-prometheus-ops"
     name: "mcp.servers.prometheus.name"

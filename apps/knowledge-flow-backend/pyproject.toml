@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 
 dependencies = [
   "fastapi==0.139.0",
-  "langchain>=1.3.10",
+  "langchain>=1.3.14",
   "langchain-community>=0.4.1",
   "langchain-text-splitters>=1.1.2",
   "langchain-postgres>=0.0.17",
@@ -37,7 +37,6 @@ dependencies = [
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
-  "weaviate-client<4.0.0",
   "fred-core>=1.5.0",
   "dateparser>=1.2.2",
   "pymysql>=1.1.1",
@@ -47,9 +46,6 @@ dependencies = [
   "uv",
   "chromadb>=0.5",
   "python-keycloak>=5.8.1",
-  "joblib>=1.5.2",
-  "matplotlib>=3.10.7",
-  "scikit-learn>=1.7.2",
   # ClickHouse client
   "clickhouse-connect>=0.8.0",
   # MarkItDown extras: ensure .docx support is available for the lite DOCX path

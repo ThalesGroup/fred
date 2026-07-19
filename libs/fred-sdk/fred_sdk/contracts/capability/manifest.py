@@ -290,6 +290,13 @@ class CapabilityCatalogEntry(BaseModel):
     # surface reads the same value off `ExecutionPreparation`. No proxy — the
     # browser calls the pod directly, same as runtime SSE.
     route_base_url: str | None = None
+    # Tool/MCP capability ids a `kind="agent"` entry activates by default (its
+    # template's `AgentDefinition.default_mcp_servers`, projected here so the
+    # admin enablement write path can gate granting the agent capability on
+    # those dependencies already being usable by the team — RFC §8.6,
+    # 2026-07-19 `depends_on` fast-follow, GitHub #2004 item 5). Always empty
+    # for `kind="tool"` entries.
+    default_capability_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def from_manifest(

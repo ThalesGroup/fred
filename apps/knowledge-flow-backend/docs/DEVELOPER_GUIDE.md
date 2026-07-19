@@ -36,7 +36,6 @@ http://localhost:8111/knowledge-flow/v1/docs
 - **Examples**:
   - `/knowledge-flow/v1/mcp-text`
   - `/knowledge-flow/v1/mcp-tabular`
-  - `/knowledge-flow/v1/mcp-statistic`
 - **Tabular MCP tools** expose the dataset-centric operations tagged `Tabular`, notably:
   - `list_tabular_datasets`
   - `get_tabular_dataset_schema`

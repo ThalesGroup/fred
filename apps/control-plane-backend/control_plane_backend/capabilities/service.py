@@ -39,6 +39,7 @@ from control_plane_backend.capabilities.enablement import (
     disable_capability_for_team,
     enable_capability_for_team,
     ensure_capability_anchor,
+    is_template_capability_instance,
     reset_capability_for_team,
     revive_dependent_instances,
     set_capability_default_on,
@@ -388,10 +389,17 @@ async def set_default_on(
     revived = 0
     if default_on:
         agent_instance_store = deps.get_agent_instance_store()
+        # A team is a revive candidate whether its dependent selected
+        # `capability_id` as a TOOL, or IS an instance of it as a
+        # `kind="agent"` template (2026-07-19, GitHub #2004 item 2) — the
+        # gathering must match `_suspend_instance_for_revoked_capability`'s
+        # two suspension conditions, or a team suspended only via the
+        # template condition is never revived.
         team_ids = {
             instance.team_id
             for instance in await agent_instance_store.list_all()
             if capability_id in (instance.tuning.selected_capability_ids or [])
+            or is_template_capability_instance(instance, capability_id)
         }
         for team_id in team_ids:
             revived += await _revive_after_grant(
@@ -454,12 +462,18 @@ async def _revive_personal_after_grant(
     """
 
     agent_instance_store = deps.get_agent_instance_store()
+    # Same broadened match as `set_default_on` above: a suspended personal-space
+    # dependent qualifies whether it selected `capability_id` as a TOOL or IS an
+    # instance of it as a `kind="agent"` template (GitHub #2004 item 2).
     personal_team_ids = {
         instance.team_id
         for instance in await agent_instance_store.list_all()
         if instance.is_suspended
         and is_personal_team_id(str(instance.team_id))
-        and capability_id in (instance.tuning.selected_capability_ids or [])
+        and (
+            capability_id in (instance.tuning.selected_capability_ids or [])
+            or is_template_capability_instance(instance, capability_id)
+        )
     }
     revived = 0
     for team_id in personal_team_ids:

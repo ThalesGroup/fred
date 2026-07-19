@@ -12,17 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import CloseIcon from "@mui/icons-material/Close";
-import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
+import styles from "./PdfStreamingDocumentViewer.module.css";
 
 type Props = {
-  document: { document_uid: string; file_name?: string } | null;
-  onClose: () => void;
+  documentUid: string;
 };
 
 // React-PDF requires workerSrc to be configured in the same module that renders
@@ -36,8 +34,11 @@ if (typeof Worker !== "undefined") {
 
 const PDF_SCALE = 0.8;
 
-export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onClose }) => {
-  const token = useAuthToken(); // ← decoupled
+// Header-less by design: the two hosting contexts (DocumentViewerPage's own
+// top bar, InlineDrawer's own title+close) already provide chrome, so this
+// component owns only the PDF surface itself.
+export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => {
+  const token = useAuthToken();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -59,9 +60,9 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
   }, []);
 
   const pdfUrl = useMemo(() => {
-    if (!doc?.document_uid) return null;
-    return `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}`;
-  }, [doc?.document_uid]);
+    if (!documentUid) return null;
+    return `/knowledge-flow/v1/raw_content/stream/${documentUid}`;
+  }, [documentUid]);
 
   const fileProp = useMemo(() => {
     if (!pdfUrl) return null;
@@ -85,82 +86,35 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
     setLoadError(null);
     setNumPages(null);
     setReloadKey((k) => k + 1); // remount Document to reset PDF.js
-  }, [doc?.document_uid]);
+  }, [documentUid]);
 
   return (
-    <Box
-      sx={{
-        width: "80vw",
-        height: "100%",
-        maxHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        minHeight: 0,
-      }}
-    >
-      <AppBar position="static" color="default" elevation={0}>
-        <Toolbar>
-          <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>
-            {doc?.file_name || "PDF Document"}
-          </Typography>
+    <div ref={contentRef} className={styles.viewer}>
+      {!isLoading && loadError && <p className={styles.error}>{loadError}</p>}
 
-          <IconButton onClick={onClose} aria-label="Close">
-            <CloseIcon />
-          </IconButton>
-        </Toolbar>
-      </AppBar>
+      {fileProp && !loadError && (
+        <Document
+          key={reloadKey}
+          file={fileProp}
+          onLoadSuccess={onDocumentLoadSuccess}
+          onLoadError={onDocumentLoadError}
+          loading={<p className={styles.loading}>Loading…</p>}
+          error={<p className={styles.error}>Failed to load PDF document.</p>}
+        >
+          {Array.from({ length: numPages ?? 0 }, (_, i) => (
+            <Page
+              key={`page_${i + 1}`}
+              pageNumber={i + 1}
+              width={pageWidth}
+              renderAnnotationLayer
+              renderTextLayer={false} // faster by default
+            />
+          ))}
+        </Document>
+      )}
 
-      <Box
-        ref={contentRef}
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          overflowX: "hidden",
-          p: 2,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          boxSizing: "border-box",
-          width: "100%",
-        }}
-      >
-        {!isLoading && loadError && (
-          <Typography color="error" sx={{ mt: 4 }}>
-            {loadError}
-          </Typography>
-        )}
-
-        {fileProp && !loadError && (
-          <Document
-            key={reloadKey}
-            file={fileProp}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={onDocumentLoadError}
-            loading={<CircularProgress />}
-            error={<Typography color="error">Failed to load PDF document.</Typography>}
-          >
-            {Array.from({ length: numPages ?? 0 }, (_, i) => (
-              <Page
-                key={`page_${i + 1}`}
-                pageNumber={i + 1}
-                width={pageWidth}
-                renderAnnotationLayer
-                renderTextLayer={false} // faster by default
-              />
-            ))}
-          </Document>
-        )}
-
-        {!fileProp && !loadError && (
-          <Typography color="error" sx={{ mt: 4 }}>
-            Document content is unavailable.
-          </Typography>
-        )}
-      </Box>
-    </Box>
+      {!fileProp && !loadError && <p className={styles.error}>Document content is unavailable.</p>}
+    </div>
   );
 };
 

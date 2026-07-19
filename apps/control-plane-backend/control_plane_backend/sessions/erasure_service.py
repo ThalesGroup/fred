@@ -311,7 +311,12 @@ class ConversationErasureService:
         session_id: str,
         authorization: str,
     ) -> StoreErasureResult:
-        """DELETE the session's LangGraph checkpoint on its runtime (204)."""
+        """DELETE the session's LangGraph checkpoint on its runtime.
+
+        Reads `{"deleted": n}` into the receipt, mirroring
+        `_erase_runtime_history` — the runtime returns the checkpoint-row count
+        it actually purged instead of a bare 204.
+        """
         url = f"{base_url.rstrip('/')}/agents/checkpoints/{session_id}"
         try:
             async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
@@ -319,7 +324,10 @@ class ConversationErasureService:
                     url, headers={"Authorization": authorization}
                 )
             response.raise_for_status()
-            return StoreErasureResult(store=STORE_CHECKPOINT, ok=True)
+            deleted = int(response.json().get("deleted", 0))
+            return StoreErasureResult(
+                store=STORE_CHECKPOINT, deleted_count=deleted, ok=True
+            )
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text.strip() or str(exc)
             return StoreErasureResult(
@@ -332,6 +340,16 @@ class ConversationErasureService:
                 store=STORE_CHECKPOINT,
                 ok=False,
                 error=f"runtime checkpoint delete request failed: {exc}",
+            )
+        except (ValueError, TypeError) as exc:
+            # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
+            # rolled to the `{"deleted": n}` contract) — `response.json()`
+            # raises `json.JSONDecodeError` (a `ValueError`). Degrade to an
+            # isolated failed store instead of crashing the whole fan-out.
+            return StoreErasureResult(
+                store=STORE_CHECKPOINT,
+                ok=False,
+                error=f"runtime checkpoint delete response was not parseable: {exc}",
             )
 
     async def _erase_runtime_history(
@@ -369,4 +387,14 @@ class ConversationErasureService:
                 store=STORE_HISTORY,
                 ok=False,
                 error=f"runtime history delete request failed: {exc}",
+            )
+        except (ValueError, TypeError) as exc:
+            # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
+            # rolled to the `{"deleted": n}` contract) — `response.json()`
+            # raises `json.JSONDecodeError` (a `ValueError`). Degrade to an
+            # isolated failed store instead of crashing the whole fan-out.
+            return StoreErasureResult(
+                store=STORE_HISTORY,
+                ok=False,
+                error=f"runtime history delete response was not parseable: {exc}",
             )

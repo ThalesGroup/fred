@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
@@ -23,15 +23,18 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
-import { useMarkdownDocumentViewer } from "../../../common/useMarkdownDocumentViewer";
 import { downloadFile } from "../../../utils/downloadUtils";
 import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
-import { usePdfDocumentViewer } from "../../../common/usePdfDocumentViewer";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
   refetchDocs?: (tagId?: string) => Promise<any>;
 };
+
+export interface DocumentPreviewTarget {
+  documentUid: string;
+  fileName?: string;
+}
 
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
   const { t } = useTranslation();
@@ -42,9 +45,8 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-  const { openMarkdownDocument } = useMarkdownDocumentViewer();
-  const { openPdfDocument } = usePdfDocumentViewer();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const refresh = useCallback(
     async (tagId?: string) => {
       await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs(tagId) : fetchAllDocuments({ filters: {} })]);
@@ -149,7 +151,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   );
   const preview = useCallback(
     (doc: DocumentMetadata) => {
-      const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
       const previewReady = doc.processing?.stages?.preview === "done";
 
       if (!previewReady) {
@@ -160,24 +161,17 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         return;
       }
 
-      openMarkdownDocument({
-        document_uid: doc.identity.document_uid,
-        file_name: name,
+      // fileName carries the real extension (identity.document_name), not the
+      // display title — DocumentViewer needs it to pick the PDF vs. markdown
+      // render strategy (FRONT-13).
+      setPreviewTarget({
+        documentUid: doc.identity.document_uid,
+        fileName: doc.identity.document_name,
       });
     },
-    [openMarkdownDocument, showInfo, t],
+    [showInfo, t],
   );
-  const previewPdf = useCallback(
-    (doc: DocumentMetadata) => {
-      const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
-
-      openPdfDocument({
-        document_uid: doc.identity.document_uid,
-        file_name: name,
-      });
-    },
-    [openPdfDocument],
-  );
+  const closePreview = useCallback(() => setPreviewTarget(null), []);
   const download = useCallback(
     async (doc: DocumentMetadata) => {
       try {
@@ -200,5 +194,14 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [triggerDownloadBlob, showError],
   );
-  return { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, refresh, download };
+  return {
+    toggleRetrievable,
+    removeFromLibrary,
+    bulkRemoveFromLibraryForTag,
+    preview,
+    previewTarget,
+    closePreview,
+    refresh,
+    download,
+  };
 }

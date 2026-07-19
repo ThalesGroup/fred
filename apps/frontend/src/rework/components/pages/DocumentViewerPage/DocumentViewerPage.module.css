@@ -32,11 +32,11 @@
   overflow-y: auto;
 }
 
-/* ── Reading column ── */
+/* ── Content host ── */
 .content {
-  margin: 0 auto;
-  padding: var(--spacing-xl) var(--spacing-l);
-  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .loading {

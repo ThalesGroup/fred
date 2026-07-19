@@ -737,13 +737,12 @@ items:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §9"
       rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
     notes: >
-      Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
-      MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
-      Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the RFC — not repeated
-      here. Manual end-to-end verification pending live pod (one unchecked item in
-      CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's confirmed. Native PDF
-      rendering and an assistant panel deferred to FRONT-13
-      (docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md).
+      Companion to RUNTIME-06. Registers the /documents/:uid route (now rendering via
+      the shared DocumentViewer component, see FRONT-13). Adds "Open document" link to
+      SourceDetailModal. Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the
+      RFC — not repeated here. Manual end-to-end verification pending live pod (one
+      unchecked item in CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's
+      confirmed.
 
   - id: CHAT-09
     title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
@@ -1044,6 +1043,11 @@ items:
       stays a manual admin decision via the new UI, made after this ships. Deferred:
       `depends_on` capability-dependency declarations + refuse-and-signal UX when
       enabling an agent without its tool dependencies granted.
+      2026-07-19: the deferred `depends_on` fast-follow, plus three backend
+      robustness gaps found reviewing this work (revoke-doesn't-suspend,
+      migration idempotency, import bypass), are being closed together under
+      GitHub #2004 on branch `2004-capab-01-agent-template-capability-gating-gaps`.
+      See `AGENT-CAPABILITY-RFC.md` §8.6's 2026-07-19 dated entry for the design.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
@@ -1215,18 +1219,22 @@ items:
 
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
-    status: draft
-    owner: TBD
+    status: in_progress
+    owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md"
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §19"
+      issue: "https://github.com/ThalesGroup/fred/issues/1956"
     notes: >
-      Consolidates the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
-      (FRONT-09) document preview flows into one DocumentViewer component. Restores
-      native PDF rendering (PdfStreamingDocumentViewer exists but is currently unwired
-      from both entry points — a UX regression from kea, tracked on GitHub issue #1956).
-      Adds an assistant side panel reusing the existing selected_document_uids
-      chat-scoping mechanism (no new backend endpoint). RFC-proposed, not started.
+      Consolidated the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
+      (FRONT-09) document preview flows into one DocumentViewer component (landed
+      2026-07-19). Restored native PDF rendering — the UX regression from kea tracked
+      on GitHub issue #1956 — closing that issue's Must-have checklist item. The
+      assistant side panel (reusing selected_document_uids for chat-scoping, no new
+      backend endpoint) is still open: ManagedChatPage requires an agentInstanceId and
+      there is no default/last-used agent concept today, so the panel needs an agent
+      picker — a product decision, not a technical unknown. Not scheduled for
+      swift-golive.
 
   # ── INGEST ────────────────────────────────────────────────────────────
 
@@ -1911,6 +1919,24 @@ items:
       The source is explicit: conversation_attachment is scoped by session_id and
       ReBAC; document_media is scoped by document/corpus permissions. Presigned
       URLs and storage keys remain runtime-only implementation details.
+
+  - id: RUNTIME-10
+    title: "Dataset-pointer chunks for tabular datasets in the vector index (RAG discovery, increment 1)"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/RAG-DATASET-DISCOVERY-RFC.md"
+      issue: "https://github.com/ThalesGroup/fred/issues/2014"
+      execution: "GitHub issue #2014"
+    notes: >
+      A generalist agent holding both the tabular/SQL tool and document_access has no way
+      to discover a tabular dataset exists — TabularProcessor never touches the vector
+      index, and search_documents_using_vectorization's docstring dominates tool selection.
+      Increment 1: one deterministic pointer chunk per dataset (title+columns only, no
+      sample values), injection-resistant fixed template, additive chunk_kind field via
+      the existing safe-mapping-update mechanism, reuses existing delete-by-document_uid
+      lifecycle and upsert-by-chunk_uid, gated behind a new config flag for measured
+      activation. Backend only, zero impact on corpora without tabular datasets.
 
   - id: RUNTIME-09
     title: "Global base prompt (Mermaid output contract) — runtime suffix injection, not authoring-time bake"

@@ -33,6 +33,7 @@ open.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import nullcontext
@@ -219,6 +220,11 @@ def _tool_thought_title(tool_name: str) -> str:
     return f"Calling {readable}"
 
 
+def _elapsed_ms_since(started_at: float) -> int:
+    """Return the whole-millisecond duration elapsed since a monotonic timestamp."""
+    return int((time.monotonic() - started_at) * 1000)
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -341,11 +347,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # Maps tool call_id → thought_id so THOUGHT_END can close the block
         # opened by THOUGHT_START before the corresponding TOOL_CALL event.
         active_thought_ids: dict[str, str] = {}
+        # Maps tool call_id → monotonic start time so THOUGHT_END can report a
+        # real `duration_ms` instead of leaving the field permanently unset.
+        active_thought_started_at: dict[str, float] = {}
         # Open model-native reasoning block (RUNTIME-05 Layer 2b). When a provider
         # streams reasoning chunks (Mistral ThinkChunk, Claude thinking), they are
         # promoted to a single THOUGHT block with source="model_native" that must be
         # closed before the first answer delta and before the run ends.
         model_native_thought_id: str | None = None
+        model_native_thought_started_at: float | None = None
         phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
@@ -372,6 +382,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     for fragment in decoded.thought_fragments:
                         if model_native_thought_id is None:
                             model_native_thought_id = uuid.uuid4().hex
+                            model_native_thought_started_at = time.monotonic()
                             yield ThoughtStartEvent(
                                 sequence=sequence,
                                 thought_id=model_native_thought_id,
@@ -393,9 +404,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             yield ThoughtEndEvent(
                                 sequence=sequence,
                                 thought_id=model_native_thought_id,
+                                duration_ms=_elapsed_ms_since(
+                                    model_native_thought_started_at
+                                )
+                                if model_native_thought_started_at is not None
+                                else None,
                             )
                             sequence += 1
                             model_native_thought_id = None
+                            model_native_thought_started_at = None
                         if not suppress_assistant_deltas:
                             yield AssistantDeltaRuntimeEvent(
                                 sequence=sequence,
@@ -448,11 +465,17 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         )
                         sequence += 1
                         thought_id = active_thought_ids.pop(message.tool_call_id, None)
+                        thought_started_at = active_thought_started_at.pop(
+                            message.tool_call_id, None
+                        )
                         if thought_id:
                             yield ThoughtEndEvent(
                                 sequence=sequence,
                                 thought_id=thought_id,
                                 conclusion="Error" if is_error else "Done",
+                                duration_ms=_elapsed_ms_since(thought_started_at)
+                                if thought_started_at is not None
+                                else None,
                             )
                             sequence += 1
                         continue
@@ -463,6 +486,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             call_id = str(tool_call.get("id") or "")
                             thought_id = uuid.uuid4().hex
                             active_thought_ids[call_id] = thought_id
+                            active_thought_started_at[call_id] = time.monotonic()
                             yield ThoughtStartEvent(
                                 sequence=sequence,
                                 thought_id=thought_id,
@@ -502,9 +526,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 yield ThoughtEndEvent(
                     sequence=sequence,
                     thought_id=model_native_thought_id,
+                    duration_ms=_elapsed_ms_since(model_native_thought_started_at)
+                    if model_native_thought_started_at is not None
+                    else None,
                 )
                 sequence += 1
                 model_native_thought_id = None
+                model_native_thought_started_at = None
 
             if last_tool_error is not None or last_assistant_message is not None:
                 final_content = (
@@ -532,14 +560,18 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     is_error=True,
                 )
                 sequence += 1
+                thought_started_at = active_thought_started_at.get(call_id)
                 yield ThoughtEndEvent(
                     sequence=sequence,
                     thought_id=thought_id,
                     conclusion="Error",
-                    duration_ms=None,
+                    duration_ms=_elapsed_ms_since(thought_started_at)
+                    if thought_started_at is not None
+                    else None,
                 )
                 sequence += 1
             active_thought_ids.clear()
+            active_thought_started_at.clear()
             # Close an open model-native reasoning block so its accordion does not
             # spin forever after a mid-stream failure.
             if model_native_thought_id is not None:
@@ -547,6 +579,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     sequence=sequence,
                     thought_id=model_native_thought_id,
                     conclusion="Error",
+                    duration_ms=_elapsed_ms_since(model_native_thought_started_at)
+                    if model_native_thought_started_at is not None
+                    else None,
                 )
                 sequence += 1
             raise

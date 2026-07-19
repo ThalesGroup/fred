@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDocumentViewerPath, decodeMaybeBase64Utf8, extractH1 } from "./documentViewerUtils";
+import { buildDocumentViewerPath, decodeMaybeBase64Utf8, extractH1, isPdfFile } from "./documentViewerUtils";
 
 describe("decodeMaybeBase64Utf8", () => {
   it("decodes base64 UTF-8 content without corrupting non-ASCII text", () => {
@@ -18,6 +18,24 @@ describe("extractH1", () => {
 
   it("returns null when no H1 exists", () => {
     expect(extractH1("## Subtitle only")).toBeNull();
+  });
+});
+
+describe("isPdfFile", () => {
+  it("recognizes a .pdf extension case-insensitively", () => {
+    expect(isPdfFile("report.pdf")).toBe(true);
+    expect(isPdfFile("REPORT.PDF")).toBe(true);
+  });
+
+  it("rejects every other extension", () => {
+    expect(isPdfFile("report.docx")).toBe(false);
+    expect(isPdfFile("report.pdf.docx")).toBe(false);
+  });
+
+  it("rejects a missing file name", () => {
+    expect(isPdfFile(undefined)).toBe(false);
+    expect(isPdfFile(null)).toBe(false);
+    expect(isPdfFile("")).toBe(false);
   });
 });
 

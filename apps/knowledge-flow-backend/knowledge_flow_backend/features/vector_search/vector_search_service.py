@@ -272,6 +272,7 @@ class VectorSearchService:
             slide_id=md.get("slide_id"),
             has_visual_evidence=md.get("has_visual_evidence"),
             slide_image_uri=md.get("slide_image_uri"),
+            chunk_kind=md.get("chunk_kind"),
             # identity
             uid=uid,
             title=md.get("title") or md.get("document_name") or "Unknown",

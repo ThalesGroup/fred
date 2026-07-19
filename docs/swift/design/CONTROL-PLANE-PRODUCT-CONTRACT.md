@@ -1218,3 +1218,16 @@ updated in the same change from `admin from organization` to `platform_admin
 from organization`, matching every other org-admin-tier capability. No route
 shape or request/response change — enforcement now resolves through
 `platform_admin` instead of the retired `admin` relation.
+
+**2026-07-19 — `depends_on` gate for `kind="agent"` capabilities (GitHub
+#2004, CTRLP-14; design in `AGENT-CAPABILITY-RFC.md` §8.6).**
+`CapabilityCatalogEntry` gained `default_capability_ids: tuple[str, ...]`
+(the template's default tool/MCP capabilities, empty for `kind="tool"`).
+`PUT /admin/capabilities/{capability_id}/teams/{team_id}` and
+`PUT .../personal-scope` (`scope="enabled"`) now also 409 for a `kind="agent"`
+entry when the team (or, for personal-scope, every personal space) isn't
+already `can_use` on all of its `default_capability_ids` — prevents enabling
+an agent whose tools aren't granted yet. `PATCH /teams/{team_id}/agent-instances/{id}`
+now 403s once the instance's own template grant is revoked (previously only
+*tool* capability selections were re-checked on update; unenroll is still
+always allowed).

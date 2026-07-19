@@ -163,6 +163,24 @@ async def test_owner_write_failure_does_not_raise_out_of_aput(checkpointer, capl
 
 
 @pytest.mark.asyncio
+async def test_adelete_thread_returns_checkpoint_row_count(checkpointer):
+    # Two turns on the same thread -> two distinct checkpoint rows to purge.
+    await _put(checkpointer, "thread-C")
+    await _put(checkpointer, "thread-C")
+
+    deleted = await checkpointer.adelete_thread("thread-C")
+
+    assert deleted == 2
+    assert await checkpointer.aget_tuple(_config("thread-C")) is None
+    assert await _owner_rows(checkpointer) == []
+
+
+@pytest.mark.asyncio
+async def test_adelete_thread_returns_zero_for_unknown_thread(checkpointer):
+    assert await checkpointer.adelete_thread("no-such-thread") == 0
+
+
+@pytest.mark.asyncio
 async def test_backfill_matches_distinct_threads(checkpointer, engine):
     await _seed_history(
         engine,

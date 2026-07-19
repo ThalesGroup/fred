@@ -908,12 +908,6 @@
           "title": "Tabular Enabled",
           "type": "boolean"
         },
-        "statistic_enabled": {
-          "default": true,
-          "description": "Expose the Statistical MCP server for data analysis helpers.",
-          "title": "Statistic Enabled",
-          "type": "boolean"
-        },
         "text_enabled": {
           "default": true,
           "description": "Expose the Text MCP server for semantic vector search.",
@@ -2296,8 +2290,7 @@
               "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
               "in_memory": "#/$defs/InMemoryVectorStorage",
               "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
-              "pgvector": "#/$defs/PgVectorStorageConfig",
-              "weaviate": "#/$defs/WeaviateVectorStorage"
+              "pgvector": "#/$defs/PgVectorStorageConfig"
             },
             "propertyName": "type"
           },
@@ -2310,9 +2303,6 @@
             },
             {
               "$ref": "#/$defs/ChromaVectorStorageConfig"
-            },
-            {
-              "$ref": "#/$defs/WeaviateVectorStorage"
             },
             {
               "$ref": "#/$defs/PgVectorStorageConfig"
@@ -2430,6 +2420,12 @@
           "description": "Parquet compression codec used when persisting tabular artifacts.",
           "title": "Compression",
           "type": "string"
+        },
+        "pointer_chunks_enabled": {
+          "default": false,
+          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+          "title": "Pointer Chunks Enabled",
+          "type": "boolean"
         },
         "query": {
           "$ref": "#/$defs/TabularQueryConfig",
@@ -2564,33 +2560,6 @@
         "client_id"
       ],
       "title": "UserSecurity",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "WeaviateVectorStorage": {
-      "properties": {
-        "type": {
-          "const": "weaviate",
-          "title": "Type",
-          "type": "string"
-        },
-        "host": {
-          "default": "https://localhost:8080",
-          "description": "Weaviate host",
-          "title": "Host",
-          "type": "string"
-        },
-        "index_name": {
-          "default": "CodeDocuments",
-          "description": "Weaviate class (collection) name",
-          "title": "Index Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "WeaviateVectorStorage",
       "type": "object",
       "additionalProperties": false
     }

@@ -339,6 +339,59 @@ async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(t
 
 
 @pytest.mark.asyncio
+async def test_tabular_processor_records_sample_values_for_low_cardinality_string_columns(tmp_path):
+    """
+    A low-cardinality string column carries its exact distinct values on the
+    schema, so a SQL-writing agent sees the real stored casing instead of
+    guessing it (e.g. it must not guess 'critical' when the data says
+    'CRITICAL').
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    rows = "\n".join(f"{i},{'CRITICAL' if i % 2 == 0 else 'LOW'}" for i in range(10))
+    csv_path = tmp_path / "scan.csv"
+    csv_path.write_text(f"id,severity\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-severity", file_name="scan.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    severity_column = next(column for column in artifact.columns if column.name == "severity")
+    assert severity_column.sample_values == ["CRITICAL", "LOW"]
+
+    # Non-string columns are never sampled, regardless of cardinality.
+    id_column = next(column for column in artifact.columns if column.name == "id")
+    assert id_column.sample_values is None
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_skips_sample_values_for_high_cardinality_string_columns(tmp_path):
+    """
+    A string column above the low-cardinality threshold gets no sample_values
+    — there is nothing useful to ground an agent's query with once every row
+    is (close to) unique, and listing them all would bloat the schema payload.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    rows = "\n".join(f"{i},unique-label-{i}" for i in range(30))
+    csv_path = tmp_path / "wide.csv"
+    csv_path.write_text(f"row,label\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-high-cardinality", file_name="wide.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    label_column = next(column for column in artifact.columns if column.name == "label")
+    assert label_column.sample_values is None
+
+
+@pytest.mark.asyncio
 async def test_tabular_processor_cleans_temporary_parquet_after_upload(tmp_path, monkeypatch):
     """
     Ensure the DuckDB-generated Parquet temp file is deleted after content-store upload.
@@ -387,6 +440,33 @@ async def test_tabular_processor_cleans_temporary_parquet_after_upload(tmp_path,
     assert processed_metadata.file.row_count == 2
     assert observed["seen_during_upload"] is True
     assert not tracked_parquet_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_logs_parquet_artifact_write(tmp_path, caplog):
+    """
+    Ensure a successful Parquet upload leaves a durable, gathersable log line.
+
+    Why this exists:
+    - Before this fix, `_persist_parquet_artifact` uploaded the artifact to
+      content storage without logging anything on success, so operators had
+      no positive confirmation in stdout/OpenSearch that ingestion actually
+      produced a queryable dataset.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-log-check", file_name="sales.csv")
+
+    with caplog.at_level("INFO"):
+        processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+
+    tabular_log_records = [record.message for record in caplog.records if "[TABULAR]" in record.message]
+    assert any("document_uid=doc-log-check" in message and f"object_key={artifact.object_key}" in message and "rows=2" in message for message in tabular_log_records)
 
 
 @pytest.mark.integration
@@ -770,3 +850,124 @@ def test_tabular_service_httpfs_install_is_attempted_after_load_failure():
     service._ensure_httpfs_ready(connection)  # type: ignore[arg-type]
 
     assert connection.commands == ["LOAD httpfs", "INSTALL httpfs", "LOAD httpfs"]
+
+
+class _FakeVectorStore:
+    """Records `add_documents` calls without touching a real vector backend."""
+
+    def __init__(self, *, raise_on_add: bool = False):
+        self.raise_on_add = raise_on_add
+        self.added_documents: list = []
+
+    def add_documents(self, documents):
+        if self.raise_on_add:
+            raise RuntimeError("simulated vector store failure")
+        self.added_documents.extend(documents)
+        return [doc.metadata.get("chunk_uid") for doc in documents]
+
+
+def test_tabular_processor_pointer_chunks_disabled_by_default(tmp_path):
+    """
+    Verify the disabled-by-default path is untouched (RAG-DATASET-DISCOVERY-RFC.md §8:
+    measured activation — no embedder/vector-store dependency paid unless enabled).
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    assert processor.tabular_config.pointer_chunks_enabled is False
+    assert processor.vector_store is None
+    assert processor.embedder is None
+
+    metadata = _metadata(document_uid="doc-no-pointer", file_name="sales.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+
+
+def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
+    """
+    Verify the pointer-chunk content, id, and kind match RAG-DATASET-DISCOVERY-RFC.md
+    §2.1/§2.2/§2.4: one deterministic chunk, injection-resistant fixed template, no
+    sample values in this increment.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    fake_vector_store = _FakeVectorStore()
+    processor.vector_store = fake_vector_store
+
+    metadata = _metadata(document_uid="doc-pointer", file_name="sales.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+
+    assert len(fake_vector_store.added_documents) == 1
+    pointer_document = fake_vector_store.added_documents[0]
+
+    assert pointer_document.metadata["chunk_uid"] == "doc-pointer::pointer"
+    assert pointer_document.metadata["chunk_kind"] == "dataset_pointer"
+    assert pointer_document.metadata["document_uid"] == "doc-pointer"
+    # VectorSearchService unconditionally filters on metadata.retrievable=true
+    # (vector_search_service.py:335,439,518) — without this the pointer chunk
+    # is written but invisible to every search call. Caught live (2026-07-19)
+    # by inspecting the actual OpenSearch document after a real ingestion.
+    assert pointer_document.metadata["retrievable"] is True
+    # Every deletion/consistency path in metadata/service.py gates its vector
+    # cleanup on ProcessingStage.VECTORIZED being marked — without this, a
+    # deleted tabular dataset leaves its pointer chunk permanently orphaned.
+    # Caught live (2026-07-19): tabular artifacts/content were deleted but the
+    # vector chunk was left behind because this guard never saw VECTORIZED.
+    assert processed_metadata.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.DONE
+
+    text = pointer_document.page_content
+    assert "[DATASET POINTER" in text
+    assert "[END DATASET POINTER]" in text
+    assert "city" in text and "amount" in text
+    assert "read_query" in text
+    assert "dataset_uid=doc-pointer" in text
+    # Increment 1 explicitly excludes sample values (§2.4) — guard against
+    # accidentally reintroducing real cell values into the pointer text.
+    assert "Paris" not in text
+    assert "Lyon" not in text
+    assert "Sample values" not in text
+
+
+def test_tabular_processor_pointer_chunk_failure_is_non_fatal(tmp_path, caplog):
+    """
+    Verify a pointer-chunk write failure never breaks Parquet ingestion — the
+    processor's primary contract (RAG-DATASET-DISCOVERY-RFC.md §2.1: best-effort).
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    processor.vector_store = _FakeVectorStore(raise_on_add=True)
+
+    metadata = _metadata(document_uid="doc-pointer-fail", file_name="sales.csv")
+    with caplog.at_level("WARNING"):
+        processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+    assert any("failed to write dataset pointer chunk" in record.message for record in caplog.records)
+
+
+def test_tabular_store_config_pointer_chunks_disabled_by_default():
+    """Guard the measured-activation default (RAG-DATASET-DISCOVERY-RFC.md §8)."""
+    from knowledge_flow_backend.common.structures import TabularStoreConfig
+
+    assert TabularStoreConfig().pointer_chunks_enabled is False
+
+
+def test_allowed_chunk_keys_includes_chunk_kind():
+    """chunk_kind must survive `sanitize_chunk_metadata`'s whitelist or pointer chunks silently lose it."""
+    from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import sanitize_chunk_metadata
+
+    clean, dropped = sanitize_chunk_metadata({"chunk_uid": "x::pointer", "chunk_kind": "dataset_pointer"})
+    assert clean["chunk_kind"] == "dataset_pointer"
+    assert "chunk_kind" not in dropped

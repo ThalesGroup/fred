@@ -36,13 +36,13 @@ import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
-import { Protected } from "../components/Protected";
+import { Protected } from "@core/guards/Protected";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { McpHub } from "../pages/McpHub";
-import { PageError } from "../pages/PageError";
-import Unauthorized from "../pages/PageUnauthorized";
+import { PageError } from "@components/pages/PageError/PageError.tsx";
+import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -84,7 +84,7 @@ const Runtime = lazy(() => import("../pages/Runtime"));
 const DataHub = lazy(() => import("../pages/DataHub"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
-const LibraryTreePlayground = lazy(() => import("../pages/LibraryTreePlayground"));
+const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 

@@ -188,8 +188,9 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
             d.metadata.setdefault("token_count", len((d.page_content or "").split()))
             d.metadata.setdefault("ingested_at", datetime.now(timezone.utc).isoformat())
 
-        # LC InMemoryVectorStore handles add; we don't pass our ids (they're logical)
-        self.vectorstore.add_documents(documents)
+        # Pass our logical chunk_uid as the LC doc id so re-ingestion overwrites
+        # the same store entry instead of appending a new random-UUID one.
+        self.vectorstore.add_documents(documents, ids=assigned)
         logger.info("✅ Added %d chunk(s) to in-memory store.", len(documents))
 
         # small debug peek

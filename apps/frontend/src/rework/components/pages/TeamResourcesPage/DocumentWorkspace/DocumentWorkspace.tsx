@@ -18,6 +18,8 @@ import { useSelector } from "react-redux";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
+import { DocumentViewer } from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
+import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   type DocumentMetadata,
@@ -32,7 +34,7 @@ import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
-import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
@@ -375,6 +377,16 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
         <div className={styles.list}>{topLevel.map((node) => renderNode(node, 0))}</div>
       )}
 
+      <InlineDrawer
+        open={!!commands.previewTarget}
+        onClose={commands.closePreview}
+        title={commands.previewTarget?.fileName ?? t("rework.resources.preview.title")}
+        width="80vw"
+      >
+        {commands.previewTarget && (
+          <DocumentViewer documentUid={commands.previewTarget.documentUid} fileName={commands.previewTarget.fileName} />
+        )}
+      </InlineDrawer>
       <DocumentUploadDrawer
         isOpen={uploadOpen}
         onClose={() => setUploadOpen(false)}

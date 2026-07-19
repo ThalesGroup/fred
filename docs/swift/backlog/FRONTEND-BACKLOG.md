@@ -57,19 +57,35 @@ Frozen frontend invariants:
 | ID | Owner | Status | Backlog section | Execution |
 | --- | --- | --- | --- | --- |
 | FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | issue #1840 |
-| FRONT-08 | Simon | In progress, implemented on branch and pending review | §14 | GitHub issue #1748 / branch `1748-front-08-frontend-auth-config` |
+| FRONT-08 | Simon | Done — merged (PR #1750, 2026-06-16) | §14 | GitHub issue #1748 (closed) |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
-| FRONT-13 | TBD | RFC proposed | §19 | TBD |
+| FRONT-13 | Dimitri | In progress — native PDF rendering landed 2026-07-19, AI panel not started | §19 | branch `2004-capab-01-agent-template-capability-gating-gaps` |
 
 Recommended order:
 
-1. Land FRONT-08 or confirm its final contract.
-2. Keep FRONT-05 narrow: remove remaining `agenticOpenApi` usage without reviving
+1. Keep FRONT-05 narrow: remove remaining `agenticOpenApi` usage without reviving
    deprecated surfaces.
-3. Start FRONT-09 with a v2 route and backend browse hardening; keep old
+2. Start FRONT-09 with a v2 route and backend browse hardening; keep old
    resource/library pages until parity.
-4. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
+3. FRONT-13 depends on FRONT-09.C/D (already landed) for the corpus-side entry point;
    no hard ordering constraint otherwise.
+
+**Opportunistic legacy cleanup (Dimitri, ongoing — no FRONT-ID, not RFC-backed):**
+Chipping away at `src/components`/`src/pages` dead code and legacy retirement in
+small verified commits, separate from FRONT-05/FRONT-09. Landed 2026-07-19 on
+`2004-capab-01-agent-template-capability-gating-gaps`: dead `monitoringApi` slice
++ 6 unused npm deps removed; `Protected` + `ConfirmationDialogProvider` moved into
+rework (closed the only legacy→rework reverse-coupling); `PageError`/
+`PageUnauthorized` ported off MUI; `LibraryTreePlayground` relocated (already
+MUI-free, pure move). Still legacy, each needs its own session, not a quick
+relocation: `TaskPlayground` (no rework Select/Slider atom yet), `ComingSoon`
+(squashing into `PageEmptyState` would drop the branded per-site icon),
+`LoadingWithProgress` (rework's `ProgressBar` atom has no indeterminate mode),
+and the monitoring/`tools` pages (`Kpis`, `Runtime`, `DataHub`, `RebacBackfill`,
+`ProcessorBench`, `ProcessorRunDetail`, `McpHub`) — real pages with their own
+legacy UI kit, not pure relocations. Full tree still not reachable regardless:
+also blocked on the missing evaluation UI (#1892) and the disabled PDF viewer
+(FRONT-13).
 
 ## 3 Explicit Non-Goals
 
@@ -185,9 +201,9 @@ if a future migration slice needs additional primitives.
 
 ## 14 Phase FRONT-08 — Backend-Driven Frontend Auth Config
 
-**ID:** FRONT-08  **Owner:** Simon  **Status:** In progress, implemented on branch and pending review
+**ID:** FRONT-08  **Owner:** Simon  **Status:** Done — merged (PR #1750, 2026-06-16)
 **RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`
-**Execution:** GitHub issue #1748 / branch `1748-front-08-frontend-auth-config`
+**Execution:** GitHub issue #1748 (closed)
 
 Goal: move the frontend "is user security enabled?" decision out of
 `apps/frontend/public/config.json` and onto a public control-plane endpoint.
@@ -213,9 +229,7 @@ Implementation checklist:
 - [x] Validate `make code-quality` and `make test` in control-plane and
       frontend.
 
-Remaining:
-
-- [ ] Review/merge branch `1748-front-08-frontend-auth-config`.
+Remaining: none — merged via PR #1750.
 
 ## 15 Phase FRONT-09 — Rework Knowledge Workspace
 
@@ -424,7 +438,7 @@ so there is nothing to generate from yet.
 
 ## 19 Phase FRONT-13 — Unified Document Viewer With AI Assistant Panel
 
-**ID:** FRONT-13  **Owner:** TBD  **Status:** RFC proposed
+**ID:** FRONT-13  **Owner:** Dimitri  **Status:** In progress — PDF wiring done, AI panel not started
 **RFC:** `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`
 **Depends on:** CHAT-08 (`/documents/:uid` route), FRONT-09.C/D (corpus preview drawer)
 
@@ -438,19 +452,27 @@ side panel that scopes a managed-chat turn to the open document via the existing
 
 Checklist:
 
-- [ ] Introduce a shared `DocumentViewer` component with two render strategies:
+- [x] Introduce a shared `DocumentViewer` component with two render strategies:
       native (`PdfStreamingDocumentViewer`) for `.pdf`, markdown (existing
       `GET /knowledge-flow/v1/markdown/{uid}` path) for every other format.
-- [ ] Replace `DocumentViewerPage`'s direct `MarkdownRenderer` usage with
+- [x] Replace `DocumentViewerPage`'s direct `MarkdownRenderer` usage with
       `DocumentViewer`.
-- [ ] Replace the corpus workspace preview drawer's `MarkdownDocumentViewer` usage
+- [x] Replace the corpus workspace preview drawer's `MarkdownDocumentViewer` usage
       with `DocumentViewer`; wire `commands.previewPdf` (currently dead code) through
-      it instead of leaving it uncalled.
+      it instead of leaving it uncalled. Landed as one merged `preview` command
+      instead of two — see commit `3ab41d97`.
 - [ ] Add the assistant side panel: quick actions ("Summarize", "List key points")
       plus free-text follow-up, opening a managed-chat turn with
       `selected_document_uids: [uid]` — no new backend endpoint.
-- [ ] Update `COMPONENT-UX.md` with the new `DocumentViewer` component and its states.
-- [ ] Update GitHub issue #1956's "PDF viewer parity" checklist item to point here.
+      **Blocked on a product decision, not a technical unknown:** `ManagedChatPage`
+      requires an `agentInstanceId` in its route and `selected_document_uids` only
+      exists inside an already-open chat's composer state — there is no "default/
+      last-used agent" concept anywhere in the code today. The panel needs an
+      agent picker (team's agent instances, same source as `TeamAgentsPage`)
+      before it can open a scoped turn. Deferred 2026-07-19, not scheduled for
+      swift-golive (the PDF regression was the Must-have item on #1956, not this).
+- [x] Update `COMPONENT-UX.md` with the new `DocumentViewer` component and its states.
+- [x] Update GitHub issue #1956's "PDF viewer parity" checklist item to point here.
 
 ## 20 Progress Snapshot
 

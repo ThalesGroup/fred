@@ -26,6 +26,15 @@ DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
 class TabularColumnSchema(BaseModel):
     name: str
     dtype: DTypes
+    sample_values: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "Every distinct non-null value observed for this column, only when its "
+            "cardinality is low enough (see the ingestion threshold) to be useful as "
+            "SQL-generation grounding — e.g. the exact stored casing of a status or "
+            "severity column. None for high-cardinality or non-string columns."
+        ),
+    )
 
 
 class TabularDatasetResponse(BaseModel):

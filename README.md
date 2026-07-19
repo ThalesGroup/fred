@@ -728,7 +728,7 @@ Persistence options:
 
 ### Licensing Note
 
-Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing.
+Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch) are configured externally and do not contaminate Fred's licensing.
 
 Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03` (see `docs/swift/data/id-legend.yaml`). Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 

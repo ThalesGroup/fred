@@ -85,7 +85,13 @@ Output: `DocumentMetadata` (existing `fred_core` model).
 The content extraction task replaces the current `convert_file_to_markdown` / DuckDB split. The output type depends on the processor:
 
 - `ContentType.MARKDOWN` — for document formats (PDF, DOCX, PPTX, images, TXT, MD, JSONL)
-- `ContentType.TABULAR` — for structured formats (CSV, XLSX); stored in PostgreSQL, not vectorized into chunks
+- `ContentType.TABULAR` — for structured formats (CSV, XLSX); the row payload is stored in
+  PostgreSQL/Parquet, not vectorized into content chunks. Since 2026-07 (`RUNTIME-10`,
+  `RAG-DATASET-DISCOVERY-RFC.md`), `TabularProcessor` optionally emits one small synthetic
+  "dataset pointer" chunk (title + column names/types, no row data) into the shared vector
+  index behind `storage.tabular_store.pointer_chunks_enabled` (default off) — this makes the
+  *existence* of the dataset discoverable by semantic search; the payload itself is still
+  never vectorized.
 
 ```python
 class ContentResult:

@@ -48,6 +48,24 @@ export function extractH1(markdown: string): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
+/**
+ * Whether a file name denotes a PDF, for choosing a DocumentViewer render strategy.
+ *
+ * Why this function exists:
+ * - `DocumentViewer` picks native PDF rendering vs. markdown extraction purely from
+ *   the file's extension — the one signal available at both call sites (chat
+ *   citation query params, corpus document metadata)
+ *
+ * How to use it:
+ * - pass the document's real file name (with extension), not its display title
+ *
+ * Example:
+ * - `isPdfFile(doc.identity.document_name) // true for "report.pdf"`
+ */
+export function isPdfFile(fileName: string | null | undefined): boolean {
+  return !!fileName && fileName.toLowerCase().endsWith(".pdf");
+}
+
 function normalizeBasename(basename: string): string {
   if (basename === "/") return "";
   return basename.endsWith("/") ? basename.slice(0, -1) : basename;

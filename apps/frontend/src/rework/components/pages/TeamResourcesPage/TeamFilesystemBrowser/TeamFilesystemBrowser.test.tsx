@@ -39,7 +39,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useUploadFileMutation: () => [async () => ({ unwrap: async () => undefined })],
   useCopyToSharedMutation: () => [async () => ({ unwrap: async () => undefined })],
 }));
-vi.mock("../../../../../components/ConfirmationDialogProvider", () => ({
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
 vi.mock("../CreateFolderModal/CreateFolderModal.tsx", () => ({ default: () => null }));

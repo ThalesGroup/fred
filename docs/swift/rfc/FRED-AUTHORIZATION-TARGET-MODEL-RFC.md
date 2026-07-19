@@ -968,6 +968,10 @@ per-tag loop):
   `list_models`, `load_model`, `test_distribution`, `detect_outliers_ml`, `run_pca`) now
   re-check the tag id authorized at `set_dataset` time, carried in the service session
   state, rather than trusting the initial gate indefinitely.
+  **2026-07-19 update:** `statistic/controller.py` and the whole statistics MCP
+  capability were deleted outright (dead/unreachable, never wired into any agent
+  template — see `docs/swift/capabilities/AUTHORING.md` history). These 16 call
+  sites no longer exist; the finding is moot, not just fixed.
 - `vector_search/vector_search_controller.py`: `similarity_search`,
   `get_visual_evidence_artifact`, `rerank`.
 - `corpus_manager/corpus_manager_controller.py`: `build_toc`, `revectorize`, `purge`

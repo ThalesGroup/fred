@@ -40,7 +40,6 @@ Current official Knowledge Flow MCP servers:
 - `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`: corpus administration operations
 - `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS`: OpenSearch monitoring operations
 - `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`: tabular analysis operations
-- `MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS`: statistics analysis operations
 """
 
 from __future__ import annotations
@@ -63,9 +62,6 @@ MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS: Final[str] = (
 MCP_SERVER_KNOWLEDGE_FLOW_TABULAR: Final[str] = "mcp-knowledge-flow-mcp-tabular"
 """Tabular analysis MCP server id used by Tabular-style agents."""
 
-MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS: Final[str] = "mcp-knowledge-flow-statistics"
-"""Statistics analysis MCP server id used by Statistics-style agents."""
-
 MCP_SERVER_KNOWLEDGE_FLOW_TEXT: Final[str] = "mcp-knowledge-flow-mcp-text"
 """Text search MCP server id — document full-text retrieval from the knowledge flow."""
 
@@ -80,7 +76,6 @@ __all__ = [
     "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
     "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
 ]

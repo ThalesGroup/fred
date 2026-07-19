@@ -1550,6 +1550,7 @@ export type CapabilityCatalogEntry = {
   team_scope?: TeamScopePolicy;
   kind?: "tool" | "agent";
   route_base_url?: string | null;
+  default_capability_ids?: string[];
 };
 export type AgentTemplateSummary = {
   template_id: string;

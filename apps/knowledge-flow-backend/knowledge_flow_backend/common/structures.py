@@ -232,12 +232,6 @@ class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
 
 
-class WeaviateVectorStorage(BaseModel):
-    type: Literal["weaviate"]
-    host: str = Field(default="https://localhost:8080", description="Weaviate host")
-    index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
-
-
 class OpenSearchVectorIndexConfig(BaseModel):
     type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
@@ -286,7 +280,6 @@ VectorStorageConfig = Annotated[
         InMemoryVectorStorage,
         OpenSearchVectorIndexConfig,
         ChromaVectorStorageConfig,
-        WeaviateVectorStorage,
         PgVectorStorageConfig,
         ClickHouseVectorStorageConfig,
     ],
@@ -572,10 +565,6 @@ class MCPConfig(BaseModel):
     tabular_enabled: bool = Field(
         default=True,
         description="Expose the Tabular MCP server for SQL/table exploration.",
-    )
-    statistic_enabled: bool = Field(
-        default=True,
-        description="Expose the Statistical MCP server for data analysis helpers.",
     )
     text_enabled: bool = Field(
         default=True,
@@ -915,6 +904,15 @@ class TabularStoreConfig(BaseModel):
     compression: str = Field(
         default="snappy",
         description="Parquet compression codec used when persisting tabular artifacts.",
+    )
+    pointer_chunks_enabled: bool = Field(
+        default=False,
+        description=(
+            "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared "
+            "vector index, so semantic search can discover a dataset exists and route agents "
+            "to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for "
+            "measured, gradual activation."
+        ),
     )
     query: TabularQueryConfig = Field(
         default_factory=TabularQueryConfig,

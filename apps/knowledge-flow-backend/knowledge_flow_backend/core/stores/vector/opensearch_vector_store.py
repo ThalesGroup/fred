@@ -67,6 +67,11 @@ REQUIRED_METADATA_FIELDS: dict[str, Dict[str, str]] = {
 SAFE_METADATA_MAPPING_UPDATES: dict[str, Dict[str, str]] = {
     **REQUIRED_METADATA_FIELDS,
     "retrievable": {"type": "boolean"},
+    # Discriminates a real ingested chunk ("content", the default when the field
+    # is absent — see chunks written before this field existed) from a synthetic
+    # "dataset_pointer" chunk describing a structured/tabular dataset that isn't
+    # itself vectorized (RAG-DATASET-DISCOVERY-RFC.md).
+    "chunk_kind": {"type": "keyword"},
 }
 
 VECTOR_METADATA_PROPERTIES: Dict[str, Any] = {

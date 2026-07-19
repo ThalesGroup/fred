@@ -366,6 +366,86 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
     assert payloads[-1]["content"] == "Echo complete."
 
 
+def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -> None:
+    """
+    `DELETE /agents/checkpoints/{session_id}` must report how many checkpoint
+    rows it actually purged, mirroring the sibling `DELETE /agents/sessions/{id}`
+    (history) endpoint's `{"deleted": n}` body.
+
+    Why this exists:
+    - before this fix the endpoint returned a bare 204 with no body, so
+      `ConversationErasureService` (control-plane, CTRLP-12) could not report a
+      real `deleted_count` for the `runtime_checkpoint` store in its erase
+      receipt — every erasure looked identical whether it purged one
+      checkpoint or a hundred.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-echo-1",
+                        "name": "demo_echo",
+                        "args": {"text": "hello"},
+                    }
+                ],
+            ),
+            AIMessage(content="Echo complete."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        execute_response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-checkpoint-delete",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert execute_response.status_code == 200
+
+        threads_before = client.get(
+            "/pod/v1/agents/checkpoints/session-checkpoint-delete"
+        )
+        assert threads_before.status_code == 200
+        assert len(threads_before.json()["checkpoints"]) > 0
+
+        delete_response = client.delete(
+            "/pod/v1/agents/checkpoints/session-checkpoint-delete"
+        )
+        assert delete_response.status_code == 200
+        deleted = delete_response.json()["deleted"]
+        assert deleted > 0
+
+        threads_after = client.get(
+            "/pod/v1/agents/checkpoints/session-checkpoint-delete"
+        )
+        assert threads_after.json()["checkpoints"] == []
+
+        # Idempotent: a retry against an already-purged thread deletes nothing.
+        retry_response = client.delete(
+            "/pod/v1/agents/checkpoints/session-checkpoint-delete"
+        )
+        assert retry_response.status_code == 200
+        assert retry_response.json() == {"deleted": 0}
+
+
 class _ContextPromptAgent(ReActAgent):
     """Tiny agent that surfaces the bound context_prompt_text through a tool."""
 

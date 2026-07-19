@@ -131,10 +131,10 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
 
     # Core capabilities that are part of the standard platform deployment —
     # MCP-backed and native alike (RFC §2, no distinction at this level).
-    # Demo servers and optional KF services (statistics) are omitted here
-    # because they are not guaranteed to be running — an unreachable declared server
-    # crashes the agent turn. Operators who have those services running should create
-    # a custom instance and add them via the control-plane agent form.
+    # Demo servers are omitted here because they are not guaranteed to be
+    # running — an unreachable declared server crashes the agent turn.
+    # Operators who have those services running should create a custom
+    # instance and add them via the control-plane agent form.
     #
     # Document search: `document_access` (native, #1906 pilot) rather than the
     # legacy inprocess `mcp-knowledge-flow-mcp-text` — this is the forward path

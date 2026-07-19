@@ -62,6 +62,10 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from fred_core.store.vector_search import (
+    DEFAULT_MIN_SOURCE_SCORE_RATIO,
+    select_citable_sources,
+)
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -78,7 +82,7 @@ from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.runtime import DocumentSearchResult
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
@@ -131,6 +135,9 @@ class DocumentAccessConfig(BaseModel):
     list means "no capability-side narrowing at this level" (the session binding
     still bounds it). `default_top_k` and `search_policy` set retrieval
     defaults; `show_document_scope_control` toggles the computed chat control.
+    `min_source_score_ratio` bounds what's citable as a "source" in the chat
+    UI (RAG-DATASET-DISCOVERY-RFC.md §7) — it never narrows what the model
+    itself sees, only what a human is shown as evidence.
     """
 
     library_tag_ids: list[str] = []
@@ -138,6 +145,16 @@ class DocumentAccessConfig(BaseModel):
     default_top_k: int = 8
     search_policy: str | None = None
     show_document_scope_control: bool = True
+    min_source_score_ratio: float = Field(
+        default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "A hit must score at least this fraction of the best hit in the "
+            "same search call to be citable as a source. Does not affect what "
+            "the model itself can read — only the human-facing Sources panel."
+        ),
+    )
 
 
 class DocumentAccessTurnOptions(BaseModel):
@@ -189,6 +206,7 @@ class _DocumentAccessMiddleware(AgentMiddleware):
         )
         default_top_k = config.default_top_k if config.default_top_k > 0 else 8
         search_policy = config.search_policy
+        min_source_score_ratio = config.min_source_score_ratio
 
         @tool(
             "search_documents_using_vectorization",
@@ -205,6 +223,10 @@ class _DocumentAccessMiddleware(AgentMiddleware):
             recent information than you already know. Skip it only for purely
             conversational exchanges (greetings, thanks, clarifying what was just
             said).
+
+            Covers prose/text documents. If a hit describes a structured/tabular
+            dataset (a "dataset pointer"), do not answer from it directly — pivot
+            to the tabular/SQL tool it names instead.
 
             Returns ranked hits with title and content. Only use information
             actually present in the returned hits; never invent facts beyond
@@ -241,13 +263,19 @@ class _DocumentAccessMiddleware(AgentMiddleware):
                     for hit in hits
                 ],
             }
-            # `blocks` feed the LLM the hit JSON; `sources` carry the typed hits
-            # the chat Sources panel renders (the runtime merges artifact
-            # sources onto the tool_result/final events).
+            # `blocks` feed the LLM the full hit set (the model needs to see a
+            # dataset pointer to know to pivot to the tabular tool, and every
+            # hit to reason with) — `sources` (the chat Sources panel) is
+            # narrowed separately: never a pointer chunk (no real content to
+            # cite), and never a hit that's noise relative to the best match
+            # in this call (found live citing near-zero-relevance paragraphs
+            # from an unrelated document, RAG-DATASET-DISCOVERY-RFC.md §7).
             artifact = ToolInvocationResult(
                 tool_ref=DOCUMENT_ACCESS_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
-                sources=tuple(hits),
+                sources=select_citable_sources(
+                    hits, min_score_ratio=min_source_score_ratio
+                ),
             )
             return json.dumps(content), artifact
 
@@ -315,6 +343,20 @@ class DocumentAccessCapability(
                     "chat composer."
                 ),
                 default=True,
+            ),
+            FieldSpec(
+                key="min_source_score_ratio",
+                type="number",
+                title="Minimum source relevance ratio",
+                description=(
+                    "A hit must score at least this fraction of the best hit "
+                    "in the same search to be shown as a cited source. Only "
+                    "affects the human-facing Sources panel, never what the "
+                    "model itself can read."
+                ),
+                default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
+                min=0.0,
+                max=1.0,
             ),
         ],
         # No new chat part / side panel / router / owned table — the pilot's

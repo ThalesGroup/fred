@@ -16,9 +16,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
-import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { decodeMaybeBase64Utf8, extractH1 } from "../../../utils/documentViewerUtils";
+import { DocumentViewer } from "@shared/organisms/DocumentViewer/DocumentViewer";
+import { extractH1 } from "../../../utils/documentViewerUtils";
 import styles from "./DocumentViewerPage.module.css";
 
 export default function DocumentViewerPage() {
@@ -26,30 +25,25 @@ export default function DocumentViewerPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [derivedTitle, setDerivedTitle] = useState<string | null>(null);
+
+  // Drop the previous document's derived title as soon as the route targets a
+  // new one, so a stale H1 never lingers while the new document's fetch is
+  // still in flight (it's only ever a fallback — recomputed once `onLoaded`
+  // fires again for the current `uid`).
+  useEffect(() => {
+    setDerivedTitle(null);
+  }, [uid]);
 
   const paramTitle = searchParams.get("title");
   const paramFile = searchParams.get("file");
   const paramAuthor = searchParams.get("author");
   const paramRepo = searchParams.get("repo");
 
-  const [fetchPreview] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery();
-
-  useEffect(() => {
-    if (!uid) return;
-    setLoading(true);
-    fetchPreview({ documentUid: uid })
-      .unwrap()
-      .then((resp) => setContent(decodeMaybeBase64Utf8(resp?.content ?? "")))
-      .catch(() => setContent("Error loading document."))
-      .finally(() => setLoading(false));
-  }, [uid, fetchPreview]);
-
   if (!uid) return null;
 
-  const title = paramTitle ?? extractH1(content) ?? paramFile ?? uid;
+  const title = paramTitle ?? derivedTitle ?? paramFile ?? uid;
 
   const handleBack = () => {
     if (window.history.length <= 1) {
@@ -87,7 +81,11 @@ export default function DocumentViewerPage() {
 
       <div className={styles.body}>
         <main className={styles.content}>
-          {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} />}
+          <DocumentViewer
+            documentUid={uid}
+            fileName={paramFile}
+            onMarkdownLoaded={(c) => setDerivedTitle(extractH1(c))}
+          />
         </main>
       </div>
 

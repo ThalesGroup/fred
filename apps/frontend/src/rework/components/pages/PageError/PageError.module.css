@@ -1,0 +1,31 @@
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding: var(--spacing-l);
+  width: 100%;
+  height: 100%;
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--error);
+  font-size: 4.5rem;
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  text-align: center;
+}
+
+.message {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}

@@ -48,7 +48,7 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
-from fred_core.store.vector_search import VectorSearchHit
+from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     FsEntry,
@@ -514,6 +514,13 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 k: v for k, v in hit.model_dump(mode="json").items() if k in _LLM_FIELDS
             }
 
+        # `sources` is narrowed separately from the model-visible content: never
+        # a dataset pointer chunk (no real content to cite), and never a hit
+        # that's noise relative to the best match in this call
+        # (RAG-DATASET-DISCOVERY-RFC.md §7). This builtin tool predates
+        # capability config fields, so unlike document_access's
+        # `min_source_score_ratio`, the ratio here is the shared default, not
+        # yet independently tunable per agent instance.
         return ToolInvocationResult(
             tool_ref=request.tool_ref,
             blocks=(
@@ -525,7 +532,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     },
                 ),
             ),
-            sources=tuple(hits),
+            sources=select_citable_sources(hits),
         )
 
     async def _invoke_traces_summarize_conversation(

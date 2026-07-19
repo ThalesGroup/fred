@@ -265,10 +265,11 @@ class AgentPodClient:
         response.raise_for_status()
         return int(response.json().get("deleted", 0))
 
-    def delete_checkpoint(self, session_id: str) -> None:
+    def delete_checkpoint(self, session_id: str) -> int:
         url = f"{self.base_url}/agents/checkpoints/{session_id}"
         response = self.http_client.delete(url, headers=self._auth_headers())
         response.raise_for_status()
+        return int(response.json().get("deleted", 0))
 
     def get_checkpoint_stats(self) -> dict[str, Any]:
         url = f"{self.base_url}/agents/checkpoints/_stats"

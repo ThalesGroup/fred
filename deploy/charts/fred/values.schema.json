@@ -6221,6 +6221,12 @@
                           "title": "Compression",
                           "type": "string"
                         },
+                        "pointer_chunks_enabled": {
+                          "default": false,
+                          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+                          "title": "Pointer Chunks Enabled",
+                          "type": "boolean"
+                        },
                         "query": {
                           "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
                           "properties": {
@@ -6276,8 +6282,7 @@
                           "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
                           "in_memory": "#/$defs/InMemoryVectorStorage",
                           "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
-                          "pgvector": "#/$defs/PgVectorStorageConfig",
-                          "weaviate": "#/$defs/WeaviateVectorStorage"
+                          "pgvector": "#/$defs/PgVectorStorageConfig"
                         },
                         "propertyName": "type"
                       },
@@ -6360,33 +6365,6 @@
                             "type"
                           ],
                           "title": "ChromaVectorStorageConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "weaviate",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "host": {
-                              "default": "https://localhost:8080",
-                              "description": "Weaviate host",
-                              "title": "Host",
-                              "type": "string"
-                            },
-                            "index_name": {
-                              "default": "CodeDocuments",
-                              "description": "Weaviate class (collection) name",
-                              "title": "Index Name",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "WeaviateVectorStorage",
                           "type": "object",
                           "additionalProperties": false
                         },
@@ -6547,12 +6525,6 @@
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
                       "title": "Tabular Enabled",
-                      "type": "boolean"
-                    },
-                    "statistic_enabled": {
-                      "default": true,
-                      "description": "Expose the Statistical MCP server for data analysis helpers.",
-                      "title": "Statistic Enabled",
                       "type": "boolean"
                     },
                     "text_enabled": {
@@ -10674,6 +10646,12 @@
                           "title": "Compression",
                           "type": "string"
                         },
+                        "pointer_chunks_enabled": {
+                          "default": false,
+                          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+                          "title": "Pointer Chunks Enabled",
+                          "type": "boolean"
+                        },
                         "query": {
                           "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
                           "properties": {
@@ -10729,8 +10707,7 @@
                           "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
                           "in_memory": "#/$defs/InMemoryVectorStorage",
                           "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
-                          "pgvector": "#/$defs/PgVectorStorageConfig",
-                          "weaviate": "#/$defs/WeaviateVectorStorage"
+                          "pgvector": "#/$defs/PgVectorStorageConfig"
                         },
                         "propertyName": "type"
                       },
@@ -10813,33 +10790,6 @@
                             "type"
                           ],
                           "title": "ChromaVectorStorageConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "weaviate",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "host": {
-                              "default": "https://localhost:8080",
-                              "description": "Weaviate host",
-                              "title": "Host",
-                              "type": "string"
-                            },
-                            "index_name": {
-                              "default": "CodeDocuments",
-                              "description": "Weaviate class (collection) name",
-                              "title": "Index Name",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "WeaviateVectorStorage",
                           "type": "object",
                           "additionalProperties": false
                         },
@@ -11000,12 +10950,6 @@
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
                       "title": "Tabular Enabled",
-                      "type": "boolean"
-                    },
-                    "statistic_enabled": {
-                      "default": true,
-                      "description": "Expose the Statistical MCP server for data analysis helpers.",
-                      "title": "Statistic Enabled",
                       "type": "boolean"
                     },
                     "text_enabled": {

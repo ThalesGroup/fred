@@ -1,4 +1,4 @@
-// Copyright Thales 2025
+// Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { CssBaseline } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { PageError } from "./PageError";
+import { PageError } from "@components/pages/PageError/PageError.tsx";
 
-export default function Unauthorized() {
+export default function PageUnauthorized() {
   const { t } = useTranslation();
 
-  return (
-    <>
-      <CssBaseline enableColorScheme />
-      <PageError title={t("unauthorized.title")} message={t("unauthorized.message")} />
-    </>
-  );
+  return <PageError title={t("unauthorized.title")} message={t("unauthorized.message")} />;
 }
