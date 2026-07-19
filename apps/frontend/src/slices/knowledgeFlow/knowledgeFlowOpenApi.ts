@@ -2427,6 +2427,8 @@ export type SavedRunSummary = {
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
+  /** Every distinct non-null value observed for this column, only when its cardinality is low enough (see the ingestion threshold) to be useful as SQL-generation grounding — e.g. the exact stored casing of a status or severity column. None for high-cardinality or non-string columns. */
+  sample_values?: string[] | null;
 };
 export type TabularDatasetResponse = {
   document_uid: string;

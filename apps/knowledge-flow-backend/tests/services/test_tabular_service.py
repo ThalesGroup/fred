@@ -339,6 +339,59 @@ async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(t
 
 
 @pytest.mark.asyncio
+async def test_tabular_processor_records_sample_values_for_low_cardinality_string_columns(tmp_path):
+    """
+    A low-cardinality string column carries its exact distinct values on the
+    schema, so a SQL-writing agent sees the real stored casing instead of
+    guessing it (e.g. it must not guess 'critical' when the data says
+    'CRITICAL').
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    rows = "\n".join(f"{i},{'CRITICAL' if i % 2 == 0 else 'LOW'}" for i in range(10))
+    csv_path = tmp_path / "scan.csv"
+    csv_path.write_text(f"id,severity\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-severity", file_name="scan.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    severity_column = next(column for column in artifact.columns if column.name == "severity")
+    assert severity_column.sample_values == ["CRITICAL", "LOW"]
+
+    # Non-string columns are never sampled, regardless of cardinality.
+    id_column = next(column for column in artifact.columns if column.name == "id")
+    assert id_column.sample_values is None
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_skips_sample_values_for_high_cardinality_string_columns(tmp_path):
+    """
+    A string column above the low-cardinality threshold gets no sample_values
+    — there is nothing useful to ground an agent's query with once every row
+    is (close to) unique, and listing them all would bloat the schema payload.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    rows = "\n".join(f"{i},unique-label-{i}" for i in range(30))
+    csv_path = tmp_path / "wide.csv"
+    csv_path.write_text(f"row,label\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-high-cardinality", file_name="wide.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    label_column = next(column for column in artifact.columns if column.name == "label")
+    assert label_column.sample_values is None
+
+
+@pytest.mark.asyncio
 async def test_tabular_processor_cleans_temporary_parquet_after_upload(tmp_path, monkeypatch):
     """
     Ensure the DuckDB-generated Parquet temp file is deleted after content-store upload.

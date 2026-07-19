@@ -36,6 +36,12 @@ from knowledge_flow_backend.features.tabular.structures import TabularColumnSche
 
 logger = logging.getLogger(__name__)
 
+# A string column with at most this many distinct non-null values gets its
+# exact values recorded on the schema (TabularColumnSchema.sample_values), so
+# a SQL-writing agent can see the real stored casing/format (e.g. "CRITICAL"
+# vs "critical") instead of guessing it from the column name alone.
+_LOW_CARDINALITY_SAMPLE_LIMIT = 20
+
 
 @dataclass(frozen=True)
 class GeneratedParquetMetadata:
@@ -347,7 +353,53 @@ class TabularProcessor(BaseOutputProcessor):
         schema_query = f"SELECT name, duckdb_type FROM parquet_schema('{quoted_path}') WHERE name != 'duckdb_schema'"  # nosec B608
         schema_rows = connection.execute(schema_query).fetchall()
         normalized_rows = [(str(column_name), str(dtype_name) if dtype_name is not None else None) for column_name, dtype_name in schema_rows]
-        return duckdb_schema(normalized_rows)
+        columns = duckdb_schema(normalized_rows)
+        return [
+            column.model_copy(
+                update={
+                    "sample_values": self._read_low_cardinality_values(
+                        connection, quoted_path, column.name
+                    )
+                }
+            )
+            if column.dtype == "string"
+            else column
+            for column in columns
+        ]
+
+    def _read_low_cardinality_values(
+        self,
+        connection: duckdb.DuckDBPyConnection,
+        quoted_parquet_path: str,
+        column_name: str,
+    ) -> list[str] | None:
+        """
+        Return the sorted distinct non-null values of one string column, or
+        `None` when there are more than `_LOW_CARDINALITY_SAMPLE_LIMIT`.
+
+        Why this exists:
+        - A SQL-writing agent that only sees a column name and "string" cannot
+          know the exact stored casing/format of a categorical value (e.g.
+          "CRITICAL" vs "critical") and has to guess — a guess that silently
+          returns zero matching rows on a mismatch instead of failing loudly.
+          Recording the real values at ingestion time removes the guess.
+
+        How to use:
+        - Call once per string column right after `parquet_schema(...)`
+          discovers it, on the same connection used to read that schema.
+        """
+        quoted_column = self._quote_identifier(column_name)
+        # column_name comes from `parquet_schema(...)` on our own just-written
+        # artifact (sanitized CSV headers), not from external input.
+        query = (
+            f"SELECT DISTINCT {quoted_column} AS value FROM read_parquet('{quoted_parquet_path}') "  # nosec B608
+            f"WHERE {quoted_column} IS NOT NULL "
+            f"LIMIT {_LOW_CARDINALITY_SAMPLE_LIMIT + 1}"
+        )
+        rows = connection.execute(query).fetchall()
+        if len(rows) > _LOW_CARDINALITY_SAMPLE_LIMIT:
+            return None
+        return sorted(str(row[0]) for row in rows)
 
     def _quote_identifier(self, name: str) -> str:
         """
