@@ -221,9 +221,11 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         vectors = self.embeddings.embed_documents(texts)
         logger.debug(f"[SEARCH] Embedding complete. Vector dimension: {len(vectors[0]) if vectors else 'N/A'}")
 
-        # Upsert for idempotency
+        # Upsert for idempotency: `add()` raises on a duplicate id, which would
+        # leave a stale pointer chunk in place on re-ingestion. `upsert()`
+        # replaces the existing record for a matching id (same kwargs as add()).
         logger.debug(f"[SEARCH] Upserting {len(chunk_ids)} chunks into Chroma collection '{self.collection_name}'")
-        self._collection.add(
+        self._collection.upsert(
             ids=chunk_ids,
             embeddings=vectors,  # type: ignore[arg-type]
             documents=texts,
