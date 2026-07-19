@@ -502,6 +502,75 @@ async def test_suspend_dependent_instances_is_idempotent_for_agent_template() ->
 
 
 @pytest.mark.asyncio
+async def test_revive_dependent_instances_revives_agent_template_instance() -> None:
+    """Symmetric counterpart of `test_disable_agent_template_capability_
+    suspends_its_instances` (2026-07-19, GitHub #2004 item 2): an instance
+    suspended by BEING an instance of a revoked `kind="agent"` template
+    capability (condition 2, never `selected_capability_ids`) must be revived
+    once the team can `can_use` the template again — the exact case every
+    revive path (`revive_dependent_instances`, `set_default_on`,
+    `set_capability_personal_scope`) previously never checked, leaving such
+    instances suspended forever."""
+
+    instance = _make_record(
+        agent_instance_id="sql-1",
+        team_id="team-a",
+        source_runtime_id="runtime-a",
+        source_agent_id="sql_expert",
+    )
+    store = _FakeAgentInstanceStore([instance])
+
+    suspended = await suspend_dependent_instances(
+        agent_instance_store=store,
+        team_id="team-a",
+        capability_id="runtime-a__sql_expert",
+    )
+    assert suspended == 1
+    assert instance.suspension_reason == "capability_access_revoked"
+
+    revived = await enablement.revive_dependent_instances(
+        agent_instance_store=store,
+        capability_id="runtime-a__sql_expert",
+        usable_capability_ids={"runtime-a__sql_expert"},
+        available_by_source={"runtime-a": frozenset()},
+        team_id="team-a",
+    )
+
+    assert revived == 1
+    assert instance.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_revive_dependent_instances_keeps_agent_template_suspended_when_still_revoked() -> (
+    None
+):
+    """The mirror of the case above: if the template capability is STILL not
+    `can_use` for the team, the grant-side revive must not clear the
+    suspension — same "a grant cannot fake it, it must check the real fact"
+    rule `revive_dependent_instances` already applies to selected capabilities."""
+
+    instance = _make_record(
+        agent_instance_id="sql-1",
+        team_id="team-a",
+        source_runtime_id="runtime-a",
+        source_agent_id="sql_expert",
+    )
+    instance.suspension_reason = "capability_access_revoked"
+    store = _FakeAgentInstanceStore([instance])
+
+    revived = await enablement.revive_dependent_instances(
+        agent_instance_store=store,
+        capability_id="runtime-a__sql_expert",
+        usable_capability_ids=set(),  # still not usable
+        available_by_source={"runtime-a": frozenset()},
+        team_id="team-a",
+    )
+
+    assert revived == 0
+    assert instance.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
 async def test_personal_scope_enabled_rejects_agent_capability_missing_tool_dependency() -> (
     None
 ):
@@ -1207,6 +1276,62 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_dependents(
     result = await capability_service.set_personal_scope(
         user=SimpleNamespace(uid="admin"),
         capability_id="corp_drive",
+        scope="enabled",
+        deps=deps,
+    )
+
+    assert result.revived_instances == 1
+    assert result.suspended_instances == 0
+    assert dependent.suspension_reason is None
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_disabled_to_enabled_revives_suspended_agent_template_dependent(
+    monkeypatch,
+) -> None:
+    """Same disabled -> enabled revive, but for a personal-space instance
+    suspended by BEING an instance of a `kind="agent"` template capability
+    (condition 2) rather than by selecting it as a tool. Before GitHub #2004
+    item 2, `_revive_personal_after_grant`'s team-gathering filter only ever
+    checked `selected_capability_ids`, so this instance's team was never even
+    considered a revive candidate and it stayed suspended forever."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    entry = _entry("runtime-a__sql_expert", kind="agent")
+
+    # The template's own id is never added to `selected_capability_ids` (only
+    # tool capabilities an instance activated live there) — this instance
+    # depends on it purely by being an instance of the template.
+    dependent = _make_record(
+        agent_instance_id="p1",
+        team_id="personal-u1",
+        source_runtime_id="runtime-a",
+        source_agent_id="sql_expert",
+    )
+    dependent.suspension_reason = "capability_access_revoked"
+    store = _FakeAgentInstanceStore([dependent])
+
+    async def _fake_catalog(_deps):
+        return {"runtime-a__sql_expert": entry}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids={"runtime-a__sql_expert"},
+    )
+
+    result = await capability_service.set_personal_scope(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="runtime-a__sql_expert",
         scope="enabled",
         deps=deps,
     )

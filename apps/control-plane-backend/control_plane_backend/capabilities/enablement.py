@@ -54,6 +54,7 @@ from control_plane_backend.agent_instances.store import (
 )
 from control_plane_backend.agent_instances.suspension import (
     SuspensionReason,
+    clear_suspension,
     reconcile_instance_suspension,
     suspend_instance,
 )
@@ -413,6 +414,30 @@ async def reset_capability_for_team(
     )
 
 
+def is_template_capability_instance(
+    instance: AgentInstanceRecord, capability_id: str
+) -> bool:
+    """True when `instance` IS an instance of `capability_id`'s `kind="agent"`
+    template — i.e. `capability_id` is the template's own id
+    (`template_capability_id(instance.source_runtime_id,
+    instance.source_agent_id)`), never a selected TOOL capability.
+
+    The single predicate the suspend side
+    (`_suspend_instance_for_revoked_capability`) and every revive-side path
+    (`revive_dependent_instances` here, and the team-gathering filters in
+    `capabilities/service.py`'s `set_default_on` and
+    `_revive_personal_after_grant`) must agree on — otherwise a
+    template-capability instance suspended one way can never be found the
+    other way (2026-07-19, GitHub #2004 item 2).
+    """
+
+    from control_plane_backend.product.service import template_capability_id
+
+    return capability_id == template_capability_id(
+        instance.source_runtime_id, instance.source_agent_id
+    )
+
+
 async def _suspend_instance_for_revoked_capability(
     *,
     agent_instance_store: AgentInstanceStore,
@@ -438,12 +463,7 @@ async def _suspend_instance_for_revoked_capability(
     (False if unmatched, or already suspended for that exact reason).
     """
 
-    from control_plane_backend.product.service import template_capability_id
-
-    is_this_template = capability_id == template_capability_id(
-        instance.source_runtime_id, instance.source_agent_id
-    )
-    if is_this_template:
+    if is_template_capability_instance(instance, capability_id):
         if (
             instance.suspension_reason
             == SuspensionReason.CAPABILITY_ACCESS_REVOKED.value
@@ -529,6 +549,14 @@ async def revive_dependent_instances(
     None) has an unreachable pod and is SKIPPED rather than revived — the same
     fail-to-unknown rule the reconciliation sweep applies (#1975). Returns the
     number of instances whose suspension was cleared.
+
+    A `kind="agent"` template instance (`is_template_capability_instance`,
+    2026-07-19, GitHub #2004 item 2) is revived on its own branch: it was never
+    suspended via `selected_capability_ids` (the template's own id is never in
+    that list — see `_suspend_instance_for_revoked_capability`), so
+    `reconcile_instance_suspension`'s selected-capability diff would never see
+    it either. It is cleared directly once the team can `can_use` the template
+    again, mirroring the direct-suspend branch this reverses.
     """
 
     instances = (
@@ -538,12 +566,31 @@ async def revive_dependent_instances(
     )
     revived = 0
     for instance in instances:
+        if not instance.is_suspended:
+            continue
+
+        if is_template_capability_instance(instance, capability_id):
+            if (
+                instance.suspension_reason
+                != SuspensionReason.CAPABILITY_ACCESS_REVOKED.value
+            ):
+                continue
+            still_revoked = (
+                usable_capability_ids is not None
+                and capability_id not in usable_capability_ids
+            )
+            if still_revoked:
+                continue
+            await clear_suspension(
+                agent_instance_store, instance, kpi_writer=kpi_writer
+            )
+            revived += 1
+            continue
+
         selected = set(instance.tuning.selected_capability_ids or [])
         # Only instances that selected the granted capability can be revived by
         # this grant; an unrelated suspension is never touched.
         if capability_id not in selected:
-            continue
-        if not instance.is_suspended:
             continue
         available_ids = available_by_source.get(instance.source_runtime_id)
         if available_ids is None:
