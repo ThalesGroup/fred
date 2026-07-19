@@ -18,7 +18,7 @@ import { ThemeProvider, keyframes } from "@mui/material/styles";
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
-import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
+import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";

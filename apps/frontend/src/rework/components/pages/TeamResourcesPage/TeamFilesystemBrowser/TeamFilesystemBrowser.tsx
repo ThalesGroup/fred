@@ -25,7 +25,7 @@ import {
   useUploadFileMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadAuthed } from "../../../../../utils/downloadUtils.tsx";
-import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import styles from "./TeamFilesystemBrowser.module.css";
 

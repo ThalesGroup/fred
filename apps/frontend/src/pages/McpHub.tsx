@@ -24,7 +24,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
-import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { McpServerCard } from "../components/mcpHub/McpServerCard";
 import { McpServerForm } from "../components/mcpHub/McpServerForm";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
