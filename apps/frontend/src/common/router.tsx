@@ -82,7 +82,6 @@ const AdminIndexRoute = () => {
 const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
 const Runtime = lazy(() => import("../pages/Runtime"));
 const DataHub = lazy(() => import("../pages/DataHub"));
-const Logs = lazy(() => import("../pages/Logs"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const LibraryTreePlayground = lazy(() => import("../pages/LibraryTreePlayground"));
@@ -224,16 +223,6 @@ export const routes: RouteObject[] = [
           <Protected requires="admin">
             <SuspenseWrapper>
               <DataHub />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/logs",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <Logs />
             </SuspenseWrapper>
           </Protected>
         ),

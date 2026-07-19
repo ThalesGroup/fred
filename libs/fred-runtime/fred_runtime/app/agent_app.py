@@ -60,8 +60,9 @@ from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
-from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.rebac.rebac_engine import (
@@ -132,7 +133,11 @@ from fred_runtime.capabilities import (
     evaluate_chat_controls_batch,
     validate_turn_options,
 )
-from fred_runtime.capabilities.errors import CapabilityError, TurnOptionsInvalidError
+from fred_runtime.capabilities.errors import (
+    CapabilityError,
+    TurnOptionsInvalidError,
+    UnknownCapabilityError,
+)
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -167,7 +172,6 @@ from .dependencies import (
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
-_audit_logger = logging.getLogger("fred.security.audit")
 
 
 def _emit_audit_event(
@@ -176,7 +180,14 @@ def _emit_audit_event(
     name: str,
     **fields: object,
 ) -> None:
-    """Append one security audit event to the container ring buffer and audit logger."""
+    """Append one security audit event to the container ring buffer and audit logger.
+
+    The ring buffer is this pod's own short-lived view, backing the
+    `/agents/audit-events` admin endpoint — the durable record is the log line,
+    written via the shared `emit_audit_log` primitive (fred_core.logs.audit_log)
+    so every audit-worthy event across the runtime (this one, and tool-call
+    invocations in ContextAwareTool) lands identically shaped.
+    """
     event = cast(
         AuditEventRecord,
         {
@@ -187,7 +198,7 @@ def _emit_audit_event(
     )
     with container._audit_events_lock:
         container.audit_events_buffer.append(event)
-    getattr(_audit_logger, level)("[SECURITY] %s", name, extra=dict(event))
+    emit_audit_log(name, level, **fields)
 
 
 def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfig]:
@@ -913,6 +924,13 @@ class _AgentTemplateSummary(BaseModel):
     # same way available_mcp_servers is, so control-plane aggregation and the
     # agent-creation UI need no second fetch.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # This template's declared default capability ids (RFC §2), verbatim from
+    # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
+    # filtering. `available_mcp_servers` above stays MCP-only (it carries full
+    # `MCPServerConfiguration` details a native capability has no equivalent
+    # for); this field is the one control-plane reads to resolve what a
+    # `selected_capability_ids = None` instance activates (#1980).
+    default_capability_ids: list[str] = Field(default_factory=list)
 
 
 class _McpCatalogEntry(BaseModel):
@@ -2504,6 +2522,20 @@ async def _iterate_runtime_event_payloads(
             turn_options=getattr(request, "turn_options", None) or None,
             team_settings=team_settings,
         )
+        # Cheap correctness trace for "agent has no tools" reports: names each
+        # link (registry present? selection? block built? how many middleware?)
+        # so a missing capability tool is diagnosable from logs alone, without
+        # re-deriving this chain by hand every time (see git history for the
+        # investigation that established these fields).
+        logger.debug(
+            "[V2][CAPABILITY] agent=%s registry_is_none=%s selected=%s "
+            "block_is_none=%s middleware_count=%s",
+            definition.agent_id,
+            capability_registry is None,
+            tuning.selected_capability_ids if tuning is not None else None,
+            capability_block is None,
+            len(capability_block.middleware) if capability_block is not None else None,
+        )
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
                 definition=definition,
@@ -2795,6 +2827,9 @@ def _build_agent_router(
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
                 available_capabilities=available_capabilities,
+                default_capability_ids=[
+                    ref.id for ref in definition.default_mcp_servers
+                ],
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
@@ -3735,6 +3770,35 @@ def create_agent_app(
     capability_registry = boot_capability_registry(
         mcp_servers=_boot_mcp_config.servers if _boot_mcp_config is not None else None
     )
+    # A template's `default_mcp_servers` names capability ids uniformly (RFC
+    # §2) — MCP-derived and native alike. Resolve every one now, at boot,
+    # instead of letting an unresolvable id disappear silently the first time
+    # a request lists templates. A server *disabled* in the MCP catalog is a
+    # separate, already-documented tolerated state (warning-only, never
+    # boot-fatal — the live tool provider just skips it at assembly, RFC
+    # §3.8); only an id the pod has genuinely never heard of — neither an
+    # installed capability nor a catalog entry at all, enabled or not — fails
+    # boot. `_LoadedMcpConfiguration.get_server` filters to enabled servers
+    # only (a different, narrower contract), so the raw server list is
+    # checked here instead.
+    _known_mcp_ids = (
+        {server.id for server in _boot_mcp_config.servers}
+        if _boot_mcp_config is not None
+        else set()
+    )
+    for _definition in registry.values():
+        for _server_ref in _definition.default_mcp_servers:
+            if (
+                _server_ref.id in capability_registry
+                or _server_ref.id in _known_mcp_ids
+            ):
+                continue
+            raise UnknownCapabilityError(
+                f"Agent template '{_definition.agent_id}' declares "
+                f"default_mcp_servers id '{_server_ref.id}', which is neither "
+                "an installed capability nor a known MCP catalog entry on "
+                "this pod."
+            )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -3750,7 +3814,10 @@ def create_agent_app(
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
-            store=RamLogStore(),
+            store=build_log_store(
+                log_store_config=config.storage.log_store,
+                opensearch_config=config.storage.opensearch,
+            ),
         )
         container = build_pod_container(config)
         container.initialize_kpi_writer()

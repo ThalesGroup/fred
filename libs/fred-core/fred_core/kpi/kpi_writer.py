@@ -36,10 +36,11 @@ from fred_core.kpi.kpi_writer_structures import (
     Quantities,
     Trace,
 )
+from fred_core.logs.log_setup import KPI_LOGGER_NAME
 from fred_core.security.structure import KeycloakUser
 
 logger = logging.getLogger(__name__)
-summary_logger = logging.getLogger("KPI")
+summary_logger = logging.getLogger(KPI_LOGGER_NAME)
 
 
 @dataclass
@@ -209,7 +210,15 @@ class KPIWriter(BaseKPIWriter):
             trace=(Trace(**trace) if trace else None),
         )
         self._record_summary(event)
-        self.store.index_event(event)
+        # Fail-open: a KPI sink outage (e.g. OpenSearch down) must never break
+        # or propagate into the business request that triggered this metric —
+        # see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6.
+        try:
+            self.store.index_event(event)
+        except Exception:
+            logger.warning(
+                "KPI store write failed; dropping event %r", name, exc_info=True
+            )
 
     # ---- simple helpers ------------------------------------------------------
     def count(

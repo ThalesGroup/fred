@@ -14,13 +14,13 @@
 from __future__ import annotations
 
 from fred_core.logs.base_log_store import BaseLogStore
-from fred_core.logs.log_structures import LogEventDTO, LogQuery, LogQueryResult
+from fred_core.logs.log_structures import LogEventDTO
 
 
 class NullLogStore(BaseLogStore):
     """
     No-op log store used when stdout-only logging is desired.
-    Keeps the logging pipeline satisfied without persisting or querying logs.
+    Keeps the logging pipeline satisfied without persisting logs.
     """
 
     def ensure_ready(self) -> None:  # pragma: no cover - trivial
@@ -31,6 +31,3 @@ class NullLogStore(BaseLogStore):
 
     def bulk_index(self, events: list[LogEventDTO]) -> None:  # pragma: no cover
         return
-
-    def query(self, q: LogQuery) -> LogQueryResult:  # pragma: no cover
-        return LogQueryResult(events=[])

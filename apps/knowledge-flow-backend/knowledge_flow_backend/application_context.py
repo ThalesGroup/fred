@@ -23,14 +23,12 @@ from fred_core import (
     BaseFilesystem,
     BaseLogStore,
     GcsFilesystem,
-    InMemoryLogStorageConfig,
     LocalFilesystem,
     MinioFilesystem,
     ModelProvider,
     OpenFgaRebacConfig,
-    OpenSearchLogStore,
-    RamLogStore,
     RebacEngine,
+    build_log_store,
     get_embeddings,
     get_model,
     rebac_factory,
@@ -128,12 +126,10 @@ EXTENSION_CATEGORY = {
 logger = logging.getLogger(__name__)
 
 
-def _mask(value: Optional[str], left: int = 4, right: int = 4) -> str:
-    if not value:
-        return "<empty>"
-    if len(value) <= left + right:
-        return "<hidden>"
-    return f"{value[:left]}…{value[-right:]}"
+def _mask(value: Optional[str]) -> str:
+    """Never reveal any character of a secret — a partial preview is still a leak
+    (a short secret's `left`/`right` window can cover most of its length)."""
+    return "<empty>" if not value else "<redacted>"
 
 
 def get_configuration() -> Configuration:
@@ -505,31 +501,12 @@ class ApplicationContext:
         Returns:
             BaseLogStore: An instance of the log storage backend.
         """
-        if self._log_store_instance is not None:
-            return self._log_store_instance
-
-        config = ApplicationContext.get_instance().get_config().storage.log_store
-        if isinstance(config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-
-            self._log_store_instance = OpenSearchLogStore(
-                host=opensearch_config.host,
-                index=config.index,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
+        if self._log_store_instance is None:
+            config = ApplicationContext.get_instance().get_config().storage
+            self._log_store_instance = build_log_store(
+                log_store_config=config.log_store,
+                opensearch_config=config.opensearch,
             )
-        elif isinstance(config, InMemoryLogStorageConfig) or config is None:
-            self._log_store_instance = RamLogStore(capacity=1000)  # Default to in-memory store if not configured
-        else:
-            raise ValueError("Log store configuration is missing or invalid")
-
         return self._log_store_instance
 
     def get_content_store(self) -> BaseContentStore:

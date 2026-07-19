@@ -469,14 +469,6 @@
     "title": "Créer un nouveau dossier",
     "validationError": "Erreur de validation"
   },
-  "logs": {
-    "content": "contenu du log",
-    "copyAll": "Copier tout ({{count}})",
-    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
-    "file": "fichier de log",
-    "live": "En direct",
-    "title": "Console de logs"
-  },
   "mcp": {
     "servers": {
       "corpus": {
@@ -504,8 +496,8 @@
         "name": "Accès à Prometheus"
       },
       "search_documents": {
-        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)",
-        "name": "Accès aux documents"
+        "description": "Recherche documentaire sémantique historique (chemin MCP pré-capability, sans scoping par agent). Remplacée par la capability Accès aux documents — ne pas activer les deux sur le même agent.",
+        "name": "Recherche documentaire (historique)"
       },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
@@ -787,7 +779,15 @@
         },
         "health": {
           "suspended": "{{count}} suspendue(s)",
-          "pending": "L'état par capacité en temps réel arrive avec le balayage de suspension."
+          "suspendedAction": "Afficher les {{count}} agent(s) suspendu(s), groupés par équipe",
+          "unknown": "{{count}} inconnu(s)",
+          "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
+          "healthy": "OK"
+        },
+        "suspendedDrawer": {
+          "title": "{{name}} — agents suspendus",
+          "subtitle": "Agents que cette capacité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
         "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
@@ -797,13 +797,22 @@
           "title": "Désactiver l'activation par défaut ?",
           "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette capacité.",
           "confirm": "Désactiver",
-          "cancel": "Annuler"
+          "cancel": "Annuler",
+          "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
+          "impactNone": "Aucun agent en cours d'exécution ne sera affecté.",
+          "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés — leur pod était injoignable, l'impact est donc inconnu.",
+          "showAffected": "Afficher les agents concernés",
+          "hideAffected": "Masquer les agents concernés",
+          "affectedAgent": "{{name}} (équipe {{team}})"
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",
           "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette capacité actuellement.",
           "searchPlaceholder": "Rechercher une équipe...",
           "clearSearch": "Effacer la recherche",
+          "teamsLoading": "Chargement des équipes…",
+          "teamsError": "Impossible de charger le registre des équipes.",
+          "noTeams": "Aucune équipe n'existe encore dans le registre.",
           "searchEmpty": "Aucune équipe ne correspond à votre recherche.",
           "enable": "Activer",
           "disable": "Désactiver",

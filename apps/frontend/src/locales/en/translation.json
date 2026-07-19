@@ -469,14 +469,6 @@
     "title": "Create new folder",
     "validationError": "Validation Error"
   },
-  "logs": {
-    "content": "log content",
-    "copyAll": "Copy All ({{count}})",
-    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
-    "file": "logger file",
-    "live": "Live",
-    "title": "Log Console"
-  },
   "mcp": {
     "servers": {
       "corpus": {
@@ -504,8 +496,8 @@
         "name": "Prometheus access"
       },
       "search_documents": {
-        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)",
-        "name": "Document access"
+        "description": "Legacy semantic document search (pre-capability MCP path, no per-agent scoping). Superseded by the Document access capability — do not enable both on the same agent.",
+        "name": "Document search (legacy)"
       },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
@@ -787,7 +779,15 @@
         },
         "health": {
           "suspended": "{{count}} suspended",
-          "pending": "Live per-capability health arrives with the suspension sweep."
+          "suspendedAction": "Show the {{count}} suspended agent(s), grouped by team",
+          "unknown": "{{count}} unknown",
+          "unknownHint": "The runtime pod was unreachable, so this capability's health can't be determined right now.",
+          "healthy": "OK"
+        },
+        "suspendedDrawer": {
+          "title": "{{name}} — suspended agents",
+          "subtitle": "Agents this capability breaks right now, grouped by team. Restore each team's access from Manage teams to revive them.",
+          "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
         "defaultOffToast": "Default-on disabled platform-wide.",
@@ -797,13 +797,22 @@
           "title": "Disable default-on?",
           "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this capability.",
           "confirm": "Disable",
-          "cancel": "Cancel"
+          "cancel": "Cancel",
+          "impact": "This will suspend {{count}} agent(s) that currently work.",
+          "impactNone": "No running agents will be affected.",
+          "impactUnknown": "{{count}} agent(s) could not be checked — their pod was unreachable, so the impact is unknown.",
+          "showAffected": "Show affected agents",
+          "hideAffected": "Hide affected agents",
+          "affectedAgent": "{{name}} (team {{team}})"
         },
         "matrix": {
           "title": "{{name}} — team access",
           "subtitle": "Set each team's access: enable with settings, disable explicitly, or leave it on the platform default. Dimmed teams cannot use this capability right now.",
           "searchPlaceholder": "Search teams...",
           "clearSearch": "Clear search",
+          "teamsLoading": "Loading teams…",
+          "teamsError": "Could not load the team registry.",
+          "noTeams": "No teams exist in the registry yet.",
           "searchEmpty": "No team matches your search.",
           "enable": "Enable",
           "disable": "Disable",

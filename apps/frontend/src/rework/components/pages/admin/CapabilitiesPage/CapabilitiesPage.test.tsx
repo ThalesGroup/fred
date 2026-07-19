@@ -18,7 +18,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   list: { data: undefined, isLoading: false, isError: false } as {
@@ -26,6 +26,7 @@ const h = vi.hoisted(() => ({
     isLoading: boolean;
     isError: boolean;
   },
+  allTeams: { data: [] as Team[], isLoading: false, isError: false },
 }));
 
 // `t` echoes its key, but appends an interpolated `count` (or the composed
@@ -44,17 +45,24 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => h.list,
-  useListTeamsQuery: () => ({ data: [] }),
+  useListAllTeamsQuery: () => h.allTeams,
   useSetCapabilityDefaultOnMutation: () => [vi.fn(), { isLoading: false }],
+  useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
 
-// Isolate the page from the drawer (which drags in TuningFieldRenderer + prompt hooks).
+// Isolate the page from the drawer's own internals (TuningFieldRenderer, tri-state
+// mutations, search) — but still render the props CapabilitiesPage passes it, so a
+// regression that stops forwarding the global team registry is caught here too.
+const drawerProps = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock("./CapabilityTeamMatrixDrawer", () => ({
-  CapabilityTeamMatrixDrawer: () => null,
+  CapabilityTeamMatrixDrawer: (props: unknown) => {
+    drawerProps.current = props;
+    return null;
+  },
 }));
 
 import CapabilitiesPage from "./CapabilitiesPage";
@@ -97,8 +105,44 @@ describe("CapabilitiesPage states", () => {
   });
 });
 
+describe("CapabilitiesPage team registry wiring", () => {
+  // Regression coverage for the bug where the "Manage teams" drawer used
+  // `useListTeamsQuery` (caller-scoped: only teams the admin belongs to)
+  // instead of `useListAllTeamsQuery` (the full registry, `can_list_all_teams`).
+  // An admin managing a capability must see every collaborative team, not just
+  // their own — `fredlab` is the concrete team named in the original bug report.
+  beforeEach(() => {
+    h.list = { data: { items: [cap({ id: "web_search" })] }, isLoading: false, isError: false };
+    h.allTeams = { data: [], isLoading: false, isError: false };
+    drawerProps.current = undefined;
+  });
+
+  it("passes the useListAllTeamsQuery result to the drawer, unfiltered", () => {
+    // `fredlab` stands in for a team the current admin is not a member of —
+    // the global registry hook must still surface it, and the page must not
+    // apply any additional client-side membership filter before forwarding it.
+    const registryTeams: Team[] = [
+      { id: "nightly", name: "Nightly Build" },
+      { id: "fredlab", name: "fredlab" },
+    ];
+    h.allTeams = { data: registryTeams, isLoading: false, isError: false };
+    render();
+    expect(drawerProps.current).toMatchObject({ teams: registryTeams });
+  });
+
+  it("forwards the registry's loading and error flags to the drawer", () => {
+    h.allTeams = { data: [], isLoading: true, isError: false };
+    render();
+    expect(drawerProps.current).toMatchObject({ teamsLoading: true, teamsError: false });
+
+    h.allTeams = { data: [], isLoading: false, isError: true };
+    render();
+    expect(drawerProps.current).toMatchObject({ teamsLoading: false, teamsError: true });
+  });
+});
+
 describe("CapabilitiesPage catalog rows", () => {
-  it("renders each capability with enabled-team count and neutral health", () => {
+  it("renders each capability with enabled-team count and a healthy resting state", () => {
     h.list = {
       data: {
         items: [cap({ id: "web_search", team_scope: "admin_gated", default_on: false, enabled_team_ids: ["nb"] })],
@@ -111,12 +155,44 @@ describe("CapabilitiesPage catalog rows", () => {
     // A non-default-on capability counts explicit grants only, labeled as teams.
     expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:1");
 
-    // Health is neutral (no resting per-capability count until the sweep, #1975).
-    expect(html).toContain("rework.admin.capabilities.health.pending");
+    // Resting health with no suspended/unknown instances reads as healthy (#1975).
+    expect(html).toContain("rework.admin.capabilities.health.healthy");
     expect(html).not.toContain("rework.admin.capabilities.health.suspended");
+    expect(html).not.toContain("rework.admin.capabilities.health.unknown");
 
     // Manage-teams action is offered per row.
     expect(html).toContain("rework.admin.capabilities.manageTeams");
+  });
+
+  it("shows the resting suspended count from the row when the capability breaks agents", () => {
+    h.list = {
+      data: { items: [cap({ id: "web_search", enabled_team_ids: ["nb"], suspended_instances: 3 })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // The count comes from the row (`suspended_instances`), not session state.
+    expect(html).toContain("rework.admin.capabilities.health.suspended:3");
+    expect(html).not.toContain("rework.admin.capabilities.health.healthy");
+  });
+
+  it("shows a neutral unknown indicator when a pod was unreachable but nothing is broken", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "web_search", enabled_team_ids: ["nb"], suspended_instances: 0, health_unknown_instances: 2 }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    // Unknown (unreachable pod) is distinct from suspended (broken).
+    expect(html).toContain("rework.admin.capabilities.health.unknown:2");
+    expect(html).not.toContain("rework.admin.capabilities.health.suspended");
+    expect(html).not.toContain("rework.admin.capabilities.health.healthy");
   });
 
   it("counts a default-on capability from the roster minus opt-outs, not its grants", () => {

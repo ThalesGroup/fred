@@ -60,7 +60,6 @@ from knowledge_flow_backend.features.content.content_controller import ContentCo
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
-from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
@@ -237,7 +236,6 @@ def create_app() -> FastAPI:
     ResourceController(router)
     McpFilesystemController(router)
     CorpusManagerController(router)
-    router.include_router(logs_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)
 

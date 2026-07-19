@@ -145,11 +145,11 @@ class _FakeTeamRebac:
     async def ensure_team_organization_relations(self, team_ids: list[Any]) -> None:
         return None
 
-    async def add_relations(self, relations: list[Relation]) -> None:
+    async def add_relations(self, relations: list[Relation], **kwargs: object) -> None:
         for relation in relations:
             await self.add_relation(relation)
 
-    async def add_relation(self, relation: Relation) -> None:
+    async def add_relation(self, relation: Relation, **kwargs: object) -> None:
         if relation.resource.type == Resource.TEAM:
             self.team_relations.append(relation)
             if relation.relation == RelationType.TEAM_ADMIN:
@@ -214,9 +214,11 @@ class _SpyNoopRebac(NoopRebacEngine):
     def __init__(self) -> None:
         self.add_relation_calls: list[Relation] = []
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def add_relation(
+        self, relation: Relation, *, actor_uid: str | None = None
+    ) -> str | None:
         self.add_relation_calls.append(relation)
-        return await super().add_relation(relation)
+        return await super().add_relation(relation, actor_uid=actor_uid)
 
 
 class _FakeKeycloakAdmin:

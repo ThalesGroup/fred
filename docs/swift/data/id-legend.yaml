@@ -1348,19 +1348,50 @@ items:
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
-    status: draft
+    status: in_progress
     owner: Dimitri
     parent: OBSERV-01
     refs:
-      rfc: "docs/swift/rfc/AGENT-TOOL-CALL-AUDIT-RFC.md"
+      doc: "docs/swift/platform/OBSERVABILITY-AND-AUDIT.md"
+      execution: "GitHub issue #2009"
     notes: >
-      Extends OBSERV-01's structured KPI/audit logging channels rather than
-      adding a new one: closes the gap where only failed tool calls become
-      structured log events (successes only hit the Prometheus histogram),
-      wires the already-defined but unused KPIWriter.log_llm() for outbound
-      LLM calls, and adds GCP Log Router sink + locked bucket guidance for
-      tamper-evident, backed-up audit storage. No backlog phase or
-      implementation started yet — pending developer confirmation.
+      2026-07-18: target architecture confirmed after checking the live C1
+      GCP/GKE reference deployment, not just application code — three
+      distinct streams (ops metrics → Prometheus/Grafana with an allow-list,
+      product analytics → OpenSearch/OBSERV-02 unchanged, security/audit trail
+      → structured JSON log line, new). Explicitly does not touch OBSERV-02's
+      OpenSearch KPI delegate (AnalyticsPage depends on it). No prior RFC
+      draft is kept — the target-state doc above is canonical; implementation
+      detail belongs on the tracking GitHub issue once work starts.
+      Supersedes and folds in the formerly-`ignored/`
+      ISSUE-AGENT-TOOL-LOGGING.md and ISSUE-AUDIT-LOG-DELIVERY.md and the
+      short-lived AGENT-TOOL-CALL-AUDIT-RFC.md; do not recreate any of them.
+      2026-07-18 (issue #2009): next slice — generic app logs now durably
+      land in OpenSearch (previous commit) and are queried by the UI Log
+      Console, which surfaced two live gaps: prompt/response/tool-arg/
+      document-content fragments were leaking into that store via several
+      logger call sites, and neither `/logs/query` nor the raw OpenSearch
+      Ops surface had a platform-permission gate (frontend-only). Also adds
+      a closed `category` field to `LogEventDTO`/`LogFilter` (replacing the
+      last decorative `[KPI]` text-tag use), sink fail-open/circuit-breaker
+      so an OpenSearch outage can't break or stall a business request, and
+      drops the frontend's dead "agentic" log-service option.
+      2026-07-18 (issue #2009): reversed the same day — product decision is
+      that Fred does not maintain its own log viewer at all; OpenSearch
+      Dashboards is now the sole log exploration surface. Removed the UI Log
+      Console (`pages/Logs.tsx`, `components/monitoring/logs/*`), the
+      `/logs/query` Knowledge Flow endpoint, the `logs.query` built-in agent
+      tool (`TOOL_REF_LOGS_QUERY` in fred-sdk's builtin catalog) and its
+      fred-runtime wiring (`KfLogsClient`, `_fetch_logs`), and the now-dead
+      `LogQuery`/`LogFilter`/`LogQueryResult`/`TailFileResponse` types and
+      `BaseLogStore.query()` read path in fred_core. Emission/storage
+      (`StoreEmitHandler`, `RamLogStore`/`OpenSearchLogStore` writes,
+      `log_setup`) and the `category` field are untouched — this only
+      removes ways to read logs back through Fred; `storage.log_store:
+      opensearch` plus OpenSearch Dashboards is now the recommended path
+      for anyone who needs to explore them. Raw OpenSearch Ops surface
+      (cluster health/indices/shards) is unaffected and stays behind
+      `CAN_OBSERVE_PLATFORM`.
 
   # ── OPS ───────────────────────────────────────────────────────────────
 

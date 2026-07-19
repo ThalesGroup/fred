@@ -4,22 +4,28 @@ This folder contains all the configuration files needed to run the Knowledge Flo
 
 ## TL;DR – Which file do I use?
 
-| Config File                   | Purpose                                                                                                        |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `configuration_dev.yaml`      | ✅ Default: local dev mode, in-memory vector store, local disk storage.                                        |
-| `configuration_postgres.yaml` | 📦 Persistent without OpenSearch: PostgreSQL (incl. `pgvector`) for metadata + vectors, local/minio for files. |
-| `configuration_prod.yaml`     | 🛠️ Production-style: uses MinIO + OpenSearch. Requires Docker Compose.                                         |
-| `configuration_worker.yaml`   | ⚙️ Worker mode: runs **only** as a Temporal worker (no FastAPI).                                               |
-| `configuration.yaml`          | 🔁 Default entrypoint. Aliased to `configuration_dev.yaml`.                                                    |
+Two run-time profiles only — no other variant is maintained:
+
+| Config File                 | Purpose                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `configuration.yaml`         | ✅ Standalone dev mode: SQLite/local storage, Chroma in-process vector store. No external services required. |
+| `configuration_prod.yaml`    | 🛠️ Deployment-representative: PostgreSQL, MinIO, OpenSearch (metadata, vectors, KPI/logs). Requires Docker Compose (or equivalent) to be running. |
+
+Two more files exist for other processes, not as alternate ways to run the API server:
+
+| Config File                  | Purpose                                                              |
+| ----------------------------- | --------------------------------------------------------------------- |
+| `configuration_test.yaml`    | Used by the pytest suite (`make test`) — infrastructure-free.        |
+| `configuration_worker.yaml`  | Runs the backend as a **Temporal worker** only, no FastAPI server.   |
 
 ---
 
 ## Details
 
-### `configuration_dev.yaml`
+### `configuration.yaml`
 
 - Default for local development.
-- Uses in-memory vector store and local file storage.
+- Uses local disk storage and an in-process Chroma vector store.
 - **No data persistence** — restarting the app will wipe everything.
 
 > Good for quick tests, debugging, and development without external dependencies.
@@ -28,22 +34,20 @@ This folder contains all the configuration files needed to run the Knowledge Flo
 
 ### `configuration_prod.yaml`
 
-- Production-style configuration.
+- Deployment-representative configuration.
 - Uses:
+  - 🗄️ **PostgreSQL** for metadata/resources/tags.
   - 🗃️ **MinIO** for file storage.
-  - 🔍 **OpenSearch** for metadata and vector index.
+  - 🔍 **OpenSearch** for the vector index, KPI, and (when `storage.log_store.type: opensearch`) generic application logs.
 - Requires Docker Compose (or external services) to be running.
-- Recommended for more realistic tests and production deployments.
+- Recommended for realistic local tests before a deployment.
 
 ---
 
-### `configuration_postgres.yaml`
+### `configuration_test.yaml`
 
-- Production-like persistence **without** OpenSearch.
-- Uses:
-  - 🗄️ **PostgreSQL + pgvector** for metadata and vector index.
-  - 📂 Local filesystem by default for file storage (can be pointed to MinIO/S3 if desired).
-- Good for teams that want to avoid OpenSearch while keeping durable storage.
+- Used exclusively by the pytest suite (`make test`).
+- Kept infrastructure-free so tests don't depend on a running stack.
 
 ---
 

@@ -11,6 +11,7 @@ from fred_core import (
     ORGANIZATION_ID,
     KeycloakUser,
     OrganizationPermission,
+    build_log_store,
     get_config,
     get_current_user,
     initialize_user_security,
@@ -18,7 +19,6 @@ from fred_core import (
 )
 from fred_core.common import read_env_bool
 from fred_core.kpi import KPIMiddleware
-from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
@@ -139,7 +139,10 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="control-plane",
         log_level=configuration.app.log_level,
-        store=NullLogStore(),
+        store=build_log_store(
+            log_store_config=configuration.storage.log_store,
+            opensearch_config=configuration.storage.opensearch,
+        ),
     )
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 

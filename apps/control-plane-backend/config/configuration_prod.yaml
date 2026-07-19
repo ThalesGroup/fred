@@ -66,6 +66,9 @@ storage:
     access_key: "admin"
     bucket_name: "control-plane-content"
     secure: false
+  log_store:
+    type: opensearch
+    index: app-logs-index
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml

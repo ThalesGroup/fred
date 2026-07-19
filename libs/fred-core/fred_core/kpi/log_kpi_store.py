@@ -30,6 +30,7 @@ _STRUCTURED_EVENT_NAMES = frozenset(
         "agent.turn_completed",
         "agent.turn_error_total",
         "agent.tool_failed_total",
+        "agent.tool_latency_ms",
     }
 )
 

@@ -94,7 +94,7 @@ def get_keycloak_url() -> str:
     """
     if not KEYCLOAK_URL:
         # This state should not be hit if initialize_user_security ran at startup
-        logger.warning("[SECURITY] Keycloak URL requested but not initialized.")
+        logger.warning("[AUTH] Keycloak URL requested but not initialized.")
         return ""
     return KEYCLOAK_URL
 
@@ -105,7 +105,7 @@ def get_keycloak_client_id() -> str:
     """
     if not KEYCLOAK_CLIENT_ID:
         # This state should not be hit if initialize_user_security ran at startup
-        logger.warning("[SECURITY] Keycloak Client ID requested but not initialized.")
+        logger.warning("[AUTH] Keycloak Client ID requested but not initialized.")
         return ""
     return KEYCLOAK_CLIENT_ID
 
@@ -130,7 +130,7 @@ def initialize_user_security(config: UserSecurity):
     # derive base + realm for log clarity
     base, realm = split_realm_url(KEYCLOAK_URL)
     logger.info(
-        "[SECURITY] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+        "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
         KEYCLOAK_ENABLED,
         base,
         realm,
@@ -186,7 +186,7 @@ def apply_security_profile(config: SecurityConfiguration) -> None:
         )
 
     logger.info(
-        "[SECURITY] C3 profile active: strict issuer+audience, OpenFGA ReBAC enforced"
+        "[AUTH] C3 profile active: strict issuer+audience, OpenFGA ReBAC enforced"
     )
 
 
@@ -215,7 +215,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
     if _JWKS_CLIENT is None:
-        logger.debug("[SECURITY] Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
+        logger.debug("[AUTH] Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
         _JWKS_CLIENT = PyJWKClient(KEYCLOAK_JWKS_URL)
     return _JWKS_CLIENT
 
@@ -232,7 +232,7 @@ def _get_cached_user(token: str) -> KeycloakUser | None:
     now = time.time()
     if expires_at > now:
         logger.debug(
-            "[SECURITY] JWT cache hit for subject=%s (expires_at=%s)",
+            "[AUTH] JWT cache hit for subject=%s (expires_at=%s)",
             user.uid,
             _iso(expires_at),
         )
@@ -260,7 +260,7 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
             expires_at_candidates.append(float(candidate))
         except (TypeError, ValueError) as exc:
             logger.debug(
-                "[SECURITY] Ignoring invalid expiry candidate %s (%s)", candidate, exc
+                "[AUTH] Ignoring invalid expiry candidate %s (%s)", candidate, exc
             )
 
     if not expires_at_candidates:
@@ -301,7 +301,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     if not KEYCLOAK_ENABLED:
         username = getpass.getuser()
         logger.debug(
-            "[SECURITY] Authentication is DISABLED. Returning mock user: %s", username
+            "[AUTH] Authentication is DISABLED. Returning mock user: %s", username
         )
         return KeycloakUser(
             uid=username,
@@ -338,7 +338,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
         logger.warning(
-            "[SECURITY] JWT issuer mismatch (soft): iss=%s expected=%s",
+            "[AUTH] JWT issuer mismatch (soft): iss=%s expected=%s",
             iss,
             KEYCLOAK_URL,
         )
@@ -346,7 +346,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if KEYCLOAK_CLIENT_ID not in aud_list:
             logger.debug(
-                "[SECURITY] JWT audience does not include client_id (soft): aud=%s client_id=%s",
+                "[AUTH] JWT audience does not include client_id (soft): aud=%s client_id=%s",
                 aud_list,
                 KEYCLOAK_CLIENT_ID,
             )
@@ -357,10 +357,10 @@ def decode_jwt(token: str) -> KeycloakUser:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
         jwks_ms = (time.perf_counter() - t0) * 1000
-        logger.debug("[SECURITY] JWKS resolved key in %.1f ms (kid=%s)", jwks_ms, kid)
+        logger.debug("[AUTH] JWKS resolved key in %.1f ms (kid=%s)", jwks_ms, kid)
     except Exception as e:
         # Invalid JWT structure/kid/signature is a normal 401, not a 500.
-        logger.warning("[SECURITY] Could not retrieve signing key from JWKS: %s", e)
+        logger.warning("[AUTH] Could not retrieve signing key from JWKS: %s", e)
         raise HTTPException(
             status_code=401,
             detail="Invalid token signature",
@@ -386,9 +386,9 @@ def decode_jwt(token: str) -> KeycloakUser:
             options={"verify_exp": True, "verify_aud": verify_aud},
             leeway=CLOCK_SKEW_SECONDS,
         )
-        logger.debug("[SECURITY] JWT token successfully decoded")
+        logger.debug("[AUTH] JWT token successfully decoded")
     except jwt.ExpiredSignatureError:
-        logger.warning("[SECURITY] Access token expired")
+        logger.warning("[AUTH] Access token expired")
         raise HTTPException(
             status_code=401,
             detail="Token has expired",
@@ -397,7 +397,7 @@ def decode_jwt(token: str) -> KeycloakUser:
             },
         )
     except jwt.InvalidTokenError as e:
-        logger.error("[SECURITY] Invalid JWT token: %s", e)
+        logger.error("[AUTH] Invalid JWT token: %s", e)
         raise HTTPException(
             status_code=401,
             detail="Invalid token",
@@ -411,7 +411,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         client_roles = client_data.get("roles", [])
 
     logger.debug(
-        "[SECURITY] JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
+        "[AUTH] JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
         payload.get("sub"),
         payload.get("preferred_username"),
         payload.get("email"),
@@ -421,7 +421,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     # Build user
     sub = payload.get("sub")
     if not isinstance(sub, str):
-        logger.warning("[SECURITY] JWT token missing or invalid 'sub' claim: %r", sub)
+        logger.warning("[AUTH] JWT token missing or invalid 'sub' claim: %r", sub)
         raise HTTPException(
             status_code=401,
             detail="Invalid token claims",
@@ -467,7 +467,7 @@ async def get_current_user(
     user_uuid = _parse_user_uuid(user)
     if user_uuid is None:
         logger.warning(
-            "[SECURITY] Authenticated subject %r is not UUID-backed; rejecting GCU lookup.",
+            "[AUTH] Authenticated subject %r is not UUID-backed; rejecting GCU lookup.",
             user.uid,
         )
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
@@ -490,7 +490,7 @@ async def get_current_user_without_gcu(
 ) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
-        logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
+        logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
             uid="admin",
             username="admin",
@@ -507,11 +507,11 @@ async def get_current_user_without_gcu(
         )
 
     # do NOT log the full token
-    logger.debug("[SECURITY] Received token prefix: %s...", token[:10])
+    logger.debug("[AUTH] Received token prefix: %s...", token[:10])
     user = decode_jwt(token)
     if is_whitelist_active() and not is_user_whitelisted(user):
         logger.warning(
-            "[SECURITY] User not in whitelist: uid=%s email=%s",
+            "[AUTH] User not in whitelist: uid=%s email=%s",
             user.uid,
             user.email,
         )

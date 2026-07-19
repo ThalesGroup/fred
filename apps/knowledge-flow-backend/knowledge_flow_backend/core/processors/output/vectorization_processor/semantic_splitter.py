@@ -26,13 +26,6 @@ logger = logging.getLogger(__name__)
 _WS_CLASS = r"[ \t\r\n\u00A0]+"  # space, tabs, CR/LF, NBSP
 
 
-def _short(s: str, n: int = 160) -> str:
-    """Short, visible snippet for logs (make whitespace visible)."""
-    s = s.replace("\n", "⏎").replace("\r", "␍").replace("\t", "⟶")
-    s = s.replace("\u00a0", "⍽")  # NBSP made visible
-    return (s[:n] + "…") if len(s) > n else s
-
-
 def _build_ws_tolerant_pattern(needle: str) -> str:
     """Turn needle into a regex: collapse any whitespace runs to [_WS_CLASS]+."""
     parts = []
@@ -205,11 +198,14 @@ class SemanticSplitter(BaseTextSplitter):
                 else:
                     cursor = idx + len(txt)
 
-                logger.debug("anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s preview=%r", i, len(txt), idx, cursor, fb, _short(txt))
+                # No content preview here — this logger feeds the generic
+                # app-log store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md
+                # §7: "Content ... Nowhere in any observability or audit stream").
+                logger.debug("anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s", i, len(txt), idx, cursor, fb)
             else:
-                # Diagnostics for misses
-                window = text_with_placeholders[cursor : cursor + max(0, len(txt) + 200)]
-                logger.debug("anchor miss| chunk=%d len=%d cursor=%d needle=%r haystack_win=%r", i, len(txt), cursor, _short(txt), _short(window))
+                # Diagnostics for misses — lengths only, no needle/haystack text.
+                window_len = len(text_with_placeholders[cursor : cursor + max(0, len(txt) + 200)])
+                logger.debug("anchor miss| chunk=%d len=%d cursor=%d haystack_win_len=%d", i, len(txt), cursor, window_len)
 
         logger.info("Anchoring summary: %d/%d chunks anchored (fallback used on %d).", ok, total, used_fb)
 

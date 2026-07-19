@@ -425,7 +425,8 @@ storage:
     # while ingesting large documents.
     bulk_size: 1000
   log_store:
-    type: "in_memory"
+    type: opensearch
+    index: app-logs-index
 # integrations:
 #   prometheus:
 #     base_url: http://prometheus:9090

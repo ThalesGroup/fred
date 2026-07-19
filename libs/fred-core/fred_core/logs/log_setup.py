@@ -23,6 +23,7 @@ import threading
 from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
+from fred_core.logs.log_structures import LogCategory
 
 try:
     from rich.logging import RichHandler
@@ -31,10 +32,31 @@ except Exception:  # optional in prod images
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for the security/audit logger name — shared by
+# log_setup() (which gives it its dedicated JSON stdout path, see below) and
+# every call site that emits an audit event (authz decisions, tool-call
+# invocations), so both sides can never drift out of sync on the string.
+AUDIT_LOGGER_NAME = "fred.security.audit"
+
+# Single source of truth for the reserved KPI-summary logger name — shared by
+# StoreEmitHandler (which derives LogEventDTO.category from it) and
+# kpi_writer.py's periodic rollup lines, so both sides can never drift out of
+# sync on the string (mirrors AUDIT_LOGGER_NAME above).
+KPI_LOGGER_NAME = "KPI"
+
 LEVEL_MAP = {
     "DETAIL": "DEBUG",
     "TRACE": "DEBUG",
 }
+
+
+# Attributes a fresh LogRecord carries by default — anything else on a record's
+# __dict__ came from a caller's `extra={...}` and should be surfaced, not dropped.
+# Introspected from a throwaway record instead of hand-maintained so it tracks
+# whatever the running Python version's logging module actually sets.
+_STANDARD_LOG_RECORD_ATTRS = frozenset(
+    vars(logging.LogRecord("", 0, "", 0, "", (), None)).keys()
+) | {"message", "asctime"}
 
 
 # --- JSON formatter kept tiny and portable ---
@@ -55,7 +77,14 @@ class CompactJsonFormatter(logging.Formatter):
             "service": self.service,
             "msg": record.getMessage(),
         }
-        return json.dumps(base, ensure_ascii=False)
+        extra = {
+            k: v
+            for k, v in record.__dict__.items()
+            if k not in _STANDARD_LOG_RECORD_ATTRS
+        }
+        if extra:
+            base["extra"] = extra
+        return json.dumps(base, ensure_ascii=False, default=str)
 
 
 # --- Minimal handler that pushes to a BaseLogStore (or a lazy getter) ---
@@ -71,6 +100,13 @@ class StoreEmitHandler(logging.Handler):
         self._tls = threading.local()
 
     def emit(self, record: logging.LogRecord) -> None:
+        # Hard drop, independent of the audit logger's own propagate=False:
+        # real security/audit events (fred.security.audit) must never land in
+        # the generic app-log store, even if a future refactor accidentally
+        # reattaches a handler or flips propagate to True (see
+        # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6).
+        if record.name == AUDIT_LOGGER_NAME:
+            return
         if getattr(self._tls, "in_emit", False):
             return
         self._tls.in_emit = True
@@ -88,6 +124,15 @@ class StoreEmitHandler(logging.Handler):
             else:
                 mapped_level = record.levelname
 
+            # Closed, structural classification — derived from the LogRecord's
+            # own logger identity, never from message text (a message that
+            # happens to contain "[KPI]" does not become that category; only
+            # a record actually emitted on the reserved KPI logger does). See
+            # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6.
+            category: LogCategory = (
+                "kpi" if record.name == KPI_LOGGER_NAME else "application"
+            )
+
             e = LogEventDTO(
                 ts=payload.get("ts", record.created) if payload else record.created,
                 level=mapped_level,  # type: ignore
@@ -101,6 +146,7 @@ class StoreEmitHandler(logging.Handler):
                 if payload
                 else self.service,
                 extra=payload.get("extra") if payload else None,
+                category=category,
             )
 
             # Never block the app on logging:
@@ -230,8 +276,13 @@ def log_setup(
 
     # 1) Human console (Rich or plain)
     formatter = logging.Formatter(
-        # Include process ID, task name, and thread name for concurrency diagnostics.
-        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
+        # Include process ID, task name, thread name, and the logger's own
+        # dotted module name for concurrency diagnostics *and* provenance —
+        # %(name)s is why a message needs no hand-invented [TAG] to say where
+        # it came from. Reserve bracket prefixes in message text for the two
+        # real routed channels ([SECURITY] via emit_audit_log, [KPI] via
+        # logging.getLogger("KPI")); everything else should rely on this.
+        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     if use_rich and RichHandler is not None:
@@ -305,5 +356,20 @@ def log_setup(
                 lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
         logging.getLogger("uvicorn.error").addFilter(UvicornWebsocketNoiseFilter())
+
+    # 5) Dedicated single-line JSON path for the security/audit logger.
+    # Structured audit events (authz decisions, tool-call invocations) must
+    # reach stdout as valid, self-contained JSON so a platform-native log
+    # pipeline (Cloud Logging or equivalent) can parse and route them without
+    # scraping free text — the human-readable console formatter above is not
+    # JSON. propagate=False keeps an audit line from also printing through
+    # that console handler.
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    audit_logger.handlers.clear()
+    audit_handler = logging.StreamHandler()
+    audit_handler.setFormatter(CompactJsonFormatter(service_name))
+    audit_logger.addHandler(audit_handler)
+    audit_logger.setLevel(log_level.upper())
+    audit_logger.propagate = False
 
     setattr(root, marker, True)

@@ -110,7 +110,7 @@ class _FakeRebac:
         held = self.roles.get(uid, set())
         return any(role.value == relation.value for role in held)
 
-    async def add_relation(self, relation: Relation) -> None:
+    async def add_relation(self, relation: Relation, **kwargs: object) -> None:
         uid = relation.subject.id
         self.roles.setdefault(uid, set()).add(UserTeamRelation(relation.relation.value))
         self.added_relations.append(relation)

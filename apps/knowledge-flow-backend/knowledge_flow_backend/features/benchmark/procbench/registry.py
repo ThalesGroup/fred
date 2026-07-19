@@ -38,7 +38,7 @@ from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_m
 
 from .runner import ProcessorSpec
 
-# Standalone PDF pipeline configs for each profile (mirrors configuration_bench.yaml).
+# Standalone PDF pipeline configs for each profile (mirrors configuration_prod.yaml).
 # These let _ProfiledPdfMarkdownProcessor run without ApplicationContext.
 _MEDIUM_PDF_CONFIG = ProcessingConfig.PdfPipelineConfig(
     extractor="docling",

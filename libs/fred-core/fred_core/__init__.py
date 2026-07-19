@@ -43,16 +43,15 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.base_log_store import BaseLogStore
-from fred_core.logs.log_setup import StoreEmitHandler, log_setup
+from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, StoreEmitHandler, log_setup
+from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
+    LogCategory,
     LogEventDTO,
-    LogFilter,
-    LogQuery,
-    LogQueryResult,
     LogStorageConfig,
-    TailFileResponse,
 )
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.logs.opensearch_log_store import OpenSearchLogStore
@@ -135,14 +134,14 @@ from .users import (
 
 __all__ = [
     "BaseLogStore",
+    "LogCategory",
     "LogEventDTO",
-    "LogFilter",
-    "LogQuery",
-    "LogQueryResult",
     "OpenSearchLogStore",
+    "AUDIT_LOGGER_NAME",
     "RamLogStore",
     "StoreEmitHandler",
-    "TailFileResponse",
+    "build_log_store",
+    "emit_audit_log",
     "log_setup",
     "LogStorageConfig",
     "InMemoryLogStorageConfig",

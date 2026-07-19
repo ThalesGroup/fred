@@ -104,6 +104,7 @@ guides. Read the developer contract first.
 | [`PLATFORM_RUNTIME_MAP.md`](platform/PLATFORM_RUNTIME_MAP.md)                                 | Canonical map of services and their responsibilities                                             |
 | [`QUALITY_REVIEW_PROTOCOL.md`](platform/QUALITY_REVIEW_PROTOCOL.md)                           | Evidence-based review modes for PR, release, architecture drift, and doc/governance audits       |
 | [`REBAC.md`](platform/REBAC.md)                                                               | ReBAC access control model (OpenFGA)                                                             |
+| [`OBSERVABILITY-AND-AUDIT.md`](platform/OBSERVABILITY-AND-AUDIT.md)                           | Observability, KPI & audit trail architecture — for architects and RSSI review                   |
 | [`SECURITY.md`](platform/SECURITY.md)                                                         | Security practices                                                                               |
 | [`V2_AGENT_CREATION.md`](platform/V2_AGENT_CREATION.md)                                       | How to create a v2 agent                                                                         |
 | [`FEATURES.md`](platform/FEATURES.md)                                                         | Platform feature inventory                                                                       |

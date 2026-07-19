@@ -35,11 +35,13 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
 from fred_runtime.capabilities.demo import DemoEchoCapability
+from fred_runtime.capabilities.errors import UnknownCapabilityError
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
@@ -49,6 +51,7 @@ from fred_sdk.contracts.capability import (
     UploadedFile,
 )
 from fred_sdk.contracts.capability.context import SaveContext
+from fred_sdk.contracts.models import MCPServerRef
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
@@ -212,6 +215,61 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         assert entry["assets"] == []
     finally:
         client.__exit__(None, None, None)
+
+
+def test_default_capability_id_unknown_fails_pod_boot(tmp_path, monkeypatch) -> None:
+    """
+    A template's `default_mcp_servers` names a capability id uniformly (RFC
+    §2) — MCP-derived or native, resolved against the one pod capability
+    registry. An id this pod does not have installed must abort boot loudly,
+    not silently vanish the first time /agents/templates is called.
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    definition = _EchoAgent().model_copy(
+        update={"default_mcp_servers": (MCPServerRef(id="does-not-exist"),)}
+    )
+    with pytest.raises(UnknownCapabilityError, match="rags.sample.echo"):
+        create_agent_app(
+            registry={definition.agent_id: definition},
+            config=_build_test_config(tmp_path),
+        )
+
+
+def test_default_capability_ids_include_native_capability(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    A native (non-MCP) capability id is a legitimate `default_mcp_servers`
+    entry, resolved against the same registry as an MCP one, and surfaced
+    verbatim on the unified `default_capability_ids` wire field control-plane
+    reads to resolve a `selected_capability_ids = None` instance (#1980).
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    definition = _EchoAgent().model_copy(
+        update={"default_mcp_servers": (MCPServerRef(id="document_access"),)}
+    )
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app) as client:
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        assert response.json()[0]["default_capability_ids"] == ["document_access"]
 
 
 # ---------------------------------------------------------------------------

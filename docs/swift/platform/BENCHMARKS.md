@@ -135,7 +135,10 @@ This captures the current local bench state so future work can restart from know
 
 ### Working Locally versus deployed
 
-Checkout the configuration_bench.yaml agentic and knowledge flow files. These are the ones used for bechmarks.
+Use `configuration_prod.yaml` on both the agentic and knowledge-flow sides — their dedicated bench variants
+(`configuration_bench_postgres.yaml`, `configuration_bench.yaml`) were retired. Each app now only carries
+`configuration.yaml` and `configuration_prod.yaml` as run-time profiles, plus `configuration_test.yaml`/
+`configuration_worker.yaml` (knowledge-flow and control-plane only) for the test suite and Temporal worker.
 Not that the yaml parameters actavate KPI so-called summary logs that quickly tells you whats going on.
 
 For example using the Rico benchmark on the agentic side you see something like

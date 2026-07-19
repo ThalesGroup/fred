@@ -235,12 +235,14 @@ class _RuntimeTemplatePayload:
                 if isinstance(entry, dict)
             ],
             # Ids of `definition.default_mcp_servers` (the servers activated when
-            # `selected_capability_ids is None`) — same namespace as
-            # `available_capabilities` ids (#1988).
+            # `selected_capability_ids is None`) — MCP-derived and native ids
+            # alike (RFC §2), read verbatim off the pod's own wire field rather
+            # than derived from `available_mcp_servers`, which is MCP-only and
+            # silently omits native capability ids.
             default_capability_ids=[
-                entry["id"]
-                for entry in data.get("available_mcp_servers", [])
-                if isinstance(entry, dict) and entry.get("id")
+                cid
+                for cid in data.get("default_capability_ids", [])
+                if isinstance(cid, str) and cid
             ],
         )
 
@@ -557,7 +559,13 @@ async def _agent_capabilities_for_source(
     """
 
     try:
-        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+        # Non-public templates (e.g. the internal self-test harness agent,
+        # `AgentDefinition.public=False`) must never surface as a selectable
+        # `kind="agent"` capability — same policy as the tool-picker they are
+        # already hidden from (AGENT-VISIBILITY-RFC). Unlike other callers of
+        # `_fetch_runtime_templates`, this one intentionally does NOT pass
+        # `include_non_public=True`.
+        templates = await _fetch_runtime_templates(base_url)
     except Exception as exc:
         logger.warning(
             "[capability-catalog] failed to fetch agent templates from %s: %s",

@@ -116,7 +116,6 @@ A working sample lives in [`agentic_backend/agents/v2/samples/tutorial_tools/age
 | `TOOL_REF_KNOWLEDGE_SEARCH`              | Search document libraries and return grounded snippets |
 | `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`        | Publish a markdown file artifact for the user          |
 | `TOOL_REF_RESOURCES_FETCH_TEXT`          | Read a config or template file                         |
-| `TOOL_REF_LOGS_QUERY`                    | Query backend logs for troubleshooting                 |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarise an execution trace                           |
 
 Import them from `agentic_backend.core.agents.v2.support.builtins`.

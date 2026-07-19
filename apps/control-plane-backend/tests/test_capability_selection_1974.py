@@ -234,6 +234,30 @@ async def test_templates_expose_pod_capability_catalog(
     assert entries[0]["version"] == "0.1.0"
 
 
+def test_runtime_template_payload_parses_default_capability_ids() -> None:
+    """
+    `_RuntimeTemplatePayload.model_validate` reads `default_capability_ids`
+    straight off the pod's wire field (RFC §2) — MCP-derived and native ids
+    alike — rather than deriving it from `available_mcp_servers`, which is
+    MCP-only and silently drops native capability ids.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+            "default_capability_ids": ["document_access", "mcp-knowledge-flow-fs"],
+        }
+    )
+    assert payload.default_capability_ids == [
+        "document_access",
+        "mcp-knowledge-flow-fs",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Enrollment
 # ---------------------------------------------------------------------------
@@ -742,6 +766,34 @@ async def test_agent_projection_always_hardcodes_admin_gated(
 
 
 @pytest.mark.asyncio
+async def test_agent_projection_never_requests_non_public_templates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression (capabilities audit, 2026-07-18): `_agent_capabilities_for_source`
+    used to call `_fetch_runtime_templates(..., include_non_public=True)`, so an
+    internal/hidden template (`AgentDefinition.public=False`, e.g. the self-test
+    harness agent) was projected into the admin capabilities catalog as a normal
+    `kind="agent"` entry. AGENT-VISIBILITY-RFC hides those from the default
+    catalog for a reason — no team can knowingly select them, so they have no
+    business appearing as a gateable capability. Assert the call never opts in.
+    """
+
+    seen: dict[str, bool] = {}
+
+    async def _fake_fetch(base_url: str, include_non_public: bool = False):
+        seen["include_non_public"] = include_non_public
+        return [_template_payload(default_capability_ids=["demo_echo"])]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    await service._agent_capabilities_for_source("http://runtime-a/pod/v1", "runtime-a")
+    assert seen["include_non_public"] is False
+
+
+@pytest.mark.asyncio
 async def test_agent_projection_returns_none_when_pod_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -815,7 +867,7 @@ class _FakeTemplateGrantRebac:
     ) -> bool:
         return resource.id in self.already_granted.get(subject.id, set())
 
-    async def add_relation(self, relation) -> str | None:
+    async def add_relation(self, relation, **kwargs: object) -> str | None:
         if relation.relation.value == "enabled":
             self.enabled_writes.append((relation.subject.id, relation.resource.id))
         return None

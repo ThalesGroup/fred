@@ -892,7 +892,7 @@ async def test_bootstrap_platform_admin_happy_path_through_real_route(
         def __init__(self) -> None:
             self.added_relations: list[object] = []
 
-        async def add_relation(self, relation):
+        async def add_relation(self, relation, **kwargs: object):
             self.added_relations.append(relation)
             return None
 

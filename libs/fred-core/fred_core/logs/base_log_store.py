@@ -22,8 +22,9 @@ Why this exists in Fred:
 - We want **one emission API** (logging handler / writer) that can plug into
   **many backends** (OpenSearch, in-memory ring for dev, CSV for tests, etc.).
 - Backends differ in capabilities and SLOs; we keep the interface minimal but
-  sufficient: readiness, single-event ingest, bulk ingest, and a *best-effort*
-  query API for the monitoring UI.
+  sufficient: readiness, single-event ingest, and bulk ingest. Reading these
+  logs back is done directly against the backing store (OpenSearch Dashboards),
+  not through Fred — this module is write-path only.
 
 Key ideas:
 - `BaseLogStore` is a `Protocol` (static duck-typing) → implementations don’t
@@ -35,14 +36,14 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from fred_core.logs.log_structures import LogEventDTO, LogQuery, LogQueryResult
+from fred_core.logs.log_structures import LogEventDTO
 
 
 class BaseLogStore(Protocol):
-    """Abstract Log store API used by the logging pipeline and monitoring UI.
+    """Abstract Log store API used by the logging pipeline.
 
     Architectural role:
-    - Decouple **log emission** from **physical storage & query**.
+    - Decouple **log emission** from **physical storage**.
     - Keep the contract intentionally small so backends remain easy to implement.
     - Allow services to boot even if the store is slow to initialize
       (callers may handle failures without crashing business logic).
@@ -50,8 +51,6 @@ class BaseLogStore(Protocol):
     Implementation notes:
     - `index_event` must be non-blocking or bounded in latency (hot paths).
     - `bulk_index` is for throughput (batching) when the caller can coalesce.
-    - `query` is intentionally lightweight: time range + simple filters
-      for the built-in console; not meant to replace a full SIEM.
     """
 
     def ensure_ready(self) -> None:
@@ -78,14 +77,5 @@ class BaseLogStore(Protocol):
         Why:
         - Backends like OpenSearch benefit from bulk ingestion.
         - Caller decides batching cadence; store optimizes the write path.
-        """
-        ...
-
-    def query(self, q: LogQuery) -> LogQueryResult:
-        """Run a best-effort query over stored logs.
-
-        Design:
-        - Used by the Fred monitoring UI (time window, filters, limit/order).
-        - Implementations may support a subset of filters; document trade-offs.
         """
         ...

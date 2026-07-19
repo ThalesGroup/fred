@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser
 
@@ -323,13 +324,45 @@ class RebacEngine(ABC):
     async def close(self) -> None:
         """Release any held connections or sessions. No-op by default."""
 
-    @abstractmethod
-    async def add_relation(self, relation: Relation) -> str | None:
-        """Persist one authorization statement.
+    async def add_relation(
+        self, relation: Relation, *, actor_uid: str | None = None
+    ) -> str | None:
+        """Persist one authorization statement and audit it.
+
+        Why this is a concrete wrapper, not an abstract method:
+        - every ReBAC write changes who can do what — it belongs in the audit
+          trail (docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5). Three
+          separate call sites (root bootstrap, team creation, capability
+          default-on) were each found emitting no audit event at all, with
+          several more callers across both control-plane-backend and
+          knowledge-flow-backend never checked. One chokepoint here, instead
+          of one `emit_audit_log` call per caller to remember, covers every
+          current and future caller across every backend.
+        - `actor_uid` is optional: pass it when the calling context knows who
+          initiated the write. Never fabricated when absent — the write
+          itself is never gated on it.
 
         Example:
         - Save `team thales owner tag cir`.
         Returns a backend-specific consistency token when available.
+        """
+        token = await self._persist_relation(relation)
+        if self.enabled:
+            emit_audit_log(
+                "authz.relation.granted",
+                actor_uid=actor_uid,
+                subject=f"{relation.subject.type.value}:{relation.subject.id}",
+                relation=relation.relation.value,
+                resource=f"{relation.resource.type.value}:{relation.resource.id}",
+            )
+        return token
+
+    @abstractmethod
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        """Backend-specific write for one relation.
+
+        Not for direct use — call `add_relation` (this class), the audited
+        public entrypoint every caller should go through instead.
         """
 
     @abstractmethod
@@ -349,15 +382,23 @@ class RebacEngine(ABC):
         - deleting an agent can remove all `owner`, `viewer`, or parent links.
         """
 
-    async def add_relations(self, relations: Iterable[Relation]) -> str | None:
+    async def add_relations(
+        self, relations: Iterable[Relation], *, actor_uid: str | None = None
+    ) -> str | None:
         """Persist several statements and return the latest consistency token.
+
+        Each one is audited individually through `add_relation` — see there
+        for why. `actor_uid` is forwarded unchanged to every one.
 
         Example:
         - Add owner and viewer links in one call after resource sharing.
         """
 
         tokens = await asyncio.gather(
-            *(self.add_relation(relation) for relation in relations),
+            *(
+                self.add_relation(relation, actor_uid=actor_uid)
+                for relation in relations
+            ),
             return_exceptions=False,
         )
 
@@ -414,8 +455,15 @@ class RebacEngine(ABC):
         relation: RelationType,
         resource_type: Resource,
         resource_id: str,
+        *,
+        actor_uid: str | None = None,
     ) -> str | None:
         """Create one statement where the subject is a user.
+
+        `actor_uid` defaults to `user.uid` — every current caller grants a
+        user a relation on themselves (e.g. tag ownership on creation), so the
+        subject and the acting principal are the same. Pass it explicitly if a
+        future caller ever grants on someone else's behalf.
 
         Example:
         - Add `user:bob editor tag:finance`.
@@ -425,7 +473,8 @@ class RebacEngine(ABC):
                 subject=RebacReference(Resource.USER, user.uid),
                 relation=relation,
                 resource=RebacReference(resource_type, resource_id),
-            )
+            ),
+            actor_uid=actor_uid if actor_uid is not None else user.uid,
         )
 
     async def delete_relations(self, relations: Iterable[Relation]) -> str | None:

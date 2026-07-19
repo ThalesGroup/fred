@@ -40,7 +40,7 @@ class NoopRebacEngine(RebacEngine):
     def enabled(self) -> bool:
         return False
 
-    async def add_relation(self, relation: Relation) -> str | None:
+    async def _persist_relation(self, relation: Relation) -> str | None:
         return None
 
     async def delete_relation(self, relation: Relation) -> str | None:

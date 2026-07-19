@@ -91,7 +91,6 @@ HTTP clients that connect agent tools to the Fred platform services:
 | `kf_vectorsearch_client`      | Vector search / retrieval                                               |
 | `kf_markdown_media_client`    | Document content (Markdown + media)                                     |
 | `kf_workspace_client`         | Workspace and library management                                        |
-| `kf_logs_client`              | Audit log retrieval                                                     |
 | `kf_fast_text_client`         | FastText classification                                                 |
 | `mcp_runtime` / `mcp_toolkit` | MCP server lifecycle and tool injection                                 |
 | `context_aware_tool`          | Tool base class that propagates the runtime context (user, team, token) |

@@ -461,27 +461,29 @@ Bench-mode summary logging can also be enabled for knowledge-flow via the same `
 
 ## 5.3 Logs and Log Store
 
-### 5.3.1 Recommended Profile (Stdout Shipping + In-Memory Query Store)
+### 5.3.1 Recommended Profile (Stdout Shipping + OpenSearch for Exploration)
 
-Use two distinct paths:
+Fred does not expose its own log-query surface — no Log Console UI, no `/logs/query` endpoint, no
+`logs.query` agent tool (removed 2026-07-18; see `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`
+§6). Use two distinct paths:
 
 - **Operational logging path:** write application logs to `stdout` and forward them with your platform collector (Fluent Bit, Vector, OpenTelemetry Collector, etc.) to Loki/Grafana.
-- **In-app query path:** keep `storage.log_store` as `in_memory` to serve Fred UI log panels and LogGenius (`/logs/query`) without extra external writes.
+- **Exploration path:** set `storage.log_store` to `opensearch` so events durably land in the shared OpenSearch cluster, then explore/search them directly in **OpenSearch Dashboards** — Fred's API is not involved in reading them back.
 
 Recommended baseline:
 
 ```yaml
 storage:
   log_store:
-    type: "in_memory"
+    type: "opensearch"
 ```
 
 Important behavior:
 
 - App logs are still emitted with normal levels (`DEBUG/INFO/WARNING/ERROR`) to console/stdout.
-- `log_store: in_memory` keeps only a recent per-process buffer (capacity 1000 events), meant for troubleshooting and UI queries.
-- If `log_store` is set to OpenSearch, each log event is additionally indexed remotely by the app, which increases write traffic.
+- `log_store: in_memory` keeps only a recent per-process buffer (capacity 1000 events), lost on restart and not reachable by any Fred API — use it only where no one needs to look at these logs at all (e.g. an ephemeral sandbox).
+- `log_store: opensearch` indexes each log event remotely, which increases write traffic but is required if OpenSearch Dashboards is going to be used to explore them.
 
-Current recommendation: keep `log_store: in_memory` in Fred backend configs and rely on stdout forwarding for production retention/search.
+Current recommendation: set `log_store: opensearch` wherever log exploration via OpenSearch Dashboards is needed, and rely on stdout forwarding for the separate operational (Loki/Grafana) path.
 
 ---

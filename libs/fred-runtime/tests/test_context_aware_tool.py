@@ -12,6 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Context-injection tests for `ContextAwareTool`.
+
+KPI timing (`agent.tool_latency_ms`) and the
+`agent.tool.invocation.{started,completed}` audit events used to be tested
+here directly; that behavior moved to the platform-wide
+`ToolObservabilityMiddleware` (#2011) — see
+`tests/test_tool_observability_middleware.py` for the equivalent coverage,
+now exercised through `awrap_tool_call` for every tool call (MCP-catalog AND
+capability-native), not just `ContextAwareTool`-wrapped ones.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -22,7 +22,6 @@ from typing import Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.logs.base_log_store import BaseLogStore
 from fred_sdk.contracts.models import MCPServerConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -130,7 +129,6 @@ class RuntimeConfig:
     security_profile: str | None = None
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)
-    log_store: BaseLogStore | None = None
     mcp_configuration: McpConfigurationLike | None = None
     chat_model_provider: Callable[[], BaseChatModel] | None = None
     chat_model_factory: Any | None = (
@@ -182,13 +180,6 @@ class RuntimeContext:
         """
 
         return self._config.kpi_writer
-
-    def get_log_store(self) -> BaseLogStore | None:
-        """
-        Return the log store used by logs.query tool, if configured.
-        """
-
-        return self._config.log_store
 
     def get_mcp_configuration(self) -> McpConfigurationLike | None:
         """

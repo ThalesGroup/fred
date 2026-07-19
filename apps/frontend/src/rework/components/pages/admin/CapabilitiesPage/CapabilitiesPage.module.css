@@ -15,12 +15,23 @@
 
 .page {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
+  /* DataTable's own root sets height:100%/overflow:auto so its sticky column
+   * header and row scroll are self-contained (DataTable.module.scss). Without
+   * a definite height here, that 100% is self-referential against this
+   * auto-sized container: the table silently becomes its own disconnected
+   * scroll region and the header/filters above it become unreachable — the
+   * mouse only scrolls "inside the capabilities area". `flex: 1` claims
+   * `.content`'s (MainLayout) real available height so the 100% below
+   * resolves to something concrete; `min-height: 0` lets this flex item
+   * actually shrink to that height instead of growing to fit all rows. */
+  min-height: 0;
 }
 
 .header {
@@ -127,6 +138,75 @@
   gap: var(--spacing-2xs);
   color: var(--warning);
   font: var(--font-label-medium);
+}
+
+/* Same warning affordance as `.healthWarn`, but the "N suspended" count is a
+ * button that opens the per-team drill-down (#1975). Reset the native button
+ * chrome, underline on hover/focus so it reads as actionable, and keep a
+ * visible focus ring for keyboard users. */
+.healthWarnButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  color: var(--warning);
+  font: var(--font-label-medium);
+}
+
+.healthWarnButton:hover {
+  text-decoration: underline;
+}
+
+.healthWarnButton:focus-visible {
+  outline: 2px solid var(--warning);
+  outline-offset: 1px;
+}
+
+/* Disable-confirmation impact preview: the concrete count of agents this change
+ * would break, an optional unreachable-pod caveat, and the affected-agent
+ * drill-down. Sits under the dialog's generic message. */
+.impact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-top: var(--spacing-s);
+}
+
+.impactWarn {
+  margin: 0;
+  color: var(--warning);
+  font: var(--font-label-medium);
+}
+
+.impactNone {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.impactUnknown {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+.affectedList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding-left: var(--spacing-m);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.affectedItem {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 /* Button sets a fixed height (2rem at size="small") and clips overflow, but

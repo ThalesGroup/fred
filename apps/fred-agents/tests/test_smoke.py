@@ -145,14 +145,35 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
     offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
     offline_mcp_catalog.write_text(
-        # Sentinel's locked `default_mcp_servers` names this server (#1988): it
-        # must be present-but-disabled here, never enabled, so the capability
-        # resolves as tolerated-disabled instead of attempting a live MCP
-        # connection this offline pod has no server to answer.
+        # Every id any registered template names in `default_mcp_servers` must
+        # be at least KNOWN to this pod at boot, or boot now fails loudly
+        # (RFC §2) instead of letting the id disappear silently the first
+        # time a request lists templates. `enabled: false` keeps them in the
+        # already-documented tolerated-disabled state (warning-only — the
+        # live tool provider skips them at assembly, never a live MCP
+        # connection this offline pod has no server to answer).
         "version: v1\n"
         "servers:\n"
+        '  - id: "mcp-knowledge-flow-mcp-text"\n'
+        '    name: "mcp.servers.search_documents.name"\n'
+        "    enabled: false\n"
+        '  - id: "mcp-knowledge-flow-fs"\n'
+        '    name: "mcp.servers.filesystem.name"\n'
+        "    enabled: false\n"
+        '  - id: "mcp-knowledge-flow-mcp-tabular"\n'
+        '    name: "mcp.servers.tabular.name"\n'
+        "    enabled: false\n"
         '  - id: "mcp-knowledge-flow-opensearch-ops"\n'
         '    name: "mcp.servers.search_opensearch.name"\n'
+        "    enabled: false\n"
+        '  - id: "mcp-knowledge-flow-corpus"\n'
+        '    name: "mcp.servers.corpus.name"\n'
+        "    enabled: false\n"
+        '  - id: "mcp-knowledge-flow-prometheus-ops"\n'
+        '    name: "mcp.servers.prometheus.name"\n'
+        "    enabled: false\n"
+        '  - id: "mcp-web-github-readonly"\n'
+        '    name: "mcp.servers.web_github_readonly.name"\n'
         "    enabled: false\n",
         encoding="utf-8",
     )

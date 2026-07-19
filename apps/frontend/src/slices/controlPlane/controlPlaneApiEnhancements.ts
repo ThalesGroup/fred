@@ -194,4 +194,7 @@ export const {
     useSetCapabilityDefaultOnMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation:
     useSetCapabilityPersonalScopeMutation,
+  // Fired on demand from the disable-confirmation dialog (lazy — not on render).
+  useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
+    useLazyCapabilityRevokeImpactQuery,
 } = enhancedControlPlaneApi;

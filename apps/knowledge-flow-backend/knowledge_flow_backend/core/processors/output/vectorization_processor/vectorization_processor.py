@@ -186,22 +186,30 @@ class VectorizationProcessor(BaseOutputProcessor):
                 # Merge with doc-level metadata
                 doc.metadata = {**base_flat, **clean}
 
+                # No content/section text here — this logger feeds the generic
+                # app-log store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md
+                # §7: "Content ... Nowhere in any observability or audit stream").
                 logger.debug(
-                    "[Chunk %d] preview=%r | idx=%s uid=%s cs=%s ce=%s section=%r dropped=%s",
+                    "[Chunk %d] content_len=%d | idx=%s uid=%s cs=%s ce=%s has_section=%s dropped=%s",
                     i,
-                    doc.page_content[:100],
+                    len(doc.page_content),
                     doc.metadata.get("chunk_index"),
                     doc.metadata.get("chunk_uid"),
                     doc.metadata.get("char_start"),
                     doc.metadata.get("char_end"),
-                    doc.metadata.get("section"),
+                    doc.metadata.get("section") is not None,
                     dropped,
                 )
 
             # 4) Store embeddings
             try:
                 for i, doc in enumerate(chunks):
-                    logger.debug("[Chunk %d] content=%r | meta=%s", i, doc.page_content[:100], doc.metadata)
+                    logger.debug(
+                        "[Chunk %d] content_len=%d | meta_keys=%s",
+                        i,
+                        len(doc.page_content),
+                        list(doc.metadata),
+                    )
                 result = self.vector_store.add_documents(chunks)
                 # Heuristic: if add_documents returns ids/list, use its length as vectors_count; otherwise fall back to chunks_count
                 if isinstance(result, (list, tuple, set)):

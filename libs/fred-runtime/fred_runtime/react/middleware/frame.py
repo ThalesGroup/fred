@@ -35,6 +35,7 @@ from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .hitl import CapabilityHitlBinding, FredHitlMiddleware
 from .model_routing import ModelRoutingMiddleware
+from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
 
@@ -93,6 +94,16 @@ def build_react_platform_middleware_frame(
             infer_operation_from_messages=infer_operation_from_messages,
             default_operation=default_operation,
         ),
+        # ToolObservabilityMiddleware sits right next to TracingKpiMiddleware
+        # on purpose: same cross-cutting job (KPI timer + audit trail), just
+        # on the other axis — TracingKpiMiddleware wraps MODEL calls
+        # (`wrap_model_call`), this one wraps TOOL calls (`wrap_tool_call`).
+        # It does not need to be INSIDE the capability block or relative to
+        # FredHitl: `wrap_tool_call` only fires for calls the tool node
+        # actually executes, i.e. strictly after FredHitl's `after_model`
+        # gate has already let the call through (a HITL-refused proposal
+        # never reaches here, so it never produces a "started" event).
+        ToolObservabilityMiddleware(kpi=kpi, binding=binding),
         FredHitlMiddleware(
             binding=binding,
             approval_policy=approval_policy,

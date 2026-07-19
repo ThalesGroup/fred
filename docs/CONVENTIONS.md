@@ -36,6 +36,15 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
   genuinely needed, log and re-raise or return an explicit error value.
 - **Use existing `fred-core` utilities.** `ThreadSafeLRUCache`, `read_env_bool`,
   `get_config`, logging setup — do not reimplement.
+- **No new `[TAG]` message prefixes.** `[SECURITY]` (via `fred_core.logs.audit_log.
+  emit_audit_log`) and `[KPI]` (via `logging.getLogger("KPI")`) are the only two
+  reserved for a real routed channel — never reuse either string on a plain module
+  logger. For everything else, the console formatter already includes `%(name)s`
+  (the logger's dotted module path) and `CompactJsonFormatter` already includes
+  `file`/`line`/`logger` — that's provenance enough. ~60 ad hoc `[VECTOR]`/
+  `[SCHEDULER]`/`[MetadataService]`-style tags already exist from before this rule;
+  don't add a new one, and don't mass-rename the old ones as a side effect of an
+  unrelated change.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
 

@@ -37,7 +37,7 @@ class _FakeRebac:
     async def check_user_permission_or_raise(self, user, permission, resource_id, **_kw) -> None:
         self.checks.append((permission, resource_id))
 
-    async def add_relation(self, relation: Relation) -> None:
+    async def add_relation(self, relation: Relation, **kwargs: object) -> None:
         self.relations_added.append(relation)
 
 
