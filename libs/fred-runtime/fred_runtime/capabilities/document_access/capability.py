@@ -206,6 +206,10 @@ class _DocumentAccessMiddleware(AgentMiddleware):
             conversational exchanges (greetings, thanks, clarifying what was just
             said).
 
+            Covers prose/text documents. If a hit describes a structured/tabular
+            dataset (a "dataset pointer"), do not answer from it directly — pivot
+            to the tabular/SQL tool it names instead.
+
             Returns ranked hits with title and content. Only use information
             actually present in the returned hits; never invent facts beyond
             them.

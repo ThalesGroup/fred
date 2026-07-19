@@ -1917,6 +1917,24 @@ items:
       ReBAC; document_media is scoped by document/corpus permissions. Presigned
       URLs and storage keys remain runtime-only implementation details.
 
+  - id: RUNTIME-10
+    title: "Dataset-pointer chunks for tabular datasets in the vector index (RAG discovery, increment 1)"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/RAG-DATASET-DISCOVERY-RFC.md"
+      issue: "https://github.com/ThalesGroup/fred/issues/2014"
+      execution: "GitHub issue #2014"
+    notes: >
+      A generalist agent holding both the tabular/SQL tool and document_access has no way
+      to discover a tabular dataset exists — TabularProcessor never touches the vector
+      index, and search_documents_using_vectorization's docstring dominates tool selection.
+      Increment 1: one deterministic pointer chunk per dataset (title+columns only, no
+      sample values), injection-resistant fixed template, additive chunk_kind field via
+      the existing safe-mapping-update mechanism, reuses existing delete-by-document_uid
+      lifecycle and upsert-by-chunk_uid, gated behind a new config flag for measured
+      activation. Backend only, zero impact on corpora without tabular datasets.
+
   - id: RUNTIME-09
     title: "Global base prompt (Mermaid output contract) — runtime suffix injection, not authoring-time bake"
     status: open

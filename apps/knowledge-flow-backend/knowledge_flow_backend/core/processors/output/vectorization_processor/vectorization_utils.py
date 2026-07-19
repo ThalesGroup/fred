@@ -120,6 +120,7 @@ def load_langchain_doc_from_metadata(file_path: str, metadata: DocumentMetadata)
 _ALLOWED_CHUNK_KEYS = {
     "chunk_index",
     "chunk_uid",
+    "chunk_kind",
     "char_start",
     "char_end",
     "heading_slug",

@@ -912,6 +912,15 @@ class TabularStoreConfig(BaseModel):
         default="snappy",
         description="Parquet compression codec used when persisting tabular artifacts.",
     )
+    pointer_chunks_enabled: bool = Field(
+        default=False,
+        description=(
+            "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared "
+            "vector index, so semantic search can discover a dataset exists and route agents "
+            "to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for "
+            "measured, gradual activation."
+        ),
+    )
     query: TabularQueryConfig = Field(
         default_factory=TabularQueryConfig,
         description="Runtime limits and access settings for tabular SQL queries.",

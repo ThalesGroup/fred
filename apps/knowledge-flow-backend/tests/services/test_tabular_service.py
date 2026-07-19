@@ -850,3 +850,113 @@ def test_tabular_service_httpfs_install_is_attempted_after_load_failure():
     service._ensure_httpfs_ready(connection)  # type: ignore[arg-type]
 
     assert connection.commands == ["LOAD httpfs", "INSTALL httpfs", "LOAD httpfs"]
+
+
+class _FakeVectorStore:
+    """Records `add_documents` calls without touching a real vector backend."""
+
+    def __init__(self, *, raise_on_add: bool = False):
+        self.raise_on_add = raise_on_add
+        self.added_documents: list = []
+
+    def add_documents(self, documents):
+        if self.raise_on_add:
+            raise RuntimeError("simulated vector store failure")
+        self.added_documents.extend(documents)
+        return [doc.metadata.get("chunk_uid") for doc in documents]
+
+
+def test_tabular_processor_pointer_chunks_disabled_by_default(tmp_path):
+    """
+    Verify the disabled-by-default path is untouched (RAG-DATASET-DISCOVERY-RFC.md §8:
+    measured activation — no embedder/vector-store dependency paid unless enabled).
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    assert processor.tabular_config.pointer_chunks_enabled is False
+    assert processor.vector_store is None
+    assert processor.embedder is None
+
+    metadata = _metadata(document_uid="doc-no-pointer", file_name="sales.csv")
+    processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+
+
+def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
+    """
+    Verify the pointer-chunk content, id, and kind match RAG-DATASET-DISCOVERY-RFC.md
+    §2.1/§2.2/§2.4: one deterministic chunk, injection-resistant fixed template, no
+    sample values in this increment.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    fake_vector_store = _FakeVectorStore()
+    processor.vector_store = fake_vector_store
+
+    metadata = _metadata(document_uid="doc-pointer", file_name="sales.csv")
+    processor.process(str(csv_path), metadata)
+
+    assert len(fake_vector_store.added_documents) == 1
+    pointer_document = fake_vector_store.added_documents[0]
+
+    assert pointer_document.metadata["chunk_uid"] == "doc-pointer::pointer"
+    assert pointer_document.metadata["chunk_kind"] == "dataset_pointer"
+    assert pointer_document.metadata["document_uid"] == "doc-pointer"
+
+    text = pointer_document.page_content
+    assert "[DATASET POINTER" in text
+    assert "[END DATASET POINTER]" in text
+    assert "city" in text and "amount" in text
+    assert "read_query" in text
+    assert "dataset_uid=doc-pointer" in text
+    # Increment 1 explicitly excludes sample values (§2.4) — guard against
+    # accidentally reintroducing real cell values into the pointer text.
+    assert "Paris" not in text
+    assert "Lyon" not in text
+    assert "Sample values" not in text
+
+
+def test_tabular_processor_pointer_chunk_failure_is_non_fatal(tmp_path, caplog):
+    """
+    Verify a pointer-chunk write failure never breaks Parquet ingestion — the
+    processor's primary contract (RAG-DATASET-DISCOVERY-RFC.md §2.1: best-effort).
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    processor.vector_store = _FakeVectorStore(raise_on_add=True)
+
+    metadata = _metadata(document_uid="doc-pointer-fail", file_name="sales.csv")
+    with caplog.at_level("WARNING"):
+        processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+    assert any("failed to write dataset pointer chunk" in record.message for record in caplog.records)
+
+
+def test_tabular_store_config_pointer_chunks_disabled_by_default():
+    """Guard the measured-activation default (RAG-DATASET-DISCOVERY-RFC.md §8)."""
+    from knowledge_flow_backend.common.structures import TabularStoreConfig
+
+    assert TabularStoreConfig().pointer_chunks_enabled is False
+
+
+def test_allowed_chunk_keys_includes_chunk_kind():
+    """chunk_kind must survive `sanitize_chunk_metadata`'s whitelist or pointer chunks silently lose it."""
+    from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import sanitize_chunk_metadata
+
+    clean, dropped = sanitize_chunk_metadata({"chunk_uid": "x::pointer", "chunk_kind": "dataset_pointer"})
+    assert clean["chunk_kind"] == "dataset_pointer"
+    assert "chunk_kind" not in dropped
