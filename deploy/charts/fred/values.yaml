@@ -331,7 +331,6 @@ x-kf-mcp: &kf-mcp
   reports_enabled: true
   kpi_enabled: true
   tabular_enabled: true
-  statistic_enabled: true
   text_enabled: true
   templates_enabled: true
   resources_enabled: true
@@ -981,15 +980,6 @@ applications:
           description: "mcp.servers.corpus.description"
           transport: "streamable_http"
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
-
-        - id: "mcp-knowledge-flow-statistics"
-          name: "mcp-knowledge-flow-statistics"
-          description: "mcp.servers.statistics.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-statistics"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"

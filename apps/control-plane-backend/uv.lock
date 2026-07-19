@@ -577,7 +577,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "3.4.3"
+version = "3.4.4"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },

@@ -580,9 +580,7 @@ async def test_update_capability_config_only_materializes_still_none_instance(
     """
     record = _make_record()
     assert record.tuning.selected_capability_ids is None
-    _wire_rebac(
-        monkeypatch, {"personal": {"runtime-a__rags.sample.echo", "demo_echo"}}
-    )
+    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo", "demo_echo"}})
     app, store = _setup(
         monkeypatch,
         records=[record],

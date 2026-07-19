@@ -6549,12 +6549,6 @@
                       "title": "Tabular Enabled",
                       "type": "boolean"
                     },
-                    "statistic_enabled": {
-                      "default": true,
-                      "description": "Expose the Statistical MCP server for data analysis helpers.",
-                      "title": "Statistic Enabled",
-                      "type": "boolean"
-                    },
                     "text_enabled": {
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
@@ -11000,12 +10994,6 @@
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
                       "title": "Tabular Enabled",
-                      "type": "boolean"
-                    },
-                    "statistic_enabled": {
-                      "default": true,
-                      "description": "Expose the Statistical MCP server for data analysis helpers.",
-                      "title": "Statistic Enabled",
                       "type": "boolean"
                     },
                     "text_enabled": {
