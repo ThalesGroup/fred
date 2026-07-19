@@ -175,7 +175,10 @@ export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg = {
 export type GetCheckpointStorageStatsPodV1AgentsCheckpointsStatsGetApiResponse =
   /** status 200 Successful Response */ CheckpointStorageStats;
 export type GetCheckpointStorageStatsPodV1AgentsCheckpointsStatsGetApiArg = void;
-export type DeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteApiResponse = unknown;
+export type DeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: number;
+  };
 export type DeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteApiArg = {
   sessionId: string;
 };
@@ -477,6 +480,8 @@ export type RuntimeErrorEvent = {
 };
 export type VectorSearchHit = {
   author?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  chunk_kind?: string | null;
   citation_url?: string | null;
   confidential?: boolean | null;
   content: string;
@@ -841,6 +846,7 @@ export type TeamScopePolicy = "default_on" | "admin_gated";
 export type CapabilityCatalogEntry = {
   assets?: AssetSlot[];
   config_fields?: FieldSpec[];
+  default_capability_ids?: string[];
   /** i18n key */
   description: string;
   /** Material Symbols name; see CapabilityManifest.icon */

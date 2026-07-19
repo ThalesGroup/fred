@@ -1917,6 +1917,8 @@ export type VectorSearchHit = {
   slide_id?: number | null;
   has_visual_evidence?: boolean | null;
   slide_image_uri?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  chunk_kind?: string | null;
   /** Document UID */
   uid: string;
   title: string;
