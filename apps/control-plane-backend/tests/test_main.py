@@ -2704,14 +2704,16 @@ def _make_runtime_client(
     calls: list[tuple[str, dict[str, str]]],
     *,
     history_deleted: int = 3,
+    checkpoint_deleted: int = 1,
     history_error: bool = False,
     checkpoint_error: bool = False,
 ) -> type:
     """Build a fake httpx.AsyncClient recording runtime DELETEs into `calls`.
 
-    Checkpoint DELETE → 204 (or 502 when `checkpoint_error` is set, to exercise
-    the orphan fix); transcript DELETE → 200 `{"deleted": history_deleted}`, or a
-    502 failure when `history_error` is set (to exercise per-store isolation).
+    Checkpoint DELETE → 200 `{"deleted": checkpoint_deleted}` (or a 502 when
+    `checkpoint_error` is set, to exercise the orphan fix); transcript DELETE →
+    200 `{"deleted": history_deleted}`, or a 502 failure when `history_error`
+    is set (to exercise per-store isolation).
     """
 
     class _RuntimeClient:
@@ -2730,7 +2732,9 @@ def _make_runtime_client(
             if "/agents/checkpoints/" in url:
                 if checkpoint_error:
                     return httpx.Response(502, text="boom", request=request)
-                return httpx.Response(204, request=request)
+                return httpx.Response(
+                    200, json={"deleted": checkpoint_deleted}, request=request
+                )
             if history_error:
                 return httpx.Response(502, text="boom", request=request)
             return httpx.Response(
