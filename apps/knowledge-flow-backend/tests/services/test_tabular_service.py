@@ -902,7 +902,7 @@ def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
     processor.vector_store = fake_vector_store
 
     metadata = _metadata(document_uid="doc-pointer", file_name="sales.csv")
-    processor.process(str(csv_path), metadata)
+    processed_metadata = processor.process(str(csv_path), metadata)
 
     assert len(fake_vector_store.added_documents) == 1
     pointer_document = fake_vector_store.added_documents[0]
@@ -910,6 +910,17 @@ def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
     assert pointer_document.metadata["chunk_uid"] == "doc-pointer::pointer"
     assert pointer_document.metadata["chunk_kind"] == "dataset_pointer"
     assert pointer_document.metadata["document_uid"] == "doc-pointer"
+    # VectorSearchService unconditionally filters on metadata.retrievable=true
+    # (vector_search_service.py:335,439,518) — without this the pointer chunk
+    # is written but invisible to every search call. Caught live (2026-07-19)
+    # by inspecting the actual OpenSearch document after a real ingestion.
+    assert pointer_document.metadata["retrievable"] is True
+    # Every deletion/consistency path in metadata/service.py gates its vector
+    # cleanup on ProcessingStage.VECTORIZED being marked — without this, a
+    # deleted tabular dataset leaves its pointer chunk permanently orphaned.
+    # Caught live (2026-07-19): tabular artifacts/content were deleted but the
+    # vector chunk was left behind because this guard never saw VECTORIZED.
+    assert processed_metadata.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.DONE
 
     text = pointer_document.page_content
     assert "[DATASET POINTER" in text

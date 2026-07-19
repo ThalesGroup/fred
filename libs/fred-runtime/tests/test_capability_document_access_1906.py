@@ -37,7 +37,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fred_core.store.vector_search import VectorSearchHit
+from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND, VectorSearchHit
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     DuplicateCapabilityIdError,
@@ -260,6 +260,44 @@ async def test_turn_option_bounded_by_capability_config() -> None:
     # sources ride the tool artifact for the chat Sources panel.
     assert message.artifact.tool_ref == DOCUMENT_ACCESS_TOOL_REF
     assert message.artifact.sources[0].uid == "d1"
+
+
+@pytest.mark.asyncio
+async def test_dataset_pointer_hit_excluded_from_sources_but_kept_for_the_model() -> (
+    None
+):
+    """
+    A dataset-pointer chunk (RAG-DATASET-DISCOVERY-RFC.md) carries no real
+    content — the model must still see it to know to pivot to the tabular
+    tool, but it must never be shown to the user as a citable source. Found
+    live (2026-07-19): a SQL-derived answer was "citing" the pointer's raw
+    anti-injection template text in the chat Sources panel.
+    """
+    pointer_hit = VectorSearchHit(
+        uid="dataset-1",
+        title="Some dataset",
+        content="[DATASET POINTER — descriptive data ...]",
+        score=0.5,
+        type="csv",
+        chunk_kind=DATASET_POINTER_CHUNK_KIND,
+    )
+    real_hit = _hit("d1")
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(pointer_hit, real_hit))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={},
+        turn_options={},
+    )
+
+    message = await _invoke_tool(cap, ctx)
+
+    # The model still sees both hits — it needs the pointer to pivot.
+    assert "DATASET POINTER" in message.content
+    # Only the real content hit is citable as a source.
+    assert [hit.uid for hit in message.artifact.sources] == ["d1"]
 
 
 # ---------------------------------------------------------------------------

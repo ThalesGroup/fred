@@ -19,6 +19,7 @@ from pathlib import Path
 
 import duckdb
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage
+from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -189,6 +190,12 @@ class TabularProcessor(BaseOutputProcessor):
         if not self.vector_store or not artifact.columns:
             return
         try:
+            # Vector search unconditionally filters on metadata.retrievable=true
+            # (VectorSearchService.search, metadata_terms={"retrievable": [True]})
+            # — without this, the pointer chunk would be written but invisible to
+            # every search call. Mirrors VectorizationProcessor.process's own
+            # mark_retrievable() call for the same reason.
+            metadata.mark_retrievable()
             title = metadata.identity.title or metadata.identity.stem
             pointer_text = self._build_pointer_chunk_text(
                 title=title,
@@ -199,11 +206,20 @@ class TabularProcessor(BaseOutputProcessor):
             clean, _dropped = sanitize_chunk_metadata(
                 {
                     "chunk_uid": f"{metadata.document_uid}::pointer",
-                    "chunk_kind": "dataset_pointer",
+                    "chunk_kind": DATASET_POINTER_CHUNK_KIND,
                 }
             )
             document = Document(page_content=pointer_text, metadata={**base_flat, **clean})
             self.vector_store.add_documents([document])
+            # Every deletion/consistency path in metadata/service.py (remove-last-tag,
+            # strong delete, orphan diagnostics, retrievable toggling) gates its
+            # vector-store call on `ProcessingStage.VECTORIZED in metadata.processing.
+            # stages` — the same invariant VectorizationProcessor upholds for prose
+            # documents. Skipping this mark left the pointer chunk permanently
+            # orphaned on document deletion (caught live, 2026-07-19: tabular
+            # artifacts/content were deleted, but delete_vectors_for_document was
+            # never reached — the guard saw no VECTORIZED stage and skipped it).
+            metadata.mark_stage_done(ProcessingStage.VECTORIZED)
             logger.info(
                 "[TABULAR] document_uid=%s dataset pointer chunk written (columns=%s)",
                 metadata.document_uid,

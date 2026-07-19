@@ -18,6 +18,13 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+# A pointer chunk (RAG-DATASET-DISCOVERY-RFC.md) describes a structured dataset
+# for discovery — it carries no real content, so it must never be presented as
+# a citable "source" the way a real content chunk is. `chunk_kind` distinguishes
+# the two; this constant is the single place both writers (TabularProcessor)
+# and readers (document_access, knowledge.search) agree on the pointer value.
+DATASET_POINTER_CHUNK_KIND = "dataset_pointer"
+
 
 class VectorSearchHit(BaseModel):
     # Content (chunk)
@@ -28,6 +35,14 @@ class VectorSearchHit(BaseModel):
     slide_id: Optional[int] = None
     has_visual_evidence: Optional[bool] = None
     slide_image_uri: Optional[str] = None
+    chunk_kind: Optional[str] = Field(
+        default=None,
+        description=(
+            "content (default, real ingested prose/data) or "
+            f"'{DATASET_POINTER_CHUNK_KIND}' (a discovery pointer to a structured "
+            "dataset, never citable as a source)."
+        ),
+    )
 
     # Identity
     uid: str = Field(..., description="Document UID")

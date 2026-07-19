@@ -62,6 +62,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -245,13 +246,19 @@ class _DocumentAccessMiddleware(AgentMiddleware):
                     for hit in hits
                 ],
             }
-            # `blocks` feed the LLM the hit JSON; `sources` carry the typed hits
-            # the chat Sources panel renders (the runtime merges artifact
-            # sources onto the tool_result/final events).
+            # `blocks` feed the LLM the full hit set (the model needs to see a
+            # dataset pointer to know to pivot to the tabular tool) — but a
+            # pointer chunk carries no real content, so `sources` (what the chat
+            # Sources panel renders as citations) must exclude it. Otherwise a
+            # SQL-derived answer ends up "citing" a chunk that isn't the source
+            # of any of its facts, with its raw anti-injection template text
+            # shown to the end user (found live, RAG-DATASET-DISCOVERY-RFC.md §7).
             artifact = ToolInvocationResult(
                 tool_ref=DOCUMENT_ACCESS_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
-                sources=tuple(hits),
+                sources=tuple(
+                    hit for hit in hits if hit.chunk_kind != DATASET_POINTER_CHUNK_KIND
+                ),
             )
             return json.dumps(content), artifact
 

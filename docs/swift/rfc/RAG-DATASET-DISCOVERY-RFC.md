@@ -285,6 +285,20 @@ fully closed:
 - Dataset versioning / schema-fingerprint / upsert semantics beyond delete-by-`document_uid` —
   not needed; the existing delete-by-`document_uid` path already handles reingestion cleanly.
 - Multi-source/ambiguous-query routing quality tuning — needs live evaluation after shipping.
+- **`sources` citation of pointer chunks** — found live (2026-07-19, tracked in #2010).
+  **Fixed and verified live (2026-07-19):** `VectorSearchHit` gained a `chunk_kind` field
+  (`fred-core`), mapped from chunk metadata in `_to_hit`, and both search-tool front-ends
+  (`document_access`'s `search_documents_using_vectorization` and the legacy `knowledge.search`
+  in `adapters.py`) now exclude `chunk_kind == DATASET_POINTER_CHUNK_KIND` hits from `sources`
+  while still passing them to the model's tool content (so the pivot mechanism is unaffected).
+  Re-ran the exact live scenario that surfaced this: the pointer no longer appears in the final
+  message's `sources`, confirmed against the raw trace.
+  **Still open, separate from this RFC:** irrelevant low-score real-content hits (e.g. an
+  unrelated document's paragraphs) still appear in `sources` even when the agent's final answer
+  came entirely from a later `read_query` pivot and never used them. This is a pre-existing,
+  general RAG citation-accuracy gap already noted in `RAG-AGENT-QUALITY-RFC.md` ("accurate
+  citation-to-source mapping when the LLM skips indices — follow-up"), not specific to pointer
+  chunks — out of scope here.
 
 ---
 

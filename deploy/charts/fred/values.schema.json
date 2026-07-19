@@ -6221,6 +6221,12 @@
                           "title": "Compression",
                           "type": "string"
                         },
+                        "pointer_chunks_enabled": {
+                          "default": false,
+                          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+                          "title": "Pointer Chunks Enabled",
+                          "type": "boolean"
+                        },
                         "query": {
                           "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
                           "properties": {
@@ -10667,6 +10673,12 @@
                           "description": "Parquet compression codec used when persisting tabular artifacts.",
                           "title": "Compression",
                           "type": "string"
+                        },
+                        "pointer_chunks_enabled": {
+                          "default": false,
+                          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+                          "title": "Pointer Chunks Enabled",
+                          "type": "boolean"
                         },
                         "query": {
                           "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",

@@ -2425,6 +2425,12 @@
           "title": "Compression",
           "type": "string"
         },
+        "pointer_chunks_enabled": {
+          "default": false,
+          "description": "Emit one synthetic 'dataset pointer' chunk per tabular dataset into the shared vector index, so semantic search can discover a dataset exists and route agents to the SQL/tabular tool (RAG-DATASET-DISCOVERY-RFC.md). Off by default for measured, gradual activation.",
+          "title": "Pointer Chunks Enabled",
+          "type": "boolean"
+        },
         "query": {
           "$ref": "#/$defs/TabularQueryConfig",
           "description": "Runtime limits and access settings for tabular SQL queries."

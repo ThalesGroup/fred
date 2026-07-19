@@ -48,7 +48,7 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
-from fred_core.store.vector_search import VectorSearchHit
+from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND, VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     FsEntry,
@@ -514,6 +514,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 k: v for k, v in hit.model_dump(mode="json").items() if k in _LLM_FIELDS
             }
 
+        # A dataset pointer chunk carries no real content — the model still
+        # needs to see it (to pivot to the tabular tool), but it must never be
+        # shown as a citable source (RAG-DATASET-DISCOVERY-RFC.md §7).
         return ToolInvocationResult(
             tool_ref=request.tool_ref,
             blocks=(
@@ -525,7 +528,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     },
                 ),
             ),
-            sources=tuple(hits),
+            sources=tuple(
+                hit for hit in hits if hit.chunk_kind != DATASET_POINTER_CHUNK_KIND
+            ),
         )
 
     async def _invoke_traces_summarize_conversation(
