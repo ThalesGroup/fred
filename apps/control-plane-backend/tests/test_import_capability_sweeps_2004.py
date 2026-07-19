@@ -94,13 +94,17 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
 
 
 async def _run(
-    engine: AsyncEngine, bundle: _FakeBundle, *, product_deps: Any = None
+    engine: AsyncEngine,
+    bundle: _FakeBundle,
+    *,
+    product_deps: Any = None,
+    import_id: str = "imp-2004",
 ) -> None:
     task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
     start = await task_service.start(StartMigrationRequest(), created_by="tester")
     await run_import(
         bundle=cast(KBundle, bundle),
-        import_id="imp-2004",
+        import_id=import_id,
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
@@ -175,6 +179,59 @@ async def test_import_skips_sweeps_when_no_agents_imported(
 
     assert calls["materialize"] == []
     assert calls["grant"] == []
+
+
+@pytest.mark.asyncio
+async def test_import_capability_sweeps_are_stable_across_a_repeated_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retried/duplicate import of the same source bundle must re-run the
+    Phase 6 sweeps, scoped to the same correct team_ids, on every pass — not
+    just the first. `run_import`'s own writes are already idempotent (rows
+    are skipped once `agent_instance_id` exists — see `_import_agent_native`),
+    but that must not silently swallow the sweep call along with it: even a
+    no-op second pass over already-imported agents still needs to reassert
+    the capability grants, because the sweeps themselves (not this import
+    path) are what's responsible for closing the #1980 bypass sentinel.
+
+    Real launches (`import_export/api.py`) mint a fresh `import_id` via
+    `uuid.uuid4()` on every call — there is no client-supplied idempotency
+    key and no DB uniqueness constraint on `import_id` (confirmed: it only
+    ever appears as a plain string on `MigrationReport`/log lines, never as
+    an ORM column). So the realistic simulation of "the same import
+    happening twice" is two separate import jobs, each with its own
+    `import_id`, run back-to-back over the same underlying bundle — not one
+    job replaying its own `import_id`. Hence two distinct ids below.
+    """
+
+    calls = _patch_sweeps(monkeypatch)
+    engine = await _make_engine(tmp_path, "dest.sqlite3")
+    try:
+        bundle = _FakeBundle(
+            agent_instance_rows=[
+                {
+                    "agent_instance_id": "ai-1",
+                    "team_id": "team-x",
+                    "template_id": "runtime-a:sql_expert",
+                    "source_runtime_id": "runtime-a",
+                    "source_agent_id": "sql_expert",
+                    "display_name": "SQL Expert",
+                    "enabled": True,
+                    "tuning_json": None,
+                }
+            ]
+        )
+        await _run(engine, bundle, product_deps=object(), import_id="imp-2004-retry-a")
+        await _run(engine, bundle, product_deps=object(), import_id="imp-2004-retry-b")
+    finally:
+        await engine.dispose()
+
+    # Second pass finds `ai-1` already present (skipped, not re-created) —
+    # exercised implicitly, since `run_import` would otherwise raise on a
+    # primary-key collision. What matters here is that the sweep scoping
+    # survives that no-op agent phase unchanged on both passes.
+    assert calls["materialize"] == [{"team-x"}, {"team-x"}]
+    assert calls["grant"] == [{"team-x"}, {"team-x"}]
 
 
 @pytest.mark.asyncio
