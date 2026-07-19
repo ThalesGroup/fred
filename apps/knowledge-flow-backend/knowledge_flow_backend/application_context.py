@@ -62,7 +62,6 @@ from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
     TabularStoreConfig,
-    WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor
@@ -698,10 +697,6 @@ class ApplicationContext:
                 bulk_size=store.bulk_size,
             )
             return self._vector_store_instance
-        # elif isinstance(store, WeaviateVectorStorage):
-        #     if self._vector_store_instance is None:
-        #         self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
-        #     return self._vector_store_instance
         elif isinstance(store, ChromaVectorStorageConfig):
             from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
 
@@ -1086,11 +1081,6 @@ class ApplicationContext:
                 logger.info("     ↳ Verify Certs: %s", ch.verify)
                 logger.info("     ↳ Username: %s", ch.username)
                 self._log_sensitive("CLICKHOUSE_PASSWORD", os.getenv("CLICKHOUSE_PASSWORD"))
-            elif isinstance(store, WeaviateVectorStorage):
-                _require_env("WEAVIATE_API_KEY")
-                logger.info(f"     ↳ Host: {store.host}")
-                logger.info(f"     ↳ Index Name: {store.index_name}")
-                self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
             elif vector_type == "in_memory":
                 logger.info("     ↳ In-memory vector store (no host/index)")
         except Exception:

@@ -232,12 +232,6 @@ class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
 
 
-class WeaviateVectorStorage(BaseModel):
-    type: Literal["weaviate"]
-    host: str = Field(default="https://localhost:8080", description="Weaviate host")
-    index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
-
-
 class OpenSearchVectorIndexConfig(BaseModel):
     type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
@@ -286,7 +280,6 @@ VectorStorageConfig = Annotated[
         InMemoryVectorStorage,
         OpenSearchVectorIndexConfig,
         ChromaVectorStorageConfig,
-        WeaviateVectorStorage,
         PgVectorStorageConfig,
         ClickHouseVectorStorageConfig,
     ],

@@ -6282,8 +6282,7 @@
                           "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
                           "in_memory": "#/$defs/InMemoryVectorStorage",
                           "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
-                          "pgvector": "#/$defs/PgVectorStorageConfig",
-                          "weaviate": "#/$defs/WeaviateVectorStorage"
+                          "pgvector": "#/$defs/PgVectorStorageConfig"
                         },
                         "propertyName": "type"
                       },
@@ -6366,33 +6365,6 @@
                             "type"
                           ],
                           "title": "ChromaVectorStorageConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "weaviate",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "host": {
-                              "default": "https://localhost:8080",
-                              "description": "Weaviate host",
-                              "title": "Host",
-                              "type": "string"
-                            },
-                            "index_name": {
-                              "default": "CodeDocuments",
-                              "description": "Weaviate class (collection) name",
-                              "title": "Index Name",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "WeaviateVectorStorage",
                           "type": "object",
                           "additionalProperties": false
                         },
@@ -10735,8 +10707,7 @@
                           "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
                           "in_memory": "#/$defs/InMemoryVectorStorage",
                           "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
-                          "pgvector": "#/$defs/PgVectorStorageConfig",
-                          "weaviate": "#/$defs/WeaviateVectorStorage"
+                          "pgvector": "#/$defs/PgVectorStorageConfig"
                         },
                         "propertyName": "type"
                       },
@@ -10819,33 +10790,6 @@
                             "type"
                           ],
                           "title": "ChromaVectorStorageConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "weaviate",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "host": {
-                              "default": "https://localhost:8080",
-                              "description": "Weaviate host",
-                              "title": "Host",
-                              "type": "string"
-                            },
-                            "index_name": {
-                              "default": "CodeDocuments",
-                              "description": "Weaviate class (collection) name",
-                              "title": "Index Name",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "WeaviateVectorStorage",
                           "type": "object",
                           "additionalProperties": false
                         },
