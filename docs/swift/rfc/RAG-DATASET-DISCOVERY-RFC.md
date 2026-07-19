@@ -293,12 +293,22 @@ fully closed:
   while still passing them to the model's tool content (so the pivot mechanism is unaffected).
   Re-ran the exact live scenario that surfaced this: the pointer no longer appears in the final
   message's `sources`, confirmed against the raw trace.
-  **Still open, separate from this RFC:** irrelevant low-score real-content hits (e.g. an
-  unrelated document's paragraphs) still appear in `sources` even when the agent's final answer
-  came entirely from a later `read_query` pivot and never used them. This is a pre-existing,
-  general RAG citation-accuracy gap already noted in `RAG-AGENT-QUALITY-RFC.md` ("accurate
-  citation-to-source mapping when the LLM skips indices — follow-up"), not specific to pointer
-  chunks — out of scope here.
+  **Also fixed and verified live (2026-07-19), as a general RAG quality improvement — not
+  specific to pointer chunks:** irrelevant low-score real-content hits (e.g. an unrelated
+  document's paragraphs) were still appearing in `sources` even when the agent's final answer
+  came entirely from a later `read_query` pivot. Added `select_citable_sources` (fred-core),
+  which additionally excludes hits scoring below a `min_score_ratio` (default 0.5) of the best
+  hit in the same search call — relative, not absolute, so it stays meaningful across embedding
+  models. Applied at all three places that build a `sources` list: `document_access` (where the
+  ratio is a real per-instance `FieldSpec`, `min_source_score_ratio`), the legacy
+  `knowledge.search` builtin, and the `KfVectorSearchToolkit` in-process provider (MIGR-03.03) —
+  the latter two share the constant default, not yet independently configurable per agent
+  instance. Re-ran the exact live scenario that surfaced this (an unrelated arXiv paper's
+  paragraphs cited alongside a SQL-derived vulnerability count): confirmed absent from the final
+  message's `sources`. This closes the `RAG-AGENT-QUALITY-RFC.md` follow-up note on
+  citation-to-source mapping for the score-noise case; citation-index parsing from the model's
+  own answer (only showing indices actually referenced in prose) remains a separate, larger
+  follow-up there.
 
 ---
 

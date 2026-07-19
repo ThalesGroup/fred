@@ -49,7 +49,7 @@ from typing import Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
-from fred_core.store.vector_search import VectorSearchHit
+from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
@@ -168,7 +168,10 @@ class KfVectorSearchToolkit:
             # Return a ToolInvocationResult directly: the runtime-provider resolver
             # invokes this tool with a plain args dict, so a content_and_artifact
             # tuple would lose the artifact (and its sources). `blocks` feed the LLM
-            # the hit JSON; `sources` carry the typed hits the Sources panel renders.
+            # the full hit set; `sources` (the Sources panel) is narrowed separately —
+            # never a dataset pointer chunk, never a hit that's noise relative to the
+            # best match in this call (RAG-DATASET-DISCOVERY-RFC.md §7). Mirrors
+            # `_invoke_knowledge_search`'s use of the same shared default ratio.
             return ToolInvocationResult(
                 tool_ref=KF_VECTOR_SEARCH_PROVIDER,
                 blocks=(
@@ -180,7 +183,7 @@ class KfVectorSearchToolkit:
                         },
                     ),
                 ),
-                sources=tuple(hits),
+                sources=select_citable_sources(hits),
             )
 
         return [search_documents_using_vectorization]

@@ -80,9 +80,9 @@ _ENTRY_POINT_VALUE = (
 )
 
 
-def _hit(uid: str) -> VectorSearchHit:
+def _hit(uid: str, score: float = 1.0) -> VectorSearchHit:
     return VectorSearchHit(
-        uid=uid, title=f"Doc {uid}", content="body", score=1.0, type="document"
+        uid=uid, title=f"Doc {uid}", content="body", score=score, type="document"
     )
 
 
@@ -298,6 +298,59 @@ async def test_dataset_pointer_hit_excluded_from_sources_but_kept_for_the_model(
     assert "DATASET POINTER" in message.content
     # Only the real content hit is citable as a source.
     assert [hit.uid for hit in message.artifact.sources] == ["d1"]
+
+
+@pytest.mark.asyncio
+async def test_low_relevance_hit_excluded_from_sources_by_default_score_ratio() -> None:
+    """
+    A real (non-pointer) hit that scores far below the best hit in the same
+    call is noise relative to the strongest match, not a citable basis for
+    the answer. Found live (2026-07-19): near-zero-relevance paragraphs from
+    an unrelated document were cited as "sources" for a SQL-derived answer.
+    """
+    strong = _hit("d1", score=0.5)
+    noise = _hit("d2", score=0.05)  # 10% of the top score — well under default 50%
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(strong, noise))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={},
+        turn_options={},
+    )
+
+    message = await _invoke_tool(cap, ctx)
+
+    # The model still sees both hits.
+    assert "d1" in message.content and "d2" in message.content
+    # Only the strong hit clears the default 0.5 ratio.
+    assert [hit.uid for hit in message.artifact.sources] == ["d1"]
+
+
+@pytest.mark.asyncio
+async def test_min_source_score_ratio_is_configurable_per_instance() -> None:
+    """
+    `min_source_score_ratio` is agent-creation config (a real `FieldSpec`), not
+    a hardcoded constant — an operator who wants a more permissive Sources
+    panel can lower it per instance.
+    """
+    strong = _hit("d1", score=0.5)
+    noise = _hit("d2", score=0.05)
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(strong, noise))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"min_source_score_ratio": 0.01},
+        turn_options={},
+    )
+
+    message = await _invoke_tool(cap, ctx)
+
+    # A permissive ratio lets the previously-excluded hit through.
+    assert {hit.uid for hit in message.artifact.sources} == {"d1", "d2"}
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,23 @@ class _FakeSearchClient:
         ]
 
 
+class _FakeSearchClientWithNoise:
+    """Stand-in returning one strong hit and one hit that's noise relative to it."""
+
+    def __init__(self, agent: object) -> None:
+        self._agent = agent
+
+    async def search(self, **kwargs: object) -> list[VectorSearchHit]:
+        return [
+            VectorSearchHit(
+                uid="d1", title="Doc 1", content="alpha", score=0.5, type="document"
+            ),
+            VectorSearchHit(
+                uid="d2", title="Doc 2", content="beta", score=0.05, type="document"
+            ),
+        ]
+
+
 def _build_search_tool(
     monkeypatch: pytest.MonkeyPatch, runtime_context: RuntimeContext
 ):
@@ -106,6 +123,30 @@ async def test_search_returns_tool_invocation_result_with_sources(
     assert [h.uid for h in result.sources] == ["d1", "d2"]
     # The LLM-facing content is the JSON hit list, carried in blocks.
     assert "alpha" in render_tool_result(result)
+
+
+@pytest.mark.asyncio
+async def test_low_relevance_hit_excluded_from_sources_by_default_score_ratio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A hit scoring far below the best hit in the same call is noise relative to
+    the strongest match, not a citable basis for the answer
+    (RAG-DATASET-DISCOVERY-RFC.md §7) — mirrors the same fix already applied
+    to `document_access` and `_invoke_knowledge_search`.
+    """
+    monkeypatch.setattr(toolkit_mod, "VectorSearchClient", _FakeSearchClientWithNoise)
+    ctx = RuntimeContext(session_id="s-1", team_id="team-1")
+    toolkit = KfVectorSearchToolkit(agent=_FakeAgent(ctx))
+    tool = toolkit.tools()[0]
+
+    result = await tool.ainvoke({"question": "what is alpha?"})
+
+    assert isinstance(result, ToolInvocationResult)
+    # The model still sees both hits.
+    assert "beta" in render_tool_result(result)
+    # Only the strong hit clears the default 0.5 ratio.
+    assert [h.uid for h in result.sources] == ["d1"]
 
 
 @pytest.mark.asyncio
