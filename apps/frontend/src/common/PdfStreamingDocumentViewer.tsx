@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, CircularProgress, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
+import styles from "./PdfStreamingDocumentViewer.module.css";
 
 type Props = {
   documentUid: string;
@@ -89,27 +89,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
   }, [documentUid]);
 
   return (
-    <Box
-      ref={contentRef}
-      sx={{
-        width: "100%",
-        height: "100%",
-        minHeight: 0,
-        overflowY: "auto",
-        overflowX: "hidden",
-        p: 2,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-start",
-        boxSizing: "border-box",
-      }}
-    >
-      {!isLoading && loadError && (
-        <Typography color="error" sx={{ mt: 4 }}>
-          {loadError}
-        </Typography>
-      )}
+    <div ref={contentRef} className={styles.viewer}>
+      {!isLoading && loadError && <p className={styles.error}>{loadError}</p>}
 
       {fileProp && !loadError && (
         <Document
@@ -117,8 +98,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
           file={fileProp}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
-          loading={<CircularProgress />}
-          error={<Typography color="error">Failed to load PDF document.</Typography>}
+          loading={<p className={styles.loading}>Loading…</p>}
+          error={<p className={styles.error}>Failed to load PDF document.</p>}
         >
           {Array.from({ length: numPages ?? 0 }, (_, i) => (
             <Page
@@ -132,12 +113,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
         </Document>
       )}
 
-      {!fileProp && !loadError && (
-        <Typography color="error" sx={{ mt: 4 }}>
-          Document content is unavailable.
-        </Typography>
-      )}
-    </Box>
+      {!fileProp && !loadError && <p className={styles.error}>Document content is unavailable.</p>}
+    </div>
   );
 };
 
