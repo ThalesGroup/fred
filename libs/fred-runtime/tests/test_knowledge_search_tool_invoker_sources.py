@@ -27,7 +27,6 @@ from typing import Any, cast
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
-from fred_runtime.integrations.v2_runtime.adapters import FredKnowledgeSearchToolInvoker
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -85,7 +84,9 @@ async def test_low_relevance_hit_excluded_from_knowledge_search_sources(
         adapters_module, "VectorSearchClient", _FakeSearchClientWithNoise
     )
     binding = _binding()
-    invoker = FredKnowledgeSearchToolInvoker(binding=binding, settings=_FakeSettings())
+    invoker = adapters_module.FredKnowledgeSearchToolInvoker(
+        binding=binding, settings=_FakeSettings()
+    )
 
     result = await invoker.invoke(
         ToolInvocationRequest(
