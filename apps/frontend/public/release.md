@@ -1,3 +1,29 @@
+**v2.1.4** — 2026-07-19
+
+- **Summary**
+
+  Production observability and capability-admin consolidation release for the GKE validation campaign.
+  This release narrows Fred’s runtime surface and clarifies the production observability target:
+  Fred emits structured application/KPI logs and metrics, but no longer exposes its own raw log
+  exploration UI, endpoint, or agent tool. Log exploration is delegated to OpenSearch Dashboards;
+  KPIs/metrics are exposed for Prometheus scraping. The release also improves capability-admin
+  health/impact visibility so platform administrators can see which agents are affected by
+  capability availability changes before or after they happen.
+
+- **Features**
+
+  - Capability admin health now distinguishes healthy, suspended, and unknown/unreachable agent impact, with drill-downs for affected instances.
+  - Capability default/team/personal-scope changes now report suspended/revived agent impact in the admin UI.
+  - Production configs are consolidated around the current target deployment posture for Control Plane, Knowledge Flow, workers, and Fred Agents.
+
+- **Security / Observability**
+
+  - Generic application/KPI logs remain emitted and storable in OpenSearch, but security/audit events stay structurally separated from the generic application log store.
+  - Generic log records now carry a closed structural category (`application` or `kpi`) derived from logger identity, never from message text.
+  - KPI/log sink writes are resilient/fail-open so an unavailable observability backend does not break business requests.
+  - Sensitive content confinement was hardened so prompts, responses, tool arguments, and document fragments are not written into KPI/log records.
+  - OpenSearch Ops surfaces remain gated behind platform-observer authorization.
+
 **v2.1.3** — 2026-07-16
 
 - **Summary**
