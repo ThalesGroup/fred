@@ -41,8 +41,8 @@ import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { McpHub } from "../pages/McpHub";
-import { PageError } from "../pages/PageError";
-import Unauthorized from "../pages/PageUnauthorized";
+import { PageError } from "@components/pages/PageError/PageError.tsx";
+import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
