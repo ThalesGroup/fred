@@ -1010,6 +1010,34 @@ dead/legacy generated client, out of scope for this sweep).
 
 ---
 
+### 8.16 ✅ `DELETE /agents/checkpoints/{session_id}` returns a deleted count (July 2026)
+
+**What changed.** The endpoint (`agent_app.py::delete_checkpoint_thread`) went
+from `status_code=204, response_model=None` (bare, bodyless response) to
+`status_code=200` returning `{"deleted": n}` — `n` is the number of rows
+removed from the checkpoints table for that thread, mirroring the sibling
+`DELETE /agents/sessions/{session_id}` (history) endpoint's `{"deleted": n}`
+shape exactly. `FredSqlCheckpointer.adelete_thread` (`sql_checkpointer.py`) now
+returns that count (`# type: ignore[override]` — LangGraph's
+`BaseCheckpointSaver.adelete_thread` is typed `-> None`) instead of `None`,
+computed from the `checkpoints` table's delete rowcount; the `writes`/`blobs`/
+`thread_owner` rows are still purged but are not separately counted.
+
+**Why.** `ConversationErasureService._erase_runtime_checkpoint` (control-plane,
+CTRLP-12) had no way to report how many checkpoint rows an erasure actually
+purged — every conversation erasure receipt showed `deleted_count=None` for
+the `runtime_checkpoint` store regardless of whether it purged one checkpoint
+or a hundred, while every other store in the same receipt reported a real
+count. Discovered live while testing the SQL-agent/tabular observability path.
+
+**Wire impact.** Regenerated `libs/fred-runtime/openapi.json` (`make
+generate-openapi`, gitignored artifact — no frontend-facing generated client
+consumes this pod-internal endpoint). `pod_client.py::PodClient.delete_checkpoint`
+(fred-agents-cli) updated to return the count too, mirroring its sibling
+`delete_session_messages`. `fred-runtime` version bumped `3.3.3` → `3.3.4`.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

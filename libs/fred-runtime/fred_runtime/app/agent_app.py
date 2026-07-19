@@ -3419,13 +3419,12 @@ def _build_agent_router(
 
     @router.delete(
         "/checkpoints/{session_id}",
-        status_code=status.HTTP_204_NO_CONTENT,
-        response_model=None,
+        status_code=status.HTTP_200_OK,
     )
     async def delete_checkpoint_thread(
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> None:
+    ) -> dict[str, int]:
         """
         Purge all checkpoint data for one session.
 
@@ -3438,7 +3437,8 @@ def _build_agent_router(
         History store rows are NOT deleted — use DELETE /sessions/{session_id}
         to remove those separately.
 
-        Returns 204 on success, 403 when not owned, 503 when no checkpointer.
+        Returns {"deleted": n} (n = checkpoint rows removed) on success,
+        403 when not owned, 503 when no checkpointer.
         """
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
@@ -3453,7 +3453,8 @@ def _build_agent_router(
                 detail="Access denied.",
             )
         cp = _get_checkpointer()
-        await cp.adelete_thread(session_id)
+        deleted = await cp.adelete_thread(session_id)
+        return {"deleted": deleted}
 
     @router.post(
         "/execute",

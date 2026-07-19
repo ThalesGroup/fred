@@ -589,7 +589,21 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     def delete_thread(self, thread_id: str) -> None:  # type: ignore[override]
         raise _sync_checkpointer_error("delete_thread")
 
-    async def adelete_thread(self, thread_id: str) -> None:
+    async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
+        """
+        Delete all checkpoint rows for one thread and return the checkpoint count.
+
+        Why this exists:
+        - Callers erasing a conversation (CTRLP-12) need an honest deleted-row
+          count for their receipt, matching the sibling history-store delete
+          which already returns one. Before this, callers had no way to know
+          how much was actually purged.
+        - The returned count is the number of rows removed from
+          `checkpoints_table` (one row per turn) — the same unit the
+          `/agents/checkpoints/{session_id}` listing endpoint reports elsewhere.
+          `writes`/`blobs`/`thread_owner` rows are still purged but are
+          implementation detail, not a separately meaningful count.
+        """
         async with self.phase("v2_checkpoint_delete_thread"):
             await self._ensure_tables()
             async with self.store.begin() as conn:
@@ -598,7 +612,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         self.writes_table.c.thread_id == thread_id
                     )
                 )
-                await conn.execute(
+                result = await conn.execute(
                     delete(self.checkpoints_table).where(
                         self.checkpoints_table.c.thread_id == thread_id
                     )
@@ -616,6 +630,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         self.thread_owner_table.c.thread_id == thread_id
                     )
                 )
+                return result.rowcount or 0
 
     # ------------------------- owner / age index (CTRLP-12 A4) -------------------------
 
