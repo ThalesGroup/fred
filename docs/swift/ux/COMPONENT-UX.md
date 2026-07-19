@@ -563,6 +563,36 @@ _(none yet)_
 
 ---
 
+### `DocumentViewer`
+
+**Location:** `src/rework/components/shared/organisms/DocumentViewer/DocumentViewer.tsx`
+**Status:** `Functional`
+
+Shared, chrome-less document content renderer used by both `DocumentViewerPage`
+(`/documents/:uid`, chat-citation flow) and `DocumentWorkspace`'s corpus preview
+drawer (`InlineDrawer`). Picks a render strategy from the file's real extension
+(`isPdfFile` on `identity.document_name`, never the display title): `.pdf` renders
+natively via `PdfStreamingDocumentViewer` (`react-pdf`); every other format renders
+the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns no
+header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
+to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
+
+#### Open UX issues
+
+- **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
+  panel next to the viewer) is not built yet, blocked on an agent-selection product
+  decision — see `FRONTEND-BACKLOG.md` §19.
+- **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
+  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08,
+  RAG-AGENT-QUALITY-RFC.md §5), unaffected by this component.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ### `HitlPrompt`
 
 **Location:** `src/rework/components/shared/molecules/HitlPrompt/HitlPrompt.tsx`

@@ -1299,8 +1299,8 @@ avoid the two copies drifting apart.
 
 - [x] Create `DocumentViewerPage` component at
       `src/rework/components/pages/DocumentViewerPage/DocumentViewerPage.tsx`  
-       Renders `MarkdownDocumentViewer` (from `src/common/`) with `document_uid` from
-      `useParams`, in a page layout with a back-navigation button.
+       Renders `DocumentViewer` (`FRONT-13`, native PDF or markdown by extension) with
+      `document_uid` from `useParams`, in a page layout with a back-navigation button.
 - [x] Register route `{ path: "documents/:uid", element: <DocumentViewerPage /> }` in
       `src/common/router.tsx`
 - [x] Update `src/common/router.tsx` header comment documenting the new path.
@@ -1325,9 +1325,10 @@ avoid the two copies drifting apart.
 - No backend changes.
 - No SSE contract changes.
 - Chunk highlight via `#chunk=...` fragment deferred (out of scope for CHAT-08).
-- Native PDF rendering and an assistant side panel deferred to `FRONT-13`
-  (`docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`) — this route serves markdown only,
-  for every format, until that phase lands.
+- Native PDF rendering landed 2026-07-19 via the shared `DocumentViewer` component
+  (`FRONT-13`, `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`) — this route now
+  renders `.pdf` natively and markdown for every other format. The assistant side
+  panel from the same RFC is still deferred (see `FRONTEND-BACKLOG.md` §19).
 
 ---
 

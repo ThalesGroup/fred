@@ -737,13 +737,12 @@ items:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §9"
       rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
     notes: >
-      Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
-      MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
-      Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the RFC — not repeated
-      here. Manual end-to-end verification pending live pod (one unchecked item in
-      CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's confirmed. Native PDF
-      rendering and an assistant panel deferred to FRONT-13
-      (docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md).
+      Companion to RUNTIME-06. Registers the /documents/:uid route (now rendering via
+      the shared DocumentViewer component, see FRONT-13). Adds "Open document" link to
+      SourceDetailModal. Rendering-spec detail lives in CHAT-RENDERING-SPEC.md and the
+      RFC — not repeated here. Manual end-to-end verification pending live pod (one
+      unchecked item in CHAT-UI-BACKLOG.md §9.5); status kept "draft" until that's
+      confirmed.
 
   - id: CHAT-09
     title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
@@ -1220,18 +1219,22 @@ items:
 
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
-    status: draft
-    owner: TBD
+    status: in_progress
+    owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md"
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §19"
+      issue: "https://github.com/ThalesGroup/fred/issues/1956"
     notes: >
-      Consolidates the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
-      (FRONT-09) document preview flows into one DocumentViewer component. Restores
-      native PDF rendering (PdfStreamingDocumentViewer exists but is currently unwired
-      from both entry points — a UX regression from kea, tracked on GitHub issue #1956).
-      Adds an assistant side panel reusing the existing selected_document_uids
-      chat-scoping mechanism (no new backend endpoint). RFC-proposed, not started.
+      Consolidated the chat-citation (/documents/:uid, CHAT-08) and corpus-workspace
+      (FRONT-09) document preview flows into one DocumentViewer component (landed
+      2026-07-19). Restored native PDF rendering — the UX regression from kea tracked
+      on GitHub issue #1956 — closing that issue's Must-have checklist item. The
+      assistant side panel (reusing selected_document_uids for chat-scoping, no new
+      backend endpoint) is still open: ManagedChatPage requires an agentInstanceId and
+      there is no default/last-used agent concept today, so the panel needs an agent
+      picker — a product decision, not a technical unknown. Not scheduled for
+      swift-golive.
 
   # ── INGEST ────────────────────────────────────────────────────────────
 

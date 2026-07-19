@@ -59,7 +59,7 @@ Frozen frontend invariants:
 | FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | issue #1840 |
 | FRONT-08 | Simon | Done — merged (PR #1750, 2026-06-16) | §14 | GitHub issue #1748 (closed) |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
-| FRONT-13 | TBD | RFC proposed | §19 | TBD |
+| FRONT-13 | Dimitri | In progress — native PDF rendering landed 2026-07-19, AI panel not started | §19 | branch `2004-capab-01-agent-template-capability-gating-gaps` |
 
 Recommended order:
 
@@ -438,7 +438,7 @@ so there is nothing to generate from yet.
 
 ## 19 Phase FRONT-13 — Unified Document Viewer With AI Assistant Panel
 
-**ID:** FRONT-13  **Owner:** TBD  **Status:** RFC proposed
+**ID:** FRONT-13  **Owner:** Dimitri  **Status:** In progress — PDF wiring done, AI panel not started
 **RFC:** `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`
 **Depends on:** CHAT-08 (`/documents/:uid` route), FRONT-09.C/D (corpus preview drawer)
 
@@ -452,19 +452,27 @@ side panel that scopes a managed-chat turn to the open document via the existing
 
 Checklist:
 
-- [ ] Introduce a shared `DocumentViewer` component with two render strategies:
+- [x] Introduce a shared `DocumentViewer` component with two render strategies:
       native (`PdfStreamingDocumentViewer`) for `.pdf`, markdown (existing
       `GET /knowledge-flow/v1/markdown/{uid}` path) for every other format.
-- [ ] Replace `DocumentViewerPage`'s direct `MarkdownRenderer` usage with
+- [x] Replace `DocumentViewerPage`'s direct `MarkdownRenderer` usage with
       `DocumentViewer`.
-- [ ] Replace the corpus workspace preview drawer's `MarkdownDocumentViewer` usage
+- [x] Replace the corpus workspace preview drawer's `MarkdownDocumentViewer` usage
       with `DocumentViewer`; wire `commands.previewPdf` (currently dead code) through
-      it instead of leaving it uncalled.
+      it instead of leaving it uncalled. Landed as one merged `preview` command
+      instead of two — see commit `3ab41d97`.
 - [ ] Add the assistant side panel: quick actions ("Summarize", "List key points")
       plus free-text follow-up, opening a managed-chat turn with
       `selected_document_uids: [uid]` — no new backend endpoint.
-- [ ] Update `COMPONENT-UX.md` with the new `DocumentViewer` component and its states.
-- [ ] Update GitHub issue #1956's "PDF viewer parity" checklist item to point here.
+      **Blocked on a product decision, not a technical unknown:** `ManagedChatPage`
+      requires an `agentInstanceId` in its route and `selected_document_uids` only
+      exists inside an already-open chat's composer state — there is no "default/
+      last-used agent" concept anywhere in the code today. The panel needs an
+      agent picker (team's agent instances, same source as `TeamAgentsPage`)
+      before it can open a scoped turn. Deferred 2026-07-19, not scheduled for
+      swift-golive (the PDF regression was the Must-have item on #1956, not this).
+- [x] Update `COMPONENT-UX.md` with the new `DocumentViewer` component and its states.
+- [x] Update GitHub issue #1956's "PDF viewer parity" checklist item to point here.
 
 ## 20 Progress Snapshot
 
