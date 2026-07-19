@@ -389,6 +389,33 @@ async def test_tabular_processor_cleans_temporary_parquet_after_upload(tmp_path,
     assert not tracked_parquet_path.exists()
 
 
+@pytest.mark.asyncio
+async def test_tabular_processor_logs_parquet_artifact_write(tmp_path, caplog):
+    """
+    Ensure a successful Parquet upload leaves a durable, gathersable log line.
+
+    Why this exists:
+    - Before this fix, `_persist_parquet_artifact` uploaded the artifact to
+      content storage without logging anything on success, so operators had
+      no positive confirmation in stdout/OpenSearch that ingestion actually
+      produced a queryable dataset.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-log-check", file_name="sales.csv")
+
+    with caplog.at_level("INFO"):
+        processed_metadata = processor.process(str(csv_path), metadata)
+
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+
+    tabular_log_records = [record.message for record in caplog.records if "[TABULAR]" in record.message]
+    assert any("document_uid=doc-log-check" in message and f"object_key={artifact.object_key}" in message and "rows=2" in message for message in tabular_log_records)
+
+
 @pytest.mark.integration
 def test_tabular_processor_limits_python_rss_growth_for_large_csv(tmp_path):
     content_store = ApplicationContext.get_instance().get_content_store()

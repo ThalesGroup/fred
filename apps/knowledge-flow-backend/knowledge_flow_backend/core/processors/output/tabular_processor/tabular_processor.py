@@ -203,6 +203,16 @@ class TabularProcessor(BaseOutputProcessor):
         finally:
             cleanup_generated_parquet_file(parquet_path)
 
+        logger.info(
+            "[TABULAR] document_uid=%s object_key=%s rows=%s size_bytes=%s format=%s compression=%s",
+            metadata.document_uid,
+            stored_object.key,
+            generated_metadata.row_count,
+            stored_object.size,
+            self.tabular_config.format,
+            self.tabular_config.compression,
+        )
+
         return TabularArtifactV1(
             dataset_uid=metadata.document_uid,
             object_key=stored_object.key,
