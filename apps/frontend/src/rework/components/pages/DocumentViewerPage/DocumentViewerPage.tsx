@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
@@ -27,6 +27,14 @@ export default function DocumentViewerPage() {
 
   const [infoOpen, setInfoOpen] = useState(false);
   const [derivedTitle, setDerivedTitle] = useState<string | null>(null);
+
+  // Drop the previous document's derived title as soon as the route targets a
+  // new one, so a stale H1 never lingers while the new document's fetch is
+  // still in flight (it's only ever a fallback — recomputed once `onLoaded`
+  // fires again for the current `uid`).
+  useEffect(() => {
+    setDerivedTitle(null);
+  }, [uid]);
 
   const paramTitle = searchParams.get("title");
   const paramFile = searchParams.get("file");

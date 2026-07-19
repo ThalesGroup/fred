@@ -58,16 +58,31 @@ function MarkdownDocumentBody({
 
   useEffect(() => {
     if (!documentUid) return;
+    // Guards against a superseded response winning the race: if `documentUid`
+    // changes again before this fetch resolves, `cancelled` flips true and the
+    // stale `.then()`/`.catch()` below becomes a no-op, so an out-of-order
+    // response can never overwrite the newer document's content or title.
+    let cancelled = false;
     setLoading(true);
     fetchPreview({ documentUid })
       .unwrap()
       .then((resp) => {
+        if (cancelled) return;
         const decoded = decodeMaybeBase64Utf8(resp?.content ?? "");
         setContent(decoded);
         onLoaded?.(decoded);
       })
-      .catch(() => setContent("Error loading document."))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setContent("Error loading document.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // onLoaded is a per-render callback (title-derivation), not a fetch dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentUid, fetchPreview]);
