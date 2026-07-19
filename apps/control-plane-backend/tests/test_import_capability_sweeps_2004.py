@@ -27,15 +27,13 @@ at all when there is nothing to fix up or no `product_deps` was supplied.
 
 from __future__ import annotations
 
-import io
-import json
-import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export import importer as importer_module
+from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.import_export.importer import run_import
 from control_plane_backend.models.base import Base as CPBase
 from fred_core.models import Base as CoreBase
@@ -101,7 +99,7 @@ async def _run(
     task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
     start = await task_service.start(StartMigrationRequest(), created_by="tester")
     await run_import(
-        bundle=bundle,
+        bundle=cast(KBundle, bundle),
         import_id="imp-2004",
         task_id=start.task_id,
         task_service=task_service,

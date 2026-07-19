@@ -31,7 +31,6 @@ import json
 from typing import Any, cast
 
 import pytest
-
 from control_plane_backend.sessions.erasure_service import (
     STORE_CHECKPOINT,
     ConversationErasureService,
@@ -52,7 +51,9 @@ class _FakeResponse:
             import httpx
 
             raise httpx.HTTPStatusError(
-                "error", request=None, response=cast(Any, self)
+                "error",
+                request=httpx.Request("DELETE", "http://test.invalid"),
+                response=cast(Any, self),
             )
 
 

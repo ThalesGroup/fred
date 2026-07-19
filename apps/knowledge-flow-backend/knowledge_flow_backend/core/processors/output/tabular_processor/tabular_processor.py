@@ -354,18 +354,7 @@ class TabularProcessor(BaseOutputProcessor):
         schema_rows = connection.execute(schema_query).fetchall()
         normalized_rows = [(str(column_name), str(dtype_name) if dtype_name is not None else None) for column_name, dtype_name in schema_rows]
         columns = duckdb_schema(normalized_rows)
-        return [
-            column.model_copy(
-                update={
-                    "sample_values": self._read_low_cardinality_values(
-                        connection, quoted_path, column.name
-                    )
-                }
-            )
-            if column.dtype == "string"
-            else column
-            for column in columns
-        ]
+        return [column.model_copy(update={"sample_values": self._read_low_cardinality_values(connection, quoted_path, column.name)}) if column.dtype == "string" else column for column in columns]
 
     def _read_low_cardinality_values(
         self,
