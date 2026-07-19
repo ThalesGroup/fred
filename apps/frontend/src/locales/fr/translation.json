@@ -1082,6 +1082,9 @@
         "title": "Nouveau dossier"
       },
       "loading": "Chargement des ressources...",
+      "preview": {
+        "title": "Aperçu du document"
+      },
       "pagination": {
         "next": "Page suivante",
         "page": "page {{page}} / {{pageCount}}",

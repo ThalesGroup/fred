@@ -1082,6 +1082,9 @@
         "title": "New folder"
       },
       "loading": "Loading resources...",
+      "preview": {
+        "title": "Document preview"
+      },
       "pagination": {
         "next": "Next page",
         "page": "page {{page}} / {{pageCount}}",

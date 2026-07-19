@@ -1,0 +1,15 @@
+/* Reading column, matching the markdown extract's line length regardless of
+   host (full page or drawer). Only the markdown branch gets this constraint —
+   the PDF branch fills its host's full width. */
+.markdownBody {
+  margin: 0 auto;
+  padding: var(--spacing-xl) var(--spacing-l);
+  max-width: 760px;
+}
+
+.loading {
+  margin: var(--spacing-xl) auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}
