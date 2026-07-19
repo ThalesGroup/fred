@@ -1,6 +1,6 @@
 [project]
 name = "fred-sdk"
-version = "3.3.2"
+version = "3.3.3"
 description = "Authoring SDK for Fred agents — graph, ReAct, and team agent primitives."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -10,8 +10,8 @@ dependencies = [
   "fred-core>=3.4.1",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
-  "langchain>=0.3.0",
-  "langgraph>=1.1.3",
+  "langchain>=1.3.14",
+  "langgraph>=1.2.9",
   "httpx>=0.28.1",
 ]
 classifiers = [
