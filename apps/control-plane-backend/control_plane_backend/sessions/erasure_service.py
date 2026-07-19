@@ -341,6 +341,16 @@ class ConversationErasureService:
                 ok=False,
                 error=f"runtime checkpoint delete request failed: {exc}",
             )
+        except (ValueError, TypeError) as exc:
+            # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
+            # rolled to the `{"deleted": n}` contract) — `response.json()`
+            # raises `json.JSONDecodeError` (a `ValueError`). Degrade to an
+            # isolated failed store instead of crashing the whole fan-out.
+            return StoreErasureResult(
+                store=STORE_CHECKPOINT,
+                ok=False,
+                error=f"runtime checkpoint delete response was not parseable: {exc}",
+            )
 
     async def _erase_runtime_history(
         self,
@@ -377,4 +387,14 @@ class ConversationErasureService:
                 store=STORE_HISTORY,
                 ok=False,
                 error=f"runtime history delete request failed: {exc}",
+            )
+        except (ValueError, TypeError) as exc:
+            # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
+            # rolled to the `{"deleted": n}` contract) — `response.json()`
+            # raises `json.JSONDecodeError` (a `ValueError`). Degrade to an
+            # isolated failed store instead of crashing the whole fan-out.
+            return StoreErasureResult(
+                store=STORE_HISTORY,
+                ok=False,
+                error=f"runtime history delete response was not parseable: {exc}",
             )

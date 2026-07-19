@@ -33,6 +33,7 @@ from typing import Any, cast
 import pytest
 from control_plane_backend.sessions.erasure_service import (
     STORE_CHECKPOINT,
+    STORE_HISTORY,
     ConversationErasureService,
 )
 
@@ -45,6 +46,34 @@ class _FakeResponse:
 
     def json(self) -> dict[str, Any]:
         return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            import httpx
+
+            raise httpx.HTTPStatusError(
+                "error",
+                request=httpx.Request("DELETE", "http://test.invalid"),
+                response=cast(Any, self),
+            )
+
+
+class _EmptyBodyResponse:
+    """Mimics a real 2xx response with an empty/non-JSON body.
+
+    Real `httpx.Response.json()` runs the JSON decoder over `self.text` and
+    raises `json.JSONDecodeError` (a `ValueError` subclass) when that text is
+    empty or not valid JSON — e.g. a bare 204, or a runtime not yet rolled to
+    the `{"deleted": n}` contract. `_FakeResponse.json()` above cannot express
+    this because it unconditionally returns the constructor payload.
+    """
+
+    def __init__(self, status_code: int = 200) -> None:
+        self.status_code = status_code
+        self.text = ""
+
+    def json(self) -> Any:
+        return json.loads(self.text)
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -116,3 +145,52 @@ async def test_erase_runtime_checkpoint_defaults_to_zero_when_body_omits_deleted
 
     assert result.ok is True
     assert result.deleted_count == 0
+
+
+@pytest.mark.asyncio
+async def test_erase_runtime_checkpoint_handles_empty_body_without_crashing(
+    monkeypatch,
+) -> None:
+    # A real 2xx-with-empty-body response (bare 204, or a runtime not yet
+    # rolled to the `{"deleted": n}` contract) makes `response.json()` raise
+    # `json.JSONDecodeError`. This must degrade to an isolated ok=False result,
+    # not propagate and crash the whole erase fan-out.
+    response = _EmptyBodyResponse()
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(cast(Any, response), seen={}),
+    )
+
+    service = ConversationErasureService(cast(Any, None))
+    result = await service._erase_runtime_checkpoint(
+        "http://runtime:8000/pod/v1", "session-1", "Bearer test-token"
+    )
+
+    assert result.store == STORE_CHECKPOINT
+    assert result.ok is False
+    assert result.deleted_count is None
+    assert result.error is not None
+    assert "not parseable" in result.error
+
+
+@pytest.mark.asyncio
+async def test_erase_runtime_history_handles_empty_body_without_crashing(
+    monkeypatch,
+) -> None:
+    # Symmetric case for the sibling history store — same shape, same gap.
+    response = _EmptyBodyResponse()
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        lambda *args, **kwargs: _FakeAsyncClient(cast(Any, response), seen={}),
+    )
+
+    service = ConversationErasureService(cast(Any, None))
+    result = await service._erase_runtime_history(
+        "http://runtime:8000/pod/v1", "session-1", "Bearer test-token"
+    )
+
+    assert result.store == STORE_HISTORY
+    assert result.ok is False
+    assert result.deleted_count is None
+    assert result.error is not None
+    assert "not parseable" in result.error
