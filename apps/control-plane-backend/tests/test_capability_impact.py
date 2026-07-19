@@ -35,8 +35,8 @@ from types import SimpleNamespace
 
 import pytest
 from control_plane_backend.agent_instances.suspension import SuspensionReason
+from control_plane_backend.capabilities import enablement as enablement_mod
 from control_plane_backend.capabilities import impact as impact_mod
-from control_plane_backend.capabilities.enablement import revive_dependent_instances
 from test_main import _FakeAgentInstanceStore, _make_record
 
 
@@ -293,8 +293,6 @@ async def test_preview_default_off_excludes_explicitly_enabled_teams(
     async def _fake_explicitly_enabled(_rebac, _capability_id):
         return {"team-explicit"}
 
-    import control_plane_backend.capabilities.enablement as enablement_mod
-
     monkeypatch.setattr(
         enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
     )
@@ -333,8 +331,6 @@ async def test_preview_single_team_disable_ignores_explicit_enabled_exclusion(
     async def _fake_explicitly_enabled(_rebac, _capability_id):
         return {"team-explicit"}
 
-    import control_plane_backend.capabilities.enablement as enablement_mod
-
     monkeypatch.setattr(
         enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
     )
@@ -365,7 +361,7 @@ async def test_revive_clears_suspension_when_all_capabilities_return() -> None:
     )
     store = _FakeAgentInstanceStore([record])
 
-    revived = await revive_dependent_instances(
+    revived = await enablement_mod.revive_dependent_instances(
         agent_instance_store=store,
         capability_id="capa1",
         usable_capability_ids={"capa1"},
@@ -390,7 +386,7 @@ async def test_revive_keeps_suspension_when_another_capability_still_missing() -
     )
     store = _FakeAgentInstanceStore([record])
 
-    revived = await revive_dependent_instances(
+    revived = await enablement_mod.revive_dependent_instances(
         agent_instance_store=store,
         capability_id="capa1",
         usable_capability_ids={"capa1"},  # capa2 still NOT usable
@@ -415,7 +411,7 @@ async def test_revive_never_touches_config_invalid_suspension() -> None:
     )
     store = _FakeAgentInstanceStore([record])
 
-    revived = await revive_dependent_instances(
+    revived = await enablement_mod.revive_dependent_instances(
         agent_instance_store=store,
         capability_id="capa1",
         usable_capability_ids={"capa1"},
@@ -440,7 +436,7 @@ async def test_revive_skips_unreachable_pod() -> None:
     )
     store = _FakeAgentInstanceStore([record])
 
-    revived = await revive_dependent_instances(
+    revived = await enablement_mod.revive_dependent_instances(
         agent_instance_store=store,
         capability_id="capa1",
         usable_capability_ids={"capa1"},
