@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDispatch, useSelector } from "react-redux";
 import Button from "@shared/atoms/Button/Button";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
+import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import type { ColorTheme } from "@shared/utils/Type";
@@ -32,7 +32,6 @@ import {
   operationalToTaskState,
   type StatusTone,
 } from "./EvaluationShared";
-import { selectTask, taskRegistered } from "@rework/features/tasks/taskSlice";
 import {
   useCancelRunEvaluationV1RunsRunIdCancelPostMutation,
   useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation,
@@ -144,27 +143,44 @@ const RISK_TONE: Record<string, StatusTone> = { low: "success", medium: "warning
 interface EvaluationRunDetailProps {
   runId: string;
   selectedCaseId?: string;
+  teamId: string;
+  evaluationName: string;
   onBack: () => void;
+  onBackToList: () => void;
 }
 
-export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: EvaluationRunDetailProps) {
+export default function EvaluationRunDetail({
+  runId,
+  selectedCaseId,
+  evaluationName,
+  onBack,
+  onBackToList,
+}: EvaluationRunDetailProps) {
   const { t } = useTranslation();
   const [selectedCase, setSelectedCase] = useState<EvaluationCaseResponse | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RunAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  const {
-    data: run,
-    isLoading: runLoading,
-    refetch: refetchRun,
-  } = useGetRunEvaluationV1RunsRunIdGetQuery({ runId }, { skip: !runId });
+  // Whether the run is still active. Starts false — we don't know the state
+  // until the first fetch resolves — then tracks run.operational_state. Used
+  // to gate polling below; RTK Query still performs the initial fetch of both
+  // queries regardless of pollingInterval, so this doesn't delay first paint.
+  const [isLive, setIsLive] = useState(false);
+
+  const { data: run, isLoading: runLoading } = useGetRunEvaluationV1RunsRunIdGetQuery(
+    { runId },
+    { skip: !runId, pollingInterval: isLive ? 5000 : 0 },
+  );
 
   const {
     data: casesData,
     isLoading: casesLoading,
     refetch: refetchCases,
-  } = useListRunCasesEvaluationV1RunsRunIdCasesGetQuery({ runId, limit: 200 }, { skip: !runId });
+  } = useListRunCasesEvaluationV1RunsRunIdCasesGetQuery(
+    { runId, limit: 200 },
+    { skip: !runId, pollingInterval: isLive ? 5000 : 0 },
+  );
 
   const [cancelRun, { isLoading: isCancelling }] = useCancelRunEvaluationV1RunsRunIdCancelPostMutation();
   const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
@@ -178,31 +194,22 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
     },
   );
 
-  const isLive = run?.operational_state === "running" || run?.operational_state === "pending";
-
-  // The campaign run is a task in the shared task store. Register it (live only,
-  // dedup-safe) so useTaskSseManager streams /evaluation/v1/tasks/{task_id}/events;
-  // the badge/bar below read from the store. (TaskTray is currently unmounted from
-  // Sidebar.tsx, see BACKLOG.md P4 — this store registration is otherwise unaffected.)
-  const dispatch = useDispatch();
-  const taskVm = useSelector(selectTask(run?.task_id ?? ""));
+  // The run and cases queries poll independently, on their own timers — not
+  // in lockstep. If the run flips to a terminal state right as the cases
+  // poll was mid-cycle, the cases table can freeze one tick before the last
+  // case's own result actually landed (the exact symptom: run header shows
+  // "Done, 5/5", one case row still stuck on "Running"). Force one more
+  // cases fetch on the live -> terminal transition so the table can't get
+  // stuck behind the run's own terminal write.
+  const wasLiveRef = useRef(false);
   useEffect(() => {
-    if (!run?.task_id || !isLive) return;
-    dispatch(
-      taskRegistered({
-        taskId: run.task_id,
-        kind: "evaluation",
-        target: { type: "evaluation_run", id: run.run_id, label: run.snapshot.evaluation_name },
-      }),
-    );
-  }, [dispatch, run?.task_id, run?.run_id, run?.snapshot.evaluation_name, isLive]);
-
-  // Refresh domain data (run aggregates + cases) as the task progresses.
-  useEffect(() => {
-    if (!taskVm) return;
-    refetchRun();
-    refetchCases();
-  }, [taskVm?.lastSeq, taskVm?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+    const nowLive = run?.operational_state === "running" || run?.operational_state === "pending";
+    if (wasLiveRef.current && !nowLive) {
+      refetchCases();
+    }
+    wasLiveRef.current = nowLive;
+    setIsLive(nowLive);
+  }, [run?.operational_state, refetchCases]);
 
   // Auto-open the case drawer when opened from the campaigns list.
   useEffect(() => {
@@ -245,8 +252,8 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
 
   const cases = casesData?.cases ?? [];
   const rate = passRate(run);
-  const taskState = taskVm?.state ?? operationalToTaskState(run.operational_state);
-  const taskProgress = taskVm?.progress ?? (run.total_cases ? run.completed_cases / run.total_cases : null);
+  const taskState = operationalToTaskState(run.operational_state);
+  const taskProgress = run.total_cases ? run.completed_cases / run.total_cases : null;
 
   const metricEntries = aggregateMetricAverages(cases);
   const globalScore = metricEntries.length
@@ -268,11 +275,18 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
 
   return (
     <div className={styles.page}>
+      <Breadcrumb
+        segments={[
+          { label: t("rework.evaluation.evaluations.title"), onClick: onBackToList },
+          { label: evaluationName, onClick: onBack },
+          { label: t("rework.evaluation.detail.subtitle", { id: run.run_id.slice(0, 12) }) },
+        ]}
+      />
+
       {/* Header */}
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>{run.snapshot.evaluation_name}</h1>
-          <p className={styles.subtitle}>{t("rework.evaluation.detail.subtitle", { id: run.run_id.slice(0, 12) })}</p>
         </div>
         <div className={styles.actions}>
           {isLive && (
@@ -289,7 +303,14 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
               {isAnalyzing ? t("rework.evaluation.detail.analyzing") : t("rework.evaluation.detail.analyze")}
             </Button>
           )}
-          {telemetry?.enabled && (
+          {/* `telemetry.enabled` is a static config flag (tracer == "langfuse"),
+              not a live reachability check — a deployment can have it set
+              without ever actually running Langfuse. Only show this action
+              when there's a real session to open, or a legitimate in-flight
+              wait (a session URL already exists, e.g. mid-run before Langfuse
+              has ingested the trace yet). Never render a permanently-dead
+              "offline" button for a tracer that was never really reachable. */}
+          {telemetry?.enabled && (langfuseSession?.available || telemetry?.langfuse_session_url) && (
             <Button
               color="on-surface"
               variant="outlined"
@@ -299,20 +320,9 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
             >
               {langfuseSession?.available
                 ? t("rework.evaluation.detail.langfuseOpen")
-                : telemetry?.langfuse_session_url
-                  ? t("rework.evaluation.detail.langfuseWaiting")
-                  : t("rework.evaluation.detail.langfuseOffline")}
+                : t("rework.evaluation.detail.langfuseWaiting")}
             </Button>
           )}
-          <Button
-            color="on-surface"
-            variant="text"
-            size="medium"
-            icon={{ category: "outlined", type: "arrow_back" }}
-            onClick={onBack}
-          >
-            {t("rework.evaluation.detail.back")}
-          </Button>
         </div>
       </div>
 
@@ -353,10 +363,18 @@ export default function EvaluationRunDetail({ runId, selectedCaseId, onBack }: E
         />
       </div>
 
-      {/* Metric averages */}
+      {/* Metric averages — while the run is still live this is a rolling
+          average of whichever cases have reported a score so far, not the
+          final number. Label it as partial so it can't be mistaken for the
+          finished result (the header's own pass-rate summary is the only
+          number that's authoritative before completion). */}
       {metricEntries.length > 0 && (
         <div className={styles.card}>
-          <span className={styles.cardTitle}>{t("rework.evaluation.detail.metricScores")}</span>
+          <span className={styles.cardTitle}>
+            {isLive
+              ? t("rework.evaluation.detail.metricScoresPartial", { done: run.completed_cases, total: run.total_cases })
+              : t("rework.evaluation.detail.metricScores")}
+          </span>
           <div className={styles.metricList}>
             {metricEntries.map(([name, avg]) => {
               const pct = Math.round(avg * 100);
@@ -507,11 +525,15 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
       </div>
 
       <FieldBlock label={t("rework.evaluation.detail.input")} value={caseData.input} />
-      {caseData.expected_output && (
-        <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} />
-      )}
-      {caseData.actual_output && (
-        <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} />
+      {(caseData.expected_output || caseData.actual_output) && (
+        <div className={styles.compareGrid}>
+          {caseData.expected_output && (
+            <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} />
+          )}
+          {caseData.actual_output && (
+            <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} />
+          )}
+        </div>
       )}
 
       {caseData.execution_error && (

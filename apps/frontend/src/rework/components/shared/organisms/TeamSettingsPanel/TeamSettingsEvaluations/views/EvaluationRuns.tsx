@@ -17,14 +17,14 @@
 // row here, which is exactly what makes two Runs comparable: they differ only by
 // the target/config each froze in its RunSnapshot.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { IndicatorDot } from "@shared/atoms/IndicatorDot/IndicatorDot";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
+import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
-import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
@@ -34,12 +34,14 @@ import {
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
+  useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation,
   type EvaluationCaseResponse,
   type EvaluationRun,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationRuns.module.css";
 
 interface EvaluationRunsProps {
+  teamId: string;
   evaluationId: string;
   evaluationName: string;
   onBack: () => void;
@@ -151,6 +153,7 @@ function CaseCard({ c, onClick }: { c: EvaluationCaseResponse; onClick: () => vo
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function EvaluationRuns({
+  teamId,
   evaluationId,
   evaluationName,
   onBack,
@@ -167,6 +170,7 @@ export default function EvaluationRuns({
     { skip: !evaluationId, pollingInterval: 10_000 },
   );
   const [deleteRun, { isLoading: isDeleting }] = useDeleteRunEvaluationV1RunsRunIdDeleteMutation();
+  const [startRun, { isLoading: isRerunning }] = useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation();
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -186,6 +190,35 @@ export default function EvaluationRuns({
   const totalCases = runs.reduce((sum, run) => sum + run.completed_cases, 0);
   const criticalErrors = runs.reduce((sum, run) => sum + run.execution_error_cases, 0);
 
+  // Most recent run, sorted defensively — do not assume the API already
+  // orders by recency. Only a "managed_instance" target can be one-click
+  // rerun (see StartRunRequest); anything else falls back to "New run…".
+  const mostRecentRun = useMemo(
+    () => [...runs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null,
+    [runs],
+  );
+  const rerunManagedTarget = mostRecentRun?.target.kind === "managed_instance" ? mostRecentRun.target : null;
+  const rerunTargetLabel = mostRecentRun ? targetLabel(mostRecentRun.target, t) : "";
+
+  const handleRerun = async () => {
+    if (!rerunManagedTarget) return;
+    try {
+      const result = await startRun({
+        evaluationId,
+        startRunRequest: {
+          team_id: teamId,
+          target: { kind: "managed_instance", agent_instance_id: rerunManagedTarget.agent_instance_id },
+        },
+      }).unwrap();
+      onOpenRun(result.run_id);
+    } catch (e) {
+      const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
+      showError({
+        summary: typeof detail === "string" ? detail : t("rework.evaluation.runCreate.error"),
+      });
+    }
+  };
+
   // Service unreachable → mirror the knowledge-flow "service not running" notice.
   if (isError) {
     return (
@@ -202,24 +235,36 @@ export default function EvaluationRuns({
 
   return (
     <div className={styles.page}>
+      <Breadcrumb
+        segments={[{ label: t("rework.evaluation.evaluations.title"), onClick: onBack }, { label: evaluationName }]}
+      />
+
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>{evaluationName}</h1>
           <p className={styles.subtitle}>{t("rework.evaluation.runs.description")}</p>
         </div>
-        <div className={styles.actionsCell}>
-          <Button
-            color="on-surface"
-            variant="text"
-            size="medium"
-            icon={{ category: "outlined", type: "arrow_back" }}
-            onClick={onBack}
-          >
-            {t("rework.evaluation.runs.backToEvaluations")}
-          </Button>
-          <Button color="primary" variant="filled" size="medium" onClick={onNewRun}>
-            {t("rework.evaluation.runs.newRun")}
-          </Button>
+        <div className={styles.headerActionsColumn}>
+          <div className={styles.headerActions}>
+            <Button color="on-surface" variant="outlined" size="medium" onClick={onNewRun}>
+              {t("rework.evaluation.runs.newRun")}
+            </Button>
+            {rerunManagedTarget && (
+              <Button color="primary" variant="filled" size="medium" disabled={isRerunning} onClick={handleRerun}>
+                {isRerunning
+                  ? t("rework.evaluation.runCreate.starting")
+                  : t("rework.evaluation.runs.rerun", { target: rerunTargetLabel })}
+              </Button>
+            )}
+          </div>
+          {rerunManagedTarget && (
+            <p className={styles.rerunHint}>
+              {t("rework.evaluation.runs.rerunHint", {
+                target: rerunTargetLabel,
+                model: rerunManagedTarget.agent_instance_id,
+              })}
+            </p>
+          )}
         </div>
       </div>
 
@@ -251,11 +296,7 @@ export default function EvaluationRuns({
       </div>
 
       {!isLoading && runs.length === 0 && (
-        <PageEmptyState
-          icon="reviews"
-          message={t("rework.evaluation.runs.empty")}
-          action={{ label: t("rework.evaluation.runs.newRun"), onClick: onNewRun }}
-        />
+        <ServiceNotice icon="reviews" title={t("rework.evaluation.runs.empty")} centered />
       )}
 
       {!isLoading && runs.length > 0 && (

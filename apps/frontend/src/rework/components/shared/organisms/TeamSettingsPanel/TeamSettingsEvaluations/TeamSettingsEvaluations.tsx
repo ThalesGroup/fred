@@ -53,9 +53,10 @@ export default function TeamSettingsEvaluations({ team }: TeamSettingsEvaluation
       <EvaluationCreate
         teamId={team.id}
         onCancel={() => setView({ kind: "evaluations" })}
-        // A fresh Evaluation has no Runs yet — land on its (empty) run list, which
-        // offers "New run" as its primary action.
-        onCreated={(evaluationId, evaluationName) => setView({ kind: "runs", evaluationId, evaluationName })}
+        // Back to the full list, not straight into the new evaluation's runs —
+        // seeing it land in the list first reinforces that a run is started
+        // FROM an evaluation, a deliberate next click, not an automatic step.
+        onCreated={() => setView({ kind: "evaluations" })}
       />
     );
   }
@@ -84,7 +85,10 @@ export default function TeamSettingsEvaluations({ team }: TeamSettingsEvaluation
       <EvaluationRunDetail
         runId={view.runId}
         selectedCaseId={view.selectedCaseId}
+        teamId={team.id}
+        evaluationName={view.evaluationName}
         onBack={() => setView({ kind: "runs", evaluationId: view.evaluationId, evaluationName: view.evaluationName })}
+        onBackToList={() => setView({ kind: "evaluations" })}
       />
     );
   }
@@ -94,6 +98,7 @@ export default function TeamSettingsEvaluations({ team }: TeamSettingsEvaluation
       <EvaluationRuns
         evaluationId={view.evaluationId}
         evaluationName={view.evaluationName}
+        teamId={team.id}
         onBack={() => setView({ kind: "evaluations" })}
         onNewRun={() =>
           setView({ kind: "runCreate", evaluationId: view.evaluationId, evaluationName: view.evaluationName })

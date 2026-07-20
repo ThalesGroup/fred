@@ -18,10 +18,9 @@
 
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { StatusPill } from "./EvaluationShared";
-import { useListEvaluationsEvaluationV1EvaluationsGetQuery } from "../../../../../../../slices/evaluation/evaluationOpenApi";
+import { useListEvaluationsQuery } from "../../../../../../../slices/evaluation/evaluationApiEnhancements";
 import styles from "./Evaluations.module.css";
 
 interface EvaluationsProps {
@@ -33,7 +32,7 @@ interface EvaluationsProps {
 export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation }: EvaluationsProps) {
   const { t } = useTranslation();
 
-  const { data, isLoading, isError } = useListEvaluationsEvaluationV1EvaluationsGetQuery({ teamId }, { skip: !teamId });
+  const { data, isLoading, isError } = useListEvaluationsQuery({ teamId }, { skip: !teamId });
 
   const evaluations = data?.evaluations ?? [];
 
@@ -65,11 +64,7 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
       {isLoading && <p className={styles.muted}>{t("common.loading")}</p>}
 
       {!isLoading && evaluations.length === 0 && (
-        <PageEmptyState
-          icon="database"
-          message={t("rework.evaluation.evaluations.empty")}
-          action={{ label: t("rework.evaluation.evaluations.new"), onClick: onNewEvaluation }}
-        />
+        <ServiceNotice icon="database" title={t("rework.evaluation.evaluations.empty")} centered />
       )}
 
       {!isLoading && evaluations.length > 0 && (
