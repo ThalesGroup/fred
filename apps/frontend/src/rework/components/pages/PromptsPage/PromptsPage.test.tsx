@@ -139,6 +139,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   ],
 }));
 
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useUsersByIdsQuery: () => ({ data: [] }),
+}));
+
 import PromptsPage from "./PromptsPage";
 
 // FullPageModal renders through a `createPortal` into a div appended

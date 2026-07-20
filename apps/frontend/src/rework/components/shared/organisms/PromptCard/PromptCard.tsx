@@ -20,6 +20,8 @@ import styles from "./PromptCard.module.scss";
 
 export interface PromptCardProps {
   prompt: PromptSummary;
+  /** Resolved display name for `prompt.created_by` (falls back to the raw uid upstream). */
+  authorName?: string;
   canManage: boolean;
   onEdit: () => void;
 }
@@ -32,7 +34,7 @@ function colorIndex(id: string): number {
   return h % PALETTE_SIZE;
 }
 
-export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProps) {
+export default function PromptCard({ prompt, authorName, canManage, onEdit }: PromptCardProps) {
   const catDef = prompt.category ? PROMPT_CATEGORY_MAP[prompt.category] : null;
   const idx = colorIndex(prompt.id);
   const body = prompt.description && prompt.description !== prompt.name ? prompt.description : null;
@@ -93,7 +95,7 @@ export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProp
       {/* ── Footer: uses left · author right ── */}
       <div className={styles.footer}>
         <span className={styles.uses}>▷ {prompt.session_count ?? 0}</span>
-        <span className={styles.author}>{prompt.created_by ?? "—"}</span>
+        <span className={styles.author}>{authorName ?? "—"}</span>
       </div>
     </div>
   );
