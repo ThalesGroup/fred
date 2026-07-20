@@ -6340,16 +6340,21 @@ def _wire_capability_catalog(
 
 
 def _stub_chat_controls(
-    monkeypatch: pytest.MonkeyPatch, response: ChatControlsResponse | None
+    monkeypatch: pytest.MonkeyPatch,
+    response: ChatControlsResponse | None,
+    captured_authorization: list | None = None,
 ) -> list[int]:
     """Stub the control-plane→pod chat-controls call (#1976). Returns a
     one-element counter of how many times the pod was asked — misses only, so a
-    cache hit leaves it unchanged."""
+    cache hit leaves it unchanged. Pass `captured_authorization` to record the
+    bearer forwarded on each pod call (#2029)."""
 
     calls = [0]
 
-    async def _fake_fetch_chat_controls(_base_url, _request):
+    async def _fake_fetch_chat_controls(_base_url, _request, authorization=None):
         calls[0] += 1
+        if captured_authorization is not None:
+            captured_authorization.append(authorization)
         return response
 
     monkeypatch.setattr(
@@ -6455,6 +6460,44 @@ async def test_prepare_execution_attaches_computed_chat_controls(
         },
         {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_forwards_bearer_to_chat_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2029: the pod's chat-controls route authenticates the caller, so prep
+    must forward the acting user's Authorization header — a bearer-less call
+    401s on auth-enabled deployments and silently empties the composer."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cc-auth")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    captured_auth: list = []
+    _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[ChatControlItem(widget="rag_scope")],
+                )
+            ]
+        ),
+        captured_authorization=captured_auth,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cc-auth/prepare-execution",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 200
+    assert captured_auth == ["Bearer test-token"]
 
 
 @pytest.mark.asyncio

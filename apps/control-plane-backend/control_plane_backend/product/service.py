@@ -591,25 +591,33 @@ async def _agent_capabilities_for_source(
 
 
 async def _fetch_chat_controls(
-    base_url: str, request: ChatControlsRequest
+    base_url: str,
+    request: ChatControlsRequest,
+    authorization: str | None = None,
 ) -> ChatControlsResponse | None:
     """
     Ask one pod to evaluate a batch of capabilities' chat controls (#1976).
 
-    POST `/agents/capabilities/chat-controls` — the same bearer-less control-
-    plane→pod call path as `_fetch_mcp_catalog`. Returns None when the pod is
-    unreachable: the missed capabilities' controls are then simply ABSENT from
-    this prep (logged, best-effort — the same silent-degrade contract as the
-    catalog fetch), never served from a stale entry, since a cache MISS by
-    construction has no entry to fall back to.
+    POST `/agents/capabilities/chat-controls` — forwards the acting user's
+    bearer (#2029): the pod route requires authentication ("reuses the same
+    bearer the pod validates for `/agents/*`"), so on auth-enabled deployments
+    a bearer-less call 401s and silently kills every composer control.
+    Returns None when the pod is unreachable: the missed capabilities'
+    controls are then simply ABSENT from this prep (logged, best-effort — the
+    same silent-degrade contract as the catalog fetch), never served from a
+    stale entry, since a cache MISS by construction has no entry to fall back
+    to.
     """
 
     if not request.items:
         return ChatControlsResponse(results=[])
     url = f"{base_url.rstrip('/')}/agents/capabilities/chat-controls"
+    headers = {"Authorization": authorization} if authorization else None
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(url, json=request.model_dump(mode="json"))
+            response = await client.post(
+                url, json=request.model_dump(mode="json"), headers=headers
+            )
         response.raise_for_status()
         return ChatControlsResponse.model_validate(response.json())
     except Exception as exc:
@@ -621,6 +629,7 @@ async def _resolve_chat_controls(
     tuning: ManagedAgentTuning,
     available_capabilities: Sequence[CapabilityCatalogEntry],
     base_url: str,
+    authorization: str | None = None,
 ) -> list[ChatControlDescriptor]:
     """
     Resolve one instance's chat controls at session prep, cache-aside (#1976).
@@ -679,7 +688,7 @@ async def _resolve_chat_controls(
 
     if misses:
         response = await _fetch_chat_controls(
-            base_url, ChatControlsRequest(items=misses)
+            base_url, ChatControlsRequest(items=misses), authorization=authorization
         )
         if response is not None:
             for result in response.results:
@@ -2423,6 +2432,7 @@ async def prepare_execution(
     session_id: str | None = None,
     lang: str = "en",
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -2532,7 +2542,12 @@ async def prepare_execution(
     # no controls this prep (logged), never a failed prep.
     available_capabilities = await _available_capabilities_for_source(source.base_url)
     chat_controls = await _resolve_chat_controls(
-        instance.tuning, available_capabilities, source.base_url
+        instance.tuning,
+        available_capabilities,
+        source.base_url,
+        # The pod's chat-controls route authenticates the caller (#2029);
+        # forward the acting user's bearer like the validate-config round-trip.
+        authorization=authorization,
     )
 
     return ExecutionPreparation(
