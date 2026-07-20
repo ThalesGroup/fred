@@ -78,7 +78,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.models import FieldSpec
+from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import DocumentSearchResult
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
@@ -311,6 +311,9 @@ class DocumentAccessCapability(
                     "Restrict search to these document library tag ids. Empty = "
                     "no capability-side restriction (still bounded by the session)."
                 ),
+                # Rendered as the library/document tree picker, not a raw
+                # tag-id text input.
+                ui=UIHints(widget="document_libraries"),
             ),
             FieldSpec(
                 key="document_uids",

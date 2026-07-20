@@ -1474,6 +1474,7 @@ export type ManagedAgentUiHints = {
   textarea?: boolean;
   group?: string | null;
   hide?: boolean;
+  widget?: string | null;
 };
 export type ManagedAgentFieldSpec = {
   key: string;
@@ -1503,6 +1504,8 @@ export type UiHints = {
   textarea?: boolean;
   group?: string | null;
   hide?: boolean;
+  /** Names a frontend stock form widget to render this field instead of the type-derived default input. Known ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
+  widget?: string | null;
 };
 export type FieldSpec = {
   key: string;

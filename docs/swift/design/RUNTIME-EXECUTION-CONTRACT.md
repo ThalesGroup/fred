@@ -1073,6 +1073,26 @@ unaudited in a shipped environment.
 - Regression coverage:
   `libs/fred-runtime/tests/test_deep_agent_middleware.py`.
 
+### 8.18 ✅ `FieldSpec.ui.widget` stock form-widget hint — #2023 (2026-07-20)
+
+**What changed.** `UIHints` (`fred_sdk/contracts/models.py`) gained an optional
+`widget: str | None` field. It names a frontend stock **form** widget to render
+that field in the agent-creation/edit form instead of the type-derived default
+input — distinct from the chat-turn `ChatControlSpec.widget` registry. First
+consumer: `document_access.library_tag_ids` sets
+`ui=UIHints(widget="document_libraries")`, rendered by the frontend
+`TuningFieldRenderer` as the `DocumentLibraryScopePicker` tree instead of a raw
+tag-id `TagInput`. Control-plane's `ManagedAgentUiHints` mirror gained the same
+field.
+
+**Why.** Users had to hand-type library tag ids when configuring the
+document-access capability on an agent; the tree picker already existed for the
+chat composer. Additive and backward compatible: `None`/unknown widget ids fall
+back to the default input, and older pods simply omit the field.
+
+`controlPlaneOpenApi.ts` and `runtimeOpenApi.ts` regenerated
+(`make update-control-plane-api` / `make update-runtime-api`).
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`
