@@ -22,6 +22,7 @@
 - **Bug Fixes**
 
   - Fix the evaluation worker's service-account identity being denied on every run case (`prepare-execution` requires `CAN_USE_TEAM_AGENTS`, which the service-agent allowlist never carried) — every evaluation run was blocked from executing (fred-core 3.4.5)
+  - Fix the evaluation worker's service-account identity being denied on `get_tabular_dataset_schema` — the same service-agent ReBAC bypass already used for document/tag access was never applied to tabular datasets, 403'ing every evaluation case touching a team's tabular corpus (`knowledge-flow-backend`, #2018)
   - Fix evaluation run rows never reaching a terminal state on a full workflow failure, and never showing incremental per-case progress while running — both left the runs list stuck at "Pending 0/N" (`fred-evaluation-backend`)
   - Fix a case-drawer table column overflow where a long judge-profile label could clip the Detail/Delete action buttons
   - Fix a team admin's "add member" search silently returning nothing (403 swallowed) because it called the platform-admin-only `/users` listing instead of a team-scoped endpoint
