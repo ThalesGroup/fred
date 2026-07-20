@@ -868,7 +868,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = self._client.delete_by_query(index=self._index, body=body)
             deleted = int(resp.get("deleted", 0))
-            logger.debug("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
+            logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
