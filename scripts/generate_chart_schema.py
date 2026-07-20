@@ -261,6 +261,11 @@ _MIGRATION = _obj({
     "command": _arr(_STRING),
     "args": _arr(_STRING),
     "resources": _OBJECT_FREE,
+    # Annotations for the migration Job pod only. Distinct from the app-level
+    # podAnnotations, which are shared with the Deployment: a service-mesh
+    # sidecar that is desirable on a long-running Deployment keeps a hook Job
+    # from ever completing, so the opt-out must target the Job alone.
+    "podAnnotations": _OBJECT_FREE,
 })
 
 _COMMAND = _obj({

@@ -135,6 +135,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -1783,6 +1786,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -2556,6 +2562,9 @@
                   }
                 },
                 "resources": {
+                  "type": "object"
+                },
+                "podAnnotations": {
                   "type": "object"
                 }
               },
@@ -7064,6 +7073,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -11571,6 +11583,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -13430,6 +13445,9 @@
                   }
                 },
                 "resources": {
+                  "type": "object"
+                },
+                "podAnnotations": {
                   "type": "object"
                 }
               },
