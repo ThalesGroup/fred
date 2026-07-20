@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import KeycloakUser
+from fred_core import AuthorizationError, KeycloakUser
+from fred_core.security.models import Resource
 
 from knowledge_flow_backend.features.filesystem import mcp_fs_controller as controller_module
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
@@ -150,6 +151,26 @@ def test_fs_page_returns_403_for_permission_error(app_context, monkeypatch) -> N
 
     assert response.status_code == 403
     assert "Forbidden" in response.text
+
+
+def test_fs_ls_returns_403_for_authorization_error(app_context, monkeypatch) -> None:
+    """AuthorizationError must map to 403, not fall through to the generic
+    500 branch (previously it did — `_handle_exception` only special-cased
+    `PermissionError`, so a real ReBAC denial from `rebac_engine.py` crashed
+    instead of being reported as a routine 403 auth failure)."""
+    service = _ServiceStub()
+
+    async def fake_ls(user, path="/"):
+        del user, path
+        raise AuthorizationError("u-1", "can_read", Resource.TEAM, "Not authorized")
+
+    service.ls = fake_ls
+
+    with _build_filesystem_app(monkeypatch, service) as client:
+        response = client.get("/knowledge-flow/v1/fs/list", params={"path": "/team/personal-u-1"})
+
+    assert response.status_code == 403
+    assert "Not authorized" in response.text
 
 
 def test_fs_page_returns_structured_payload(app_context, monkeypatch) -> None:

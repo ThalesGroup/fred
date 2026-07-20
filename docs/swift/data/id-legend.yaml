@@ -503,6 +503,77 @@ items:
       lint/render clean; remaining Step 6 chart gate (migration disabled by
       default) still open.
 
+  - id: AUTHZ-08
+    title: "Personal-team ReBAC gap: real self-provisioned tuple, write-guarded"
+    status: done
+    owner: Dimitri
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
+      design: "docs/swift/platform/REBAC.md, docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §2.2/§8.19"
+      issue: "https://github.com/ThalesGroup/fred/issues/2034"
+    notes: >
+      Found live 2026-07-20: personal teams (`personal-<uid>`) had zero
+      OpenFGA tuples of any kind, confirmed by directly querying the store.
+      Root cause traced to AUTHZ-05 item 8b (2026-07-13): removing the
+      Keycloak-groups-derived contextual-relation fallback incidentally also
+      removed the only thing that had ever made a personal space's `CAN_READ`
+      check pass (a non-persisted, non-Keycloak contextual `team_member`
+      relation the same helper injected). The item 8b fix that shipped
+      (`agent_app.py::_authorize_execution_or_raise`, exact-identity-match
+      guard, no OpenFGA call) was applied to exactly one call site and never
+      generalized. Sweep of every other real ReBAC team-permission check
+      confirmed the same root cause reachable elsewhere: knowledge-flow-
+      backend's filesystem routes crashed 500 (local exception handling
+      swallowed `AuthorizationError` into a generic 500 before the app's
+      registered 403 handler ever ran); corpus_manager_controller.py,
+      tag_service.py's canonical-id path, openai_compat_router.py,
+      fred-core's `tasks/authz.py::list_tasks_scoped`, and all 5
+      evaluations/api.py endpoints wrongly 403'd the space's own owner.
+      Considered and rejected: generalizing the identity-only guard (matches
+      AUTHZ-05 item 8b's original intent, but structurally cannot support
+      `ListObjects`/enumeration — `lookup_user_resources` would still omit a
+      user's own personal team from any "list my teams" surface — and
+      requires re-threading the same special case into every future caller,
+      the exact whack-a-mole shape PERSONAL-TEAM-ISOLATION-RFC.md §3 already
+      rejected once for a different problem). Shipped instead: personal teams
+      are real ReBAC team objects. `RebacEngine.check_user_permission_or_raise`
+      /`has_user_permission` (fred-core, shared by every backend) self-heal
+      exactly one tuple — `user:<uid> team_editor team:personal-<uid>` — on
+      the owner's first touch (idempotent via `has_direct_relation`, so no
+      re-write or audit-log spam on repeat checks); `team_editor` was chosen
+      because it exactly reproduces `build_personal_team`'s hardcoded
+      permission set. `RebacEngine.add_relation` — the one audited write
+      chokepoint every relation write already funneled through — now refuses
+      any tuple naming a personal team except that owner self-grant and the
+      structural `organization -> team` edge, so no admin API, import/export
+      path, or future caller can write a tuple granting anyone access to
+      someone else's personal space; this is what makes a real, persisted
+      tuple safe here (closes the residual risk a plain identity-only guard
+      was originally chosen to avoid — checked live: `teams/service.py`'s
+      `grant_team_member_role` had no such guard before this, so the "no
+      tuple" design was protected by accident, not by policy, prior to this
+      fix). `agent_app.py`'s local identity-only branch deleted — the plain
+      `check_user_team_permission_or_raise` call now handles personal spaces
+      correctly with no special-casing, same as every other caller.
+      Independent, secondary fix bundled in the same pass: knowledge-flow-
+      backend's `mcp_fs_controller._handle_exception` now maps
+      `AuthorizationError` to 403 explicitly (previously fell through to the
+      generic 500 branch), and `mcp_fs_service.py`'s 9 call sites no longer
+      double-log an ERROR-level traceback for an expected, routine denial
+      (ReBAC already logs one bounded WARNING at the point of denial; the
+      audit trail already carries the structured record). Verified offline:
+      fred-core 297 passed (9 new tests: self-heal provisions/is idempotent/
+      never provisions another user's space, add_relation write-guard allows
+      the two sanctioned shapes and rejects everything else), fred-runtime
+      556 passed (3 personal-space tests in test_agent_app.py rewritten to
+      prove agent_app.py no longer special-cases the outcome), knowledge-
+      flow-backend 382 passed (2 new tests: `AuthorizationError` → 403,
+      no ERROR-level log on denial); `make code-quality` clean on all three.
+      No live integration test run (standing repo convention) — OpenFGA
+      write idempotency (`on_duplicate_writes=IGNORE`) verified by reading
+      `openfga_engine.py`, not by exercising a live store.
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01

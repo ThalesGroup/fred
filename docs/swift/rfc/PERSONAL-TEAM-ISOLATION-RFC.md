@@ -168,12 +168,39 @@ Add to the sessions and agent-instances sections:
 > by team membership. No additional per-resource `user_id` filter is required or
 > maintained for personal space resources.
 
-### REBAC — no model change
+### REBAC — updated 2026-07-20 (AUTHZ-08)
 
-The ReBAC model remains unchanged. Personal teams become real isolated team
-objects. Each user is `MEMBER` of exactly one personal team (their own). The
-existing `MEMBER` relation and team-scoped permission checks apply without
-modification.
+This section originally claimed "each user is `MEMBER` of exactly one personal
+team... the existing `MEMBER` relation... applies without modification." That
+was never actually implemented here — no code path ever wrote a ReBAC tuple
+for a personal team. A contextual (never-persisted) `team_member` relation
+happened to cover the gap until AUTHZ-05 item 8b (2026-07-13) removed it as
+part of decoupling ReBAC from Keycloak groups, at which point every personal-
+space permission check that didn't go through control-plane's synthetic-DTO
+shortcut (`build_personal_team`) started failing — either as a wrongful 403
+(most call sites) or, where local exception handling didn't expect
+`AuthorizationError`, an unhandled 500 (`knowledge-flow-backend`'s filesystem
+routes). Confirmed live 2026-07-20; see AUTHZ-08.
+
+**Current design (AUTHZ-08):** personal teams are real ReBAC team objects.
+`RebacEngine.check_user_permission_or_raise`/`has_user_permission` (fred-core,
+shared by every backend) self-heal the owner's own `team_editor` tuple
+(`user:<uid> team_editor team:personal-<uid>`) on first touch — chosen over
+`team_member` because it exactly reproduces `build_personal_team`'s hardcoded
+permission set (`can_read`, `can_update_resources`, `can_update_agents`, all
+implied by `team_editor`). `RebacEngine.add_relation` — the single audited
+write chokepoint every relation write funnels through — refuses any tuple
+naming a personal team except that one self-grant and the structural
+`organization -> team` edge, so no admin API, import/export path, or future
+caller can write (accidentally or otherwise) a tuple granting anyone access to
+someone else's personal space. This closes the actual security question this
+RFC exists to answer, permanently: unlike the removed contextual-relation
+approach or the identity-only guard AUTHZ-05 item 8b introduced locally in
+`fred-runtime`'s `agent_app.py` (now deleted — this generalizes it to every
+backend and every ReBAC surface, including `ListObjects`/enumeration, which an
+identity-only guard structurally cannot support), the tuple is real, so
+`lookup_user_resources` (e.g. the `/fs` virtual `/teams` directory) lists a
+user's own personal team like any other, with no per-caller special-casing.
 
 ---
 

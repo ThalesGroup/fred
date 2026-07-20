@@ -2041,12 +2041,16 @@ _BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
 
 
 @pytest.mark.asyncio
-async def test_authorize_allows_personal_space_owner_without_openfga(
+async def test_authorize_allows_personal_space_owner_via_rebac_check(
     monkeypatch, minimal_config
 ) -> None:
     """A human caller acting on their own canonical personal_team_id is authorized
-    as intrinsic ownership — no OpenFGA call (AUTHZ-05 item 8b watch item)."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)  # would deny if consulted
+    through the plain `CAN_READ` team check — no special-casing here (AUTHZ-08,
+    supersedes AUTHZ-05 item 8b). In the real system this succeeds because
+    `RebacEngine.check_user_team_permission_or_raise` self-heals the owner's own
+    `team_editor` tuple on first touch; this test only proves agent_app.py no
+    longer short-circuits before the check, i.e. the engine IS consulted."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)  # models the self-healed tuple
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
@@ -2054,20 +2058,27 @@ async def test_authorize_allows_personal_space_owner_without_openfga(
         _managed_request(team_id=personal_team_id(_ALICE.uid)), _ALICE, container
     )
 
-    assert engine.calls == []
+    assert engine.calls == [
+        ("alice", TeamPermission.CAN_READ, personal_team_id(_ALICE.uid))
+    ]
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "personal_space_owner_authorized"
+    assert events[-1]["audit_event"] == "rebac_authorized"
     assert events[-1].get("team_id") == personal_team_id(_ALICE.uid)
 
 
 @pytest.mark.asyncio
-async def test_authorize_denies_other_users_personal_space(
+async def test_authorize_denies_other_users_personal_space_via_rebac_check(
     monkeypatch, minimal_config
 ) -> None:
-    """Alice requesting Bob's personal space is denied outright — a permissive
-    (or residual) OpenFGA tuple must never be able to rescue this."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)  # would allow if consulted
+    """Alice requesting Bob's personal space is denied — via the plain `CAN_READ`
+    team check, not a local identity guard. In the real system no tuple is ever
+    provisioned for Alice on Bob's space (self-heal only ever grants the space's
+    own owner), and `RebacEngine.add_relation`'s write-guard refuses any other
+    shape naming a personal team (AUTHZ-08) — that invariant is proven in
+    fred-core's own test suite, not here. This test only proves agent_app.py
+    defers to the check rather than special-casing the outcome."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)  # models "no tuple exists"
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
@@ -2077,20 +2088,23 @@ async def test_authorize_denies_other_users_personal_space(
         )
 
     assert exc.value.status_code == 403
-    assert engine.calls == []
+    assert engine.calls == [
+        ("alice", TeamPermission.CAN_READ, personal_team_id(_BOB.uid))
+    ]
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "personal_space_denied"
+    assert events[-1]["audit_event"] == "rebac_denied"
     assert events[-1].get("user_id") == "alice"
 
 
 @pytest.mark.asyncio
-async def test_authorize_denies_ambiguous_personal_alias(
+async def test_authorize_denies_bare_personal_alias(
     monkeypatch, minimal_config
 ) -> None:
-    """The bare "personal" alias is ambiguous once ReBAC is active — reject it
-    rather than resolving it as if it meant the caller's own space."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
+    """The bare "personal" alias is not `is_personal_team_id`-shaped, so it is
+    just an ordinary (always-tupleless) team id post-AUTHZ-08 — denied by the
+    plain check like any other unknown team, not by a dedicated alias guard."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
@@ -2100,7 +2114,7 @@ async def test_authorize_denies_ambiguous_personal_alias(
         )
 
     assert exc.value.status_code == 403
-    assert engine.calls == []
+    assert engine.calls == [("alice", TeamPermission.CAN_READ, "personal")]
 
 
 # ---------------------------------------------------------------------------

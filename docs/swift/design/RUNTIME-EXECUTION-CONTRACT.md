@@ -272,12 +272,13 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   (`fred_core.security.oidc`). Under the `c3` profile it validates issuer and
   audience strictly (`verify_aud=True`), and each pod validates `aud == its own
   client_id` (per-agent audience — anti-confused-deputy, decision D5c).
-- **Authorization** — for a **collaborative** `runtime_context.team_id` (anything
-  not a personal space), the pod runs a per-request OpenFGA check that the caller
-  holds `CAN_READ` on that team (the same relation the control-plane required
-  before it would mint a grant). This is the model already homologated on
-  `main`'s agentic-backend, re-instantiated per pod. A **personal space**
-  (`personal-<uid>`) is never checked against OpenFGA — see below.
+- **Authorization** — the pod runs a per-request OpenFGA check that the caller
+  holds `CAN_READ` on `runtime_context.team_id` (the same relation the
+  control-plane required before it would mint a grant). This is the model
+  already homologated on `main`'s agentic-backend, re-instantiated per pod, and
+  it applies uniformly to collaborative teams and **personal spaces** alike
+  (`personal-<uid>`) — see below for how a personal space's own `CAN_READ`
+  comes to hold true.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -286,37 +287,45 @@ authorizes teams the user actually has a relation to. A missing team on a manage
 request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
 survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
 
-**Personal spaces are intrinsic ownership, not an OpenFGA relation (AUTHZ-05 item
-8b, 2026-07-13).** A personal space is a synthetic, system-recognized team
-(`fred_core.common.personal_team_id(uid)`) with no `team_metadata` row and no
-stored OpenFGA tuple of any kind — it is not a collaborative team and was never
-meant to route through `CAN_READ`. `_authorize_execution_or_raise` therefore
-special-cases it, before the OpenFGA branch, purely by identity comparison:
+**Personal spaces are real ReBAC team objects (AUTHZ-08, 2026-07-20, supersedes
+AUTHZ-05 item 8b).** A personal space (`fred_core.common.personal_team_id(uid)`)
+has no `team_metadata` row — it stays a synthetic, system-recognized team on the
+control-plane product surface (`build_personal_team`) — but it is a first-class
+object in the ReBAC graph, exactly like a collaborative team. `agent_app.py`
+carries no personal-space-specific authorization code at all; the plain
+`rebac.check_user_team_permission_or_raise(user, CAN_READ, team_id)` call below
+handles it correctly because of two `fred-core` mechanisms shared by every
+backend (not just this runtime):
 
-- `team_id == personal_team_id(authenticated_user.uid)` (the caller's own
-  canonical personal space) → authorized as intrinsic ownership, audited
-  `personal_space_owner_authorized`, **no OpenFGA call**.
-- any other `personal-*` id (another user's personal space) → denied outright,
-  audited `personal_space_denied`, HTTP 403. This is a hard identity check, not
-  an OpenFGA lookup — a stray or residual OpenFGA tuple naming that id can never
-  grant access here.
-- the bare `"personal"` alias → also denied under this same rule once ReBAC is
-  active, rather than resolved as if it meant the caller's own space; it stays a
-  dev/CLI-only shorthand (see `fred_runtime/cli/entrypoint.py`).
-- any non-personal `team_id` (a real collaborative team) → unchanged, always the
-  OpenFGA `CAN_READ` check described above.
-- `service_agent` callers are unaffected: their team-scoped, OpenFGA-free
-  authorization (§ below, RFC EVAL-AUTH Solution A) is checked first and returns
-  before the personal-space branch is reached.
-- `platform_admin`/`platform_observer` confer no implicit access here, personal
-  or collaborative — this carve-out is identity-only (JWT subject vs. the
-  requested personal id), never role-based.
+- `RebacEngine.check_user_permission_or_raise`/`has_user_permission` self-heal
+  the caller's own `user:<uid> team_editor team:personal-<uid>` tuple on first
+  touch, whenever `team_id == personal_team_id(user.uid)` — idempotent (checked
+  via `has_direct_relation` before writing, so it doesn't re-write or re-audit
+  on every request). `team_editor` was chosen because it exactly reproduces
+  `build_personal_team`'s hardcoded permission set (`can_read`,
+  `can_update_resources`, `can_update_agents`).
+- `RebacEngine.add_relation` — the one audited write chokepoint every relation
+  write funnels through — refuses any tuple naming a personal team except that
+  owner self-grant and the structural `organization -> team` edge (written by
+  `ensure_team_organization_relations` for every team, personal or not). No
+  admin API, import/export path, or future caller can write a tuple granting
+  anyone else access to someone else's personal space; this is what makes a
+  real, persisted tuple safe here.
 
-No Keycloak group, claim, or role feeds this decision anywhere — the removal of
-`groups_list_to_relations`/`_user_contextual_relations` (item 8b) is unaffected;
-this carve-out replaces the contextual (never-persisted) `team_member` relation
-that helper used to grant for personal spaces, with an explicit, narrower check
-local to the runtime.
+Net effect at this call site: the caller's own personal space authorizes
+(audited `rebac_authorized`, same as any other team); another user's personal
+space, or the bare `"personal"` alias (for which no tuple is ever provisioned),
+denies (audited `rebac_denied`) — with no special-casing needed in this file.
+`service_agent` callers are unaffected: their team-scoped, OpenFGA-free
+authorization (§ below, RFC EVAL-AUTH Solution A) is checked first and returns
+before the `CAN_READ` check is reached.
+
+No Keycloak group, claim, or role feeds any of this — the removal of
+`groups_list_to_relations`/`_user_contextual_relations` (AUTHZ-05 item 8b) is
+unaffected; AUTHZ-08 replaces both the contextual (never-persisted)
+`team_member` relation that helper used to grant for personal spaces AND the
+identity-only guard that temporarily replaced it here, with one real, narrowly
+write-guarded tuple provisioned in `fred-core` for every backend.
 
 **Architectural constraint (unchanged):**
 
@@ -1092,6 +1101,30 @@ back to the default input, and older pods simply omit the field.
 
 `controlPlaneOpenApi.ts` and `runtimeOpenApi.ts` regenerated
 (`make update-control-plane-api` / `make update-runtime-api`).
+
+### 8.19 ✅ Personal-team authorization moved to fred-core, real ReBAC tuple — AUTHZ-08 (2026-07-20)
+
+**What changed.** `agent_app.py::_authorize_execution_or_raise` no longer
+special-cases personal spaces (the identity-only guard from AUTHZ-05 item 8b is
+deleted). Personal teams are now real ReBAC team objects: `fred-core`'s
+`RebacEngine.check_user_permission_or_raise`/`has_user_permission` self-heal
+the owner's own `team_editor` tuple on a personal team on first touch, and
+`RebacEngine.add_relation` refuses any other tuple naming a personal team. See
+§2.2 above and `docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md` §"REBAC" for the
+full design.
+
+**Why.** Live-stack testing (2026-07-20) found the AUTHZ-05 item 8b guard was
+never generalized past `agent_app.py` — every other consumer of a personal
+`team_id` (knowledge-flow-backend's filesystem/corpus/tag routes,
+`openai_compat_router.py`, `tasks/authz.py`, control-plane's evaluations API)
+still assumed OpenFGA held the answer, and it didn't: some crashed with an
+unhandled 500, most wrongly 403'd the space's own owner. A real, narrowly
+write-guarded tuple fixes every one of those call sites from one change in
+`fred-core`, with no per-caller special-casing, and unlike an identity-only
+guard it also makes `ListObjects`/enumeration (`lookup_user_resources`) work
+correctly for personal spaces.
+
+No OpenAPI/type changes — this is authorization-internals only.
 
 ---
 

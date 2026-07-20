@@ -150,6 +150,34 @@ Cannot:
 
 - configure any team-wide setting, policy, or shared resource
 
+### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
+
+A personal team (`personal-<uid>`) is a real ReBAC team object, but it does
+**not** follow the "granted through bootstrap or explicit admin action" rule
+above — that rule is about *collaborative* teams, where ownership must be
+assigned because it isn't otherwise knowable. A personal team's owner is
+knowable by construction (the uid is embedded in the team id), so it is
+provisioned automatically instead:
+
+- `RebacEngine.check_user_permission_or_raise`/`has_user_permission`
+  (`fred-core`, shared by every backend) self-heal exactly one tuple —
+  `user:<uid> team_editor team:personal-<uid>` — the first time its own owner
+  touches a personal-team permission check. `team_editor` reproduces
+  control-plane's synthetic `build_personal_team` DTO permission set
+  (`can_read`, `can_update_resources`, `can_update_agents`) exactly.
+- `RebacEngine.add_relation` — the one audited chokepoint every relation write
+  funnels through, collaborative or personal — refuses any tuple naming a
+  personal team except that owner self-grant and the structural
+  `organization -> team` edge every team gets. No admin API, import/export
+  path, or future caller can write a tuple granting anyone else access to
+  someone else's personal space; this invariant is what makes writing a real,
+  persisted tuple safe for a resource type that otherwise has no assignable
+  owner.
+
+Never add a personal team to `initial_team_admin_ids`, a member-role grant
+endpoint, or any bulk relation-writing tool — `add_relation` rejects it, by
+design, regardless of caller.
+
 ### Team registry governance — platform admin, existence only
 
 Three narrow, `platform_admin`-only capabilities govern the team *registry*
