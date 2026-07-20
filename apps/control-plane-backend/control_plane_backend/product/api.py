@@ -1084,6 +1084,7 @@ async def post_prepare_execution(
     team_id: Annotated[TeamId, Path()],
     agent_instance_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
+    http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
     lang: str = Query(default="en"),
@@ -1132,6 +1133,10 @@ async def post_prepare_execution(
             session_id=session_id,
             lang=lang,
             deps=deps,
+            # Forwarded to the pod's chat-controls evaluation so the pod-side
+            # auth sees the acting user — same pattern as the validate-config
+            # round-trip on enroll/update.
+            authorization=http_request.headers.get("Authorization"),
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
