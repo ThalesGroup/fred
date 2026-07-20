@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from fred_core.store.base_content_store import ContentStore
+from fred_core.store.gcs_content_store import GcsContentStore
 from fred_core.store.local_content_store import LocalContentStore
 from fred_core.store.minio_content_store import MinioContentStore
 from fred_core.store.opensearch_mapping_validator import (
@@ -23,6 +24,7 @@ from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
     "ContentStore",
+    "GcsContentStore",
     "LocalContentStore",
     "MappingValidationError",
     "MinioContentStore",

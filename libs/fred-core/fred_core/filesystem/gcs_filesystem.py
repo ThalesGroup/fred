@@ -17,12 +17,12 @@ import re
 import time
 from typing import List, Optional, Set
 
+from fred_core.common.gcs_client import build_gcs_client
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
-from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 logger = logging.getLogger(__name__)
@@ -67,9 +67,7 @@ class GcsFilesystem(BaseFilesystem):
         # Prefix injected externally by the app if needed (mirrors MinioFilesystem).
         self.prefix: str | None = None
 
-        self.client = (
-            storage.Client(project=project_id) if project_id else storage.Client()
-        )
+        self.client = build_gcs_client(project_id)
         self.bucket = self.client.bucket(bucket_name)
 
     def health_check(self) -> dict:

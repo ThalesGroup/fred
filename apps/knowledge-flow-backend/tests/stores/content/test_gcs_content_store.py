@@ -112,7 +112,7 @@ def gcs_store(monkeypatch):
     from knowledge_flow_backend.core.stores.content import gcs_content_store
 
     buckets: dict[str, dict] = {}
-    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient(buckets))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: _FakeClient(buckets))
     store = gcs_content_store.GcsContentStore(document_bucket="kf-documents", object_bucket="kf-objects")
     store._buckets = buckets
     return store
@@ -215,7 +215,7 @@ def test_constructor_stores_signing_service_account_email(monkeypatch):
     """
     from knowledge_flow_backend.core.stores.content import gcs_content_store
 
-    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: _FakeClient({}))
     store = gcs_content_store.GcsContentStore(
         document_bucket="kf-documents",
         object_bucket="kf-objects",
@@ -229,7 +229,7 @@ def test_constructor_defaults_signing_email_to_none(monkeypatch):
     """Construction without a signing email is allowed; the factory enforces it."""
     from knowledge_flow_backend.core.stores.content import gcs_content_store
 
-    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: _FakeClient({}))
     store = gcs_content_store.GcsContentStore(document_bucket="kf-documents", object_bucket="kf-objects")
 
     assert store.signing_service_account_email is None
@@ -262,7 +262,7 @@ class _RecordingSignBucket:
 def _signing_store(monkeypatch, captured: dict, *, email="signer@project.iam.gserviceaccount.com"):
     from knowledge_flow_backend.core.stores.content import gcs_content_store
 
-    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: _FakeClient({}))
     store = gcs_content_store.GcsContentStore(
         document_bucket="kf-documents",
         object_bucket="kf-objects",
@@ -328,7 +328,7 @@ def test_mint_access_token_uses_adc_and_refreshes(monkeypatch):
             self.token = "minted-token"
 
     fake_creds = _FakeCreds()
-    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: _FakeClient({}))
     monkeypatch.setattr(gcs_content_store, "_load_adc_credentials", lambda: fake_creds)
 
     store = gcs_content_store.GcsContentStore(
