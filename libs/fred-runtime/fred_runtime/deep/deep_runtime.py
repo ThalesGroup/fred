@@ -29,14 +29,23 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import cast
 
+from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.runtime import Executor
+from fred_sdk.contracts.runtime import Executor, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
+from fred_runtime.react.middleware.tool_observability import (
+    ToolObservabilityMiddleware,
+)
+from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
+from fred_runtime.react.react_model_adapter import (
+    REACT_MODEL_OPERATION_ROUTING,
+    infer_react_model_operation_from_messages as _infer_react_model_operation_from_messages,
+)
 from fred_runtime.react.react_prompting import (
     compose_system_prompt as _compose_system_prompt,
 )
@@ -53,6 +62,7 @@ from fred_runtime.react.react_runtime import (
 )
 from fred_runtime.react.react_tool_binding import ReActToolBinder
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
+from fred_runtime.runtime_context import get_runtime_context
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",
@@ -135,7 +145,10 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt=system_prompt,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             middleware=_build_deepagent_runtime_middleware(
-                filesystem_tools_enabled=filesystem_tools_enabled
+                filesystem_tools_enabled=filesystem_tools_enabled,
+                tracer=self.services.tracer,
+                kpi=get_runtime_context().get_kpi_writer(),
+                binding=binding,
             ),
         )
         return _TransportBackedReActExecutor(
@@ -229,12 +242,26 @@ def _filesystem_prompt_suffix(*, filesystem_tools_enabled: bool) -> str:
 
 
 def _build_deepagent_runtime_middleware(
-    *, filesystem_tools_enabled: bool
+    *,
+    filesystem_tools_enabled: bool,
+    tracer: TracerPort | None,
+    kpi: BaseKPIWriter | None,
+    binding: BoundRuntimeContext,
 ) -> list[AgentMiddleware]:
     """
-    Build Deep runtime middleware for filesystem-tool policy.
+    Build Deep runtime middleware: platform observability first, then the
+    filesystem-tool policy guard.
 
     Why this exists:
+    - Deep used to bypass `build_react_platform_middleware_frame()` entirely
+      (it overrides `build_executor`, so it never went through
+      `_create_compiled_react_agent`), which meant a Deep turn emitted no
+      `[LLM][CALL]`/`[LLM][RESPONSE]` logs, no `llm.call_latency_ms` KPI, and
+      no `agent.tool.invocation.*` audit events — the same
+      `TracingKpiMiddleware`/`ToolObservabilityMiddleware` pair ReAct always
+      gets. `create_deep_agent` accepts a plain `middleware=` list, so the
+      fix is to hand it the same two middleware instances, same order, no
+      new machinery.
     - when the standard filesystem MCP tools are absent, Deep should block
       accidental filesystem calls explicitly
     - when those tools are present, Deep should not add special blocking and
@@ -243,15 +270,24 @@ def _build_deepagent_runtime_middleware(
     How to use it:
     - call once while creating the compiled deep agent
     - pass whether standard filesystem tools are available in the resolved tool
-      list
+      list, plus the same tracer/kpi/binding used to build the tool bindings
 
     Example:
-    - `middleware = _build_deepagent_runtime_middleware(filesystem_tools_enabled=True)`
+    - `middleware = _build_deepagent_runtime_middleware(filesystem_tools_enabled=True, tracer=tracer, kpi=kpi, binding=binding)`
     """
+    middleware: list[AgentMiddleware] = [
+        TracingKpiMiddleware(
+            tracer=tracer,
+            kpi=kpi,
+            binding=binding,
+            infer_operation_from_messages=_infer_react_model_operation_from_messages,
+            default_operation=REACT_MODEL_OPERATION_ROUTING,
+        ),
+        ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+    ]
     if filesystem_tools_enabled:
-        return []
+        return middleware
 
-    middleware: list[AgentMiddleware] = []
     for tool_name in _FILESYSTEM_TOOL_NAMES:
         middleware.append(
             cast(

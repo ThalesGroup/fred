@@ -1038,6 +1038,42 @@ consumes this pod-internal endpoint). `pod_client.py::PodClient.delete_checkpoin
 
 ---
 
+### 8.17 ✅ `DeepAgentRuntime` gets the same observability middleware as ReAct (July 2026)
+
+**What changed.** `DeepAgentRuntime.build_executor` (`deep/deep_runtime.py`)
+now always leads the middleware list it hands to `deepagents.create_deep_agent`
+with `TracingKpiMiddleware` and `ToolObservabilityMiddleware` — the same two
+instances, same construction, that `build_react_platform_middleware_frame`
+wires for every ReAct agent. The pre-existing filesystem-tool guard
+(`ToolCallLimitMiddleware` per disabled filesystem tool, unchanged) now
+follows them instead of being the only middleware present.
+
+**Why.** `DeepAgentRuntime` overrides `build_executor` entirely and never
+calls `build_react_platform_middleware_frame`/`_create_compiled_react_agent`
+— it builds its own `deepagents`-native graph. That meant a Deep turn emitted
+no `[LLM][CALL]`/`[LLM][RESPONSE]` logs, no `llm.call_latency_ms` /
+`agent.tool_latency_ms` KPI, and no `agent.tool.invocation.*` audit events:
+the same guarantees `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §9
+documents for every other execution path, silently absent for Deep since the
+runtime was first added. Found while scoping DeepAgent's move from dormant to
+visible ahead of the go-live validation; fixed before any concrete
+`DeepAgentDefinition` is registered in an app, so no Deep turn has ever run
+unaudited in a shipped environment.
+
+**Consequences.**
+
+- No change to Deep's typed input/output/events, its filesystem-tool policy,
+  or its explicit non-support for tool approval /
+  `max_tool_calls_per_turn` (still `NotImplementedError` — out of scope here).
+- `create_deep_agent`'s own `middleware=` parameter is the extension point;
+  `TracingKpiMiddleware`/`ToolObservabilityMiddleware` needed no changes
+  themselves — both were already generic `AgentMiddleware` implementations,
+  not ReAct-specific.
+- Regression coverage:
+  `libs/fred-runtime/tests/test_deep_agent_middleware.py`.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
