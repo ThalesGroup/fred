@@ -1722,6 +1722,7 @@ async def _write_turn_history(
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
+    final_ui_parts: list[dict[str, Any]] = []
 
     for payload in payloads:
         kind = payload.get("kind")
@@ -1809,9 +1810,16 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+            # ui_parts (capability chat parts: link, ppt_preview, …) must
+            # survive into history — the FinalRuntimeEvent carries the merged
+            # union of every tool's ui_parts, and the frontend reads them from
+            # the persisted final message on reload (exactly like live SSE).
+            final_ui_parts = [
+                p for p in (payload.get("ui_parts") or []) if isinstance(p, dict)
+            ]
 
     # 3. Terminal assistant message (from FinalRuntimeEvent)
-    if final_content or final_model:
+    if final_content or final_model or final_ui_parts:
         messages.append(
             make_assistant_final(
                 session_id,
@@ -1822,6 +1830,7 @@ async def _write_turn_history(
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
                 finish_reason=final_finish_reason,
+                ui_parts=final_ui_parts or None,
             )
         )
 

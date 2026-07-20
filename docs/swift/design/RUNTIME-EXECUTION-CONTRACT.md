@@ -1040,6 +1040,36 @@ dead/legacy generated client, out of scope for this sweep).
 
 ---
 
+### 8.17 ✅ Capability `ui_parts` persisted in turn history — #1903 PPT filler follow-up (2026-07-20)
+
+**Was**: the `FinalRuntimeEvent`'s `ui_parts` (capability chat parts such as
+`ppt_preview`, see §8.13) rendered live over SSE but were dropped by
+`_write_turn_history` — the persisted final message carried only the text part,
+so reloading a session lost every capability card. A ui_parts-only final (no
+text, no model) produced no history row at all.
+
+**Fix** (`fred-core` + `fred-runtime`, additive):
+
+- `fred_core/history/history_schema.py`: the stored `MessagePart` union is
+  widened with an open `UiPartRecord` model (`extra="allow"`, a `type`
+  validator rejects the seven core part kinds so malformed core parts still
+  fail loudly on their own models). Because the runtime `UiPart` union is
+  OPEN — capability packages register kinds at pod boot (§8.13) — core storage
+  cannot enumerate them; `UiPartRecord` retains every field verbatim instead.
+  `make_assistant_final(...)` gains an optional `ui_parts=` argument and
+  appends the records after the text part, mirroring the live SSE shape.
+- `fred_runtime/app/agent_app.py`: `_write_turn_history` now captures
+  `ui_parts` from the final payload and passes them through to
+  `make_assistant_final`; the terminal assistant message is also written when
+  the final carries only `ui_parts` (previously gated on text/model alone).
+
+**Wire compatibility**: additive and backward-compatible. Existing stored
+parts and history rows are unaffected; the history endpoint returns
+unknown-kind parts verbatim, so capability parts now round-trip
+store → history read → part-renderer registry (§8.13) unchanged.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
