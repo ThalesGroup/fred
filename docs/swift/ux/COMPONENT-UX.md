@@ -1275,6 +1275,19 @@ tree instead of the raw tag-id `TagInput`. Unknown widget ids fall back to the
 via `GET /users/by-ids`, and shows "Updated by …" when the instance has been
 user-edited (`updated_by`).
 
+### `document_access` config/chat parity with the legacy search tool
+
+The Document access capability now offers the same configuration surface and
+composer controls as "Document search (legacy)": File attachments, Search
+policy picker (configured policy becomes the picker default; enforced only
+when the picker is hidden), RAG scope picker + default, on top of the
+existing scope picker toggle. All emitted as the same stock widgets — the
+choices travel on `RuntimeContext`, which the v2 document-search adapter
+already honors. Manifest bumped to 0.2.0 (additive, old slices revalidate).
+The legacy tool's "Bound document libraries" raw tag-id input now renders as
+the library tree via the `ui.widget: document_libraries` hint in the pod's
+`mcp_catalog.yaml`.
+
 ### `DocumentWorkspace` — library deletion
 
 Corpus library folders now carry a delete action (same `canUpdateResources`

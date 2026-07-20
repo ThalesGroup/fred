@@ -48,6 +48,8 @@ servers:
         title: "Bound document libraries"
         description: "Restrict the chat library picker to this preselected set of document libraries."
         default: []
+        ui:
+          widget: "document_libraries"
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
@@ -143,6 +145,8 @@ servers:
         title: "Bound document libraries"
         description: "Restrict the chat library picker to this preselected set of document libraries."
         default: []
+        ui:
+          widget: "document_libraries"
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"

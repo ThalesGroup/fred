@@ -84,6 +84,11 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
+from fred_runtime.capabilities.mcp import (
+    RagScopeControlParams,
+    SearchPolicyControlParams,
+)
+
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
 DOCUMENT_ACCESS_TOOL_REF = "document_access"
@@ -92,6 +97,7 @@ DOCUMENT_ACCESS_TOOL_REF = "document_access"
 # `chat_options.search_policy` enum). None on the config means "let the session
 # binding decide".
 _SEARCH_POLICIES = ("strict", "hybrid", "semantic")
+_RAG_SCOPES = ("corpus_only", "hybrid", "general_only")
 
 # Only the fields the LLM needs for citation and reasoning are exposed to the
 # model. URL and operational fields are excluded so the model cannot reproduce
@@ -134,9 +140,14 @@ class DocumentAccessConfig(BaseModel):
     The scope fields NARROW the searchable set at agent-creation time: an empty
     list means "no capability-side narrowing at this level" (the session binding
     still bounds it). `default_top_k` and `search_policy` set retrieval
-    defaults; `show_document_scope_control` toggles the computed chat control.
-    `min_source_score_ratio` bounds what's citable as a "source" in the chat
-    UI (RAG-DATASET-DISCOVERY-RFC.md §7) — it never narrows what the model
+    defaults; the `show_*_control` toggles pick which computed chat controls
+    the composer shows (same stock-widget parity as the legacy MCP search
+    tool: attach files, document/library scope, search policy, RAG scope).
+    When the search-policy picker is shown, `search_policy` acts as the
+    picker's DEFAULT and the per-turn choice (RuntimeContext) wins at search
+    time; when hidden, it is enforced as-is. `min_source_score_ratio` bounds
+    what's citable as a "source" in the chat UI
+    (RAG-DATASET-DISCOVERY-RFC.md §7) — it never narrows what the model
     itself sees, only what a human is shown as evidence.
     """
 
@@ -145,6 +156,10 @@ class DocumentAccessConfig(BaseModel):
     default_top_k: int = 8
     search_policy: str | None = None
     show_document_scope_control: bool = True
+    show_attach_files_control: bool = True
+    show_search_policy_control: bool = True
+    show_rag_scope_control: bool = True
+    default_rag_scope: str | None = None
     min_source_score_ratio: float = Field(
         default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
         ge=0.0,
@@ -205,7 +220,13 @@ class _DocumentAccessMiddleware(AgentMiddleware):
             config.document_uids or None, turn.document_uids
         )
         default_top_k = config.default_top_k if config.default_top_k > 0 else 8
-        search_policy = config.search_policy
+        # With the search-policy picker shown, the configured policy is only
+        # the picker's DEFAULT: pass None so the adapter falls back to the
+        # per-turn RuntimeContext value (which carries that default anyway).
+        # With the picker hidden, the configured policy is enforced.
+        search_policy = (
+            None if config.show_search_policy_control else config.search_policy
+        )
         min_source_score_ratio = config.min_source_score_ratio
 
         @tool(
@@ -297,7 +318,11 @@ class DocumentAccessCapability(
 
     manifest = CapabilityManifest(
         id="document_access",
-        version="0.1.0",
+        # 0.2.0: legacy-parity chat controls (attach files, search-policy and
+        # RAG-scope pickers) + their config toggles. Additive with defaults, so
+        # stored 0.1.0 slices revalidate unchanged; the bump also invalidates
+        # the control-plane chat-controls cache.
+        version="0.2.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -348,6 +373,44 @@ class DocumentAccessCapability(
                 default=True,
             ),
             FieldSpec(
+                key="show_attach_files_control",
+                type="boolean",
+                title="File attachments",
+                description=(
+                    "Allow users to attach files (PDF, images, text) to their "
+                    "messages in the chat interface."
+                ),
+                default=True,
+            ),
+            FieldSpec(
+                key="show_search_policy_control",
+                type="boolean",
+                title="Search policy picker in chat",
+                description=(
+                    "Allow users to switch the search policy from the chat "
+                    "interface. The configured search policy then acts as the "
+                    "picker's default instead of being enforced."
+                ),
+                default=True,
+            ),
+            FieldSpec(
+                key="show_rag_scope_control",
+                type="boolean",
+                title="RAG scope picker in chat",
+                description=(
+                    "Allow users to switch the RAG scope (corpus only / hybrid "
+                    "/ general knowledge) from the chat interface."
+                ),
+                default=True,
+            ),
+            FieldSpec(
+                key="default_rag_scope",
+                type="select",
+                enum=list(_RAG_SCOPES),
+                title="Default RAG scope",
+                description="Scope used when the user has not overridden it.",
+            ),
+            FieldSpec(
                 key="min_source_score_ratio",
                 type="number",
                 title="Minimum source relevance ratio",
@@ -372,24 +435,52 @@ class DocumentAccessCapability(
 
     def chat_controls(self, config: DocumentAccessConfig) -> list[ChatControlSpec]:
         """
-        One computed `document_scope` narrowing control (RFC §3.3), shown only
-        when the instance opts in. `bound_library_ids` pins the picker to the
-        capability's configured library scope (read-only) when one is set.
+        The stock composer controls (RFC §3.3), each behind its config toggle —
+        the same widget set the legacy MCP search tool emits, so both paths
+        offer the same chat surface. `bound_library_ids` pins the scope picker
+        to the capability's configured library scope (read-only) when one is
+        set. Search-policy/RAG-scope choices travel on `RuntimeContext`, which
+        the document-search adapter already honors.
         """
 
-        if not config.show_document_scope_control:
-            return []
-        bound = config.library_tag_ids or None
-        return [
-            ChatControlSpec(
-                widget="document_scope",
-                params=DocumentScopeControlParams(
-                    libraries=True,
-                    documents=True,
-                    bound_library_ids=bound,
-                ),
+        controls: list[ChatControlSpec] = []
+        if config.show_attach_files_control:
+            controls.append(ChatControlSpec(widget="attach_files"))
+        if config.show_document_scope_control:
+            bound = config.library_tag_ids or None
+            controls.append(
+                ChatControlSpec(
+                    widget="document_scope",
+                    params=DocumentScopeControlParams(
+                        libraries=True,
+                        documents=True,
+                        bound_library_ids=bound,
+                    ),
+                )
             )
-        ]
+        if config.show_search_policy_control:
+            controls.append(
+                ChatControlSpec(
+                    widget="search_policy",
+                    params=(
+                        SearchPolicyControlParams(default=config.search_policy)  # type: ignore[arg-type]
+                        if config.search_policy in _SEARCH_POLICIES
+                        else SearchPolicyControlParams()
+                    ),
+                )
+            )
+        if config.show_rag_scope_control:
+            controls.append(
+                ChatControlSpec(
+                    widget="rag_scope",
+                    params=(
+                        RagScopeControlParams(default=config.default_rag_scope)  # type: ignore[arg-type]
+                        if config.default_rag_scope in _RAG_SCOPES
+                        else RagScopeControlParams()
+                    ),
+                )
+            )
+        return controls
 
     def middleware(
         self,
