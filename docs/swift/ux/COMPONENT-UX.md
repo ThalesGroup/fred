@@ -1242,6 +1242,49 @@ _(none yet)_
 
 ---
 
+## Swift UX bug pass — #2023 / #1952 (2026-07-20)
+
+Fixes shipped together from live-testing feedback; all `Functional`, awaiting
+design review.
+
+### `CapabilityCard` (agent form Tools tab)
+
+Toggling a capability no longer changes the name's font size
+(`--font-label-medium` → `--font-title-small` caused every card below to jump).
+Active emphasis is now weight + `--primary` color at identical metrics; only
+the config sub-form still expands, which is expected.
+
+### `TeamFilesystemBrowser` / `AgentFilesystemBrowser` (Resources tabs)
+
+Expanding an empty folder now shows the same explanatory hint pattern as the
+corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an
+empty dropdown: generic `rework.resources.empty.folder` for folders, dedicated
+`empty.agentFiles` inside an agent's space, and `empty.agents` when no agent
+has files at all.
+
+### `TuningFieldRenderer` — `document_libraries` widget (agent form)
+
+An array field whose `ui.widget` is `document_libraries`
+(document_access `library_tag_ids`) renders the `DocumentLibraryScopePicker`
+tree instead of the raw tag-id `TagInput`. Unknown widget ids fall back to the
+`TagInput`.
+
+### `AgentFormBody` audit footer (#1952)
+
+"Created by" resolves the uid to first/last name (fallback username, then uid)
+via `GET /users/by-ids`, and shows "Updated by …" when the instance has been
+user-edited (`updated_by`).
+
+### `CategoryPicker` / prompt category surfaces
+
+Pickers and filters offer exactly 7 functional categories (doc-assist,
+summary, extraction, writing, analysis, conversational, integration).
+`monitoring`, `migration` and `other` are retired from selection but keep
+their pill rendering on pre-existing prompts; the "show more" fold is gone
+(7 visible).
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

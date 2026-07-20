@@ -95,6 +95,10 @@ interface TeamFilesystemBrowserProps {
    * are always writable by their owner; only the shared area is gated by CAN_UPDATE_RESOURCES.
    * Defaults to true so existing private-root call sites are unaffected. */
   canWrite?: boolean;
+  /** i18n key of the hint shown when this root has no entries, so an expanded-but-empty area
+   * explains itself instead of rendering nothing. Nested folders always use the generic
+   * empty-folder message. */
+  emptyHintKey?: string;
 }
 
 /**
@@ -103,24 +107,38 @@ interface TeamFilesystemBrowserProps {
  * Folders expand in place; each folder carries upload + new-folder actions; files carry
  * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
  */
-export default function TeamFilesystemBrowser({ root, baseDepth = 0, canWrite = true }: TeamFilesystemBrowserProps) {
+export default function TeamFilesystemBrowser({
+  root,
+  baseDepth = 0,
+  canWrite = true,
+  emptyHintKey,
+}: TeamFilesystemBrowserProps) {
   const { refetch } = useLsQuery({ path: root });
-  return <FsLevel path={root} depth={baseDepth} canWrite={canWrite} onChanged={() => void refetch()} />;
+  return (
+    <FsLevel
+      path={root}
+      depth={baseDepth}
+      canWrite={canWrite}
+      emptyHintKey={emptyHintKey}
+      onChanged={() => void refetch()}
+    />
+  );
 }
 
 interface FsLevelProps {
   path: string;
   depth: number;
   canWrite: boolean;
+  emptyHintKey?: string;
   /** refetch of the directory that owns these entries (so deletes here update the list). */
   onChanged: () => void;
 }
 
 /** Renders the entries of one directory; recurses into expanded folders. */
-function FsLevel({ path, depth, canWrite, onChanged }: FsLevelProps) {
+function FsLevel({ path, depth, canWrite, emptyHintKey, onChanged }: FsLevelProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { data } = useLsQuery({ path });
+  const { data, isLoading } = useLsQuery({ path });
   const [deleteFile, { isLoading: isDeleting }] = useDeleteFileMutation();
   const [copyToShared] = useCopyToSharedMutation();
 
@@ -146,6 +164,16 @@ function FsLevel({ path, depth, canWrite, onChanged }: FsLevelProps) {
       message: t("rework.resources.confirm.shareMessage", { name }),
       onConfirm: () => void copyToShared({ path: encodeURI(childPath) }).unwrap(),
     });
+
+  // Loaded-and-empty: explain what the area is for instead of an expand that shows
+  // nothing — mirrors the corpus workspace's empty-folder hint.
+  if (!isLoading && Array.isArray(data) && entries.length === 0) {
+    return (
+      <div className={styles.hint} style={{ paddingLeft: depth * INDENT_STEP }}>
+        {t(emptyHintKey ?? "rework.resources.empty.folder")}
+      </div>
+    );
+  }
 
   return (
     <>

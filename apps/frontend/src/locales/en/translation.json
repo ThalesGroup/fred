@@ -132,7 +132,7 @@
     },
     "document_access": {
       "name": "Document access",
-      "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
+      "description": "Search documents uploaded using semantic similarity (RAG)."
     }
   },
   "chatbot": {
@@ -1062,6 +1062,8 @@
         "shareTitle": "Copy to Team space"
       },
       "empty": {
+        "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
+        "agents": "No agent files yet. Files your agents create for you will appear here, grouped by agent.",
         "createLibrary": "Create a library (folder) to start adding documents.",
         "folder": "This folder is empty."
       },

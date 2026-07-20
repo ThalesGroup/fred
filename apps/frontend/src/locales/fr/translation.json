@@ -132,7 +132,7 @@
     },
     "document_access": {
       "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
     }
   },
   "chatbot": {
@@ -1062,6 +1062,8 @@
         "shareTitle": "Copier dans l'espace d'équipe"
       },
       "empty": {
+        "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
+        "agents": "Aucun fichier d'agent pour l'instant. Les fichiers créés pour vous par vos agents apparaîtront ici, regroupés par agent.",
         "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
         "folder": "Ce dossier est vide."
       },
