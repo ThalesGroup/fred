@@ -2967,10 +2967,12 @@ async def list_context_prompts(
     *,
     lang: str = "en",
 ) -> list[ContextPromptSummary]:
-    """Return personal + team prompts + platform defaults for the context picker.
+    """Return the space's own prompts + platform defaults for the context picker.
 
-    DB records are ordered by session_count DESC; defaults are appended at the end
-    so frequently-used custom prompts appear first.
+    Personal prompts appear only in the personal space — a team context
+    exposes the team's prompts, never the caller's personal ones. DB records are
+    ordered by session_count DESC; defaults are appended at the end so
+    frequently-used custom prompts appear first.
     """
 
     store = deps.get_prompt_store()

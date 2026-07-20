@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, literal, select, union_all, update
+from sqlalchemy import delete, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
@@ -429,7 +429,12 @@ class PromptStore:
         team_id: TeamId,
         session: AsyncSession | None = None,
     ) -> list[ContextPromptRecord]:
-        """Return the union of personal + team prompts ordered by session_count DESC for the context picker."""
+        """Return the context-picker prompts of one space, ordered by session_count DESC.
+
+        Personal prompts never leave the personal space: browsing a team
+        returns that team's prompts only; browsing the personal space returns the
+        user's personal prompts (labelled scope="personal").
+        """
 
         personal_str = str(personal_team_id)
         team_str = str(team_id)
@@ -456,10 +461,7 @@ class PromptStore:
             PromptRow.category,
         ).where(PromptRow.team_id == team_str)
 
-        if personal_str == team_str:
-            combined = personal_q
-        else:
-            combined = union_all(personal_q, team_q)
+        combined = personal_q if personal_str == team_str else team_q
 
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(combined)).all()

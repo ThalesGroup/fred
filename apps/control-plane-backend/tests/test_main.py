@@ -526,12 +526,13 @@ class _FakePromptStore:
     ) -> list:
         from control_plane_backend.prompts.store import ContextPromptRecord
 
+        # Mirrors the real store: personal prompts only in the personal space.
+        scope = "personal" if str(personal_team_id) == str(team_id) else "team"
         seen_ids: set[str] = set()
         results = []
         for r in self._records:
-            if r.team_id in (personal_team_id, team_id) and r.prompt_id not in seen_ids:
+            if r.team_id == str(team_id) and r.prompt_id not in seen_ids:
                 seen_ids.add(r.prompt_id)
-                scope = "personal" if r.team_id == personal_team_id else "team"
                 results.append(
                     ContextPromptRecord(
                         prompt_id=r.prompt_id,
@@ -7051,10 +7052,10 @@ async def test_prompt_update_increments_version(
 
 
 @pytest.mark.asyncio
-async def test_get_context_prompts_returns_personal_and_team(
+async def test_get_context_prompts_excludes_personal_in_team_space(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """GET /prompts/context returns the union of personal and team prompts with scope field."""
+    """GET /prompts/context on a team never exposes the caller's personal prompts."""
 
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
@@ -7079,12 +7080,45 @@ async def test_get_context_prompts_returns_personal_and_team(
     assert resp.status_code == 200
     body = resp.json()
     ids = [item["id"] for item in body]
-    assert "p-personal" in ids
+    assert "p-personal" not in ids
     assert "p-team" in ids
-    # team prompt has higher session_count so should appear first
     assert body[0]["id"] == "p-team"
     assert body[0]["scope"] == "team"
-    assert body[1]["scope"] == "personal"
+
+
+@pytest.mark.asyncio
+async def test_get_context_prompts_personal_space_returns_personal_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /prompts/context on the personal team returns the user's prompts as scope=personal."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    personal = _make_prompt_record(
+        prompt_id="p-personal", team_id=_PERSONAL_TEAM_ID, name="My prompt"
+    )
+    team_p = _make_prompt_record(
+        prompt_id="p-team", team_id="bid-team", name="Team prompt"
+    )
+    store = _FakePromptStore([personal, team_p])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/prompts/context"
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = [item["id"] for item in body]
+    assert "p-personal" in ids
+    assert "p-team" not in ids
+    assert body[0]["scope"] == "personal"
 
 
 @pytest.mark.asyncio
