@@ -22,6 +22,7 @@
   - Import capability sweeps stay correctly scoped and idempotent across retried/duplicate import jobs
   - Checkpoint erasure now reports a real deleted-row count instead of always `None`, matching its sibling history-erasure endpoint (fred-runtime 3.3.5)
   - ReAct thought events now carry a real `duration_ms` instead of always `None`
+  - DeepAgent (the minimal multi-step planning runtime) now emits the same audit/KPI/log trail as every other agent — a prerequisite for enabling it, landed before any Deep agent is exposed
   - Removed dead frontend code: the unused `monitoringApi` slice, the kubernetes/statistics endpoints and Helm flag, and five npm dependencies with zero import sites
   - Continued MUI → rework migration: `Protected` guard, `ConfirmationDialogProvider`, `PageError`/`PageUnauthorized`, `LibraryTreePlayground`, and `PdfStreamingDocumentViewer` ported off MUI
   - Removed the unused Weaviate vector-store backend (not selected by any checked-in config)
