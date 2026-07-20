@@ -1045,9 +1045,15 @@ items:
       enabling an agent without its tool dependencies granted.
       2026-07-19: the deferred `depends_on` fast-follow, plus three backend
       robustness gaps found reviewing this work (revoke-doesn't-suspend,
-      migration idempotency, import bypass), are being closed together under
-      GitHub #2004 on branch `2004-capab-01-agent-template-capability-gating-gaps`.
-      See `AGENT-CAPABILITY-RFC.md` §8.6's 2026-07-19 dated entry for the design.
+      migration idempotency, import bypass), closed together under GitHub
+      #2004, merged via #2015 on `swift`. See `AGENT-CAPABILITY-RFC.md` §8.6's
+      2026-07-19 dated entry for the design.
+      2026-07-20: #2004 item 4 (kind="tool"/kind="agent" catalog-id namespace
+      collision) closed on the follow-up branch
+      `2004-capab-01ctrlp-14-follow-up-...` — `agent__` reserved id prefix +
+      admission-time rejection + one-time tuple-rename migration. See
+      `AGENT-CAPABILITY-RFC.md` §8.6's 2026-07-20 dated entry. All five #2004
+      items now resolved; issue closes with this branch's PR.
 
   - id: CTRLP-15
     title: "Control-plane content store: native GCS backend for team banner/logo assets"
