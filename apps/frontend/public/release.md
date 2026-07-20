@@ -1,3 +1,41 @@
+**v2.1.5** — 2026-07-20
+
+- **Summary**
+
+  Closes the remaining CAPAB-01 agent-template capability gating gaps (`depends_on`
+  enforcement, suspend/revive symmetry, import-sweep idempotency), ships increment 1 of
+  tabular dataset discovery via semantic search, and lands a native in-app PDF viewer
+  alongside continued MUI-to-rework frontend migration. Includes a full independent
+  4-lens code review pass with fixes for every blocking/should-fix finding, several of
+  them deploy-relevant.
+
+- **Features**
+
+  - `depends_on` gate: enabling a `kind="agent"` capability for a team or personal space now rejects (409) when its default tool capabilities aren't yet usable, closing the live bug where an agent could be enabled with a still-disabled dependent tool (CTRLP-14, #2004, #2015)
+  - Dataset pointer chunks (increment 1): tabular/SQL datasets are now discoverable by a generalist agent via semantic search, gated off by default pending a deliberate rollout decision (RUNTIME-10, #2014)
+  - Native PDF rendering unified into a single `DocumentViewer`, shared by chat citations and the corpus workspace preview drawer — every PDF previously rendered as markdown-only text regardless of upload format (FRONT-13, #1956)
+  - SQL agent grounds generated queries in real, sampled column values instead of guessing string casing/format, removing a silent wrong-case "no data found" failure mode
+
+- **Improvements**
+
+  - Revoking a team's grant on an agent-template capability now suspends its dependent instances consistently, and re-granting it reliably revives them again — previously revival only matched tool-level selections, so a template-suspended instance could never come back (CAPAB-01, #2004)
+  - Import capability sweeps stay correctly scoped and idempotent across retried/duplicate import jobs
+  - Checkpoint erasure now reports a real deleted-row count instead of always `None`, matching its sibling history-erasure endpoint (fred-runtime 3.3.5)
+  - ReAct thought events now carry a real `duration_ms` instead of always `None`
+  - Removed dead frontend code: the unused `monitoringApi` slice, the kubernetes/statistics endpoints and Helm flag, and five npm dependencies with zero import sites
+  - Continued MUI → rework migration: `Protected` guard, `ConfirmationDialogProvider`, `PageError`/`PageUnauthorized`, `LibraryTreePlayground`, and `PdfStreamingDocumentViewer` ported off MUI
+  - Removed the unused Weaviate vector-store backend (not selected by any checked-in config)
+  - Routine dependency bump: langchain 1.3.10→1.3.14, langgraph 1.2.5→1.2.9, deepagents 0.6.10→0.6.12
+
+- **Bug Fixes**
+
+  - Fix in-memory and Chroma vector stores not upserting by `chunk_uid` — re-ingesting a dataset appended a duplicate pointer chunk or silently dropped the update instead of overwriting it
+  - Fix dataset pointer chunks being invisible to search (never marked retrievable) and orphaned on deletion (never marked vectorized)
+  - Exclude dataset-pointer and low-relevance chunks from the chat Sources panel — a discovery-pivot chunk or near-zero-relevance hit was previously cited as if it were the answer's real source
+  - Fix checkpoint/history erasure crashing the whole erase-session fan-out on a non-JSON or empty 2xx response, instead of isolating the single store failure
+  - Fix a `DocumentViewer` race where switching documents mid-fetch let a stale response overwrite the newer document's content and title
+  - Revert a live-testing config leftover that had left dataset pointer chunks enabled by default in 7 checked-in config/Helm files, including the GCP values file — now correctly gated off pending a deliberate rollout decision
+
 **v2.1.4** — 2026-07-19
 
 - **Summary**
