@@ -51,6 +51,7 @@ class AgentInstanceRecord:
         suspension_reason: str | None = None,
         created_at=None,
         updated_at=None,
+        updated_by: str | None = None,
     ) -> None:
         self.agent_instance_id = agent_instance_id
         self.team_id = team_id
@@ -68,6 +69,8 @@ class AgentInstanceRecord:
         self.suspension_reason = suspension_reason
         self.created_at = created_at
         self.updated_at = updated_at
+        # Last editing user's uid (#1952); None = never user-edited.
+        self.updated_by = updated_by
 
     @property
     def is_suspended(self) -> bool:
@@ -107,6 +110,7 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         suspension_reason=row.suspension_reason,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        updated_by=row.updated_by,
     )
 
 
@@ -133,6 +137,7 @@ class AgentInstanceStore:
             enabled=record.enabled,
             suspension_reason=record.suspension_reason,
             created_by=record.created_by,
+            updated_by=record.updated_by,
             tuning_json=tuning_json,
             created_at=created_at,
             updated_at=updated_at,
@@ -223,9 +228,14 @@ class AgentInstanceStore:
         description: str | None = None,
         enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
+        updated_by: str | None = None,
         session: AsyncSession | None = None,
     ) -> AgentInstanceRecord | None:
-        """Update one instance scoped to team_id. Returns None if not found."""
+        """Update one instance scoped to team_id. Returns None if not found.
+
+        ``updated_by`` stamps the acting user's uid (#1952); None leaves the
+        stored value unchanged (seed/startup saves have no acting user).
+        """
         async with use_session(self._sessions, session) as s:
             rows = (
                 (
@@ -250,6 +260,8 @@ class AgentInstanceStore:
                 row.enabled = enabled
             if tuning is not None:
                 row.tuning_json = tuning.model_dump_json()
+            if updated_by is not None:
+                row.updated_by = updated_by
             row.updated_at = _utcnow()
         return await self.get(agent_instance_id)
 

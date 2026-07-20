@@ -1392,6 +1392,7 @@
       },
       "formAgent": {
         "createdBy": "Créé par {{user}}",
+        "updatedBy": "Modifié par {{user}}",
         "fields": {
           "description": {
             "label": "Description",
