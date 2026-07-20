@@ -48,6 +48,7 @@ async def aggregate_capability_catalog(
     # Lazy import breaks the product.service ↔ capabilities import cycle: the
     # pod-catalog fetch protocol lives with the rest of the runtime-source code.
     from control_plane_backend.product.service import (
+        AGENT_CAPABILITY_NAMESPACE_PREFIX,
         _agent_capabilities_for_source,
         _available_capabilities_for_source,
     )
@@ -87,6 +88,26 @@ async def aggregate_capability_catalog(
                     entry.id,
                     source.base_url,
                     CAPABILITY_ID_PATTERN,
+                )
+                continue
+            if entry.kind != "agent" and entry.id.startswith(
+                AGENT_CAPABILITY_NAMESPACE_PREFIX
+            ):
+                # `AGENT_CAPABILITY_NAMESPACE_PREFIX` is reserved exclusively
+                # for kind="agent" template projections (GitHub #2004 item 4)
+                # so the two kinds can never collide in this flat dict —
+                # admitting a same-prefixed tool id would defeat that
+                # guarantee and silently shadow (or be shadowed by) the real
+                # agent-template entry. Quarantine at the same chokepoint as
+                # the invalid-id check above, rather than letting it overwrite.
+                logger.error(
+                    "[capability-catalog] refusing kind=%r capability id %r "
+                    'from %s: the %r prefix is reserved for kind="agent" '
+                    "template projections — rename this tool/MCP-server id",
+                    entry.kind,
+                    entry.id,
+                    source.base_url,
+                    AGENT_CAPABILITY_NAMESPACE_PREFIX,
                 )
                 continue
             catalog[entry.id] = entry
