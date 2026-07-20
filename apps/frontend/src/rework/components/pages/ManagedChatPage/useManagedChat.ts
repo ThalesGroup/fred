@@ -265,19 +265,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
     const boundLibraryIds =
       (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
-    // The picker's per-turn selection must reach the OWNING capability's typed
-    // `turn_options[capability_id]` slice (RFC §3.5) — `document_access` reads
-    // its narrowing there, never from `runtime_context` (PR review,
-    // chatgpt-codex-connector). `documentScopeControl.capability_id` keys it
-    // correctly regardless of which capability actually surfaced the widget.
-    const turnOptions = documentScopeControl
-      ? {
-          [documentScopeControl.capability_id]: {
-            library_tag_ids: composer.selectedLibraryIds,
-            document_uids: composer.selectedDocumentUids,
-          },
-        }
-      : undefined;
+    // The picker's per-turn selection reaches the OWNING capability's typed
+    // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
+    // `document_access` declares a TurnOptionsModel for it. The MCP
+    // capability's document_scope widget reads RuntimeContext (built below)
+    // and validates turn_options against EmptyModel, so sending it a slice is
+    // a typed 422 (#2029 follow-up; was masked by the missing-bearer bug).
+    const turnOptions =
+      documentScopeControl && documentScopeControl.capability_id === "document_access"
+        ? {
+            [documentScopeControl.capability_id]: {
+              library_tag_ids: composer.selectedLibraryIds,
+              document_uids: composer.selectedDocumentUids,
+            },
+          }
+        : undefined;
     send(
       text,
       sid,
