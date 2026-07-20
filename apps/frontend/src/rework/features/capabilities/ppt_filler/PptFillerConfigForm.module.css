@@ -1,0 +1,124 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2, 8px);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2, 8px);
+}
+
+.fileInput {
+  display: none;
+}
+
+.fileName {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--on-surface-variant, #666);
+  font-size: var(--font-size-small, 0.8125rem);
+  overflow-wrap: anywhere;
+}
+
+.clearButton {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--on-surface-variant, #666);
+  font-size: inherit;
+}
+
+.hint {
+  margin: 0;
+  color: var(--on-surface-variant, #666);
+  font-size: var(--font-size-small, 0.8125rem);
+}
+
+.blocking,
+.error {
+  margin: 0;
+  color: var(--error, #b3261e);
+  font-size: var(--font-size-small, 0.8125rem);
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--spacing-4, 16px);
+}
+
+.schema {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2, 8px);
+  border: 1px solid var(--outline-variant, #e0e0e0);
+  border-radius: var(--radius-small, 8px);
+  padding: var(--spacing-3, 12px);
+}
+
+.schemaTitle {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--font-size-small, 0.8125rem);
+}
+
+.slideGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slideTitle {
+  margin: 0;
+  color: var(--on-surface-variant, #666);
+  font-weight: 600;
+  font-size: var(--font-size-small, 0.8125rem);
+}
+
+.keyList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-2, 8px);
+  font-size: var(--font-size-small, 0.8125rem);
+}
+
+.keyName {
+  border-radius: 4px;
+  background: var(--surface-container, #f4f4f4);
+  padding: 0 4px;
+  font-family: var(--font-mono, monospace);
+}
+
+.imageBadge {
+  border: 1px solid var(--outline-variant, #e0e0e0);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--on-surface-variant, #666);
+  font-size: var(--font-size-x-small, 0.75rem);
+}
+
+.keyDescription {
+  color: var(--on-surface-variant, #666);
+  overflow-wrap: anywhere;
+}

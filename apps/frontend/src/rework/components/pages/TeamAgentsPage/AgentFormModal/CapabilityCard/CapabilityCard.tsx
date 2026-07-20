@@ -15,6 +15,7 @@
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
@@ -26,14 +27,21 @@ interface CapabilityCardProps {
   disabled: boolean;
   /** Per-capability config values keyed by the field's local key (matches config_fields[].key). */
   configValues: Record<string, unknown>;
+  /** Pending asset files for this capability, keyed by AssetSlot.key (#1903). */
+  assetFiles: Record<string, File | undefined>;
   onToggle: () => void;
   onConfigChange: (key: string, value: unknown) => void;
+  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  onBlockingErrorChange: (message: string | null) => void;
 }
 
 /**
  * One selectable capability in the agent Tools tab: a switch that activates the
  * capability plus, when active, its `config_fields` rendered through the shared
- * metadata-driven {@link TuningFieldRenderer} (no bespoke per-field UI here).
+ * metadata-driven {@link TuningFieldRenderer} — or, for a field whose
+ * `ui.widget` resolves in the owning capability's plugin `configWidgets`, the
+ * plugin's custom form widget (RFC §9 item 4, #1903). A widget id is rendered
+ * at most once even when several fields name it.
  */
 export function CapabilityCard({
   capability,
@@ -41,8 +49,11 @@ export function CapabilityCard({
   checked,
   disabled,
   configValues,
+  assetFiles,
   onToggle,
   onConfigChange,
+  onAssetFileChange,
+  onBlockingErrorChange,
 }: CapabilityCardProps) {
   const { t } = useTranslation();
   const switchId = useId();
@@ -50,6 +61,8 @@ export function CapabilityCard({
   const hasOptions = checked && configFields.length > 0;
   const displayName = t(capability.name);
   const description = t(capability.description);
+
+  const renderedWidgets = new Set<string>();
 
   return (
     <li className={`${styles.card} ${checked ? styles.cardActive : ""}`}>
@@ -63,16 +76,37 @@ export function CapabilityCard({
 
       {hasOptions && (
         <div className={styles.subForm}>
-          {configFields.map((field) => (
-            <TuningFieldRenderer
-              key={field.key}
-              field={field}
-              value={configValues[field.key]}
-              onChange={onConfigChange}
-              disabled={disabled}
-              teamId={teamId}
-            />
-          ))}
+          {configFields.map((field) => {
+            const Widget = configWidgetFor(capability.id, field.ui?.widget);
+            if (Widget) {
+              const widgetId = field.ui?.widget as string;
+              if (renderedWidgets.has(widgetId)) return null;
+              renderedWidgets.add(widgetId);
+              return (
+                <Widget
+                  key={widgetId}
+                  capabilityId={capability.id}
+                  teamId={teamId}
+                  disabled={disabled}
+                  configValues={configValues}
+                  onConfigChange={onConfigChange}
+                  assetFiles={assetFiles}
+                  onAssetFileChange={onAssetFileChange}
+                  onBlockingErrorChange={onBlockingErrorChange}
+                />
+              );
+            }
+            return (
+              <TuningFieldRenderer
+                key={field.key}
+                field={field}
+                value={configValues[field.key]}
+                onChange={onConfigChange}
+                disabled={disabled}
+                teamId={teamId}
+              />
+            );
+          })}
         </div>
       )}
     </li>

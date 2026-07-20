@@ -895,6 +895,23 @@ def _validate_capability_ids(
     return submitted_ids
 
 
+@dataclass(frozen=True)
+class CapabilityAssetFile:
+    """
+    One uploaded capability asset relayed to the pod at agent save
+    (#1903, RFC AGENT-CAPABILITY §3.4).
+
+    Control-plane never opens the bytes: it is a pure multipart relay between
+    the browser and the pod's `validate-config` endpoint, which enforces the
+    declared `AssetSlot` (cardinality, extension) before capability code runs.
+    """
+
+    slot_key: str
+    filename: str
+    content: bytes
+    content_type: str | None = None
+
+
 async def _validate_capability_config_via_pod(
     *,
     base_url: str,
@@ -903,6 +920,7 @@ async def _validate_capability_config_via_pod(
     team_id: TeamId,
     agent_instance_id: str | None,
     authorization: str | None,
+    asset_files: Sequence[CapabilityAssetFile] = (),
 ) -> dict[str, Any]:
     """
     Round-trip one capability's config to its pod for validation (#1974,
@@ -915,6 +933,9 @@ async def _validate_capability_config_via_pod(
       (the {"schema_version", "config"} envelope) is persisted VERBATIM
     - pod-side 422s (asset-slot violations, content validation) propagate to
       the caller as EnrollmentError(422) with the pod's wording
+    - `asset_files` are the save's uploaded asset binaries for THIS capability
+      (#1903): forwarded as multipart file fields keyed by slot key, exactly
+      the shape the pod endpoint reads into `validate_config`'s uploads
     """
     url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/validate-config"
     data: dict[str, str] = {
@@ -923,10 +944,23 @@ async def _validate_capability_config_via_pod(
     }
     if agent_instance_id:
         data["agent_instance_id"] = agent_instance_id
+    files = [
+        (
+            upload.slot_key,
+            (
+                upload.filename,
+                upload.content,
+                upload.content_type or "application/octet-stream",
+            ),
+        )
+        for upload in asset_files
+    ]
     headers = {"Authorization": authorization} if authorization else None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, data=data, headers=headers)
+            response = await client.post(
+                url, data=data, files=files or None, headers=headers
+            )
     except httpx.RequestError as exc:
         raise EnrollmentError(
             f"Agent runtime service at {base_url} is not reachable to "
@@ -975,6 +1009,7 @@ async def _apply_capability_selection(
     authorization: str | None,
     context_label: str,
     deps: ProductServiceDependencies | None = None,
+    asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1066,6 +1101,7 @@ async def _apply_capability_selection(
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             authorization=authorization,
+            asset_files=(asset_uploads or {}).get(cap_id, ()),
         )
         return cap_id, envelope
 
@@ -1873,6 +1909,7 @@ async def enroll_agent_instance(
     request: CreateAgentInstanceRequest,
     deps: ProductServiceDependencies,
     authorization: str | None = None,
+    asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Enroll one discovered template for a team, creating a DB-backed managed instance.
@@ -1998,6 +2035,7 @@ async def enroll_agent_instance(
         authorization=authorization,
         context_label="agent enrollment",
         deps=deps,
+        asset_uploads=asset_uploads,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2041,6 +2079,7 @@ async def update_agent_instance(
     deps: ProductServiceDependencies,
     user: KeycloakUser,
     authorization: str | None = None,
+    asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
 ) -> ManagedAgentInstanceSummary | None:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -2168,6 +2207,7 @@ async def update_agent_instance(
                 authorization=authorization,
                 context_label="agent update",
                 deps=deps,
+                asset_uploads=asset_uploads,
             )
         new_tuning = base
 

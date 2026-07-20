@@ -20,7 +20,8 @@
 
 import type { CapabilityUiPlugin } from "./types";
 import { demoEchoCapability } from "./demo_echo/plugin";
+import { pptFillerCapability } from "./ppt_filler/plugin";
 
-export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [demoEchoCapability];
+export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [demoEchoCapability, pptFillerCapability];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

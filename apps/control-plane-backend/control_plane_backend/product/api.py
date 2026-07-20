@@ -2,8 +2,19 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import Response
+from pydantic import ValidationError
 from fred_core import (
     ORGANIZATION_ID,
     KeycloakUser,
@@ -41,6 +52,7 @@ from control_plane_backend.product.schemas import (
     UpdateSessionRequest,
 )
 from control_plane_backend.product.service import (
+    CapabilityAssetFile,
     EnrollmentError,
     ExecutionPreparationError,
     PromptRequestError,
@@ -317,6 +329,175 @@ async def patch_team_agent_instance(
             deps=deps,
             user=user,
             authorization=http_request.headers.get("Authorization"),
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent instance {agent_instance_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+async def _parse_capability_asset_uploads(
+    asset_slots: list[str],
+    asset_files: list[UploadFile],
+) -> dict[str, list[CapabilityAssetFile]]:
+    """
+    Pair the parallel `asset_slots` / `asset_files` multipart arrays (#1903).
+
+    Each slot entry is `{capability_id}:{slot_key}` and addresses the file at
+    the same index. Control-plane never opens the bytes — the pod's declared
+    `AssetSlot` gate (cardinality, extension) and the capability's own content
+    validation both run pod-side on the relayed multipart.
+    """
+    if len(asset_slots) != len(asset_files):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "asset_slots and asset_files must have the same length "
+                f"(got {len(asset_slots)} slots for {len(asset_files)} files)."
+            ),
+        )
+    uploads: dict[str, list[CapabilityAssetFile]] = {}
+    for slot_ref, upload in zip(asset_slots, asset_files):
+        capability_id, separator, slot_key = slot_ref.partition(":")
+        if not separator or not capability_id or not slot_key:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Invalid asset slot reference {slot_ref!r}; expected "
+                    "'{capability_id}:{slot_key}'."
+                ),
+            )
+        uploads.setdefault(capability_id, []).append(
+            CapabilityAssetFile(
+                slot_key=slot_key,
+                filename=upload.filename or slot_key,
+                content=await upload.read(),
+                content_type=upload.content_type,
+            )
+        )
+    return uploads
+
+
+@router.post(
+    "/teams/{team_id}/agent-instances/with-assets",
+    response_model=ManagedAgentInstanceSummary,
+    response_model_exclude_none=True,
+    status_code=201,
+    summary=(
+        "Enroll a template as a managed agent instance with capability asset "
+        "uploads (multipart)."
+    ),
+)
+async def post_team_agent_instance_with_assets(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    http_request: Request,
+    request: Annotated[
+        str, Form(description="CreateAgentInstanceRequest as a JSON object string")
+    ],
+    asset_slots: Annotated[
+        list[str],
+        Form(
+            description=(
+                "One '{capability_id}:{slot_key}' reference per uploaded file, "
+                "aligned by index with asset_files."
+            )
+        ),
+    ] = [],
+    asset_files: Annotated[list[UploadFile], File()] = [],
+    user: KeycloakUser = Depends(get_current_user),
+) -> ManagedAgentInstanceSummary:
+    """
+    Multipart companion of `POST /teams/{team_id}/agent-instances` (#1903,
+    AGENT-CAPABILITY-RFC §3.4).
+
+    Why this endpoint exists:
+    - an asset-bearing capability (e.g. `ppt_filler`) needs its uploaded file to
+      travel INSIDE the atomic agent save, so the pod's `validate_config` can
+      parse it, store the binary, and persist the derived config in one step —
+      control-plane is a pure relay and never opens the bytes
+    - the JSON route stays unchanged for every save that carries no upload
+    """
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    try:
+        body = CreateAgentInstanceRequest.model_validate_json(request)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    uploads = await _parse_capability_asset_uploads(asset_slots, asset_files)
+    try:
+        return await enroll_agent_instance(
+            user=user,
+            team_id=team.id,
+            request=body,
+            deps=deps,
+            authorization=http_request.headers.get("Authorization"),
+            asset_uploads=uploads,
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/with-assets",
+    response_model=ManagedAgentInstanceSummary,
+    response_model_exclude_none=True,
+    summary=(
+        "Update a managed agent instance with capability asset uploads (multipart)."
+    ),
+)
+async def patch_team_agent_instance_with_assets(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    http_request: Request,
+    request: Annotated[
+        str, Form(description="UpdateAgentInstanceRequest as a JSON object string")
+    ],
+    asset_slots: Annotated[
+        list[str],
+        Form(
+            description=(
+                "One '{capability_id}:{slot_key}' reference per uploaded file, "
+                "aligned by index with asset_files."
+            )
+        ),
+    ] = [],
+    asset_files: Annotated[list[UploadFile], File()] = [],
+    user: KeycloakUser = Depends(get_current_user),
+) -> ManagedAgentInstanceSummary:
+    """
+    Multipart companion of `PATCH /teams/{team_id}/agent-instances/{id}` (#1903)
+    — same relay semantics as the enroll variant; see it for the rationale.
+    """
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    try:
+        body = UpdateAgentInstanceRequest.model_validate_json(request)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    uploads = await _parse_capability_asset_uploads(asset_slots, asset_files)
+    try:
+        result = await update_agent_instance(
+            team_id=team.id,
+            agent_instance_id=agent_instance_id,
+            request=body,
+            deps=deps,
+            user=user,
+            authorization=http_request.headers.get("Authorization"),
+            asset_uploads=uploads,
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
