@@ -147,22 +147,46 @@
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
-        "schemaTitle": "Fields the agent will fill",
+        "validTemplate": "Valid template",
+        "parsingDetails": "Parsing details",
+        "keyColumn": "Key",
+        "descriptionColumn": "Description",
+        "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
         "imageBadge": "image · {{folder}}",
         "noDescription": "No description"
       },
       "errors": {
-        "key_without_description": "{{placeholder}} appears on slide {{slide}} but has no description in the slide notes.",
-        "described_but_not_in_slide": "{{placeholder}} is described in the notes of slide {{slide}} but never appears in a text box on that slide.",
-        "unknown_metadata": "{{placeholder}} in the notes of slide {{slide}} declares an unknown metadata key (only 'type' and 'folder' are recognized).",
-        "unknown_type": "{{placeholder}} in the notes of slide {{slide}} declares an unknown type (only 'text' and 'image' are recognized).",
-        "duplicated_metadata": "{{placeholder}} in the notes of slide {{slide}} declares the same metadata key more than once.",
-        "image_without_folder": "{{placeholder}} in the notes of slide {{slide}} is an image but does not give a folder.",
-        "empty_folder": "{{placeholder}} in the notes of slide {{slide}} gives a folder but leaves it blank.",
-        "folder_without_image_type": "{{placeholder}} in the notes of slide {{slide}} gives a folder but is not an image (set 'type: image' to use a folder).",
-        "folder_not_found": "{{placeholder}} on slide {{slide}} points to a folder that does not exist in this space.",
-        "image_key_invalid_location": "{{placeholder}} on slide {{slide}} sits in a table cell, which cannot hold a picture. Move it into a text box or a rectangle.",
+        "key_without_description": {
+          "heading": "The following keys have no description:"
+        },
+        "described_but_not_in_slide": {
+          "heading": "The following described keys were not found in the slide:"
+        },
+        "unknown_metadata": {
+          "heading": "Unknown metadata keyword (use only `type` or `folder`):"
+        },
+        "unknown_type": {
+          "heading": "Unknown type value (use `text` or `image`):"
+        },
+        "duplicated_metadata": {
+          "heading": "Metadata declared twice in one key block:"
+        },
+        "image_without_folder": {
+          "heading": "Image keys missing a folder:"
+        },
+        "empty_folder": {
+          "heading": "Folder value is empty:"
+        },
+        "folder_without_image_type": {
+          "heading": "A folder was set on a non-image key:"
+        },
+        "folder_not_found": {
+          "heading": "Folder not found in your space:"
+        },
+        "image_key_invalid_location": {
+          "heading": "Move these image keys into a text box or rectangle (a table cell cannot hold an image):"
+        },
         "invalid_upload": "The uploaded file could not be read as a .pptx. Re-select the file and try again.",
         "asset_required": "PPT Filler requires a PowerPoint template, but none was provided."
       },

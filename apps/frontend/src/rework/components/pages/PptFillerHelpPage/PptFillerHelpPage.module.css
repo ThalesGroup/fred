@@ -1,0 +1,96 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background-color: var(--surface-main);
+  width: 100%;
+  height: 100vh;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+/* Centered, not too wide for comfortable reading. */
+.content {
+  box-sizing: border-box;
+  padding: var(--spacing-3xl) var(--spacing-l) calc(var(--spacing-3xl) * 2);
+  width: 100%;
+  max-width: 720px;
+  font: var(--font-body-large);
+  line-height: 1.6;
+
+  h1 {
+    margin: 0 0 var(--spacing-l) 0;
+    color: var(--on-surface);
+    font: var(--font-title-large-emphasized);
+    text-align: center;
+  }
+
+  h2 {
+    margin: var(--spacing-xl) 0 var(--spacing-xs) 0;
+    color: var(--secondary);
+    font: var(--font-title-large-emphasized);
+  }
+
+  h3 {
+    margin: var(--spacing-l) 0 var(--spacing-2xs) 0;
+    color: var(--secondary);
+    font: var(--font-title-medium-emphasized);
+  }
+
+  p {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* Horizontal rules become light section separators. */
+  hr {
+    margin: var(--spacing-xl) 0;
+    border: none;
+    border-top: 1px solid var(--outline-retreat);
+  }
+
+  ul,
+  ol {
+    padding-left: var(--spacing-l);
+  }
+
+  li {
+    margin: var(--spacing-2xs) 0;
+  }
+
+  code {
+    border-radius: var(--radius-xs);
+    background-color: var(--surface-container-high);
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+  }
+
+  /* Fenced code blocks: distinct container so they stand out from prose. */
+  pre {
+    margin: var(--spacing-m) 0;
+    border: 1px solid var(--outline-retreat);
+    border-radius: var(--radius-s);
+    background-color: var(--surface-container);
+    padding: var(--spacing-m);
+    overflow-x: auto;
+  }
+
+  /* Inside a block, the code element is just monospace text — drop the inline chip styling. */
+  pre code {
+    border-radius: 0;
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.9em;
+  }
+
+  /* Illustration screenshots: never overflow the reading column. */
+  img {
+    display: block;
+    margin: var(--spacing-m) 0;
+    border: 1px solid var(--outline-retreat);
+    border-radius: var(--radius-s);
+    width: 100%;
+    height: auto;
+  }
+}

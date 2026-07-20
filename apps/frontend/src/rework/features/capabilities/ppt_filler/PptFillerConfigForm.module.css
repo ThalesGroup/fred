@@ -37,6 +37,18 @@
   font-size: inherit;
 }
 
+.learnMoreLink {
+  align-self: flex-start;
+  margin-top: var(--spacing-3xs);
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.learnMoreLink:hover {
+  text-decoration: underline;
+}
+
 .hint {
   margin: 0;
   color: var(--on-surface-variant, #666);
@@ -50,75 +62,138 @@
   font-size: var(--font-size-small, 0.8125rem);
 }
 
+/* Grouped template errors: heading → per-slide group → offending keys. */
 .errorList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding-left: var(--spacing-4, 16px);
+  gap: var(--spacing-m);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-s) var(--spacing-m);
+  max-height: 320px;
+  overflow-y: auto;
 }
 
+.errorGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.errorHeading {
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.errorSlideGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  padding-left: var(--spacing-s);
+}
+
+.errorSlide {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.errorKeyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding-left: var(--spacing-l);
+  list-style: disc;
+}
+
+.errorKey {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Green-check confirmation shown when the analyzed template has no errors. */
+.validTemplate {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.validCheck {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--success, #2e7d32);
+  font: var(--font-label-medium);
+  font-weight: 700;
+}
+
+/* Collapsed "parsing details" content: one small key/description table per slide. */
 .schema {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2, 8px);
-  border: 1px solid var(--outline-variant, #e0e0e0);
-  border-radius: var(--radius-small, 8px);
-  padding: var(--spacing-3, 12px);
-}
-
-.schemaTitle {
-  margin: 0;
-  font-weight: 600;
-  font-size: var(--font-size-small, 0.8125rem);
+  gap: var(--spacing-m);
 }
 
 .slideGroup {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-2xs);
 }
 
 .slideTitle {
   margin: 0;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
   font-weight: 600;
-  font-size: var(--font-size-small, 0.8125rem);
 }
 
-.keyList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.keyTable {
+  border-collapse: collapse;
+  width: 100%;
+  font: var(--font-body-small);
 }
 
-.keyRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--spacing-2, 8px);
-  font-size: var(--font-size-small, 0.8125rem);
+.keyTable th {
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-3xs) var(--spacing-s) var(--spacing-3xs) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-align: left;
+}
+
+.keyTable td {
+  vertical-align: baseline;
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-2xs) var(--spacing-s) var(--spacing-2xs) 0;
+}
+
+.keyTable tr:last-child td {
+  border-bottom: none;
+}
+
+.keyCell {
+  white-space: nowrap;
 }
 
 .keyName {
-  border-radius: 4px;
-  background: var(--surface-container, #f4f4f4);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high, #f4f4f4);
   padding: 0 4px;
   font-family: var(--font-mono, monospace);
 }
 
 .imageBadge {
-  border: 1px solid var(--outline-variant, #e0e0e0);
+  margin-left: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
   border-radius: 999px;
   padding: 0 6px;
-  color: var(--on-surface-variant, #666);
-  font-size: var(--font-size-x-small, 0.75rem);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .keyDescription {
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   overflow-wrap: anywhere;
 }

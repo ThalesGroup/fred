@@ -21,7 +21,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
+import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CapabilityConfigWidgetProps } from "../types";
 import {
@@ -36,21 +38,43 @@ import styles from "./PptFillerConfigForm.module.css";
 /** The manifest's one upload slot key (AssetSlot.key on the backend). */
 const TEMPLATE_SLOT = "template";
 
+// Known parse-error codes mapped to the i18n key of their group heading. Unmapped codes
+// fall back to the server `message` (the English fallback the backend always provides).
+const ERROR_CODE_HEADING_I18N: Record<string, string> = {
+  key_without_description: "capability.ppt_filler.errors.key_without_description.heading",
+  described_but_not_in_slide: "capability.ppt_filler.errors.described_but_not_in_slide.heading",
+  // Image-support error codes: note-metadata + folder-resolution validation.
+  unknown_metadata: "capability.ppt_filler.errors.unknown_metadata.heading",
+  unknown_type: "capability.ppt_filler.errors.unknown_type.heading",
+  duplicated_metadata: "capability.ppt_filler.errors.duplicated_metadata.heading",
+  image_without_folder: "capability.ppt_filler.errors.image_without_folder.heading",
+  empty_folder: "capability.ppt_filler.errors.empty_folder.heading",
+  folder_without_image_type: "capability.ppt_filler.errors.folder_without_image_type.heading",
+  folder_not_found: "capability.ppt_filler.errors.folder_not_found.heading",
+  image_key_invalid_location: "capability.ppt_filler.errors.image_key_invalid_location.heading",
+};
+
 /**
- * i18n an error by its stable code (the RFC contract: `code` is the machine
- * key, `message` the English fallback). Unknown codes fall back to the
- * backend-provided message so a new code never renders blank.
+ * Groups flat template errors first by error code, then by slide number, collecting the
+ * affected keys. Turns a long repeated list into a compact "heading → slide → keys" tree.
  */
-function useTemplateErrorText() {
-  const { t } = useTranslation();
-  return (error: TemplateError): string =>
-    t(`capability.ppt_filler.errors.${error.code}`, {
-      defaultValue: error.message,
-      slide: error.slide,
-      // The literal `{{key}}` placeholder is prebuilt here — braces inside an
-      // i18next template would be parsed as interpolation markers.
-      placeholder: `{{${error.key}}}`,
-    });
+function groupErrors(errors: TemplateError[]) {
+  const byCode = new Map<string, { code: string; message: string; slides: Map<number, string[]> }>();
+  for (const err of errors) {
+    let group = byCode.get(err.code);
+    if (!group) {
+      group = { code: err.code, message: err.message, slides: new Map() };
+      byCode.set(err.code, group);
+    }
+    const keys = group.slides.get(err.slide) ?? [];
+    keys.push(err.key);
+    group.slides.set(err.slide, keys);
+  }
+  return [...byCode.values()].map((group) => ({
+    code: group.code,
+    message: group.message,
+    slides: [...group.slides.entries()].sort(([a], [b]) => a - b).map(([slide, keys]) => ({ slide, keys })),
+  }));
 }
 
 export function PptFillerConfigForm({
@@ -61,7 +85,6 @@ export function PptFillerConfigForm({
   onBlockingErrorChange,
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
-  const errorText = useTemplateErrorText();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [analyze, { isLoading: isAnalyzing }] = useAnalyzeAnalyzePostMutation();
   const [analysis, setAnalysis] = useState<ParseResult | null>(null);
@@ -160,44 +183,80 @@ export function PptFillerConfigForm({
         )}
       </div>
 
+      <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="noopener noreferrer">
+        {t("capability.ppt_filler.form.learnMore")}
+      </Link>
+
       {blockingError && <p className={styles.blocking}>{blockingError}</p>}
       {isAnalyzing && <p className={styles.hint}>{t("capability.ppt_filler.form.analyzing")}</p>}
       {analyzeFailed && <p className={styles.error}>{t("capability.ppt_filler.form.analyzeFailed")}</p>}
 
       {previewErrors.length > 0 && (
-        <ul className={styles.errorList}>
-          {previewErrors.map((error, index) => (
-            <li key={`${error.slide}-${error.key}-${error.code}-${index}`} className={styles.error}>
-              {errorText(error)}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {previewSlides.length > 0 && (
-        <div className={styles.schema}>
-          <p className={styles.schemaTitle}>{t("capability.ppt_filler.form.schemaTitle")}</p>
-          {previewSlides.map((slide) => (
-            <div key={slide.slide} className={styles.slideGroup}>
-              <p className={styles.slideTitle}>{t("capability.ppt_filler.form.slide", { number: slide.slide })}</p>
-              <ul className={styles.keyList}>
-                {(slide.keys ?? []).map((keyField) => (
-                  <li key={keyField.key} className={styles.keyRow}>
-                    <code className={styles.keyName}>{`{{${keyField.key}}}`}</code>
-                    {keyField.type === "image" && (
-                      <span className={styles.imageBadge}>
-                        {t("capability.ppt_filler.form.imageBadge", { folder: keyField.folder ?? "" })}
-                      </span>
-                    )}
-                    <span className={styles.keyDescription}>
-                      {keyField.description || t("capability.ppt_filler.form.noDescription")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+        <div className={styles.errorList}>
+          {groupErrors(previewErrors).map((group) => (
+            <div key={group.code} className={styles.errorGroup}>
+              <span className={styles.errorHeading}>
+                {ERROR_CODE_HEADING_I18N[group.code] ? t(ERROR_CODE_HEADING_I18N[group.code]) : group.message}
+              </span>
+              {group.slides.map(({ slide, keys }) => (
+                <div key={slide} className={styles.errorSlideGroup}>
+                  <span className={styles.errorSlide}>{t("capability.ppt_filler.form.slide", { number: slide })}</span>
+                  <ul className={styles.errorKeyList}>
+                    {keys.map((key) => (
+                      <li key={key} className={styles.errorKey}>{`{{${key}}}`}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           ))}
         </div>
+      )}
+
+      {previewErrors.length === 0 && previewSlides.length > 0 && (
+        <div className={styles.validTemplate}>
+          <span className={styles.validCheck} aria-hidden="true">
+            ✓
+          </span>
+          <span>{t("capability.ppt_filler.form.validTemplate")}</span>
+        </div>
+      )}
+
+      {previewSlides.length > 0 && (
+        <Disclosure title={t("capability.ppt_filler.form.parsingDetails")}>
+          <div className={styles.schema}>
+            {previewSlides.map((slide) => (
+              <div key={slide.slide} className={styles.slideGroup}>
+                <p className={styles.slideTitle}>{t("capability.ppt_filler.form.slide", { number: slide.slide })}</p>
+                <table className={styles.keyTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("capability.ppt_filler.form.keyColumn")}</th>
+                      <th scope="col">{t("capability.ppt_filler.form.descriptionColumn")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(slide.keys ?? []).map((keyField) => (
+                      <tr key={keyField.key}>
+                        <td className={styles.keyCell}>
+                          <code className={styles.keyName}>{`{{${keyField.key}}}`}</code>
+                          {keyField.type === "image" && (
+                            <span className={styles.imageBadge}>
+                              {t("capability.ppt_filler.form.imageBadge", { folder: keyField.folder ?? "" })}
+                            </span>
+                          )}
+                        </td>
+                        <td className={styles.keyDescription}>
+                          {keyField.description || t("capability.ppt_filler.form.noDescription")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </Disclosure>
       )}
     </div>
   );
