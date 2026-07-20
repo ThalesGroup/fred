@@ -1275,6 +1275,14 @@ tree instead of the raw tag-id `TagInput`. Unknown widget ids fall back to the
 via `GET /users/by-ids`, and shows "Updated by …" when the instance has been
 user-edited (`updated_by`).
 
+### `DocumentWorkspace` — library deletion
+
+Corpus library folders now carry a delete action (same `canUpdateResources`
+gate as upload/new-folder), with a confirmation dialog. Deletion cascades
+server-side: sub-folders and the untagging of contained documents are the
+backend's `delete_tag_for_user`. Errors surface as a toast with the backend
+detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
 ### `CategoryPicker` / prompt category surfaces
 
 Pickers and filters offer exactly 7 functional categories (doc-assist,

@@ -26,6 +26,7 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -128,6 +129,32 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   );
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
+
+  // Library deletion cascades server-side: sub-folders (path-prefix tags) and
+  // the untagging of every contained document are handled by the backend.
+  const confirmDeleteLibrary = useCallback(
+    (node: TagNode, tag: TagWithItemsId) =>
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteLibraryTitle"),
+        message: t("rework.resources.confirm.deleteLibraryMessage", { name: node.name }),
+        onConfirm: () => {
+          void deleteTag({ tagId: tag.id })
+            .unwrap()
+            .then(() => {
+              showSuccess({ summary: t("rework.resources.confirm.deleteLibraryDone", { name: node.name }) });
+              void refetchTags();
+            })
+            .catch((error) => {
+              showError({
+                summary: t("rework.resources.confirm.deleteLibraryTitle"),
+                detail: String((error as { data?: { detail?: string } })?.data?.detail ?? error),
+              });
+            });
+        },
+      }),
+    [deleteTag, refetchTags, showConfirmationDialog, showError, showSuccess, t],
+  );
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
 
   const selectedNode = selectedFolderFull ? findNode(tree, selectedFolderFull) : null;
@@ -312,6 +339,9 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                 : undefined
             }
             onCreateSubfolder={canCreateFolder ? () => openCreateFolder(node.full) : undefined}
+            onDelete={
+              tag && canCreateFolder ? () => confirmDeleteLibrary(node, tag as unknown as TagWithItemsId) : undefined
+            }
           />
         </div>
 

@@ -1056,6 +1056,9 @@
         "searchable": "Activer/désactiver la recherche"
       },
       "confirm": {
+        "deleteLibraryDone": "« {{name}} » supprimée.",
+        "deleteLibraryMessage": "Supprimer « {{name}} » et ses sous-dossiers ? Les documents qu'elle contient sont retirés du corpus (et supprimés s'ils n'appartiennent à aucune autre bibliothèque).",
+        "deleteLibraryTitle": "Supprimer la bibliothèque",
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteTitle": "Retirer le document",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",

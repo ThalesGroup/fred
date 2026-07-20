@@ -1056,6 +1056,9 @@
         "searchable": "Toggle searchable"
       },
       "confirm": {
+        "deleteLibraryDone": "\"{{name}}\" deleted.",
+        "deleteLibraryMessage": "Delete \"{{name}}\" and its subfolders? The documents inside are removed from the corpus (and deleted when they belong to no other library).",
+        "deleteLibraryTitle": "Delete library",
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteTitle": "Remove document",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
