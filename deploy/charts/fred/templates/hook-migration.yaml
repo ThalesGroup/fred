@@ -23,6 +23,9 @@ spec:
         {{- if .app.podAnnotations }}
 {{ toYaml .app.podAnnotations | nindent 8 }}
         {{- end }}
+        {{- if .app.migration.podAnnotations }}
+{{ toYaml .app.migration.podAnnotations | nindent 8 }}
+        {{- end }}
         {{- if .app.configuration }}
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
         {{- end }}
