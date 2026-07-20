@@ -144,9 +144,8 @@
 
 .slideTitle {
   margin: 0;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-  font-weight: 600;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
 }
 
 .keyTable {

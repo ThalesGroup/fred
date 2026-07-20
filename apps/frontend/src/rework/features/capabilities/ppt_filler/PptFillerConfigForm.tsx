@@ -223,7 +223,7 @@ export function PptFillerConfigForm({
       )}
 
       {previewSlides.length > 0 && (
-        <Disclosure title={t("capability.ppt_filler.form.parsingDetails")}>
+        <Disclosure title={t("capability.ppt_filler.form.parsingDetails")} variant="subtle">
           <div className={styles.schema}>
             {previewSlides.map((slide) => (
               <div key={slide.slide} className={styles.slideGroup}>
