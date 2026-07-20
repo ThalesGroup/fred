@@ -269,8 +269,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
     // `document_access` declares a TurnOptionsModel for it. The MCP
     // capability's document_scope widget reads RuntimeContext (built below)
-    // and validates turn_options against EmptyModel, so sending it a slice is
-    // a typed 422 (#2029 follow-up; was masked by the missing-bearer bug).
+    // and validates turn_options against EmptyModel, so sending it a slice
+    // is a typed 422.
     const turnOptions =
       documentScopeControl && documentScopeControl.capability_id === "document_access"
         ? {

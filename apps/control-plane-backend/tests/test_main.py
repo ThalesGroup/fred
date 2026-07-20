@@ -6347,7 +6347,7 @@ def _stub_chat_controls(
     """Stub the control-plane→pod chat-controls call (#1976). Returns a
     one-element counter of how many times the pod was asked — misses only, so a
     cache hit leaves it unchanged. Pass `captured_authorization` to record the
-    bearer forwarded on each pod call (#2029)."""
+    bearer forwarded on each pod call."""
 
     calls = [0]
 
@@ -6466,9 +6466,9 @@ async def test_prepare_execution_attaches_computed_chat_controls(
 async def test_prepare_execution_forwards_bearer_to_chat_controls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#2029: the pod's chat-controls route authenticates the caller, so prep
-    must forward the acting user's Authorization header — a bearer-less call
-    401s on auth-enabled deployments and silently empties the composer."""
+    """The pod's chat-controls route authenticates the caller, so prep must
+    forward the acting user's Authorization header — a bearer-less call 401s
+    on auth-enabled deployments and silently empties the composer."""
     product_service._chat_controls_cache.clear()
     store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cc-auth")])
     app = _prep_app_for_mcp_instance(monkeypatch, store)

@@ -1133,9 +1133,9 @@ async def post_prepare_execution(
             session_id=session_id,
             lang=lang,
             deps=deps,
-            # Forwarded to the pod's chat-controls evaluation (#2029) so the
-            # pod-side auth sees the acting user — same pattern as the
-            # validate-config round-trip on enroll/update.
+            # Forwarded to the pod's chat-controls evaluation so the pod-side
+            # auth sees the acting user — same pattern as the validate-config
+            # round-trip on enroll/update.
             authorization=http_request.headers.get("Authorization"),
         )
     except ExecutionPreparationError as exc:

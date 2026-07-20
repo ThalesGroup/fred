@@ -599,9 +599,9 @@ async def _fetch_chat_controls(
     Ask one pod to evaluate a batch of capabilities' chat controls (#1976).
 
     POST `/agents/capabilities/chat-controls` — forwards the acting user's
-    bearer (#2029): the pod route requires authentication ("reuses the same
-    bearer the pod validates for `/agents/*`"), so on auth-enabled deployments
-    a bearer-less call 401s and silently kills every composer control.
+    bearer: the pod route requires authentication ("reuses the same bearer
+    the pod validates for `/agents/*`"), so on auth-enabled deployments a
+    bearer-less call 401s and silently kills every composer control.
     Returns None when the pod is unreachable: the missed capabilities'
     controls are then simply ABSENT from this prep (logged, best-effort — the
     same silent-degrade contract as the catalog fetch), never served from a
@@ -2545,8 +2545,8 @@ async def prepare_execution(
         instance.tuning,
         available_capabilities,
         source.base_url,
-        # The pod's chat-controls route authenticates the caller (#2029);
-        # forward the acting user's bearer like the validate-config round-trip.
+        # The pod's chat-controls route authenticates the caller; forward the
+        # acting user's bearer like the validate-config round-trip.
         authorization=authorization,
     )
 
