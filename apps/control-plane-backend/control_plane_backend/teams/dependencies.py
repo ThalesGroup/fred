@@ -29,11 +29,15 @@ from control_plane_backend.scheduler.temporal.structures import (
 )
 from control_plane_backend.users.dependencies import build_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
-from control_plane_backend.users.service import get_users_by_ids
+from control_plane_backend.users.service import get_users_by_ids, search_users
 
 UserSummaryLookup: TypeAlias = Callable[
     [Iterable[str]],
     Awaitable[dict[str, UserSummary]],
+]
+UserSearch: TypeAlias = Callable[
+    [str],
+    Awaitable[list[UserSummary]],
 ]
 LifecycleRunner: TypeAlias = Callable[
     [LifecycleManagerInput],
@@ -69,6 +73,7 @@ class TeamServiceDependencies:
     get_purge_queue_store: Callable[[], PurgeQueueStore]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
     get_users_by_ids: UserSummaryLookup
+    search_users: UserSearch
     run_lifecycle_manager_once_in_memory: LifecycleRunner
 
 
@@ -76,6 +81,7 @@ def build_team_service_dependencies(
     container: ControlPlaneContainer,
     *,
     user_summary_lookup: UserSummaryLookup | None = None,
+    user_search: UserSearch | None = None,
     lifecycle_runner: LifecycleRunner | None = None,
 ) -> TeamServiceDependencies:
     """
@@ -119,6 +125,30 @@ def build_team_service_dependencies(
 
         user_summary_lookup = _lookup_users_by_ids
 
+    if user_search is None:
+        user_deps_for_search = build_user_service_dependencies(container)
+
+        async def _search_users(query: str) -> list[UserSummary]:
+            """
+            Search Keycloak users with the container-bound user dependencies.
+
+            Why this function exists:
+            - the team-scoped candidate-member search route needs the same
+              explicit-DI boundary as `_lookup_users_by_ids`, backed by
+              `users/service.py::search_users` instead of the org-wide listing
+
+            How to use it:
+            - call with a non-empty search query
+            - the closure captures the user dependency bundle built from the
+              same application container
+
+            Example:
+            - `matches = await _search_users("cohen")`
+            """
+            return await search_users(query, user_deps_for_search)
+
+        user_search = _search_users
+
     if lifecycle_runner is None:
         lifecycle_deps = build_lifecycle_action_dependencies(container)
 
@@ -157,6 +187,7 @@ def build_team_service_dependencies(
         get_purge_queue_store=container.get_purge_queue_store,
         get_policy_catalog=container.get_policy_catalog,
         get_users_by_ids=user_summary_lookup,
+        search_users=user_search,
         run_lifecycle_manager_once_in_memory=lifecycle_runner,
     )
 

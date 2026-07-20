@@ -1,0 +1,95 @@
+/* Evaluations list — the reusable, versioned case sets. Design tokens only. */
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  margin: var(--spacing-2xs) 0 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+/* ── Grid table ──────────────────────────────────────────────────────────── */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1.6fr auto auto auto auto auto;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.headerRow {
+  border-bottom: 1px solid var(--outline-variant);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small-emphasized);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bodyRow {
+  cursor: pointer;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.bodyRow:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.bodyRow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.name {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.mono {
+  color: var(--on-surface-retreat);
+  font-size: var(--font-size-xs, 0.75rem);
+  font-family: var(--font-family-mono, monospace);
+}
+
+.muted {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.actionsCell {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}

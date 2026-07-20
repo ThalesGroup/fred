@@ -899,6 +899,37 @@ application logger for the audit window, plus a queryable readiness-report endpo
 store. A durable audit sink is a separate, larger decision (`OBSERV` domain) out of
 scope for this two-week launch — flag as a follow-up, not a launch blocker.
 
+### 24.9 Team-scoped user search for the add-member flow (2026-07-20)
+
+Found during a live evaluation-UI testing session: `TeamSettingsMembers.tsx`'s "add
+member" search box is correctly gated on the caller's own `can_administer_members`
+(owner-only per `§24.7`, no platform escalation) — but its data source was
+`GET /control-plane/v1/users`, gated on `OrganizationPermission.CAN_ADMINISTER_USERS`
+(`platform_admin` only, `users/api.py`). Any team admin who is not also
+`platform_admin` therefore saw the search box render (their own permission check
+passed) but it always returned nothing (the org-wide listing 403'd, swallowed
+silently by the frontend) — a real functional gap, not an edge case, since team
+ownership and platform administration are deliberately disjoint roles in this model.
+
+**Rejected fix:** loosen `CAN_ADMINISTER_USERS` on `/users` to also accept
+`can_administer_members` on any team. Rejected because it would let any team owner
+enumerate the entire org's Keycloak directory (every user's name/username/email) in
+one call — a real widening of who can read that data, and the same shape of mistake
+`§24.7` already found once in this permission family, just running the other
+direction (team-scope reaching into org-wide data instead of platform-scope reaching
+into team data).
+
+**Chosen fix:** a new, narrower endpoint, `GET /teams/{team_id}/candidate-members`
+(`teams/api.py::search_candidate_team_members`), gated on `can_administer_members`
+for that specific team. It requires a non-empty search query (`min_length=2`,
+enforced server-side, never just client-side) and returns only matching users
+already excluding current team members — never a full-directory listing. The
+org-wide `/users` endpoint and its `platform_admin` gate are unchanged.
+`users/service.py::search_users` backs it with Keycloak's native `search` query
+param rather than fetching every user and filtering in memory.
+
+Verified: `tests/test_team_member_roles.py::test_search_candidate_team_members_checks_permission_and_excludes_existing_members`.
+
 ## 25a. Second finding: organization-level content bypass (2026-07-09, deferred)
 
 While implementing `§24.2`, a second and larger gap was found: `OrganizationPermission.CAN_READ_CONTENT` /

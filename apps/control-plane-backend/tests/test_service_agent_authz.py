@@ -62,6 +62,7 @@ def _deps(rebac: _FakeRebac):
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
+        search_users=cast(Any, lambda *_a, **_k: []),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 
@@ -79,6 +80,33 @@ async def test_service_agent_read_bypasses_openfga() -> None:
         TeamId("fredlab"),
         cast(Any, rebac),
         [TeamPermission.CAN_READ],
+        _deps(rebac),
+    )
+
+    assert rebac.calls == []  # OpenFGA never consulted for the service identity
+    assert token is None
+    assert metadata.id == "fredlab"
+
+
+@pytest.mark.asyncio
+async def test_service_agent_use_team_agents_bypasses_openfga() -> None:
+    """service_agent + CAN_USE_TEAM_AGENTS → authorized without any OpenFGA check.
+
+    Regression test (2026-07-20, AGENT-EVALUATION-RFC.md §8.6): prepare-execution
+    (`product/api.py::post_prepare_execution`) requires CAN_USE_TEAM_AGENTS, not
+    CAN_READ — the evaluation worker's M2M identity was unconditionally denied on
+    every run case until this permission joined the allowlist.
+    """
+    from control_plane_backend.teams.service import (
+        _validate_team_and_check_permission,
+    )
+
+    rebac = _FakeRebac()
+    metadata, token = await _validate_team_and_check_permission(
+        _user(["service_agent"]),
+        TeamId("fredlab"),
+        cast(Any, rebac),
+        [TeamPermission.CAN_USE_TEAM_AGENTS],
         _deps(rebac),
     )
 

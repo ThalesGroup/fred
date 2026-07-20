@@ -45,7 +45,9 @@ from control_plane_backend.teams.service import (
     list_team_members_unfiltered,
     remove_team_member,
     revoke_team_member_role,
+    search_candidate_team_members,
 )
+from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     KeycloakUser,
     RebacReference,
@@ -138,12 +140,17 @@ async def _no_users_by_ids(*_a, **_k) -> dict:
     return {}
 
 
+async def _no_search_users(*_a, **_k) -> list:
+    return []
+
+
 def _deps(
     rebac: _FakeRebac,
     team_id: str,
     *,
     get_session_store: Any = cast(Any, object),
     get_purge_queue_store: Any = cast(Any, object),
+    search_users: Any = cast(Any, _no_search_users),
 ):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -160,6 +167,7 @@ def _deps(
         get_purge_queue_store=get_purge_queue_store,
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        search_users=search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 
@@ -520,3 +528,76 @@ async def test_remove_team_member_checks_permission_for_every_held_role(
         TeamPermission.CAN_ADMINISTER_EDITORS,
     }
     assert rebac.roles["bob"] == set()
+
+
+# --------------------------- search_candidate_team_members ---------------
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_members_checks_permission_and_excludes_existing_members() -> (
+    None
+):
+    rebac = _FakeRebac(roles={"existing-member": {UserTeamRelation.TEAM_MEMBER}})
+    search_calls: list[str] = []
+
+    async def _search_users(query: str) -> list[UserSummary]:
+        search_calls.append(query)
+        return [
+            UserSummary(id="existing-member", username="already-in-team"),
+            UserSummary(id="new-user", username="cohen.odelia"),
+        ]
+
+    deps = _deps(rebac, "fredlab", search_users=_search_users)
+
+    matches = await search_candidate_team_members(
+        _user(), TeamId("fredlab"), "cohen", deps
+    )
+
+    assert search_calls == ["cohen"]
+    assert [m.id for m in matches] == ["new-user"]
+    assert rebac.team_permission_checks == [
+        ("fredlab", (TeamPermission.CAN_ADMINISTER_MEMBERS,))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_members_rejects_whitespace_only_query() -> None:
+    """`min_length=2` at the API layer validates the raw string, so "  " (two
+    spaces) would otherwise pass through and reach Keycloak's search
+    un-widened. The service must strip and re-check before searching — but
+    still authorize first, regardless of whether the query turns out valid.
+    """
+    rebac = _FakeRebac(roles={})
+    search_calls: list[str] = []
+
+    async def _search_users(query: str) -> list[UserSummary]:
+        search_calls.append(query)
+        return [UserSummary(id="new-user", username="cohen.odelia")]
+
+    deps = _deps(rebac, "fredlab", search_users=_search_users)
+
+    matches = await search_candidate_team_members(
+        _user(), TeamId("fredlab"), "  ", deps
+    )
+
+    assert matches == []
+    assert search_calls == []  # never reached the search
+    assert rebac.team_permission_checks == [
+        ("fredlab", (TeamPermission.CAN_ADMINISTER_MEMBERS,))
+    ]  # still authorized before the empty-query short-circuit
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_members_strips_surrounding_whitespace() -> None:
+    rebac = _FakeRebac(roles={})
+    search_calls: list[str] = []
+
+    async def _search_users(query: str) -> list[UserSummary]:
+        search_calls.append(query)
+        return [UserSummary(id="new-user", username="cohen.odelia")]
+
+    deps = _deps(rebac, "fredlab", search_users=_search_users)
+
+    await search_candidate_team_members(_user(), TeamId("fredlab"), "  cohen  ", deps)
+
+    assert search_calls == ["cohen"]

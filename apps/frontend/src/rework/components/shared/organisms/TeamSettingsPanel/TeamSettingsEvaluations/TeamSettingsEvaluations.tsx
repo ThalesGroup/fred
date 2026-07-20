@@ -13,49 +13,114 @@
 // limitations under the License.
 
 // Team-scoped evaluations, hosted inside the Team Settings modal. Because a modal
-// cannot host sub-routes, the list / create / detail screens are switched via local
-// view state instead of router navigation.
+// cannot host sub-routes, the screens are switched via local view state instead of
+// router navigation.
+//
+// The screens follow the two nouns of RFC AGENT-EVALUATION §8.5: an Evaluation (a
+// versioned, reusable case set) holds N Runs (one execution each, against a target
+// chosen at start time). Creating an Evaluation never starts a Run.
+//
+//   evaluations ──▶ evaluationCreate
+//        │
+//        └──▶ runs (of one evaluation) ──▶ runCreate
+//                     │
+//                     └──▶ runDetail
 
 import { useState } from "react";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import EvaluationCampaigns from "./views/EvaluationCampaigns";
-import EvaluationCampaignCreate from "./views/EvaluationCampaignCreate";
-import EvaluationCampaignDetail from "./views/EvaluationCampaignDetail";
+import Evaluations from "./views/Evaluations";
+import EvaluationCreate from "./views/EvaluationCreate";
+import EvaluationRuns from "./views/EvaluationRuns";
+import RunCreate from "./views/RunCreate";
+import EvaluationRunDetail from "./views/EvaluationRunDetail";
 
-type EvalView = { kind: "list" } | { kind: "create" } | { kind: "detail"; campaignId: string; selectedCaseId?: string };
+type EvalView =
+  | { kind: "evaluations" }
+  | { kind: "evaluationCreate" }
+  | { kind: "runs"; evaluationId: string; evaluationName: string }
+  | { kind: "runCreate"; evaluationId: string; evaluationName: string }
+  | { kind: "runDetail"; evaluationId: string; evaluationName: string; runId: string; selectedCaseId?: string };
 
 interface TeamSettingsEvaluationsProps {
   team: TeamWithPermissions;
 }
 
 export default function TeamSettingsEvaluations({ team }: TeamSettingsEvaluationsProps) {
-  const [view, setView] = useState<EvalView>({ kind: "list" });
+  const [view, setView] = useState<EvalView>({ kind: "evaluations" });
 
-  if (view.kind === "create") {
+  if (view.kind === "evaluationCreate") {
     return (
-      <EvaluationCampaignCreate
+      <EvaluationCreate
         teamId={team.id}
-        onCancel={() => setView({ kind: "list" })}
-        onCreated={(campaignId) => setView({ kind: "detail", campaignId })}
+        onCancel={() => setView({ kind: "evaluations" })}
+        // Back to the full list, not straight into the new evaluation's runs —
+        // seeing it land in the list first reinforces that a run is started
+        // FROM an evaluation, a deliberate next click, not an automatic step.
+        onCreated={() => setView({ kind: "evaluations" })}
       />
     );
   }
 
-  if (view.kind === "detail") {
+  if (view.kind === "runCreate") {
     return (
-      <EvaluationCampaignDetail
-        campaignId={view.campaignId}
+      <RunCreate
+        teamId={team.id}
+        evaluationId={view.evaluationId}
+        evaluationName={view.evaluationName}
+        onCancel={() => setView({ kind: "runs", evaluationId: view.evaluationId, evaluationName: view.evaluationName })}
+        onStarted={(runId) =>
+          setView({
+            kind: "runDetail",
+            evaluationId: view.evaluationId,
+            evaluationName: view.evaluationName,
+            runId,
+          })
+        }
+      />
+    );
+  }
+
+  if (view.kind === "runDetail") {
+    return (
+      <EvaluationRunDetail
+        runId={view.runId}
         selectedCaseId={view.selectedCaseId}
-        onBack={() => setView({ kind: "list" })}
+        teamId={team.id}
+        evaluationName={view.evaluationName}
+        onBack={() => setView({ kind: "runs", evaluationId: view.evaluationId, evaluationName: view.evaluationName })}
+        onBackToList={() => setView({ kind: "evaluations" })}
+      />
+    );
+  }
+
+  if (view.kind === "runs") {
+    return (
+      <EvaluationRuns
+        evaluationId={view.evaluationId}
+        evaluationName={view.evaluationName}
+        teamId={team.id}
+        onBack={() => setView({ kind: "evaluations" })}
+        onNewRun={() =>
+          setView({ kind: "runCreate", evaluationId: view.evaluationId, evaluationName: view.evaluationName })
+        }
+        onOpenRun={(runId, selectedCaseId) =>
+          setView({
+            kind: "runDetail",
+            evaluationId: view.evaluationId,
+            evaluationName: view.evaluationName,
+            runId,
+            selectedCaseId,
+          })
+        }
       />
     );
   }
 
   return (
-    <EvaluationCampaigns
+    <Evaluations
       teamId={team.id}
-      onNewCampaign={() => setView({ kind: "create" })}
-      onOpenCampaign={(campaignId, selectedCaseId) => setView({ kind: "detail", campaignId, selectedCaseId })}
+      onNewEvaluation={() => setView({ kind: "evaluationCreate" })}
+      onOpenEvaluation={(evaluationId, evaluationName) => setView({ kind: "runs", evaluationId, evaluationName })}
     />
   );
 }

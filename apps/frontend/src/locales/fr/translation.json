@@ -1118,7 +1118,7 @@
       },
       "evaluationService": {
         "title": "Service d'évaluation indisponible",
-        "description": "Démarrez le service fred-evaluation pour gérer les campagnes."
+        "description": "Démarrez le service fred-evaluation pour gérer les évaluations et les exécutions."
       }
     },
     "sidebar": {
@@ -1474,67 +1474,13 @@
       "title": "Votre profil"
     },
     "evaluation": {
-      "campaigns": {
-        "title": "Évaluations",
-        "description": "Campagnes de validation d'agents",
-        "newCampaign": "+ Nouvelle campagne",
-        "createCampaign": "Créer une campagne",
-        "empty": "Aucune campagne d'évaluation",
-        "loadError": "Erreur lors du chargement des campagnes.",
-        "casesError": "Erreur lors du chargement des cas.",
-        "noCases": "Aucun cas disponible.",
-        "drawerTitle": "Cas de la campagne",
-        "drawerHint": "Cliquez sur un cas pour voir tous les détails",
-        "inputLabel": "Entrée",
-        "executionError": "Erreur d'exécution",
-        "viewFullDetail": "Voir le détail complet →",
-        "metricsCount": "{{count}} métriques",
-        "targetInstance": "Instance · {{id}}",
-        "detail": "Détail",
-        "deleteTitle": "Supprimer la campagne",
-        "deleteMessage": "Supprimer {{name}} ? Cela supprime définitivement tous les cas, métriques et événements de cette campagne.",
-        "deleteSuccess": "Campagne supprimée",
-        "deleteError": "Échec de la suppression de la campagne",
-        "kpi": {
-          "active": "Campagnes actives",
-          "globalScore": "Score moyen global (%)",
-          "casesEvaluated": "Cas évalués",
-          "criticalFailures": "Échecs critiques"
-        },
-        "col": {
-          "name": "Nom / ID",
-          "target": "Cible",
-          "state": "État",
-          "verdict": "Verdict",
-          "progress": "Progression",
-          "scores": "Scores"
-        }
-      },
       "comingSoon": "Cet écran arrive ici — bientôt disponible.",
       "create": {
-        "title": "Nouvelle campagne",
-        "description": "Configurez et lancez une campagne de validation d'agent",
         "back": "Retour",
-        "steps": {
-          "target": "Cible",
-          "dataset": "Jeu de données",
-          "policy": "Politique"
-        },
-        "name": {
-          "label": "Nom de la campagne",
-          "placeholder": "ex. Régression nocturne"
-        },
-        "targetKind": {
-          "label": "Que voulez-vous évaluer ?"
-        },
         "target": {
           "managed": {
             "title": "Instance gérée",
-            "desc": "Une instance d'agent de l'équipe (control plane)"
-          },
-          "runtime": {
-            "title": "Agent runtime",
-            "desc": "Un agent précis sur un runtime, par identifiant"
+            "desc": "Une instance d'agent d'équipe approuvée via le control plane"
           }
         },
         "instance": {
@@ -1542,19 +1488,11 @@
           "placeholder": "Sélectionnez une instance",
           "loading": "Chargement des instances..."
         },
-        "runtime": {
-          "label": "Identifiant runtime",
-          "placeholder": "runtime-..."
-        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
         },
         "securityNote": "Les URLs de runtime ne sont jamais exposées au navigateur. Seuls des identifiants contrôlés sont acceptés.",
-        "dataset": {
-          "name": "Nom du jeu de données",
-          "version": "Version (optionnel)"
-        },
         "manual": {
           "label": "Cas de test"
         },
@@ -1567,14 +1505,13 @@
         },
         "import": {
           "json": "Importer du JSON",
-          "csv": "Importer du CSV",
           "dropHint": "Glissez-déposez un fichier {{mode}}, ou cliquez pour parcourir",
           "dropSub": "Jusqu'à 200 cas",
           "jsonImported": "{{count}} cas importés depuis le JSON",
-          "csvImported": "{{count}} cas importés depuis le CSV",
           "error": "Fichier invalide. Vérifiez le format JSON ou CSV.",
           "tooMany": "200 cas maximum autorisés.",
-          "total": "Total : {{count}} cas à évaluer"
+          "total": "Total : {{count}} cas à évaluer",
+          "empty": "Le fichier ne contient aucun cas."
         },
         "judge": {
           "label": "Profil du juge",
@@ -1601,39 +1538,29 @@
         },
         "recap": {
           "title": "Récapitulatif",
-          "campaign": "Campagne",
           "targetType": "Type de cible",
           "managed": "Instance gérée",
           "runtime": "Agent runtime",
           "instance": "Instance",
           "runtimeId": "Identifiant runtime",
           "agent": "Identifiant d'agent",
-          "dataset": "Jeu de données",
-          "cases": "Cas",
           "judge": "Juge",
           "concurrency": "Concurrence",
           "timeout": "Délai",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
           "profileAuto": "Automatique"
-        },
-        "nav": {
-          "prev": "Précédent",
-          "next": "Suivant",
-          "launch": "Lancer la campagne"
-        },
-        "launching": "Lancement...",
-        "success": "Campagne en file d'attente",
-        "error": "Échec de la création de la campagne"
+        }
       },
       "detail": {
-        "cancelError": "Impossible d'annuler la campagne",
+        "cancelError": "Impossible d'annuler l'exécution",
         "analyzeError": "Échec de l'analyse",
-        "loading": "Chargement de la campagne...",
-        "notFound": "Campagne introuvable",
+        "loading": "Chargement de l'exécution...",
+        "notFound": "Exécution introuvable",
         "loadingCases": "Chargement des cas...",
-        "subtitle": "Campagne · {{id}}",
+        "subtitle": "Exécution · {{id}}",
         "back": "Retour",
+        "rerun": "↻ Relancer cette exécution",
         "cancel": "Annuler",
         "cancelling": "Annulation...",
         "analyze": "Analyser",
@@ -1651,6 +1578,7 @@
           "scoringErrors": "Erreurs scoring"
         },
         "metricScores": "Scores par métrique",
+        "metricScoresPartial": "Scores par métrique — partiel, {{done}}/{{total}} cas notés pour l'instant",
         "globalScore": "Score global",
         "analysisTitle": "Analyse",
         "risk": "risque : {{level}}",
@@ -1658,12 +1586,12 @@
         "strengths": "Points forts",
         "weaknesses": "Points faibles",
         "recommendations": "Recommandations",
-        "campaignInfo": "Informations de la campagne",
+        "campaignInfo": "Informations de l'exécution",
         "meta": {
-          "dataset": "Jeu de données",
+          "dataset": "Évaluation",
           "profile": "Profil de scoring",
           "judge": "Juge",
-          "team": "Équipe",
+          "team": "Identifiant d'évaluation",
           "created": "Créée le",
           "started": "Démarrée le",
           "completed": "Terminée le"
@@ -1689,6 +1617,99 @@
         "skipped": "ignoré",
         "passed": "réussi",
         "failed": "échoué"
+      },
+      "evaluations": {
+        "title": "Évaluations",
+        "description": "Jeux de cas versionnés et réutilisables. Ouvrez-en une pour voir ses exécutions.",
+        "new": "+ Nouvelle évaluation",
+        "empty": "Aucune évaluation. Créez-en une pour commencer.",
+        "openRuns": "Exécutions",
+        "caseCount": "{{count}} cas",
+        "col": {
+          "name": "Nom / ID",
+          "version": "Version",
+          "author": "Auteur",
+          "origin": "Origine",
+          "cases": "Cas"
+        },
+        "origin": {
+          "upload": "Import",
+          "manual": "Manuel",
+          "capture": "Capture"
+        }
+      },
+      "evaluationCreate": {
+        "title": "Nouvelle évaluation",
+        "description": "Nommez l'évaluation et donnez-lui ses cas. Aucune exécution n'est lancée.",
+        "name": {
+          "label": "Nom de l'évaluation",
+          "placeholder": "ex. usage-arxivai"
+        },
+        "versionNote": "Réutiliser un nom existant crée une nouvelle version (v1 → v2), qui devient la version courante.",
+        "submit": "Créer l'évaluation",
+        "saving": "Création...",
+        "success": "Évaluation « {{name}} » créée en {{version}}",
+        "error": "Échec de la création de l'évaluation",
+        "mode": {
+          "label": "Comment fournir les cas ?",
+          "import": {
+            "title": "Importer mon dataset",
+            "desc": "Un fichier JSON contenant les cas (input / expected_output)"
+          },
+          "manual": {
+            "title": "Écrire les cas à la main",
+            "desc": "Saisir chaque cas directement dans le formulaire"
+          }
+        }
+      },
+      "runs": {
+        "casesError": "Erreur lors du chargement des cas.",
+        "noCases": "Aucun cas disponible.",
+        "drawerTitle": "Cas de l'exécution",
+        "drawerHint": "Cliquez sur un cas pour voir tous les détails",
+        "inputLabel": "Entrée",
+        "executionError": "Erreur d'exécution",
+        "viewFullDetail": "Voir le détail complet →",
+        "metricsCount": "{{count}} métriques",
+        "targetInstance": "Instance · {{id}}",
+        "detail": "Détail",
+        "deleteTitle": "Supprimer l'exécution",
+        "deleteSuccess": "Exécution supprimée",
+        "deleteError": "Échec de la suppression de l'exécution",
+        "loadError": "Erreur lors du chargement des exécutions.",
+        "description": "Exécutions de cette évaluation",
+        "backToEvaluations": "Évaluations",
+        "newRun": "+ Nouvelle exécution",
+        "rerun": "↻ Relancer · {{target}}",
+        "rerunHint": "Relance immédiatement avec la dernière cible ({{target}} · {{model}}). Utilisez « Nouvelle exécution… » pour en choisir une autre.",
+        "empty": "Aucune exécution pour cette évaluation",
+        "versionLabel": "Évaluation {{version}}",
+        "deleteMessage": "Supprimer l'exécution {{id}} ? Cela supprime définitivement ses cas, métriques et événements.",
+        "kpi": {
+          "active": "Exécutions actives",
+          "completed": "Exécutions terminées",
+          "casesEvaluated": "Cas évalués",
+          "criticalFailures": "Échecs critiques"
+        },
+        "col": {
+          "run": "Exécution / ID",
+          "target": "Cible",
+          "state": "État",
+          "verdict": "Verdict",
+          "progress": "Progression",
+          "scores": "Profil / juge"
+        }
+      },
+      "runCreate": {
+        "title": "Nouvelle exécution",
+        "description": "Évaluation « {{name}} » — choisissez l'agent à évaluer.",
+        "submit": "Lancer l'exécution",
+        "starting": "Lancement...",
+        "success": "Exécution lancée",
+        "error": "Échec du lancement de l'exécution",
+        "recap": {
+          "evaluation": "Évaluation"
+        }
       }
     },
     "taskActivity": {

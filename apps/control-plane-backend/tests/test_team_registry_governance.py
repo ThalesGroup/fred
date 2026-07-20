@@ -143,6 +143,10 @@ async def _no_users_by_ids(*_a, **_k) -> dict:
     return {}
 
 
+async def _no_search_users(*_a, **_k) -> list:
+    return []
+
+
 def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -158,6 +162,7 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        search_users=cast(Any, _no_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 

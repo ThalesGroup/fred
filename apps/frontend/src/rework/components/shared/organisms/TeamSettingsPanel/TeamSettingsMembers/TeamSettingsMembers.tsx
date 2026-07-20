@@ -14,13 +14,12 @@
 
 import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions, UserSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useAddTeamMemberMutation,
-  useListTeamMembersQuery,
-  useListUsersQuery,
+  useSearchCandidateTeamMembersQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import styles from "./TeamSettingsMembers.module.scss";
@@ -34,26 +33,15 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   const { canAdministerMembers: can_administer_members } = useTeamCapabilities(team);
 
-  const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
-  const { data: allApplicationUsers } = useListUsersQuery();
   const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberMutation();
 
   const [addUserQuery, setAddUserQuery] = useState<string>("");
+  const trimmedQuery = addUserQuery.trim();
 
-  const availableUsers = useMemo(() => {
-    if (!allApplicationUsers) return [];
-    if (!teamMembers) return allApplicationUsers;
-
-    const memberIds = new Set(teamMembers.map((m) => m.user.id));
-    return allApplicationUsers.filter((u) => !memberIds.has(u.id));
-  }, [allApplicationUsers, teamMembers]);
-
-  const suggestions = useMemo(() => {
-    const query = addUserQuery.toLowerCase().trim();
-    if (!query) return availableUsers;
-
-    return availableUsers.filter((u) => `${u.first_name} ${u.last_name} ${u.username}`.toLowerCase().includes(query));
-  }, [addUserQuery, availableUsers]);
+  const { data: suggestions = [] } = useSearchCandidateTeamMembersQuery(
+    { teamId: team.id, query: trimmedQuery },
+    { skip: !can_administer_members || trimmedQuery.length < 2 },
+  );
 
   const handleAddMember = async (user: UserSummary) => {
     if (isAddingMember) return;

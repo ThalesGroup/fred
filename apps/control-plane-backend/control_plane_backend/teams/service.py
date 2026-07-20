@@ -804,6 +804,64 @@ async def add_team_member(
     )
 
 
+async def search_candidate_team_members(
+    user: KeycloakUser,
+    team_id: TeamId,
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """
+    Search Keycloak users eligible to be added to one team.
+
+    Why this function exists:
+    - `can_administer_members` is deliberately owner-only with no
+      platform-level escalation (FRED-AUTHORIZATION-TARGET-MODEL-RFC.md
+      §24.7), so a team admin who is not also `platform_admin` had no way to
+      find a user to invite: the only existing Keycloak search
+      (`users.service.list_users`) is gated to `platform_admin` and returns
+      the full org directory unfiltered. This gives team admins a search
+      scoped to their own `can_administer_members` grant instead of widening
+      that org-wide listing to every team admin.
+
+    How to use it:
+    - call from `GET /teams/{team_id}/candidate-members`
+    - `query` must have at least 2 non-whitespace characters — checked here,
+      not just via the API layer's `min_length` (which validates the raw
+      string, so " " alone would otherwise pass through and reach Keycloak's
+      search un-widened)
+    - users already holding any role on the team are filtered out of the
+      result
+
+    Example:
+    - `matches = await search_candidate_team_members(user, team_id, "cohen", deps)`
+    """
+    rebac = deps.rebac
+    await _validate_team_and_check_permission(
+        user,
+        team_id,
+        rebac,
+        [TeamPermission.CAN_ADMINISTER_MEMBERS],
+        deps,
+    )
+
+    stripped_query = query.strip()
+    if len(stripped_query) < 2:
+        return []
+
+    admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
+        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
+        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
+        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
+        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER),
+    )
+    existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
+
+    matches = await deps.search_users(stripped_query)
+    return [
+        candidate for candidate in matches if candidate.id not in existing_member_ids
+    ]
+
+
 async def remove_team_member(
     user: KeycloakUser,
     team_id: TeamId,
