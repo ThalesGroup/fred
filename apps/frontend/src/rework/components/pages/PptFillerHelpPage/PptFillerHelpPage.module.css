@@ -66,22 +66,16 @@
     font-size: 0.9em;
   }
 
-  /* Fenced code blocks: distinct container so they stand out from prose. */
-  pre {
-    margin: var(--spacing-m) 0;
-    border: 1px solid var(--outline-retreat);
-    border-radius: var(--radius-s);
-    background-color: var(--surface-container);
-    padding: var(--spacing-m);
-    overflow-x: auto;
-  }
-
-  /* Inside a block, the code element is just monospace text — drop the inline chip styling. */
+  /* Fenced code blocks are rendered by the shared CodeBlock component (bordered
+   * container, monospace body, copy button) — no bare <pre> reaches the page, so
+   * no element-level pre styling here: it would double-border CodeBlock's inner pre.
+   * Inside that block (<pre><code>), drop the inline chip styling the rule above
+   * would otherwise force onto the highlighter's code element. */
   pre code {
     border-radius: 0;
     background-color: transparent;
     padding: 0;
-    font-size: 0.9em;
+    font-size: inherit;
   }
 
   /* Illustration screenshots: never overflow the reading column. */
