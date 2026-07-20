@@ -486,7 +486,9 @@ async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
             if isinstance(entry, dict) and "id" in entry
         }
     except Exception as exc:
-        logger.warning("Failed to fetch MCP catalog from %s: %s", base_url, exc)
+        # Best-effort (see docstring): an unreachable pod is expected/handled, not
+        # a fault worth WARNING-level attention on every poll cycle it recurs.
+        logger.debug("Failed to fetch MCP catalog from %s: %s", base_url, exc)
         return None
 
 
@@ -506,7 +508,9 @@ async def _available_capabilities_for_source(
     try:
         templates = await _fetch_runtime_templates(base_url, include_non_public=True)
     except Exception as exc:
-        logger.warning("Failed to fetch capability catalog from %s: %s", base_url, exc)
+        # Best-effort (see docstring): an unreachable pod is expected/handled, not
+        # a fault worth WARNING-level attention on every poll cycle it recurs.
+        logger.debug("Failed to fetch capability catalog from %s: %s", base_url, exc)
         return []
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
@@ -585,7 +589,9 @@ async def _agent_capabilities_for_source(
         # `include_non_public=True`.
         templates = await _fetch_runtime_templates(base_url)
     except Exception as exc:
-        logger.warning(
+        # Best-effort (see docstring): an unreachable pod is expected/handled, not
+        # a fault worth WARNING-level attention on every poll cycle it recurs.
+        logger.debug(
             "[capability-catalog] failed to fetch agent templates from %s: %s",
             base_url,
             exc,
@@ -1139,7 +1145,9 @@ async def list_agent_templates(
                 source.base_url, include_non_public=include_non_public
             )
         except Exception as exc:  # pragma: no cover - defensive logging path
-            logger.warning(
+            # An unreachable configured source degrades gracefully (skipped, not
+            # fatal) — not worth WARNING-level attention on every recurrence.
+            logger.debug(
                 "Failed to fetch runtime templates from %s for team %s: %s",
                 source.base_url,
                 team_id,
@@ -1255,7 +1263,10 @@ async def _available_capability_ids_by_source(
                 source.base_url, include_non_public=True
             )
         except Exception as exc:  # pragma: no cover - defensive logging path
-            logger.warning(
+            # An unreachable configured source degrades gracefully (instances are
+            # skipped, not suspended, per #1975) — not worth WARNING-level
+            # attention on every recurrence.
+            logger.debug(
                 "[capability-suspension] sweep could not fetch templates from %s: %s",
                 source.base_url,
                 exc,
