@@ -2,7 +2,7 @@
 name: live-observability-session
 description: Start Fred's backends and watch their logs/metrics/audit trail live while the developer drives the frontend/chat by hand. Use for manual observability or KPI test campaigns, or to diagnose a "does X actually log/emit/audit correctly" question against the three-stream model in OBSERVABILITY-AND-AUDIT.md.
 user-invocable: true
-argument-hint: [optional: which backends — default all 3 APIs + both Temporal workers]
+argument-hint: [optional: which backends — default 3 core APIs + 2 Temporal workers; add fred-evaluation-backend (+worker) when the session involves agent evaluation]
 ---
 
 # Live Observability Session
@@ -61,9 +61,26 @@ Run each from its own app directory at the monorepo root (`~/Fred/fred`), each i
 | `apps/knowledge-flow-backend` | `make run` | 8111 | yes — `make run-worker` |
 | `apps/fred-agents` | `make run` | 8000 | no |
 
-That's up to 5 background processes (3 APIs + 2 workers). Launch them in parallel — independent
-Bash calls in one message — not sequentially. If the developer only cares about one slice (e.g.
-"just check ingestion KPIs"), ask which subset before launching all 5; don't pay the startup cost
+**Agent evaluation adds a fourth app, in a separate sibling repo** —
+`~/Fred/fred-agent-evaluator/apps/fred-evaluation-backend` (not under `~/Fred/fred`). Include it
+whenever the session involves running or checking an agent evaluation/scoring campaign:
+
+| App | Command | Port | Has a Temporal worker? |
+|---|---|---|---|
+| `fred-agent-evaluator/apps/fred-evaluation-backend` | `make run` | 8336 | yes — `make run-worker-prod` (not plain `run-worker`: this target exports `CONFIG_FILE=configuration_prod.yaml` explicitly and enables M2M against Keycloak, matching how the other three backends run in this stack) |
+
+Its `config/.env` already pins `CONFIG_FILE` to `configuration_prod.yaml` by default (check it
+like the others, don't assume). **This backend's prod config disables both `prometheus` and
+`opensearch` in its logging/metrics block** (`configuration_prod.yaml` → `logging.prometheus.enabled:
+false`, `logging.opensearch.enabled: false`) — its `/metrics` route 404s and it does not feed the
+shared `app-logs-index`. Don't report either as broken; it's the app's own config, not a bug. Its
+only live signal in this stack is its own stdout (Monitor it the same way as the other three) plus
+whatever it writes to Postgres/Temporal directly.
+
+That's up to 7 background processes when evaluation is in scope (4 APIs + 3 workers), or 5 when
+it isn't (3 APIs + 2 workers). Launch whichever set is in scope in parallel — independent Bash
+calls in one message — not sequentially. If the developer only cares about one slice (e.g. "just
+check ingestion KPIs"), ask which subset before launching all of them; don't pay the startup cost
 of backends that aren't part of this session's question.
 
 `make run` installs deps first if needed (`run: dev run-local`) — the first launch after a
@@ -95,7 +112,9 @@ session if it's been a while — it's the target spec, not always the current di
    standalone Prometheus (see Preconditions), so read them by curling each backend's own metrics
    endpoint directly, e.g. `curl localhost:8222/metrics` (control-plane), `localhost:8111/metrics`
    (knowledge-flow), `localhost:8000/metrics` (fred-agents) — grep the raw Prometheus-exposition
-   text output for the metric name you care about. If the developer's session *does* have a real
+   text output for the metric name you care about. `fred-evaluation-backend` (8336) is the
+   exception — its prod config disables `prometheus`, so it has no `/metrics` route; don't curl
+   it, its signal is stdout only. If the developer's session *does* have a real
    Prometheus reachable (a different, non-default setup), `curl localhost:9090/api/v1/query?query=...`
    works the same way — don't assume either way, check the port first. Every label actually
    reaching the KPI store is filtered through `PROMETHEUS_ALLOWED_LABELS` in
@@ -130,6 +149,8 @@ available).
 
 ## Ending the session
 
-Stop the 5 background processes when the developer is done (or when they start a `make clean` /
-infra wipe cycle — those invalidate the running `.venv`s and containers respectively). Don't leave
-them running silently across an unrelated task.
+Stop whichever background processes this session started (5 without evaluation in scope, 7 with
+`fred-evaluation-backend` included) when the developer is done — or when they start a `make clean`
+/ infra wipe cycle (those invalidate the running `.venv`s and containers respectively) either in
+`~/Fred/fred` or, separately, in `~/Fred/fred-agent-evaluator`. Don't leave them running silently
+across an unrelated task.
