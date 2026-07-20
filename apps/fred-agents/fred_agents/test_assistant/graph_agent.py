@@ -49,6 +49,7 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ think       ──► think_step        ──► finalize
      ├─ long        ──► long_step         ──► finalize
      ├─ files       ──► files_step        ──► finalize
+     ├─ geo         ──► geo_step          ──► finalize
      └─ fallback    ──► fallback_step     ──► finalize
 
 No model provider is needed. No MCP servers are required.
@@ -67,7 +68,7 @@ from fred_sdk import (
     ToolRefRequirement,
     UIHints,
 )
-from fred_sdk.contracts.context import LinkPart
+from fred_sdk.contracts.context import GeoPart, LinkPart
 from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
@@ -79,6 +80,7 @@ from .graph_steps import (
     fallback_step,
     files_step,
     finalize_step,
+    geo_step,
     hitl_choice_step,
     hitl_text_step,
     long_step,
@@ -92,7 +94,7 @@ _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords to trigger a scenario:\n"
     "  echo | model | planning | hitl choice | hitl text | "
-    "trace | error | think | markdown | long | files\n\n"
+    "trace | error | think | markdown | long | files | geo\n\n"
     "Any other message shows this help menu."
 )
 
@@ -329,6 +331,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "markdown": markdown_step,
             "long": long_step,
             "files": files_step,
+            "geo": geo_step,
             "fallback": fallback_step,
             "finalize": finalize_step,
         },
@@ -342,6 +345,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "markdown": "finalize",
             "long": "finalize",
             "files": "finalize",
+            "geo": "finalize",
             "fallback": "finalize",
         },
         error_routes={
@@ -360,6 +364,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "markdown": "markdown",
                 "long": "long",
                 "files": "files",
+                "geo": "geo",
                 "fallback": "fallback",
             },
         },
@@ -368,8 +373,9 @@ class TestAssistantGraphAgent(GraphAgent):
     def build_output(self, state: BaseModel) -> BaseModel:
         """
         Override to attach mock VectorSearchHit sources and token_usage when the
-        trace scenario ran (SourcesPanel + token badge), and LinkPart ui_parts when
-        the files scenario ran (download chip rendering).
+        trace scenario ran (SourcesPanel + token badge), LinkPart ui_parts when
+        the files scenario ran (download chip rendering), and GeoPart ui_parts
+        when the geo scenario ran (interactive map rendering).
         """
         assert isinstance(state, TestState)
         content = state.final_text or ""
@@ -379,9 +385,11 @@ class TestAssistantGraphAgent(GraphAgent):
             hit = VectorSearchHit.model_validate(raw)
             sources = (*sources, hit)
 
-        ui_parts: tuple[LinkPart, ...] = ()
+        ui_parts: tuple[LinkPart | GeoPart, ...] = ()
         for raw in state.link_parts:
             ui_parts = (*ui_parts, LinkPart.model_validate(raw))
+        for raw in state.geo_parts:
+            ui_parts = (*ui_parts, GeoPart.model_validate(raw))
 
         token_usage: dict[str, int] | None = None
         if state.scenario == "trace" and sources:

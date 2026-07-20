@@ -28,6 +28,7 @@ Scenario routing (handled by dispatch_step):
   "think"       → dispatch routes "think"        → think_step       → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
   "files"       → dispatch routes "files"        → files_step       → finalize
+  "geo"         → dispatch routes "geo"          → geo_step         → finalize
   (other)       → dispatch routes "fallback"     → fallback_step    → finalize
 """
 
@@ -47,6 +48,7 @@ from fred_sdk import (
 from fred_sdk import (
     finalize_step as _finalize_step,
 )
+from fred_sdk.contracts.context import GeoPart
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from .graph_state import TestState
@@ -166,6 +168,7 @@ async def dispatch_step(
       "error"       → error_step
       "long"        → long_step
       "files"       → files_step
+      "geo"         → geo_step
       "fallback"    → fallback_step
     """
     planning = context.tuning_values.get("prompts.planning", "")
@@ -198,6 +201,8 @@ async def dispatch_step(
         scenario = "long"
     elif text.startswith("files"):
         scenario = "files"
+    elif text.startswith("geo"):
+        scenario = "geo"
     else:
         scenario = "fallback"
 
@@ -1343,6 +1348,79 @@ async def files_step(
     )
 
 
+# ── Step: geo ──────────────────────────────────────────────────────────────────
+
+_GEO_SAMPLE = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
+            "properties": {"name": "Paris"},
+        },
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [13.4050, 52.5200]},
+            "properties": {"name": "Berlin"},
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [2.33, 48.85],
+                        [2.37, 48.85],
+                        [2.37, 48.87],
+                        [2.33, 48.87],
+                        [2.33, 48.85],
+                    ]
+                ],
+            },
+            "properties": {"name": "Test zone", "color": "#6366f1", "fillOpacity": 0.2},
+        },
+    ],
+}
+
+
+@typed_node(TestState)
+async def geo_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Emit a sample GeoJSON `FeatureCollection` as a `GeoPart` ui_part.
+
+    Exercises the typed `GeoPart`/`ui_parts` rendering path (#1977's
+    `GeoPartRenderer`, backed by Leaflet) end to end, deterministically and
+    without a real agent needing to call the `geo.render_points` builtin tool.
+
+    SSE events exercised: status (x2), assistant_delta, final (with ui_parts).
+    """
+    delay = _delay_seconds(context)
+
+    context.emit_status("geo", "Building a sample FeatureCollection.")
+    await asyncio.sleep(0.05 + delay)
+    context.emit_status("geo", "Sending map data.")
+
+    reply = (
+        "**Sample map.** Two pins (Paris, Berlin) and one styled polygon, "
+        "sent as a `GeoPart` ui_part — rendered below as an interactive map, "
+        "not as a markdown code block."
+    )
+    context.emit_assistant_delta(reply)
+
+    geo_part = GeoPart(geojson=_GEO_SAMPLE, fit_bounds=True)
+
+    return StepResult(
+        state_update={
+            "final_text": reply,
+            "done_reason": "geo_complete",
+            "geo_parts": [geo_part.model_dump(mode="json")],
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -1358,7 +1436,8 @@ _SCENARIO_TABLE = """\
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |
-| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |"""
+| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
+| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (interactive map) |"""
 
 
 @typed_node(TestState)
