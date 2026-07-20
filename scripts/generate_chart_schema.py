@@ -301,6 +301,18 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "httpRoute": _HTTP_ROUTE,
         "volumeMounts": _arr(_VOLUME_MOUNT),
         "volumes": _arr(_VOLUME),
+        # Pod- and container-level keys below are read by templates/deployment.yaml,
+        # job.yaml and hook-migration.yaml, but were absent from the schema, so
+        # values files legitimately using them were rejected by `helm template`.
+        "extraVolumeMounts": _arr(_VOLUME_MOUNT),
+        "extraVolumes": _arr(_VOLUME),
+        "resources": _obj({"limits": _OBJECT_FREE, "requests": _OBJECT_FREE}),
+        "imagePullSecrets": _arr(_obj({"name": _STRING}, additional=True)),
+        "podAnnotations": _OBJECT_FREE,
+        "podSecurityContext": _OBJECT_FREE,
+        "envFrom": _arr(_obj({}, additional=True)),
+        "nodeSelector": _OBJECT_FREE,
+        "tolerations": _arr(_obj({}, additional=True)),
         "probes": _PROBES,
         "securityContext": _SECURITY_CONTEXT,
         "serviceAccount": _SERVICE_ACCOUNT,
