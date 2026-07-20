@@ -14,29 +14,33 @@
 
 // PptPreviewPane
 // --------------
-// The ppt_filler capability's side panel (CapabilitySidePanel) — a read-only pane
-// that renders the filled deck as a PDF. It reads the "current" preview from the
-// slice (set by a card's Open button / auto-open), fetches the bytes with the live
-// bearer (usePptPreview), and draws every page vertically with react-pdf.
+// The ppt_filler capability's side panel (CapabilitySidePanel) — a read-only,
+// floating-card pane (Kea parity) that renders the filled deck as a PDF. It
+// reads the "current" preview from the slice (set by the chat cards), fetches
+// the bytes with the live bearer (usePptPreview), and draws every page
+// vertically with react-pdf. Hosted headless: the InlineDrawer chrome is
+// hidden, so this pane's own header (title + download + close) is the ONLY
+// chrome — exactly one close button.
 //
-// pdf.js worker rule (this exact bug was fought before — see the Kea `pdfWorker.ts`
-// rationale): each `<Document>` mount MUST get its OWN module worker. A single
-// shared `GlobalWorkerOptions.workerPort` reused across remounts throws
-// "PDFWorker.fromPort - the worker is being destroyed" when a second preview opens
-// or the open deck is re-filled, because react-pdf's unmount `destroy()` races the
-// next mount on the same port. So we provision a FRESH worker per remount key (in a
-// useMemo, before the child `<Document>` reads GlobalWorkerOptions) and terminate
-// that exact instance on unmount / key change. We deliberately do NOT set a
-// module-level shared workerPort, and we do NOT rely on `workerSrc` alone (that
-// yields a "fake worker" that fails to import the bundled asset).
+// pdf.js worker rule (this exact bug was fought before — see `utils/pdfWorker.ts`
+// for the full rationale): each `<Document>` mount gets its OWN fresh module
+// worker, provisioned during render (useMemo, keyed on the remount key) so it
+// is in place before react-pdf reads GlobalWorkerOptions. The old worker is
+// NOT terminated by us — react-pdf's own `loadingTask.destroy()` tears it down
+// with its Document. Terminating it ourselves leaves `workerPort` pointing at
+// a dead worker under StrictMode's mount→cleanup→remount (the pane then hangs
+// on "Loading preview…" forever) and races the next mount with
+// "PDFWorker.fromPort - the worker is being destroyed".
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { configurePdfWorkerPort } from "../../../utils/pdfWorker";
 import type { CapabilitySidePanelProps } from "../types";
 import { selectCurrentPreview } from "./pptPreviewSlice";
 import { usePptPreview } from "./usePptPreview";
@@ -44,10 +48,6 @@ import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewPane.module.css";
 
 const PDF_SCALE = 0.95;
-
-// Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
-// `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
 export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
@@ -57,7 +57,8 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Fit the page width to the pane, less padding, tracking resizes.
+  // Fit the page width to the pane, less padding, tracking resizes (the pane
+  // is resizable, so pages re-fit live while the user drags).
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [pageWidth, setPageWidth] = useState<number>(600);
   useEffect(() => {
@@ -74,33 +75,14 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   }, []);
 
   // A re-fill (or switching decks) changes this key → react-pdf remounts the
-  // <Document> and we provision a fresh worker for it.
+  // <Document> with a freshly provisioned worker.
   const remountKey = current ? `${current.preview_id}:${current.version}` : "none";
 
-  // Provision a fresh worker for THIS remount before the child <Document> reads
-  // GlobalWorkerOptions (useMemo runs during render, ahead of child effects). The
-  // effect below terminates the exact instance this run created.
-  const workerRef = useRef<Worker | null>(null);
-  useMemo(() => {
-    if (typeof Worker === "undefined") {
-      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-      workerRef.current = null;
-      return;
-    }
-    const worker = new Worker(pdfWorkerUrl, { type: "module" });
-    workerRef.current = worker;
-    pdfjs.GlobalWorkerOptions.workerPort = worker;
-  }, [remountKey]);
-
-  // Terminate the worker created for the current key when the key changes or the
-  // pane unmounts. The closure captures the instance from THIS run, so a cleanup
-  // firing after the next key's useMemo can never kill the newer worker.
-  useEffect(() => {
-    const worker = workerRef.current;
-    return () => {
-      worker?.terminate();
-    };
-  }, [remountKey]);
+  // Give this <Document> mount its own pdf.js worker. Running in useMemo
+  // (during render, before the child <Document> mounts) means the worker is in
+  // place when react-pdf reads GlobalWorkerOptions; the previous Document's
+  // teardown destroys its OWN worker, so no destroy can race this mount.
+  useMemo(() => configurePdfWorkerPort(), [remountKey]);
 
   useEffect(() => {
     setNumPages(null);
@@ -165,8 +147,10 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
                 key={`page_${i + 1}`}
                 pageNumber={i + 1}
                 width={pageWidth}
-                renderAnnotationLayer={false}
-                renderTextLayer={false}
+                renderAnnotationLayer
+                // Text layer on (Kea parity): overlays invisible positioned
+                // spans on the canvas so slide text can be selected/copied.
+                renderTextLayer
                 className={styles.page}
               />
             ))}

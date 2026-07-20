@@ -14,7 +14,7 @@
 
 import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
@@ -31,6 +31,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
+import { chatSessionScopeChanged } from "../../../features/capabilities/sessionScope";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -120,6 +121,15 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+
+  // Capability per-conversation UI state (e.g. the ppt_filler preview slice)
+  // resets on every session view — page mount and session switch alike. Fired
+  // from here because this page is the only one that knows the active session,
+  // while staying capability-agnostic (slices subscribe via extraReducers).
+  const capabilityScopeDispatch = useDispatch();
+  useEffect(() => {
+    capabilityScopeDispatch(chatSessionScopeChanged(chat.sessionId ?? null));
+  }, [capabilityScopeDispatch, chat.sessionId]);
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;

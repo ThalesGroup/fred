@@ -14,27 +14,36 @@
 
 // PPT-filler preview routing state.
 //
-// The `ppt_preview` chat part lives in the message stream; this slice holds the
+// The `ppt_preview` chat parts live in the message stream; this slice holds the
 // small cross-component UI state the side panel and the chat cards share:
 //
-//   - `current`      — the preview the pane should render right now.
-//   - `openRequestId`— a monotonic counter. Bumping it is the signal for the chat
-//                      page to OPEN the ppt_filler side panel (the host owns the
-//                      column's open/closed state; a slice value can't call it, so
-//                      the page subscribes to this counter and opens on change).
+//   - `current`    — the preview the pane should render right now (the LATEST
+//                    deck the conversation produced, unless the user explicitly
+//                    selected another card).
+//   - `seen`       — `(preview_id, version)` keys already folded in, so card
+//                    remounts (scroll, panel toggle re-renders) can never
+//                    overwrite an explicit user selection with an older deck.
+//   - `autoOpened` — once-per-session-view guard: the FIRST preview to appear
+//                    (live fill or history replay alike) auto-opens the panel,
+//                    later ones do not — so a user who closed the panel is not
+//                    fought by every subsequent card mount. Mirrors Kea's
+//                    `usePptPreview` `autoOpenedRef`.
 //
-// Mirrors the Kea `usePptPreview` hook's open/select behaviour, but as Redux state
-// so a chat-part renderer (which is far from the panel host in the tree) can drive
-// the panel without prop-drilling.
+// The whole slice resets on `chatSessionScopeChanged` (dispatched by the chat
+// page on mount and on session switch), which re-arms auto-open per
+// conversation view and prevents one session's deck from leaking into another.
 
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import { chatSessionScopeChanged } from "../sessionScope";
 import type { PptPreviewPartData } from "./types";
 
 export interface PptPreviewState {
   /** The preview the side panel should render, or null before any deck exists. */
   current: PptPreviewPartData | null;
-  /** Monotonic; incrementing it asks the chat page to open the ppt_filler panel. */
-  openRequestId: number;
+  /** `(preview_id:version)` keys already folded into this session view. */
+  seen: Record<string, true>;
+  /** True once the first preview of this session view requested an auto-open. */
+  autoOpened: boolean;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -43,46 +52,59 @@ interface PptPreviewRootState {
   pptPreview: PptPreviewState;
 }
 
-const initialState: PptPreviewState = { current: null, openRequestId: 0 };
+const initialState: PptPreviewState = { current: null, seen: {}, autoOpened: false };
+
+export const previewKeyOf = (preview: PptPreviewPartData): string => `${preview.preview_id}:${preview.version}`;
 
 export const pptPreviewSlice = createSlice({
   name: "pptPreview",
   initialState,
   reducers: {
     /**
-     * Select this preview AND request the panel to open (bumps `openRequestId`).
-     * Dispatched by a card's "Open preview" button and by the card auto-open
-     * heuristic when a freshly filled deck arrives live.
+     * Fold one `ppt_preview` part into the slice — dispatched by every chat
+     * card on mount (live fill AND history replay). First sighting of a key
+     * makes that deck current (cards mount in thread order, so the latest deck
+     * wins); repeat sightings are no-ops. Also consumes the one auto-open
+     * budget of this session view (the card checks `selectShouldAutoOpen`
+     * BEFORE dispatching to know whether to request the panel).
      */
-    openPreview(state, action: PayloadAction<PptPreviewPartData>) {
+    previewSeen(state, action: PayloadAction<PptPreviewPartData>) {
+      const key = previewKeyOf(action.payload);
+      if (state.seen[key]) return;
+      state.seen[key] = true;
       state.current = action.payload;
-      state.openRequestId += 1;
+      state.autoOpened = true;
     },
 
     /**
-     * Update the current preview WITHOUT requesting an open — e.g. a re-fill of a
-     * deck whose panel is already open. The panel remounts on the new `version`;
-     * the open request is not re-fired so a closed panel stays closed.
+     * Explicit user selection (a card's "Open preview" click) — always makes
+     * this deck current, regardless of `seen`.
      */
-    setPreview(state, action: PayloadAction<PptPreviewPartData>) {
+    selectPreview(state, action: PayloadAction<PptPreviewPartData>) {
       state.current = action.payload;
     },
-
-    /** Clear the current preview (e.g. on session switch). */
-    clearPreview(state) {
-      state.current = null;
-    },
+  },
+  extraReducers: (builder) => {
+    // New conversation view (page mount or session switch): drop the previous
+    // session's deck and re-arm the auto-open guard.
+    builder.addCase(chatSessionScopeChanged, () => initialState);
   },
 });
 
-export const { openPreview, setPreview, clearPreview } = pptPreviewSlice.actions;
+export const { previewSeen, selectPreview } = pptPreviewSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 /** The preview the side panel should render, or null. */
 export const selectCurrentPreview = (state: PptPreviewRootState): PptPreviewPartData | null => state.pptPreview.current;
 
-/** The open-request counter the chat page subscribes to. */
-export const selectPptOpenRequestId = (state: PptPreviewRootState): number => state.pptPreview.openRequestId;
+/** True while this session view still has its auto-open budget. */
+export const selectShouldAutoOpen = (state: PptPreviewRootState): boolean => !state.pptPreview.autoOpened;
+
+/** Whether this exact deck (preview_id + version) was already folded in. */
+export const selectIsPreviewSeen =
+  (key: string) =>
+  (state: PptPreviewRootState): boolean =>
+    state.pptPreview.seen[key] === true;
 
 export default pptPreviewSlice.reducer;

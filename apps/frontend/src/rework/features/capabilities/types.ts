@@ -44,6 +44,22 @@ export interface CapabilitySidePanelProps {
  */
 export type CapabilitySidePanel = ComponentType<CapabilitySidePanelProps>;
 
+/**
+ * Expanded side-panel declaration for panels that need host options beyond the
+ * bare component (the shorthand `CapabilitySidePanel` value stays valid).
+ */
+export interface CapabilitySidePanelDef {
+  Component: CapabilitySidePanel;
+  /**
+   * The panel renders its OWN chrome (header + close button) — the host hides
+   * the InlineDrawer header so exactly one close button shows (e.g. the
+   * ppt_filler preview pane's floating-card header).
+   */
+  headless?: boolean;
+  /** The host makes the push drawer resizable by dragging its left edge. */
+  resizable?: boolean;
+}
+
 /** The RAG-scope closed set (RuntimeContext `search_rag_scope`, RFC §3.3). */
 export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
 
@@ -152,6 +168,8 @@ export interface CapabilityUiPlugin {
    * mounts every panel a session's active capabilities declare, in the reserved
    * right column; unknown widget ids never occur here (the plugin IS the
    * declaration) but the host skips capabilities with no plugin entry.
+   * A bare component uses the host's default chrome; the object form
+   * (`CapabilitySidePanelDef`) opts into headless/resizable hosting.
    */
-  sidePanels?: Record<string, CapabilitySidePanel>;
+  sidePanels?: Record<string, CapabilitySidePanel | CapabilitySidePanelDef>;
 }

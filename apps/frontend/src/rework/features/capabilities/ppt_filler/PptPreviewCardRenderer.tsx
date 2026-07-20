@@ -19,55 +19,59 @@
 // via the slice) and a ".pptx" download button. The rendered deck lives in the
 // pane, not here.
 //
-// Auto-open heuristic (port of Kea's fill→pane flow): when a deck is filled LIVE
-// during this page load, its card should pop the preview panel open without a
-// click. But replaying chat HISTORY on initial load also mounts these cards, and
-// we must NOT auto-open then. So we auto-open a `(preview_id, version)` exactly
-// once, and only if the page has been open for >5s (history replay happens in the
-// first moments after load; a live fill happens well after).
+// Auto-open (Kea `usePptPreview` parity): every card folds its deck into the
+// slice on mount (`previewSeen`), so the pane always knows the LATEST deck —
+// including after a page reload replays history. The FIRST deck of a session
+// view also opens the panel automatically (live fill and history replay alike);
+// the slice's once-per-view budget (`selectShouldAutoOpen`) guarantees later
+// cards never fight a user who closed the panel. The chat page re-arms the
+// budget per conversation via `chatSessionScopeChanged`.
 
 import { useEffect } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Button from "@shared/atoms/Button/Button";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
 import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
-import { openPreview } from "./pptPreviewSlice";
+import { previewKeyOf, previewSeen, selectIsPreviewSeen, selectPreview, selectShouldAutoOpen } from "./pptPreviewSlice";
 import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewCardRenderer.module.css";
 
-// Module-level so the heuristic survives card remounts within one page load.
-const seenKeys = new Set<string>();
-const pageLoadedAt = Date.now();
-const AUTO_OPEN_MIN_AGE_MS = 5000;
+const OPEN_PANEL_REQUEST = { capabilityId: "ppt_filler", widget: "ppt_preview_pane" } as const;
 
 export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const store = useStore();
   const preview = part as unknown as PptPreviewPartData;
 
-  const key = `${preview.preview_id}:${preview.version}`;
-
-  // Opening = set the preview data AND signal the page to open the ppt_filler
-  // side-panel column (the page owns the single-push-drawer state).
-  const openPane = (data: PptPreviewPartData) => {
-    dispatch(openPreview(data));
-    dispatch(requestSidePanelOpen({ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }));
-  };
+  const key = previewKeyOf(preview);
+  // Subscribed only to keep the effect honest across store resets; the effect
+  // re-reads the LIVE state below to stay correct when sibling cards mount in
+  // the same commit (their dispatches are invisible to this render's props).
+  const seen = useSelector(selectIsPreviewSeen(key));
 
   useEffect(() => {
-    if (seenKeys.has(key)) return;
-    const isLiveFill = Date.now() - pageLoadedAt > AUTO_OPEN_MIN_AGE_MS;
-    // Mark seen regardless, so a history-replay mount never auto-opens later and a
-    // live fill only pops the panel the first time its part arrives.
-    seenKeys.add(key);
-    if (isLiveFill) openPane(preview);
-    // Intentionally keyed on the deck identity only; `preview`/`dispatch` are stable
-    // per that identity for this heuristic.
+    type SliceState = Parameters<typeof selectShouldAutoOpen>[0];
+    const state = store.getState() as SliceState;
+    if (selectIsPreviewSeen(key)(state)) return;
+    const shouldAutoOpen = selectShouldAutoOpen(state);
+    // Fold this deck in (marks it seen, makes it current, consumes the
+    // session view's auto-open budget)…
+    dispatch(previewSeen(preview));
+    // …and pop the panel only for the view's first deck.
+    if (shouldAutoOpen) dispatch(requestSidePanelOpen(OPEN_PANEL_REQUEST));
+    // Keyed on the deck identity (and re-armed when a session-scope reset
+    // clears `seen`); `preview` is stable per key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, seen]);
+
+  const openPane = () => {
+    dispatch(selectPreview(preview));
+    dispatch(requestSidePanelOpen(OPEN_PANEL_REQUEST));
+  };
 
   const title = preview.title || t("capability.ppt_filler.preview.untitled", { defaultValue: "Presentation" });
 
@@ -94,7 +98,7 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
           variant="text"
           size="small"
           icon={{ category: "outlined", type: "slideshow" }}
-          onClick={() => openPane(preview)}
+          onClick={openPane}
         >
           {t("capability.ppt_filler.preview.open", { defaultValue: "Open preview" })}
         </Button>

@@ -13,15 +13,38 @@
  * limitations under the License.
  */
 
+/* Floating card (Kea parity): the pane sits inside a headless push drawer and
+ * provides its own chrome — margin, border, radius, shadow, fade-in. */
 .pane {
   display: flex;
   flex-direction: column;
+  animation: paneIn 0.3s ease-out;
   box-sizing: border-box;
+  margin: var(--spacing-s);
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
   background-color: var(--surface-container);
-  height: 100%;
+  height: calc(100% - 2 * var(--spacing-s));
   min-height: 0;
   overflow: hidden;
   color: var(--on-surface);
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
 }
 
 .header {
@@ -77,6 +100,21 @@
 
 .page:not(:last-child) {
   margin-bottom: var(--spacing-m);
+}
+
+/* Align the selectable text layer with the rendered canvas (Kea parity).
+ *
+ * react-pdf 10 / pdf.js 4 split a page's scale into `--scale-factor` × `--user-unit`
+ * (exposed together as `--total-scale-factor`). LibreOffice-exported PPTX→PDF decks
+ * carry a non-1 UserUnit (~0.75), so when we size a <Page> by `width`,
+ * `--scale-factor` stays 1 and the extra `--user-unit` is NOT applied to the
+ * text-layer spans — they land at full native coordinates and drift down/right of
+ * the glyphs. Scaling the whole text layer by `--total-scale-factor` puts the
+ * invisible spans back exactly over the canvas text so selection/search line up.
+ * Harmless when `--user-unit` is 1 (scale = --scale-factor). */
+.body :global(.react-pdf__Page__textContent.textLayer) {
+  transform: scale(var(--total-scale-factor));
+  transform-origin: 0 0;
 }
 
 .empty,

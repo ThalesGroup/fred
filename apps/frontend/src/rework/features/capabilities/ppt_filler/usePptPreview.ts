@@ -23,6 +23,13 @@
 // Freshness: `version` is appended as a `?v=` cache-bust and is part of the refetch
 // key, so a re-fill (new version) re-fetches instead of showing a browser-cached
 // stale deck. The object URL is revoked on cleanup so blobs never leak.
+//
+// Key scoping: the returned `objectUrl` is tagged with the deck key it was
+// fetched for and returned ONLY while that key is current. Without this, the
+// render right after a deck switch would briefly expose the PREVIOUS deck's URL
+// under the NEW remount key, mounting a `<Document>` that immediately unmounts —
+// the exact extra mount/unmount cycle that races pdf.js worker teardown
+// ("PDFWorker.fromPort - the worker is being destroyed").
 
 import { useCallback, useEffect, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -45,7 +52,7 @@ function withVersion(url: string, version: string): string {
 }
 
 export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreviewResult {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [fetched, setFetched] = useState<{ key: string; url: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -54,10 +61,11 @@ export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreview
 
   const downloadUrl = preview?.pdf_download_url;
   const version = preview?.version;
+  const key = preview ? `${preview.preview_id}:${preview.version}` : null;
 
   useEffect(() => {
-    if (!downloadUrl || version === undefined) {
-      setObjectUrl(null);
+    if (!downloadUrl || !key || version === undefined) {
+      setFetched(null);
       setError(null);
       setIsLoading(false);
       return;
@@ -77,7 +85,7 @@ export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreview
         const blob = await res.blob();
         if (cancelled) return;
         created = URL.createObjectURL(blob);
-        setObjectUrl(created);
+        setFetched({ key, url: created });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -90,7 +98,10 @@ export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreview
       // Revoke the URL this run created so blobs don't leak across re-fills.
       if (created) URL.revokeObjectURL(created);
     };
-  }, [downloadUrl, version, reloadNonce]);
+  }, [downloadUrl, key, version, reloadNonce]);
+
+  // Only expose a URL fetched for the CURRENT deck key (see header comment).
+  const objectUrl = fetched && fetched.key === key ? fetched.url : null;
 
   return { objectUrl, isLoading, error, refetch };
 }

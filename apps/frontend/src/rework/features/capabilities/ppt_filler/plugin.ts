@@ -28,6 +28,8 @@ export const pptFillerCapability: CapabilityUiPlugin = {
   partRenderers: { ppt_preview: PptPreviewCardRenderer },
   // Keyed by the backend FieldSpec's `ui.widget` (RFC §9 item 4).
   configWidgets: { ppt_filler_template: PptFillerConfigForm },
-  // Keyed by the backend manifest's SidePanelSpec.widget (#1979).
-  sidePanels: { ppt_preview_pane: PptPreviewPane },
+  // Keyed by the backend manifest's SidePanelSpec.widget (#1979). The pane
+  // renders its own floating-card chrome (headless: single close button) and
+  // opts into the host's drag-to-resize (Kea parity).
+  sidePanels: { ppt_preview_pane: { Component: PptPreviewPane, headless: true, resizable: true } },
 };
