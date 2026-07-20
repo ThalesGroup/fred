@@ -139,6 +139,12 @@
 .root :global(th) {
   background: var(--surface-container);
   font-weight: 600;
+  /* .root inherits overflow-wrap: anywhere for prose, which also shrinks a
+     header's *minimum* content width to ~1 character — combined with the
+     table's own shrink-to-fit sizing (width: max-content above), long
+     single-word headers (e.g. a CSV column name) collapsed to a 1-char-wide
+     column and wrapped vertically, one letter per line. Headers never wrap. */
+  white-space: nowrap;
 }
 
 .root :global(tr:nth-child(even)) {
