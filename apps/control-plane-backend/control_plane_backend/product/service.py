@@ -23,7 +23,7 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import Relation, RebacReference, RelationType
+from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
