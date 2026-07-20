@@ -135,8 +135,8 @@
       "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
     },
     "ppt_filler": {
-      "name": "PPT Filler",
-      "description": "Faites remplir votre propre modèle PowerPoint depuis la conversation : l'agent extrait les valeurs et produit une présentation finalisée.",
+      "name": "Template de PowerPoint",
+      "description": "Permet a l'agent de remplir un modèle PowerPoint que vous avez uploader.",
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",

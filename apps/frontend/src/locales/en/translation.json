@@ -135,8 +135,8 @@
       "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
     },
     "ppt_filler": {
-      "name": "PPT Filler",
-      "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
+      "name": "PowerPoint Filler",
+      "description": "Fills your uploaded PowerPoint template and returns a completed deck the user can download.",
       "form": {
         "uploadTemplate": "Upload a .pptx template",
         "replaceTemplate": "Replace the template",
