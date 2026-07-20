@@ -1055,9 +1055,10 @@ no `[LLM][CALL]`/`[LLM][RESPONSE]` logs, no `llm.call_latency_ms` /
 `agent.tool_latency_ms` KPI, and no `agent.tool.invocation.*` audit events:
 the same guarantees `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §9
 documents for every other execution path, silently absent for Deep since the
-runtime was first added. Found while scoping DeepAgent's move from dormant to
-visible ahead of the go-live validation; fixed before any concrete
-`DeepAgentDefinition` is registered in an app, so no Deep turn has ever run
+runtime was first added. Found and fixed while scoping DeepAgent's move from
+dormant to visible ahead of the go-live validation, landed in the same change
+that registered `fred.github.deep_assistant` (`apps/fred-agents`) — the first
+concrete `DeepAgentDefinition` in any app — so no Deep turn has ever run
 unaudited in a shipped environment.
 
 **Consequences.**

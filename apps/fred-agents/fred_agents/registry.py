@@ -29,6 +29,7 @@ Example:
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 
 from fred_agents.comparison import COMPARISON_AGENT
+from fred_agents.deep_assistant import DEEP_ASSISTANT_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.mindmap import MINDMAP_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
@@ -48,6 +49,11 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                no MCP by default. Admins equip it with catalog
                                MCP servers via the control-plane agent form.
                                First entry → default agent in fred-agents-cli.
+    - fred.github.deep_assistant  General-purpose deep-agent (LangGraph planner)
+                               counterpart to fred.github.assistant. No
+                               filesystem MCP by default (DeepAgentRuntime's
+                               filesystem-tool guard blocks it until an
+                               operator adds it explicitly).
     - fred.github.sentinel     Monitoring ReAct agent. Requires OpenSearch MCP.
                                Expected to fail gracefully in standalone mode —
                                useful for validating error detection and handling.
@@ -74,6 +80,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     return {
         # First entry is the default agent selected by fred-agents-cli on connect.
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
+        DEEP_ASSISTANT_AGENT.agent_id: DEEP_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
         REACT_RAG_MCP_AGENT.agent_id: REACT_RAG_MCP_AGENT,

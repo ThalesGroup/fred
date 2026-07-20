@@ -327,6 +327,63 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
     assert payloads[-1]["content"] == "Sentinel is ready."
 
 
+def test_fred_agents_pod_streams_deep_assistant_offline(monkeypatch, tmp_path) -> None:
+    """
+    Verify the standalone pod actually runs `fred.github.deep_assistant` end to
+    end through the real `deepagents.create_deep_agent` graph.
+
+    Why this test exists:
+    - `DeepAgentRuntime` existed for months with no `DeepAgentDefinition`
+      registered anywhere, so nothing had ever exercised it through a real
+      app boot + the real `deepagents` graph (unit tests elsewhere stub
+      `_create_compiled_deep_agent` itself). This is the first agent to do
+      so, so this smoke test is the actual proof it works, not just that it
+      imports.
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+
+    Example:
+    - `pytest tests/test_smoke.py -q`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Deep assistant is ready.")]
+    )
+    app = _build_offline_agents_app(
+        monkeypatch,
+        tmp_path,
+        StaticChatModelFactory(model),
+    )
+
+    with TestClient(app) as client:
+        registered = client.get("/fred/agents/v2/agents").json()
+        assert "fred.github.deep_assistant" in registered
+
+        templates_response = client.get("/fred/agents/v2/agents/templates")
+        template_ids = {
+            template["template_agent_id"] for template in templates_response.json()
+        }
+        assert "fred.github.deep_assistant" in template_ids
+
+        stream_response = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.github.deep_assistant",
+                "input": "Say hello.",
+                "session_id": "deep-assistant-session",
+                "runtime_context": {"user_id": "deep-assistant-user"},
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = _parse_sse_payloads(stream_response.text)
+    assert payloads
+    assert not any("error" in payload for payload in payloads)
+    assert payloads[-1]["kind"] == "final"
+    assert payloads[-1]["content"] == "Deep assistant is ready."
+
+
 def test_fred_test_assistant_echo_stays_off_model_routing_path(
     monkeypatch, tmp_path
 ) -> None:
