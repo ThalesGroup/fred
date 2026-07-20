@@ -1242,6 +1242,50 @@ _(none yet)_
 
 ---
 
+### `WritableDocumentPane` (writable_document capability)
+
+**Location:** `src/rework/features/capabilities/writable_document/WritableDocumentPane.tsx`
+**Status:** `Functional`
+
+The right-column side panel of the `writable_document` capability (#1905, Kea port):
+a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-write
+documents. Tab strip when the session has several documents; editor remounts on agent
+writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
+debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
+Mounted by `CapabilitySidePanelHost` when the capability is active.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — MDXEditor toolbar density, tab strip styling, and the
+  saving indicator's placement have had no designer pass; the editor ships MDXEditor's
+  default theme which may clash with the design tokens in dark mode.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `WritableDocumentCardRenderer` (writable_document capability)
+
+**Location:** `src/rework/features/capabilities/writable_document/WritableDocumentCardRenderer.tsx`
+**Status:** `Functional`
+
+The `writable_document` chat-part card shown in an assistant message after the agent
+writes or revises a document: title, last-author caption, open-in-panel action, and
+the export menu. Auto-opens the pane once per `(document_id, updated_at)` for fresh
+parts only (>5 s history-replay guard, same heuristic as the ppt_filler preview card).
+
+#### Open UX issues
+
+_(none)_
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

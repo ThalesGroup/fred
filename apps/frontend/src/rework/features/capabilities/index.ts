@@ -20,7 +20,8 @@
 
 import type { CapabilityUiPlugin } from "./types";
 import { demoEchoCapability } from "./demo_echo/plugin";
+import { writableDocumentCapability } from "./writable_document/plugin";
 
-export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [demoEchoCapability];
+export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [demoEchoCapability, writableDocumentCapability];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

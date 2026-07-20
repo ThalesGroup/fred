@@ -133,6 +133,35 @@
     "document_access": {
       "name": "Accès aux documents",
       "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+    },
+    "writable_document": {
+      "name": "Document collaboratif",
+      "description": "Rédigez des documents avec l'agent dans un éditeur Markdown côte à côte, et exportez-les en Word ou Markdown.",
+      "panel": {
+        "writable_document_pane": {
+          "title": "Document"
+        }
+      },
+      "untitled": "Document",
+      "saving": "Enregistrement…",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadError": "Échec du téléchargement",
+      "noSession": "Aucune session — ouvrez une conversation pour voir ses documents.",
+      "empty": "Aucun document pour l'instant. Demandez à l'agent d'en rédiger un.",
+      "card": {
+        "aria": "Document collaboratif",
+        "open": "Ouvrir",
+        "updatedByAgent": "Mis à jour par l'agent",
+        "updatedByUser": "Modifié par vous"
+      },
+      "format": {
+        "word": "Microsoft Word",
+        "markdown": "Markdown"
+      },
+      "code": {
+        "plainText": "Texte brut"
+      }
     }
   },
   "chatbot": {
