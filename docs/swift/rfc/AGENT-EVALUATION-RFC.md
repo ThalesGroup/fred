@@ -410,6 +410,43 @@ ported when the evaluator moved to its own service. This must close before wider
 track as a backlog item reusing the pattern already proven in `EVAL-03`/`EVAL-AUTH` rather than
 solving it here.
 
+### 8.6 Fix 2026-07-20: `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` missing `CAN_USE_TEAM_AGENTS`
+
+Found live testing a run end-to-end: every case activity failed, the worker's
+`prepare_managed_instance_execution` call (`ServiceAuthentication`, correctly — RFC EVAL-AUTH
+Solution A, worker uses its own M2M identity, never a propagated user token) got a 403 from
+`POST /teams/{team_id}/agent-instances/{id}/prepare-execution` on every case, blocking the run
+entirely.
+
+Root cause: that endpoint requires `TeamPermission.CAN_USE_TEAM_AGENTS`
+(`product/api.py::post_prepare_execution`, moved there by an AUTHZ-05 review to stop leaking
+real `context_prompt_text` from callers with no real team relation). But
+`SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` (`rebac_engine.py`, Solution A's allowlist) only ever
+carried `CAN_READ` — its own docstring still says *"the evaluation worker executes agents,
+gated by CAN_READ"*, which stopped being true the moment AUTHZ-05 moved the gate. The worker's
+M2M identity structurally never holds an OpenFGA team relation, so once the CAN_READ-only
+bypass no longer covered the permission actually required, every call fell through to the real
+ReBAC check and was denied, unconditionally, for every team.
+
+Fix: added `CAN_USE_TEAM_AGENTS` to `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS`. Still read-only —
+`CAN_USE_TEAM_AGENTS` gates read/prepare, never a mutation — and the `context_prompt_text` leak
+AUTHZ-05 was closing doesn't apply to the worker's calls: they never pass `session_id`, the only
+way that field gets populated. `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` is now
+`{CAN_READ, CAN_USE_TEAM_AGENTS}`.
+
+**Identity pattern this preserves (do not drift from it):** interactive `/evaluation/v1` API
+requests (evaluation/run CRUD, triggered by a signed-in analyst) propagate that user's own
+bearer token verbatim (`outbound_auth.py::resolve_interactive_auth`, `UserAuthentication`) — the
+evaluation backend never acts with elevated rights on a human's behalf. Only the asynchronous
+Temporal worker, executing a run's cases outside any request/response cycle and needing durable
+access to the target agent for the run's whole lifetime, uses the worker's own dedicated M2M
+service identity (`ServiceAuthentication`, `fred-evaluation-worker` Keycloak client,
+`service_agent` role — least-privilege, read/prepare-only per
+`SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS`, no `realm-management` role,
+`keycloak-post-install.sh`). The two paths must never be conflated: a route handler must never
+default to the worker's M2M identity when a user token is expected, and the worker must never
+carry or replay a user's bearer token.
+
 ---
 
 ## 9. Canonical data model

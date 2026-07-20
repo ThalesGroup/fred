@@ -166,9 +166,21 @@ class TeamPermission(str, Enum):
 
 # Team permissions a `service_agent` caller is allowed to satisfy without an OpenFGA
 # relation (RFC EVAL-AUTH, Solution A). Read-only: the evaluation worker executes
-# agents (gated by CAN_READ) and never mutates a team. Any write permission falls
-# through to the normal ReBAC check and is therefore denied.
-SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS = frozenset({TeamPermission.CAN_READ})
+# agents and prepares their execution context, never mutates a team. Any write
+# permission falls through to the normal ReBAC check and is therefore denied.
+#
+# CAN_USE_TEAM_AGENTS (2026-07-20, AGENT-EVALUATION-RFC.md §8.6): added after an
+# AUTHZ-05 review moved `POST .../agent-instances/{id}/prepare-execution` from
+# CAN_READ to CAN_USE_TEAM_AGENTS (real prompt content leak, product/api.py) without
+# updating this allowlist to match — the evaluation worker's M2M identity, which
+# structurally never holds a team relation, was then unconditionally denied on every
+# run case. Safe to include: CAN_USE_TEAM_AGENTS gates read/prepare only, never a
+# mutation, and the leak concern that moved prepare-execution off CAN_READ
+# (`context_prompt_text`) never applies to the worker's calls — they never pass
+# `session_id`, the only way that field is populated.
+SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS = frozenset(
+    {TeamPermission.CAN_READ, TeamPermission.CAN_USE_TEAM_AGENTS}
+)
 
 
 class AgentPermission(str, Enum):

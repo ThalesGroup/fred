@@ -89,6 +89,33 @@ async def test_service_agent_read_bypasses_openfga() -> None:
 
 
 @pytest.mark.asyncio
+async def test_service_agent_use_team_agents_bypasses_openfga() -> None:
+    """service_agent + CAN_USE_TEAM_AGENTS → authorized without any OpenFGA check.
+
+    Regression test (2026-07-20, AGENT-EVALUATION-RFC.md §8.6): prepare-execution
+    (`product/api.py::post_prepare_execution`) requires CAN_USE_TEAM_AGENTS, not
+    CAN_READ — the evaluation worker's M2M identity was unconditionally denied on
+    every run case until this permission joined the allowlist.
+    """
+    from control_plane_backend.teams.service import (
+        _validate_team_and_check_permission,
+    )
+
+    rebac = _FakeRebac()
+    metadata, token = await _validate_team_and_check_permission(
+        _user(["service_agent"]),
+        TeamId("fredlab"),
+        cast(Any, rebac),
+        [TeamPermission.CAN_USE_TEAM_AGENTS],
+        _deps(rebac),
+    )
+
+    assert rebac.calls == []  # OpenFGA never consulted for the service identity
+    assert token is None
+    assert metadata.id == "fredlab"
+
+
+@pytest.mark.asyncio
 async def test_service_agent_write_falls_through_to_openfga() -> None:
     """service_agent + a WRITE permission is NOT bypassed → normal ReBAC check runs
     (and, holding no relation, would be denied)."""

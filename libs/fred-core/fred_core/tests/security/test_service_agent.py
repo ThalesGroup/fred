@@ -44,9 +44,10 @@ def test_non_service_roles_are_not_service_agent() -> None:
 
 
 def test_allowed_team_permissions_are_read_only() -> None:
-    # The worker may only satisfy CAN_READ — never a write/admin permission.
+    # The worker may only satisfy CAN_READ / CAN_USE_TEAM_AGENTS (both read/prepare
+    # only) — never a write/admin permission.
     assert SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS == frozenset(
-        {TeamPermission.CAN_READ}
+        {TeamPermission.CAN_READ, TeamPermission.CAN_USE_TEAM_AGENTS}
     )
     assert (
         TeamPermission.CAN_UPDATE_AGENTS not in SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS
