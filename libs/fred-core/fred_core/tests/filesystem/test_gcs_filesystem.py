@@ -107,7 +107,7 @@ def gcs_fs(monkeypatch):
 
     store: dict[str, bytes] = {}
     monkeypatch.setattr(
-        gcs_filesystem.storage, "Client", lambda *a, **k: _FakeClient(store)
+        gcs_filesystem, "build_gcs_client", lambda project_id=None: _FakeClient(store)
     )
     fs = gcs_filesystem.GcsFilesystem(bucket_name="test-bucket")
     return fs
@@ -182,7 +182,7 @@ async def test_prefix_isolates_logical_root(monkeypatch):
 
     store: dict[str, bytes] = {}
     monkeypatch.setattr(
-        gcs_filesystem.storage, "Client", lambda *a, **k: _FakeClient(store)
+        gcs_filesystem, "build_gcs_client", lambda project_id=None: _FakeClient(store)
     )
     fs = gcs_filesystem.GcsFilesystem(bucket_name="b", prefix="vfs")
 
@@ -211,7 +211,7 @@ async def test_list_does_not_leak_sibling_prefix(monkeypatch):
         "team-alpha/docs/secret.txt": b"not yours",
     }
     monkeypatch.setattr(
-        gcs_filesystem.storage, "Client", lambda *a, **k: _FakeClient(store)
+        gcs_filesystem, "build_gcs_client", lambda project_id=None: _FakeClient(store)
     )
     fs = gcs_filesystem.GcsFilesystem(bucket_name="b", prefix="team-a")
 

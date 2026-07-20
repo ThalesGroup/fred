@@ -1049,6 +1049,31 @@ items:
       GitHub #2004 on branch `2004-capab-01-agent-template-capability-gating-gaps`.
       See `AGENT-CAPABILITY-RFC.md` §8.6's 2026-07-19 dated entry for the design.
 
+  - id: CTRLP-15
+    title: "Control-plane content store: native GCS backend for team banner/logo assets"
+    status: in_progress
+    owner: Dimitri
+    parent: FILES-06
+    refs:
+      rfc: "docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md §6"
+      execution: "GitHub issue #2022; branch 2022-make-control-plane-use-gcs-for-loading-its-initial-assets"
+    notes: >
+      Adds a `gcs` variant to control-plane's `storage.content_storage`
+      (`GcsContentStorageConfig`), backed by a new `fred_core.store.GcsContentStore`
+      (put_object + get_presigned_url). Unlike knowledge-flow's GCS content store,
+      whose browser-facing `get_presigned_url` stays unsupported in favor of
+      application-level HMAC tokens (FILES-06 / GCS-TABULAR-SIGNED-URL-RFC §2),
+      the control-plane has no such token flow for team banner/logo images —
+      `TeamService` hands the presigned URL straight to the frontend `<img>`. So
+      this store's `get_presigned_url` mints a real short-lived V4 signed URL via
+      IAM signBlob under Workload Identity (no JSON key), same mechanism as
+      knowledge-flow's internal tabular signing, formalized in
+      GCS-TABULAR-SIGNED-URL-RFC §6 (amendment 2026-07-20). Config requires
+      `signing_service_account_email`; startup fails fast if omitted while
+      `type: gcs` is set. MinIO/S3-compatible and local content stores are
+      unaffected. `deploy/charts/fred/values-gcp.yaml` gained a matching
+      `control-plane-backend` GCS example block.
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01

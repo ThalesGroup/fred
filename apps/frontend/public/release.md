@@ -1,3 +1,22 @@
+**v2.1.7** — 2026-07-20
+
+- **Summary**
+
+  Adds native Google Cloud Storage support for control-plane's team personalization assets (banner/logo images), and fixes GCS authentication on Trusted Partner Cloud / sovereign deployments such as S3NS.
+
+- **Features**
+
+  - Control-plane can now load team banner/logo assets from a native GCS bucket via Application Default Credentials / Workload Identity, in addition to the existing MinIO/S3-compatible and local filesystem backends (`content_storage.type: gcs`, control-plane-backend, fred-core, #2022)
+  - New `signing_service_account_email` config knob for control-plane's GCS content store — mints short-lived V4 signed URLs via IAM `signBlob` (keyless) so team banners/logos remain viewable in the browser, extending the signing mechanism already used for knowledge-flow's internal tabular Parquet reads (`docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md` §6)
+
+- **Bug Fixes**
+
+  - Fix `UniverseMismatchError` ("The configured universe domain (googleapis.com) does not match the universe domain found in the credentials") on every native-GCS backend (control-plane's new content store, knowledge-flow's content store and file store, fred-core's virtual filesystem) when deployed on a Trusted Partner Cloud / sovereign GCP variant such as S3NS — the GCS client now derives its universe domain from the loaded ADC credentials instead of assuming the public `googleapis.com` default, so the same code works unmodified on public GCP and on S3NS (`fred-core` 3.4.6, `knowledge-flow-backend` 1.5.3, `control-plane-backend` 1.6.1)
+
+- **Deployment note**
+
+  No new required config for existing MinIO/local deployments — additive only. GCS deployments (including already-running knowledge-flow-on-S3NS instances) pick up the universe-domain fix automatically on upgrade, no config change needed. Control-plane's new `gcs` backend needs `storage.content_storage.signing_service_account_email` set (see `deploy/charts/fred/values-gcp.yaml`) — the signing service account needs `storage.objects.get` on the control-plane `-objects` bucket, and the Workload Identity service account needs `iam.serviceAccounts.signBlob` on it (may reuse the same signing account already configured for knowledge-flow's tabular reads).
+
 **v2.1.6** — 2026-07-20
 
 - **Summary**

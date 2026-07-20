@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import BinaryIO, List, Optional
 
 import google.auth
+from fred_core.common.gcs_client import build_gcs_client
 from google.auth.transport.requests import Request as GoogleAuthRequest
-from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore, FileMetadata, StoredObjectInfo
@@ -85,7 +85,7 @@ class GcsContentStore(BaseContentStore):
         # the access token for IAM signBlob. None until the first signing call.
         self._signing_credentials = None
 
-        self.client = storage.Client(project=project_id) if project_id else storage.Client()
+        self.client = build_gcs_client(project_id)
         self.document_bucket = self.client.bucket(document_bucket)
         self.object_bucket = self.client.bucket(object_bucket)
         logger.info(

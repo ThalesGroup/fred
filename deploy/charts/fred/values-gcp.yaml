@@ -23,8 +23,9 @@
 # Helm DEEP-MERGES maps, so the base `content_storage.root_path` / `filesystem`
 # minio keys would remain and FAIL schema validation. Therefore the storage
 # blocks below are meant to REPLACE the base ones: either
-#   (a) edit the `x-kf-content-storage` / `x-kf-filesystem` / `x-kf-storage`
-#       anchors in values.yaml directly with the blocks shown here, or
+#   (a) edit the `x-kf-content-storage` / `x-kf-filesystem` / `x-kf-storage` /
+#       `x-cp-storage` anchors in values.yaml directly with the blocks shown
+#       here, or
 #   (b) keep a dedicated GKE values.yaml whose anchors already use these values.
 # The non-storage overrides (serviceAccount annotations, dotenv) are safe to use
 # as a `-f` overlay as-is.
@@ -32,6 +33,38 @@
 # Replace every <PLACEHOLDER> below for your project.
 
 applications:
+  control-plane-backend:
+    # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
+    # The GSA needs roles/storage.objectAdmin on the content bucket, and
+    # iam.serviceAccounts.signBlob on the signing service account below
+    # (typically roles/iam.serviceAccountTokenCreator) — team banner/logo
+    # images are served straight to the browser via a V4 signed URL, so this
+    # signing account is required, not just an internal nicety (see
+    # docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
+    serviceAccount:
+      annotations:
+        iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+
+    configuration:
+      storage:
+        # --- Content store: native GCS (bucket must already exist) ---
+        # bucket_name is suffixed at runtime → -objects (team banners/logos).
+        content_storage:
+          type: gcs
+          bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-cp-content
+          project_id: "" # optional; inferred from ADC when empty
+          # Required: service account used to sign V4 signed URLs for
+          # browser-facing banner/logo images via IAM signBlob (keyless).
+          # Startup fails clearly if unset. It needs storage.objects.get on the
+          # -objects bucket; the GSA above needs iam.serviceAccounts.signBlob
+          # on it. May be the GSA itself (self-signing).
+          signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+
+    dotenv:
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
+      FRED_POSTGRES_PASSWORD: ""
+      OPENFGA_API_TOKEN: ""
+
   knowledge-flow-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
     # The GSA needs roles/storage.objectAdmin on the content + fs buckets, and
