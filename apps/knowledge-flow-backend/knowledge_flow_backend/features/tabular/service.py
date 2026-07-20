@@ -25,7 +25,7 @@ from datetime import timedelta
 
 import duckdb
 import pandas as pd
-from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata
 
@@ -414,6 +414,15 @@ class TabularService:
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
             visible_documents = await self.metadata_store.get_all_metadata({})
+        elif is_service_agent(user):
+            # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
+            # the evaluation worker holds no per-user document relations by design, so the
+            # per-user READ lookup above is always empty and would zero out every dataset.
+            # Authorize via the team-scoped tag set instead; fail closed without one.
+            if not scoped_tag_ids:
+                return []
+            tag_documents = await asyncio.gather(*(self.metadata_store.get_metadata_in_tag(tag_id) for tag_id in scoped_tag_ids))
+            visible_documents = [metadata for documents in tag_documents for metadata in documents]
         else:
             authorized_ids = [document.id for document in authorized_document_ref]
             if not authorized_ids:
