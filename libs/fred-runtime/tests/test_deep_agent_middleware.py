@@ -34,9 +34,6 @@ from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
-from fred_runtime.deep.deep_runtime import (
-    _build_deepagent_runtime_middleware,
-)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -74,7 +71,7 @@ def _binding() -> BoundRuntimeContext:
 
 
 def test_middleware_leads_with_observability_when_filesystem_enabled() -> None:
-    middleware = _build_deepagent_runtime_middleware(
+    middleware = deep_mod._build_deepagent_runtime_middleware(
         filesystem_tools_enabled=True,
         tracer=None,
         kpi=None,
@@ -87,7 +84,7 @@ def test_middleware_leads_with_observability_when_filesystem_enabled() -> None:
 
 
 def test_middleware_keeps_observability_first_then_filesystem_guards() -> None:
-    middleware = _build_deepagent_runtime_middleware(
+    middleware = deep_mod._build_deepagent_runtime_middleware(
         filesystem_tools_enabled=False,
         tracer=None,
         kpi=None,
