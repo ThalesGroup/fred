@@ -14,10 +14,11 @@
 
 // The ppt_filler capability's `ppt_preview` chat-part card (UiPartRenderer).
 //
-// A compact reference to a filled deck shown inside an assistant message: a
-// slideshow icon, the deck title, an "Open preview" button (opens the side panel
-// via the slice) and a ".pptx" download button. The rendered deck lives in the
-// pane, not here.
+// A compact, clickable chip shown inside an assistant message (visual parity
+// with legacy `ArtifactCard`): a slideshow icon, the deck title, an "Open
+// preview" hint — the whole body opens the side panel via the slice — and a
+// trailing ".pptx" download button. The rendered deck lives in the pane, not
+// here.
 //
 // Auto-open (Kea `usePptPreview` parity): every card folds its deck into the
 // slice on mount (`previewSeen`), so the pane always knows the LATEST deck —
@@ -31,7 +32,6 @@ import { useEffect } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import Button from "@shared/atoms/Button/Button";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
 import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
@@ -76,33 +76,21 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   const title = preview.title || t("capability.ppt_filler.preview.untitled", { defaultValue: "Presentation" });
 
   return (
-    <div
-      className={styles.card}
-      role="note"
-      aria-label={t("capability.ppt_filler.preview.cardAria", { defaultValue: "Presentation preview" })}
-    >
-      <div className={styles.header}>
-        <span className={styles.icon} aria-hidden>
+    <div className={styles.chip}>
+      <button type="button" className={styles.open} onClick={openPane}>
+        <span className={styles.icon}>
           <Icon category="outlined" type="slideshow" />
         </span>
-        <span className={styles.title} title={title}>
-          {title}
+        <span className={styles.text}>
+          <span className={styles.title}>{title}</span>
+          <span className={styles.hint}>
+            {t("capability.ppt_filler.preview.open", { defaultValue: "Open preview" })}
+          </span>
         </span>
-        {preview.pptx_download_url && (
-          <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
-        )}
-      </div>
-      <div className={styles.actions}>
-        <Button
-          color="primary"
-          variant="text"
-          size="small"
-          icon={{ category: "outlined", type: "slideshow" }}
-          onClick={openPane}
-        >
-          {t("capability.ppt_filler.preview.open", { defaultValue: "Open preview" })}
-        </Button>
-      </div>
+      </button>
+      {preview.pptx_download_url && (
+        <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
+      )}
     </div>
   );
 }

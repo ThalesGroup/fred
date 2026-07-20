@@ -193,7 +193,6 @@
       "preview": {
         "untitled": "Presentation",
         "open": "Open preview",
-        "cardAria": "Presentation preview",
         "download": "Download .pptx",
         "downloadError": "Download failed",
         "close": "Close preview",

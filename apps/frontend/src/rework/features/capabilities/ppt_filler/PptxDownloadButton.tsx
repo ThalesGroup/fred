@@ -23,7 +23,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 
@@ -57,16 +56,14 @@ export default function PptxDownloadButton({
   };
 
   return (
-    <Tooltip text={label}>
-      <IconButton
-        color="on-surface"
-        variant="icon"
-        size="small"
-        icon={{ category: "outlined", type: "download" }}
-        onClick={handleDownload}
-        disabled={isDownloading}
-        aria-label={label}
-      />
-    </Tooltip>
+    <IconButton
+      color="on-surface"
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: "download" }}
+      onClick={handleDownload}
+      disabled={isDownloading}
+      aria-label={label}
+    />
   );
 }
