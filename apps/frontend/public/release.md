@@ -15,6 +15,7 @@
   - Dataset pointer chunks (increment 1): tabular/SQL datasets are now discoverable by a generalist agent via semantic search, gated off by default pending a deliberate rollout decision (RUNTIME-10, #2014)
   - Native PDF rendering unified into a single `DocumentViewer`, shared by chat citations and the corpus workspace preview drawer — every PDF previously rendered as markdown-only text regardless of upload format (FRONT-13, #1956)
   - SQL agent grounds generated queries in real, sampled column values instead of guessing string casing/format, removing a silent wrong-case "no data found" failure mode
+  - First deep-agent template exposed: `fred.github.deep_assistant` (blank-slate, plans before it acts, same enrollment model as the general assistant). No filesystem tool by default — operators add it explicitly once ready
 
 - **Improvements**
 
@@ -22,7 +23,7 @@
   - Import capability sweeps stay correctly scoped and idempotent across retried/duplicate import jobs
   - Checkpoint erasure now reports a real deleted-row count instead of always `None`, matching its sibling history-erasure endpoint (fred-runtime 3.3.5)
   - ReAct thought events now carry a real `duration_ms` instead of always `None`
-  - DeepAgent (the minimal multi-step planning runtime) now emits the same audit/KPI/log trail as every other agent — a prerequisite for enabling it, landed before any Deep agent is exposed
+  - DeepAgent (the minimal multi-step planning runtime) now emits the same audit/KPI/log trail as every other agent, closing a gap that predated any Deep agent being exposed
   - Removed dead frontend code: the unused `monitoringApi` slice, the kubernetes/statistics endpoints and Helm flag, and five npm dependencies with zero import sites
   - Continued MUI → rework migration: `Protected` guard, `ConfirmationDialogProvider`, `PageError`/`PageUnauthorized`, `LibraryTreePlayground`, and `PdfStreamingDocumentViewer` ported off MUI
   - Removed the unused Weaviate vector-store backend (not selected by any checked-in config)
