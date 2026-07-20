@@ -107,6 +107,48 @@ async def list_users(
     return summaries
 
 
+_SEARCH_RESULT_LIMIT = 20
+
+
+async def search_users(
+    query: str,
+    deps: UserServiceDependencies,
+) -> list[UserSummary]:
+    """
+    Search Keycloak users by a free-text query (username/name/email substring).
+
+    Why this function exists:
+    - team-scoped invite flows (`can_administer_members`, owner-only per
+      FRED-AUTHORIZATION-TARGET-MODEL-RFC.md §24.7) need a bounded, server-filtered
+      user lookup — the existing org-wide listing (`list_users`) is intentionally
+      gated to `platform_admin` and returns every Keycloak user unfiltered, so it
+      cannot be reused here without widening that exposure to every team admin
+
+    How to use it:
+    - pass a non-empty query string; callers must enforce a minimum length
+      (done at the API layer) so this never degrades into an unbounded listing
+    - returns at most `_SEARCH_RESULT_LIMIT` matches; empty list when Keycloak
+      M2M is not configured
+
+    Example:
+    - `matches = await search_users("cohen", deps)`
+    """
+    admin = _get_keycloak_admin(deps)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; returning empty search.")
+        return []
+
+    raw_users = await admin.a_get_users({"search": query, "max": _SEARCH_RESULT_LIMIT})
+    summaries: list[UserSummary] = []
+    for raw_user in raw_users:
+        try:
+            summaries.append(UserSummary.from_raw_user(raw_user))
+        except ValueError:
+            logger.debug("Skipping Keycloak user without identifier: %s", raw_user)
+
+    return summaries
+
+
 async def create_user(
     _current_user: KeycloakUser,
     request: CreateUserRequest,

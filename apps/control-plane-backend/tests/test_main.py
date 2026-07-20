@@ -4595,6 +4595,9 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
 
+    async def _fake_search_users(*_args, **_kwargs):
+        return []
+
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
@@ -4616,6 +4619,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         get_purge_queue_store=cast(Any, lambda: object()),
         get_policy_catalog=cast(Any, lambda: object()),
         get_users_by_ids=_fake_get_users_by_ids,
+        search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
 
@@ -4667,6 +4671,9 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
             "marc": UserSummary(id="marc"),
         }
 
+    async def _fake_search_users(*_args, **_kwargs):
+        return []
+
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
@@ -4688,6 +4695,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         get_purge_queue_store=cast(Any, lambda: object()),
         get_policy_catalog=cast(Any, lambda: object()),
         get_users_by_ids=_fake_get_users_by_ids,
+        search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
 
@@ -4990,6 +4998,9 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     async def _fake_get_users_by_ids(_user_ids):
         return {}
 
+    async def _fake_search_users(_query):
+        return []
+
     fake_scheduler = type("SchedulerCfg", (), {"enabled": True})()
     fake_configuration = type("Cfg", (), {"scheduler": fake_scheduler})()
     fake_team_deps = TeamServiceDependencies(
@@ -5002,6 +5013,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
         get_policy_catalog=cast(Any, lambda: object()),
         get_users_by_ids=_fake_get_users_by_ids,
+        search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=_fake_run_lifecycle_manager_once_in_memory,
     )
 

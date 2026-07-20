@@ -144,6 +144,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.addTeamMemberRequest,
       }),
     }),
+    searchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGet: build.query<
+      SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiResponse,
+      SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/candidate-members`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
     removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: build.mutation<
       RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiResponse,
       RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiArg
@@ -823,6 +834,12 @@ export type AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiResponse = unkno
 export type AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiArg = {
   teamId: string;
   addTeamMemberRequest: AddTeamMemberRequest;
+};
+export type SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiArg = {
+  teamId: string;
+  query: string;
 };
 export type RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiResponse =
   /** status 202 Successful Response */ RemoveTeamMemberResponse;
@@ -2270,6 +2287,8 @@ export const {
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
+  useSearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery,
+  useLazySearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
   useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation,
   useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation,

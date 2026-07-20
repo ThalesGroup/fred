@@ -296,6 +296,10 @@ async def _no_users_by_ids(*_a: Any, **_k: Any) -> dict[str, Any]:
     return {}
 
 
+async def _no_search_users(*_a: Any, **_k: Any) -> list[Any]:
+    return []
+
+
 def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDependencies:
     config = MagicMock()
     config.app.personal_max_resources_storage_size = 5368709120
@@ -311,6 +315,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=ConversationPolicyCatalog,
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        search_users=cast(Any, _no_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 

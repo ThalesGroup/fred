@@ -263,6 +263,11 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/candidate-members
+    review_status: approved
+    required_permission: can_administer_members
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/members
     review_status: pending_review
     required_permission: pending_review

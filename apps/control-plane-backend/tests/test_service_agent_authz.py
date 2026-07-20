@@ -62,6 +62,7 @@ def _deps(rebac: _FakeRebac):
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
+        search_users=cast(Any, lambda *_a, **_k: []),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 

@@ -1231,3 +1231,21 @@ an agent whose tools aren't granted yet. `PATCH /teams/{team_id}/agent-instances
 now 403s once the instance's own template grant is revoked (previously only
 *tool* capability selections were re-checked on update; unenroll is still
 always allowed).
+
+## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
+
+**New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
+`list[UserSummary]`. Gated on `can_administer_members` for `team_id` (owner-only,
+no platform escalation — `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §24.7/§24.9).
+`query` is required, `min_length=2`, enforced server-side. Returns Keycloak users
+matching the query, excluding anyone already holding any role on the team.
+
+**Why:** the existing `GET /users` listing is intentionally `platform_admin`-only
+(`§24.9`); team admins need a way to find someone to invite without widening that
+org-wide listing to every team admin. `TeamSettingsMembers.tsx`'s "add member"
+search now calls this endpoint (`useSearchCandidateTeamMembersQuery`) instead of
+`useListUsersQuery` — previously it called the `platform_admin`-gated listing
+unconditionally and silently showed zero results for any team-admin-only caller.
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`). No other
+route or schema changed.

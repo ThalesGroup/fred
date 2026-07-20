@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, Path, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Path, Query, UploadFile
 from fastapi.responses import JSONResponse
 from fred_core import AuthorizationError, KeycloakUser, get_current_user
 from fred_core.common import TeamId
@@ -56,10 +56,14 @@ from control_plane_backend.teams.service import (
 from control_plane_backend.teams.service import (
     revoke_team_member_role as revoke_team_member_role_from_service,
 )
+from control_plane_backend.teams.service import (
+    search_candidate_team_members as search_candidate_team_members_from_service,
+)
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
     upload_team_banner as upload_team_banner_from_service,
 )
+from control_plane_backend.users.schemas import UserSummary
 
 router = APIRouter(tags=["Teams"])
 TeamDependencies = Annotated[
@@ -271,6 +275,21 @@ async def add_team_member(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await add_team_member_from_service(user, team_id, request, deps)
+
+
+@router.get(
+    "/teams/{team_id}/candidate-members",
+    response_model=list[UserSummary],
+    response_model_exclude_none=True,
+    summary="Search Keycloak users eligible to be added to a team",
+)
+async def search_candidate_team_members(
+    team_id: Annotated[TeamId, Path()],
+    query: Annotated[str, Query(min_length=2)],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[UserSummary]:
+    return await search_candidate_team_members_from_service(user, team_id, query, deps)
 
 
 @router.delete(
