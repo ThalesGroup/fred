@@ -36,6 +36,14 @@ class AgentInstanceRow(Base):
         ),
     )
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment=(
+            "Uid of the last user who edited the instance (#1952). NULL when "
+            "never user-edited (seed/startup saves have no acting user)."
+        ),
+    )
     tuning_json: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

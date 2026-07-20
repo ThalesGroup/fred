@@ -1249,3 +1249,25 @@ unconditionally and silently showed zero results for any team-admin-only caller.
 
 `controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`). No other
 route or schema changed.
+
+## 19. Contract Notes — audit-name resolution + `updated_by` (2026-07-20, #1952)
+
+**New endpoint:** `GET /users/by-ids?ids=<uid>&ids=<uid>` → `list[UserSummary]`
+(max 100 ids). Open to any authenticated user — it only exposes display identity
+(name/username/email), never roles or credentials. Every requested id yields
+exactly one entry, in request order, deduplicated; unknown ids (or a disabled
+Keycloak M2M client) degrade to an id-only summary so callers can always fall
+back to rendering the uid. Wraps the pre-existing internal service
+`users/service.py::get_users_by_ids`. The frontend agent-edit footer resolves
+`created_by`/`updated_by` through it (`useUsersByIdsQuery`) instead of showing
+raw uids (#1952); the unpaginated `platform_admin`-only `GET /users` stays
+untouched.
+
+**Schema:** `ManagedAgentInstanceSummary.updated_by: str | null` (read-only,
+server-authoritative). Backed by a new nullable `agent_instance.updated_by`
+column (Alembic `0285dc3a0cdc`, plain ADD COLUMN, SQLite-compatible), stamped
+with the acting user's uid on every `PATCH
+/teams/{team_id}/agent-instances/{id}`. NULL means never user-edited
+(seed/startup saves have no acting user).
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`).

@@ -3,7 +3,7 @@ import uuid as _uuid_mod
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Path, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, status
 from fastapi.responses import JSONResponse
 from fred_core import (
     ORGANIZATION_ID,
@@ -50,6 +50,9 @@ from control_plane_backend.users.service import (
 from control_plane_backend.users.service import (
     find_user_details_by_id,
     update_gcu_validation,
+)
+from control_plane_backend.users.service import (
+    get_users_by_ids as get_users_by_ids_from_service,
 )
 from control_plane_backend.users.service import (
     list_users as list_users_from_service,
@@ -146,6 +149,47 @@ async def list_users(
     - `GET /control-plane/v1/users`
     """
     return await list_users_from_service(user, deps)
+
+
+@router.get(
+    "/users/by-ids",
+    response_model=list[UserSummary],
+    response_model_exclude_none=True,
+    summary="Resolve a batch of user ids to display summaries.",
+)
+async def get_users_by_ids(
+    deps: UserDependencies,
+    ids: Annotated[list[str], Query(min_length=1, max_length=100)],
+    _user: KeycloakUser = Depends(get_current_user),
+) -> list[UserSummary]:
+    """
+    Resolve up to 100 user ids to normalized display summaries (#1952).
+
+    Why this endpoint exists:
+    - audit fields (`created_by` / `updated_by` on managed agent instances)
+      store raw uids; the frontend needs first/last names without pulling the
+      whole unpaginated realm through `GET /users` (admin-only)
+
+    How to use it:
+    - repeat the query param: `GET /users/by-ids?ids=a&ids=b`
+    - any authenticated user may call it; it only exposes display identity
+      (name/username/email), never roles or credentials
+    - every requested id gets exactly one entry, in request order; unknown ids
+      (or a disabled Keycloak M2M client) degrade to an id-only summary so the
+      caller can always fall back to rendering the uid
+
+    Example:
+    - `GET /control-plane/v1/users/by-ids?ids=75730f40-...`
+    """
+    summaries = await get_users_by_ids_from_service(ids, deps)
+    seen: set[str] = set()
+    results: list[UserSummary] = []
+    for user_id in ids:
+        if not user_id or user_id in seen:
+            continue
+        seen.add(user_id)
+        results.append(summaries.get(user_id) or UserSummary(id=user_id))
+    return results
 
 
 @router.post(

@@ -169,6 +169,7 @@ class _FakeAgentInstanceStore:
         description: str | None = None,
         enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
+        updated_by: str | None = None,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -188,6 +189,8 @@ class _FakeAgentInstanceStore:
             record.enabled = enabled
         if tuning is not None:
             record.tuning = tuning
+        if updated_by is not None:
+            record.updated_by = updated_by
         return record
 
     async def list_all(self) -> list[AgentInstanceRecord]:
@@ -667,6 +670,23 @@ async def test_list_users_returns_empty_without_keycloak_m2m() -> None:
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_get_users_by_ids_degrades_to_id_only_without_keycloak() -> None:
+    """/users/by-ids answers one entry per unique id, in order, even with no Keycloak (#1952)."""
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            "/control-plane/v1/users/by-ids",
+            params=[("ids", "u-1"), ("ids", "u-2"), ("ids", "u-1")],
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == [{"id": "u-1"}, {"id": "u-2"}]
 
 
 @pytest.mark.asyncio
@@ -2132,6 +2152,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
                     created_by VARCHAR,
+                    updated_by VARCHAR,
                     tuning_json TEXT,
                     prompt_refs_json TEXT,
                     created_at DATETIME NOT NULL DEFAULT (now()),
@@ -5489,6 +5510,37 @@ async def test_patch_agent_instance_updates_display_name(
     assert payload["display_name"] == "Renamed Echo Agent"
     assert payload["agent_instance_id"] == "instance-1"
     assert payload["status"] == "enabled"
+
+
+@pytest.mark.asyncio
+async def test_patch_agent_instance_stamps_updated_by(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH stamps the acting user's uid into updated_by (#1952)."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_record()
+    assert record.updated_by is None
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"display_name": "Renamed Echo Agent"},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    # No-security mode authenticates as the mock "admin" subject.
+    assert payload["updated_by"] == "admin"
+    assert record.updated_by == "admin"
 
 
 @pytest.mark.asyncio

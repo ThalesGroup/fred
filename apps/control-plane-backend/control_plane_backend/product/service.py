@@ -1742,6 +1742,7 @@ def _record_to_summary(
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
+        updated_by=record.updated_by,
         tuning_field_values=record.tuning.values,
         selected_capability_ids=(
             list(record.tuning.selected_capability_ids)
@@ -2241,6 +2242,7 @@ async def update_agent_instance(
         description=request.description,
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
+        updated_by=user.uid,
     )
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
