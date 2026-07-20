@@ -44,6 +44,8 @@ from fred_runtime.react.middleware.tool_observability import (
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.react.react_model_adapter import (
     REACT_MODEL_OPERATION_ROUTING,
+)
+from fred_runtime.react.react_model_adapter import (
     infer_react_model_operation_from_messages as _infer_react_model_operation_from_messages,
 )
 from fred_runtime.react.react_prompting import (
