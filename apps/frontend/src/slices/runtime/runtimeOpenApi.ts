@@ -733,33 +733,40 @@ export type ToolResultPart = {
   ok?: boolean | null;
   type?: "tool_result";
 };
+export type UiPartRecord = {
+  type: string;
+  [key: string]: any;
+};
 export type Role = "user" | "assistant" | "tool" | "system";
 export type ChatMessage = {
   channel: Channel;
   exchange_id: string;
   metadata?: ChatMetadata;
   parts: (
-    | ({
-        type: "code";
-      } & CodePart)
-    | ({
-        type: "hitl_request";
-      } & HitlRequestPart)
-    | ({
-        type: "hitl_response";
-      } & HitlResponsePart)
-    | ({
-        type: "image_url";
-      } & ImageUrlPart)
-    | ({
-        type: "text";
-      } & TextPart)
-    | ({
-        type: "tool_call";
-      } & ToolCallPart)
-    | ({
-        type: "tool_result";
-      } & ToolResultPart)
+    | (
+        | ({
+            type: "code";
+          } & CodePart)
+        | ({
+            type: "hitl_request";
+          } & HitlRequestPart)
+        | ({
+            type: "hitl_response";
+          } & HitlResponsePart)
+        | ({
+            type: "image_url";
+          } & ImageUrlPart)
+        | ({
+            type: "text";
+          } & TextPart)
+        | ({
+            type: "tool_call";
+          } & ToolCallPart)
+        | ({
+            type: "tool_result";
+          } & ToolResultPart)
+      )
+    | UiPartRecord
   )[];
   rank: number;
   role: Role;
@@ -780,6 +787,7 @@ export type UiHints = {
   multiline?: boolean;
   placeholder?: string | null;
   textarea?: boolean;
+  widget?: string | null;
 };
 export type FieldSpec = {
   default?:

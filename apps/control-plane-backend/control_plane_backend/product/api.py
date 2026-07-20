@@ -14,7 +14,6 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import Response
-from pydantic import ValidationError
 from fred_core import (
     ORGANIZATION_ID,
     KeycloakUser,
@@ -23,6 +22,7 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common import TeamId
+from pydantic import ValidationError
 
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
