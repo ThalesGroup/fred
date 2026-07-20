@@ -1271,3 +1271,12 @@ with the acting user's uid on every `PATCH
 (seed/startup saves have no acting user).
 
 `controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`).
+
+## 20. Contract Notes — prompts-context personal scoping (2026-07-20, #2023)
+
+**Behavior change:** `GET /teams/{team_id}/prompts/context` no longer merges
+the caller's personal prompts into a non-personal team's context (#2023) — a
+team space returns the team's prompts + platform defaults only; the personal
+space returns the caller's prompts (scope `personal`) + defaults. Response
+shape unchanged. Already-attached personal prompts keep resolving at
+prepare-execution (see `design/PROMPTS.md` §5/§6).

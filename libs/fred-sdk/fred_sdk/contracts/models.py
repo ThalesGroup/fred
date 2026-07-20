@@ -98,6 +98,16 @@ class UIHints(BaseModel):
     textarea: bool = False
     group: Optional[str] = None
     hide: bool = False
+    widget: Optional[str] = Field(
+        default=None,
+        description=(
+            "Names a frontend stock form widget to render this field instead "
+            "of the type-derived default input. Known ids: "
+            "'document_libraries' (library/document tree picker for an array "
+            "of library tag ids). Unknown ids fall back to the default input, "
+            "so older frontends degrade gracefully."
+        ),
+    )
 
 
 class FieldSpec(BaseModel):

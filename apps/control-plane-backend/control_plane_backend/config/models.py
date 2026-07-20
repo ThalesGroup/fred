@@ -102,6 +102,10 @@ class ManagedAgentUiHints(BaseModel):
     textarea: bool = False
     group: str | None = None
     hide: bool = False
+    # Mirrors fred_sdk UIHints.widget: names a frontend stock form
+    # widget (e.g. "document_libraries"); unknown/None falls back to the
+    # type-derived default input.
+    widget: str | None = None
 
 
 class ManagedAgentFieldSpec(BaseModel):

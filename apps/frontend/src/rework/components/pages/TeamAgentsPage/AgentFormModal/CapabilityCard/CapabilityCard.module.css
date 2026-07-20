@@ -37,8 +37,10 @@
   font: var(--font-label-medium);
 }
 
+/* Emphasis only — same font metrics as .name so toggling never shifts the list */
 .nameActive {
-  font: var(--font-title-small);
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .description {

@@ -13,14 +13,7 @@
  * limitations under the License.
  */
 
-/* The rows themselves are the shared FolderRow / DocRow molecules (identical to the corpus).
- * This wrapper only adds the horizontal filet + indentation, exactly like DocumentWorkspace:
- * padding-left insets the content, never the full-width bottom border. */
-.row {
-  border-bottom: 1px solid var(--outline-retreat);
-}
-
-/* Empty-directory hint, same rendering as the corpus workspace's .hint */
+/* Empty-area hint, same rendering as the corpus workspace's .hint */
 .hint {
   padding: var(--spacing-2xs) var(--spacing-xs);
   color: var(--on-surface-muted);

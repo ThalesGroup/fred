@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
@@ -182,6 +183,24 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
 
   if (field.type === "array") {
     const tags = Array.isArray(value) ? (value as string[]) : [];
+
+    // `ui.widget` stock form widgets. "document_libraries" renders the
+    // library/document tree picker instead of a raw tag-id text input; an
+    // unknown widget id falls through to the default TagInput.
+    if (field.ui?.widget === "document_libraries") {
+      return (
+        <div className={styles.field}>
+          <span className={styles.label}>{label}</span>
+          <DocumentLibraryScopePicker
+            teamId={teamId}
+            selectedTagIds={tags}
+            onChange={(tagIds) => onChange(field.key, tagIds)}
+          />
+          {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
+          {error && <p className={styles.error}>{error}</p>}
+        </div>
+      );
+    }
 
     return (
       <div className={styles.field}>
