@@ -1,3 +1,31 @@
+**v2.1.6** — 2026-07-20
+
+- **Summary**
+
+  First release with production ready agent evaluation framework.
+
+- **Features**
+
+  - One-click "Rerun" on the evaluation runs list, reusing the most recent run's target — the daily re-run workflow is a single click instead of a target picker every time (falls back to "New run…" when there's nothing rerunnable yet)
+  - New shared `Breadcrumb` navigation component (Evaluations list → one Evaluation's runs → one Run's cases), replacing the duplicate back-button pattern on each page
+
+- **Improvements**
+
+  - Evaluation run/case progress now polls the run data directly instead of depending on the shared task-activity SSE stream, which opens one long-lived connection per active task per browser tab and can exhaust the browser's shared per-origin connection limit across two open tabs
+  - Run and case progress queries no longer poll out of lockstep: the cases table forces one final refresh exactly when a run reaches a terminal state, closing a race where the run showed "Done" while a case row stayed stuck on "Running"
+  - The "Scores by metric" panel is now labelled as a partial, still-updating average while a run is live, instead of reading as the final score under the same "Global score" label
+  - Evaluation creation now returns to the full evaluations list instead of jumping straight into the new evaluation's (empty) run list, keeping "starting a run" a deliberate next step
+  - Evaluation empty states (list and per-evaluation runs) now use the same sober `ServiceNotice` component already used elsewhere for "no X available" messaging, instead of a large standalone icon with its own redundant call-to-action button
+  - The evaluation run detail page's Langfuse action no longer renders as a permanently-disabled "offline" button when telemetry is enabled in config but was never actually reachable — only shown when a session is available or genuinely still pending
+  - `GET /teams/{team_id}/candidate-members` (new, team-scoped): a team admin can now search for a user to add to their team without requiring platform-admin rights, which the existing org-wide `/users` listing required
+
+- **Bug Fixes**
+
+  - Fix the evaluation worker's service-account identity being denied on every run case (`prepare-execution` requires `CAN_USE_TEAM_AGENTS`, which the service-agent allowlist never carried) — every evaluation run was blocked from executing (fred-core 3.4.5)
+  - Fix evaluation run rows never reaching a terminal state on a full workflow failure, and never showing incremental per-case progress while running — both left the runs list stuck at "Pending 0/N" (`fred-evaluation-backend`)
+  - Fix a case-drawer table column overflow where a long judge-profile label could clip the Detail/Delete action buttons
+  - Fix a team admin's "add member" search silently returning nothing (403 swallowed) because it called the platform-admin-only `/users` listing instead of a team-scoped endpoint
+
 **v2.1.5** — 2026-07-20
 
 - **Summary**
