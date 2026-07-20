@@ -558,3 +558,46 @@ async def test_search_candidate_team_members_checks_permission_and_excludes_exis
     assert rebac.team_permission_checks == [
         ("fredlab", (TeamPermission.CAN_ADMINISTER_MEMBERS,))
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_members_rejects_whitespace_only_query() -> None:
+    """`min_length=2` at the API layer validates the raw string, so "  " (two
+    spaces) would otherwise pass through and reach Keycloak's search
+    un-widened. The service must strip and re-check before searching — but
+    still authorize first, regardless of whether the query turns out valid.
+    """
+    rebac = _FakeRebac(roles={})
+    search_calls: list[str] = []
+
+    async def _search_users(query: str) -> list[UserSummary]:
+        search_calls.append(query)
+        return [UserSummary(id="new-user", username="cohen.odelia")]
+
+    deps = _deps(rebac, "fredlab", search_users=_search_users)
+
+    matches = await search_candidate_team_members(
+        _user(), TeamId("fredlab"), "  ", deps
+    )
+
+    assert matches == []
+    assert search_calls == []  # never reached the search
+    assert rebac.team_permission_checks == [
+        ("fredlab", (TeamPermission.CAN_ADMINISTER_MEMBERS,))
+    ]  # still authorized before the empty-query short-circuit
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_members_strips_surrounding_whitespace() -> None:
+    rebac = _FakeRebac(roles={})
+    search_calls: list[str] = []
+
+    async def _search_users(query: str) -> list[UserSummary]:
+        search_calls.append(query)
+        return [UserSummary(id="new-user", username="cohen.odelia")]
+
+    deps = _deps(rebac, "fredlab", search_users=_search_users)
+
+    await search_candidate_team_members(_user(), TeamId("fredlab"), "  cohen  ", deps)
+
+    assert search_calls == ["cohen"]

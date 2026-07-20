@@ -49,16 +49,22 @@ export function Breadcrumb({ segments }: BreadcrumbProps) {
       <ol className={styles.list}>
         {segments.map((segment, index) => {
           const isCurrent = index === lastIndex;
+          // A non-current segment with no onClick would otherwise render as a
+          // focusable button that does nothing — fall back to plain text.
+          const isInteractive = !isCurrent && !!segment.onClick;
           return (
             <li key={`${segment.label}-${index}`} className={styles.item}>
-              {isCurrent ? (
-                <span className={styles.current} aria-current="page">
-                  {segment.label}
-                </span>
-              ) : (
+              {isInteractive ? (
                 <button type="button" className={styles.link} onClick={segment.onClick}>
                   {segment.label}
                 </button>
+              ) : (
+                <span
+                  className={isCurrent ? styles.current : styles.plain}
+                  aria-current={isCurrent ? "page" : undefined}
+                >
+                  {segment.label}
+                </span>
               )}
               {!isCurrent && (
                 <span className={styles.separator} aria-hidden="true">

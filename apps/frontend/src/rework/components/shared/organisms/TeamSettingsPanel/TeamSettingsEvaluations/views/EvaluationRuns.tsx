@@ -186,7 +186,11 @@ export default function EvaluationRuns({
 
   const runs = data ?? [];
   const running = runs.filter((run) => run.operational_state === "running").length;
-  const completed = runs.filter((run) => run.operational_state === "completed").length;
+  // operationalToTaskState is the canonical mapper (it also treats "succeeded"
+  // as terminal-success, matching the backend's own documented either/or) —
+  // reuse it instead of comparing the raw string, so this count can't silently
+  // drop to 0 if the backend ever reports "succeeded" instead of "completed".
+  const completed = runs.filter((run) => operationalToTaskState(run.operational_state) === "succeeded").length;
   const totalCases = runs.reduce((sum, run) => sum + run.completed_cases, 0);
   const criticalErrors = runs.reduce((sum, run) => sum + run.execution_error_cases, 0);
 

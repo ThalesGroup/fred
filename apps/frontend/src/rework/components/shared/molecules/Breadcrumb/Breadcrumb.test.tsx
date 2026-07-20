@@ -76,6 +76,17 @@ describe("Breadcrumb", () => {
     expect(onClickA).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a non-last segment with no onClick as plain text, not a dead button", () => {
+    render([{ label: "Evaluations" }, { label: "Run 12", onClick: vi.fn() }, { label: "Case 3" }]);
+
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toBe("Run 12");
+
+    const spans = Array.from(container.querySelectorAll("span")).map((s) => s.textContent);
+    expect(spans).toContain("Evaluations");
+  });
+
   it("renders nothing for an empty segment list", () => {
     render([]);
     expect(container.querySelector("nav")).toBeNull();

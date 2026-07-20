@@ -62,6 +62,19 @@
   font: var(--font-label-large-emphasized);
 }
 
+/* A non-current segment with no onClick — same resting look as .link, but
+   never interactive (no pointer cursor, no hover state) so it can't be
+   mistaken for a dead button. */
+.plain {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
 .separator {
   display: inline-flex;
   align-items: center;

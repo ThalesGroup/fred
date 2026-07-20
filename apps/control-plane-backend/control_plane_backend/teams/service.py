@@ -825,7 +825,10 @@ async def search_candidate_team_members(
 
     How to use it:
     - call from `GET /teams/{team_id}/candidate-members`
-    - `query` must be non-empty (enforced at the API layer via `min_length`)
+    - `query` must have at least 2 non-whitespace characters — checked here,
+      not just via the API layer's `min_length` (which validates the raw
+      string, so " " alone would otherwise pass through and reach Keycloak's
+      search un-widened)
     - users already holding any role on the team are filtered out of the
       result
 
@@ -841,6 +844,10 @@ async def search_candidate_team_members(
         deps,
     )
 
+    stripped_query = query.strip()
+    if len(stripped_query) < 2:
+        return []
+
     admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
@@ -849,7 +856,7 @@ async def search_candidate_team_members(
     )
     existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
 
-    matches = await deps.search_users(query)
+    matches = await deps.search_users(stripped_query)
     return [
         candidate for candidate in matches if candidate.id not in existing_member_ids
     ]

@@ -1511,7 +1511,7 @@
           "error": "Invalid file. Check the JSON or CSV format.",
           "tooMany": "Maximum 200 cases allowed.",
           "total": "Total: {{count}} cases to evaluate",
-          "empty": "The file contains no case."
+          "empty": "The file contains no cases."
         },
         "judge": {
           "label": "Judge profile",

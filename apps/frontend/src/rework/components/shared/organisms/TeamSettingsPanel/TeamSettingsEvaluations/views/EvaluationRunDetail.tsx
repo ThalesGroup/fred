@@ -211,7 +211,8 @@ export default function EvaluationRunDetail({
     setIsLive(nowLive);
   }, [run?.operational_state, refetchCases]);
 
-  // Auto-open the case drawer when opened from the campaigns list.
+  // Auto-open the case drawer when opened from the runs list's case drawer
+  // ("View full detail" — EvaluationRuns.tsx's CaseDrawer).
   useEffect(() => {
     if (!selectedCaseId || !casesData?.cases) return;
     const found = casesData.cases.find((c) => c.case_id === selectedCaseId);
