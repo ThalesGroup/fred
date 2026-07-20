@@ -431,16 +431,31 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
     tasks_file.write_text(json.dumps(tasks, indent=2) + "\n")
 
 
+# Config files that hold cross-service `localhost:<port>` URLs and therefore need
+# their ports rewritten to the worktree's allocation. Both the dev (`configuration.yaml`,
+# loaded by `make run`) and prod (`configuration_prod.yaml`, loaded by `make run-prod`)
+# variants are listed — patching only the prod one leaves the default dev task pointing
+# at the main checkout's ports.
+INTER_SERVICE_CONFIGS = [
+    *[f"{service_dir(svc)}/config/configuration.yaml" for svc in PYTHON_SERVICES],
+    *[f"{service_dir(svc)}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
+    f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
+    "apps/knowledge-flow-backend/config/configuration_worker.yaml",
+    "apps/control-plane-backend/config/configuration_worker.yaml",
+]
+
+
+def inter_service_config_paths(wt: Path) -> list[Path]:
+    """Return the existing config files whose cross-service ports must be rewritten."""
+
+    return [wt / p for p in INTER_SERVICE_CONFIGS if (wt / p).exists()]
+
+
 def worktree_skip_paths(wt: Path) -> list[str]:
     """Return the list of worktree-local config paths that should be hidden from git status."""
     paths = [
-        *[
-            f"{service_dir(svc)}/config/configuration_prod.yaml"
-            for svc in PYTHON_SERVICES
-        ],
-        f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
+        *INTER_SERVICE_CONFIGS,
         f"{service_dir('fred-agents')}/config/models_catalog.yaml",
-        "apps/knowledge-flow-backend/config/configuration_worker.yaml",
         "deploy/local/k3d/values-local.yaml",
         ".vscode/tasks.json",
         ".vscode/launch.json",
@@ -477,6 +492,38 @@ def read_ports_md(wt: Path) -> dict[str, int]:
     return ports
 
 
+def warn_unpatched_default_ports(wt: Path, ports: dict[str, int]) -> None:
+    """Warn about service config files still pointing at a default port after patching.
+
+    A leftover default port means the worktree would talk to the main checkout's
+    services instead of its own. This is the failure mode that went unnoticed when
+    fred-agents was added, so surface it loudly rather than letting it fail at runtime.
+    """
+    default_ports = {str(p): svc for svc, p in DEFAULT_PORTS.items()}
+    # Only ports we actually reallocated are stale; a service left on its default is fine.
+    stale = {p: svc for p, svc in default_ports.items() if ports[svc] != int(p)}
+    if not stale:
+        return
+
+    findings: list[str] = []
+    for cfg in sorted((wt / "apps").glob("*/config/*.yaml")):
+        try:
+            content = cfg.read_text()
+        except OSError:
+            continue
+        for port, svc in stale.items():
+            if f"localhost:{port}" in content:
+                findings.append(f"{cfg.relative_to(wt)} → localhost:{port} ({svc})")
+
+    if findings:
+        click.echo(
+            click.style("! ", fg="yellow", bold=True)
+            + "Config still references default ports — these may hit the main checkout:"
+        )
+        for f in findings:
+            info(f)
+
+
 def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_task: str | None = None) -> None:
     """Apply the full worktree patch pipeline: prod configs, .vscode, and skip-worktree hiding."""
     # Disable prometheus metrics in prod configs
@@ -488,19 +535,18 @@ def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_t
             if patched != content:
                 prod_cfg.write_text(patched)
 
-    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
-    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
-    kf_new_port = str(ports["knowledge-flow-backend"])
-    for cfg_path in [
-        wt / service_dir("fred-agents") / "config" / "configuration_prod.yaml",
-        wt / service_dir("fred-agents") / "config" / "mcp_catalog.yaml",
-    ]:
-        if cfg_path.exists():
-            content = cfg_path.read_text()
-            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
-            if patched != content:
-                cfg_path.write_text(patched)
-                info(f"Patched {cfg_path.relative_to(wt)}")
+    # Patch inter-service URLs that reference another service by its default port.
+    # Every service in DEFAULT_PORTS is rewritten (not just knowledge-flow): fred-agents
+    # also dials control-plane via platform.control_plane_url, and leaving that at the
+    # default port makes managed agent-instance execution fail with a connection error.
+    for cfg_path in inter_service_config_paths(wt):
+        content = cfg_path.read_text()
+        patched = content
+        for svc, default_port in DEFAULT_PORTS.items():
+            patched = patched.replace(f"localhost:{default_port}", f"localhost:{ports[svc]}")
+        if patched != content:
+            cfg_path.write_text(patched)
+            info(f"Patched {cfg_path.relative_to(wt)}")
 
     # Copy .vscode from main repo (ensures latest tasks.json) then patch
     vscode_dir = wt / ".vscode"
@@ -516,6 +562,8 @@ def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_t
 
     hide_config_files(wt)
     ok("Patched files hidden from git status (skip-worktree)")
+
+    warn_unpatched_default_ports(wt, ports)
 
 
 def open_vscode(wt: Path) -> None:
