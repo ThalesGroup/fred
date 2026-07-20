@@ -16,7 +16,7 @@ import hashlib
 import logging
 from typing import Optional
 
-from google.cloud import storage
+from fred_core.common.gcs_client import build_gcs_client
 from google.cloud.exceptions import NotFound
 
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore, FileInfo
@@ -35,7 +35,7 @@ class GcsFileStore(BaseFileStore):
 
     def __init__(self, bucket_name: str, project_id: Optional[str] = None):
         self.bucket_name = bucket_name
-        self.client = storage.Client(project=project_id) if project_id else storage.Client()
+        self.client = build_gcs_client(project_id)
         self.bucket = self.client.bucket(bucket_name)
 
     def put(self, namespace: str, key: str, content: bytes, content_type: str = "application/octet-stream") -> FileInfo:

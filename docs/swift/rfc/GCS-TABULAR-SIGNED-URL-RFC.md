@@ -171,3 +171,47 @@ surface for GCS deployments and leaves the indexed Parquet artifacts unusable.
 - A live GKE validation run proves DuckDB can query a Parquet artifact through
   the generated V4 signed URL.
 - GKE deployment docs list the required IAM permissions and config knobs.
+
+---
+
+## 6. Amendment (2026-07-20) — Browser-Facing Signed URLs For Control-Plane Assets
+
+§2 deliberately scoped signed-URL support to backend-internal tabular reads
+and left "a separate browser direct-download decision" open. Issue #2022 is
+that decision, for a narrower and different case than knowledge-flow document
+sharing.
+
+**Problem**: the control-plane serves team personalization assets (banner and
+logo images) straight to the browser — `TeamService` calls
+`ContentStore.get_presigned_url(...)` directly and hands the URL to the
+frontend `<img src>` (`control_plane_backend/teams/service.py`). Unlike
+knowledge-flow's document/VFS sharing, the control-plane has no
+application-level HMAC token flow to fall back on, so leaving
+`get_presigned_url` unsupported for GCS silently breaks team branding on GCS
+deployments (the caller already catches and logs, so the failure mode is a
+missing banner, not a crash).
+
+**Decision**: extend real V4 signed URLs, minted the same way (IAM `signBlob`
+under Workload Identity, no JSON key), to `fred_core.store.GcsContentStore`'s
+public `get_presigned_url(...)` — the method browser-facing callers use. This
+is scoped to `fred-core`'s generic object store (`libs/fred-core/fred_core/store/`),
+which backs the control-plane's team banner/logo objects only:
+
+- Config: `control-plane-backend`'s `storage.content_storage` gains a `gcs`
+  variant (`GcsContentStorageConfig`) with the same
+  `signing_service_account_email` field and fail-fast-at-startup validation
+  as knowledge-flow's `GcsStorageConfig`.
+- IAM: the signing service account needs `storage.objects.get` on the
+  control-plane's `-objects` bucket; the Workload Identity service account
+  needs `iam.serviceAccounts.signBlob` on it. Independent from — but may
+  reuse — the signing account configured for knowledge-flow's tabular reads.
+- TTL stays short (1 hour, set by the caller in `teams/service.py`).
+- Knowledge-flow's own `GcsContentStore.get_presigned_url` (browser-facing
+  document sharing) is **unchanged** — it still raises `NotImplementedError`
+  and relies on application-level HMAC tokens. This amendment does not revisit
+  that choice; the control-plane simply has no equivalent token mechanism to
+  reuse.
+
+This keeps the cross-backend invariant from §4: MinIO/S3-compatible and local
+content stores are unaffected: their `get_presigned_url` already worked for
+the browser-facing banner case.
