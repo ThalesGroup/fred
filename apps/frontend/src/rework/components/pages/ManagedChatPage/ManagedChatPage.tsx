@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useMemo, useRef, useState } from "react";
+import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
@@ -29,6 +30,7 @@ import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/Compo
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
+import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -86,6 +88,19 @@ export default function ManagedChatPage() {
     { kind: "attachments" } | { kind: "capability"; key: string } | null
   >(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
+
+  // Capability part renderers may request their own panel to open (#1903,
+  // e.g. the ppt_filler preview card after a fill): watch the request counter
+  // and open the named panel — this page stays the single open-state authority.
+  const sidePanelOpenRequest = useSelector(selectSidePanelOpenRequest);
+  const lastSidePanelRequestId = useRef(sidePanelOpenRequest.requestId);
+  useEffect(() => {
+    if (sidePanelOpenRequest.requestId === lastSidePanelRequestId.current) return;
+    lastSidePanelRequestId.current = sidePanelOpenRequest.requestId;
+    if (sidePanelOpenRequest.key) {
+      setActivePushDrawer({ kind: "capability", key: sidePanelOpenRequest.key });
+    }
+  }, [sidePanelOpenRequest]);
   const [dragActive, setDragActive] = useState(false);
   // Trace detail panel state is lifted here so the drawer is a sibling of the main
   // column. We store the selected entry's *key* (not a snapshot) and re-resolve it

@@ -241,6 +241,27 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: build.mutation<
+      PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiResponse,
+      PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/with-assets`,
+        method: "POST",
+        body: queryArg.bodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost,
+      }),
+    }),
+    patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch:
+      build.mutation<
+        PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiResponse,
+        PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/with-assets`,
+          method: "PATCH",
+          body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
+        }),
+      }),
     getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: build.query<
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
@@ -894,6 +915,20 @@ export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentI
   teamId: string;
   agentInstanceId: string;
 };
+export type PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiResponse =
+  /** status 201 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiArg = {
+  teamId: string;
+  bodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost;
+};
+export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+    bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
+  };
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
   /** status 200 Successful Response */ PromptSummary[];
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
@@ -1488,6 +1523,7 @@ export type UiHints = {
   textarea?: boolean;
   group?: string | null;
   hide?: boolean;
+  widget?: string | null;
 };
 export type FieldSpec = {
   key: string;
@@ -1678,6 +1714,21 @@ export type UpdateAgentInstanceRequest = {
     };
   } | null;
 };
+export type BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost = {
+  /** CreateAgentInstanceRequest as a JSON object string */
+  request: string;
+  /** One '{capability_id}:{slot_key}' reference per uploaded file, aligned by index with asset_files. */
+  asset_slots?: string[];
+  asset_files?: string[];
+};
+export type BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch =
+  {
+    /** UpdateAgentInstanceRequest as a JSON object string */
+    request: string;
+    /** One '{capability_id}:{slot_key}' reference per uploaded file, aligned by index with asset_files. */
+    asset_slots?: string[];
+    asset_files?: string[];
+  };
 export type PromptCategory =
   | "doc-assist"
   | "summary"
@@ -2303,6 +2354,8 @@ export const {
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
+  usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
+  usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,

@@ -1869,6 +1869,70 @@ Follow-up will add them once KF ships those endpoints.
 "Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`
 entry's display name.
 
+### 10.2 As-implemented (#1903 PPT filler, July 2026)
+
+Shipped `PptFillerCapability` as the **first out-of-tree capability package**:
+`libs/fred-capability-ppt-filler` (module `fred_capability_ppt_filler`),
+installed in the `fred-agents` pod via its `pyproject.toml` dependency + the
+`fred.capabilities` entry point — zero code edits in fred-runtime. It exercises
+the full §10 row: `validate_config` + asset upload, config-derived dynamic
+tools, a custom form widget, a contributed chat part (`ppt_preview`), a side
+panel (`ppt_preview_pane`), and the stateless `/analyze` route on
+`manifest.router`. The Kea functional spec (PPT-FILLER-TOOLKIT-RFC.md + images
+/ text-formatting / preview-pane extensions) is carried whole; Kea's bespoke
+`ToolkitAssetProcessor` seam is fully subsumed by
+`validate_config(config, uploads, ctx)` (base64-in-params transport retired —
+uploads are real multipart files).
+
+**Control-plane→pod multipart relay (the §3.4 deferred piece).** Two additive
+multipart companion routes: `POST /teams/{id}/agent-instances/with-assets` and
+`PATCH /teams/{id}/agent-instances/{iid}/with-assets` (a `request` JSON form
+field + parallel `asset_slots` (`{capability_id}:{slot_key}`) / `asset_files`
+arrays). Control-plane never opens the bytes; `_apply_capability_selection`
+forwards each capability's files into the existing `validate-config`
+round-trip as multipart fields keyed by slot key. The JSON routes are unchanged
+and remain the path for every save without uploads.
+
+**Agent-asset storage (the §3.8 dependency).** The KF virtual filesystem grew
+one sub-area: `/teams/{t}/agents/{agent_instance_id}/config/...` — read gated
+by team `CAN_READ` (any member chatting with the agent fetches assets at tool
+time), write gated by `CAN_UPDATE_RESOURCES` (same as `shared/`). Exposed to
+capabilities as the new typed `AgentAssetPort` (`RuntimeServices.agent_assets`,
+store/fetch/delete by slot-relative key; team + instance bind privately in the
+adapter). The agent-instance id is generated BEFORE capability validation on
+create, so the path exists for both create and edit.
+
+**Two more §10.1-doctrine ports** (image support): `DocumentContentPort`
+(original bytes by uid, KF `/raw_content/{uid}`) and `DocumentFolderPort`
+(author folder string → DOCUMENT tag id at save; folder-tag document listing at
+chat time via KF `/documents/metadata/browse`). Kea's `list_document_tree`
+dependency is replaced by a capability-owned `list_images_in_folder` tool that
+resolves folder paths against the save-time-resolved `folder_tag_id`s — the
+LLM never sees a tag id.
+
+**Frontend registry slots wired for the first time (§9 item 4).**
+`FieldSpec.ui.widget` (new SDK hint) + `CapabilityUiPlugin.configWidgets`: a
+config field naming a widget renders through the owning plugin's component
+inside the capability card (unknown ids fall back to the generic renderer).
+The agent form stages per-slot `File`s, gates Save on widget-reported blocking
+errors, and switches to the `with-assets` endpoints only when a file is staged.
+Per-capability base URLs are populated pre-save straight from the template
+catalog (`route_base_url`), the template-bound counterpart of the prep-time
+population. A capability-agnostic `sidePanelOpenRequest` slice lets a chat-part
+renderer open its own side panel (the page stays the single open-state
+authority) — how the `ppt_preview` card opens the PDF pane.
+
+**Deliberate deviations from the Kea spec.** (a) The mandatory `template` slot
+declares `min_count=0`: the platform slot gate runs on EVERY save, and
+`min_count=1` would force re-upload on ordinary edits; mandatory-ness is state
+3 of `validate_config`, exactly Kea's `asset_required` semantics. (b) The
+stateless `/analyze` reports every offline error code but not
+`folder_not_found` (needs platform access); the save round-trip resolves
+folders with a real resolver and remains the source of truth. (c) The preview
+part stores durable bearer-protected `/fs/download` hrefs (never a short-TTL
+signed URL — the part is persisted in the conversation), and the frontend
+bearer-fetches the PDF at open time.
+
 ---
 
 ## 11. Alternatives considered

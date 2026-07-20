@@ -16,7 +16,10 @@ import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { IconType } from "@shared/utils/Type.ts";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch } from "react-redux";
+import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
@@ -77,6 +80,8 @@ type AgentFormBodyProps = {
   selectedCapabilityIds: string[];
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
+  /** Pending capability asset files: outer key = capability id, inner key = AssetSlot.key (#1903). */
+  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -89,6 +94,8 @@ type AgentFormBodyProps = {
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
+  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
+  onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
 };
 
 export function AgentFormBody({
@@ -100,6 +107,7 @@ export function AgentFormBody({
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
+  capabilityAssetFiles,
   isSubmitting,
   submitAttempted,
   activeSection,
@@ -112,12 +120,25 @@ export function AgentFormBody({
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilityConfigChange,
+  onCapabilityAssetFileChange,
+  onCapabilityBlockingErrorChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
   const capabilities = selectedTemplate?.available_capabilities ?? [];
+
+  // Pre-save capability routing (RFC §9.1): custom config widgets may call
+  // their capability's own pod routes (e.g. ppt_filler's stateless /analyze,
+  // #1903) BEFORE any session exists, so the per-capability base URLs are
+  // populated here straight from the template catalog — the template-bound
+  // counterpart of the prep-time population in `useChatSse`.
+  useEffect(() => {
+    if (capabilities.length === 0) return;
+    dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
+  }, [dispatch, capabilities]);
 
   // #1975 (RFC §3.9): a platform-suspended instance renders its broken
   // capability in an error state with plain-language text and the two fix paths
@@ -284,8 +305,13 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           configValues={capabilityConfigValues[capability.id] ?? {}}
+                          assetFiles={capabilityAssetFiles[capability.id] ?? {}}
                           onToggle={toggle}
                           onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                          onAssetFileChange={(slotKey, file) =>
+                            onCapabilityAssetFileChange(capability.id, slotKey, file)
+                          }
+                          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
                         />
                       );
                     })}

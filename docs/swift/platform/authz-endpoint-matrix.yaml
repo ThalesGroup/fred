@@ -231,6 +231,19 @@ operations:
     path: /control-plane/v1/teams/{team_id}/agent-instances
     review_status: pending_review
     required_permission: pending_review
+  # #1903 multipart companions of the two agent-instance saves above/below —
+  # identical authorization (team CAN_UPDATE_AGENTS), they only add capability
+  # asset uploads to the atomic save.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/with-assets
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/with-assets
+    review_status: pending_review
+    required_permission: pending_review
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}

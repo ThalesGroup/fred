@@ -38,6 +38,13 @@ export type AgentFormPayload = {
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   /**
+   * Pending capability asset uploads (outer key = capability id, inner key =
+   * AssetSlot.key, #1903). Non-empty → the caller must use the multipart
+   * `with-assets` save endpoints so the files travel INSIDE the atomic save.
+   * Only files for ACTIVE capabilities are included.
+   */
+  capabilityAssetFiles: Record<string, Record<string, File>>;
+  /**
    * True when the chosen template advertises at least one capability. When false
    * the caller omits capability fields from the request so a plain edit of a
    * capability-less agent never triggers the backend's live-pod capability
@@ -66,6 +73,10 @@ type FormState = {
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
+  /** Pending capability asset files (capability id → AssetSlot.key → File, #1903). */
+  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  /** Save-blocking problems reported by capability config widgets (null = none). */
+  capabilityBlockingErrors: Record<string, string | null>;
 };
 
 function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
@@ -92,6 +103,17 @@ export function buildAgentFormSubmitPayload(
   const effectiveCapabilityConfig = Object.fromEntries(
     Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
   );
+  // Asset files only travel for ACTIVE capabilities, with undefined slots
+  // dropped, so a deselected capability's staged upload never reaches the pod.
+  const effectiveAssetFiles = Object.fromEntries(
+    Object.entries(form.capabilityAssetFiles)
+      .filter(([id]) => effectiveCapabilityIds.includes(id))
+      .map(([id, slots]) => [
+        id,
+        Object.fromEntries(Object.entries(slots).filter(([, file]) => file instanceof File)) as Record<string, File>,
+      ])
+      .filter(([, slots]) => Object.keys(slots).length > 0),
+  );
 
   return {
     templateId: form.templateId,
@@ -100,6 +122,7 @@ export function buildAgentFormSubmitPayload(
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
+    capabilityAssetFiles: effectiveAssetFiles,
     templateHasCapabilities: availableCapabilityIds.size > 0,
   };
 }
@@ -145,6 +168,8 @@ export default function AgentFormModal({
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
+    capabilityAssetFiles: {},
+    capabilityBlockingErrors: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("settings");
@@ -165,6 +190,8 @@ export default function AgentFormModal({
         // capability_config stores the {schema_version, config} envelope per id;
         // the form edits the inner `config` object only.
         capabilityConfigValues: extractCapabilityConfigValues(editInstance.capability_config),
+        capabilityAssetFiles: {},
+        capabilityBlockingErrors: {},
       });
       setStep(2);
     } else {
@@ -175,6 +202,8 @@ export default function AgentFormModal({
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
+        capabilityAssetFiles: {},
+        capabilityBlockingErrors: {},
       });
       setStep(1);
     }
@@ -195,6 +224,8 @@ export default function AgentFormModal({
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: [],
       capabilityConfigValues: {},
+      capabilityAssetFiles: {},
+      capabilityBlockingErrors: {},
     });
     setActiveSection("settings");
     setSubmitAttempted(false);
@@ -215,10 +246,34 @@ export default function AgentFormModal({
     }));
   };
 
+  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: File | null) => {
+    setForm((prev) => ({
+      ...prev,
+      capabilityAssetFiles: {
+        ...prev.capabilityAssetFiles,
+        [capabilityId]: { ...prev.capabilityAssetFiles[capabilityId], [slotKey]: file ?? undefined },
+      },
+    }));
+  };
+
+  const handleCapabilityBlockingErrorChange = (capabilityId: string, message: string | null) => {
+    setForm((prev) =>
+      prev.capabilityBlockingErrors[capabilityId] === message
+        ? prev
+        : {
+            ...prev,
+            capabilityBlockingErrors: { ...prev.capabilityBlockingErrors, [capabilityId]: message },
+          },
+    );
+  };
+
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
   const requiredFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => f.required && !f.ui?.hide);
   const missingRequired = requiredFields.some((f) => !form.tuningValues[f.key]);
-  const isFormValid = !!form.templateId && !!form.displayName.trim() && !missingRequired;
+  // A capability config widget may block the save (e.g. ppt_filler while its
+  // mandatory template is missing, #1903) — only ACTIVE capabilities count.
+  const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
+  const isFormValid = !!form.templateId && !!form.displayName.trim() && !missingRequired && !capabilityBlocked;
   const canSave = isFormValid && !isSubmitting;
 
   const errorSections = new Set<SectionKey>(
@@ -299,6 +354,7 @@ export default function AgentFormModal({
               tuningFieldValues={form.tuningValues}
               selectedCapabilityIds={form.selectedCapabilityIds}
               capabilityConfigValues={form.capabilityConfigValues}
+              capabilityAssetFiles={form.capabilityAssetFiles}
               isSubmitting={isSubmitting}
               submitAttempted={submitAttempted}
               activeSection={activeSection}
@@ -311,6 +367,8 @@ export default function AgentFormModal({
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
               onCapabilityConfigChange={handleCapabilityConfigChange}
+              onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
+              onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
             />
           )}
         </div>

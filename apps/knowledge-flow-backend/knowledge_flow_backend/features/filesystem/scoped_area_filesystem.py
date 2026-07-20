@@ -26,6 +26,7 @@ from fred_core import (
 
 from .virtual_fs_contract import (
     AREA_TEAMS,
+    SUBAREA_AGENT_CONFIG,
     SUBAREA_AGENTS,
     SUBAREA_SHARED,
     SUBAREA_USERS,
@@ -73,6 +74,9 @@ class ScopedAreaFilesystem:
     - **`shared/`:** read needs `CAN_READ`; write/delete/mkdir need `CAN_UPDATE_RESOURCES`
     - **`users/{uid}/`:** the path uid MUST equal the acting user (personal-in-team)
     - **`agents/{agent_id}/users/{uid}/`:** same ownership rule as `users/`
+    - **`agents/{agent_id}/config/`:** agent-config assets (#1903) — read needs
+      `CAN_READ` (any member chatting with the agent fetches them); write/delete
+      need `CAN_UPDATE_RESOURCES`, same as `shared/`
 
     The acting `team_id` always arrives as the first path segment (injected upstream from
     the verified session context); this router never derives it from agent-supplied state.
@@ -166,10 +170,18 @@ class ScopedAreaFilesystem:
             self._ensure_own_uid(user, rest[0])
             subpath_parts = (SUBAREA_USERS, *rest)
         elif sub == SUBAREA_AGENTS:
-            # /teams/{team}/agents/{agent_id}/users/{uid}/...
-            if len(rest) < 3 or rest[1] != SUBAREA_USERS:
-                raise FileNotFoundError(f"Agent path must be /{AREA_TEAMS}/{team_id}/{SUBAREA_AGENTS}/{{agent_id}}/{SUBAREA_USERS}/{{uid}}/...")
-            self._ensure_own_uid(user, rest[2])
+            # /teams/{team}/agents/{agent_id}/users/{uid}/...   (per-user agent space)
+            # /teams/{team}/agents/{agent_id}/config/...        (agent-config assets, #1903)
+            if len(rest) >= 2 and rest[1] == SUBAREA_AGENT_CONFIG:
+                if want_write:
+                    await self._ensure_team(user, team_id, TeamPermission.CAN_UPDATE_RESOURCES)
+            elif len(rest) >= 3 and rest[1] == SUBAREA_USERS:
+                self._ensure_own_uid(user, rest[2])
+            else:
+                raise FileNotFoundError(
+                    f"Agent path must be /{AREA_TEAMS}/{team_id}/{SUBAREA_AGENTS}/{{agent_id}}/{SUBAREA_USERS}/{{uid}}/... "
+                    f"or /{AREA_TEAMS}/{team_id}/{SUBAREA_AGENTS}/{{agent_id}}/{SUBAREA_AGENT_CONFIG}/..."
+                )
             subpath_parts = (SUBAREA_AGENTS, *rest)
         else:
             raise FileNotFoundError(f"Unsupported team sub-area: {sub!r}")
@@ -209,7 +221,7 @@ class ScopedAreaFilesystem:
         if sub == SUBAREA_AGENTS and not rest:
             return [dir_entry(agent_id) for agent_id in await self._list_agent_ids(user, team_id)]
         if sub == SUBAREA_AGENTS and len(rest) == 1:
-            return [dir_entry(SUBAREA_USERS)]
+            return [dir_entry(SUBAREA_USERS), dir_entry(SUBAREA_AGENT_CONFIG)]
         if sub == SUBAREA_AGENTS and len(rest) == 2 and rest[1] == SUBAREA_USERS:
             return [dir_entry(user.uid)]
 
@@ -251,6 +263,8 @@ class ScopedAreaFilesystem:
             return dir_entry(rest[0])
         if sub == SUBAREA_AGENTS and len(rest) == 2 and rest[1] == SUBAREA_USERS:
             return dir_entry(SUBAREA_USERS)
+        if sub == SUBAREA_AGENTS and len(rest) == 2 and rest[1] == SUBAREA_AGENT_CONFIG:
+            return dir_entry(SUBAREA_AGENT_CONFIG)
         if sub == SUBAREA_AGENTS and len(rest) == 3 and rest[1] == SUBAREA_USERS:
             self._ensure_own_uid(user, rest[2])
             return dir_entry(rest[2])
@@ -379,6 +393,7 @@ class ScopedAreaFilesystem:
             scopes: list[tuple[str, ...]] = [(team_id, SUBAREA_SHARED), (team_id, SUBAREA_USERS, user.uid)]
             for agent_id in await self._list_agent_ids(user, team_id):
                 scopes.append((team_id, SUBAREA_AGENTS, agent_id, SUBAREA_USERS, user.uid))
+                scopes.append((team_id, SUBAREA_AGENTS, agent_id, SUBAREA_AGENT_CONFIG))
             return [hit for scope in scopes for hit in await self._grep_scope(user, pattern, scope)]
         if sub == SUBAREA_USERS and len(segments) == 2:
             return await self._grep_scope(user, pattern, (team_id, SUBAREA_USERS, user.uid))

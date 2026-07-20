@@ -1249,3 +1249,35 @@ unconditionally and silently showed zero results for any team-admin-only caller.
 
 `controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`). No other
 route or schema changed.
+
+## 19. Contract Notes — #1903 capability asset uploads (2026-07-17)
+
+### Multipart companion routes for agent saves that carry capability assets
+
+An asset-bearing capability (first: `ppt_filler`, AGENT-CAPABILITY-RFC §3.4)
+needs its uploaded file to travel INSIDE the atomic agent save so the pod's
+`validate_config` can parse it, store the binary, and persist the derived
+config in one step. Two additive routes relay that multipart; the existing
+JSON routes are unchanged and remain the path for every save without uploads:
+
+- `POST /teams/{team_id}/agent-instances/with-assets`
+- `PATCH /teams/{team_id}/agent-instances/{agent_instance_id}/with-assets`
+
+Body (`multipart/form-data`):
+
+| Field | Meaning |
+| --- | --- |
+| `request` | The corresponding JSON request (`CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`) as a JSON object string |
+| `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files` |
+| `asset_files` | The uploaded binaries |
+
+Semantics: control-plane is a pure relay — it never opens the bytes. Files are
+grouped per capability and forwarded to the pod's
+`POST /agents/capabilities/{id}/validate-config` as multipart fields keyed by
+slot key; the pod's declared `AssetSlot` gate (cardinality, extension) and the
+capability's own content validation both run pod-side, and their 422 wording
+propagates verbatim (the uniform-422 convention of §17). Mismatched
+`asset_slots`/`asset_files` lengths and malformed slot references are rejected
+422 before any pod call. Files addressed to a capability that is not active in
+the save are ignored, mirroring the config-values policy. Responses and
+authorization (`CAN_UPDATE_AGENTS`) are identical to the JSON routes.

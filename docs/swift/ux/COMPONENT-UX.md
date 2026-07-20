@@ -1242,6 +1242,57 @@ _(none yet)_
 
 ---
 
+## #1903 PPT Filler capability organisms
+
+### `PptFillerConfigForm`
+
+**Location:** `src/rework/features/capabilities/ppt_filler/PptFillerConfigForm.tsx`
+**Status:** `Functional`
+
+The ppt_filler capability's custom agent-form widget (rendered inside its
+`CapabilityCard` via the `configWidgets` plugin slot, RFC §9 item 4): `.pptx`
+upload/replace control, instant per-slide schema preview through the
+capability's stateless `/analyze` pod route, slide-numbered template errors
+i18n'd by stable code, and Save gating while the mandatory template is missing
+or invalid. The staged file travels with the atomic save (multipart
+`with-assets` endpoints); the preview never persists anything.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — upload row layout, schema-preview density on
+  templates with many slides, and error-list prominence all need a designer
+  pass.
+- **No drag-and-drop** — file selection is button+picker only.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `PptPreviewCardRenderer` + `PptPreviewPane`
+
+**Location:** `src/rework/features/capabilities/ppt_filler/PptPreviewCardRenderer.tsx`, `.../PptPreviewPane.tsx`
+**Status:** `Functional`
+
+The `ppt_preview` chat part (compact card: title, open-preview, `.pptx`
+download) and the PDF side pane it opens (react-pdf, all pages vertical,
+width-fitted, fresh pdf.js worker per mount). A live fill auto-opens the pane
+once per deck version (5s page-age gate keeps history replay from popping it);
+the pane mounts through the capability side-panel host's push drawer.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — card visual weight in the thread, pane default
+  width, and the auto-open heuristic all need product validation.
+- **No page thumbnails / jump navigation** — long decks scroll only.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
