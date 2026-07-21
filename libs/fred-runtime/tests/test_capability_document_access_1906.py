@@ -110,6 +110,7 @@ class _FakePort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -118,6 +119,7 @@ class _FakePort(DocumentSearchPort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
+                "attachments_only": attachments_only,
             }
         )
         return DocumentSearchResult(hits=self._hits)
@@ -203,26 +205,79 @@ def test_double_registration_trips_boot_invariant() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Computed chat control (RFC §3.3)
+# Computed chat controls (RFC §3.3) — legacy-parity stock set
 # ---------------------------------------------------------------------------
 
 
+def _widgets(controls) -> list[str]:
+    return [c.widget for c in controls]
+
+
+def test_chat_controls_default_to_the_full_legacy_parity_set() -> None:
+    cap = DocumentAccessCapability()
+    controls = cap.chat_controls(DocumentAccessConfig())
+    assert _widgets(controls) == [
+        "attach_files",
+        "document_scope",
+        "search_policy",
+        "rag_scope",
+    ]
+
+
 def test_chat_control_document_scope_bound_to_config_libraries() -> None:
+    # A pre-0.3 slice with a library scope and no bind flag stays binding
+    # (upgrade validator), and binding pins the picker read-only.
     cap = DocumentAccessCapability()
     controls = cap.chat_controls(
         DocumentAccessConfig.model_validate({"library_tag_ids": ["A", "B"]})
     )
-    assert len(controls) == 1
-    assert controls[0].widget == "document_scope"
-    params = controls[0].params
-    assert params is not None
-    assert params.model_dump()["bound_library_ids"] == ["A", "B"]
+    scope = next(c for c in controls if c.widget == "document_scope")
+    assert scope.params is not None
+    params = scope.params.model_dump()
+    assert params["bound_library_ids"] == ["A", "B"]
+    # Bound → the libraries row shows (pinned) even without free selection.
+    assert params["libraries"] is True
 
 
-def test_chat_control_hidden_when_disabled() -> None:
+def test_bound_libraries_inert_while_binding_is_off() -> None:
+    # The tree's value is kept but ignored when "Bind to specific libraries"
+    # is off — same semantics as the legacy tool.
     cap = DocumentAccessCapability()
+    config = DocumentAccessConfig.model_validate(
+        {"bind_libraries": False, "library_tag_ids": ["A", "B"]}
+    )
+    scope = next(c for c in cap.chat_controls(config) if c.widget == "document_scope")
+    assert scope.params is not None
+    assert scope.params.model_dump()["bound_library_ids"] is None
+
+
+def test_chat_controls_each_toggle_hides_its_widget() -> None:
+    cap = DocumentAccessCapability()
+    # Legacy single-toggle slices map onto the split library/document toggles.
     config = DocumentAccessConfig.model_validate({"show_document_scope_control": False})
-    assert cap.chat_controls(config) == []
+    assert "document_scope" not in _widgets(cap.chat_controls(config))
+    all_off = DocumentAccessConfig.model_validate(
+        {
+            "show_library_selection": False,
+            "show_document_selection": False,
+            "show_attach_files_control": False,
+            "show_search_policy_control": False,
+            "show_rag_scope_control": False,
+        }
+    )
+    assert cap.chat_controls(all_off) == []
+
+
+def test_chat_controls_config_values_become_picker_defaults() -> None:
+    cap = DocumentAccessCapability()
+    config = DocumentAccessConfig.model_validate(
+        {"search_policy": "strict", "default_rag_scope": "corpus_only"}
+    )
+    controls = {c.widget: c for c in cap.chat_controls(config)}
+    assert controls["search_policy"].params is not None
+    assert controls["search_policy"].params.model_dump()["default"] == "strict"
+    assert controls["rag_scope"].params is not None
+    assert controls["rag_scope"].params.model_dump()["default"] == "corpus_only"
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +315,52 @@ async def test_turn_option_bounded_by_capability_config() -> None:
     # sources ride the tool artifact for the chat Sources panel.
     assert message.artifact.tool_ref == DOCUMENT_ACCESS_TOOL_REF
     assert message.artifact.sources[0].uid == "d1"
+
+
+@pytest.mark.asyncio
+async def test_search_policy_enforced_only_when_picker_hidden() -> None:
+    """With the search-policy picker shown, the configured policy is only the
+    picker's default (the port gets None and the per-turn RuntimeContext value
+    wins in the adapter); with the picker hidden, it is enforced as-is."""
+
+    cap = DocumentAccessCapability()
+
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"search_policy": "strict", "show_search_policy_control": True},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["search_policy"] is None
+
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"search_policy": "strict", "show_search_policy_control": False},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["search_policy"] == "strict"
+
+
+@pytest.mark.asyncio
+async def test_unbound_library_scope_not_applied_at_search_time() -> None:
+    """With `bind_libraries` off, the stored tree selection is inert — the
+    port must not receive it as a scope (legacy-tool semantics)."""
+
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"bind_libraries": False, "library_tag_ids": ["A", "B"]},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["library_tag_ids"] is None
 
 
 @pytest.mark.asyncio
@@ -398,6 +499,63 @@ async def test_scoping_precedence_end_to_end(monkeypatch: pytest.MonkeyPatch) ->
     assert call["document_library_tags_ids"] == ["A"]
     # documents: turn omits → config[u1,u2,u3]; then ∩session[u1,u2] = [u1,u2].
     assert call["document_uids"] == ["u1", "u2"]
+
+
+@pytest.mark.asyncio
+async def test_attachments_only_pins_search_to_the_session_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`search_attachments_only`: the capability forwards the flag through the
+    port, and the adapter searches the session scope only (attached files),
+    never the corpus — regardless of the turn's RAG scope default."""
+
+    captured: dict[str, Any] = {}
+
+    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
+        client = _FakeVectorSearchClient(agent=agent)
+        captured["client"] = client
+        return client
+
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
+    binding = _binding(session_id="s-1", search_rag_scope="hybrid")
+    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
+
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=adapter),
+        config={"search_attachments_only": True},
+    )
+    await _invoke_tool(cap, ctx)
+
+    call = captured["client"].calls[0]
+    assert call["include_session_scope"] is True
+    assert call["include_corpus_scope"] is False
+
+    # And the scope-picker chat control is dropped (scope is pinned).
+    widgets = [
+        c.widget
+        for c in cap.chat_controls(DocumentAccessConfig(search_attachments_only=True))
+    ]
+    assert "document_scope" not in widgets
+    assert "attach_files" in widgets
+
+    # Inert without attachments: the flag must not strand an agent whose
+    # attach button is disabled — the picker returns and the search is normal.
+    no_attach = DocumentAccessConfig(
+        search_attachments_only=True, show_attach_files_control=False
+    )
+    assert "document_scope" in [c.widget for c in cap.chat_controls(no_attach)]
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"search_attachments_only": True, "show_attach_files_control": False},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["attachments_only"] is False
 
 
 @pytest.mark.asyncio

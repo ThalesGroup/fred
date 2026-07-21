@@ -32,9 +32,15 @@
 }
 
 /* Each row is full-width so its rule spans edge to edge; indentation is applied
- * inside via padding-left, which never insets the bottom border. */
+ * inside via padding-left, which never insets the border. The filet sits on TOP
+ * of each row (suppressed on the very first) so it only ever separates two rows
+ * — the last row never draws a line that would double the section border below. */
 .row {
-  border-bottom: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-retreat);
+}
+
+.list > div:first-child > .row:first-child {
+  border-top: none;
 }
 
 .hint {

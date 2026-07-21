@@ -970,6 +970,14 @@ binding PRIVATELY (wrapping the same `VectorSearchClient` path as
 - No OpenAPI/wire-schema change: the port is internal DI, not a serialized
   request/response model.
 
+**Amendment (2026-07-21).** `search()` gained an additive keyword
+`attachments_only: bool = False`: the adapter then searches the session scope
+only (`include_session_scope=True, include_corpus_scope=False`) — the
+conversation's attached files, never the corpus. First consumer:
+`document_access.search_attachments_only` (the capability also drops its
+scope-picker chat control when the flag is on). `general_only` RAG scope keeps
+precedence (no search at all).
+
 ---
 
 ### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
@@ -1081,6 +1089,14 @@ back to the default input, and older pods simply omit the field.
 
 `controlPlaneOpenApi.ts` and `runtimeOpenApi.ts` regenerated
 (`make update-control-plane-api` / `make update-runtime-api`).
+
+**Amendment (2026-07-21).** `UIHints` also gained `visible_when: str | None` —
+the key of a sibling field in the same form; the field is only rendered while
+that sibling's effective value (current input or declared default) is truthy.
+Display-only: the hidden field keeps its stored value, and backends must not
+rely on it being hidden. First consumer: the legacy search tool's
+`chat_options.bound_library_ids` is gated on `chat_options.libraries_binding`
+in the pod `mcp_catalog.yaml`.
 
 ### 8.19 ✅ Personal-team authorization moved to fred-core, real ReBAC tuple — AUTHZ-08 (2026-07-20)
 

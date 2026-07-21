@@ -1398,6 +1398,7 @@
         "title": "Chat with your {{agentsNicknamePlural}}"
       },
       "formAgent": {
+        "advancedSettings": "Advanced settings",
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
         "fields": {

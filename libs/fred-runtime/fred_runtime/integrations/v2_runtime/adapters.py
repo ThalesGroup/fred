@@ -782,6 +782,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
@@ -804,6 +805,10 @@ class DocumentSearchAdapter(DocumentSearchPort):
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
             runtime_context
         )
+        if attachments_only:
+            # Capability-pinned scope: the conversation's session-scoped
+            # documents (attached files) only, never the corpus.
+            include_session_scope, include_corpus_scope = True, False
 
         hits = await self._search_client.search(
             question=query,
