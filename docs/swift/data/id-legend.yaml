@@ -1209,7 +1209,41 @@ items:
     refs:
       rfc: "fred-agent-evaluator/docs/rfc/EVAL-AUTH-RFC.md"
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
-    notes: "Solution A: runtime + control-plane + knowledge-flow recognize service_agent for team can_read only (read-only, no OpenFGA tuple), scoped to the request team_id. knowledge-flow enforcement in TagService.resolve_authorized_tag_ids_in_rebac authorizes the team's corpus tags so RAG evaluations retrieve the team corpus (fred PR #1923). Branch 1890. Identity provisioned in fred-deployment-factory (client fred-evaluation-worker). Reusable service-account pattern for async agent workers — see RFC EVAL-AUTH §11. Deploy-time invariant: grant service_agent role only to trusted M2M clients."
+    notes: >
+      Solution A: runtime + control-plane + knowledge-flow recognize service_agent for team
+      can_read only (read-only, no OpenFGA tuple), scoped to the request team_id.
+      knowledge-flow enforcement in TagService.resolve_authorized_tag_ids_in_rebac authorizes
+      the team's corpus tags so RAG evaluations retrieve the team corpus (fred PR #1923).
+      Branch 1890. Identity provisioned in fred-deployment-factory (client
+      fred-evaluation-worker). Reusable service-account pattern for async agent workers — see
+      RFC EVAL-AUTH §11. Deploy-time invariant: grant service_agent role only to trusted M2M
+      clients.
+
+
+      2026-07-21 follow-up (branch fix/eval-03-service-agent-single-resource-checkpoints): the
+      bulk resolver (resolve_authorized_tag_ids_in_rebac) was covered, but a real evaluation
+      run (warfare-tracks, team fredlab) showed the single-resource checkpoint
+      TagService.get_tag_for_user (used by the corpus-filesystem MCP tool and by
+      vector-search's explicit-tag resolution) had no service_agent bypass at all — it always
+      denied the service_agent (zero per-user ReBAC relations by design). Fixed by scoping the
+      bypass to the tag's own owner_id (reusing resolve_authorized_tag_ids_in_rebac against
+      that team) rather than trusting an externally supplied team_id — no signature/plumbing
+      change needed on any caller. Also fixed AuthorizationError (fred-core) to inherit from
+      PermissionError, since check_permission_or_raise raises AuthorizationError but several
+      controllers (e.g. tabular) only catch PermissionError before a generic 500 handler — a
+      denial was surfacing as an unhandled 500 instead of 403.
+
+
+      Known remaining gap (not fixed in this pass, needs its own RFC-level design): general
+      corpus-filesystem *discovery* (listing /corpus or /corpus/libraries without an
+      already-known tag_id) still returns empty for service_agent, because
+      CorpusVirtualFilesystem/mcp_fs_service.py have no team_id concept anywhere in their
+      contract (by design, for the interactive human-user case where ReBAC tuples alone scope
+      the listing). A service_agent has no ReBAC tuples, so there is currently no way to scope
+      that listing to one team without adding team_id as an explicit MCP tool parameter — a
+      public contract change, not a code fix. Same-class gap also identified in
+      MetadataService.get_document_metadata (untagged document reads via corpus browsing) —
+      also deferred pending the same team_id design decision.
 
   # ── FRONT ─────────────────────────────────────────────────────────────
 
