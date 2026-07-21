@@ -1718,6 +1718,7 @@
         "newRun": "+ New run",
         "rerun": "↻ Rerun · {{target}}",
         "rerunHint": "Reruns immediately with the last target ({{target}} · {{model}}). Use “New run…” to pick a different one.",
+        "rerunRow": "↻ Rerun",
         "empty": "No run for this evaluation yet",
         "versionLabel": "Evaluation {{version}}",
         "deleteMessage": "Delete run {{id}}? This permanently removes its cases, metrics and events.",
