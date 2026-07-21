@@ -27,7 +27,8 @@ from fred_core.security.structure import KeycloakUser
 
 import knowledge_flow_backend.features.tag.tag_service as tag_service_module
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
-from knowledge_flow_backend.features.tag.tag_service import TagService
+
+TagService = tag_service_module.TagService
 
 
 class _FakeRebac:
