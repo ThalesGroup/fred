@@ -13,29 +13,39 @@
 # limitations under the License.
 
 """
-`DocumentAccessCapability` — the #1906 pilot (CAPAB-01, RFC §3, §10).
+`DocumentAccessCapability` (RFC §3, §10) — the canonical real capability.
 
 Why this module exists:
-- it is the first REAL (non-tracer) capability: one live vector-search tool
-  wired to a platform service through the SDK `DocumentSearchPort`, plus
-  static config-field scoping and one computed chat-turn narrowing control
-  (RFC §10 "#1906 document-access" row)
+- it is the first REAL (non-tracer) capability: live document tools wired to
+  platform services through typed SDK ports, plus static config-field scoping
+  and one computed chat-turn narrowing control
 - it doubles as the canonical in-tree reference a capability author copies
 
-What this pilot ships (and deliberately does NOT):
-- ships: `search_documents_using_vectorization`, the vector-search tool, wired
-  live through `ctx.services.document_search`
-- deferred: `list_document_tree` and `summarize_document` — their Knowledge Flow
-  backend endpoints (`POST /documents/tree`, a synchronous
-  `POST /documents/{uid}/summarize`) and pod-reachable session-attachment
-  enumeration do not exist on Swift yet. They are intentionally NOT registered
-  (a registered tool the LLM can call but that returns "not implemented" erodes
-  trust) — see RFC §10.
+What this capability ships (and deliberately does NOT):
+- `search_documents_using_vectorization`, the vector-search tool, wired live
+  through `ctx.services.document_search`
+- `list_document_tree` and `summarize_document`: wired live through
+  `ctx.services.document_tree` / `ctx.services.document_summarize`, backed by
+  Knowledge Flow's document tree and synchronous summarize endpoints. Their
+  failures surface as `is_error` tool results with actionable detail
+  (timeout/HTTP status), never raised exceptions.
+- still deferred: the tree's trailing "Session attachments" section — a
+  pod-reachable session-attachment enumeration does not exist yet
+  (attachments are only a *search* scope today, `attachments_only=True`).
+  The tree tool therefore lists the corpus only, and is not registered at all
+  in attachments-only mode (`search_attachments_only`), where the corpus is
+  out of the agent's scope by definition.
+
+Identifier hygiene (hard rule): document uids and tag ids are internal working
+identifiers for the agent's own tool calls (tree → summarize chaining, scope
+filters). The agent uses them freely, but every LLM-facing docstring instructs
+the model to NEVER repeat them to the end user — answers refer to documents by
+display name only.
 
 Doctrine (RFC §3.5, §3.8, §10):
-- the capability reaches the platform ONLY through a typed optional port on
-  `RuntimeServices` (`services.document_search`); the per-turn binding and the
-  raw access token NEVER enter `CapabilityContext`
+- the capability reaches the platform ONLY through typed optional ports on
+  `RuntimeServices`; the per-turn binding and the raw access token NEVER enter
+  `CapabilityContext`
 - the tool signature exposes ONLY LLM arguments (`question`, `top_k`); scope and
   identity reach the tool through the middleware closure, never the tool schema
 
@@ -60,6 +70,7 @@ Duplicate-search-tool story (pilot decision, RFC §10):
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Sequence
 
 from fred_core.store.vector_search import (
@@ -79,7 +90,11 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
-from fred_sdk.contracts.runtime import DocumentSearchResult
+from fred_sdk.contracts.runtime import (
+    DocumentSearchResult,
+    DocumentSummaryResult,
+    DocumentTreeResult,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, model_validator
@@ -99,12 +114,87 @@ DOCUMENT_ACCESS_TOOL_REF = "document_access"
 _SEARCH_POLICIES = ("strict", "hybrid", "semantic")
 _RAG_SCOPES = ("corpus_only", "hybrid", "general_only")
 
-# Only the fields the LLM needs for citation and reasoning are exposed to the
-# model. URL and operational fields are excluded so the model cannot reproduce
-# broken or internal paths — mirrors the builtin `knowledge.search` pruning.
+# Only the fields the LLM needs for citation, reasoning, and tool chaining are
+# exposed to the model. URL and operational fields are excluded so the model
+# cannot reproduce broken or internal paths. `uid` stays: it is the working
+# identifier summarize_document takes — internal to the agent, never repeated
+# to the end user (each tool docstring says so).
 _LLM_FIELDS = frozenset(
     {"uid", "title", "content", "file_name", "page", "section", "score"}
 )
+
+_KF_SERVICE = "Knowledge Flow"
+
+# Built-in default summary length when neither the caller (the LLM) nor the
+# capability config specifies one.
+DEFAULT_SUMMARIZE_MAX_CHARS = 5000
+# Wire bounds of the Knowledge Flow endpoints' `max_chars` validation — clamp
+# client-side so an out-of-range LLM value degrades gracefully instead of 422ing.
+_SUMMARIZE_MAX_CHARS_BOUNDS = (200, 20_000)
+_TREE_MAX_CHARS_BOUNDS = (500, 20_000)
+
+
+def _clamp(value: int, bounds: tuple[int, int]) -> int:
+    low, high = bounds
+    return max(low, min(value, high))
+
+
+def resolve_summarize_max_chars(cap: int | None, requested: int | None) -> int:
+    """
+    Resolve the effective summary length from the configured cap and the
+    caller's request.
+
+    The per-agent cap (`summarize_max_chars` config) is both the default (when
+    the caller asks for nothing) and a hard upper bound on whatever the caller
+    requests; without one, the built-in default applies and the caller's
+    request is honored verbatim (within wire bounds).
+    """
+
+    default = cap if cap is not None else DEFAULT_SUMMARIZE_MAX_CHARS
+    effective = requested if requested is not None else default
+    if cap is not None:
+        effective = min(effective, cap)
+    return _clamp(effective, _SUMMARIZE_MAX_CHARS_BOUNDS)
+
+
+def _document_tool_failure(
+    *,
+    tool_ref: str,
+    action: str,
+    exc: Exception,
+    elapsed_s: float,
+    document_uid: str | None = None,
+) -> tuple[str, ToolInvocationResult]:
+    """Turn any document tool-call failure into a non-empty, actionable error
+    message plus an ``is_error=True`` artifact.
+
+    The v2 ReAct runtime surfaces ``ToolInvocationResult.is_error`` directly to
+    the user (and suppresses LLM hallucination), so a failing tool MUST return
+    such a result instead of raising — a raised exception is re-raised by the
+    default ``ToolNode`` handler, which leaves the tool call pending in the
+    trace and yields an empty error detail to the UI.
+
+    Transport detail (timeout, HTTP status) arrives via the SDK-typed
+    `DocumentPortCallError` attributes the adapters stamp — this module never
+    imports the adapter's HTTP stack.
+    """
+
+    err_type = type(exc).__name__
+    raw = str(exc).strip()
+    timed_out = bool(getattr(exc, "timed_out", False))
+    status_code = getattr(exc, "status_code", None)
+
+    if timed_out:
+        cause = f"the {_KF_SERVICE} service timed out after {elapsed_s:.0f}s"
+    elif status_code is not None:
+        cause = f"the {_KF_SERVICE} service returned HTTP {status_code}"
+    else:
+        cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
+
+    target = f" (document_uid={document_uid})" if document_uid else ""
+    detail = f": {raw}" if raw else ""
+    message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
+    return message, ToolInvocationResult(tool_ref=tool_ref, is_error=True)
 
 
 def narrow_scope_ids(
@@ -112,7 +202,7 @@ def narrow_scope_ids(
 ) -> list[str] | None:
     """
     Bound one scope level (`inner`) by a broader one (`outer`) — the capability
-    half of the pilot's scoping precedence (CAPAB-01 #1906).
+    half of the scoping precedence.
 
     Semantics (empty/None = "no bound at this level"):
     - `inner` empty → inherit `outer` unchanged;
@@ -169,6 +259,9 @@ class DocumentAccessConfig(BaseModel):
     # `show_attach_files_control` in the form AND inert without it (a stored
     # True must not strand an agent that can no longer receive attachments).
     search_attachments_only: bool = False
+    # Per-agent default AND hard cap for summarize_document's summary length
+    # (chars). None = built-in default, caller's request honored verbatim.
+    summarize_max_chars: int | None = Field(default=None, ge=200, le=20_000)
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
     default_rag_scope: str | None = None
@@ -232,7 +325,8 @@ class DocumentScopeControlParams(BaseModel):
 
 
 class _DocumentAccessMiddleware(AgentMiddleware):
-    """Carries the single vector-search tool, bound to the turn's typed context."""
+    """Carries the document-access tools (vector search, tree listing,
+    on-demand summarize), bound to the turn's typed context."""
 
     def __init__(
         self,
@@ -342,7 +436,148 @@ class _DocumentAccessMiddleware(AgentMiddleware):
             )
             return json.dumps(content), artifact
 
-        tools: Sequence[BaseTool] = [search_documents_using_vectorization]
+        attachments_only = (
+            config.search_attachments_only and config.show_attach_files_control
+        )
+        summarize_cap = config.summarize_max_chars
+
+        @tool("list_document_tree", response_format="content_and_artifact")
+        async def list_document_tree(
+            working_directory: str | None = None,
+            max_chars: int = 6000,
+        ) -> tuple[str, ToolInvocationResult]:
+            """List the folders and documents in the user's document scope as a tree.
+
+            Call this first to orient on what's available before searching or
+            summarizing — it shows folder structure and, for each document, its
+            name, uid, and upload date, not its content.
+
+            Documents are rendered as "name [document_uid] (uploaded date)" —
+            use that uid as the `document_uid` argument to summarize_document.
+            The bracketed identifiers are internal working ids for YOUR tool
+            calls only: NEVER repeat them in your answer to the user — always
+            refer to documents by their display name.
+
+            `working_directory` narrows the listing to a specific folder (e.g.
+            "Sales/HR"); omit it to start from the root. The tree is rendered as
+            indented text, with documents appearing as leaves under every folder
+            they belong to (a document can be in more than one folder).
+
+            If the corpus is too large to show in full, the deepest branches are
+            pruned and a note tells you how many items were omitted — when that
+            happens, narrow `working_directory` or switch to
+            search_documents_using_vectorization instead of trying to browse
+            everything.
+            """
+
+            port = services.document_tree
+            if port is None:
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_tree is not "
+                    "available on this execution path."
+                )
+
+            effective_max_chars = _clamp(max_chars, _TREE_MAX_CHARS_BOUNDS)
+            started = time.monotonic()
+            try:
+                result: DocumentTreeResult = await port.tree(
+                    working_directory=working_directory,
+                    library_tag_ids=scoped_library_tag_ids,
+                    max_chars=effective_max_chars,
+                )
+            except Exception as exc:
+                return _document_tool_failure(
+                    tool_ref="list_document_tree",
+                    action="list the document tree",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            artifact = ToolInvocationResult(tool_ref="list_document_tree")
+            return result.tree, artifact
+
+        @tool("summarize_document", response_format="content_and_artifact")
+        async def summarize_document(
+            document_uid: str,
+            instruction: str | None = None,
+            max_chars: int | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Generate a fresh, on-demand summary of one document by its uid.
+
+            Use this when you need to understand a document's content in depth —
+            e.g. to decide whether it's relevant, or to extract specific
+            information — without pulling its full text into your own context. A
+            fresh model reads the whole document (using map-reduce for large
+            documents) and returns just the summary.
+
+            `document_uid` MUST be the document's opaque uid, not its name or
+            title. Get it from a prior search_documents_using_vectorization
+            hit's 'uid' field, from list_document_tree (the value shown in
+            '[...]' after each document name), or from the conversation's
+            attached-files list (the bracketed value after the file name). If
+            you only know a document's name, resolve its uid with one of those
+            first — never pass the name here. The uid is an internal working
+            identifier for YOUR tool calls only: NEVER repeat it in your answer
+            to the user — always refer to the document by its display name.
+
+            Pass `instruction` to steer the summary: focus area, what to look
+            for, audience, tone, desired length — e.g. "focus on financial risks
+            and list every action item". Without it, you get a generic abstract.
+
+            `max_chars` bounds the returned summary length; raise it for a more
+            detailed summary, lower it for a terse one. Leave it unset to use
+            the agent's configured default. The agent may also impose a hard
+            maximum, in which case a larger request is clamped down to it.
+            """
+
+            port = services.document_summarize
+            if port is None:
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_summarize is not "
+                    "available on this execution path."
+                )
+
+            effective_max_chars = resolve_summarize_max_chars(summarize_cap, max_chars)
+            started = time.monotonic()
+            try:
+                result: DocumentSummaryResult = await port.summarize(
+                    document_uid,
+                    instruction=instruction,
+                    max_chars=effective_max_chars,
+                )
+            except Exception as exc:
+                message, artifact = _document_tool_failure(
+                    tool_ref="summarize_document",
+                    action="summarize the document",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                    document_uid=document_uid,
+                )
+                # 403/404 almost always means the model passed a file NAME (or
+                # a stale/foreign uid) — the backend fails closed on unknown
+                # resources. Tell the model how to recover instead of letting
+                # it give up and echo the error.
+                if getattr(exc, "status_code", None) in (403, 404):
+                    message += (
+                        " If you passed a file name, that is the likely cause: "
+                        "document_uid must be the opaque uid. Find it in the "
+                        "conversation's attached-files list (the bracketed "
+                        "value after the file name), in a search hit's 'uid' "
+                        "field, or via list_document_tree — then call "
+                        "summarize_document again with that uid. Do not "
+                        "repeat the uid to the user."
+                    )
+                return message, artifact
+            artifact = ToolInvocationResult(tool_ref="summarize_document")
+            return result.summary, artifact
+
+        tools: list[BaseTool] = [search_documents_using_vectorization]
+        # The corpus tree is meaningless in attachments-only mode (the corpus
+        # is out of the agent's scope by definition), and there is no
+        # session-attachment enumeration yet (see module docstring) — so the
+        # listing tool is dropped rather than registered-but-empty.
+        if not attachments_only:
+            tools.append(list_document_tree)
+        tools.append(summarize_document)
         self.tools = tools
 
 
@@ -352,10 +587,12 @@ class DocumentAccessCapability(
     ]
 ):
     """
-    Vector-search over the document corpus, wired through `DocumentSearchPort`
-    (CAPAB-01 #1906 pilot). ONE live tool; config-field scoping + one computed
-    chat-turn narrowing control. See the module docstring for the deferred
-    tools and the duplicate-search-tool decision.
+    Document access over the platform corpus: vector search, tree listing, and
+    on-demand summarization, wired through the `document_search` /
+    `document_tree` / `document_summarize` ports. Config-field scoping + one
+    computed chat-turn narrowing control. See the module docstring for the
+    remaining deferral (session-attachment enumeration) and the
+    duplicate-search-tool decision.
     """
 
     manifest = CapabilityManifest(
@@ -461,6 +698,20 @@ class DocumentAccessCapability(
                 default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
                 min=0.0,
                 max=1.0,
+                ui=UIHints(group="retrieval", advanced=True),
+            ),
+            FieldSpec(
+                key="summarize_max_chars",
+                type="integer",
+                title="Summary length cap",
+                description=(
+                    "Default and hard maximum length (in characters) of "
+                    "summaries produced by the summarize_document tool. Leave "
+                    "empty to use the built-in default and honor the model's "
+                    "requested length."
+                ),
+                min=200,
+                max=20_000,
                 ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(

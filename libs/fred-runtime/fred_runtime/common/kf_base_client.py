@@ -63,6 +63,7 @@ class KfBaseClient:
         self._kpi = runtime_ctx.get_kpi_writer()
 
         timeout_cfg = runtime_ctx.config.timeouts.as_httpx_timeout_config()
+        self._timeout_cfg = timeout_cfg
         limits_cfg = runtime_ctx.get_http_client_limits()
         limits_dict = dict(limits_cfg) if limits_cfg is not None else None
         tuning, client = get_shared_kf_async_client(
@@ -220,11 +221,29 @@ class KfBaseClient:
         )
 
     async def _request_with_token_refresh(
-        self, method: str, path: str, *, phase_name: str, **kwargs: Any
+        self,
+        method: str,
+        path: str,
+        *,
+        phase_name: str,
+        read_timeout: Optional[float] = None,
+        **kwargs: Any,
     ) -> httpx.Response:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
+
+        `read_timeout` overrides the shared client's default read/write timeout for
+        this single request only (the connect/pool timeouts stay short). Use it for
+        long server-side operations such as document summarization, which can run far
+        longer than the default per the shared client config.
         """
+        if read_timeout is not None:
+            kwargs["timeout"] = httpx.Timeout(
+                connect=self._timeout_cfg.get("connect"),
+                read=read_timeout,
+                write=read_timeout,
+                pool=self._timeout_cfg.get("pool"),
+            )
         with self._kpi.timer(
             "app.phase_latency_ms",
             dims={**self._kpi_dims(method=method, path=path), "phase": phase_name},

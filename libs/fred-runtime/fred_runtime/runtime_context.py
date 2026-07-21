@@ -77,6 +77,11 @@ class RuntimeTimeouts:
     read: float = 30.0
     write: float | None = None
     pool: float | None = None
+    # Per-request read override for on-demand document summarization:
+    # Knowledge Flow runs map-reduce LLM passes over the whole document, which
+    # routinely exceeds the default read timeout for large PDFs. Not part of
+    # `as_httpx_timeout_config()` — applied per-request by KfDocumentClient.
+    summarize_read: float = 300.0
 
     def as_httpx_timeout_config(self) -> dict[str, float | None]:
         """
