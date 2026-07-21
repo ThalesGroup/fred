@@ -242,6 +242,8 @@ _RBAC = _obj({
 })
 
 _SERVICE_ACCOUNT = _obj({
+    "enabled": _BOOL,
+    "name": _STRING,
     "annotations": _OBJECT_FREE,
     "labels": _OBJECT_FREE,
     "automountServiceAccountToken": _BOOL,
@@ -296,6 +298,7 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "migration": _MIGRATION,
         "rollingUpdate": _ROLLING_UPDATE,
         "image": _IMAGE,
+        "imagePullSecrets": _arr(_obj({"name": _STRING})),
         "command": _COMMAND,
         "env": _arr(_ENV_VAR),
         "extraEnvVars": _arr(_ENV_VAR),
