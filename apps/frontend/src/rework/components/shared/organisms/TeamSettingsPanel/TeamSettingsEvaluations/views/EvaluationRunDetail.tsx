@@ -22,7 +22,9 @@ import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
 import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { ColorTheme } from "@shared/utils/Type";
+import { downloadFile } from "../../../../../../../utils/downloadUtils";
 import {
   StatusPill,
   FieldBlock,
@@ -38,11 +40,13 @@ import {
   useGetRunEvaluationV1RunsRunIdGetQuery,
   useGetTelemetryEvaluationV1TelemetryGetQuery,
   useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery,
+  useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   type EvaluationCaseResponse,
   type EvaluationMetricResultResponse,
   type EvaluationRun,
   type RunAnalysisResult,
+  type RunReport,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationRunDetail.module.css";
 
@@ -84,6 +88,86 @@ function aggregateMetricAverages(cases: EvaluationCaseResponse[]): Array<[string
     name,
     scores.reduce((sum, score) => sum + score, 0) / scores.length,
   ]);
+}
+
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[^a-z0-9-_]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function reportFilename(report: RunReport, extension: "json" | "txt"): string {
+  const base = sanitizeFilename(report.run.snapshot.evaluation_name) || "evaluation";
+  return `${base}-run-${report.run.run_id.slice(0, 12)}.${extension}`;
+}
+
+// Plain-text rendering of a RunReport — mirrors the case drawer's fields
+// (CaseDetail below) so pasting this into another chat gives the same picture
+// as looking at the run in the UI, minus the visual chrome.
+function reportToText(report: RunReport, t: ReturnType<typeof useTranslation>["t"]): string {
+  const { run, cases, analysis } = report;
+  const lines: string[] = [];
+
+  lines.push(`${run.snapshot.evaluation_name} v${run.snapshot.evaluation_version}`);
+  lines.push(`Run: ${run.run_id}`);
+  lines.push(t("rework.evaluation.detail.verdictLabel", { verdict: run.verdict }));
+  lines.push(`${t("rework.evaluation.detail.meta.profile")}: ${run.profile}`);
+  lines.push(`${t("rework.evaluation.detail.meta.judge")}: ${run.judge_profile_id}`);
+  lines.push(`${t("rework.evaluation.create.recap.metrics")}: ${run.metrics.join(", ") || "—"}`);
+  if (run.custom_metrics.length > 0) {
+    lines.push(
+      `${t("rework.evaluation.create.recap.customMetrics")}: ${run.custom_metrics.map((m) => m.name).join(", ")}`,
+    );
+  }
+  lines.push("");
+
+  if (analysis) {
+    lines.push(
+      `${t("rework.evaluation.detail.analysisTitle")} (${t("rework.evaluation.detail.risk", { level: analysis.risk_level })})`,
+    );
+    lines.push(analysis.summary);
+    lines.push("");
+  }
+
+  cases.forEach((c, i) => {
+    lines.push("=".repeat(80));
+    lines.push(
+      `${t("rework.evaluation.detail.caseTitle")} ${i + 1}/${cases.length} — ${c.external_id ?? c.case_id.slice(0, 12)}`,
+    );
+    lines.push(
+      `${t("rework.evaluation.detail.col.status")}: ${c.status}   ${t("rework.evaluation.detail.verdictLabel", { verdict: c.verdict })}   ${t("rework.evaluation.detail.latency")}: ${formatMs(c.latency_ms)}`,
+    );
+    lines.push("");
+    lines.push(`${t("rework.evaluation.detail.input")}:`);
+    lines.push(c.input);
+    lines.push("");
+    if (c.expected_output) {
+      lines.push(`${t("rework.evaluation.detail.expected")}:`);
+      lines.push(c.expected_output);
+      lines.push("");
+    }
+    if (c.actual_output) {
+      lines.push(`${t("rework.evaluation.detail.actual")}:`);
+      lines.push(c.actual_output);
+      lines.push("");
+    }
+    if (c.execution_error) {
+      lines.push(`${t("rework.evaluation.detail.execError")}: ${c.execution_error}`);
+      lines.push("");
+    }
+    if (c.metrics.length > 0) {
+      lines.push(`${t("rework.evaluation.detail.metrics", { count: c.metrics.length })}:`);
+      for (const m of c.metrics) {
+        const pct = m.score != null ? `${Math.round(m.score * 100)}%` : "—";
+        lines.push(`- ${m.name.replace("Metric", "")}: ${pct} (${m.verdict})`);
+        if (m.explanation) lines.push(`  ${m.explanation}`);
+      }
+      lines.push("");
+    }
+  });
+
+  return lines.join("\n");
 }
 
 function useAnimatedCount(target: number): number {
@@ -157,6 +241,7 @@ export default function EvaluationRunDetail({
   onBackToList,
 }: EvaluationRunDetailProps) {
   const { t } = useTranslation();
+  const { showError } = useToast();
   const [selectedCase, setSelectedCase] = useState<EvaluationCaseResponse | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RunAnalysisResult | null>(null);
@@ -184,6 +269,8 @@ export default function EvaluationRunDetail({
 
   const [cancelRun, { isLoading: isCancelling }] = useCancelRunEvaluationV1RunsRunIdCancelPostMutation();
   const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
+  const [fetchReport] = useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery();
+  const [downloadingFormat, setDownloadingFormat] = useState<"json" | "txt" | null>(null);
 
   const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
   // Unlike `run`/`cases` above, this poll had no isLive gate — it kept hitting
@@ -241,6 +328,26 @@ export default function EvaluationRunDetail({
     } catch (e) {
       const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
       setAnalysisError(typeof detail === "string" ? detail : t("rework.evaluation.detail.analyzeError"));
+    }
+  };
+
+  const handleDownloadReport = async (format: "json" | "txt") => {
+    setDownloadingFormat(format);
+    try {
+      const report = await fetchReport({ runId }).unwrap();
+      const filename = reportFilename(report, format);
+      if (format === "json") {
+        downloadFile(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }), filename);
+      } else {
+        downloadFile(new Blob([reportToText(report, t)], { type: "text/plain" }), filename);
+      }
+    } catch (e) {
+      const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
+      showError({
+        summary: typeof detail === "string" ? detail : t("rework.evaluation.detail.reportError"),
+      });
+    } finally {
+      setDownloadingFormat(null);
     }
   };
 
@@ -307,6 +414,36 @@ export default function EvaluationRunDetail({
             <Button color="on-surface" variant="outlined" size="medium" disabled={isAnalyzing} onClick={handleAnalyze}>
               {isAnalyzing ? t("rework.evaluation.detail.analyzing") : t("rework.evaluation.detail.analyze")}
             </Button>
+          )}
+          {/* Self-contained JSON/txt export of the run (EVAL-06 §3) — the copy-paste-
+              into-another-chat path. Gated on the same terminal-success state as
+              Analyze; the backend report includes the cached analysis if there is
+              one, but never triggers a fresh LLM call itself. */}
+          {taskState === "succeeded" && (
+            <>
+              <Button
+                color="on-surface"
+                variant="outlined"
+                size="medium"
+                disabled={downloadingFormat !== null}
+                onClick={() => handleDownloadReport("json")}
+              >
+                {downloadingFormat === "json"
+                  ? t("rework.evaluation.detail.downloading")
+                  : t("rework.evaluation.detail.downloadJson")}
+              </Button>
+              <Button
+                color="on-surface"
+                variant="outlined"
+                size="medium"
+                disabled={downloadingFormat !== null}
+                onClick={() => handleDownloadReport("txt")}
+              >
+                {downloadingFormat === "txt"
+                  ? t("rework.evaluation.detail.downloading")
+                  : t("rework.evaluation.detail.downloadText")}
+              </Button>
+            </>
           )}
           {/* `telemetry.enabled` is a static config flag (tracer == "langfuse"),
               not a live reachability check — a deployment can have it set

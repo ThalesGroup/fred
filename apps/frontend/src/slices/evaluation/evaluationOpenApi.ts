@@ -38,6 +38,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/evaluation/v1/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
+    getRunReportEvaluationV1RunsRunIdReportGet: build.query<
+      GetRunReportEvaluationV1RunsRunIdReportGetApiResponse,
+      GetRunReportEvaluationV1RunsRunIdReportGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/runs/${queryArg.runId}/report` }),
+    }),
     listRunCasesEvaluationV1RunsRunIdCasesGet: build.query<
       ListRunCasesEvaluationV1RunsRunIdCasesGetApiResponse,
       ListRunCasesEvaluationV1RunsRunIdCasesGetApiArg
@@ -169,6 +175,10 @@ export type GetRunEvaluationV1RunsRunIdGetApiArg = {
 };
 export type DeleteRunEvaluationV1RunsRunIdDeleteApiResponse = unknown;
 export type DeleteRunEvaluationV1RunsRunIdDeleteApiArg = {
+  runId: string;
+};
+export type GetRunReportEvaluationV1RunsRunIdReportGetApiResponse = /** status 200 Successful Response */ RunReport;
+export type GetRunReportEvaluationV1RunsRunIdReportGetApiArg = {
   runId: string;
 };
 export type ListRunCasesEvaluationV1RunsRunIdCasesGetApiResponse =
@@ -373,6 +383,19 @@ export type EvaluationCaseResponse = {
   started_at: string | null;
   completed_at: string | null;
 };
+export type RunAnalysisResult = {
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  risk_level: string;
+};
+export type RunReport = {
+  schema_version?: "1";
+  run: EvaluationRun;
+  cases: EvaluationCaseResponse[];
+  analysis?: RunAnalysisResult | null;
+};
 export type EvaluationCaseListResponse = {
   cases: EvaluationCaseResponse[];
   total: number;
@@ -384,13 +407,6 @@ export type TelemetrySessionResponse = {
 export type TelemetryInfoResponse = {
   enabled: boolean;
   langfuse_session_url?: string | null;
-};
-export type RunAnalysisResult = {
-  summary: string;
-  strengths: string[];
-  weaknesses: string[];
-  recommendations: string[];
-  risk_level: string;
 };
 export type RunAnalysisResponse = {
   run_id: string;
@@ -544,6 +560,8 @@ export const {
   useGetRunEvaluationV1RunsRunIdGetQuery,
   useLazyGetRunEvaluationV1RunsRunIdGetQuery,
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
+  useGetRunReportEvaluationV1RunsRunIdReportGetQuery,
+  useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useLazyListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useGetRunCaseEvaluationV1RunsRunIdCasesCaseIdGetQuery,
