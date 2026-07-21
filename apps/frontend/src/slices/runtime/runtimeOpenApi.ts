@@ -778,6 +778,8 @@ export type AssetSlot = {
   min_count?: number;
 };
 export type UiHints = {
+  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
+  advanced?: boolean;
   group?: string | null;
   hide?: boolean;
   markdown?: boolean;

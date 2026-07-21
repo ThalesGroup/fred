@@ -117,6 +117,13 @@ class UIHints(BaseModel):
             "and backends must not rely on the field being hidden."
         ),
     )
+    advanced: bool = Field(
+        default=False,
+        description=(
+            "Renders the field inside the form's collapsed 'Advanced "
+            "settings' disclosure instead of the main section. Display-only."
+        ),
+    )
 
 
 class FieldSpec(BaseModel):

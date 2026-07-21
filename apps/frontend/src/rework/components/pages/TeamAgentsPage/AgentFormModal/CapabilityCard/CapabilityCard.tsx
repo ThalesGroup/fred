@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Fragment, useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,7 +40,9 @@ interface CapabilityCardProps {
  * The active capability's `config_fields` form. Fields sharing a `ui.group`
  * form a visual section: a thin divider is drawn whenever the group changes
  * between two consecutive VISIBLE fields (hidden fields — `ui.hide` or an
- * unsatisfied `ui.visible_when` — never produce dangling dividers).
+ * unsatisfied `ui.visible_when` — never produce dangling dividers). Fields
+ * flagged `ui.advanced` render inside a collapsed "Advanced settings"
+ * disclosure below the main section.
  */
 function CapabilityConfigForm({
   configFields,
@@ -54,28 +57,37 @@ function CapabilityConfigForm({
   teamId?: string;
   onConfigChange: (key: string, value: unknown) => void;
 }) {
+  const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
   const visibleFields = configFields.filter(
     (f) => !f.ui?.hide && (!f.ui?.visible_when || Boolean(effectiveValues[f.ui.visible_when])),
   );
+  const mainFields = visibleFields.filter((f) => !f.ui?.advanced);
+  const advancedFields = visibleFields.filter((f) => f.ui?.advanced);
+
+  const renderGrouped = (fields: typeof visibleFields) =>
+    fields.map((field, index) => (
+      <Fragment key={field.key}>
+        {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
+        <TuningFieldRenderer
+          field={field}
+          value={configValues[field.key]}
+          onChange={onConfigChange}
+          disabled={disabled}
+          teamId={teamId}
+          allValues={effectiveValues}
+        />
+      </Fragment>
+    ));
 
   return (
     <div className={styles.subForm}>
-      {visibleFields.map((field, index) => (
-        <Fragment key={field.key}>
-          {index > 0 && field.ui?.group !== visibleFields[index - 1].ui?.group && (
-            <hr className={styles.sectionDivider} />
-          )}
-          <TuningFieldRenderer
-            field={field}
-            value={configValues[field.key]}
-            onChange={onConfigChange}
-            disabled={disabled}
-            teamId={teamId}
-            allValues={effectiveValues}
-          />
-        </Fragment>
-      ))}
+      {renderGrouped(mainFields)}
+      {advancedFields.length > 0 && (
+        <Disclosure title={t("rework.teams.formAgent.advancedSettings")}>
+          <div className={styles.advancedFields}>{renderGrouped(advancedFields)}</div>
+        </Disclosure>
+      )}
     </div>
   );
 }

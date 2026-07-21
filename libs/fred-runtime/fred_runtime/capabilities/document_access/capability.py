@@ -423,7 +423,7 @@ class DocumentAccessCapability(
                 description="How many hits to retrieve when the model omits top_k.",
                 default=8,
                 min=1,
-                ui=UIHints(group="retrieval"),
+                ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(
                 key="min_source_score_ratio",
@@ -438,7 +438,7 @@ class DocumentAccessCapability(
                 default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
                 min=0.0,
                 max=1.0,
-                ui=UIHints(group="retrieval"),
+                ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(
                 key="show_search_policy_control",
@@ -450,7 +450,7 @@ class DocumentAccessCapability(
                     "picker's default instead of being enforced."
                 ),
                 default=True,
-                ui=UIHints(group="search_policy"),
+                ui=UIHints(group="search_policy", advanced=True),
             ),
             FieldSpec(
                 key="search_policy",
@@ -461,7 +461,7 @@ class DocumentAccessCapability(
                     "Search strategy used when the user has not overridden it "
                     "(enforced as-is when the picker is hidden)."
                 ),
-                ui=UIHints(group="search_policy"),
+                ui=UIHints(group="search_policy", advanced=True),
             ),
             FieldSpec(
                 key="show_rag_scope_control",
@@ -472,7 +472,7 @@ class DocumentAccessCapability(
                     "/ general knowledge) from the chat interface."
                 ),
                 default=True,
-                ui=UIHints(group="rag_scope"),
+                ui=UIHints(group="rag_scope", advanced=True),
             ),
             FieldSpec(
                 key="default_rag_scope",
@@ -480,7 +480,7 @@ class DocumentAccessCapability(
                 enum=list(_RAG_SCOPES),
                 title="Default RAG scope",
                 description="Scope used when the user has not overridden it.",
-                ui=UIHints(group="rag_scope"),
+                ui=UIHints(group="rag_scope", advanced=True),
             ),
         ],
         # No new chat part / side panel / router / owned table — the pilot's

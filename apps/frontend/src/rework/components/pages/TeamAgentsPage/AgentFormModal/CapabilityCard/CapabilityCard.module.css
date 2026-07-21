@@ -64,3 +64,11 @@
   border: none;
   border-top: 1px solid var(--outline-retreat);
 }
+
+/* Field stack inside the "Advanced settings" disclosure */
+.advancedFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding-top: var(--spacing-2xs);
+}

@@ -1476,6 +1476,7 @@ export type ManagedAgentUiHints = {
   hide?: boolean;
   widget?: string | null;
   visible_when?: string | null;
+  advanced?: boolean;
 };
 export type ManagedAgentFieldSpec = {
   key: string;
@@ -1509,6 +1510,8 @@ export type UiHints = {
   widget?: string | null;
   /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
   visible_when?: string | null;
+  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
+  advanced?: boolean;
 };
 export type FieldSpec = {
   key: string;
