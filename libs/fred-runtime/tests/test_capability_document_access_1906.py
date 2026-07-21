@@ -110,6 +110,7 @@ class _FakePort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -118,6 +119,7 @@ class _FakePort(DocumentSearchPort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
+                "attachments_only": attachments_only,
             }
         )
         return DocumentSearchResult(hits=self._hits)
@@ -497,6 +499,47 @@ async def test_scoping_precedence_end_to_end(monkeypatch: pytest.MonkeyPatch) ->
     assert call["document_library_tags_ids"] == ["A"]
     # documents: turn omits → config[u1,u2,u3]; then ∩session[u1,u2] = [u1,u2].
     assert call["document_uids"] == ["u1", "u2"]
+
+
+@pytest.mark.asyncio
+async def test_attachments_only_pins_search_to_the_session_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`search_attachments_only`: the capability forwards the flag through the
+    port, and the adapter searches the session scope only (attached files),
+    never the corpus — regardless of the turn's RAG scope default."""
+
+    captured: dict[str, Any] = {}
+
+    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
+        client = _FakeVectorSearchClient(agent=agent)
+        captured["client"] = client
+        return client
+
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
+    binding = _binding(session_id="s-1", search_rag_scope="hybrid")
+    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
+
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=adapter),
+        config={"search_attachments_only": True},
+    )
+    await _invoke_tool(cap, ctx)
+
+    call = captured["client"].calls[0]
+    assert call["include_session_scope"] is True
+    assert call["include_corpus_scope"] is False
+
+    # And the scope-picker chat control is dropped (scope is pinned).
+    widgets = [
+        c.widget
+        for c in cap.chat_controls(cap.ConfigModel(search_attachments_only=True))
+    ]
+    assert "document_scope" not in widgets
+    assert "attach_files" in widgets
 
 
 @pytest.mark.asyncio

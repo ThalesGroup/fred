@@ -617,6 +617,7 @@ class DocumentSearchPort(ABC):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -624,7 +625,9 @@ class DocumentSearchPort(ABC):
         `library_tag_ids` / `document_uids` are the capability's already-narrowed
         scope (None = "no capability-side narrowing at this level"); the adapter
         further bounds them by the session binding. `search_policy` overrides the
-        binding's default policy when provided.
+        binding's default policy when provided. `attachments_only=True` restricts
+        the search to the conversation's session-scoped documents (attached
+        files) and excludes the corpus entirely.
         """
 
 

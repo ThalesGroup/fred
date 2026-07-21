@@ -161,6 +161,11 @@ class DocumentAccessConfig(BaseModel):
     show_library_selection: bool = True
     show_document_selection: bool = True
     show_attach_files_control: bool = True
+    # Restrict search to the conversation's attached files, never the corpus.
+    # Enforced pod-side: the tool passes `attachments_only=True` to the
+    # DocumentSearchPort, whose adapter searches the session scope only
+    # (include_corpus_scope=False); the scope-picker chat control is dropped.
+    search_attachments_only: bool = False
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
     default_rag_scope: str | None = None
@@ -301,6 +306,7 @@ class _DocumentAccessMiddleware(AgentMiddleware):
                 library_tag_ids=scoped_library_tag_ids,
                 document_uids=scoped_document_uids,
                 search_policy=search_policy,
+                attachments_only=config.search_attachments_only,
             )
             hits = result.hits
 
@@ -417,6 +423,18 @@ class DocumentAccessCapability(
                 ui=UIHints(group="scope"),
             ),
             FieldSpec(
+                key="search_attachments_only",
+                type="boolean",
+                title="Search in attachments only",
+                description=(
+                    "Restrict the agent's document search to the files "
+                    "attached to the conversation — the corpus is never "
+                    "searched."
+                ),
+                default=False,
+                ui=UIHints(group="scope"),
+            ),
+            FieldSpec(
                 key="default_top_k",
                 type="integer",
                 title="Default results",
@@ -506,10 +524,14 @@ class DocumentAccessCapability(
             controls.append(ChatControlSpec(widget="attach_files"))
         # Same visibility algebra as the legacy MCP tool: binding replaces the
         # free library picker with a read-only pinned list; the document picker
-        # is independent.
+        # is independent. Attachments-only pins the whole scope to the
+        # conversation's attached files, so no scope picker at all.
         bound = (config.library_tag_ids or None) if config.bind_libraries else None
         show_libraries = (not config.bind_libraries) and config.show_library_selection
         show_documents = config.show_document_selection
+        if config.search_attachments_only:
+            show_libraries = show_documents = False
+            bound = None
         if show_libraries or show_documents or bound:
             controls.append(
                 ChatControlSpec(

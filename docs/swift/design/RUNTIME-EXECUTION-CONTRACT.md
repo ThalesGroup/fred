@@ -970,6 +970,14 @@ binding PRIVATELY (wrapping the same `VectorSearchClient` path as
 - No OpenAPI/wire-schema change: the port is internal DI, not a serialized
   request/response model.
 
+**Amendment (2026-07-21).** `search()` gained an additive keyword
+`attachments_only: bool = False`: the adapter then searches the session scope
+only (`include_session_scope=True, include_corpus_scope=False`) — the
+conversation's attached files, never the corpus. First consumer:
+`document_access.search_attachments_only` (the capability also drops its
+scope-picker chat control when the flag is on). `general_only` RAG scope keeps
+precedence (no search at all).
+
 ---
 
 ### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
