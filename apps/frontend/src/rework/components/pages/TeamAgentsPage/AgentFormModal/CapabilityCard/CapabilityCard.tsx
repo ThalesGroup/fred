@@ -71,6 +71,7 @@ export function CapabilityCard({
               onChange={onConfigChange}
               disabled={disabled}
               teamId={teamId}
+              allValues={Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]))}
             />
           ))}
         </div>

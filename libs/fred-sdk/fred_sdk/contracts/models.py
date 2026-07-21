@@ -108,6 +108,15 @@ class UIHints(BaseModel):
             "so older frontends degrade gracefully."
         ),
     )
+    visible_when: Optional[str] = Field(
+        default=None,
+        description=(
+            "Key of a sibling field in the same form: this field is only "
+            "shown while that sibling's effective value (current input or its "
+            "declared default) is truthy. Display-only — the value is kept, "
+            "and backends must not rely on the field being hidden."
+        ),
+    )
 
 
 class FieldSpec(BaseModel):

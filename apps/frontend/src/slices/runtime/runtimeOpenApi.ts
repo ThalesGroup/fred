@@ -785,6 +785,8 @@ export type UiHints = {
   multiline?: boolean;
   placeholder?: string | null;
   textarea?: boolean;
+  /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
+  visible_when?: string | null;
   /** Names a frontend stock form widget to render this field instead of the type-derived default input. Known ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
   widget?: string | null;
 };

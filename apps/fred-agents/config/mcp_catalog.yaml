@@ -50,6 +50,7 @@ servers:
         default: []
         ui:
           widget: "document_libraries"
+          visible_when: "chat_options.libraries_binding"
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
@@ -147,6 +148,7 @@ servers:
         default: []
         ui:
           widget: "document_libraries"
+          visible_when: "chat_options.libraries_binding"
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"

@@ -183,6 +183,13 @@ export function AgentFormBody({
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
 
+  // Effective value (current input or declared default) of every tuning field,
+  // across sections — drives `ui.visible_when` even when the gating field lives
+  // in another section.
+  const effectiveTuningValues = Object.fromEntries(
+    (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
+  );
+
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
     fields.map((field) => (
       <TuningFieldRenderer
@@ -192,6 +199,7 @@ export function AgentFormBody({
         onChange={onTuningChange}
         disabled={isSubmitting}
         teamId={teamId}
+        allValues={effectiveTuningValues}
         error={
           submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
         }

@@ -1090,6 +1090,14 @@ document-access capability on an agent; the tree picker already existed for the
 chat composer. Additive and backward compatible: `None`/unknown widget ids fall
 back to the default input, and older pods simply omit the field.
 
+**Amendment (2026-07-21).** `UIHints` also gained `visible_when: str | None` —
+the key of a sibling field in the same form; the field is only rendered while
+that sibling's effective value (current input or declared default) is truthy.
+Display-only: the hidden field keeps its stored value, and backends must not
+rely on it being hidden. First consumer: the legacy search tool's
+`chat_options.bound_library_ids` is gated on `chat_options.libraries_binding`
+in the pod `mcp_catalog.yaml`.
+
 `controlPlaneOpenApi.ts` and `runtimeOpenApi.ts` regenerated
 (`make update-control-plane-api` / `make update-runtime-api`).
 
