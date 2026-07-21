@@ -73,6 +73,9 @@ spec:
 
           volumeMounts:
 {{ toYaml .app.volumeMounts | nindent 12 }}
+          {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
+{{ toYaml .app.extraVolumeMounts | nindent 12 }}
+          {{- end }}
 
           {{- with .app.migration.resources }}
           resources:
@@ -81,6 +84,9 @@ spec:
 
       volumes:
 {{ toYaml .app.volumes | nindent 8 }}
+      {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
+{{ toYaml .app.extraVolumes | nindent 8 }}
+      {{- end }}
 
       {{- with .app.nodeSelector }}
       nodeSelector:
