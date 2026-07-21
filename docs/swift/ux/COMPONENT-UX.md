@@ -1285,8 +1285,8 @@ like the legacy tool), File attachments, Search policy picker (configured
 policy becomes the picker default; enforced only when the picker is hidden),
 RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter
-already honors. Manifest bumped to 0.3.0; stored older slices revalidate
-unchanged (the single scope toggle maps onto the split ones, and a
+already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
+revalidate unchanged (the single scope toggle maps onto the split ones, and a
 pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
 document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's

@@ -177,10 +177,11 @@ class DocumentAccessConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _upgrade_pre_0_3_slices(cls, data: object) -> object:
-        """Stored ≤0.2.0 slices revalidate without behavior change: the single
-        scope toggle maps onto the split library/document toggles, and a
-        pre-`bind_libraries` library scope stays binding."""
+    def _upgrade_legacy_slices(cls, data: object) -> object:
+        """Slices stored before the split-toggle surface revalidate without
+        behavior change: the single scope toggle maps onto the split
+        library/document toggles, and a pre-`bind_libraries` library scope
+        stays binding."""
 
         if isinstance(data, dict):
             if (
@@ -348,12 +349,11 @@ class DocumentAccessCapability(
 
     manifest = CapabilityManifest(
         id="document_access",
-        # 0.3.0: exact legacy-tool configuration surface — split library/
-        # document picker toggles, "bind to specific libraries" gating the
-        # bound-libraries tree, plus the 0.2.0 chat-control toggles. Stored
-        # older slices revalidate unchanged via _upgrade_pre_0_3_slices; the
-        # bump also invalidates the control-plane chat-controls cache.
-        version="0.3.0",
+        # Pre-GA: the version stays 0.1.0 while the platform has not shipped —
+        # config-surface changes land without bumps. Start bumping (it keys the
+        # stored-slice schema_version and the control-plane chat-controls
+        # cache) once real deployments hold stored configs.
+        version="0.1.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
