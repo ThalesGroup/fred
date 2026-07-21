@@ -212,6 +212,10 @@ export default function EvaluationRuns({
         startRunRequest: {
           team_id: teamId,
           target: { kind: "managed_instance", agent_instance_id: rerunManagedTarget.agent_instance_id },
+          // The previous run's metric selection isn't exposed by the read API (only
+          // team_id/target are reused today) — default to the historical baseline
+          // metric until rerun is extended to carry the original choice forward.
+          metrics: ["answer_relevancy"],
         },
       }).unwrap();
       onOpenRun(result.run_id);

@@ -277,9 +277,17 @@ export type ManagedInstanceTarget = {
   kind: "managed_instance";
   agent_instance_id: string;
 };
+export type CustomMetricSpecInput = {
+  name: string;
+  criteria: string;
+  parameters: string[];
+  threshold?: number;
+};
 export type StartRunRequest = {
   team_id: string;
   target: ManagedInstanceTarget;
+  metrics: string[];
+  custom_metrics?: CustomMetricSpecInput[];
 };
 export type RuntimeAgentTarget = {
   kind: "runtime_agent";
@@ -436,6 +444,62 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
+export type IngestionDetail = {
+  processed: number;
+  total: number;
+  failed: number;
+  preview: number;
+  vectorized: number;
+  sql_indexed: number;
+};
+export type EvaluationDetail = {
+  campaign_id: string;
+  completed: number;
+  total: number;
+  passed: number;
+  failed: number;
+  execution_errors: number;
+  scoring_errors: number;
+};
+export type TaskLogDetail = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export type MigrationResult = {
+  import_id: string;
+  source_platform: string;
+  identities_created?: number;
+  users_processed?: number;
+  users_skipped?: string[];
+  teams_imported?: number;
+  teams_skipped?: number;
+  teams_provisioned?: number;
+  team_roles_granted?: number;
+  team_roles_skipped?: number;
+  platform_roles_granted?: number;
+  agents_imported?: number;
+  agents_skipped?: number;
+  agents_gap?: number;
+  tags_imported?: number;
+  tags_skipped?: number;
+  docs_imported?: number;
+  docs_skipped?: number;
+  warnings?: string[];
+};
+export type MigrationDetail = {
+  step_id: string;
+  processed: number;
+  total: number;
+  failed: number;
+  result?: MigrationResult | null;
+};
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type ErasureDetail = {
+  reason?: ErasureReason | null;
+  stores_ok?: number;
+  stores_total?: number;
+  attempts?: number;
+};
 export type TaskSummary = {
   task_id: string;
   kind: string;
@@ -449,18 +513,10 @@ export type TaskSummary = {
   created_at: string;
   updated_at: string;
   scheduled_for?: string | null;
+  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
-};
-export type EvaluationDetail = {
-  campaign_id: string;
-  completed: number;
-  total: number;
-  passed: number;
-  failed: number;
-  execution_errors: number;
-  scoring_errors: number;
 };
 export type EvaluationTaskEvent = {
   task_id: string;
