@@ -188,18 +188,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -593,6 +581,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
@@ -1845,18 +1845,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -2250,6 +2238,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
@@ -2628,18 +2628,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -3033,6 +3021,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
@@ -7144,18 +7144,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -7549,6 +7537,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
@@ -11660,18 +11660,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -12065,6 +12053,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
@@ -13578,18 +13578,6 @@
               },
               "additionalProperties": false
             },
-            "imagePullSecrets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
             "command": {
               "type": "object",
               "properties": {
@@ -13983,6 +13971,18 @@
                 }
               },
               "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
             },
             "podAnnotations": {
               "type": "object"
