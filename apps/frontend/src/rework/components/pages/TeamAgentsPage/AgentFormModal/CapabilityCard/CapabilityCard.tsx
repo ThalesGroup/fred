@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { Fragment, useId } from "react";
+import { Fragment, type PropsWithChildren, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
@@ -84,11 +84,29 @@ function CapabilityConfigForm({
     <div className={styles.subForm}>
       {renderGrouped(mainFields)}
       {advancedFields.length > 0 && (
-        <Disclosure title={t("rework.teams.formAgent.advancedSettings")}>
+        <AdvancedSection title={t("rework.teams.formAgent.advancedSettings")}>
           <div className={styles.advancedFields}>{renderGrouped(advancedFields)}</div>
-        </Disclosure>
+        </AdvancedSection>
       )}
     </div>
+  );
+}
+
+/**
+ * Collapsed-by-default host of the `ui.advanced` fields, drawn as a clickable
+ * labeled divider (`──── Advanced settings ⌄ ────`) so it reads as part of the
+ * form's section language rather than a nested boxed accordion.
+ */
+function AdvancedSection({ title, children }: PropsWithChildren<{ title: string }>) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className={styles.advancedToggle} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className={styles.advancedToggleLabel}>{title}</span>
+        <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
+      </button>
+      {open && children}
+    </>
   );
 }
 
