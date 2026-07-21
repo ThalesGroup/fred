@@ -63,7 +63,7 @@ include = ["fred_core*"]
 [dependency-groups]
 dev = [
     "detect-secrets>=1.5.0",
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
     "pytest-socket>=0.7.0",
@@ -78,7 +78,7 @@ dev = [
     "bandit>=1.8.6",
     "basedpyright==1.31.0",
     "detect-secrets>=1.5.0",
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
     "pytest-socket>=0.7.0",
