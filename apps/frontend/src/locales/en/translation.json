@@ -1058,6 +1058,9 @@
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteTitle": "Remove document",
+        "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
+        "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
+        "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
         "shareTitle": "Copy to Team space"
       },
@@ -1100,6 +1103,8 @@
       },
       "title": "Resources",
       "toast": {
+        "deleteFolderError": "Could not delete the folder",
+        "deleteFolderSuccess": "Folder deleted",
         "processError": "Could not start processing",
         "processStarted": "Processing started"
       }

@@ -1058,6 +1058,9 @@
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteTitle": "Retirer le document",
+        "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
+        "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe"
       },
@@ -1100,6 +1103,8 @@
       },
       "title": "Ressources",
       "toast": {
+        "deleteFolderError": "Impossible de supprimer le dossier",
+        "deleteFolderSuccess": "Dossier supprimé",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
       }
