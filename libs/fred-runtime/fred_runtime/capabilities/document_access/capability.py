@@ -82,7 +82,7 @@ from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import DocumentSearchResult
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fred_runtime.capabilities.mcp import (
     RagScopeControlParams,
@@ -135,27 +135,31 @@ def narrow_scope_ids(
 
 class DocumentAccessConfig(BaseModel):
     """
-    Agent-creation / stored config of the document-access capability (RFC §3.2).
+    Agent-creation / stored config of the document-access capability (RFC §3.2),
+    mirroring the legacy MCP search tool's configuration surface exactly.
 
-    The scope fields NARROW the searchable set at agent-creation time: an empty
-    list means "no capability-side narrowing at this level" (the session binding
-    still bounds it). `default_top_k` and `search_policy` set retrieval
-    defaults; the `show_*_control` toggles pick which computed chat controls
-    the composer shows (same stock-widget parity as the legacy MCP search
-    tool: attach files, document/library scope, search policy, RAG scope).
-    When the search-policy picker is shown, `search_policy` acts as the
-    picker's DEFAULT and the per-turn choice (RuntimeContext) wins at search
-    time; when hidden, it is enforced as-is. `min_source_score_ratio` bounds
-    what's citable as a "source" in the chat UI
-    (RAG-DATASET-DISCOVERY-RFC.md §7) — it never narrows what the model
-    itself sees, only what a human is shown as evidence.
+    `bind_libraries` + `library_tag_ids` pin the agent to a fixed library set
+    (the bound ids are IGNORED while `bind_libraries` is off, like the legacy
+    tool); `document_uids` NARROWS to specific documents. An empty list means
+    "no capability-side narrowing at this level" (the session binding still
+    bounds it). `default_top_k` and `search_policy` set retrieval defaults;
+    the `show_*` toggles pick which computed chat controls the composer shows
+    (attach files, library/document scope, search policy, RAG scope). When
+    the search-policy picker is shown, `search_policy` acts as the picker's
+    DEFAULT and the per-turn choice (RuntimeContext) wins at search time;
+    when hidden, it is enforced as-is. `min_source_score_ratio` bounds what's
+    citable as a "source" in the chat UI (RAG-DATASET-DISCOVERY-RFC.md §7) —
+    it never narrows what the model itself sees, only what a human is shown
+    as evidence.
     """
 
     library_tag_ids: list[str] = []
     document_uids: list[str] = []
     default_top_k: int = 8
     search_policy: str | None = None
-    show_document_scope_control: bool = True
+    bind_libraries: bool = False
+    show_library_selection: bool = True
+    show_document_selection: bool = True
     show_attach_files_control: bool = True
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
@@ -170,6 +174,26 @@ class DocumentAccessConfig(BaseModel):
             "the model itself can read — only the human-facing Sources panel."
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_pre_0_3_slices(cls, data: object) -> object:
+        """Stored ≤0.2.0 slices revalidate without behavior change: the single
+        scope toggle maps onto the split library/document toggles, and a
+        pre-`bind_libraries` library scope stays binding."""
+
+        if isinstance(data, dict):
+            if (
+                "show_document_scope_control" in data
+                and "show_library_selection" not in data
+                and "show_document_selection" not in data
+            ):
+                shown = bool(data.get("show_document_scope_control"))
+                data["show_library_selection"] = shown
+                data["show_document_selection"] = shown
+            if "bind_libraries" not in data and data.get("library_tag_ids"):
+                data["bind_libraries"] = True
+        return data
 
 
 class DocumentAccessTurnOptions(BaseModel):
@@ -213,8 +237,14 @@ class _DocumentAccessMiddleware(AgentMiddleware):
         # Capability-config ∩ turn-option → the params handed to the port. This
         # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
         # result by the session binding (`⊆ session_binding`).
+        # Bound library ids only apply while the binding toggle is on — same
+        # semantics as the legacy tool (the tree's value is kept but inert
+        # when unbound).
+        bound_library_ids = (
+            (config.library_tag_ids or None) if config.bind_libraries else None
+        )
         scoped_library_tag_ids = narrow_scope_ids(
-            config.library_tag_ids or None, turn.library_tag_ids
+            bound_library_ids, turn.library_tag_ids
         )
         scoped_document_uids = narrow_scope_ids(
             config.document_uids or None, turn.document_uids
@@ -318,58 +348,51 @@ class DocumentAccessCapability(
 
     manifest = CapabilityManifest(
         id="document_access",
-        # 0.2.0: legacy-parity chat controls (attach files, search-policy and
-        # RAG-scope pickers) + their config toggles. Additive with defaults, so
-        # stored 0.1.0 slices revalidate unchanged; the bump also invalidates
-        # the control-plane chat-controls cache.
-        version="0.2.0",
+        # 0.3.0: exact legacy-tool configuration surface — split library/
+        # document picker toggles, "bind to specific libraries" gating the
+        # bound-libraries tree, plus the 0.2.0 chat-control toggles. Stored
+        # older slices revalidate unchanged via _upgrade_pre_0_3_slices; the
+        # bump also invalidates the control-plane chat-controls cache.
+        version="0.3.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
         config_fields=[
             FieldSpec(
+                key="show_library_selection",
+                type="boolean",
+                title="Document library picker",
+                description="Show a document library selector in the chat interface.",
+                default=True,
+            ),
+            FieldSpec(
+                key="bind_libraries",
+                type="boolean",
+                title="Bind to specific libraries",
+                description=(
+                    "Restrict this agent to a fixed set of document libraries "
+                    "chosen at configuration time."
+                ),
+                default=False,
+            ),
+            FieldSpec(
                 key="library_tag_ids",
                 type="array",
                 item_type="string",
-                title="Document libraries",
+                title="Bound document libraries",
                 description=(
-                    "Restrict search to these document library tag ids. Empty = "
-                    "no capability-side restriction (still bounded by the session)."
+                    "Restrict the chat library picker to this preselected set "
+                    "of document libraries."
                 ),
-                # Rendered as the library/document tree picker, not a raw
-                # tag-id text input.
-                ui=UIHints(widget="document_libraries"),
+                # Library/document tree picker, only shown while the binding
+                # toggle above is on (the ids are ignored otherwise).
+                ui=UIHints(widget="document_libraries", visible_when="bind_libraries"),
             ),
             FieldSpec(
-                key="document_uids",
-                type="array",
-                item_type="string",
-                title="Documents",
-                description="Restrict search to these specific document uids.",
-            ),
-            FieldSpec(
-                key="default_top_k",
-                type="integer",
-                title="Default results",
-                description="How many hits to retrieve when the model omits top_k.",
-                default=8,
-                min=1,
-            ),
-            FieldSpec(
-                key="search_policy",
-                type="select",
-                enum=list(_SEARCH_POLICIES),
-                title="Search policy",
-                description="Retrieval policy; empty lets the session decide.",
-            ),
-            FieldSpec(
-                key="show_document_scope_control",
+                key="show_document_selection",
                 type="boolean",
-                title="Show scope picker in chat",
-                description=(
-                    "Show the per-turn document-scope narrowing control in the "
-                    "chat composer."
-                ),
+                title="Document picker",
+                description="Show a document selector in the chat interface.",
                 default=True,
             ),
             FieldSpec(
@@ -394,6 +417,16 @@ class DocumentAccessCapability(
                 default=True,
             ),
             FieldSpec(
+                key="search_policy",
+                type="select",
+                enum=list(_SEARCH_POLICIES),
+                title="Default search policy",
+                description=(
+                    "Search strategy used when the user has not overridden it "
+                    "(enforced as-is when the picker is hidden)."
+                ),
+            ),
+            FieldSpec(
                 key="show_rag_scope_control",
                 type="boolean",
                 title="RAG scope picker in chat",
@@ -409,6 +442,21 @@ class DocumentAccessCapability(
                 enum=list(_RAG_SCOPES),
                 title="Default RAG scope",
                 description="Scope used when the user has not overridden it.",
+            ),
+            FieldSpec(
+                key="document_uids",
+                type="array",
+                item_type="string",
+                title="Documents",
+                description="Restrict search to these specific document uids.",
+            ),
+            FieldSpec(
+                key="default_top_k",
+                type="integer",
+                title="Default results",
+                description="How many hits to retrieve when the model omits top_k.",
+                default=8,
+                min=1,
             ),
             FieldSpec(
                 key="min_source_score_ratio",
@@ -446,14 +494,19 @@ class DocumentAccessCapability(
         controls: list[ChatControlSpec] = []
         if config.show_attach_files_control:
             controls.append(ChatControlSpec(widget="attach_files"))
-        if config.show_document_scope_control:
-            bound = config.library_tag_ids or None
+        # Same visibility algebra as the legacy MCP tool: binding replaces the
+        # free library picker with a read-only pinned list; the document picker
+        # is independent.
+        bound = (config.library_tag_ids or None) if config.bind_libraries else None
+        show_libraries = (not config.bind_libraries) and config.show_library_selection
+        show_documents = config.show_document_selection
+        if show_libraries or show_documents or bound:
             controls.append(
                 ChatControlSpec(
                     widget="document_scope",
                     params=DocumentScopeControlParams(
-                        libraries=True,
-                        documents=True,
+                        libraries=show_libraries or bool(bound),
+                        documents=show_documents,
                         bound_library_ids=bound,
                     ),
                 )

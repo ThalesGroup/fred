@@ -1277,15 +1277,19 @@ user-edited (`updated_by`).
 
 ### `document_access` config/chat parity with the legacy search tool
 
-The Document access capability now offers the same configuration surface and
-composer controls as "Document search (legacy)": File attachments, Search
-policy picker (configured policy becomes the picker default; enforced only
-when the picker is hidden), RAG scope picker + default, on top of the
-existing scope picker toggle. All emitted as the same stock widgets — the
+The Document access capability now offers the exact configuration surface and
+composer controls of "Document search (legacy)": Document library picker and
+Document picker toggles (split), Bind to specific libraries gating the
+bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
+like the legacy tool), File attachments, Search policy picker (configured
+policy becomes the picker default; enforced only when the picker is hidden),
+RAG scope picker + default. All emitted as the same stock widgets — the
 choices travel on `RuntimeContext`, which the v2 document-search adapter
-already honors. Manifest bumped to 0.2.0 (additive, old slices revalidate).
-The legacy tool's "Bound document libraries" raw tag-id input now renders as
-the library tree via the `ui.widget: document_libraries` hint in the pod's
+already honors. Manifest bumped to 0.3.0; stored older slices revalidate
+unchanged (the single scope toggle maps onto the split ones, and a
+pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
+document libraries" raw tag-id input now renders as the library tree, gated
+on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
 ### `DocumentWorkspace` — library deletion

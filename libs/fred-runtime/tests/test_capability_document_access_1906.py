@@ -223,22 +223,41 @@ def test_chat_controls_default_to_the_full_legacy_parity_set() -> None:
 
 
 def test_chat_control_document_scope_bound_to_config_libraries() -> None:
+    # A pre-0.3 slice with a library scope and no bind flag stays binding
+    # (upgrade validator), and binding pins the picker read-only.
     cap = DocumentAccessCapability()
     controls = cap.chat_controls(
         DocumentAccessConfig.model_validate({"library_tag_ids": ["A", "B"]})
     )
     scope = next(c for c in controls if c.widget == "document_scope")
     assert scope.params is not None
-    assert scope.params.model_dump()["bound_library_ids"] == ["A", "B"]
+    params = scope.params.model_dump()
+    assert params["bound_library_ids"] == ["A", "B"]
+    # Bound → the libraries row shows (pinned) even without free selection.
+    assert params["libraries"] is True
+
+
+def test_bound_libraries_inert_while_binding_is_off() -> None:
+    # The tree's value is kept but ignored when "Bind to specific libraries"
+    # is off — same semantics as the legacy tool.
+    cap = DocumentAccessCapability()
+    config = DocumentAccessConfig.model_validate(
+        {"bind_libraries": False, "library_tag_ids": ["A", "B"]}
+    )
+    scope = next(c for c in cap.chat_controls(config) if c.widget == "document_scope")
+    assert scope.params is not None
+    assert scope.params.model_dump()["bound_library_ids"] is None
 
 
 def test_chat_controls_each_toggle_hides_its_widget() -> None:
     cap = DocumentAccessCapability()
+    # Legacy single-toggle slices map onto the split library/document toggles.
     config = DocumentAccessConfig.model_validate({"show_document_scope_control": False})
     assert "document_scope" not in _widgets(cap.chat_controls(config))
     all_off = DocumentAccessConfig.model_validate(
         {
-            "show_document_scope_control": False,
+            "show_library_selection": False,
+            "show_document_selection": False,
             "show_attach_files_control": False,
             "show_search_policy_control": False,
             "show_rag_scope_control": False,
@@ -323,6 +342,23 @@ async def test_search_policy_enforced_only_when_picker_hidden() -> None:
     )
     await _invoke_tool(cap, ctx)
     assert port.calls[0]["search_policy"] == "strict"
+
+
+@pytest.mark.asyncio
+async def test_unbound_library_scope_not_applied_at_search_time() -> None:
+    """With `bind_libraries` off, the stored tree selection is inert — the
+    port must not receive it as a scope (legacy-tool semantics)."""
+
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"bind_libraries": False, "library_tag_ids": ["A", "B"]},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["library_tag_ids"] is None
 
 
 @pytest.mark.asyncio
