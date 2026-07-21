@@ -417,6 +417,30 @@ class DocumentAccessCapability(
                 ui=UIHints(group="scope"),
             ),
             FieldSpec(
+                key="default_top_k",
+                type="integer",
+                title="Default results",
+                description="How many hits to retrieve when the model omits top_k.",
+                default=8,
+                min=1,
+                ui=UIHints(group="retrieval"),
+            ),
+            FieldSpec(
+                key="min_source_score_ratio",
+                type="number",
+                title="Minimum source relevance ratio",
+                description=(
+                    "A hit must score at least this fraction of the best hit "
+                    "in the same search to be shown as a cited source. Only "
+                    "affects the human-facing Sources panel, never what the "
+                    "model itself can read."
+                ),
+                default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
+                min=0.0,
+                max=1.0,
+                ui=UIHints(group="retrieval"),
+            ),
+            FieldSpec(
                 key="show_search_policy_control",
                 type="boolean",
                 title="Search policy picker in chat",
@@ -457,30 +481,6 @@ class DocumentAccessCapability(
                 title="Default RAG scope",
                 description="Scope used when the user has not overridden it.",
                 ui=UIHints(group="rag_scope"),
-            ),
-            FieldSpec(
-                key="default_top_k",
-                type="integer",
-                title="Default results",
-                description="How many hits to retrieve when the model omits top_k.",
-                default=8,
-                min=1,
-                ui=UIHints(group="retrieval"),
-            ),
-            FieldSpec(
-                key="min_source_score_ratio",
-                type="number",
-                title="Minimum source relevance ratio",
-                description=(
-                    "A hit must score at least this fraction of the best hit "
-                    "in the same search to be shown as a cited source. Only "
-                    "affects the human-facing Sources panel, never what the "
-                    "model itself can read."
-                ),
-                default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
-                min=0.0,
-                max=1.0,
-                ui=UIHints(group="retrieval"),
             ),
         ],
         # No new chat part / side panel / router / owned table — the pilot's
