@@ -536,14 +536,14 @@ async def test_attachments_only_pins_search_to_the_session_scope(
     # And the scope-picker chat control is dropped (scope is pinned).
     widgets = [
         c.widget
-        for c in cap.chat_controls(cap.ConfigModel(search_attachments_only=True))
+        for c in cap.chat_controls(DocumentAccessConfig(search_attachments_only=True))
     ]
     assert "document_scope" not in widgets
     assert "attach_files" in widgets
 
     # Inert without attachments: the flag must not strand an agent whose
     # attach button is disabled — the picker returns and the search is normal.
-    no_attach = cap.ConfigModel(
+    no_attach = DocumentAccessConfig(
         search_attachments_only=True, show_attach_files_control=False
     )
     assert "document_scope" in [c.widget for c in cap.chat_controls(no_attach)]
