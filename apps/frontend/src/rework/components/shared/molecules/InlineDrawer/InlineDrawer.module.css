@@ -61,6 +61,58 @@
   width: var(--drawer-width);
 }
 
+/* While the user drags the resize handle, the width must track the pointer
+   1:1 — suppress the open/close width transition for the drag's duration. */
+.drawer[data-dragging="true"] {
+  transition: none;
+}
+
+/* Headless: the hosted panel renders its own chrome (header, close button,
+   card border) — drop the drawer's body padding and separator so the panel
+   controls its full surface (e.g. capability panels styled as floating cards). */
+.drawer[data-headless="true"] {
+  background: transparent;
+}
+
+.drawer[data-layout="push"][data-open="true"][data-headless="true"] {
+  border-left-color: transparent;
+}
+
+.drawer[data-headless="true"] .body {
+  padding: 0;
+}
+
+/* Left-edge drag handle (resizable push drawers): an 8px hit area hugging the
+   drawer's left border, with a 4px pill that highlights while hovered. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: 8px;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color 0.15s,
+    height 0.15s;
+  border-radius: 2px;
+  background-color: var(--outline-retreat);
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before {
+  background-color: var(--primary);
+  height: 56px;
+}
+
 /* Inner panel — keeps the content at full width while the push drawer
    animates its own width from 0, so nothing reflows mid-transition. */
 .panel {

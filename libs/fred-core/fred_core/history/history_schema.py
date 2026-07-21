@@ -246,7 +246,52 @@ class HitlResponsePart(BaseModel):
     label: Optional[str] = None
 
 
-MessagePart: TypeAlias = Annotated[
+_CORE_PART_KINDS = frozenset(
+    {
+        "text",
+        "code",
+        "image_url",
+        "tool_call",
+        "tool_result",
+        "hitl_request",
+        "hitl_response",
+    }
+)
+
+
+class UiPartRecord(BaseModel):
+    """
+    Open pass-through record for a capability-emitted ``ui_part``.
+
+    Why this exists:
+    - the runtime ``UiPart`` union is OPEN: capability packages register new
+      part kinds (``link``, ``geo``, ``ppt_preview``, …) at pod boot, so core
+      history storage cannot enumerate them
+    - dropping unknown kinds at persistence time silently breaks history
+      replay for capability UI (the part renders live over SSE, then vanishes
+      on reload) — this record retains every field verbatim instead
+
+    How to use it:
+    - validate any serialized ui_part dict with
+      ``UiPartRecord.model_validate(part_dict)``; all fields beyond ``type``
+      are kept as extras and round-trip through ``model_dump``
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+
+    @field_validator("type")
+    @classmethod
+    def _reject_core_kinds(cls, v: str) -> str:
+        # A malformed CORE part (e.g. a "text" part missing its text) must fail
+        # loudly on its own model, never silently degrade into an open record.
+        if v in _CORE_PART_KINDS:
+            raise ValueError(f"'{v}' is a core message part kind, not a ui_part")
+        return v
+
+
+CoreMessagePart: TypeAlias = Annotated[
     Union[
         TextPart,
         CodePart,
@@ -258,12 +303,16 @@ MessagePart: TypeAlias = Annotated[
     ],
     Field(discriminator="type"),
 ]
-"""
-Discriminated union of all core message parts.
 
-Note: ``agentic-backend`` extends this union with LinkPart and GeoPart in its
-own ``chat_schema`` module. The fred-core version covers all parts needed for
-pod-agent history storage.
+MessagePart: TypeAlias = Union[CoreMessagePart, UiPartRecord]
+"""
+All storable message parts: the discriminated core union, plus the open
+``UiPartRecord`` fallback for capability-emitted ui_part kinds (the ``type``
+validator on ``UiPartRecord`` keeps core kinds out of the fallback branch).
+
+Note: ``agentic-backend`` extends the core union with LinkPart and GeoPart in
+its own ``chat_schema`` module. The fred-core version covers all parts needed
+for pod-agent history storage.
 """
 
 
@@ -365,13 +414,20 @@ def make_assistant_final(
     usage: Optional[ChatTokenUsage] = None,
     sources: Optional[List[VectorSearchHit]] = None,
     finish_reason: Optional[str] = None,
+    ui_parts: Optional[List[Dict[str, Any]]] = None,
 ) -> ChatMessage:
     """
     Build the terminal assistant message for a turn.
 
     How to use it:
     - call after accumulating all assistant delta tokens into ``text``
+    - pass the FinalRuntimeEvent's serialized ``ui_parts`` so capability chat
+      parts (link, ppt_preview, …) survive into history — they are appended
+      after the text part, mirroring the live SSE message shape
     """
+    parts: List[MessagePart] = [TextPart(text=text)] if text else []
+    for raw in ui_parts or []:
+        parts.append(UiPartRecord.model_validate(raw))
     return ChatMessage(
         session_id=session_id,
         exchange_id=exchange_id,
@@ -379,7 +435,7 @@ def make_assistant_final(
         timestamp=datetime.now(timezone.utc),
         role=Role.assistant,
         channel=Channel.final,
-        parts=[TextPart(text=text)] if text else [],
+        parts=parts,
         metadata=ChatMetadata(
             model=model,
             token_usage=usage,

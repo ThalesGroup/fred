@@ -133,6 +133,78 @@
     "document_access": {
       "name": "Accès aux documents",
       "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+    },
+    "ppt_filler": {
+      "name": "Template de PowerPoint",
+      "description": "Permet a l'agent de remplir un modèle PowerPoint que vous avez uploader.",
+      "form": {
+        "uploadTemplate": "Téléverser un modèle .pptx",
+        "replaceTemplate": "Remplacer le modèle",
+        "uploadAria": "Fichier de modèle PowerPoint",
+        "clearAria": "Retirer le fichier sélectionné",
+        "currentTemplate": "Un modèle est configuré pour cet agent.",
+        "templateRequired": "PPT Filler nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
+        "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
+        "analyzing": "Analyse du modèle…",
+        "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
+        "validTemplate": "Modèle valide",
+        "parsingDetails": "Détails de l'analyse",
+        "keyColumn": "Clé",
+        "descriptionColumn": "Description",
+        "learnMore": "Comment ça marche ? Que dois-je uploader ?",
+        "slide": "Diapositive {{number}}",
+        "imageBadge": "image · {{folder}}",
+        "noDescription": "Pas de description"
+      },
+      "errors": {
+        "key_without_description": {
+          "heading": "Les clés suivantes n'ont pas de description :"
+        },
+        "described_but_not_in_slide": {
+          "heading": "Les clés décrites suivantes sont introuvables dans la diapositive :"
+        },
+        "unknown_metadata": {
+          "heading": "Mot-clé de métadonnée inconnu (utilisez uniquement `type` ou `folder`) :"
+        },
+        "unknown_type": {
+          "heading": "Valeur de type inconnue (utilisez `text` ou `image`) :"
+        },
+        "duplicated_metadata": {
+          "heading": "Métadonnée déclarée deux fois dans un même bloc de clé :"
+        },
+        "image_without_folder": {
+          "heading": "Clés image sans dossier :"
+        },
+        "empty_folder": {
+          "heading": "La valeur du dossier est vide :"
+        },
+        "folder_without_image_type": {
+          "heading": "Un dossier a été défini sur une clé qui n'est pas de type image :"
+        },
+        "folder_not_found": {
+          "heading": "Dossier introuvable dans votre espace :"
+        },
+        "image_key_invalid_location": {
+          "heading": "Déplacez ces clés image dans une zone de texte ou un rectangle (une cellule de tableau ne peut pas contenir d'image) :"
+        },
+        "invalid_upload": "Le fichier téléversé n'a pas pu être lu comme un .pptx. Sélectionnez à nouveau le fichier et réessayez.",
+        "asset_required": "PPT Filler nécessite un modèle PowerPoint, mais aucun n'a été fourni."
+      },
+      "preview": {
+        "untitled": "Présentation",
+        "open": "Ouvrir l'aperçu",
+        "download": "Télécharger le .pptx",
+        "downloadError": "Échec du téléchargement",
+        "close": "Fermer l'aperçu",
+        "loadError": "Impossible de charger l'aperçu.",
+        "loading": "Chargement de l'aperçu…",
+        "empty": "Pas encore d'aperçu. Demandez à l'assistant de remplir une présentation."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Aperçu de la présentation"
+        }
+      }
     }
   },
   "chatbot": {

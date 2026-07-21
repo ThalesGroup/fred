@@ -35,6 +35,31 @@ describe("sidePanelRegistry (#1979)", () => {
     expect(entries[0]).toMatchObject({ capabilityId: "demo_echo", widget: "demo_notes", Component: StubPanel });
   });
 
+  it("defaults shorthand (bare component) declarations to hosted chrome, not resizable", () => {
+    const registry = buildSidePanelRegistry([withPanel]);
+    const [entry] = sidePanelsForCapabilities(["demo_echo"], registry);
+
+    expect(entry.headless).toBe(false);
+    expect(entry.resizable).toBe(false);
+  });
+
+  it("resolves the object form with headless/resizable options (ppt_filler pane shape)", () => {
+    const withOptions: CapabilityUiPlugin = {
+      id: "ppt_filler",
+      sidePanels: { ppt_preview_pane: { Component: StubPanel, headless: true, resizable: true } },
+    };
+    const registry = buildSidePanelRegistry([withOptions]);
+    const [entry] = sidePanelsForCapabilities(["ppt_filler"], registry);
+
+    expect(entry).toMatchObject({
+      capabilityId: "ppt_filler",
+      widget: "ppt_preview_pane",
+      Component: StubPanel,
+      headless: true,
+      resizable: true,
+    });
+  });
+
   it("skips capabilities that declare no side panel", () => {
     const registry = buildSidePanelRegistry([withPanel, withoutPanel]);
     expect(sidePanelsForCapabilities(["plain"], registry)).toHaveLength(0);

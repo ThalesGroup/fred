@@ -133,6 +133,78 @@
     "document_access": {
       "name": "Document access",
       "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
+    },
+    "ppt_filler": {
+      "name": "PowerPoint Filler",
+      "description": "Fills your uploaded PowerPoint template and returns a completed deck the user can download.",
+      "form": {
+        "uploadTemplate": "Upload a .pptx template",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A template is configured for this agent.",
+        "templateRequired": "PPT Filler requires a PowerPoint template. Upload a .pptx file.",
+        "templateInvalid": "Fix the template errors below before saving.",
+        "analyzing": "Analyzing the template…",
+        "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "validTemplate": "Valid template",
+        "parsingDetails": "Parsing details",
+        "keyColumn": "Key",
+        "descriptionColumn": "Description",
+        "learnMore": "How does this work? What should I upload?",
+        "slide": "Slide {{number}}",
+        "imageBadge": "image · {{folder}}",
+        "noDescription": "No description"
+      },
+      "errors": {
+        "key_without_description": {
+          "heading": "The following keys have no description:"
+        },
+        "described_but_not_in_slide": {
+          "heading": "The following described keys were not found in the slide:"
+        },
+        "unknown_metadata": {
+          "heading": "Unknown metadata keyword (use only `type` or `folder`):"
+        },
+        "unknown_type": {
+          "heading": "Unknown type value (use `text` or `image`):"
+        },
+        "duplicated_metadata": {
+          "heading": "Metadata declared twice in one key block:"
+        },
+        "image_without_folder": {
+          "heading": "Image keys missing a folder:"
+        },
+        "empty_folder": {
+          "heading": "Folder value is empty:"
+        },
+        "folder_without_image_type": {
+          "heading": "A folder was set on a non-image key:"
+        },
+        "folder_not_found": {
+          "heading": "Folder not found in your space:"
+        },
+        "image_key_invalid_location": {
+          "heading": "Move these image keys into a text box or rectangle (a table cell cannot hold an image):"
+        },
+        "invalid_upload": "The uploaded file could not be read as a .pptx. Re-select the file and try again.",
+        "asset_required": "PPT Filler requires a PowerPoint template, but none was provided."
+      },
+      "preview": {
+        "untitled": "Presentation",
+        "open": "Open preview",
+        "download": "Download .pptx",
+        "downloadError": "Download failed",
+        "close": "Close preview",
+        "loadError": "Failed to load preview.",
+        "loading": "Loading preview…",
+        "empty": "No preview yet. Ask the assistant to fill a deck."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Presentation preview"
+        }
+      }
     }
   },
   "chatbot": {

@@ -186,7 +186,11 @@ def _fake_pod_validate(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         team_id,
         agent_instance_id,
         authorization,
+        asset_files=(),
     ) -> dict[str, Any]:
+        # `asset_files` (#1903) is accepted so this fake's signature stays
+        # compatible with the production call in `_apply_capability_selection`;
+        # these config-selection tests carry no uploads, so it is not asserted.
         calls.append(
             {
                 "base_url": base_url,

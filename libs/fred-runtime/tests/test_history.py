@@ -220,6 +220,67 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[3].rank == 3
 
 
+def test_write_turn_history_persists_final_ui_parts() -> None:
+    """
+    _write_turn_history must retain the FinalRuntimeEvent's ui_parts on the
+    persisted final assistant message, unknown capability kinds included.
+
+    Why this test exists:
+    - capability chat parts (e.g. the ppt_filler `ppt_preview`) render live
+      over SSE from the final event's ui_parts; dropping them at persistence
+      silently breaks history replay (the chat card vanishes on reload)
+    - the UiPart union is OPEN (capability packages extend it at pod boot), so
+      persistence must round-trip kinds fred-core has never heard of
+    """
+    from fred_core.history.history_schema import Channel, Role, UiPartRecord
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    ppt_preview = {
+        "type": "ppt_preview",
+        "preview_id": "outputs/s1/deck.pptx",
+        "title": "deck.pptx",
+        "pdf_download_url": "/knowledge-flow/v1/fs/download/outputs/s1/deck.preview.pdf",
+        "version": "abc123",
+    }
+    payloads = [
+        {
+            "kind": "final",
+            "content": "Done.",
+            "model_name": "gpt-4o",
+            "ui_parts": [ppt_preview],
+        },
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="fill my deck",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    store.save.assert_awaited_once()
+    messages = store.save.call_args.kwargs["messages"]
+    final = messages[-1]
+    assert final.role == Role.assistant
+    assert final.channel == Channel.final
+    # Text part first (live SSE shape), then the retained ui_part.
+    assert final.parts[0].text == "Done."
+    part = final.parts[1]
+    assert isinstance(part, UiPartRecord)
+    assert part.type == "ppt_preview"
+    # Every capability field round-trips verbatim through model_dump.
+    assert part.model_dump() == ppt_preview
+    # And the row re-validates from its serialized form (the read path).
+    revalidated = type(final).model_validate(final.model_dump(mode="json"))
+    assert revalidated.parts[1].model_dump() == ppt_preview
+
+
 def test_write_turn_history_skips_save_when_no_content() -> None:
     """
     _write_turn_history must not call save() when there is no request message

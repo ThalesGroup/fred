@@ -183,7 +183,10 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false, fullW
         if (lang === "mermaid") {
           return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
         }
-        if (className) {
+        // Fenced blocks normally carry a language-* className, but a bare ``` fence has
+        // none — its content still keeps its newlines, which inline code never contains.
+        // Without this check, multiline no-language fences collapse into an inline chip.
+        if (className || String(children).includes("\n")) {
           return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;
         }
         return <CodeBlock code={String(children)} inline />;

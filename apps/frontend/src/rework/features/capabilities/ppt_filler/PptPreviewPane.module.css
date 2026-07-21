@@ -1,0 +1,132 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Floating card (Kea parity): the pane sits inside a headless push drawer and
+ * provides its own chrome — margin, border, radius, shadow, fade-in. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  animation: paneIn 0.3s ease-out;
+  box-sizing: border-box;
+  margin: var(--spacing-s);
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  height: calc(100% - 2 * var(--spacing-s));
+  min-height: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-m);
+}
+
+.titleGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scrollable PDF body: slides stack vertically, centered horizontally. Vertical
+ * gaps are set on the page wrapper (`.page`) rather than `gap`, because react-pdf
+ * renders each <Page> in its own wrapper and a bare `gap` can collapse between them. */
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: safe center;
+  align-items: center;
+  background-color: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+/* Each slide is a card with a shadow; margin (not container `gap`) guarantees the
+ * space between consecutive slides survives react-pdf's per-page wrappers. */
+.page {
+  box-shadow: var(--shadow-s);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.page:not(:last-child) {
+  margin-bottom: var(--spacing-m);
+}
+
+/* Align the selectable text layer with the rendered canvas (Kea parity).
+ *
+ * react-pdf 10 / pdf.js 4 split a page's scale into `--scale-factor` × `--user-unit`
+ * (exposed together as `--total-scale-factor`). LibreOffice-exported PPTX→PDF decks
+ * carry a non-1 UserUnit (~0.75), so when we size a <Page> by `width`,
+ * `--scale-factor` stays 1 and the extra `--user-unit` is NOT applied to the
+ * text-layer spans — they land at full native coordinates and drift down/right of
+ * the glyphs. Scaling the whole text layer by `--total-scale-factor` puts the
+ * invisible spans back exactly over the canvas text so selection/search line up.
+ * Harmless when `--user-unit` is 1 (scale = --scale-factor). */
+.body :global(.react-pdf__Page__textContent.textLayer) {
+  transform: scale(var(--total-scale-factor));
+  transform-origin: 0 0;
+}
+
+.empty,
+.loading {
+  margin-top: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.error {
+  margin-top: var(--spacing-l);
+  color: var(--error);
+  font: var(--font-body-small);
+}

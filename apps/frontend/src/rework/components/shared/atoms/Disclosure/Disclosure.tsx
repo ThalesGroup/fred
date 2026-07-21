@@ -19,13 +19,24 @@ import styles from "./Disclosure.module.css";
 interface DisclosureProps {
   title: string;
   defaultOpen?: boolean;
+  /**
+   * Visual weight. "outlined" (default) renders a bordered card; "subtle" renders a
+   * discrete inline toggle — no border, muted small text — for secondary details.
+   */
+  variant?: "outlined" | "subtle";
 }
 
 /** A lightweight collapsible section (replaces MUI Accordion). Design-tokens only. */
-export default function Disclosure({ title, defaultOpen = false, children }: PropsWithChildren<DisclosureProps>) {
+export default function Disclosure({
+  title,
+  defaultOpen = false,
+  variant = "outlined",
+  children,
+}: PropsWithChildren<DisclosureProps>) {
   const [open, setOpen] = useState(defaultOpen);
+  const rootClassName = variant === "subtle" ? `${styles.disclosure} ${styles.subtle}` : styles.disclosure;
   return (
-    <div className={styles.disclosure}>
+    <div className={rootClassName}>
       <button type="button" className={styles.summary} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={styles.title}>{title}</span>
         <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />

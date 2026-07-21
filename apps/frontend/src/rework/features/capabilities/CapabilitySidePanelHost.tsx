@@ -80,6 +80,11 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
         onClose={() => onActiveKeyChange(null)}
         title={active ? titleOf(active) : ""}
         layout="push"
+        // Panels that render their own chrome (headless) keep exactly ONE
+        // close button; resizable panels get the drag handle on the left edge.
+        hideHeader={active?.headless ?? false}
+        resizable={active?.resizable ?? false}
+        resizeStorageKey="capabilitySidePanel:width"
       >
         {active && <active.Component capabilityId={active.capabilityId} onClose={() => onActiveKeyChange(null)} />}
       </InlineDrawer>

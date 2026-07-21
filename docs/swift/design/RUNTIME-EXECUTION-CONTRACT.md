@@ -983,6 +983,36 @@ binding PRIVATELY (wrapping the same `VectorSearchClient` path as
 
 ---
 
+### 8.16 ✅ `agent_assets` / `document_content` / `document_folders` ports — #1903 PPT filler (July 2026)
+
+**What changed.** Three more OPTIONAL, additive ports on `RuntimeServices`
+(`fred_sdk/contracts/runtime.py`), same class of change and same §8.15 doctrine
+(scope/key parameters only; binding + token captured privately by the
+fred-runtime adapters):
+
+- `agent_assets: AgentAssetPort | None` — per-agent-instance config-asset
+  storage (`store`/`fetch`/`delete` by slot-relative key). Backed by the KF
+  virtual-filesystem sub-area `teams/{t}/agents/{agent_instance_id}/config/...`
+  (`AgentConfigAssetsAdapter`). Injected BOTH turn-time
+  (`_build_runtime_services`) and save-time
+  (`_build_capability_save_services`, which now also receives the
+  `agent_instance_id` from the validate-config form and stamps it on the
+  privately-held `RuntimeContext`).
+- `document_content: DocumentContentPort | None` — a corpus document's
+  ORIGINAL bytes by uid (KF `GET /raw_content/{uid}`, `DocumentContentAdapter`
+  over the new minimal `KfDocumentClient`).
+- `document_folders: DocumentFolderPort | None` — author folder string →
+  DOCUMENT tag id (save/analyze-time validation) and folder-tag document
+  listing (KF `GET /tags` + `POST /documents/metadata/browse`,
+  `DocumentFolderAdapter` over the new `KfTagClient`).
+
+No OpenAPI/wire-schema change on the execution surface. The pod's
+`validate-config` endpoint behavior is unchanged except that its save services
+now carry the three ports, letting an asset-bearing capability store binaries
+and resolve folders during `validate_config` (RFC AGENT-CAPABILITY §3.4/§3.8).
+
+---
+
 ### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
 
 **What changed.** `RuntimeContext.user_groups` (`fred_sdk.contracts.context`,
@@ -1007,6 +1037,36 @@ update-runtime-api`, 1-line diff); frontend `tsc --noEmit` clean.
 `apps/frontend/src/slices/agentic/agenticOpenApi.ts` still carries a stale
 `user_groups` field — no Makefile target regenerates it (looks like a
 dead/legacy generated client, out of scope for this sweep).
+
+---
+
+### 8.17 ✅ Capability `ui_parts` persisted in turn history — #1903 PPT filler follow-up (2026-07-20)
+
+**Was**: the `FinalRuntimeEvent`'s `ui_parts` (capability chat parts such as
+`ppt_preview`, see §8.13) rendered live over SSE but were dropped by
+`_write_turn_history` — the persisted final message carried only the text part,
+so reloading a session lost every capability card. A ui_parts-only final (no
+text, no model) produced no history row at all.
+
+**Fix** (`fred-core` + `fred-runtime`, additive):
+
+- `fred_core/history/history_schema.py`: the stored `MessagePart` union is
+  widened with an open `UiPartRecord` model (`extra="allow"`, a `type`
+  validator rejects the seven core part kinds so malformed core parts still
+  fail loudly on their own models). Because the runtime `UiPart` union is
+  OPEN — capability packages register kinds at pod boot (§8.13) — core storage
+  cannot enumerate them; `UiPartRecord` retains every field verbatim instead.
+  `make_assistant_final(...)` gains an optional `ui_parts=` argument and
+  appends the records after the text part, mirroring the live SSE shape.
+- `fred_runtime/app/agent_app.py`: `_write_turn_history` now captures
+  `ui_parts` from the final payload and passes them through to
+  `make_assistant_final`; the terminal assistant message is also written when
+  the final carries only `ui_parts` (previously gated on text/model alone).
+
+**Wire compatibility**: additive and backward-compatible. Existing stored
+parts and history rows are unaffected; the history endpoint returns
+unknown-kind parts verbatim, so capability parts now round-trip
+store → history read → part-renderer registry (§8.13) unchanged.
 
 ---
 

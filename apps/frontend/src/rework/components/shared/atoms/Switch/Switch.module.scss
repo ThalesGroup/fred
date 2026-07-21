@@ -1,5 +1,14 @@
 .switch-container {
   display: inline-block;
+  /* The visually-hidden native input below is absolutely positioned. Without a
+   * positioned ancestor its containing block is the viewport, so it stays at
+   * the page's unscrolled layout position instead of following the switch when
+   * a parent scroll container scrolls. Clicking the label then focuses an
+   * input that may sit past the viewport edge, and the browser scrolls the
+   * `overflow: hidden` html element to reveal it — the whole app shifts and
+   * there is no scrollbar to undo it. Anchoring the input to the label keeps
+   * it exactly under the switch. */
+  position: relative;
   vertical-align: middle;
 }
 

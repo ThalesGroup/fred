@@ -7,6 +7,7 @@
   "extraPaths": [
     "../../libs/fred-core",
     "../../libs/fred-sdk",
-    "../../libs/fred-runtime"
+    "../../libs/fred-runtime",
+    "../../libs/fred-capability-ppt-filler"
   ]
 }

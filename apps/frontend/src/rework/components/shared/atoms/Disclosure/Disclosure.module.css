@@ -28,3 +28,27 @@
 .content {
   padding: 0 var(--spacing-m) var(--spacing-m);
 }
+
+/* Subtle variant: discrete inline toggle for secondary details — no card chrome. */
+.subtle {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.subtle .summary {
+  justify-content: flex-start;
+  gap: var(--spacing-3xs);
+  padding: var(--spacing-3xs) 0;
+  width: auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.subtle .title {
+  font: inherit;
+}
+
+.subtle .content {
+  padding: var(--spacing-3xs) 0 0;
+}

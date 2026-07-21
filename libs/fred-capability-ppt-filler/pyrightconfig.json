@@ -1,0 +1,13 @@
+// Pyright config used when opening project with workspace
+// in vscode and by the pyright CLI
+{
+  "include": ["fred_capability_ppt_filler", "tests"],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "../fred-core",
+    "../fred-sdk"
+  ]
+}

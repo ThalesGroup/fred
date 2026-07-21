@@ -23,7 +23,7 @@
 //   contributes nothing (silent skip, never a crash)
 
 import { capabilityUiPlugins } from "./index";
-import type { CapabilityUiPlugin, CapabilitySidePanel } from "./types";
+import type { CapabilityUiPlugin, CapabilitySidePanel, CapabilitySidePanelDef } from "./types";
 
 export interface SidePanelEntry {
   /** Owning capability id (`manifest.id`). */
@@ -32,6 +32,21 @@ export interface SidePanelEntry {
   widget: string;
   /** The component to render in the right column. */
   Component: CapabilitySidePanel;
+  /** Panel renders its own chrome — the host hides the drawer header. */
+  headless: boolean;
+  /** The host makes the push drawer resizable. */
+  resizable: boolean;
+}
+
+/** Detect the object form by its `Component` key (a component itself may be a
+ * function OR an exotic object like React.memo — never keyed `Component`). */
+function isDef(value: CapabilitySidePanel | CapabilitySidePanelDef): value is CapabilitySidePanelDef {
+  return typeof value === "object" && value !== null && "Component" in value;
+}
+
+/** Normalize the shorthand component form into the full declaration. */
+function toDef(value: CapabilitySidePanel | CapabilitySidePanelDef): CapabilitySidePanelDef {
+  return isDef(value) ? value : { Component: value };
 }
 
 export function buildSidePanelRegistry(
@@ -43,7 +58,16 @@ export function buildSidePanelRegistry(
     if (panels.length === 0) continue;
     registry.set(
       plugin.id,
-      panels.map(([widget, Component]) => ({ capabilityId: plugin.id, widget, Component })),
+      panels.map(([widget, value]) => {
+        const def = toDef(value);
+        return {
+          capabilityId: plugin.id,
+          widget,
+          Component: def.Component,
+          headless: def.headless ?? false,
+          resizable: def.resizable ?? false,
+        };
+      }),
     );
   }
   return registry;

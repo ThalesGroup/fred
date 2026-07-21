@@ -5534,7 +5534,11 @@ def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         team_id,
         agent_instance_id,
         authorization,
+        asset_files=(),
     ) -> dict[str, Any]:
+        # `asset_files` (#1903) accepted for signature parity with the
+        # production call in `_apply_capability_selection`; these MCP-config
+        # tests carry no uploads.
         return {"schema_version": "1", "config": dict(config_values)}
 
     monkeypatch.setattr(

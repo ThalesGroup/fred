@@ -141,7 +141,10 @@ from fred_runtime.runtime_support.checkpoints import load_checkpoint
 from ..common.structures import AgentSettingsLike
 from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
+    AgentConfigAssetsAdapter,
     CompositeToolInvoker,
+    DocumentContentAdapter,
+    DocumentFolderAdapter,
     DocumentSearchAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
@@ -773,6 +776,12 @@ def _build_runtime_services(
         checkpointer=runtime_config.checkpointer,
         agent_invoker=agent_invoker,
         document_search=document_search,
+        # #1903 capability ports: per-instance config assets (template fetch at
+        # tool time), image-document raw fetch, and folder listing. Same
+        # private-binding doctrine as document_search.
+        agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
+        document_content=DocumentContentAdapter(binding=binding, settings=settings),
+        document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
     )
 
 
@@ -1713,6 +1722,7 @@ async def _write_turn_history(
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
+    final_ui_parts: list[dict[str, Any]] = []
 
     for payload in payloads:
         kind = payload.get("kind")
@@ -1800,9 +1810,16 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+            # ui_parts (capability chat parts: link, ppt_preview, …) must
+            # survive into history — the FinalRuntimeEvent carries the merged
+            # union of every tool's ui_parts, and the frontend reads them from
+            # the persisted final message on reload (exactly like live SSE).
+            final_ui_parts = [
+                p for p in (payload.get("ui_parts") or []) if isinstance(p, dict)
+            ]
 
     # 3. Terminal assistant message (from FinalRuntimeEvent)
-    if final_content or final_model:
+    if final_content or final_model or final_ui_parts:
         messages.append(
             make_assistant_final(
                 session_id,
@@ -1813,6 +1830,7 @@ async def _write_turn_history(
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
                 finish_reason=final_finish_reason,
+                ui_parts=final_ui_parts or None,
             )
         )
 
@@ -2145,6 +2163,7 @@ def _build_capability_save_services(
     user_id: str,
     team_id: str | None,
     access_token: str | None,
+    agent_instance_id: str | None = None,
 ) -> RuntimeServices:
     """
     Minimal `RuntimeServices` for one capability save-time validation (#1974).
@@ -2152,8 +2171,11 @@ def _build_capability_save_services(
     Why this exists:
     - `validate_config` may store uploaded asset binaries through the KF-backed
       workspace port and keep only the storage keys in the stored config
-      (RFC §3.4, §3.8) — so the save path needs `workspace_fs`, bound to the
-      saving user's identity/team, but none of the execution-only services
+      (RFC §3.4, §3.8) — so the save path needs `workspace_fs` plus the
+      per-instance `agent_assets` store (#1903), bound to the saving user's
+      identity/team, but none of the execution-only services
+    - `document_folders` lets an asset-parsing capability resolve author folder
+      strings against the agent's space at save time (#1903 image support)
     """
 
     request_id = str(uuid4())
@@ -2163,6 +2185,7 @@ def _build_capability_save_services(
             user_id=user_id,
             team_id=team_id,
             access_token=access_token,
+            agent_instance_id=agent_instance_id,
         ),
         portable_context=PortableContext(
             request_id=request_id,
@@ -2178,7 +2201,9 @@ def _build_capability_save_services(
     )
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
     return RuntimeServices(
-        workspace_fs=FredWorkspaceFs(binding=binding, settings=settings)
+        workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
+        agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
+        document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
     )
 
 
@@ -2944,6 +2969,10 @@ def _build_agent_router(
                 user_id=(caller.uid if caller is not None else None) or "anonymous",
                 team_id=team_id or None,
                 access_token=access_token,
+                agent_instance_id=(
+                    form_instance_id if isinstance(form_instance_id, str) else None
+                )
+                or None,
             ),
         )
         try:

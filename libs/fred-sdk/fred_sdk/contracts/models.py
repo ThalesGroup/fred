@@ -98,6 +98,12 @@ class UIHints(BaseModel):
     textarea: bool = False
     group: Optional[str] = None
     hide: bool = False
+    # Custom form-widget id (AGENT-CAPABILITY-RFC §9 item 4, #1903): when set on
+    # a capability config field, the frontend resolves it against the owning
+    # capability plugin's `configWidgets` and renders that component instead of
+    # the generic metadata-driven renderer. Unknown ids fall back to the generic
+    # renderer (forward-compatible, same policy as chat-control widgets).
+    widget: Optional[str] = None
 
 
 class FieldSpec(BaseModel):

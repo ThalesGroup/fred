@@ -29,16 +29,45 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import {
   type CreateAgentInstanceRequest,
   type ManagedAgentInstanceSummary,
+  type UpdateAgentInstanceRequest,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
+  usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
 type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
+
+/**
+ * Build the multipart body of the `with-assets` save endpoints (#1903): the
+ * JSON request as a `request` form field plus one `{capabilityId}:{slotKey}`
+ * reference per file, aligned by index with the `asset_files` entries. The
+ * generated client cannot express multipart, so the FormData is passed as the
+ * generated mutation's body — the sanctioned narrow exception (the TYPES still
+ * come from the generated client; see CLAUDE.md backend↔frontend contract).
+ */
+function buildAgentSaveFormData(
+  request: CreateAgentInstanceRequest | UpdateAgentInstanceRequest,
+  assetFiles: Record<string, Record<string, File>>,
+): FormData {
+  const formData = new FormData();
+  formData.append("request", JSON.stringify(request));
+  for (const [capabilityId, slots] of Object.entries(assetFiles)) {
+    for (const [slotKey, file] of Object.entries(slots)) {
+      formData.append("asset_slots", `${capabilityId}:${slotKey}`);
+      formData.append("asset_files", file, file.name);
+    }
+  }
+  return formData;
+}
+
+const hasAssetFiles = (assetFiles: Record<string, Record<string, File>>): boolean =>
+  Object.values(assetFiles).some((slots) => Object.keys(slots).length > 0);
 
 function extractApiErrorDetail(error: unknown): string {
   if (typeof error !== "object" || error === null) return String(error);
@@ -104,31 +133,45 @@ export default function TeamAgentsPage() {
 
   const [createManagedInstance, { isLoading: isCreatingInstance }] =
     usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
+  const [createManagedInstanceWithAssets, { isLoading: isCreatingInstanceWithAssets }] =
+    usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation();
   const [patchManagedInstance, { isLoading: isUpdatingInstance }] =
     usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation();
+  const [patchManagedInstanceWithAssets, { isLoading: isUpdatingInstanceWithAssets }] =
+    usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation();
   const [deleteManagedInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
 
   const handleEnroll = async (payload: AgentFormPayload) => {
     if (!teamId) return;
+    const request: CreateAgentInstanceRequest = {
+      template_id: payload.templateId,
+      display_name: payload.displayName,
+      description: payload.description || undefined,
+      tuning_field_values:
+        Object.keys(payload.tuningFieldValues).length > 0
+          ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
+          : undefined,
+      capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+      capability_config_values:
+        payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+          ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+          : undefined,
+    };
     try {
-      await createManagedInstance({
-        teamId,
-        createAgentInstanceRequest: {
-          template_id: payload.templateId,
-          display_name: payload.displayName,
-          description: payload.description || undefined,
-          tuning_field_values:
-            Object.keys(payload.tuningFieldValues).length > 0
-              ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
-              : undefined,
-          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
-          capability_config_values:
-            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
-              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
-              : undefined,
-        },
-      }).unwrap();
+      if (hasAssetFiles(payload.capabilityAssetFiles)) {
+        // Capability asset uploads travel INSIDE the atomic save (#1903): the
+        // multipart companion endpoint relays them to the pod's validate-config.
+        await createManagedInstanceWithAssets({
+          teamId,
+          bodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost:
+            buildAgentSaveFormData(request, payload.capabilityAssetFiles) as unknown as {
+              request: string;
+            },
+        }).unwrap();
+      } else {
+        await createManagedInstance({ teamId, createAgentInstanceRequest: request }).unwrap();
+      }
       showSuccess({ summary: `${agentsNicknameSingular} created` });
       setIsEnrollOpen(false);
       await refetchInstances();
@@ -142,24 +185,36 @@ export default function TeamAgentsPage() {
 
   const handleEdit = async (payload: AgentFormPayload) => {
     if (!teamId || !editingInstance) return;
+    const request: UpdateAgentInstanceRequest = {
+      display_name: payload.displayName,
+      description: payload.description || undefined,
+      tuning_field_values:
+        Object.keys(payload.tuningFieldValues).length > 0
+          ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
+          : undefined,
+      capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+      capability_config_values:
+        payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+          ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+          : undefined,
+    };
     try {
-      await patchManagedInstance({
-        teamId,
-        agentInstanceId: editingInstance.agent_instance_id,
-        updateAgentInstanceRequest: {
-          display_name: payload.displayName,
-          description: payload.description || undefined,
-          tuning_field_values:
-            Object.keys(payload.tuningFieldValues).length > 0
-              ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
-              : undefined,
-          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
-          capability_config_values:
-            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
-              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
-              : undefined,
-        },
-      }).unwrap();
+      if (hasAssetFiles(payload.capabilityAssetFiles)) {
+        await patchManagedInstanceWithAssets({
+          teamId,
+          agentInstanceId: editingInstance.agent_instance_id,
+          bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch:
+            buildAgentSaveFormData(request, payload.capabilityAssetFiles) as unknown as {
+              request: string;
+            },
+        }).unwrap();
+      } else {
+        await patchManagedInstance({
+          teamId,
+          agentInstanceId: editingInstance.agent_instance_id,
+          updateAgentInstanceRequest: request,
+        }).unwrap();
+      }
       showSuccess({ summary: `${agentsNicknameSingular} updated` });
       setEditingInstance(null);
       await refetchInstances();
@@ -321,7 +376,9 @@ export default function TeamAgentsPage() {
 
       <AgentFormModal
         isOpen={isEnrollOpen || editingInstance !== null}
-        isSubmitting={isCreatingInstance || isUpdatingInstance}
+        isSubmitting={
+          isCreatingInstance || isUpdatingInstance || isCreatingInstanceWithAssets || isUpdatingInstanceWithAssets
+        }
         mode={editingInstance ? "edit" : "create"}
         editInstance={editingInstance ?? undefined}
         // Personal team's backend name is a non-localized literal ("Equipe
