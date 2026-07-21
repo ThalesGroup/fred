@@ -142,7 +142,7 @@ fi
 
 section "Docs And Tracking Files Touched"
 printf '%s\n' "${touched_files[@]}" \
-  | rg -n '(^docs/swift/(rfc|backlog|data|tracks|platform)/|^docs/swift/(STATUS|WORKPLAN|PMO-BOARD|README)\.md$|CLAUDE\.md$|AGENTS\.md$)' \
+  | rg -n '(^docs/swift/(rfc|backlog|data|tracks|platform)/|^docs/swift/(STATUS|WORKPLAN|README)\.md$|CLAUDE\.md$|AGENTS\.md$)' \
   || printf 'No docs, tracking, or assistant-governance files detected in touched paths.\n'
 
 section "Temporary Swift-Specific Residue Check: Control-Plane Self-Test Harness Files"

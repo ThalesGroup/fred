@@ -1302,12 +1302,12 @@ The repository currently contains tracking divergence for EVAL-01. The approval 
 3. `docs/swift/WORKPLAN.md`
    - correct the RFC path from `docs/rfc/...` to `docs/swift/rfc/...`;
    - update the current state to reflect shipped trace and CLI foundations.
-4. `docs/swift/PMO-BOARD.md`
-   - add the EVAL backlog link in the currently empty backlog column;
-   - retain the current owner/status unless explicitly changed by PMO.
-5. `docs/swift/STATUS.md` and `docs/swift/data/sprint.yaml`
-   - verify status and owner consistency with the canonical ID registry and PMO board.
-6. `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`
+4. `docs/swift/STATUS.md`
+   - verify status and owner consistency with the canonical ID registry.
+   - (superseded 2026-07-21: `PMO-BOARD.md` and `sprint.yaml`, formerly listed
+     here, were removed — GitHub Issues/Milestones are the only tracking
+     surface now; nothing to sync in their place.)
+5. `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`
    - add implementation phases for Control Plane campaigns, task events, frontend, persistence, security, and OTLP export;
    - close or rewrite questions already resolved by this RFC.
 

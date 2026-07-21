@@ -5,7 +5,8 @@
 **Status:** prerequisite. Must be **fully completed and verified** before any application
 data (Postgres `fred_kea`, OpenFGA tuples) is imported into S3NS.
 **Backlog:** `MIGR-04` in [`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md).
-**Related design:** [`PERSONAL-TEAM-ISOLATION-RFC.md`](../rfc/PERSONAL-TEAM-ISOLATION-RFC.md),
+**Related design:** [`REBAC.md`](../platform/REBAC.md) § Personal teams (current
+design; supersedes the retired `PERSONAL-TEAM-ISOLATION-RFC.md`),
 [`TASK-EVENT-STREAM-RFC.md`](../rfc/TASK-EVENT-STREAM-RFC.md) (the data-migration steps that
 **assume** this prerequisite is met).
 **Keycloak version in scope:** 26.3.0 (Quarkus distribution).

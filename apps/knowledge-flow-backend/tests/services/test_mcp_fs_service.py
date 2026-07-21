@@ -1,9 +1,13 @@
+import logging
+
 import pytest
 from fred_core import (
+    AuthorizationError,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
     KeycloakUser,
 )
+from fred_core.security.models import Resource
 
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import (
     FilesystemReadBounds,
@@ -142,6 +146,28 @@ async def test_list_routes_teams_path_to_scoped_area(app_context):
     assert call_name == "list_area"
     assert args == (_user(), ("acme", "shared", "reports"))
     assert kwargs == {}
+
+
+@pytest.mark.asyncio
+async def test_list_reraises_authorization_error_without_error_log(app_context, caplog):
+    """`AuthorizationError` is an expected, routine denial (ReBAC already logs
+    one bounded WARNING at the point of denial) — `list()` must propagate it
+    unchanged for the controller's `AuthorizationError -> 403` mapping, without
+    also emitting its own ERROR-level traceback (previously it did, via a bare
+    `except Exception: logger.exception(...)`, producing a duplicate stack
+    trace for a non-bug outcome)."""
+    service, scoped_areas, _corpus_area = _service()
+
+    async def raise_authorization_error(*args, **kwargs):
+        raise AuthorizationError("u-1", "can_read", Resource.TEAM, "Not authorized")
+
+    scoped_areas.list_area = raise_authorization_error
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(AuthorizationError):
+            await service.list(_user(), "/teams/personal-u-1")
+
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)
 
 
 @pytest.mark.asyncio

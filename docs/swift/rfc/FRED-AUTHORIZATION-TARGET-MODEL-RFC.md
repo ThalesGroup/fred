@@ -2,8 +2,11 @@
 
 **Status:** Proposed target model; Parts 5-8 are implemented in the v2.1.1
 candidate. The former item `8b` — removal of the Keycloak-`groups`-claim-derived
-`team_member` fallback — is complete and its personal-space regression is corrected
-and recorded in this RFC and the runtime contract. Part 7 (`AUTHZ-06`) implements
+`team_member` fallback — is complete; its personal-space regression went
+through two fixes (an identity-only guard, then superseded by `AUTHZ-08`'s
+real, write-guarded ReBAC tuple — see `platform/REBAC.md` § Personal teams)
+before being fully closed, including the "list my teams" enumeration case the
+first fix couldn't cover. Part 7 (`AUTHZ-06`) implements
 cumulative team roles. Part 8 (`AUTHZ-07`, revised §42) implements JWT plus
 deploy-secret dual proof, self-promotion only, a durable one-time completion marker,
 and declarative provisioning as specified by `PLATFORM-IMPORT-RFC.md`. The superseded

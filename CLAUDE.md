@@ -22,12 +22,16 @@ safe change aligned with the documented architecture.
 
 Run this audit before any implementation, spec, or doc change.
 
-**1. GitHub issue lookup first** — `docs/swift/backlog/BACKLOG.md`,
-`docs/swift/WORKPLAN.md`, and `docs/swift/PMO-BOARD.md` are frozen (2026-07-16)
-and no longer track active work. **GitHub Issues + Milestones
-(`swift-golive`, `swift ga`) are the source of truth.** Before starting
-anything, check `gh issue list` (by title keyword or milestone) for an
-existing issue covering the task — do not create a duplicate.
+**1. GitHub issue lookup first** — `docs/swift/backlog/BACKLOG.md` and
+`docs/swift/WORKPLAN.md` are frozen (2026-07-16) and no longer track active
+work. `docs/swift/PMO-BOARD.md` and `docs/swift/data/sprint.yaml` were removed
+(2026-07-21) — they duplicated GitHub without ever being kept current. **GitHub
+Issues + Milestones (`swift-golive`, `swift ga`) are the single source of
+truth for sprints, issues, and milestones.** Before starting anything, check
+`gh issue list` (by title keyword or milestone) for an existing issue covering
+the task — do not create a duplicate. For status/planning questions, query
+GitHub directly (`gh issue list`, `gh issue view`) rather than looking for a
+tracking doc to read.
 
 **2. ID lookup (narrow scope)** — open `docs/swift/data/id-legend.yaml` only
 when the task is tied to an RFC or a genuine cross-cutting architecture
@@ -114,8 +118,10 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 
-`docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, and `PMO-BOARD.md` are frozen —
-never write to them. Do not mark backlog checkboxes or add PMO/WORKPLAN rows.
+`docs/swift/backlog/BACKLOG.md` and `WORKPLAN.md` are frozen — never write to
+them. Do not mark backlog checkboxes or add WORKPLAN rows. `PMO-BOARD.md` and
+`sprint.yaml` no longer exist — never recreate them; track status on the
+GitHub issue instead.
 
 **Close-out statement (required in every final reply):**
 
@@ -176,9 +182,12 @@ For the actual list of active/open work, query GitHub directly:
 `--milestone "swift ga"` (due 2026-09-30). Do not expect `STATUS.md` to mirror
 issue content — it won't, by design.
 
-`docs/swift/backlog/BACKLOG.md`, `docs/swift/WORKPLAN.md`, and
-`docs/swift/PMO-BOARD.md` are frozen (2026-07-16) — historical record of the
-runtime migration only, not live tracking. Do not treat them as current status.
+`docs/swift/backlog/BACKLOG.md` and `docs/swift/WORKPLAN.md` are frozen
+(2026-07-16) — historical record of the runtime migration only, not live
+tracking. Do not treat them as current status. `docs/swift/PMO-BOARD.md` and
+`docs/swift/data/sprint.yaml` were removed (2026-07-21): they mirrored GitHub
+without ever being kept current. Sprints, issues, and milestones live on
+GitHub only — query it directly, do not look for a doc mirror.
 
 The mandatory read order below applies to **development tasks only**. Skip for status queries.
 
@@ -275,4 +284,5 @@ Do not silently expand scope. Do not silently delete content.
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
 | Track manifests                          | `docs/swift/tracks/`                                  |
-| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `PMO-BOARD.md`, `docs/PMO.md` |
+| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `docs/PMO.md` |
+| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `PMO-BOARD.md`/`sprint.yaml` removed 2026-07-21, never recreate them |

@@ -137,7 +137,7 @@ Behavior-preserving by construction (org defaults mirror the current role matrix
 
 ## 8. Backlog & execution
 Backlog entry under a new `docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md` (or a section in `BACKLOG.md` — see
-§9), one sub-item per bucket; `id-legend.yaml` + `PMO-BOARD.md` rows; GitHub issue links RFC + backlog before
+§9), one sub-item per bucket; `id-legend.yaml` row; GitHub issue links RFC + backlog before
 implementation (CLAUDE.md Step 3.5).
 
 ## 9. Decisions (confirmed 2026-06-29)
