@@ -242,6 +242,8 @@ _RBAC = _obj({
 })
 
 _SERVICE_ACCOUNT = _obj({
+    "enabled": _BOOL,
+    "name": _STRING,
     "annotations": _OBJECT_FREE,
     "labels": _OBJECT_FREE,
     "automountServiceAccountToken": _BOOL,

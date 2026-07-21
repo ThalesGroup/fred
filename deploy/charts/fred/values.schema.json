@@ -724,6 +724,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -2375,6 +2381,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -3152,6 +3164,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -7662,6 +7680,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -12172,6 +12196,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -14084,6 +14114,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
