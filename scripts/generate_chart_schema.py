@@ -51,6 +51,10 @@ def _inline_refs(schema: dict) -> dict:
                     name = ref[len("#/$defs/"):]
                     if name in seen:
                         return {}  # cycle guard: emit empty object
+                    if name not in defs:
+                        raise ValueError(
+                            f"Invalid schema: $ref '{ref}' points to missing definition '{name}' in $defs"
+                        )
                     return _resolve(copy.deepcopy(defs[name]), seen | {name})
                 return node
             return {k: _resolve(v, seen) for k, v in node.items() if k != "$defs"}
