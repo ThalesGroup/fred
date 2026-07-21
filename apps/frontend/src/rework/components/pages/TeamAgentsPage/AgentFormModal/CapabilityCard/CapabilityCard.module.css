@@ -57,3 +57,53 @@
   background: var(--surface-container);
   padding: var(--spacing-m);
 }
+
+/* Thin separator between two ui.group sections of the config form */
+.sectionDivider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--outline-retreat);
+}
+
+/* "Advanced settings" toggle: plain left-aligned text + chevron, no button
+ * chrome — clicking it reveals the ui.advanced fields below. */
+.advancedToggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  padding: 0;
+  color: var(--on-surface-retreat);
+}
+
+.advancedToggle:hover {
+  color: var(--on-surface);
+}
+
+.advancedToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.advancedToggleLabel {
+  font: var(--font-label-medium);
+}
+
+/* Field stack revealed under the advanced toggle */
+.advancedFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+/* A field gated by ui.visible_when sits visually under its gating sibling:
+ * indented behind a thin vertical guide, the classic nested-setting cue. */
+.dependentField {
+  margin-left: var(--spacing-2xs);
+  border-left: 2px solid var(--outline-retreat);
+  padding-left: var(--spacing-m);
+}

@@ -54,6 +54,7 @@ class _FakePort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -62,6 +63,7 @@ class _FakePort(DocumentSearchPort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
+                "attachments_only": attachments_only,
             }
         )
         return DocumentSearchResult(hits=(_hit("d1"),))

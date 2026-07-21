@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { useId } from "react";
+import { Fragment, type PropsWithChildren, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
@@ -35,6 +36,84 @@ interface CapabilityCardProps {
  * capability plus, when active, its `config_fields` rendered through the shared
  * metadata-driven {@link TuningFieldRenderer} (no bespoke per-field UI here).
  */
+/**
+ * The active capability's `config_fields` form. Fields sharing a `ui.group`
+ * form a visual section: a thin divider is drawn whenever the group changes
+ * between two consecutive VISIBLE fields (hidden fields — `ui.hide` or an
+ * unsatisfied `ui.visible_when` — never produce dangling dividers). Fields
+ * flagged `ui.advanced` render inside a collapsed "Advanced settings"
+ * disclosure below the main section.
+ */
+function CapabilityConfigForm({
+  configFields,
+  configValues,
+  disabled,
+  teamId,
+  onConfigChange,
+}: {
+  configFields: NonNullable<CapabilityCatalogEntry["config_fields"]>;
+  configValues: Record<string, unknown>;
+  disabled: boolean;
+  teamId?: string;
+  onConfigChange: (key: string, value: unknown) => void;
+}) {
+  const { t } = useTranslation();
+  const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
+  const visibleFields = configFields.filter(
+    (f) => !f.ui?.hide && (!f.ui?.visible_when || Boolean(effectiveValues[f.ui.visible_when])),
+  );
+  const mainFields = visibleFields.filter((f) => !f.ui?.advanced);
+  const advancedFields = visibleFields.filter((f) => f.ui?.advanced);
+
+  const renderGrouped = (fields: typeof visibleFields) =>
+    fields.map((field, index) => (
+      <Fragment key={field.key}>
+        {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
+        {/* A ui.visible_when field only exists under its gating sibling — a
+            slight indent makes the subordination readable. */}
+        <div className={field.ui?.visible_when ? styles.dependentField : undefined}>
+          <TuningFieldRenderer
+            field={field}
+            value={configValues[field.key]}
+            onChange={onConfigChange}
+            disabled={disabled}
+            teamId={teamId}
+            allValues={effectiveValues}
+          />
+        </div>
+      </Fragment>
+    ));
+
+  return (
+    <div className={styles.subForm}>
+      {renderGrouped(mainFields)}
+      {advancedFields.length > 0 && (
+        <AdvancedSection title={t("rework.teams.formAgent.advancedSettings")}>
+          <div className={styles.advancedFields}>{renderGrouped(advancedFields)}</div>
+        </AdvancedSection>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Collapsed-by-default host of the `ui.advanced` fields, drawn as a clickable
+ * labeled divider (`──── Advanced settings ⌄ ────`) so it reads as part of the
+ * form's section language rather than a nested boxed accordion.
+ */
+function AdvancedSection({ title, children }: PropsWithChildren<{ title: string }>) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className={styles.advancedToggle} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className={styles.advancedToggleLabel}>{title}</span>
+        <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
+      </button>
+      {open && children}
+    </>
+  );
+}
+
 export function CapabilityCard({
   capability,
   teamId,
@@ -61,20 +140,7 @@ export function CapabilityCard({
         </label>
       </div>
 
-      {hasOptions && (
-        <div className={styles.subForm}>
-          {configFields.map((field) => (
-            <TuningFieldRenderer
-              key={field.key}
-              field={field}
-              value={configValues[field.key]}
-              onChange={onConfigChange}
-              disabled={disabled}
-              teamId={teamId}
-            />
-          ))}
-        </div>
-      )}
+      {hasOptions && <CapabilityConfigForm {...{ configFields, configValues, disabled, teamId, onConfigChange }} />}
     </li>
   );
 }

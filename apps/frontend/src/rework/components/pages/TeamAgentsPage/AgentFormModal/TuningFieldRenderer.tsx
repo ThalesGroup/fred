@@ -37,9 +37,20 @@ type TuningFieldRendererProps = {
   disabled: boolean;
   error?: string;
   teamId?: string;
+  /** Effective values (current input or declared default) of every sibling field
+   * in the same form — drives the `ui.visible_when` conditional display. */
+  allValues?: Record<string, unknown>;
 };
 
-export function TuningFieldRenderer({ field, value, onChange, disabled, error, teamId }: TuningFieldRendererProps) {
+export function TuningFieldRenderer({
+  field,
+  value,
+  onChange,
+  disabled,
+  error,
+  teamId,
+  allValues,
+}: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
   const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
@@ -84,6 +95,9 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   };
 
   if (field.ui?.hide) return null;
+  // `ui.visible_when`: show only while the referenced sibling's effective
+  // value is truthy. Display-only — the hidden field keeps its stored value.
+  if (field.ui?.visible_when && !allValues?.[field.ui.visible_when]) return null;
 
   const fieldValue = value ?? field.default ?? "";
   const label = `${field.title}${field.required ? " *" : ""}`;

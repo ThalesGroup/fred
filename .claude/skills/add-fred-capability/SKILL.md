@@ -62,7 +62,8 @@ Declare as ClassVars on the subclass (`base.py` is authoritative):
 - `ConfigModel` — what the user sends at agent creation → drives `manifest.config_fields`.
   A `FieldSpec` may set `ui=UIHints(widget="document_libraries")` to render the
   library/document tree picker in the agent form instead of the type-derived default
-  input (#2023); unknown widget ids fall back gracefully.
+  input (#2023); unknown widget ids fall back gracefully. `ui.visible_when="<sibling_key>"`
+  hides the field while that sibling is falsy (display-only — handle the value anyway).
 - `StoredConfigModel` — what is persisted after `validate_config`; **defaults to
   `ConfigModel`**, so omit it unless save-time enrichment derives extra state.
 - `TurnOptionsModel` — typed chat-time values from a chat control; `EmptyModel` if none. `[T0]`

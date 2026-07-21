@@ -1398,6 +1398,7 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}"
       },
       "formAgent": {
+        "advancedSettings": "Paramètres avancés",
         "createdBy": "Créé par {{user}}",
         "updatedBy": "Modifié par {{user}}",
         "fields": {

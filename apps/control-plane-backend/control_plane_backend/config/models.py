@@ -106,6 +106,12 @@ class ManagedAgentUiHints(BaseModel):
     # widget (e.g. "document_libraries"); unknown/None falls back to the
     # type-derived default input.
     widget: str | None = None
+    # Mirrors fred_sdk UIHints.visible_when: sibling-field key gating this
+    # field's visibility (display-only; the value is kept while hidden).
+    visible_when: str | None = None
+    # Mirrors fred_sdk UIHints.advanced: rendered inside the collapsed
+    # "Advanced settings" disclosure instead of the main section.
+    advanced: bool = False
 
 
 class ManagedAgentFieldSpec(BaseModel):

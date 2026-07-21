@@ -368,7 +368,9 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                     {t("rework.resources.loading")}
                   </div>
                 )}
-                {page && !page.loading && page.docs.length === 0 && (
+                {/* Leaf folders only: a folder whose content IS its subfolders
+                    is not "empty", so no hint under the children. */}
+                {page && !page.loading && page.docs.length === 0 && children.length === 0 && (
                   <div className={styles.hint} style={{ paddingLeft: docIndent }}>
                     {t("rework.resources.empty.folder")}
                   </div>

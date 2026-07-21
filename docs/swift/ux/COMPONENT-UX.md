@@ -1275,6 +1275,31 @@ tree instead of the raw tag-id `TagInput`. Unknown widget ids fall back to the
 via `GET /users/by-ids`, and shows "Updated by …" when the instance has been
 user-edited (`updated_by`).
 
+### `document_access` config/chat parity with the legacy search tool
+
+The Document access capability now offers the exact configuration surface and
+composer controls of "Document search (legacy)": Document library picker and
+Document picker toggles (split), Bind to specific libraries gating the
+bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
+like the legacy tool), File attachments, Search policy picker (configured
+policy becomes the picker default; enforced only when the picker is hidden),
+RAG scope picker + default. All emitted as the same stock widgets — the
+choices travel on `RuntimeContext`, which the v2 document-search adapter
+already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
+revalidate unchanged (the single scope toggle maps onto the split ones, and a
+pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
+document libraries" raw tag-id input now renders as the library tree, gated
+on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
+`mcp_catalog.yaml`.
+
+### `DocumentWorkspace` — library deletion
+
+Corpus library folders now carry a delete action (same `canUpdateResources`
+gate as upload/new-folder), with a confirmation dialog. Deletion cascades
+server-side: sub-folders and the untagging of contained documents are the
+backend's `delete_tag_for_user`. Errors surface as a toast with the backend
+detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
 ### `CategoryPicker` / prompt category surfaces
 
 Pickers and filters offer exactly 7 functional categories (doc-assist,
