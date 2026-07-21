@@ -69,6 +69,75 @@
   gap: var(--spacing-m);
 }
 
+.toolChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+}
+
+.toolChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  background: var(--secondary-container);
+  padding: 2px var(--spacing-s);
+  color: var(--on-secondary-container);
+  font: var(--font-label-medium);
+}
+
+.metricList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.metricRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface);
+}
+
+.metricMeta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.metricName {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.metricDesc {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.paramRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+}
+
+.paramOption {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
 .caseCard {
   display: flex;
   flex-direction: column;
