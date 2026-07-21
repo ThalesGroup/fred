@@ -444,13 +444,6 @@ class DocumentAccessCapability(
                 description="Scope used when the user has not overridden it.",
             ),
             FieldSpec(
-                key="document_uids",
-                type="array",
-                item_type="string",
-                title="Documents",
-                description="Restrict search to these specific document uids.",
-            ),
-            FieldSpec(
                 key="default_top_k",
                 type="integer",
                 title="Default results",
