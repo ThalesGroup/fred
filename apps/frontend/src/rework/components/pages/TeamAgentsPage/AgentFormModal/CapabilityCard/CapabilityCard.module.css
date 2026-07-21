@@ -99,3 +99,11 @@
   flex-direction: column;
   gap: var(--spacing-m);
 }
+
+/* A field gated by ui.visible_when sits visually under its gating sibling:
+ * indented behind a thin vertical guide, the classic nested-setting cue. */
+.dependentField {
+  margin-left: var(--spacing-2xs);
+  border-left: 2px solid var(--outline-retreat);
+  padding-left: var(--spacing-m);
+}

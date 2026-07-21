@@ -69,14 +69,18 @@ function CapabilityConfigForm({
     fields.map((field, index) => (
       <Fragment key={field.key}>
         {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
-        <TuningFieldRenderer
-          field={field}
-          value={configValues[field.key]}
-          onChange={onConfigChange}
-          disabled={disabled}
-          teamId={teamId}
-          allValues={effectiveValues}
-        />
+        {/* A ui.visible_when field only exists under its gating sibling — a
+            slight indent makes the subordination readable. */}
+        <div className={field.ui?.visible_when ? styles.dependentField : undefined}>
+          <TuningFieldRenderer
+            field={field}
+            value={configValues[field.key]}
+            onChange={onConfigChange}
+            disabled={disabled}
+            teamId={teamId}
+            allValues={effectiveValues}
+          />
+        </div>
       </Fragment>
     ));
 

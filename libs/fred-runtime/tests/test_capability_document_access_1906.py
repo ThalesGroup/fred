@@ -541,6 +541,22 @@ async def test_attachments_only_pins_search_to_the_session_scope(
     assert "document_scope" not in widgets
     assert "attach_files" in widgets
 
+    # Inert without attachments: the flag must not strand an agent whose
+    # attach button is disabled — the picker returns and the search is normal.
+    no_attach = cap.ConfigModel(
+        search_attachments_only=True, show_attach_files_control=False
+    )
+    assert "document_scope" in [c.widget for c in cap.chat_controls(no_attach)]
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config={"search_attachments_only": True, "show_attach_files_control": False},
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["attachments_only"] is False
+
 
 @pytest.mark.asyncio
 async def test_general_only_scope_short_circuits(

@@ -165,6 +165,9 @@ class DocumentAccessConfig(BaseModel):
     # Enforced pod-side: the tool passes `attachments_only=True` to the
     # DocumentSearchPort, whose adapter searches the session scope only
     # (include_corpus_scope=False); the scope-picker chat control is dropped.
+    # Only meaningful while attachments are enabled: the field is gated on
+    # `show_attach_files_control` in the form AND inert without it (a stored
+    # True must not strand an agent that can no longer receive attachments).
     search_attachments_only: bool = False
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
@@ -306,7 +309,9 @@ class _DocumentAccessMiddleware(AgentMiddleware):
                 library_tag_ids=scoped_library_tag_ids,
                 document_uids=scoped_document_uids,
                 search_policy=search_policy,
-                attachments_only=config.search_attachments_only,
+                attachments_only=(
+                    config.search_attachments_only and config.show_attach_files_control
+                ),
             )
             hits = result.hits
 
@@ -432,7 +437,7 @@ class DocumentAccessCapability(
                     "searched."
                 ),
                 default=False,
-                ui=UIHints(group="scope"),
+                ui=UIHints(group="scope", visible_when="show_attach_files_control"),
             ),
             FieldSpec(
                 key="default_top_k",
@@ -529,7 +534,7 @@ class DocumentAccessCapability(
         bound = (config.library_tag_ids or None) if config.bind_libraries else None
         show_libraries = (not config.bind_libraries) and config.show_library_selection
         show_documents = config.show_document_selection
-        if config.search_attachments_only:
+        if config.search_attachments_only and config.show_attach_files_control:
             show_libraries = show_documents = False
             bound = None
         if show_libraries or show_documents or bound:
