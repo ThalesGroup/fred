@@ -46,7 +46,8 @@ class CheapExtractiveSummarizer(BaseDocSummarizer):
 
     # ---- BaseDocSummarizer API ----
 
-    def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
+    def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
+        """`instruction` is ignored: this fallback has no LLM to steer with it."""
         sents = [s.strip() for s in self._SPLIT.split(text or "") if s.strip()]
         if not sents:
             return ""
