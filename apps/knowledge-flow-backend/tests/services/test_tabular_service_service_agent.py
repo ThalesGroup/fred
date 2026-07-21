@@ -99,7 +99,7 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
 
     assert await service.list_datasets(_user(["service_agent"])) == []
 
-    with pytest.raises(Exception):
+    with pytest.raises(PermissionError):
         await service.describe_dataset(
             _user(["service_agent"]),
             "doc-team-a",

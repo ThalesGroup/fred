@@ -220,12 +220,14 @@ class GcsFilesystem(BaseFilesystem):
             except NotFound:
                 logger.warning("[GCS_DELETE] already gone: %s", blob.name)
 
-        # Delete the object itself and a possible directory marker.
+        # Delete the object itself and a possible directory marker. The marker in
+        # particular may simply never have existed, so NotFound here is routine,
+        # not warning-worthy.
         for key in (resolved, prefix):
             try:
                 self.bucket.blob(key).delete()
             except NotFound:
-                logger.warning("[GCS_DELETE] already gone: %s", key)
+                logger.debug("[GCS_DELETE] already gone: %s", key)
 
     async def print_root_dir(self) -> str:
         """Return the logical root URI in ``gs://bucket/prefix`` form."""

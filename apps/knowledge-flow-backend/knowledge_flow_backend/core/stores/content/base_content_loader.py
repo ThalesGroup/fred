@@ -33,12 +33,29 @@ class BaseContentLoader(ABC):
         Must be overridden by loaders that support streaming.
         Default: fetch to temp file and open.
         """
-        import io
+        import shutil
         import tempfile
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             tmp_path = self.fetch_by_relative_path(relative_path, Path(tmpdir))
-            return io.BytesIO(tmp_path.read_bytes())
+            stream = open(tmp_path, "rb")
+        except Exception:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise
+
+        # The temp dir must outlive this call (unlike a `with TemporaryDirectory()`
+        # block, which would delete it — and the fd's backing file — before the
+        # caller ever reads from the returned stream). Clean it up once the caller
+        # closes the stream instead.
+        original_close = stream.close
+
+        def _close_and_cleanup() -> None:
+            original_close()
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        stream.close = _close_and_cleanup
+        return stream
 
     def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
         raise NotImplementedError("This loader does not support direct fetch by relative path.")

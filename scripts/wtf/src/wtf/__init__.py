@@ -869,7 +869,10 @@ def remove_worktree_and_branch(branch: str, prune: bool) -> None:
     ok(f"Worktree removed: {wt}")
 
     # Delete the branch if fully merged
-    result = subprocess.run(["git", "branch", "--merged"], capture_output=True, text=True)
+    try:
+        result = run_quiet(["git", "branch", "--merged"])
+    except subprocess.CalledProcessError:
+        raise click.ClickException("git failed to list merged branches — see error above")
     merged_branches = {
         line.strip().removeprefix("* ").strip()
         for line in result.stdout.splitlines()
