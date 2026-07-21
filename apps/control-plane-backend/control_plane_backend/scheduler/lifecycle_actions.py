@@ -129,8 +129,9 @@ async def delete_conversation_and_mark_done(
 
     if not receipt.ok:
         logger.warning(
-            "lifecycle erase incomplete for session %s; leaving queued for retry",
+            "lifecycle erase incomplete for session %s; leaving queued for retry. stores=%r",
             session_id,
+            [(s.store, s.ok, s.error) for s in receipt.stores],
         )
         return ConversationActionResult(
             conversation_id=session_id, action="erase_incomplete", ok=False

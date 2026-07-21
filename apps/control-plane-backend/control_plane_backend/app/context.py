@@ -142,6 +142,7 @@ class ApplicationContext:
         return self._kpi_writer
 
     def get_kpi_store(self):  # -> OpenSearchKPIStore | None
+        from fred_core.common.resilient_sink import ResilientSinkStore
         from fred_core.kpi.kpi_writer import KPIWriter
         from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
         from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
@@ -152,6 +153,11 @@ class ApplicationContext:
         store = writer.store
         if isinstance(store, PrometheusKPIStore):
             store = store._delegate
+        # ResilientSinkStore (#2009) wraps the real store for fail-open writes —
+        # unwrap it too, or every read-side KPI-preset query 503s even though
+        # the write path underneath is a perfectly healthy OpenSearchKPIStore.
+        if isinstance(store, ResilientSinkStore):
+            store = store.wrapped
         return store if isinstance(store, OpenSearchKPIStore) else None
 
     def start_metrics_exporter(self) -> None:
