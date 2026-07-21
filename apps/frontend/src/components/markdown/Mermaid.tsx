@@ -339,8 +339,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
   const previewMaxHeight = "60vh";
-  const previewSurfaceBg =
-    theme.palette.mode === "dark" ? theme.palette.background.paper : theme.palette.background.paper;
+  const previewSurfaceBg = theme.palette.background.paper;
   const previewSurfaceBorder =
     theme.palette.mode === "dark"
       ? `1px solid ${alpha(theme.palette.common.white, 0.14)}`

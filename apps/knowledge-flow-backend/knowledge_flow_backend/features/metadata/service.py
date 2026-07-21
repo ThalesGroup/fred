@@ -335,6 +335,7 @@ class MetadataService:
                 return None
 
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
+        return None
 
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
         """

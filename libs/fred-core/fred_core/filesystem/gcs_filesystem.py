@@ -225,7 +225,7 @@ class GcsFilesystem(BaseFilesystem):
             try:
                 self.bucket.blob(key).delete()
             except NotFound:
-                pass
+                logger.warning("[GCS_DELETE] already gone: %s", key)
 
     async def print_root_dir(self) -> str:
         """Return the logical root URI in ``gs://bucket/prefix`` form."""

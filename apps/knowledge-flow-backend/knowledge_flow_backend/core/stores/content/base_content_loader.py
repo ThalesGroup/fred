@@ -33,11 +33,12 @@ class BaseContentLoader(ABC):
         Must be overridden by loaders that support streaming.
         Default: fetch to temp file and open.
         """
+        import io
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = self.fetch_by_relative_path(relative_path, Path(tmpdir))
-            return open(tmp_path, "rb")
+            return io.BytesIO(tmp_path.read_bytes())
 
     def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
         raise NotImplementedError("This loader does not support direct fetch by relative path.")

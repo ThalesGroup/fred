@@ -59,7 +59,9 @@ def _build_tool_error_message(
             except Exception:
                 detail = raw[:300] if raw else str(inner)
     except httpx.ResponseNotRead:
-        pass
+        logger.debug(
+            "HTTP response body not read (streamed response); using default error message"
+        )
     except Exception:
         logger.warning(
             "Failed to extract HTTP response body for error message", exc_info=True
@@ -87,7 +89,9 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             # keep logs short; we only need a hint
             body_preview = f" | body: {txt[:300].replace(chr(10), ' ')}"
     except httpx.ResponseNotRead:
-        pass
+        logger.debug(
+            "HTTP response body not read (streamed response); skipping body preview"
+        )
     except Exception:
         logger.warning("Failed to extract HTTP response body", exc_info=True)
 
