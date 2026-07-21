@@ -654,10 +654,21 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """List resources a user can access for one permission."""
+        resource_type = _resource_for_permission(permission)
+        # Self-heal the caller's own personal-team tuple before enumerating
+        # (AUTHZ-08 follow-up): `lookup_resources`/OpenFGA `ListObjects` never
+        # goes through `has_user_permission`/`check_user_team_permission_or_raise`,
+        # so without this a first-touch user's own personal team was silently
+        # missing from "list my teams" results (e.g. the `/fs` virtual `/teams`
+        # directory) until some other check-triggering call happened to
+        # provision it first.
+        await self._ensure_personal_team_editor(
+            user, resource_type, personal_team_id(user.uid)
+        )
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
-            resource_type=_resource_for_permission(permission),
+            resource_type=resource_type,
             consistency_token=consistency_token,
         )
 

@@ -21,6 +21,7 @@ import pytest
 from fred_core.common.team_id import personal_team_id
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
+    AgentPermission,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -167,6 +168,20 @@ class _ContextualRelationsSpyEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         return []
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # Pretend the tuple already exists so `lookup_user_resources`'s
+        # personal-team self-heal (AUTHZ-08 follow-up) is a no-op here — this
+        # class exists to spy on `contextual_relations`, not to exercise
+        # self-heal (see `_PersonalTeamAwareEngine` for that).
+        return True
 
     async def has_permission(
         self,
@@ -412,6 +427,58 @@ async def test_ensure_personal_team_editor_skips_when_rebac_disabled() -> None:
         await engine.check_user_permission_or_raise(
             user, TeamPermission.CAN_READ, team_id
         )
+
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_self_heals_personal_team_on_first_enumeration() -> (
+    None
+):
+    """Regression for the enumeration gap found in the AUTHZ-08 review: a
+    first-touch user whose very first ReBAC-touching call is "list my teams"
+    (e.g. the `/fs` virtual `/teams` directory) must still get their own
+    personal-team tuple self-healed — `lookup_resources`/OpenFGA `ListObjects`
+    never went through `has_user_permission`/`check_user_team_permission_or_raise`,
+    so without wiring self-heal into `lookup_user_resources` too, the owner's
+    own personal team was silently absent from every "list my teams" result
+    until some unrelated check-triggering call happened to provision it first.
+    """
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+
+    assert engine.added_relations == [
+        Relation(
+            subject=RebacReference(Resource.USER, user.uid),
+            relation=RelationType.TEAM_EDITOR,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_self_heal_is_idempotent() -> None:
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+
+    assert len(engine.added_relations) == 1
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_skips_self_heal_for_non_team_permission() -> None:
+    """Enumerating a non-team resource type (e.g. "list my agents") must never
+    trigger the personal-team self-heal — it is scoped to `Resource.TEAM`
+    enumeration only, same as the existing check-path self-heal."""
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+
+    await engine.lookup_user_resources(user, AgentPermission.READ)
 
     assert engine.added_relations == []
 

@@ -287,45 +287,25 @@ authorizes teams the user actually has a relation to. A missing team on a manage
 request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
 survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
 
-**Personal spaces are real ReBAC team objects (AUTHZ-08, 2026-07-20, supersedes
-AUTHZ-05 item 8b).** A personal space (`fred_core.common.personal_team_id(uid)`)
-has no `team_metadata` row — it stays a synthetic, system-recognized team on the
-control-plane product surface (`build_personal_team`) — but it is a first-class
-object in the ReBAC graph, exactly like a collaborative team. `agent_app.py`
-carries no personal-space-specific authorization code at all; the plain
-`rebac.check_user_team_permission_or_raise(user, CAN_READ, team_id)` call below
-handles it correctly because of two `fred-core` mechanisms shared by every
-backend (not just this runtime):
-
-- `RebacEngine.check_user_permission_or_raise`/`has_user_permission` self-heal
-  the caller's own `user:<uid> team_editor team:personal-<uid>` tuple on first
-  touch, whenever `team_id == personal_team_id(user.uid)` — idempotent (checked
-  via `has_direct_relation` before writing, so it doesn't re-write or re-audit
-  on every request). `team_editor` was chosen because it exactly reproduces
-  `build_personal_team`'s hardcoded permission set (`can_read`,
-  `can_update_resources`, `can_update_agents`).
-- `RebacEngine.add_relation` — the one audited write chokepoint every relation
-  write funnels through — refuses any tuple naming a personal team except that
-  owner self-grant and the structural `organization -> team` edge (written by
-  `ensure_team_organization_relations` for every team, personal or not). No
-  admin API, import/export path, or future caller can write a tuple granting
-  anyone else access to someone else's personal space; this is what makes a
-  real, persisted tuple safe here.
+**Personal spaces are real ReBAC team objects.** A personal space
+(`fred_core.common.personal_team_id(uid)`) has no `team_metadata` row — it
+stays a synthetic, system-recognized team on the control-plane product
+surface (`build_personal_team`) — but it is a first-class object in the ReBAC
+graph, exactly like a collaborative team. `agent_app.py` carries no
+personal-space-specific authorization code at all; the plain
+`rebac.check_user_team_permission_or_raise(user, CAN_READ, team_id)` call
+below handles it correctly, because `fred-core` self-heals the owner's own
+tuple and write-guards every other write to a personal team — see
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
+for the full mechanism, shared by every backend, not just this runtime.
 
 Net effect at this call site: the caller's own personal space authorizes
 (audited `rebac_authorized`, same as any other team); another user's personal
-space, or the bare `"personal"` alias (for which no tuple is ever provisioned),
-denies (audited `rebac_denied`) — with no special-casing needed in this file.
-`service_agent` callers are unaffected: their team-scoped, OpenFGA-free
-authorization (§ below, RFC EVAL-AUTH Solution A) is checked first and returns
-before the `CAN_READ` check is reached.
-
-No Keycloak group, claim, or role feeds any of this — the removal of
-`groups_list_to_relations`/`_user_contextual_relations` (AUTHZ-05 item 8b) is
-unaffected; AUTHZ-08 replaces both the contextual (never-persisted)
-`team_member` relation that helper used to grant for personal spaces AND the
-identity-only guard that temporarily replaced it here, with one real, narrowly
-write-guarded tuple provisioned in `fred-core` for every backend.
+space, or the bare `"personal"` alias (for which no tuple is ever
+provisioned), denies (audited `rebac_denied`) — with no special-casing needed
+in this file. `service_agent` callers are unaffected: their team-scoped,
+OpenFGA-free authorization (§ below, RFC EVAL-AUTH Solution A) is checked
+first and returns before the `CAN_READ` check is reached.
 
 **Architectural constraint (unchanged):**
 
@@ -1110,8 +1090,8 @@ deleted). Personal teams are now real ReBAC team objects: `fred-core`'s
 `RebacEngine.check_user_permission_or_raise`/`has_user_permission` self-heal
 the owner's own `team_editor` tuple on a personal team on first touch, and
 `RebacEngine.add_relation` refuses any other tuple naming a personal team. See
-§2.2 above and `docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md` §"REBAC" for the
-full design.
+§2.2 above and [`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
+for the full design.
 
 **Why.** Live-stack testing (2026-07-20) found the AUTHZ-05 item 8b guard was
 never generalized past `agent_app.py` — every other consumer of a personal
@@ -1125,6 +1105,21 @@ guard it also makes `ListObjects`/enumeration (`lookup_user_resources`) work
 correctly for personal spaces.
 
 No OpenAPI/type changes — this is authorization-internals only.
+
+### 8.20 ✅ Personal-team enumeration self-heal — AUTHZ-08 follow-up (2026-07-21)
+
+**What changed.** §8.19's claim that a real tuple "makes `ListObjects`/
+enumeration (`lookup_user_resources`) work correctly for personal spaces" was
+not yet true when written: self-heal was wired into the permission-*check*
+methods only. `fred-core`'s `RebacEngine.lookup_user_resources` now self-heals
+the caller's own personal-team tuple too, before enumerating — see
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08).
+
+**Why.** A first-touch user whose first authenticated call was an
+enumeration (e.g. `GET /fs/list?path=/teams`, listing "teams I can read")
+rather than a permission check on a known team id got an empty result — their
+own personal team was silently missing until some other call happened to
+provision it first. No OpenAPI/type changes.
 
 ---
 

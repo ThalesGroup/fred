@@ -1280,3 +1280,16 @@ team space returns the team's prompts + platform defaults only; the personal
 space returns the caller's prompts (scope `personal`) + defaults. Response
 shape unchanged. Already-attached personal prompts keep resolving at
 prepare-execution (see `design/PROMPTS.md` §5/§6).
+
+## 21. Contract Notes — personal team isolation rule (CTRLP-10 / AUTHZ-08)
+
+**Personal team isolation rule:** the personal team ID is `personal-{user.uid}`
+(`fred_core.common.personal_team_id`) — no two users share a personal team.
+Every team-scoped session, agent-instance, and prompt endpoint enforces
+isolation by team membership; no additional per-resource `user_id` filter is
+required or maintained for personal-space resources. The `"personal"` string
+accepted on some routes is a bootstrap-era URL alias resolved server-side to
+the caller's own canonical ID — it is never itself a stored value. Full
+authorization mechanism (self-provisioned ReBAC tuple, write-guarded):
+[`platform/REBAC.md` § Personal
+teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08).
