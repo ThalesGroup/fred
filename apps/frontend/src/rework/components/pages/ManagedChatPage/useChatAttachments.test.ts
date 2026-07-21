@@ -26,6 +26,18 @@ describe("buildAttachmentsMarkdown", () => {
     expect(buildAttachmentsMarkdown([attachment], [])).toContain("- report.pdf: conversation document");
   });
 
+  it("carries the internal document uid so document tools can resolve the file", () => {
+    const attachment = {
+      attachmentId: "attachment-1",
+      name: "report.pdf",
+      documentUid: "554ab873903c40fdad52f36e2cffb501",
+    } as SessionAttachment;
+
+    expect(buildAttachmentsMarkdown([attachment], [])).toContain(
+      "- report.pdf [554ab873903c40fdad52f36e2cffb501]: conversation document",
+    );
+  });
+
   it("returns null once the last attachment has been deleted", () => {
     const attachment = {
       attachmentId: "attachment-1",
