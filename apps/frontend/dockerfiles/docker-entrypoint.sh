@@ -9,10 +9,12 @@ set -eu
 #   FRONTEND_AGENTIC_UPSTREAM=http://host.docker.internal:8000 \
 #   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://host.docker.internal:8111 \
 #   FRONTEND_CONTROL_PLANE_UPSTREAM=http://host.docker.internal:8222 \
+#   FRONTEND_EVALUATION_UPSTREAM=http://host.docker.internal:8336 \
 #   /usr/local/bin/fred-frontend-entrypoint.sh
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
+: "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
 
 cat > /etc/nginx/conf.d/fred.conf <<EOF
@@ -47,6 +49,15 @@ server {
 
     location /control-plane/ {
         proxy_pass ${FRONTEND_CONTROL_PLANE_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /evaluation/ {
+        proxy_pass ${FRONTEND_EVALUATION_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
