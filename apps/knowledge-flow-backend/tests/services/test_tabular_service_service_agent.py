@@ -99,6 +99,12 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
 
     assert await service.list_datasets(_user(["service_agent"])) == []
 
+    with pytest.raises(Exception):
+        await service.describe_dataset(
+            _user(["service_agent"]),
+            "doc-team-a",
+        )
+
 
 @pytest.mark.asyncio
 async def test_normal_user_still_uses_per_user_rebac_lookup(tmp_path: Path, metadata_store):
@@ -132,3 +138,35 @@ async def test_normal_user_still_uses_per_user_rebac_lookup(tmp_path: Path, meta
         )
         == []
     )
+
+
+@pytest.mark.asyncio
+async def test_normal_user_with_rebac_relation_can_access_team_dataset(tmp_path: Path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-team-a",
+        file_name="sales-team-a.csv",
+        content="city,amount\nParis,10\n",
+        tag_ids=["tag-team-a"],
+        tag_names=["Team A"],
+    )
+
+    service = TabularService()
+    # A regular user must be allowed when an explicit per-user readable-document
+    # tuple exists; this confirms the normal ReBAC path still works.
+    service.rebac = _FakeRebac({"doc-team-a"})
+    service.tag_service = _FakeTagService(
+        readable_tag_ids=set(),
+        team_scopes={"team-a": {"tag-team-a"}},
+    )
+
+    datasets = await service.list_datasets(
+        _user(["viewer"]),
+        owner_filter=OwnerFilter.TEAM,
+        team_id="team-a",
+    )
+    assert [dataset.document_uid for dataset in datasets] == ["doc-team-a"]
