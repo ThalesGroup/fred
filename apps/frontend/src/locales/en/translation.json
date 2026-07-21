@@ -1496,6 +1496,11 @@
           "placeholder": "Select an instance",
           "loading": "Loading instances..."
         },
+        "instanceTools": {
+          "label": "Tools enabled on this agent",
+          "inherited": "This instance follows its template's default tools — no per-instance override.",
+          "none": "No tools enabled on this instance."
+        },
         "agent": {
           "label": "Agent ID",
           "placeholder": "agent-..."
@@ -1531,6 +1536,21 @@
         "timeout": {
           "label": "Case timeout (s)"
         },
+        "builtinMetrics": {
+          "label": "Metrics",
+          "help": "Pick which metrics to score this run against — nothing is added automatically.",
+          "answerRelevancy": "Answer Relevancy",
+          "answerRelevancyDesc": "Does the answer address the question asked?",
+          "faithfulness": "Faithfulness",
+          "faithfulnessDesc": "Does the answer stay grounded in the retrieved context?",
+          "contextualRelevancy": "Contextual Relevancy",
+          "contextualRelevancyDesc": "Is the retrieved context relevant to the question?",
+          "contextualPrecision": "Contextual Precision",
+          "contextualPrecisionDesc": "Are the most relevant chunks ranked first? Requires an expected output.",
+          "contextualRecall": "Contextual Recall",
+          "contextualRecallDesc": "Does the context cover everything the expected output needs? Requires an expected output.",
+          "none": "Select at least one metric to start a run."
+        },
         "metrics": {
           "label": "Custom metrics",
           "help": "Natural-language criteria, judged alongside the built-in metrics",
@@ -1542,6 +1562,12 @@
           "criteria": "Criterion to evaluate",
           "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
           "parameters": "Fields the judge may read",
+          "parameterOptions": {
+            "input": "Input",
+            "actualOutput": "Actual output",
+            "expectedOutput": "Expected output",
+            "retrievalContext": "Retrieved context"
+          },
           "threshold": "Pass threshold"
         },
         "recap": {
@@ -1555,6 +1581,7 @@
           "judge": "Judge",
           "concurrency": "Concurrency",
           "timeout": "Timeout",
+          "metrics": "Metrics",
           "customMetrics": "Custom metrics",
           "profile": "Profile",
           "profileAuto": "Automatic"

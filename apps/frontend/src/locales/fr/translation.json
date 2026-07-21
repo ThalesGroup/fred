@@ -1496,6 +1496,11 @@
           "placeholder": "Sélectionnez une instance",
           "loading": "Chargement des instances..."
         },
+        "instanceTools": {
+          "label": "Tools activés sur cet agent",
+          "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
+          "none": "Aucun tool activé sur cette instance."
+        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
@@ -1531,6 +1536,21 @@
         "timeout": {
           "label": "Délai par cas (s)"
         },
+        "builtinMetrics": {
+          "label": "Métriques",
+          "help": "Choisis les métriques à calculer pour ce run — rien n'est ajouté automatiquement.",
+          "answerRelevancy": "Pertinence de la réponse",
+          "answerRelevancyDesc": "La réponse traite-t-elle la question posée ?",
+          "faithfulness": "Fidélité",
+          "faithfulnessDesc": "La réponse reste-t-elle ancrée dans le contexte récupéré ?",
+          "contextualRelevancy": "Pertinence contextuelle",
+          "contextualRelevancyDesc": "Le contexte récupéré est-il pertinent pour la question ?",
+          "contextualPrecision": "Précision contextuelle",
+          "contextualPrecisionDesc": "Les extraits les plus pertinents sont-ils classés en premier ? Nécessite une réponse attendue.",
+          "contextualRecall": "Rappel contextuel",
+          "contextualRecallDesc": "Le contexte couvre-t-il tout ce que la réponse attendue nécessite ? Nécessite une réponse attendue.",
+          "none": "Sélectionne au moins une métrique pour lancer un run."
+        },
         "metrics": {
           "label": "Métriques personnalisées",
           "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
@@ -1542,6 +1562,12 @@
           "criteria": "Critère à évaluer",
           "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
           "parameters": "Champs évalués par le juge",
+          "parameterOptions": {
+            "input": "Entrée",
+            "actualOutput": "Réponse produite",
+            "expectedOutput": "Réponse attendue",
+            "retrievalContext": "Contexte récupéré"
+          },
           "threshold": "Seuil de réussite"
         },
         "recap": {
@@ -1555,6 +1581,7 @@
           "judge": "Juge",
           "concurrency": "Concurrence",
           "timeout": "Délai",
+          "metrics": "Métriques",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
           "profileAuto": "Automatique"
