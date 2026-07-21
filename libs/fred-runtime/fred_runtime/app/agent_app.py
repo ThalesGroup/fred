@@ -56,7 +56,6 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
-from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -1260,12 +1259,13 @@ async def _authorize_execution_or_raise(
     - security disabled (no authenticated user) → skip (dev/local).
     - ReBAC engine absent or disabled (Noop) → skip (identity-only dev posture);
       the C3 profile guarantees an enabled engine in classified deployments.
-    - a personal space (`personal-<uid>`) is intrinsic ownership, not a stored
-      OpenFGA tuple: a human caller acting on their own canonical
-      `personal_team_id(authenticated_user.uid)` is authorized without an OpenFGA
-      call; any other `personal-*` id (another user's space, or the bare
-      `"personal"` alias) is explicitly denied — never routed to OpenFGA (AUTHZ-05
-      item 8b watch item).
+    - a personal space (`personal-<uid>`) is a real ReBAC team object (AUTHZ-08):
+      the owner's `team_editor` tuple self-heals on first touch inside
+      `RebacEngine.check_user_team_permission_or_raise`, and `add_relation`'s
+      write-guard refuses any tuple naming a personal team except that one, so
+      the plain `CAN_READ` check below already authorizes the owner and denies
+      everyone else (another user's space, or the bare `"personal"` alias, for
+      which no tuple is ever provisioned) — no special-casing needed here.
     - otherwise require the caller to hold `CAN_READ` on the requested team — the
       same relation the control-plane required before it would mint a grant. The
       team is caller-supplied but safe: OpenFGA only authorizes teams the user
@@ -1341,36 +1341,14 @@ async def _authorize_execution_or_raise(
             agent_instance_id=request.agent_instance_id,
         )
         return
-    if team_id == "personal" or is_personal_team_id(team_id):
-        # Personal spaces are intrinsic ownership (AUTHZ-05 item 8b): the id is
-        # derived from the JWT subject via `personal_team_id`, is never persisted
-        # as an OpenFGA tuple, and must never be resolved by OpenFGA. Only an
-        # exact match against the caller's own canonical id is authorized; any
-        # other personal-* id (another user's space) or the bare "personal"
-        # alias (ambiguous once ReBAC is active) is denied here, before OpenFGA
-        # ever sees it.
-        if team_id == personal_team_id(authenticated_user.uid):
-            _emit_audit_event(
-                container,
-                "info",
-                "personal_space_owner_authorized",
-                user_id=authenticated_user.uid,
-                team_id=team_id,
-                agent_instance_id=request.agent_instance_id,
-            )
-            return
-        _emit_audit_event(
-            container,
-            "warning",
-            "personal_space_denied",
-            user_id=authenticated_user.uid,
-            team_id=team_id,
-            agent_instance_id=request.agent_instance_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"user {authenticated_user.uid!r} is not authorized for team {team_id!r}",
-        )
+    # Personal spaces (AUTHZ-08, supersedes AUTHZ-05 item 8b) are now real
+    # ReBAC team objects: `RebacEngine.check_user_team_permission_or_raise`
+    # self-heals the owner's own `team_editor` tuple on first touch and
+    # `add_relation`'s write-guard refuses any other shape naming a personal
+    # team, so the bare `check_user_team_permission_or_raise` call below
+    # already authorizes the owner and denies everyone else — no special-
+    # casing needed here (the bare "personal" alias also denies normally,
+    # since no tuple is ever provisioned for that literal string).
     try:
         await rebac.check_user_team_permission_or_raise(
             authenticated_user, TeamPermission.CAN_READ, team_id

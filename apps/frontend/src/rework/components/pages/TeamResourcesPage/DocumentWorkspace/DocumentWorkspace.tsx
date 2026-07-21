@@ -129,33 +129,8 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   );
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
-  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
-
-  // Library deletion cascades server-side: sub-folders (path-prefix tags) and
-  // the untagging of every contained document are handled by the backend.
-  const confirmDeleteLibrary = useCallback(
-    (node: TagNode, tag: TagWithItemsId) =>
-      showConfirmationDialog({
-        title: t("rework.resources.confirm.deleteLibraryTitle"),
-        message: t("rework.resources.confirm.deleteLibraryMessage", { name: node.name }),
-        onConfirm: () => {
-          void deleteTag({ tagId: tag.id })
-            .unwrap()
-            .then(() => {
-              showSuccess({ summary: t("rework.resources.confirm.deleteLibraryDone", { name: node.name }) });
-              void refetchTags();
-            })
-            .catch((error) => {
-              showError({
-                summary: t("rework.resources.confirm.deleteLibraryTitle"),
-                detail: String((error as { data?: { detail?: string } })?.data?.detail ?? error),
-              });
-            });
-        },
-      }),
-    [deleteTag, refetchTags, showConfirmationDialog, showError, showSuccess, t],
-  );
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const selectedNode = selectedFolderFull ? findNode(tree, selectedFolderFull) : null;
   const selectedTag = selectedNode?.tagsHere[0] ?? null;
@@ -258,6 +233,46 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     [processDocuments, showSuccess, showError, t, loadTagPage, perTag],
   );
 
+  // Deletes the folder's tag; the backend cascades to sub-folders and untags/
+  // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
+  // safe to offer for both empty and populated folders — the confirmation
+  // message just makes the blast radius explicit before it happens.
+  const confirmDeleteFolder = useCallback(
+    (node: TagNode) => {
+      const tag = node.tagsHere[0];
+      if (!tag) return;
+      const docCount = tag.item_ids?.length ?? 0;
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteFolderTitle"),
+        message:
+          docCount > 0
+            ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
+            : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
+        onConfirm: () =>
+          void deleteTag({ tagId: tag.id })
+            .unwrap()
+            .then(() => {
+              showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                next.delete(node.full);
+                return next;
+              });
+              setSelectedFolderFull((prev) => (prev === node.full ? null : prev));
+              void refetchTags();
+            })
+            .catch((e: unknown) => {
+              showError?.({
+                summary: t("validation.error"),
+                detail:
+                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+              });
+            }),
+      });
+    },
+    [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags],
+  );
+
   const moreActionsFor = useCallback(
     (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => {
       // Both actions below write to the tag/document (toggle-retrievable, delete),
@@ -339,9 +354,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                 : undefined
             }
             onCreateSubfolder={canCreateFolder ? () => openCreateFolder(node.full) : undefined}
-            onDelete={
-              tag && canCreateFolder ? () => confirmDeleteLibrary(node, tag as unknown as TagWithItemsId) : undefined
-            }
+            onDelete={tag && canCreateFolder ? () => confirmDeleteFolder(node) : undefined}
           />
         </div>
 

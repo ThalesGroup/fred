@@ -524,26 +524,45 @@ def warn_unpatched_default_ports(wt: Path, ports: dict[str, int]) -> None:
             info(f)
 
 
+def disable_prometheus_exporter(content: str) -> str:
+    """Force `observability.kpi.prometheus.enabled: false` in a service config.
+
+    Every backend (and Temporal worker) binds a hardcoded Prometheus scrape port
+    (`observability.kpi.prometheus.port`) that is identical across worktrees, and
+    the sink model defaults to enabled — so the second worktree to start a service
+    dies with "Address already in use" on the metrics port, not the service port.
+    Handles both config shapes: an explicit `enabled: true` right under the
+    `prometheus:` key, and a block that only sets `port:` (relying on the
+    enabled-by-default model).
+    """
+    patched = re.sub(
+        r"^(\s*)prometheus:\n(\s+)enabled: true\b",
+        r"\1prometheus:\n\2enabled: false",
+        content,
+        flags=re.MULTILINE,
+    )
+    return re.sub(
+        r"^(\s*)prometheus:\n(\s+)port:",
+        r"\1prometheus:\n\2enabled: false\n\2port:",
+        patched,
+        flags=re.MULTILINE,
+    )
+
+
 def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_task: str | None = None) -> None:
     """Apply the full worktree patch pipeline: prod configs, .vscode, and skip-worktree hiding."""
-    # Disable prometheus metrics in prod configs
-    for svc in PYTHON_SERVICES:
-        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
-        if prod_cfg.exists():
-            content = prod_cfg.read_text()
-            patched = content.replace("metrics_enabled: true", "metrics_enabled: false")
-            if patched != content:
-                prod_cfg.write_text(patched)
-
     # Patch inter-service URLs that reference another service by its default port.
     # Every service in DEFAULT_PORTS is rewritten (not just knowledge-flow): fred-agents
     # also dials control-plane via platform.control_plane_url, and leaving that at the
     # default port makes managed agent-instance execution fail with a connection error.
+    # The same pass disables the Prometheus KPI exporter, whose scrape port cannot be
+    # shared between worktrees.
     for cfg_path in inter_service_config_paths(wt):
         content = cfg_path.read_text()
         patched = content
         for svc, default_port in DEFAULT_PORTS.items():
             patched = patched.replace(f"localhost:{default_port}", f"localhost:{ports[svc]}")
+        patched = disable_prometheus_exporter(patched)
         if patched != content:
             cfg_path.write_text(patched)
             info(f"Patched {cfg_path.relative_to(wt)}")

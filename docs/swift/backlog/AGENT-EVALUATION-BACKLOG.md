@@ -189,9 +189,30 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 - [x] `fred-core`: `is_service_agent()` helper + `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` (`{CAN_READ}` only)
 - [x] `fred-runtime`: recognize `service_agent` in `_authorize_execution_or_raise` (scoped to `team_id`, audited, fail-closed if no team)
 - [x] `control-plane`: recognize `service_agent` in `_validate_team_and_check_permission` (read-only; write permissions fall through to the normal ReBAC check → denied)
-- [x] `knowledge-flow`: recognize `service_agent` in `TagService.resolve_authorized_tag_ids_in_rebac` — authorize the **team's** tags (owner/editor/viewer) scoped to `team_id`, read-only, fail-closed without a (non-personal) team (fred PR #1923). Covers the corpus-scoping (`tag_ids`) path used by RAG search; the explicit per-document path is unchanged (worker does not pass explicit `document_uids`).
+- [x] `knowledge-flow`: recognize `service_agent` in `TagService.resolve_authorized_tag_ids_in_rebac` — authorize the **team's** tags (owner/editor/viewer) scoped to `team_id`, read-only, fail-closed without a (non-personal) team (fred PR #1923). Covers the corpus-scoping (`tag_ids`) path used by RAG search.
 - [x] Tests: allow/deny in fred-core, fred-runtime, control-plane, knowledge-flow (`tests/services/test_tag_service_service_agent.py`)
 - [x] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator branch `21`)
+- [x] `knowledge-flow`: recognize `service_agent` in `TagService.get_tag_for_user` (single-tag
+      lookup — the corpus-filesystem MCP tool and vector-search's explicit-tag resolution both
+      funnel through this). The assumption above ("explicit per-document path is unchanged,
+      worker does not pass explicit `document_uids`") did not hold for **tags**: a real
+      evaluation run (warfare-tracks, team fredlab, 2026-07-21) showed the worker's tool calls
+      do resolve individual tag ids directly, and this checkpoint had no `service_agent`
+      bypass — it always denied (zero per-user ReBAC relations), logging a "ReBAC
+      authorization denied" warning per lookup. Fixed by scoping the bypass to the tag's own
+      `owner_id` (branch `fix/eval-03-service-agent-single-resource-checkpoints`).
+- [x] `fred-core`: `AuthorizationError` now inherits from `PermissionError` — a denial raised
+      via `check_permission_or_raise` was falling through to a generic 500 handler at any
+      controller (e.g. tabular) that only caught `PermissionError`, instead of the correct 403.
+- [ ] **Not fixed — needs its own RFC-level decision:** general corpus-filesystem *discovery*
+      (`list_area`/`cat_area`/etc. on `/corpus` or `/corpus/libraries` without an already-known
+      `tag_id`) still returns empty for `service_agent`. `CorpusVirtualFilesystem` and
+      `mcp_fs_service.py` have no `team_id` concept anywhere in their contract by design (a
+      human user's own ReBAC tuples already scope the listing across every team they belong
+      to). A `service_agent` has zero tuples, so there is nothing to scope a listing bypass to
+      without adding `team_id` as an explicit MCP tool parameter — a public tool-contract
+      change, not an internal fix. Same-class gap in `MetadataService.get_document_metadata`
+      (untagged document reads via corpus browsing) — also deferred.
 
 ---
 

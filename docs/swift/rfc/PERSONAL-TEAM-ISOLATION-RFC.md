@@ -1,6 +1,12 @@
 # RFC — Per-User Personal Space Isolation
 
-**Status:** Implemented  
+**Status:** Implemented — retired 2026-07-21. Kept as the historical decision
+record only (naming choice, rejected alternatives). **Current design state:**
+[`docs/swift/platform/REBAC.md` § Personal
+teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
+(ReBAC mechanism) and `id-legend.yaml` entries `CTRLP-10` (isolation shipped)
+and `AUTHZ-08` (ReBAC tuple hardening + enumeration follow-up). Do not amend
+this file further — amend the docs above instead.  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-01  
 **ID:** CTRLP-10  
@@ -40,181 +46,69 @@ def build_personal_team(_user: KeycloakUser) -> TeamWithPermissions:
         id=PERSONAL_TEAM_ID,            # ← user argument ignored
         ...
     )
-
-# fred-core — security/rebac/rebac_engine.py
-Relation(
-    subject=RebacReference(Resource.USER, user.uid),
-    relation=RelationType.MEMBER,
-    resource=RebacReference(Resource.TEAM, PERSONAL_TEAM_ID),  # ← same team for all
-)
 ```
 
 ---
 
-## 3. Decision
+## 3. Decision — personal team ID format
 
 Replace the shared constant with a **per-user personal team ID** derived from
-the user's Keycloak `uid`:
-
-```
-personal_team_id(user) → TeamId(f"personal-{user.uid}")
-```
+the user's Keycloak `uid`: `personal_team_id(user) → TeamId(f"personal-{user.uid}")`.
 
 **Why this is the right approach:**
 - Every user gets a truly isolated namespace with no shared state.
 - No per-resource `user_id` filter needs to be added to every store — team
   isolation already covers it.
-- ReBAC already works correctly for non-personal teams; personal teams become
-  first-class team objects, identical in treatment.
-- The frontend already receives the team ID from bootstrap and uses it
-  dynamically — no frontend route changes are required.
-- The `"personal"` string in URL routes becomes an opaque alias resolved at
-  bootstrap time, not a load-bearing identifier.
+- Personal teams become first-class team objects, identical in treatment to
+  collaborative teams (see `REBAC.md` for how that treatment was later made
+  real rather than synthetic — `AUTHZ-08`).
+- The `"personal"` string in URL routes becomes an opaque alias, resolved
+  server-side (`get_system_team` accepts both), not a load-bearing identifier.
 
-**Why not per-resource user_id filtering (Option B):**
-- Requires every store method (agents, sessions, knowledge, prompts, and any
-  future resource type) to carry and enforce a `user_id` parameter.
-- Fragile: new resource types silently miss the filter until a breach is
-  discovered.
-- Already demonstrated as insufficient — the session `list_by_team` fix done
-  on this branch is the exact type of whack-a-mole this approach requires.
+**Why not per-resource `user_id` filtering:** requires every store method
+(agents, sessions, knowledge, prompts, and any future resource type) to carry
+and enforce a `user_id` parameter — fragile, since a new resource type
+silently misses the filter until a breach is discovered. Team isolation
+(the ID format above) covers every resource type by construction instead.
 
 ---
 
-## 4. Proposed solution
+## 4. What shipped
 
-### 4.1 fred-core
+Format `personal-{uid}` is exported as `fred_core.common.personal_team_id`.
+Every control-plane and runtime call site that used to read the
+`PERSONAL_TEAM_ID` constant now derives it per-caller; the bare `"personal"`
+alias is resolved server-side at the API boundary, never stored. Full
+implementation and shipped-branch detail: `id-legend.yaml` entry `CTRLP-10`.
 
-Replace the constant with a function. Keep the constant as a deprecated alias
-pointing to `"personal"` for the migration period only.
-
-```python
-# fred_core/common/team_id.py
-
-def personal_team_id(user_uid: str) -> TeamId:
-    """Return the personal team ID for one user."""
-    return TeamId(f"personal-{user_uid}")
-```
-
-Export `personal_team_id` from `fred_core.common`. Remove `PERSONAL_TEAM_ID`
-from the public API once all callers are migrated.
-
-Update `rebac_engine.py` to use `personal_team_id(user.uid)`.
-
-### 4.2 control-plane-backend
-
-Six call sites to update:
-
-| File | Change |
-|---|---|
-| `teams/system.py` | `build_personal_team(user)` uses `personal_team_id(user.uid)` |
-| `teams/system.py` | `get_team_by_id_from_service` branch: compare against `personal_team_id(user.uid)` |
-| `product/service.py` (bootstrap) | Pass `personal_team_id(user.uid)` to `get_team_by_id_from_service` |
-| `product/service.py` (session create) | Replace `PERSONAL_TEAM_ID` with `personal_team_id(user.uid)` |
-| `product/service.py` (prompt context) | Same |
-| `users/api.py` | Pass `personal_team_id(user.uid)` when fetching personal team |
-
-`prompts/store.py` uses `literal("personal")` as a scope label in a query —
-this label is cosmetic metadata, not a foreign key, and can remain `"personal"`
-as a display string. No data integrity risk.
-
-### 4.3 Frontend
-
-No route or component changes required. The frontend receives the team ID from
-`useFrontendBootstrap` → `activeTeam.id` and uses it dynamically throughout.
-After the fix, `activeTeam.id` will be `personal-<uid>` and all navigation,
-API calls, and URL construction will use that value automatically.
-
-The fallback `?? "personal"` strings in components are pre-bootstrap guards.
-They should be updated to `?? ""` (empty = no navigation) to avoid silently
-routing to a stale team ID, but this is a cleanup item, not a blocker.
-
-### 4.4 Database migration
-
-**Dev / test environments:** Purge all rows with `team_id="personal"` across
-`session_metadata`, `agent_instances`, `managed_mcp_servers`, `prompts`, and
-any other team-scoped tables. Data created in a shared personal space has no
-reliable owner and cannot be safely reassigned.
-
-**Production (future):** If a production deployment accumulates data under
-`team_id="personal"` before this RFC is applied, a migration script must
-identify ownership from correlated tables (e.g., `session_metadata.user_id`,
-`agent_instances.created_by`) and rewrite `team_id` to the correct
-`personal-<uid>` value. This script must be written and reviewed before the
-production cutover.
+Dev/test environments had all `team_id="personal"` rows purged at cutover (no
+reliable per-row owner to reassign). No production deployment predated this
+fix.
 
 ---
 
-## 5. Alternatives considered
+## 5. Confirmed decisions
 
-**Option B — per-resource `user_id` filtering:** Rejected. See §3.
-
-**Keep `"personal"` as a URL alias resolved server-side:** The frontend could
-continue navigating to `/team/personal/…` and the API would resolve `"personal"`
-to `personal_team_id(current_user.uid)`. This avoids any URL-visible change
-but adds a translation layer in every route handler. Deferred — can be added
-later as a UX convenience without affecting the isolation model.
-
----
-
-## 6. Impact on existing contracts
-
-### CONTROL-PLANE-PRODUCT-CONTRACT — addition required
-
-Add to the sessions and agent-instances sections:
-
-> **Personal team isolation rule:** The personal team ID is `personal-{user.uid}`.
-> No two users share a personal team. All team-scoped endpoints enforce isolation
-> by team membership. No additional per-resource `user_id` filter is required or
-> maintained for personal space resources.
-
-### REBAC — no model change
-
-The ReBAC model remains unchanged. Personal teams become real isolated team
-objects. Each user is `MEMBER` of exactly one personal team (their own). The
-existing `MEMBER` relation and team-scoped permission checks apply without
-modification.
-
----
-
-## 7. Decisions
-
-1. **Personal team ID format: `personal-{uid}`** — confirmed. Readable in logs
-   and DB queries, unambiguous prefix distinguishes personal teams from
+1. **Personal team ID format: `personal-{uid}`.** Readable in logs and DB
+   queries; unambiguous prefix distinguishes personal teams from
    collaborative teams.
+2. **Bootstrap alias `"personal"` resolved server-side.** `get_system_team`
+   recognises both `"personal"` (URL alias) and `"personal-{uid}"` (canonical
+   ID); all data-access calls use the resolved `team.id`, never the raw path
+   parameter.
+3. **Session `user_id` filter kept as defence-in-depth**, redundant with team
+   isolation but harmless.
+4. **Agent `created_by` uses `user.username`, not `user.uid`.**
 
-2. **Bootstrap alias `"personal"` resolved server-side** — implemented.
-   `get_system_team` recognises both `"personal"` (URL alias from the frontend)
-   and `"personal-{uid}"` (canonical ID). All data-access calls in
-   `product/api.py` use `team.id` (the resolved canonical value), not the raw
-   path parameter, ensuring the DB always sees `personal-{uid}`.
+---
 
-3. **Session `user_id` filter** — kept as defence-in-depth. Team isolation
-   makes it redundant but harmless. The PATCH/DELETE ownership gap documented
-   in BACKLOG §6.4.F is closed by control-plane ownership enforcement.
+## 6. ReBAC treatment — see `REBAC.md`
 
-4. **All product API endpoints use `team.id` for data routing** — implemented.
-   14 team-scoped endpoints (sessions, agent instances, prompts, prepare-execution)
-   now capture the return value of `get_team_by_id_from_service` and pass
-   `team.id` to every downstream store call, ensuring no raw path parameter
-   (`"personal"`) ever reaches the DB.
-
-5. **Agent `created_by` uses `user.username` not `user.uid`** — fixed.
-   `enroll_agent_instance` now stores the human-readable username.
-
-## 8. What was shipped (branch `1666-ctrlp-10-per-user-personal-space-replace-shared-team_id-constant`)
-
-### Isolation (CTRLP-10 core)
-- `fred_core/common/team_id.py`: `personal_team_id(uid)` replaces `PERSONAL_TEAM_ID`
-- `teams/system.py`: `get_system_team` accepts `"personal"` as alias
-- `product/api.py`: all 14 team-scoped endpoints use `team.id` for data access
-- `product/service.py`: bootstrap, context prompts, agent creation use `personal_team_id(user.uid)`
-
-### Prompt library UX (delivered on same branch)
-- `PromptSummary` extended with `category`, `emoji`, `tags`, `text_preview`, `is_default`
-- `PromptCategory` enum (9 functional categories) — backend authoritative, OpenAPI generated
-- `FieldSpec` / `ManagedAgentFieldSpec` / `AgentDefinition` extended with `description_by_lang`, `default_by_lang` — agent authors provide bilingual defaults
-- System default prompts (9, one per category) injected at query time, translated per `?lang=` param, never stored per-user
-- `GeneralAssistantDefinition`: FR/EN system prompt and description variants
-- Alembic migrations: `c5d6e7f8a9b0` (emoji + tags), `d6e7f8a9b0c1` (category)
-- Frontend: `CategoryPicker`, `PromptCard` redesign, `PromptsPage` with search + filter chips + read-only default modal
+This RFC originally specified "no ReBAC model change: each user is `MEMBER` of
+exactly one personal team." That was never actually implemented — no code
+path wrote a ReBAC tuple for a personal team until `AUTHZ-08` (2026-07-20).
+The current, real design (self-provisioned `team_editor` tuple, write-guarded
+at the one `add_relation` chokepoint, self-healed on both permission checks
+and enumeration) lives in
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08) —
+do not re-derive or re-amend it here.

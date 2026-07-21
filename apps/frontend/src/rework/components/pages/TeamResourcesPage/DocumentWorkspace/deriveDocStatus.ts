@@ -27,10 +27,16 @@ export interface ResolvedDocStatus {
  * live processing/failed run is reflected immediately; otherwise the answer is
  * read from `processing.stages`.
  *
- * - `vector === "done"` is the signal that a document is queryable → `ready`.
+ * - `vector === "done"` (chunked+embedded, backend `ProcessingStage.VECTORIZED`)
+ *   or `sql === "done"` (tabular-indexed, `ProcessingStage.SQL_INDEXED`) each
+ *   independently mean "queryable" → `ready`. A CSV/XLSX document only ever
+ *   completes the `sql` stage (it's never chunked/embedded), so checking
+ *   `vector` alone left every tabular document stuck at `raw` forever, even
+ *   after a full page reload — this isn't a staleness gap, both stages are
+ *   genuine, mutually-exclusive-per-file-type completion signals.
  * - nothing processed yet (only stored) → `raw` (a legitimate choice, not an error).
  */
-const QUERYABLE_STAGE = "vector";
+const QUERYABLE_STAGES = ["vector", "sql"];
 
 export function deriveDocStatus(doc: DocumentMetadata, task?: TaskViewModel): ResolvedDocStatus {
   if (task) {
@@ -44,6 +50,6 @@ export function deriveDocStatus(doc: DocumentMetadata, task?: TaskViewModel): Re
 
   if (values.some((s) => s === "failed")) return { status: "failed", progress: null };
   if (values.some((s) => s === "in_progress")) return { status: "processing", progress: null };
-  if (stages[QUERYABLE_STAGE] === "done") return { status: "ready", progress: null };
+  if (QUERYABLE_STAGES.some((stage) => stages[stage] === "done")) return { status: "ready", progress: null };
   return { status: "raw", progress: null };
 }

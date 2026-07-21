@@ -186,11 +186,15 @@ export default function EvaluationRunDetail({
   const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
 
   const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
+  // Unlike `run`/`cases` above, this poll had no isLive gate — it kept hitting
+  // the backend every 10s indefinitely, even long after the run went terminal,
+  // as long as the drawer stayed open. Match the sibling queries' pattern:
+  // poll while live, single fetch once terminal.
   const { data: langfuseSession } = useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery(
     { runId },
     {
       skip: !runId || !telemetry?.enabled,
-      pollingInterval: 10000,
+      pollingInterval: isLive ? 10000 : 0,
     },
   );
 

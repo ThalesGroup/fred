@@ -1,3 +1,25 @@
+**v2.1.9** — 2026-07-21
+
+- **Summary**
+
+  Bug-fix release: ReBAC/authz gap closures (personal-team tuples, agent-kind
+  capability id collisions, AuthorizationError 500s), evaluation-agent reachability
+  fixes, and several UX/chart papercuts.
+
+- **Bug Fixes**
+
+  - Personal teams now get a real, self-healing ReBAC tuple — closes 500s/wrong 403s across filesystem, corpus, tags, tasks, evaluations (AUTHZ-08, #2038)
+  - `AuthorizationError` now inherits from `PermissionError`, so a real ReBAC denial surfaces as 403 instead of an unhandled 500 (EVAL-03, #2042)
+  - Reserve a namespaced id range for `kind="agent"` capabilities so they can no longer collide with `kind="tool"` ids (CTRLP-14, #2031)
+  - Make the evaluation agent reachable from the frontend (#2037); forward the caller's bearer token to pod chat-controls evaluation, which was silently dropping all composer capability controls on auth-enabled deployments (#2030)
+  - Tabular (CSV/XLSX) documents now reach "Ready" status instead of showing "Raw" forever (#2041)
+  - Fix KPI preset endpoints 503ing due to an unhandled resilient KPI store wrapper (#2041)
+  - Fix evaluation telemetry polling and conversation erasure edge cases (#2041)
+  - UX pass: personal prompts no longer leak into team spaces, prompt categories trimmed to 7, library tree picker and capability-toggle fixes (#2032)
+  - Fix Helm chart schema rejecting valid pod-level keys (`resources`, `imagePullSecrets`, `extraVolumes`, …) and migration hooks (#2025)
+  - Fix worktree dev configs still binding a shared Prometheus metrics port (#2028)
+  - Finish agent audit fields: `updated_by` column and creator/editor name resolution in the UI (#1952)
+
 **v2.1.7** — 2026-07-20
 
 - **Summary**

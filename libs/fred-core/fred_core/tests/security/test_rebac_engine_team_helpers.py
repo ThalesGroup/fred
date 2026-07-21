@@ -18,8 +18,10 @@ from typing import Iterable
 
 import pytest
 
-from fred_core.security.models import Resource
+from fred_core.common.team_id import personal_team_id
+from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
+    AgentPermission,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -167,6 +169,20 @@ class _ContextualRelationsSpyEngine(RebacEngine):
     ) -> list[RebacReference]:
         return []
 
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # Pretend the tuple already exists so `lookup_user_resources`'s
+        # personal-team self-heal (AUTHZ-08 follow-up) is a no-op here — this
+        # class exists to spy on `contextual_relations`, not to exercise
+        # self-heal (see `_PersonalTeamAwareEngine` for that).
+        return True
+
     async def has_permission(
         self,
         subject: RebacReference,
@@ -263,3 +279,266 @@ async def test_check_user_team_permission_or_raise_single_permission() -> None:
     assert engine.checked_permissions == [
         (TeamPermission.CAN_UPDATE_AGENTS, "team-42", token)
     ]
+
+
+class _PersonalTeamAwareEngine(RebacEngine):
+    """Exercises the real base-class self-heal (`_ensure_personal_team_editor`)
+    and write-guard (`_reject_unsanctioned_personal_team_write`) logic directly.
+
+    Unlike `_RecordingRebacEngine`, this does NOT override
+    `check_user_permission_or_raise`/`has_user_permission`, so calls flow through
+    the actual `RebacEngine` implementation being tested (AUTHZ-08).
+    """
+
+    def __init__(self, *, enabled: bool = True) -> None:
+        self._enabled = enabled
+        self.added_relations: list[Relation] = []
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        self.added_relations.append(relation)
+        return str(len(self.added_relations))
+
+    async def delete_relation(self, relation: Relation) -> str | None:
+        return None
+
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
+        return None
+
+    async def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject_type: Resource | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        return []
+
+    async def lookup_resources(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        return any(
+            r.subject == subject and r.relation == relation and r.resource == resource
+            for r in self.added_relations
+        )
+
+    async def has_permission(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> bool:
+        # Narrow stand-in sufficient for these tests: authorized iff a direct
+        # tuple was persisted for this exact subject/resource pair.
+        return any(
+            r.subject == subject and r.resource == resource
+            for r in self.added_relations
+        )
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_team_editor_self_heals_on_first_check() -> None:
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    await engine.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+
+    assert engine.added_relations == [
+        Relation(
+            subject=RebacReference(Resource.USER, user.uid),
+            relation=RelationType.TEAM_EDITOR,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_team_editor_is_idempotent() -> None:
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    await engine.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+    await engine.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+
+    assert len(engine.added_relations) == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_team_editor_never_provisions_another_users_space() -> (
+    None
+):
+    engine = _PersonalTeamAwareEngine()
+    alice = _user()
+    bobs_team = personal_team_id("bob")
+
+    with pytest.raises(AuthorizationError):
+        await engine.check_user_permission_or_raise(
+            alice, TeamPermission.CAN_READ, bobs_team
+        )
+
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_team_editor_skips_when_rebac_disabled() -> None:
+    engine = _PersonalTeamAwareEngine(enabled=False)
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    with pytest.raises(AuthorizationError):
+        await engine.check_user_permission_or_raise(
+            user, TeamPermission.CAN_READ, team_id
+        )
+
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_self_heals_personal_team_on_first_enumeration() -> (
+    None
+):
+    """Regression for the enumeration gap found in the AUTHZ-08 review: a
+    first-touch user whose very first ReBAC-touching call is "list my teams"
+    (e.g. the `/fs` virtual `/teams` directory) must still get their own
+    personal-team tuple self-healed — `lookup_resources`/OpenFGA `ListObjects`
+    never went through `has_user_permission`/`check_user_team_permission_or_raise`,
+    so without wiring self-heal into `lookup_user_resources` too, the owner's
+    own personal team was silently absent from every "list my teams" result
+    until some unrelated check-triggering call happened to provision it first.
+    """
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+
+    assert engine.added_relations == [
+        Relation(
+            subject=RebacReference(Resource.USER, user.uid),
+            relation=RelationType.TEAM_EDITOR,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_self_heal_is_idempotent() -> None:
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+    await engine.lookup_user_resources(user, TeamPermission.CAN_READ)
+
+    assert len(engine.added_relations) == 1
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_resources_skips_self_heal_for_non_team_permission() -> None:
+    """Enumerating a non-team resource type (e.g. "list my agents") must never
+    trigger the personal-team self-heal — it is scoped to `Resource.TEAM`
+    enumeration only, same as the existing check-path self-heal."""
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+
+    await engine.lookup_user_resources(user, AgentPermission.READ)
+
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_add_relation_rejects_elevated_role_on_personal_team() -> None:
+    engine = _PersonalTeamAwareEngine()
+    team_id = personal_team_id("alice")
+
+    with pytest.raises(ValueError):
+        await engine.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, "alice"),
+                relation=RelationType.TEAM_ADMIN,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_add_relation_rejects_grant_to_a_different_user_on_personal_team() -> (
+    None
+):
+    engine = _PersonalTeamAwareEngine()
+    team_id = personal_team_id("alice")
+
+    with pytest.raises(ValueError):
+        await engine.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, "mallory"),
+                relation=RelationType.TEAM_EDITOR,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+    assert engine.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_add_relation_allows_owner_editor_grant_on_personal_team() -> None:
+    engine = _PersonalTeamAwareEngine()
+    team_id = personal_team_id("alice")
+
+    await engine.add_relation(
+        Relation(
+            subject=RebacReference(Resource.USER, "alice"),
+            relation=RelationType.TEAM_EDITOR,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    )
+
+    assert len(engine.added_relations) == 1
+
+
+@pytest.mark.asyncio
+async def test_add_relation_allows_organization_edge_on_personal_team() -> None:
+    engine = _PersonalTeamAwareEngine()
+    team_id = personal_team_id("alice")
+
+    await engine.ensure_team_organization_relations([team_id])
+
+    assert len(engine.added_relations) == 1
+    assert engine.added_relations[0].relation == RelationType.ORGANIZATION

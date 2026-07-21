@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from fred_core import (
     ORGANIZATION_ID,
+    AuthorizationError,
     KeycloakUser,
     OrganizationPermission,
     RebacDisabledResult,
@@ -154,9 +155,36 @@ class TagService:
         return tag_ids
 
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+        if is_service_agent(user):
+            # EVAL-AUTH (Solution A) — extends the bypass already applied to the
+            # bulk resolver (resolve_authorized_tag_ids_in_rebac) to this
+            # single-tag lookup. The service_agent holds no per-user tag
+            # relation, so the interactive check below always denies it.
+            #
+            # No team_id parameter is needed here (unlike the tabular per-uid
+            # fallback, which trusts the request's own team_id): the tag's own
+            # `owner_id` already tells us the team that would have to grant
+            # read access, so we scope the check to that team directly rather
+            # than trusting an externally supplied one. This also means a
+            # personal tag (`owner_id` is a user id, not a team) safely fails
+            # closed — `resolve_authorized_tag_ids_in_rebac` returns nothing
+            # for a subject that isn't a real ReBAC team.
+            tag = await self._tag_store.get_tag_by_id(tag_id)
+            authorized_ids = await self.resolve_authorized_tag_ids_in_rebac(user, None, tag.owner_id)
+            if not isinstance(authorized_ids, RebacDisabledResult) and tag_id not in authorized_ids:
+                logger.warning(
+                    "ReBAC authorization denied: subject=user:%s permission=%s resource=%s:%s (service_agent, team=%s)",
+                    user.uid,
+                    TagPermission.READ.value,
+                    Resource.TAGS.value,
+                    tag_id,
+                    tag.owner_id,
+                )
+                raise AuthorizationError(user.uid, TagPermission.READ.value, Resource.TAGS)
+        else:
+            await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+            tag = await self._tag_store.get_tag_by_id(tag_id)
 
-        tag = await self._tag_store.get_tag_by_id(tag_id)
         item_service = get_specific_tag_item_service(tag.type)
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
 
