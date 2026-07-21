@@ -6,7 +6,8 @@
   "overrides": {
     "pdfjs-dist": "4.3.136",
     "canvas": "npm:@napi-rs/canvas@^0.1.59",
-    "@mapbox/node-pre-gyp": "^2"
+    "@mapbox/node-pre-gyp": "^2",
+    "dompurify": "^3.4.12"
   },
   "scripts": {
     "dev": "vite",

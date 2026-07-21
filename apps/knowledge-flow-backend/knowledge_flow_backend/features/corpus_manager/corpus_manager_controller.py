@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import DocumentPermission, KeycloakUser, TagPermission, TeamPermission, get_current_user
@@ -63,7 +64,7 @@ class CorpusManagerController:
         for document_uid in scope.document_uids:
             await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
 
-    def _handle_exception(self, e: Exception, context: str):
+    def _handle_exception(self, e: Exception, context: str) -> NoReturn:
         logger.exception("[CORPUS] %s failed", context)
         raise HTTPException(500, "Internal server error")
 
