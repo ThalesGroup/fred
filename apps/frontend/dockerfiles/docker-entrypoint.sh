@@ -28,7 +28,7 @@ set -eu
 # /evaluation/ unreachable. Resolving it as a variable at request time
 # (via `resolver`) keeps startup independent of that upstream's presence.
 if [ -z "${FRONTEND_DNS_RESOLVER:-}" ]; then
-    FRONTEND_DNS_RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)"
+    FRONTEND_DNS_RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
 fi
 : "${FRONTEND_DNS_RESOLVER:=127.0.0.11}"
 
