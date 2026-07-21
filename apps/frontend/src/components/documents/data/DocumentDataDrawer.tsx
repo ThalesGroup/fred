@@ -158,7 +158,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
   const formatError = (err: unknown): string => {
     if (!err) return "";
     if (typeof err === "string") return err;
-    if (err && typeof err === "object" && "status" in err) {
+    if (typeof err === "object" && "status" in err) {
       const anyErr = err as any;
       const detail = anyErr?.data?.detail ?? anyErr?.data;
       const detailStr = detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
