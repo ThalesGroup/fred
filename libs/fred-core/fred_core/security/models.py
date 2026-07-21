@@ -63,8 +63,17 @@ class Resource(str, Enum):
     ORGANIZATION = "organization"
 
 
-class AuthorizationError(Exception):
-    """Raised when a user is not authorized to perform an action."""
+class AuthorizationError(PermissionError):
+    """Raised when a user is not authorized to perform an action.
+
+    Inherits from the builtin `PermissionError` (not bare `Exception`) so that
+    every call site's `except PermissionError` — the standard ReBAC-denial ->
+    403 mapping — also catches this without needing its own `except
+    AuthorizationError` clause. Without this, a denial raised via
+    `check_permission_or_raise` (which raises `AuthorizationError`) falls
+    through to a generic `except Exception` handler and surfaces as an
+    unhandled 500 instead of 403 wherever only `PermissionError` is caught.
+    """
 
     def __init__(
         self,
