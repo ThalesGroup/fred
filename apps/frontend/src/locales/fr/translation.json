@@ -1718,6 +1718,7 @@
         "newRun": "+ Nouvelle exécution",
         "rerun": "↻ Relancer · {{target}}",
         "rerunHint": "Relance immédiatement avec la dernière cible ({{target}} · {{model}}). Utilisez « Nouvelle exécution… » pour en choisir une autre.",
+        "rerunRow": "↻ Relancer",
         "empty": "Aucune exécution pour cette évaluation",
         "versionLabel": "Évaluation {{version}}",
         "deleteMessage": "Supprimer l'exécution {{id}} ? Cela supprime définitivement ses cas, métriques et événements.",

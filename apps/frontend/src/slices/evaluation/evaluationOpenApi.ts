@@ -316,6 +316,8 @@ export type EvaluationRun = {
   target: ManagedInstanceTarget | RuntimeAgentTarget;
   profile: string;
   judge_profile_id: string;
+  metrics: string[];
+  custom_metrics: CustomMetricSpecInput[];
   operational_state: string;
   verdict: "pending" | "passed" | "failed" | "inconclusive";
   total_cases: number;
