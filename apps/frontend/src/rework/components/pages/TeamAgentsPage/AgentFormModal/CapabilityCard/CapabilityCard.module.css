@@ -57,3 +57,10 @@
   background: var(--surface-container);
   padding: var(--spacing-m);
 }
+
+/* Thin separator between two ui.group sections of the config form */
+.sectionDivider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--outline-retreat);
+}

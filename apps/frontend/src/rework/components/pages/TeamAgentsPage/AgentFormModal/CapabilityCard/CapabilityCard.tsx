@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { useId } from "react";
+import { Fragment, useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
@@ -35,6 +35,51 @@ interface CapabilityCardProps {
  * capability plus, when active, its `config_fields` rendered through the shared
  * metadata-driven {@link TuningFieldRenderer} (no bespoke per-field UI here).
  */
+/**
+ * The active capability's `config_fields` form. Fields sharing a `ui.group`
+ * form a visual section: a thin divider is drawn whenever the group changes
+ * between two consecutive VISIBLE fields (hidden fields — `ui.hide` or an
+ * unsatisfied `ui.visible_when` — never produce dangling dividers).
+ */
+function CapabilityConfigForm({
+  configFields,
+  configValues,
+  disabled,
+  teamId,
+  onConfigChange,
+}: {
+  configFields: NonNullable<CapabilityCatalogEntry["config_fields"]>;
+  configValues: Record<string, unknown>;
+  disabled: boolean;
+  teamId?: string;
+  onConfigChange: (key: string, value: unknown) => void;
+}) {
+  const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
+  const visibleFields = configFields.filter(
+    (f) => !f.ui?.hide && (!f.ui?.visible_when || Boolean(effectiveValues[f.ui.visible_when])),
+  );
+
+  return (
+    <div className={styles.subForm}>
+      {visibleFields.map((field, index) => (
+        <Fragment key={field.key}>
+          {index > 0 && field.ui?.group !== visibleFields[index - 1].ui?.group && (
+            <hr className={styles.sectionDivider} />
+          )}
+          <TuningFieldRenderer
+            field={field}
+            value={configValues[field.key]}
+            onChange={onConfigChange}
+            disabled={disabled}
+            teamId={teamId}
+            allValues={effectiveValues}
+          />
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 export function CapabilityCard({
   capability,
   teamId,
@@ -61,21 +106,7 @@ export function CapabilityCard({
         </label>
       </div>
 
-      {hasOptions && (
-        <div className={styles.subForm}>
-          {configFields.map((field) => (
-            <TuningFieldRenderer
-              key={field.key}
-              field={field}
-              value={configValues[field.key]}
-              onChange={onConfigChange}
-              disabled={disabled}
-              teamId={teamId}
-              allValues={Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]))}
-            />
-          ))}
-        </div>
-      )}
+      {hasOptions && <CapabilityConfigForm {...{ configFields, configValues, disabled, teamId, onConfigChange }} />}
     </li>
   );
 }

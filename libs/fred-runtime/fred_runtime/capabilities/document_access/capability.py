@@ -364,6 +364,10 @@ class DocumentAccessCapability(
                 title="Document library picker",
                 description="Show a document library selector in the chat interface.",
                 default=True,
+                # `ui.group` drives the form's visual sections: the renderer
+                # draws a thin divider whenever the group changes between two
+                # consecutive visible fields.
+                ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="bind_libraries",
@@ -374,6 +378,7 @@ class DocumentAccessCapability(
                     "chosen at configuration time."
                 ),
                 default=False,
+                ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="library_tag_ids",
@@ -386,7 +391,11 @@ class DocumentAccessCapability(
                 ),
                 # Library/document tree picker, only shown while the binding
                 # toggle above is on (the ids are ignored otherwise).
-                ui=UIHints(widget="document_libraries", visible_when="bind_libraries"),
+                ui=UIHints(
+                    widget="document_libraries",
+                    visible_when="bind_libraries",
+                    group="scope",
+                ),
             ),
             FieldSpec(
                 key="show_document_selection",
@@ -394,6 +403,7 @@ class DocumentAccessCapability(
                 title="Document picker",
                 description="Show a document selector in the chat interface.",
                 default=True,
+                ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="show_attach_files_control",
@@ -404,6 +414,7 @@ class DocumentAccessCapability(
                     "messages in the chat interface."
                 ),
                 default=True,
+                ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="show_search_policy_control",
@@ -415,6 +426,7 @@ class DocumentAccessCapability(
                     "picker's default instead of being enforced."
                 ),
                 default=True,
+                ui=UIHints(group="search_policy"),
             ),
             FieldSpec(
                 key="search_policy",
@@ -425,6 +437,7 @@ class DocumentAccessCapability(
                     "Search strategy used when the user has not overridden it "
                     "(enforced as-is when the picker is hidden)."
                 ),
+                ui=UIHints(group="search_policy"),
             ),
             FieldSpec(
                 key="show_rag_scope_control",
@@ -435,6 +448,7 @@ class DocumentAccessCapability(
                     "/ general knowledge) from the chat interface."
                 ),
                 default=True,
+                ui=UIHints(group="rag_scope"),
             ),
             FieldSpec(
                 key="default_rag_scope",
@@ -442,6 +456,7 @@ class DocumentAccessCapability(
                 enum=list(_RAG_SCOPES),
                 title="Default RAG scope",
                 description="Scope used when the user has not overridden it.",
+                ui=UIHints(group="rag_scope"),
             ),
             FieldSpec(
                 key="default_top_k",
@@ -450,6 +465,7 @@ class DocumentAccessCapability(
                 description="How many hits to retrieve when the model omits top_k.",
                 default=8,
                 min=1,
+                ui=UIHints(group="retrieval"),
             ),
             FieldSpec(
                 key="min_source_score_ratio",
@@ -464,6 +480,7 @@ class DocumentAccessCapability(
                 default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
                 min=0.0,
                 max=1.0,
+                ui=UIHints(group="retrieval"),
             ),
         ],
         # No new chat part / side panel / router / owned table — the pilot's
