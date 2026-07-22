@@ -192,7 +192,7 @@ export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
       title={label}
       headerActions={copyText ? <CopyHeaderAction text={copyText} key={label} /> : undefined}
       layout="overlay"
-      width="460px"
+      width="720px"
     >
       {entry && (entry.kind === "combo" ? <ToolDetail entry={entry} /> : <TextDetail entry={entry} />)}
     </InlineDrawer>
