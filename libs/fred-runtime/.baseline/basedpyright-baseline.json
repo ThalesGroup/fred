@@ -1,3 +1,32 @@
 {
-    "files": {}
+    "files": {
+        "./fred_runtime/common/mcp_runtime.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 17,
+                    "lineCount": 3
+                }
+            }
+        ],
+        "./tests/test_conversational_memory.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 13,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 13,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
 }

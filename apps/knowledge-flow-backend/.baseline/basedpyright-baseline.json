@@ -1,3 +1,74 @@
 {
-    "files": {}
+    "files": {
+        "./knowledge_flow_backend/common/processing_profile_context.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 78,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/common/source_utils.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 93,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/core/processors/input/common/image_describer.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 13,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/core/processors/output/vectorization_processor/vectorization_processor.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 78,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/features/kpi/prometheus_service.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 23,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/features/metadata/service.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 85,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/features/resources/utils.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 41,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
 }

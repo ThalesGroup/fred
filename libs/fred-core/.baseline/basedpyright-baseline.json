@@ -1,3 +1,24 @@
 {
-    "files": {}
+    "files": {
+        "./fred_core/logs/opensearch_log_store.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 55,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./fred_core/security/rebac/rebac_engine.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 68,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
 }

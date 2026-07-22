@@ -113,7 +113,7 @@ class SchedulerController:
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
             except Exception as e:
-                raise_internal_error(logger, "Failed to submit process-documents workflow", e)
+                return raise_internal_error(logger, "Failed to submit process-documents workflow", e)
 
         @router.post(
             "/process-library",
@@ -144,4 +144,4 @@ class SchedulerController:
                     document_count=len(req.document_uids) if req.document_uids else None,
                 )
             except Exception as e:
-                raise_internal_error(logger, "Failed to submit process-library workflow", e)
+                return raise_internal_error(logger, "Failed to submit process-library workflow", e)

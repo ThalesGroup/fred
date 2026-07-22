@@ -62,7 +62,7 @@ const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   return builtIn ?? <InsertDriveFileIcon style={style} />;
 };
 
-export const getDocumentIcon = (filename: string): ReactElement | null => {
+export const getDocumentIcon = (filename: string): ReactElement => {
   const ext = filename.split(".").pop()?.toLowerCase();
   return <ExtIcon ext={ext} />;
 };

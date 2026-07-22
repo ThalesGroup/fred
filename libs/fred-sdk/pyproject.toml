@@ -1,6 +1,6 @@
 [project]
 name = "fred-sdk"
-version = "3.3.4"
+version = "3.3.5"
 description = "Authoring SDK for Fred agents — graph, ReAct, and team agent primitives."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

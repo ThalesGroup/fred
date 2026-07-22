@@ -310,6 +310,10 @@
   gap: var(--spacing-s);
 }
 
+.spacer {
+  flex: 1;
+}
+
 .caseSection {
   display: flex;
   flex-direction: column;

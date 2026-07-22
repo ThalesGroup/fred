@@ -1610,6 +1610,7 @@
         "stats": {
           "passed": "Réussis",
           "failed": "Échoués",
+          "insufficient": "Insuffisants",
           "execErrors": "Erreurs exéc.",
           "scoringErrors": "Erreurs scoring"
         },
@@ -1642,6 +1643,8 @@
           "metrics": "Métriques"
         },
         "caseTitle": "Détail du cas",
+        "copyJson": "Copier en JSON",
+        "copied": "Copié",
         "latency": "Latence",
         "input": "Entrée",
         "expected": "Sortie attendue",

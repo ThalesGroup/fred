@@ -114,6 +114,10 @@ format-check: node_modules ## Check formatting with prettier (fails on unformatt
 format-fix: node_modules ## Reformat the codebase in place with prettier
 	npx prettier . --write
 
+.PHONY: lint
+lint: node_modules ## Lint src/ with ESLint (deliberately narrow rule set — see eslint.config.mjs)
+	npx eslint "src/**/*.{ts,tsx}"
+
 # knip (unused-export/dependency detection) is not wired in yet; see the
 # code-quality TODO below. Uncomment once the config is stable.
 # .PHONY: knip
@@ -126,7 +130,7 @@ format-fix: node_modules ## Reformat the codebase in place with prettier
 
 # TODO: add `knip` to the prerequisites below once it is wired in.
 .PHONY: code-quality
-code-quality: type-check format-check  ## Run all checks (type-check + prettier) — the gate to pass before committing
+code-quality: type-check format-check lint  ## Run all checks (type-check + prettier + eslint) — the gate to pass before committing
 	@echo "All frontend code quality checks completed"
 
 # TODO: add `knip-fix` to the prerequisites below once knip is wired in.

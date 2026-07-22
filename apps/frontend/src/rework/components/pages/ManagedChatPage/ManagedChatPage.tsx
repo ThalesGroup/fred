@@ -99,7 +99,7 @@ export default function ManagedChatPage() {
 
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = teamId === activeTeam?.id;
-  const { data: fetchedTeam } = useGetTeamQuery({ teamId }, { skip: !teamId || isPersonalTeam });
+  const { data: fetchedTeam } = useGetTeamQuery({ teamId }, { skip: isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
   const { canAdministerAdmins } = useTeamCapabilities(team);
   const isAdmin = isPersonalTeam || canAdministerAdmins;

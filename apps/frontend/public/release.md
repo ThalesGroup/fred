@@ -1,3 +1,16 @@
+**v2.1.10** — 2026-07-22
+
+- **Summary**
+
+  Defense-in-depth authorization hardening for agent tool execution: every tool call in a
+  ReAct turn is now individually re-authorized, and JWTs are rejected if their issued
+  lifetime exceeds one hour, independent of what the issuing IdP was configured to allow.
+
+- **Security**
+
+  - Every tool call in a ReAct turn is now individually re-authorized against the caller's team (`CAN_READ`), not just once at turn start — a denied or stale team membership now blocks the specific tool call instead of being silently trusted for the rest of a long-running turn (`fred-runtime` 3.3.7)
+  - JWTs are now rejected when their issued lifetime (`exp - iat`) exceeds one hour, regardless of what the issuing IdP was configured to grant — closes a gap where token lifetime was entirely delegated to IdP configuration with no application-side ceiling; Fred's own service-to-service tokens are short-lived and auto-refreshed, so this does not affect normal traffic (`fred-core` 3.4.7)
+
 **v2.1.9** — 2026-07-21
 
 - **Summary**
