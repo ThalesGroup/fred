@@ -82,3 +82,13 @@
   color: var(--on-surface);
   font: var(--font-body-medium);
 }
+
+/* ── Tool-result error (SQL execution error, etc.) ─────────────────────── */
+.errorBox {
+  border: 1px solid var(--error);
+  border-radius: var(--radius-m);
+  background: var(--error-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-error-container);
+  font: var(--font-body-medium);
+}

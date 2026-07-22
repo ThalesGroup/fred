@@ -15,15 +15,20 @@
 import { useState } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import MonacoPane from "@shared/atoms/MonacoPane/MonacoPane";
+import { CodeBlock } from "../../CodeBlock/CodeBlock";
+import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
-import type { TraceEntry } from "../../../../../utils/traceUtils";
+import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
 import {
   PHASE_LABELS,
+  asRagSearchResult,
+  asSqlQueryResult,
   detailTextForEntry,
   entryLabel,
   formatLatencyMs,
   humanizeToolName,
+  parseToolResultContent,
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
@@ -97,8 +102,57 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Structured JSON view for tool call / result entries. */
-function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+/** Status + latency line shown atop every tool-result view. */
+function ToolMeta({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+  const latency = entry.result ? formatLatencyMs(toolResultLatencyMs(entry.result)) : "";
+  const status = !entry.result ? "running" : toolResultOk(entry.result) ? "completed" : "failed";
+  return (
+    <div className={styles.meta}>
+      <span className={styles.metaInfo}>{status}</span>
+      {latency && <span className={styles.metaInfo}>{latency}</span>}
+    </div>
+  );
+}
+
+/** Curated view for the tabular/SQL tool: the executed query plus a row preview. */
+function SqlToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "combo" }>; data: SqlQueryResult }) {
+  return (
+    <div className={styles.detail}>
+      <ToolMeta entry={entry} />
+      <CodeBlock code={data.sql_query} language="sql" />
+      {data.error ? (
+        <div className={styles.errorBox}>{data.error}</div>
+      ) : (
+        <>
+          <span className={styles.metaInfo}>
+            {data.rows.length} ligne{data.rows.length > 1 ? "s" : ""}
+          </span>
+          {data.rows.length > 0 && (
+            <MonacoPane
+              value={JSON.stringify(data.rows.slice(0, 50), null, 2)}
+              height="min(50vh, 400px)"
+              options={{ lineNumbers: "off", folding: true }}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Curated view for RAG/vector-search tools: the query plus retrieved sources. */
+function RagToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "combo" }>; data: RagSearchResult }) {
+  return (
+    <div className={styles.detail}>
+      <ToolMeta entry={entry} />
+      <p className={styles.detailTitle}>{data.query}</p>
+      <SourcesPanel sources={data.hits} />
+    </div>
+  );
+}
+
+/** Fallback: redacted {action, status, latency} JSON view for unrecognized tools. */
+function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const payload = toolPayload(entry);
   const [copied, setCopied] = useState(false);
 
@@ -132,6 +186,16 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
       />
     </>
   );
+}
+
+/** Dispatches a tool-result entry to the richest view its content shape supports. */
+function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+  const data = entry.result ? parseToolResultContent(entry.result) : null;
+  const sqlResult = asSqlQueryResult(data);
+  if (sqlResult) return <SqlToolDetail entry={entry} data={sqlResult} />;
+  const ragResult = asRagSearchResult(data);
+  if (ragResult) return <RagToolDetail entry={entry} data={ragResult} />;
+  return <GenericToolDetail entry={entry} />;
 }
 
 export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {

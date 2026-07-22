@@ -286,6 +286,7 @@ export function useChatSse(
               call_id: event.call_id,
               ok: !event.is_error,
               content: event.content ?? "",
+              latency_ms: event.latency_ms ?? null,
             },
           ];
           if (event.ui_parts?.length) {

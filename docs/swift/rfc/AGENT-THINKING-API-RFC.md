@@ -4,7 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Status:** Draft  
 **Date:** 2026-05-23  
-**Last amended:** 2026-06-17 — RUNTIME-05 Mistral reasoning chunks
+**Last amended:** 2026-07-22 — chat trace UI stops rendering the synthetic `tool_use` thought row (Amendment B)
 **Track:** fred-sdk / fred-runtime execution contract
 
 ---
@@ -720,3 +720,53 @@ already consumes `thought_start/delta/end` events.
 | Auto-synthesise thoughts for ALL ReAct events (model calls, chain nodes)               | Too noisy — same reason as RUNTIME-04 §13 Alt C; tool calls are the only structured, meaningful surface                        |
 | Add `context.thinking()` to ReAct via a `ToolContext` passed into tool implementations | Requires Fred to own the tool implementation; MCP tools and LangChain tools are third-party code — no injection point          |
 | No auto-synthesis; require all ReAct authors to subclass and override                  | Template agents (no Python code) would always have empty ThoughtTrace; the whole feature is unusable for the dominant use case |
+
+---
+
+## Amendment B — Drop the synthetic `tool_use` thought row from the UI; carry latency on the tool-result event instead (2026-07-22)
+
+**Author:** Dimitri Tombroff
+**Date:** 2026-07-22
+**Amends:** RUNTIME-04 / Amendment A (Layer 1 auto-synthesis)
+
+### B.1 Problem
+
+Amendment A (§A.2, Layer 1) specified that the runtime auto-synthesize a
+`tool_use` thought around every tool call, closed with
+`conclusion="{n_results} · {latency_ms}ms"` — e.g. "3 results · 420ms". The
+implementation in `react_runtime.py` never built that template; it closes
+every `tool_use` thought with the hardcoded literal `conclusion="Error" if
+is_error else "Done"`. In the chat UI, this produced one **"Tool use" / Done**
+row per tool call, in addition to the `tool_call`/`tool_result` combo row that
+already shows the humanized tool label and status — a redundant, content-free
+row repeated once per tool invocation (user-reported, chain-of-thought
+review, 2026-07-22).
+
+### B.2 Decision
+
+Rather than implementing the original `"{n_results} · {latency_ms}ms"`
+template (which requires a per-tool-shape result digest — fragile and
+tool-specific to generalize) the fix moves the one piece of that template that
+*is* generic — latency — onto the `ToolResultRuntimeEvent` itself
+(`latency_ms: int | None`, populated from the same
+`_elapsed_ms_since(thought_started_at)` call already computed for the
+`ThoughtEndEvent`), and the frontend (`traceUtils.groupTraceEntries()`) stops
+rendering the `tool_use`-phase solo thought row entirely — see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.21 for the full change.
+
+The backend still emits the `ThoughtStartEvent(phase="tool_use")` /
+`ThoughtEndEvent(conclusion="Done"/"Error")` pair unchanged (no behavior change
+for any other consumer, e.g. eval trace/replay tooling that reads the full
+event stream) — only the chat UI's trace list stops rendering that specific
+row, because the paired combo row now conveys the same "what ran, how it went,
+how long it took" information on its own.
+
+This does not fully satisfy Amendment A's original template — there is no
+"3 results" style count in the UI today. That remains a legitimate fast-follow
+if a specific need for it shows up, implemented as a per-tool `thought_config()`
+override (Layer 2, §A.2) rather than a generic runtime digest, since result
+shape is tool-specific and Layer 2 already exists for exactly this purpose.
+
+Non-`tool_use` thought phases (`planning`, `observation`, `reflection`,
+`synthesis`) are unaffected — their `conclusion` is real agent-authored or
+model-native text, not this synthetic placeholder, and continues to render.

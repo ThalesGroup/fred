@@ -618,6 +618,7 @@ export type ToolResultRuntimeEvent = {
   content?: string;
   is_error?: boolean;
   kind?: "tool_result";
+  latency_ms?: number | null;
   sequence?: number;
   sources?: VectorSearchHit[];
   tool_name?: string | null;

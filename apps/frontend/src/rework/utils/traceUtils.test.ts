@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import {
+  asRagSearchResult,
+  asSqlQueryResult,
   formatLatencyMs,
   groupTraceEntries,
   humanizeToolName,
   isTraceChannel,
   isFinalChannel,
+  parseToolResultContent,
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
@@ -195,6 +198,25 @@ describe("groupTraceEntries", () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toEqual({ kind: "solo", message: thought });
     expect(entries[1]).toMatchObject({ kind: "combo" });
+  });
+
+  it("filters out synthetic tool_use thought entries — redundant with the paired combo row", () => {
+    const toolUseThought = thoughtMsg("", { phase: "tool_use", title: "Calling search", conclusion: "Done" });
+    const call = toolCallMsg("c1", "search");
+    const result = toolResultMsg("c1", "found it");
+    const entries = groupTraceEntries([toolUseThought, call, result]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: "combo", call, result });
+  });
+
+  it("keeps non-tool_use thought phases (planning, reflection, synthesis) alongside combos", () => {
+    const planning = thoughtMsg("thinking it through", { phase: "planning" });
+    const call = toolCallMsg("c1", "search");
+    const result = toolResultMsg("c1", "found it");
+    const entries = groupTraceEntries([planning, call, result]);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toEqual({ kind: "solo", message: planning });
+    expect(entries[1]).toMatchObject({ kind: "combo", call, result });
   });
 });
 
@@ -400,6 +422,68 @@ describe("humanizeToolName", () => {
 
   it("includes provider label for non-web MCP tools with no verb object", () => {
     expect(humanizeToolName("mcp__github__search")).toBe("Searching GitHub");
+  });
+});
+
+// ── parseToolResultContent / asSqlQueryResult / asRagSearchResult ───────────
+
+describe("parseToolResultContent", () => {
+  it("parses valid JSON object content", () => {
+    const result = toolResultMsg("c1", '{"foo":"bar"}');
+    expect(parseToolResultContent(result)).toEqual({ foo: "bar" });
+  });
+
+  it("returns null for non-JSON content", () => {
+    const result = toolResultMsg("c1", "plain text answer");
+    expect(parseToolResultContent(result)).toBeNull();
+  });
+
+  it("returns null for JSON arrays (not an object)", () => {
+    const result = toolResultMsg("c1", "[1,2,3]");
+    expect(parseToolResultContent(result)).toBeNull();
+  });
+});
+
+describe("asSqlQueryResult", () => {
+  it("recognizes a RawSQLResponse-shaped object", () => {
+    const data = { sql_query: "SELECT * FROM ships", rows: [{ id: 1 }], error: null };
+    expect(asSqlQueryResult(data)).toEqual(data);
+  });
+
+  it("returns null when sql_query is missing", () => {
+    expect(asSqlQueryResult({ rows: [] })).toBeNull();
+  });
+
+  it("returns null when rows is not an array", () => {
+    expect(asSqlQueryResult({ sql_query: "SELECT 1", rows: "not an array" })).toBeNull();
+  });
+
+  it("returns null for null input", () => {
+    expect(asSqlQueryResult(null)).toBeNull();
+  });
+});
+
+describe("asRagSearchResult", () => {
+  it("recognizes a {query, hits} shaped object", () => {
+    const data = { query: "how many ships", hits: [{ uid: "u1", title: "t", content: "c", score: 0.9 }] };
+    expect(asRagSearchResult(data)).toEqual(data);
+  });
+
+  it("returns null when query is missing", () => {
+    expect(asRagSearchResult({ hits: [] })).toBeNull();
+  });
+
+  it("returns null when hits is not an array", () => {
+    expect(asRagSearchResult({ query: "q", hits: "not an array" })).toBeNull();
+  });
+
+  it("returns null for null input", () => {
+    expect(asRagSearchResult(null)).toBeNull();
+  });
+
+  it("does not misclassify a SQL result as a RAG result", () => {
+    const sqlData = { sql_query: "SELECT 1", rows: [] };
+    expect(asRagSearchResult(sqlData)).toBeNull();
   });
 });
 

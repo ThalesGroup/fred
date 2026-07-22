@@ -945,6 +945,40 @@ items:
       Implemented 2026-06-29; offline suites green (cp 175 / agents 33 / frontend 276),
       all code-quality green. Awaiting review.
 
+  - id: CHAT-16
+    title: "Restore tool-call detail in the chain-of-thought trace and drawer (SQL, RAG sources, latency)"
+    status: done
+    owner: Dimitri
+    closed: "2026-07-22"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §17"
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md Amendment B"
+      execution: "GitHub issue #1774"
+    notes: >
+      Follow-up to CHAT-14's redaction fix, which overcorrected by discarding
+      all tool-result detail (raw content already carried the SQL query and
+      RAG hits). `ToolResultRuntimeEvent`/`ToolResultPart` gain `latency_ms`
+      (additive; populated from the same elapsed-time computation already
+      used to close the paired `tool_use` thought — see
+      RUNTIME-EXECUTION-CONTRACT.md §8.21), threaded through `agent_app.py`
+      persistence, `useChatSse.ts`, and the OpenAPI-generated runtime client.
+      `traceUtils.groupTraceEntries()` stops emitting the synthetic
+      `tool_use`-phase thought row (title "Calling `<tool>`", conclusion
+      always the hardcoded literal "Done"/"Error") — redundant with the
+      paired combo row, which now also shows real latency; the repeated
+      "Done" spam is gone. `TraceDetailDrawer` now recognizes two curated
+      tool-result content shapes and renders them richly instead of the
+      blanket `{action, status, latency}` redaction: SQL
+      (`{sql_query, rows, error}`) via `CodeBlock` + row preview, and RAG
+      (`{query, hits}`) via the existing `SourcesPanel` molecule. Any other
+      tool shape still falls back to the original redacted view — the
+      CHAT-14 security posture is preserved as the default, only these two
+      specifically useful shapes are exempted. Removed the now-fully-dead
+      `summarizeToolResultCompact` (flagged as a follow-up in CHAT-14's
+      notes). New tests in `traceUtils.test.ts`
+      (shape-detection + tool_use filtering). Offline suites green
+      (fred-sdk 233, fred-runtime 565, frontend 503), all code-quality green.
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01

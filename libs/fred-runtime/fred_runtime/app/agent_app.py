@@ -1747,6 +1747,7 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     content=payload.get("content", ""),
                     ok=not payload.get("is_error", False),
+                    latency_ms=payload.get("latency_ms"),
                 )
             )
             rank += 1

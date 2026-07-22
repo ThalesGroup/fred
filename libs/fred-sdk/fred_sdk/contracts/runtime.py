@@ -192,6 +192,7 @@ class ToolResultRuntimeEvent(RuntimeEventBase):
     is_error: bool = False
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
+    latency_ms: int | None = None
 
 
 class HumanChoiceOption(FrozenModel):

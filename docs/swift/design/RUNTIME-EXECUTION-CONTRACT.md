@@ -1153,6 +1153,59 @@ rather than a permission check on a known team id got an empty result — their
 own personal team was silently missing until some other call happened to
 provision it first. No OpenAPI/type changes.
 
+### 8.21 ✅ `ToolResultRuntimeEvent.latency_ms` — chat trace detail restored (2026-07-22)
+
+**What changed.** `ToolResultRuntimeEvent` (`fred_sdk/contracts/runtime.py`)
+gains an additive `latency_ms: int | None = None` field. `react_runtime.py`
+already computed the wall-clock duration of every tool call to close the
+paired `tool_use` `ThoughtEndEvent` (`_elapsed_ms_since(thought_started_at)`)
+— it now attaches that same value to the `ToolResultRuntimeEvent` itself
+instead of only the bookkeeping thought. `agent_app.py`'s history-persistence
+path threads it into `make_tool_result(..., latency_ms=...)` (the
+`ToolResultPart.latency_ms` field already existed in `fred-core`'s
+`history_schema.py` but was never populated by any caller). OpenAPI/generated
+client regenerated (`make update-runtime-api`).
+
+On the frontend, `useChatSse.ts` now copies `event.latency_ms` onto the
+`ToolResultPart` it builds for the `tool_result` SSE case (previously
+dropped, mirroring how `sources` was already handled for the `final` event
+but not `tool_result`). `traceUtils.groupTraceEntries()` also stops emitting
+a solo trace row for the synthetic `tool_use`-phase thought that brackets
+every tool call: that row's title ("Calling `<tool>`") and its `conclusion`
+were always the hardcoded literal `"Done"`/`"Error"` from `react_runtime.py`
+— purely redundant bookkeeping, not agent-authored reasoning — and produced
+one repeated, information-free "Done" row per tool call in the chain-of-thought
+list. The paired `tool_call`/`tool_result` combo row already shows the
+humanized tool label and the status dot, and now also shows the real latency.
+Genuine authored thoughts (`planning`/`observation`/`reflection`/`synthesis`)
+are unaffected — their `conclusion` is real agent-written text, not this
+synthetic placeholder.
+
+Separately, `TraceDetailDrawer`'s tool-result view (previously a blanket
+`{action, status, latency}` redaction for every tool, per #1774/CHAT-13 —
+see §8.6's sibling UX work) now recognizes two common, specifically-curated
+content shapes from `ToolResultPart.content` and renders them richly instead
+of redacting them: a tabular/SQL tool result (`{sql_query, rows, error}`,
+e.g. `knowledge-flow-backend`'s `RawSQLResponse`) shows the executed SQL and a
+row preview; a RAG/vector-search tool result (`{query, hits}`) shows the
+search query and the retrieved hits via the existing `SourcesPanel` molecule.
+Any other tool shape still falls back to the original redacted view — the
+redaction default from #1774 is preserved for unrecognized tools, only two
+specifically useful shapes are now exempted from it.
+
+**Why.** User-reported regression (chain-of-thought review, 2026-07-22): the
+#1774/CHAT-13 fix for noisy raw tool identifiers (see §8.6 area) overcorrected
+by discarding all tool-result detail, including the two kinds of information
+users actually look for mid-answer — the SQL query behind a numeric answer,
+and the sources behind a RAG citation — and left `latency_ms` permanently
+empty because no event in the pipeline ever populated it, while the
+chain-of-thought list repeated a synthetic, content-free "Done" once per tool
+call. No new contract surface was needed: `content` already carried the SQL
+query and RAG hits (per-tool `sources` on `ToolResultRuntimeEvent` exist too,
+but are still only consumed in aggregate on the final message — wiring
+per-call `sources` through `ToolResultPart` is a possible fast-follow, not
+done here since `content` already covers the citation case).
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

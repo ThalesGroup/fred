@@ -205,6 +205,14 @@ shared molecule.
   tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
   opens in the overlay drawer with markdown rendering instead of raw JSON.
 
+- **Repeated content-free "Done" rows (2026-07-22)** — every tool call previously produced
+  two trace rows: a "Tool use" phase thought (title "Calling `<tool>`", secondary text always
+  the hardcoded literal "Done"/"Error") and the paired `tool_call`/`tool_result` combo row.
+  The thought row is now filtered out entirely (`traceUtils.groupTraceEntries()`) — it was
+  pure bookkeeping duplication, not agent reasoning. The combo row alone now carries the
+  humanized tool label, the status dot, and (new) the real execution latency. See
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21 and `AGENT-THINKING-API-RFC.md` Amendment B.
+
 ---
 
 ### `TraceEntryRow`
@@ -249,12 +257,22 @@ shared molecule.
 
 #### Open UX issues
 
-- **Theme** — Monaco is always `vs-dark` (now only used for tool call/result entries). The
-  spec says theme-aware (`vs` / `vs-dark`). Not yet wired to the app theme context.
+- **Theme** — Monaco is always `vs-dark` (still used for the row-preview pane in the SQL
+  view, and for the generic/unrecognized-tool fallback view). The spec says theme-aware
+  (`vs` / `vs-dark`). Not yet wired to the app theme context.
 
-- **Tool entry rendering** — tool call/result entries still render as raw Monaco JSON.
-  A prettier structured view (args table, result preview) is a follow-up; only reasoning /
-  note entries got the markdown treatment in the 2026-06-18 pass.
+- **Per-call source curation** — the RAG tool view reads `hits` straight out of the tool's
+  raw `content` JSON (the same list the LLM sees), not the narrower, curated
+  `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
+  dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
+  `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
+  + SSE consumption) — a reasonable fast-follow, not required for the current fix since
+  `content` already carries enough to render useful citations.
+
+- **Unrecognized-tool fallback still raw JSON** — only two content shapes are recognized
+  (SQL `{sql_query, rows, error}`, RAG `{query, hits}`); any other tool still falls back to
+  the redacted `{action, status, latency}` Monaco JSON view. Intentional (see Resolved below)
+  but the list of recognized shapes may need to grow as more tools are added.
 
 #### Resolved
 
@@ -270,6 +288,15 @@ shared molecule.
   render header + conclusion only — no "no reasoning text" placeholder.
 
 - **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
+
+- **Curated tool-result views for SQL and RAG (2026-07-22)** — tool call/result entries no
+  longer always render the blanket-redacted `{action, status, latency}` JSON (from
+  #1774/CHAT-13). Two common, specifically useful content shapes are now recognized and
+  rendered richly: a tabular/SQL result (`{sql_query, rows, error}`) shows the executed SQL
+  via `CodeBlock` plus a row-count and preview; a RAG/vector-search result (`{query, hits}`)
+  shows the search query plus retrieved sources via the existing `SourcesPanel` molecule.
+  Any other tool shape still falls back to the original redacted view — see
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 ---
 

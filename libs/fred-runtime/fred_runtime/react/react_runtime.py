@@ -454,6 +454,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 "suppressing LLM turn, surfacing error directly",
                                 message.name,
                             )
+                        thought_id = active_thought_ids.pop(message.tool_call_id, None)
+                        thought_started_at = active_thought_started_at.pop(
+                            message.tool_call_id, None
+                        )
+                        tool_latency_ms = (
+                            _elapsed_ms_since(thought_started_at)
+                            if thought_started_at is not None
+                            else None
+                        )
                         yield ToolResultRuntimeEvent(
                             sequence=sequence,
                             call_id=message.tool_call_id,
@@ -462,20 +471,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             is_error=is_error,
                             sources=sources,
                             ui_parts=ui_parts,
+                            latency_ms=tool_latency_ms,
                         )
                         sequence += 1
-                        thought_id = active_thought_ids.pop(message.tool_call_id, None)
-                        thought_started_at = active_thought_started_at.pop(
-                            message.tool_call_id, None
-                        )
                         if thought_id:
                             yield ThoughtEndEvent(
                                 sequence=sequence,
                                 thought_id=thought_id,
                                 conclusion="Error" if is_error else "Done",
-                                duration_ms=_elapsed_ms_since(thought_started_at)
-                                if thought_started_at is not None
-                                else None,
+                                duration_ms=tool_latency_ms,
                             )
                             sequence += 1
                         continue
