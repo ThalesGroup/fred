@@ -27,7 +27,6 @@ import subprocess  # nosec B404: only used to construct result/exception stubs i
 from pathlib import Path
 
 import pytest
-
 from fred_core.conversion import convert_pptx_bytes_to_pdf, convert_pptx_file_to_pdf
 
 _MODULE = "fred_core.conversion.pptx_pdf"

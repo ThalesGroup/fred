@@ -25,11 +25,10 @@ from __future__ import annotations
 import io
 from typing import List, Tuple
 
+from fred_capability_ppt_filler.parser import SlideSchema, parse
 from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches
-
-from fred_capability_ppt_filler.parser import SlideSchema, parse
 
 # (text-box body, notes text) per slide.
 SlideSpec = Tuple[str, str]

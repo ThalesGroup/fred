@@ -14,14 +14,13 @@ from __future__ import annotations
 import io
 from typing import List
 
-from pptx import Presentation
-from pptx.dml.color import RGBColor
-from pptx.util import Inches, Pt
-
 from fred_capability_ppt_filler.traversal import (
     list_keys_on_slide,
     replace_keys_on_slide,
 )
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
 
 _FONT_NAME = "Arial"
 _FONT_SIZE = Pt(20)

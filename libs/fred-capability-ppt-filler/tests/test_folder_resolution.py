@@ -24,9 +24,6 @@ import io
 from typing import Dict, List, Optional, Tuple
 
 import pytest
-from pptx import Presentation
-from pptx.util import Inches
-
 from fred_capability_ppt_filler.folder_resolution import (
     CODE_FOLDER_NOT_FOUND,
     CODE_IMAGE_KEY_INVALID_LOCATION,
@@ -36,6 +33,8 @@ from fred_capability_ppt_filler.parser import (
     CODE_IMAGE_WITHOUT_FOLDER,
     parse,
 )
+from pptx import Presentation
+from pptx.util import Inches
 
 # (text-box body, notes text) per slide.
 SlideSpec = Tuple[str, str]

@@ -32,25 +32,8 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
-from fred_sdk.contracts.capability import (
-    CapabilityContext,
-    CapabilityIdentity,
-    EmptyModel,
-)
-from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
-from fred_sdk.contracts.runtime import RuntimeServices
-from pptx import Presentation
-from pptx.util import Inches
-
 import fred_capability_ppt_filler.fill as fill_mod
-from fred_capability_ppt_filler.capability import (
-    PPT_FILLER_TEMPLATE_KEY,
-    PptFillerConfig,
-)
-from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
-from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
-
+import pytest
 from deck_builders import (
     IMAGE_NOTES,
     build_deck,
@@ -62,7 +45,22 @@ from deck_builders import (
     schema_slides,
     webp_bytes,
 )
+from fred_capability_ppt_filler.capability import (
+    PPT_FILLER_TEMPLATE_KEY,
+    PptFillerConfig,
+)
+from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
+from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+)
+from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
+from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
+from pptx import Presentation
+from pptx.util import Inches
 
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"

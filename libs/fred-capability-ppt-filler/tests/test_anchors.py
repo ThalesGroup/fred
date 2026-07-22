@@ -11,14 +11,13 @@ the expected absolute geometry is deterministic and the group transform is non-t
 import io
 from typing import List, Optional, Tuple
 
-from pptx import Presentation
-from pptx.oxml.ns import qn
-from pptx.util import Inches, Pt
-
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
     list_image_anchors_on_slide,
 )
+from pptx import Presentation
+from pptx.oxml.ns import qn
+from pptx.util import Inches, Pt
 
 # An EMU box: (left, top, width, height). Used both to place fixture shapes and to assert
 # the absolute geometry returned by the traversal.

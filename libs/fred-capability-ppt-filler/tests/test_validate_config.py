@@ -26,13 +26,7 @@ fixed storage key.
 from __future__ import annotations
 
 import pytest
-from fred_sdk.contracts.capability import (
-    CapabilityIdentity,
-    SaveContext,
-    UploadedFile,
-)
-from fred_sdk.contracts.runtime import RuntimeServices
-
+from deck_builders import IMAGE_NOTES, build_deck
 from fred_capability_ppt_filler.capability import (
     PPT_FILLER_TEMPLATE_KEY,
     TEMPLATE_SLOT,
@@ -40,8 +34,12 @@ from fred_capability_ppt_filler.capability import (
     PptFillerConfig,
 )
 from fred_capability_ppt_filler.parser import KeyField, SlideSchema
-
-from deck_builders import IMAGE_NOTES, build_deck
+from fred_sdk.contracts.capability import (
+    CapabilityIdentity,
+    SaveContext,
+    UploadedFile,
+)
+from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeAssets, FakeFolders
 
 

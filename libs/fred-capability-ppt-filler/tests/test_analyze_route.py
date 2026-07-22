@@ -26,12 +26,10 @@ save round-trip supplies). An unreadable upload returns ``200`` with a single
 from __future__ import annotations
 
 import pytest
+from deck_builders import IMAGE_NOTES, build_deck, build_table_deck
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
-
 from fred_capability_ppt_filler.capability import PptFillerCapability
-
-from deck_builders import IMAGE_NOTES, build_deck, build_table_deck
 
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"

@@ -9,9 +9,6 @@ import io
 from typing import List, Optional, Tuple
 
 import pytest
-from pptx import Presentation
-from pptx.util import Inches, Pt
-
 from fred_capability_ppt_filler.parser import (
     CODE_DESCRIBED_BUT_NOT_IN_SLIDE,
     CODE_DUPLICATED_METADATA,
@@ -27,6 +24,8 @@ from fred_capability_ppt_filler.traversal import (
     list_keys_on_slide,
     replace_keys_on_slide,
 )
+from pptx import Presentation
+from pptx.util import Inches, Pt
 
 # (text-box body, notes text) per slide. A blank text-box keeps a slide that only has
 # notes (to exercise described_but_not_in_slide).
