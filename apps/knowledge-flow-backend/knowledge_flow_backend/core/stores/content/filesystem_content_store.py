@@ -176,7 +176,11 @@ class FileSystemContentStore(BaseContentStore):
         """
         file_path = self._get_primary_file_path(document_uid)
         f = open(file_path, "rb")
-        f.seek(start)
+        try:
+            f.seek(start)
+        except Exception:
+            f.close()
+            raise
 
         # Create a wrapper to limit the stream to the requested length (main's version)
         class RangeStreamWrapper(io.IOBase):
@@ -318,7 +322,11 @@ class FileSystemContentStore(BaseContentStore):
             return f
 
         # ranged stream
-        f.seek(start or 0)
+        try:
+            f.seek(start or 0)
+        except Exception:
+            f.close()
+            raise
 
         # NOTE: Using the RawIOBase/BufferedReader pattern here for the Generic Object API (similar to HEAD)
         # as it was part of the set of new methods.
