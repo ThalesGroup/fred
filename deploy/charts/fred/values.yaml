@@ -432,7 +432,10 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false           # Run migrations via Helm hooks on deploy
+      # ON since writable_document (#1905) — the first fred-agents capability
+      # that owns a DB table. The pre-install/pre-upgrade hook Job now runs on
+      # every deploy so a fresh platform and every upgrade get the schema.
+      enabled: true
       scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
       backoffLimit: 3         # Retry count on migration failure
       # fred-agents runs the runtime CLI (not bare alembic): it upgrades
