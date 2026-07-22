@@ -164,13 +164,16 @@ export default function EvaluationRuns({
   const { showSuccess, showError } = useToast();
   const [drawerRunId, setDrawerRunId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EvaluationRun | null>(null);
+  // Which run's rerun is currently in flight — per-run rather than a single global
+  // flag, so relaunching one row doesn't disable every other row's Rerun button.
+  const [reruningRunId, setReruningRunId] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery(
     { evaluationId },
     { skip: !evaluationId, pollingInterval: 10_000 },
   );
   const [deleteRun, { isLoading: isDeleting }] = useDeleteRunEvaluationV1RunsRunIdDeleteMutation();
-  const [startRun, { isLoading: isRerunning }] = useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation();
+  const [startRun] = useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation();
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -204,14 +207,22 @@ export default function EvaluationRuns({
   const rerunManagedTarget = mostRecentRun?.target.kind === "managed_instance" ? mostRecentRun.target : null;
   const rerunTargetLabel = mostRecentRun ? targetLabel(mostRecentRun.target, t) : "";
 
-  const handleRerun = async () => {
-    if (!rerunManagedTarget) return;
+  // Reruns any given run of this evaluation — not just the most recent one. Reuses
+  // that run's own target and exact metric selection ("New run…" but without having
+  // to re-pick the agent or the metrics).
+  const handleRerunRun = async (run: EvaluationRun) => {
+    if (run.target.kind !== "managed_instance") return;
+    setReruningRunId(run.run_id);
     try {
       const result = await startRun({
         evaluationId,
         startRunRequest: {
           team_id: teamId,
-          target: { kind: "managed_instance", agent_instance_id: rerunManagedTarget.agent_instance_id },
+          target: { kind: "managed_instance", agent_instance_id: run.target.agent_instance_id },
+          // Fall back to the historical baseline only for a run predating this field
+          // (empty list) — otherwise reproduce exactly what this run was scored on.
+          metrics: run.metrics?.length ? run.metrics : ["answer_relevancy"],
+          custom_metrics: run.custom_metrics ?? [],
         },
       }).unwrap();
       onOpenRun(result.run_id);
@@ -220,6 +231,8 @@ export default function EvaluationRuns({
       showError({
         summary: typeof detail === "string" ? detail : t("rework.evaluation.runCreate.error"),
       });
+    } finally {
+      setReruningRunId(null);
     }
   };
 
@@ -253,9 +266,15 @@ export default function EvaluationRuns({
             <Button color="on-surface" variant="outlined" size="medium" onClick={onNewRun}>
               {t("rework.evaluation.runs.newRun")}
             </Button>
-            {rerunManagedTarget && (
-              <Button color="primary" variant="filled" size="medium" disabled={isRerunning} onClick={handleRerun}>
-                {isRerunning
+            {rerunManagedTarget && mostRecentRun && (
+              <Button
+                color="primary"
+                variant="filled"
+                size="medium"
+                disabled={reruningRunId === mostRecentRun.run_id}
+                onClick={() => handleRerunRun(mostRecentRun)}
+              >
+                {reruningRunId === mostRecentRun.run_id
                   ? t("rework.evaluation.runCreate.starting")
                   : t("rework.evaluation.runs.rerun", { target: rerunTargetLabel })}
               </Button>
@@ -360,6 +379,19 @@ export default function EvaluationRuns({
                   <Button color="on-surface" variant="outlined" size="small" onClick={() => onOpenRun(run.run_id)}>
                     {t("rework.evaluation.runs.detail")}
                   </Button>
+                  {run.target.kind === "managed_instance" && (
+                    <Button
+                      color="on-surface"
+                      variant="outlined"
+                      size="small"
+                      disabled={reruningRunId === run.run_id}
+                      onClick={() => handleRerunRun(run)}
+                    >
+                      {reruningRunId === run.run_id
+                        ? t("rework.evaluation.runCreate.starting")
+                        : t("rework.evaluation.runs.rerunRow")}
+                    </Button>
+                  )}
                   <Button
                     color="error"
                     variant="outlined"

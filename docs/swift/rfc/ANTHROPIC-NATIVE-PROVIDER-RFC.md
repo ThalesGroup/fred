@@ -212,4 +212,4 @@ Offline unit tests in `libs/fred-core` (no network):
 - [ ] Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8`
 - [ ] Config example in the relevant `configuration.yaml` sample(s)
 - [ ] `id-legend.yaml` RUNTIME-07 row + BACKLOG.md item marked done
-- [ ] `PMO-BOARD.md` row synced (execution ref = GitHub issue → PR → branch)
+- [ ] GitHub issue kept current (execution ref = PR → branch, closed on ship)

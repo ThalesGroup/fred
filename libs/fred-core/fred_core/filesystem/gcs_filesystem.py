@@ -17,12 +17,12 @@ import re
 import time
 from typing import List, Optional, Set
 
+from fred_core.common.gcs_client import build_gcs_client
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
-from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 logger = logging.getLogger(__name__)
@@ -67,9 +67,7 @@ class GcsFilesystem(BaseFilesystem):
         # Prefix injected externally by the app if needed (mirrors MinioFilesystem).
         self.prefix: str | None = None
 
-        self.client = (
-            storage.Client(project=project_id) if project_id else storage.Client()
-        )
+        self.client = build_gcs_client(project_id)
         self.bucket = self.client.bucket(bucket_name)
 
     def health_check(self) -> dict:
@@ -222,12 +220,14 @@ class GcsFilesystem(BaseFilesystem):
             except NotFound:
                 logger.warning("[GCS_DELETE] already gone: %s", blob.name)
 
-        # Delete the object itself and a possible directory marker.
+        # Delete the object itself and a possible directory marker. The marker in
+        # particular may simply never have existed, so NotFound here is routine,
+        # not warning-worthy.
         for key in (resolved, prefix):
             try:
                 self.bucket.blob(key).delete()
             except NotFound:
-                pass
+                logger.debug("[GCS_DELETE] already gone: %s", key)
 
     async def print_root_dir(self) -> str:
         """Return the logical root URI in ``gs://bucket/prefix`` form."""

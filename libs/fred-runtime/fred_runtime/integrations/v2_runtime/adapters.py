@@ -64,9 +64,19 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
+    AgentAssetPort,
     ChatModelFactoryPort,
+    DocumentContentPort,
+    DocumentFolderPort,
+    DocumentPortCallError,
+    DocumentRawContent,
     DocumentSearchPort,
     DocumentSearchResult,
+    DocumentSummarizePort,
+    DocumentSummaryResult,
+    DocumentTreePort,
+    DocumentTreeResult,
+    FolderDocumentEntry,
     SpanPort,
     ToolInvokerPort,
     ToolProviderPort,
@@ -83,6 +93,8 @@ from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
+from fred_runtime.common.kf_document_client import KfDocumentClient
+from fred_runtime.common.kf_tag_client import KfTagClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -782,6 +794,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
+        attachments_only: bool = False,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
@@ -804,6 +817,10 @@ class DocumentSearchAdapter(DocumentSearchPort):
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
             runtime_context
         )
+        if attachments_only:
+            # Capability-pinned scope: the conversation's session-scoped
+            # documents (attached files) only, never the corpus.
+            include_session_scope, include_corpus_scope = True, False
 
         hits = await self._search_client.search(
             question=query,
@@ -818,6 +835,246 @@ class DocumentSearchAdapter(DocumentSearchPort):
             include_corpus_scope=include_corpus_scope,
         )
         return DocumentSearchResult(hits=tuple(hits))
+
+
+class AgentConfigAssetsAdapter(AgentAssetPort):
+    """
+    Runtime adapter behind `RuntimeServices.agent_assets` (#1903, RFC §3.4/§3.8).
+
+    Stores one agent instance's capability config assets under the KF path
+    `teams/{team}/agents/{agent_instance_id}/config/{key}` through the unified
+    `/fs` routes. The team and agent instance come from the privately-captured
+    binding/settings — a capability only ever names the slot-relative `key`, so
+    it can never write outside its own instance's config area. KF-side, reads
+    are team-membership-gated (any user chatting with the agent) and writes
+    require the team resource-update permission (`ScopedAreaFilesystem`).
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self._binding = binding
+        self._client = KfWorkspaceClient(
+            agent=_WorkspaceAgentShim(binding=binding, settings=settings)
+        )
+
+    def _config_path(self, key: str) -> str:
+        team = (
+            getattr(self._binding.runtime_context, "team_id", None)
+            or self._settings.team_id
+        )
+        instance = getattr(self._binding.runtime_context, "agent_instance_id", None)
+        if not team or not instance:
+            raise RuntimeError(
+                "Agent-config assets require a team and an agent instance in "
+                "the session context."
+            )
+        parts = [p for p in key.strip().replace("\\", "/").split("/") if p]
+        if not parts or ".." in parts:
+            raise ValueError(f"Invalid agent asset key: {key!r}")
+        return f"teams/{team}/agents/{instance}/config/{'/'.join(parts)}"
+
+    async def store(
+        self,
+        key: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+        filename: str | None = None,
+    ) -> str:
+        await self._client.fs_upload(
+            self._config_path(key),
+            content,
+            filename or key.rsplit("/", 1)[-1],
+            content_type=content_type,
+        )
+        return key
+
+    async def fetch(self, key: str) -> bytes:
+        blob = await self._client.fs_download_blob(self._config_path(key))
+        return blob.bytes
+
+    async def delete(self, key: str) -> None:
+        try:
+            await self._client.fs_delete(self._config_path(key))
+        except WorkspaceRetrievalError:
+            pass
+
+
+class DocumentContentAdapter(DocumentContentPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_content` (#1903).
+
+    Fetches a corpus document's ORIGINAL bytes by uid with the acting user's
+    identity (KF enforces document-level access). Same doctrine as
+    `DocumentSearchAdapter`: the binding/token stay private; the capability
+    passes only the document uid.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=settings)
+        )
+
+    async def fetch_raw(self, document_uid: str) -> DocumentRawContent:
+        blob = await self._client.fetch_raw_content(document_uid=document_uid)
+        return DocumentRawContent(
+            content=blob.bytes,
+            content_type=blob.content_type,
+            filename=blob.filename,
+        )
+
+
+class DocumentFolderAdapter(DocumentFolderPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_folders` (#1903).
+
+    Resolves an author folder string to a DOCUMENT tag id in the bound space:
+    the agent's team when one is set, else the acting user's personal space —
+    the same scoping rule Kea's `_KfTagFolderResolver` applied.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self._client = KfTagClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=settings)
+        )
+
+    async def resolve_folder(self, folder: str) -> str | None:
+        team_id = self._settings.team_id
+        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
+        return await self._client.resolve_folder(
+            folder,
+            owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+            team_id=team_id if scoped_team else None,
+        )
+
+    async def list_folder_documents(
+        self, folder_tag_id: str
+    ) -> tuple[FolderDocumentEntry, ...]:
+        pairs = await self._client.browse_documents_by_tag(folder_tag_id)
+        return tuple(
+            FolderDocumentEntry(document_uid=uid, document_name=name)
+            for uid, name in pairs
+        )
+
+
+def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
+    """
+    Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
+    so capabilities can render an actionable `is_error` tool result without
+    importing the adapter's HTTP stack.
+    """
+
+    timed_out = isinstance(exc, httpx.TimeoutException)
+    status_code = (
+        exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    )
+    detail = str(exc).strip() or type(exc).__name__
+    return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
+
+
+class DocumentTreeAdapter(DocumentTreePort):
+    """
+    Runtime adapter behind `RuntimeServices.document_tree`.
+
+    Same shape as `DocumentSearchAdapter`: the per-turn binding is captured
+    PRIVATELY (through `_VectorSearchAgentShim` + `KfDocumentClient`, which own
+    the access token and its refresh) and only the capability-safe `tree(...)`
+    surface is exposed. The caller-supplied `library_tag_ids` are the
+    capability's already-narrowed scope; this adapter intersects them with the
+    session binding's own library scope and stamps the owner_filter/team_id
+    seam, so the Knowledge Flow listing can never leak folders across team
+    boundaries.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def tree(
+        self,
+        *,
+        working_directory: str | None = None,
+        library_tag_ids: Sequence[str] | None = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        runtime_context = self._binding.runtime_context
+        effective_libs = _narrow_scope_ids(
+            get_document_library_tags_ids(runtime_context), library_tag_ids
+        )
+        team_id = self._settings.team_id
+        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
+        try:
+            result = await self._client.tree(
+                working_directory=working_directory,
+                tag_ids=effective_libs,
+                max_chars=max_chars,
+                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+                team_id=team_id if scoped_team else None,
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
+
+
+class DocumentSummarizeAdapter(DocumentSummarizePort):
+    """
+    Runtime adapter behind `RuntimeServices.document_summarize`.
+
+    No scope narrowing here: the caller already holds a concrete
+    `document_uid` (from a search hit, tree listing, or the conversation's
+    attached-files context), and Knowledge Flow's own per-document ReBAC is
+    the real authorization gate. The binding/token stay private;
+    `KfDocumentClient` applies the extended summarize read timeout.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def summarize(
+        self,
+        document_uid: str,
+        *,
+        instruction: str | None = None,
+        max_chars: int = 2000,
+    ) -> DocumentSummaryResult:
+        try:
+            result = await self._client.summarize(
+                document_uid=document_uid,
+                instruction=instruction,
+                max_chars=max_chars,
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentSummaryResult(
+            document_uid=result.document_uid,
+            summary=result.summary,
+            shrunk_for_budget=result.shrunk_for_budget,
+            keywords=tuple(result.keywords),
+        )
 
 
 class FredMcpToolProvider(ToolProviderPort):

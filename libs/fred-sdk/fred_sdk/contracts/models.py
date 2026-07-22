@@ -98,6 +98,35 @@ class UIHints(BaseModel):
     textarea: bool = False
     group: Optional[str] = None
     hide: bool = False
+    widget: Optional[str] = Field(
+        default=None,
+        description=(
+            "Names a frontend form widget to render this field instead of "
+            "the type-derived default input. Resolved first against the "
+            "owning capability plugin's `configWidgets` (custom widgets, "
+            "AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock "
+            "widgets — known stock ids: 'document_libraries' "
+            "(library/document tree picker for an array of library tag ids). "
+            "Unknown ids fall back to the default input, so older frontends "
+            "degrade gracefully."
+        ),
+    )
+    visible_when: Optional[str] = Field(
+        default=None,
+        description=(
+            "Key of a sibling field in the same form: this field is only "
+            "shown while that sibling's effective value (current input or its "
+            "declared default) is truthy. Display-only — the value is kept, "
+            "and backends must not rely on the field being hidden."
+        ),
+    )
+    advanced: bool = Field(
+        default=False,
+        description=(
+            "Renders the field inside the form's collapsed 'Advanced "
+            "settings' disclosure instead of the main section. Display-only."
+        ),
+    )
 
 
 class FieldSpec(BaseModel):
@@ -223,7 +252,7 @@ class MCPServerRef(BaseModel):
     """
 
     id: str = Field(..., validation_alias=AliasChoices("id", "name"))
-    require_tools: list[str] = []
+    require_tools: list[str] = Field(default_factory=list)
     locked: bool = Field(
         default=False,
         description=(
@@ -833,7 +862,7 @@ class ReActPolicy(FrozenModel):
     - "Operations copilot": tools + explicit approval on risky actions
     """
 
-    system_prompt_template: str | None = Field(
+    system_prompt_template: str = Field(
         ...,
         min_length=1,
         description=(

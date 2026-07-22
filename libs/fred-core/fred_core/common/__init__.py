@@ -20,6 +20,7 @@ from .config_loader import (
 )
 from .env import coerce_bool, read_env_bool
 from .fastapi_handlers import register_exception_handlers
+from .gcs_client import build_gcs_client
 from .lru_cache import ThreadSafeLRUCache
 from .resilient_sink import ResilientSinkStore
 from .structures import (
@@ -64,6 +65,7 @@ __all__ = [
     "ResilientSinkStore",
     "TemporalSchedulerConfig",
     "ThreadSafeLRUCache",
+    "build_gcs_client",
     "coerce_bool",
     "load_configuration_with_config_files",
     "parse_yaml_mapping_file",

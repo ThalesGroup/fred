@@ -1,5 +1,6 @@
 {
   "typeCheckingMode": "standard",
   "venvPath": ".",
-  "venv": ".venv"
+  "venv": ".venv",
+  "reportUnreachable": "warning"
 }

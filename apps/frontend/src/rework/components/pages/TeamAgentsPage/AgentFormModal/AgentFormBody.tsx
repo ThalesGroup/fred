@@ -16,12 +16,17 @@ import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { IconType } from "@shared/utils/Type.ts";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch } from "react-redux";
+import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
+  UserSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import styles from "./AgentFormBody.module.css";
@@ -51,6 +56,13 @@ function routeField(field: ManagedAgentFieldSpec): "prompts" | "settings" | "cha
   return "settings";
 }
 
+/** Human display for a resolved user: full name, else username, else the raw uid (#1952). */
+function userDisplayName(uid: string, summary: UserSummary | undefined): string {
+  if (!summary) return uid;
+  const fullName = [summary.first_name, summary.last_name].filter(Boolean).join(" ");
+  return fullName || summary.username || uid;
+}
+
 function formatRelativeDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -77,6 +89,8 @@ type AgentFormBodyProps = {
   selectedCapabilityIds: string[];
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
+  /** Pending capability asset files: outer key = capability id, inner key = AssetSlot.key (#1903). */
+  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -89,6 +103,8 @@ type AgentFormBodyProps = {
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
+  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
+  onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
 };
 
 export function AgentFormBody({
@@ -100,6 +116,7 @@ export function AgentFormBody({
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
+  capabilityAssetFiles,
   isSubmitting,
   submitAttempted,
   activeSection,
@@ -112,12 +129,32 @@ export function AgentFormBody({
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilityConfigChange,
+  onCapabilityAssetFileChange,
+  onCapabilityBlockingErrorChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
+
+  // Resolve audit uids (created_by / updated_by) to display names (#1952).
+  const auditUids = Array.from(
+    new Set([editInstance?.created_by, editInstance?.updated_by].filter((uid): uid is string => Boolean(uid))),
+  );
+  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
+  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
   const capabilities = selectedTemplate?.available_capabilities ?? [];
+
+  // Pre-save capability routing (RFC §9.1): custom config widgets may call
+  // their capability's own pod routes (e.g. ppt_filler's stateless /analyze,
+  // #1903) BEFORE any session exists, so the per-capability base URLs are
+  // populated here straight from the template catalog — the template-bound
+  // counterpart of the prep-time population in `useChatSse`.
+  useEffect(() => {
+    if (capabilities.length === 0) return;
+    dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
+  }, [dispatch, capabilities]);
 
   // #1975 (RFC §3.9): a platform-suspended instance renders its broken
   // capability in an error state with plain-language text and the two fix paths
@@ -167,6 +204,13 @@ export function AgentFormBody({
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
 
+  // Effective value (current input or declared default) of every tuning field,
+  // across sections — drives `ui.visible_when` even when the gating field lives
+  // in another section.
+  const effectiveTuningValues = Object.fromEntries(
+    (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
+  );
+
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
     fields.map((field) => (
       <TuningFieldRenderer
@@ -176,6 +220,7 @@ export function AgentFormBody({
         onChange={onTuningChange}
         disabled={isSubmitting}
         teamId={teamId}
+        allValues={effectiveTuningValues}
         error={
           submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
         }
@@ -284,8 +329,13 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           configValues={capabilityConfigValues[capability.id] ?? {}}
+                          assetFiles={capabilityAssetFiles[capability.id] ?? {}}
                           onToggle={toggle}
                           onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                          onAssetFileChange={(slotKey, file) =>
+                            onCapabilityAssetFileChange(capability.id, slotKey, file)
+                          }
+                          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
                         />
                       );
                     })}
@@ -299,8 +349,19 @@ export function AgentFormBody({
 
       {mode === "edit" && editInstance?.created_by && (
         <p className={styles.metadataFooter}>
-          {t("rework.teams.formAgent.createdBy", { user: editInstance.created_by })}
+          {t("rework.teams.formAgent.createdBy", {
+            user: userDisplayName(editInstance.created_by, auditUserById.get(editInstance.created_by)),
+          })}
           {editInstance.created_at && ` · ${formatRelativeDate(editInstance.created_at)}`}
+          {editInstance.updated_by && (
+            <>
+              {" — "}
+              {t("rework.teams.formAgent.updatedBy", {
+                user: userDisplayName(editInstance.updated_by, auditUserById.get(editInstance.updated_by)),
+              })}
+              {editInstance.updated_at && ` · ${formatRelativeDate(editInstance.updated_at)}`}
+            </>
+          )}
         </p>
       )}
     </div>

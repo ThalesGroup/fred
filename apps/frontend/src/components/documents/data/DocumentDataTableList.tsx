@@ -14,7 +14,6 @@
 
 import { Box, Chip, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from "@mui/material";
 import TableChartIcon from "@mui/icons-material/TableChart";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
@@ -155,7 +154,7 @@ export const DocumentDataTableList = ({ rows, search }: DocumentDataRowsProps) =
                     gap: 0.75,
                   }}
                 >
-                  {getDocumentIcon(doc.label) || <InsertDriveFileOutlinedIcon fontSize="small" />}
+                  {getDocumentIcon(doc.label)}
                   <Typography variant="body2" noWrap>
                     {doc.label}
                   </Typography>

@@ -18,6 +18,10 @@ export interface PromptCategoryDef {
   pillFg: string;
 }
 
+/**
+ * The categories offered in pickers and filters: the functional 7 only.
+ * Categories retired from the taxonomy live in LEGACY_PROMPT_CATEGORIES below.
+ */
 export const PROMPT_CATEGORIES: PromptCategoryDef[] = [
   {
     id: "doc-assist",
@@ -55,6 +59,27 @@ export const PROMPT_CATEGORIES: PromptCategoryDef[] = [
     pillFg: "var(--warning)",
   },
   {
+    id: "conversational",
+    labelKey: "rework.promptCategories.conversational",
+    icon: "chat",
+    pillBg: "var(--tertiary-container)",
+    pillFg: "var(--tertiary)",
+  },
+  {
+    id: "integration",
+    labelKey: "rework.promptCategories.integration",
+    icon: "hub",
+    pillBg: "var(--surface-container-high)",
+    pillFg: "var(--on-surface-retreat)",
+  },
+];
+
+/**
+ * Retired categories: never offered in pickers/filters, but prompts that
+ * still carry them (pre-existing rows, imports) keep their pill rendering.
+ */
+const LEGACY_PROMPT_CATEGORIES: PromptCategoryDef[] = [
+  {
     id: "monitoring",
     labelKey: "rework.promptCategories.monitoring",
     icon: "show_chart",
@@ -70,20 +95,6 @@ export const PROMPT_CATEGORIES: PromptCategoryDef[] = [
     pillFg: "var(--primary)",
   },
   {
-    id: "conversational",
-    labelKey: "rework.promptCategories.conversational",
-    icon: "chat",
-    pillBg: "var(--tertiary-container)",
-    pillFg: "var(--tertiary)",
-  },
-  {
-    id: "integration",
-    labelKey: "rework.promptCategories.integration",
-    icon: "hub",
-    pillBg: "var(--surface-container-high)",
-    pillFg: "var(--on-surface-retreat)",
-  },
-  {
     id: "other",
     labelKey: "rework.promptCategories.other",
     icon: "chat_bubble",
@@ -93,8 +104,8 @@ export const PROMPT_CATEGORIES: PromptCategoryDef[] = [
 ];
 
 export const PROMPT_CATEGORY_MAP: Record<PromptCategory, PromptCategoryDef> = Object.fromEntries(
-  PROMPT_CATEGORIES.map((c) => [c.id, c]),
+  [...PROMPT_CATEGORIES, ...LEGACY_PROMPT_CATEGORIES].map((c) => [c.id, c]),
 ) as Record<PromptCategory, PromptCategoryDef>;
 
-/** Number of categories shown before the "show more" link. */
-export const CATEGORY_INITIAL_VISIBLE = 6;
+/** Number of categories shown before the "show more" link — all 7, no fold. */
+export const CATEGORY_INITIAL_VISIBLE = 7;

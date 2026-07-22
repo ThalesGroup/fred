@@ -132,7 +132,7 @@
     },
     "document_access": {
       "name": "Document access",
-      "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
+      "description": "Search documents uploaded using semantic similarity (RAG)."
     },
     "writable_document": {
       "name": "Writable document",
@@ -161,6 +161,56 @@
       },
       "code": {
         "plainText": "Plain text"
+      }
+    },
+    "ppt_filler": {
+      "name": "PPT Filler",
+      "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
+      "form": {
+        "uploadTemplate": "Upload a .pptx template",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A template is configured for this agent.",
+        "templateRequired": "PPT Filler requires a PowerPoint template. Upload a .pptx file.",
+        "templateInvalid": "Fix the template errors below before saving.",
+        "analyzing": "Analyzing the template…",
+        "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "schemaTitle": "Fields the agent will fill",
+        "learnMore": "How does this work? What should I upload?",
+        "slide": "Slide {{number}}",
+        "imageBadge": "image · {{folder}}",
+        "noDescription": "No description"
+      },
+      "errors": {
+        "key_without_description": "{{placeholder}} appears on slide {{slide}} but has no description in the slide notes.",
+        "described_but_not_in_slide": "{{placeholder}} is described in the notes of slide {{slide}} but never appears in a text box on that slide.",
+        "unknown_metadata": "{{placeholder}} in the notes of slide {{slide}} declares an unknown metadata key (only 'type' and 'folder' are recognized).",
+        "unknown_type": "{{placeholder}} in the notes of slide {{slide}} declares an unknown type (only 'text' and 'image' are recognized).",
+        "duplicated_metadata": "{{placeholder}} in the notes of slide {{slide}} declares the same metadata key more than once.",
+        "image_without_folder": "{{placeholder}} in the notes of slide {{slide}} is an image but does not give a folder.",
+        "empty_folder": "{{placeholder}} in the notes of slide {{slide}} gives a folder but leaves it blank.",
+        "folder_without_image_type": "{{placeholder}} in the notes of slide {{slide}} gives a folder but is not an image (set 'type: image' to use a folder).",
+        "folder_not_found": "{{placeholder}} on slide {{slide}} points to a folder that does not exist in this space.",
+        "image_key_invalid_location": "{{placeholder}} on slide {{slide}} sits in a table cell, which cannot hold a picture. Move it into a text box or a rectangle.",
+        "invalid_upload": "The uploaded file could not be read as a .pptx. Re-select the file and try again.",
+        "asset_required": "PPT Filler requires a PowerPoint template, but none was provided."
+      },
+      "preview": {
+        "untitled": "Presentation",
+        "open": "Open preview",
+        "cardAria": "Presentation preview",
+        "download": "Download .pptx",
+        "downloadError": "Download failed",
+        "close": "Close preview",
+        "loadError": "Failed to load preview.",
+        "loading": "Loading preview…",
+        "empty": "No preview yet. Ask the assistant to fill a deck."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Presentation preview"
+        }
       }
     }
   },
@@ -1087,10 +1137,15 @@
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteTitle": "Remove document",
+        "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
+        "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
+        "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
         "shareTitle": "Copy to Team space"
       },
       "empty": {
+        "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
+        "agents": "No agent files yet. Files your agents create for you will appear here, grouped by agent.",
         "createLibrary": "Create a library (folder) to start adding documents.",
         "folder": "This folder is empty."
       },
@@ -1127,6 +1182,8 @@
       },
       "title": "Resources",
       "toast": {
+        "deleteFolderError": "Could not delete the folder",
+        "deleteFolderSuccess": "Folder deleted",
         "processError": "Could not start processing",
         "processStarted": "Processing started"
       }
@@ -1420,7 +1477,9 @@
         "title": "Chat with your {{agentsNicknamePlural}}"
       },
       "formAgent": {
+        "advancedSettings": "Advanced settings",
         "createdBy": "Created by {{user}}",
+        "updatedBy": "Updated by {{user}}",
         "fields": {
           "description": {
             "label": "Description",
@@ -1517,6 +1576,11 @@
           "placeholder": "Select an instance",
           "loading": "Loading instances..."
         },
+        "instanceTools": {
+          "label": "Tools enabled on this agent",
+          "inherited": "This instance follows its template's default tools — no per-instance override.",
+          "none": "No tools enabled on this instance."
+        },
         "agent": {
           "label": "Agent ID",
           "placeholder": "agent-..."
@@ -1552,6 +1616,21 @@
         "timeout": {
           "label": "Case timeout (s)"
         },
+        "builtinMetrics": {
+          "label": "Metrics",
+          "help": "Pick which metrics to score this run against — nothing is added automatically.",
+          "answerRelevancy": "Answer Relevancy",
+          "answerRelevancyDesc": "Does the answer address the question asked?",
+          "faithfulness": "Faithfulness",
+          "faithfulnessDesc": "Does the answer stay grounded in the retrieved context?",
+          "contextualRelevancy": "Contextual Relevancy",
+          "contextualRelevancyDesc": "Is the retrieved context relevant to the question?",
+          "contextualPrecision": "Contextual Precision",
+          "contextualPrecisionDesc": "Are the most relevant chunks ranked first? Requires an expected output.",
+          "contextualRecall": "Contextual Recall",
+          "contextualRecallDesc": "Does the context cover everything the expected output needs? Requires an expected output.",
+          "none": "Select at least one metric to start a run."
+        },
         "metrics": {
           "label": "Custom metrics",
           "help": "Natural-language criteria, judged alongside the built-in metrics",
@@ -1563,6 +1642,12 @@
           "criteria": "Criterion to evaluate",
           "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
           "parameters": "Fields the judge may read",
+          "parameterOptions": {
+            "input": "Input",
+            "actualOutput": "Actual output",
+            "expectedOutput": "Expected output",
+            "retrievalContext": "Retrieved context"
+          },
           "threshold": "Pass threshold"
         },
         "recap": {
@@ -1576,6 +1661,7 @@
           "judge": "Judge",
           "concurrency": "Concurrency",
           "timeout": "Timeout",
+          "metrics": "Metrics",
           "customMetrics": "Custom metrics",
           "profile": "Profile",
           "profileAuto": "Automatic"
@@ -1603,6 +1689,7 @@
         "stats": {
           "passed": "Passed",
           "failed": "Failed",
+          "insufficient": "Insufficient",
           "execErrors": "Exec. errors",
           "scoringErrors": "Scoring errors"
         },
@@ -1635,6 +1722,8 @@
           "metrics": "Metrics"
         },
         "caseTitle": "Case detail",
+        "copyJson": "Copy JSON",
+        "copied": "Copied",
         "latency": "Latency",
         "input": "Input",
         "expected": "Expected output",
@@ -1711,6 +1800,7 @@
         "newRun": "+ New run",
         "rerun": "↻ Rerun · {{target}}",
         "rerunHint": "Reruns immediately with the last target ({{target}} · {{model}}). Use “New run…” to pick a different one.",
+        "rerunRow": "↻ Rerun",
         "empty": "No run for this evaluation yet",
         "versionLabel": "Evaluation {{version}}",
         "deleteMessage": "Delete run {{id}}? This permanently removes its cases, metrics and events.",

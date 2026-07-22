@@ -192,7 +192,7 @@ func main() {
 		for i := 0; i < cfg.Clients; i++ {
 			wg.Add(1)
 			sessionID := cfg.SessionID
-			if cfg.Protocol != "sse" && len(wsSessionIDs) > 0 {
+			if cfg.Protocol != "sse" && i < len(wsSessionIDs) {
 				sessionID = wsSessionIDs[i]
 			}
 			startDelay := delayPerClient * time.Duration(i)

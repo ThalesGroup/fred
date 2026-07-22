@@ -132,7 +132,7 @@
     },
     "document_access": {
       "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
     },
     "writable_document": {
       "name": "Document collaboratif",
@@ -161,6 +161,56 @@
       },
       "code": {
         "plainText": "Texte brut"
+      }
+    },
+    "ppt_filler": {
+      "name": "PPT Filler",
+      "description": "Faites remplir votre propre modèle PowerPoint depuis la conversation : l'agent extrait les valeurs et produit une présentation finalisée.",
+      "form": {
+        "uploadTemplate": "Téléverser un modèle .pptx",
+        "replaceTemplate": "Remplacer le modèle",
+        "uploadAria": "Fichier de modèle PowerPoint",
+        "clearAria": "Retirer le fichier sélectionné",
+        "currentTemplate": "Un modèle est configuré pour cet agent.",
+        "templateRequired": "PPT Filler nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
+        "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
+        "analyzing": "Analyse du modèle…",
+        "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
+        "schemaTitle": "Champs que l'agent remplira",
+        "learnMore": "Comment ça marche ? Que dois-je uploader ?",
+        "slide": "Diapositive {{number}}",
+        "imageBadge": "image · {{folder}}",
+        "noDescription": "Pas de description"
+      },
+      "errors": {
+        "key_without_description": "{{placeholder}} apparaît sur la diapositive {{slide}} mais n'a pas de description dans les commentaires.",
+        "described_but_not_in_slide": "{{placeholder}} est décrit dans les commentaires de la diapositive {{slide}} mais n'apparaît dans aucune zone de texte de cette diapositive.",
+        "unknown_metadata": "{{placeholder}} dans les commentaires de la diapositive {{slide}} déclare une métadonnée inconnue (seuls 'type' et 'folder' sont reconnus).",
+        "unknown_type": "{{placeholder}} dans les commentaires de la diapositive {{slide}} déclare un type inconnu (seuls 'text' et 'image' sont reconnus).",
+        "duplicated_metadata": "{{placeholder}} dans les commentaires de la diapositive {{slide}} déclare la même métadonnée plusieurs fois.",
+        "image_without_folder": "{{placeholder}} dans les commentaires de la diapositive {{slide}} est une image mais n'indique pas de dossier.",
+        "empty_folder": "{{placeholder}} dans les commentaires de la diapositive {{slide}} indique un dossier mais le laisse vide.",
+        "folder_without_image_type": "{{placeholder}} dans les commentaires de la diapositive {{slide}} indique un dossier mais n'est pas une image (ajoutez 'type: image' pour utiliser un dossier).",
+        "folder_not_found": "{{placeholder}} sur la diapositive {{slide}} pointe vers un dossier qui n'existe pas dans cet espace.",
+        "image_key_invalid_location": "{{placeholder}} sur la diapositive {{slide}} se trouve dans une cellule de tableau, qui ne peut pas contenir d'image. Déplacez-le dans une zone de texte ou un rectangle.",
+        "invalid_upload": "Le fichier téléversé n'a pas pu être lu comme un .pptx. Sélectionnez à nouveau le fichier et réessayez.",
+        "asset_required": "PPT Filler nécessite un modèle PowerPoint, mais aucun n'a été fourni."
+      },
+      "preview": {
+        "untitled": "Présentation",
+        "open": "Ouvrir l'aperçu",
+        "cardAria": "Aperçu de la présentation",
+        "download": "Télécharger le .pptx",
+        "downloadError": "Échec du téléchargement",
+        "close": "Fermer l'aperçu",
+        "loadError": "Impossible de charger l'aperçu.",
+        "loading": "Chargement de l'aperçu…",
+        "empty": "Pas encore d'aperçu. Demandez à l'assistant de remplir une présentation."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Aperçu de la présentation"
+        }
       }
     }
   },
@@ -1087,10 +1137,15 @@
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteTitle": "Retirer le document",
+        "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
+        "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe"
       },
       "empty": {
+        "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
+        "agents": "Aucun fichier d'agent pour l'instant. Les fichiers créés pour vous par vos agents apparaîtront ici, regroupés par agent.",
         "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
         "folder": "Ce dossier est vide."
       },
@@ -1127,6 +1182,8 @@
       },
       "title": "Ressources",
       "toast": {
+        "deleteFolderError": "Impossible de supprimer le dossier",
+        "deleteFolderSuccess": "Dossier supprimé",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
       }
@@ -1420,7 +1477,9 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}"
       },
       "formAgent": {
+        "advancedSettings": "Paramètres avancés",
         "createdBy": "Créé par {{user}}",
+        "updatedBy": "Modifié par {{user}}",
         "fields": {
           "description": {
             "label": "Description",
@@ -1517,6 +1576,11 @@
           "placeholder": "Sélectionnez une instance",
           "loading": "Chargement des instances..."
         },
+        "instanceTools": {
+          "label": "Tools activés sur cet agent",
+          "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
+          "none": "Aucun tool activé sur cette instance."
+        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
@@ -1552,6 +1616,21 @@
         "timeout": {
           "label": "Délai par cas (s)"
         },
+        "builtinMetrics": {
+          "label": "Métriques",
+          "help": "Choisis les métriques à calculer pour ce run — rien n'est ajouté automatiquement.",
+          "answerRelevancy": "Pertinence de la réponse",
+          "answerRelevancyDesc": "La réponse traite-t-elle la question posée ?",
+          "faithfulness": "Fidélité",
+          "faithfulnessDesc": "La réponse reste-t-elle ancrée dans le contexte récupéré ?",
+          "contextualRelevancy": "Pertinence contextuelle",
+          "contextualRelevancyDesc": "Le contexte récupéré est-il pertinent pour la question ?",
+          "contextualPrecision": "Précision contextuelle",
+          "contextualPrecisionDesc": "Les extraits les plus pertinents sont-ils classés en premier ? Nécessite une réponse attendue.",
+          "contextualRecall": "Rappel contextuel",
+          "contextualRecallDesc": "Le contexte couvre-t-il tout ce que la réponse attendue nécessite ? Nécessite une réponse attendue.",
+          "none": "Sélectionne au moins une métrique pour lancer un run."
+        },
         "metrics": {
           "label": "Métriques personnalisées",
           "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
@@ -1563,6 +1642,12 @@
           "criteria": "Critère à évaluer",
           "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
           "parameters": "Champs évalués par le juge",
+          "parameterOptions": {
+            "input": "Entrée",
+            "actualOutput": "Réponse produite",
+            "expectedOutput": "Réponse attendue",
+            "retrievalContext": "Contexte récupéré"
+          },
           "threshold": "Seuil de réussite"
         },
         "recap": {
@@ -1576,6 +1661,7 @@
           "judge": "Juge",
           "concurrency": "Concurrence",
           "timeout": "Délai",
+          "metrics": "Métriques",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
           "profileAuto": "Automatique"
@@ -1603,6 +1689,7 @@
         "stats": {
           "passed": "Réussis",
           "failed": "Échoués",
+          "insufficient": "Insuffisants",
           "execErrors": "Erreurs exéc.",
           "scoringErrors": "Erreurs scoring"
         },
@@ -1635,6 +1722,8 @@
           "metrics": "Métriques"
         },
         "caseTitle": "Détail du cas",
+        "copyJson": "Copier en JSON",
+        "copied": "Copié",
         "latency": "Latence",
         "input": "Entrée",
         "expected": "Sortie attendue",
@@ -1711,6 +1800,7 @@
         "newRun": "+ Nouvelle exécution",
         "rerun": "↻ Relancer · {{target}}",
         "rerunHint": "Relance immédiatement avec la dernière cible ({{target}} · {{model}}). Utilisez « Nouvelle exécution… » pour en choisir une autre.",
+        "rerunRow": "↻ Relancer",
         "empty": "Aucune exécution pour cette évaluation",
         "versionLabel": "Évaluation {{version}}",
         "deleteMessage": "Supprimer l'exécution {{id}} ? Cela supprime définitivement ses cas, métriques et événements.",

@@ -1,7 +1,7 @@
 [project]
 name = "knowledge-flow-backend"
 readme = "README.md"
-version = "1.5.2"
+version = "1.5.3"
 license = "Apache-2.0"
 description = "Knowledge Flow Backend"
 authors = [{ name = "Fred", email = "noreply@example.com" }]

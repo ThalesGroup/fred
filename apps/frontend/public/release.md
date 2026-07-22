@@ -1,3 +1,57 @@
+**v2.1.10** — 2026-07-22
+
+- **Summary**
+
+  Defense-in-depth authorization hardening for agent tool execution: every tool call in a
+  ReAct turn is now individually re-authorized, and JWTs are rejected if their issued
+  lifetime exceeds one hour, independent of what the issuing IdP was configured to allow.
+
+- **Security**
+
+  - Every tool call in a ReAct turn is now individually re-authorized against the caller's team (`CAN_READ`), not just once at turn start — a denied or stale team membership now blocks the specific tool call instead of being silently trusted for the rest of a long-running turn (`fred-runtime` 3.3.7)
+  - JWTs are now rejected when their issued lifetime (`exp - iat`) exceeds one hour, regardless of what the issuing IdP was configured to grant — closes a gap where token lifetime was entirely delegated to IdP configuration with no application-side ceiling; Fred's own service-to-service tokens are short-lived and auto-refreshed, so this does not affect normal traffic (`fred-core` 3.4.7)
+
+**v2.1.9** — 2026-07-21
+
+- **Summary**
+
+  Bug-fix release: ReBAC/authz gap closures (personal-team tuples, agent-kind
+  capability id collisions, AuthorizationError 500s), evaluation-agent reachability
+  fixes, and several UX/chart papercuts.
+
+- **Bug Fixes**
+
+  - Personal teams now get a real, self-healing ReBAC tuple — closes 500s/wrong 403s across filesystem, corpus, tags, tasks, evaluations (AUTHZ-08, #2038)
+  - `AuthorizationError` now inherits from `PermissionError`, so a real ReBAC denial surfaces as 403 instead of an unhandled 500 (EVAL-03, #2042)
+  - Reserve a namespaced id range for `kind="agent"` capabilities so they can no longer collide with `kind="tool"` ids (CTRLP-14, #2031)
+  - Make the evaluation agent reachable from the frontend (#2037); forward the caller's bearer token to pod chat-controls evaluation, which was silently dropping all composer capability controls on auth-enabled deployments (#2030)
+  - Tabular (CSV/XLSX) documents now reach "Ready" status instead of showing "Raw" forever (#2041)
+  - Fix KPI preset endpoints 503ing due to an unhandled resilient KPI store wrapper (#2041)
+  - Fix evaluation telemetry polling and conversation erasure edge cases (#2041)
+  - UX pass: personal prompts no longer leak into team spaces, prompt categories trimmed to 7, library tree picker and capability-toggle fixes (#2032)
+  - Fix Helm chart schema rejecting valid pod-level keys (`resources`, `imagePullSecrets`, `extraVolumes`, …) and migration hooks (#2025)
+  - Fix worktree dev configs still binding a shared Prometheus metrics port (#2028)
+  - Finish agent audit fields: `updated_by` column and creator/editor name resolution in the UI (#1952)
+
+**v2.1.7** — 2026-07-20
+
+- **Summary**
+
+  Adds native Google Cloud Storage support for control-plane's team personalization assets (banner/logo images), and fixes GCS authentication on Trusted Partner Cloud / sovereign deployments such as S3NS.
+
+- **Features**
+
+  - Control-plane can now load team banner/logo assets from a native GCS bucket via Application Default Credentials / Workload Identity, in addition to the existing MinIO/S3-compatible and local filesystem backends (`content_storage.type: gcs`, control-plane-backend, fred-core, #2022)
+  - New `signing_service_account_email` config knob for control-plane's GCS content store — mints short-lived V4 signed URLs via IAM `signBlob` (keyless) so team banners/logos remain viewable in the browser, extending the signing mechanism already used for knowledge-flow's internal tabular Parquet reads (`docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md` §6)
+
+- **Bug Fixes**
+
+  - Fix `UniverseMismatchError` ("The configured universe domain (googleapis.com) does not match the universe domain found in the credentials") on every native-GCS backend (control-plane's new content store, knowledge-flow's content store and file store, fred-core's virtual filesystem) when deployed on a Trusted Partner Cloud / sovereign GCP variant such as S3NS — the GCS client now derives its universe domain from the loaded ADC credentials instead of assuming the public `googleapis.com` default, so the same code works unmodified on public GCP and on S3NS (`fred-core` 3.4.6, `knowledge-flow-backend` 1.5.3, `control-plane-backend` 1.6.1)
+
+- **Deployment note**
+
+  No new required config for existing MinIO/local deployments — additive only. GCS deployments (including already-running knowledge-flow-on-S3NS instances) pick up the universe-domain fix automatically on upgrade, no config change needed. Control-plane's new `gcs` backend needs `storage.content_storage.signing_service_account_email` set (see `deploy/charts/fred/values-gcp.yaml`) — the signing service account needs `storage.objects.get` on the control-plane `-objects` bucket, and the Workload Identity service account needs `iam.serviceAccounts.signBlob` on it (may reuse the same signing account already configured for knowledge-flow's tabular reads).
+
 **v2.1.6** — 2026-07-20
 
 - **Summary**

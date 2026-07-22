@@ -94,6 +94,35 @@ export type CapabilityChatTurnControl<TParams = Record<string, unknown>> = Compo
   CapabilityChatTurnControlProps<TParams>
 >;
 
+export interface CapabilityConfigWidgetProps {
+  /** The capability this widget configures (`manifest.id`). */
+  capabilityId: string;
+  /** The team the agent is being created/edited for (scopes any lookups). */
+  teamId?: string;
+  disabled: boolean;
+  /** This capability's current config values (the stored-config `config` object). */
+  configValues: Record<string, unknown>;
+  /** Patch one config value (same contract as `TuningFieldRenderer.onChange`). */
+  onConfigChange: (key: string, value: unknown) => void;
+  /** Pending asset files for this capability, keyed by `AssetSlot.key` (#1903). */
+  assetFiles: Record<string, File | undefined>;
+  /** Stage (or clear with `null`) one slot's file for the multipart save. */
+  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  /**
+   * Report a save-blocking problem for this capability (`null` = none). The
+   * form disables Save while any ACTIVE capability reports one — how a widget
+   * enforces e.g. "the template is mandatory" before the backend's 422.
+   */
+  onBlockingErrorChange: (message: string | null) => void;
+}
+
+/**
+ * A custom agent-creation form widget (RFC §9 item 4, #1903) — rendered inside
+ * the capability's card INSTEAD of the generic metadata-driven renderer, for
+ * the config field(s) whose `ui.widget` names it.
+ */
+export type CapabilityConfigWidget = ComponentType<CapabilityConfigWidgetProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -104,8 +133,12 @@ export interface CapabilityUiPlugin {
    * and warns.
    */
   partRenderers?: Record<string, UiPartRenderer>;
-  /** Agent-creation form widgets keyed by `ui.widget` id (typed by its host slice, RFC §9 item 4). */
-  configWidgets?: Record<string, unknown>;
+  /**
+   * Agent-creation form widgets keyed by `ui.widget` id (RFC §9 item 4,
+   * #1903). A config field whose `ui.widget` resolves here renders through the
+   * plugin widget; unknown ids fall back to the generic renderer.
+   */
+  configWidgets?: Record<string, CapabilityConfigWidget>;
   /**
    * Composer chat-turn controls keyed by `ChatControlDescriptor.widget` id
    * (RFC §9 item 2). Capabilities with dynamic ids (MCP servers, id = the

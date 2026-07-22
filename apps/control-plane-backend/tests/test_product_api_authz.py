@@ -250,7 +250,10 @@ async def test_prepare_execution_requires_can_use_team_agents(
     monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
-    await product_api.post_prepare_execution(TeamId("t"), "inst-1", deps, _user())
+    fake_request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.post_prepare_execution(
+        TeamId("t"), "inst-1", deps, fake_request, _user()
+    )
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [

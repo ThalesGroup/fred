@@ -135,6 +135,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -534,6 +537,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -639,6 +724,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -1073,6 +1164,11 @@
                           ],
                           "default": null,
                           "title": "Pool"
+                        },
+                        "summarize_read": {
+                          "default": 300.0,
+                          "title": "Summarize Read",
+                          "type": "number"
                         }
                       },
                       "title": "RuntimeTimeouts",
@@ -1701,6 +1797,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -2100,6 +2199,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -2205,6 +2386,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -2393,6 +2580,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -2792,6 +2982,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -2897,6 +3169,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -6818,6 +7096,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -7217,6 +7498,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -7322,6 +7685,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -11243,6 +11612,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -11642,6 +12014,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -11747,6 +12201,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -12533,6 +12993,7 @@
                     "content_storage": {
                       "discriminator": {
                         "mapping": {
+                          "gcs": "#/$defs/GcsContentStorageConfig",
                           "local": "#/$defs/LocalContentStorageConfig",
                           "minio": "#/$defs/MinioContentStorageConfig"
                         },
@@ -12632,6 +13093,54 @@
                             "access_key"
                           ],
                           "title": "MinioContentStorageConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).",
+                          "properties": {
+                            "type": {
+                              "const": "gcs",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "bucket_name": {
+                              "default": "control-plane-content",
+                              "description": "Content store bucket name (suffix '-objects' is used for banner objects)",
+                              "title": "Bucket Name",
+                              "type": "string"
+                            },
+                            "project_id": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "GCP project id; inferred from ADC when empty.",
+                              "title": "Project Id"
+                            },
+                            "signing_service_account_email": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Service account email used to sign V4 signed URLs for browser-facing banner/logo images, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                              "title": "Signing Service Account Email"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "title": "GcsContentStorageConfig",
                           "type": "object",
                           "additionalProperties": false
                         }
@@ -13021,6 +13530,9 @@
                 },
                 "resources": {
                   "type": "object"
+                },
+                "podAnnotations": {
+                  "type": "object"
                 }
               },
               "additionalProperties": false
@@ -13420,6 +13932,88 @@
                 "additionalProperties": true
               }
             },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "envFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
             "probes": {
               "type": "object",
               "properties": {
@@ -13525,6 +14119,12 @@
             "serviceAccount": {
               "type": "object",
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
                 "annotations": {
                   "type": "object"
                 },
@@ -14311,6 +14911,7 @@
                     "content_storage": {
                       "discriminator": {
                         "mapping": {
+                          "gcs": "#/$defs/GcsContentStorageConfig",
                           "local": "#/$defs/LocalContentStorageConfig",
                           "minio": "#/$defs/MinioContentStorageConfig"
                         },
@@ -14410,6 +15011,54 @@
                             "access_key"
                           ],
                           "title": "MinioContentStorageConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).",
+                          "properties": {
+                            "type": {
+                              "const": "gcs",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "bucket_name": {
+                              "default": "control-plane-content",
+                              "description": "Content store bucket name (suffix '-objects' is used for banner objects)",
+                              "title": "Bucket Name",
+                              "type": "string"
+                            },
+                            "project_id": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "GCP project id; inferred from ADC when empty.",
+                              "title": "Project Id"
+                            },
+                            "signing_service_account_email": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Service account email used to sign V4 signed URLs for browser-facing banner/logo images, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                              "title": "Signing Service Account Email"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "title": "GcsContentStorageConfig",
                           "type": "object",
                           "additionalProperties": false
                         }

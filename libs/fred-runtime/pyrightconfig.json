@@ -2,6 +2,7 @@
   "include": ["fred_runtime", "tests"],
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
+  "reportUnreachable": "warning",
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": ["../fred-core", "../fred-sdk"],

@@ -51,6 +51,10 @@ def _inline_refs(schema: dict) -> dict:
                     name = ref[len("#/$defs/"):]
                     if name in seen:
                         return {}  # cycle guard: emit empty object
+                    if name not in defs:
+                        raise ValueError(
+                            f"Invalid schema: $ref '{ref}' points to missing definition '{name}' in $defs"
+                        )
                     return _resolve(copy.deepcopy(defs[name]), seen | {name})
                 return node
             return {k: _resolve(v, seen) for k, v in node.items() if k != "$defs"}
@@ -242,6 +246,8 @@ _RBAC = _obj({
 })
 
 _SERVICE_ACCOUNT = _obj({
+    "enabled": _BOOL,
+    "name": _STRING,
     "annotations": _OBJECT_FREE,
     "labels": _OBJECT_FREE,
     "automountServiceAccountToken": _BOOL,
@@ -261,6 +267,11 @@ _MIGRATION = _obj({
     "command": _arr(_STRING),
     "args": _arr(_STRING),
     "resources": _OBJECT_FREE,
+    # Annotations for the migration Job pod only. Distinct from the app-level
+    # podAnnotations, which are shared with the Deployment: a service-mesh
+    # sidecar that is desirable on a long-running Deployment keeps a hook Job
+    # from ever completing, so the opt-out must target the Job alone.
+    "podAnnotations": _OBJECT_FREE,
 })
 
 _COMMAND = _obj({
@@ -301,6 +312,18 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "httpRoute": _HTTP_ROUTE,
         "volumeMounts": _arr(_VOLUME_MOUNT),
         "volumes": _arr(_VOLUME),
+        # Pod- and container-level keys below are read by templates/deployment.yaml,
+        # job.yaml and hook-migration.yaml, but were absent from the schema, so
+        # values files legitimately using them were rejected by `helm template`.
+        "extraVolumeMounts": _arr(_VOLUME_MOUNT),
+        "extraVolumes": _arr(_VOLUME),
+        "resources": _obj({"limits": _OBJECT_FREE, "requests": _OBJECT_FREE}),
+        "imagePullSecrets": _arr(_obj({"name": _STRING}, additional=True)),
+        "podAnnotations": _OBJECT_FREE,
+        "podSecurityContext": _OBJECT_FREE,
+        "envFrom": _arr(_obj({}, additional=True)),
+        "nodeSelector": _OBJECT_FREE,
+        "tolerations": _arr(_obj({}, additional=True)),
         "probes": _PROBES,
         "securityContext": _SECURITY_CONTEXT,
         "serviceAccount": _SERVICE_ACCOUNT,

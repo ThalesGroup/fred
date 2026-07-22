@@ -1,0 +1,185 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import asyncio
+import logging
+import time
+from typing import List, Optional
+
+from fred_core import AuthorizationError, KeycloakUser
+from langchain_core.documents import Document
+from pydantic import BaseModel, Field
+
+from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
+
+logger = logging.getLogger(__name__)
+
+
+class SummarizeDocumentRequest(BaseModel):
+    instruction: Optional[str] = Field(
+        default=None,
+        description="Free-text instruction steering the summary: focus area, audience, what to look for, desired length/tone.",
+    )
+    max_chars: int = Field(
+        default=2000,
+        ge=200,
+        le=20_000,
+        description="Target ceiling for the returned summary length, in characters.",
+    )
+
+
+class SummarizeDocumentResponse(BaseModel):
+    document_uid: str
+    summary: str
+    shrunk_for_budget: bool = Field(description="True if a corrective pass had to shrink the summary to fit max_chars.")
+    keywords: List[str] = Field(default_factory=list)
+
+
+class SummarizeService:
+    """
+    On-demand, steerable document summarization.
+
+    Fred rationale:
+    - Reuses the same size-aware map-reduce summarizer used at ingestion time
+      (SmartDocSummarizer), so there is exactly one summarization implementation,
+      now instruction-aware. The persisted ingestion-time abstract stays fixed
+      and generic; this path is for callers (agents) who need a deep, targeted
+      summary on demand.
+    """
+
+    def __init__(self):
+        from knowledge_flow_backend.features.content.content_service import ContentService
+
+        self.content_service = ContentService()
+        self.context = ApplicationContext.get_instance()
+
+    def _build_summarizer(self) -> SmartDocSummarizer:
+        return SmartDocSummarizer(
+            model_config=self.context.configuration.chat_model,
+            splitter=self.context.get_text_splitter(),
+        )
+
+    async def _get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
+        """Resolve the document's text for summarization, uniformly across both
+        document sources Fred exposes to agents:
+
+        - Corpus documents have a stored markdown preview (the normal path).
+        - Session attachments (chat uploads) are fast-ingested as vectors only --
+          no metadata record, no preview artifact, and no ReBAC tuple. On Swift
+          the corpus lookup therefore fails with AuthorizationError (the ReBAC
+          check runs before the store lookup and fails closed on an unknown
+          resource) rather than FileNotFoundError -- both are handled: we
+          reconstruct the attachment text from the session vectors instead.
+
+        This mirrors vector search, which already queries corpus + session scopes
+        and merges them: the agent uses one document_uid and never has to know
+        which source it came from.
+        """
+        try:
+            return await self.content_service.get_markdown_preview(user, document_uid)
+        except (FileNotFoundError, AuthorizationError):
+            # Not a readable corpus document -- try the session-attachment
+            # vectors. Safe on a denied corpus uid too: reconstruction only
+            # joins chunks whose own user_id matches the requesting user.
+            text = await asyncio.to_thread(self._reconstruct_attachment_text, user, document_uid)
+            if text:
+                return text
+            # Genuinely unknown uid, someone else's attachment, or a corpus
+            # document the user cannot read: surface the original 404/403
+            # rather than summarizing empty text.
+            raise
+
+    def _reconstruct_attachment_text(self, user: KeycloakUser, document_uid: str) -> str:
+        """Rebuild a session attachment's text from its vector chunks.
+
+        Security: attachments have no metadata-store ReBAC record, so the vectors'
+        own metadata is the access gate — a chunk is joined ONLY when it is a
+        genuine session-scoped chunk (``scope == "session"``, the same marker
+        the vector-search attachment branch filters on) AND owned by the
+        requesting user (``user_id``). The scope gate matters because this
+        fallback also runs after a ReBAC *denial* on a corpus document: corpus
+        chunks (``scope != session``) must never be reconstructable here, or a
+        user denied READ on a document could still read it back through its
+        vectors. Chunks are ordered by page (fast-ingest stores one chunk per
+        page) so the reconstructed text reads in order.
+        """
+        store = self.context.get_create_vector_store(self.context.get_embedder())
+        try:
+            chunks = store.get_chunks_for_document(document_uid)
+        except NotImplementedError:
+            # Backend can't fetch chunks by document -- nothing we can do here.
+            return ""
+
+        def _is_own_session_chunk(chunk: dict) -> bool:
+            metadata = chunk.get("metadata") or {}
+            return metadata.get("scope") == "session" and metadata.get("user_id") == user.uid
+
+        owned = [c for c in chunks if _is_own_session_chunk(c)]
+        if not owned:
+            return ""
+
+        def _page(chunk: dict) -> int:
+            page = (chunk.get("metadata") or {}).get("page")
+            return page if isinstance(page, int) else 0
+
+        owned.sort(key=_page)
+        return "\n\n".join((c.get("text") or "") for c in owned).strip()
+
+    async def summarize_document(self, user: KeycloakUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
+        started = time.monotonic()
+        markdown = await self._get_document_markdown(user, document_uid)
+        fetch_ms = (time.monotonic() - started) * 1000
+        document = Document(page_content=markdown, metadata={})
+
+        summarizer = self._build_summarizer()
+        # SmartDocSummarizer is synchronous (LLM calls via .invoke()); offload so it
+        # doesn't block the event loop, matching vector_search_service.py's pattern.
+        #
+        # compute_keywords=False: this on-demand path returns only the abstract to
+        # the caller (the agent discards keywords), so skipping the separate keyword
+        # LLM call halves the number of round-trips and roughly halves latency.
+        summarize_started = time.monotonic()
+        abstract, keywords = await asyncio.to_thread(
+            summarizer.summarize_document,
+            document,
+            instruction=request.instruction,
+            compute_keywords=False,
+        )
+        summarize_ms = (time.monotonic() - summarize_started) * 1000
+        abstract = abstract or ""
+        logger.info(
+            "Summarize %s: chars_in=%d fetch_ms=%.0f summarize_ms=%.0f abstract_chars=%d",
+            document_uid,
+            len(markdown or ""),
+            fetch_ms,
+            summarize_ms,
+            len(abstract),
+        )
+
+        shrunk = False
+        if len(abstract) > request.max_chars:
+            shrink_instruction = f"This summary is currently ~{len(abstract)} characters; rewrite it to fit within ~{request.max_chars} characters while preserving the key points."
+            try:
+                abstract = await asyncio.to_thread(summarizer.summarize_abstract, abstract, instruction=shrink_instruction)
+                shrunk = True
+            except Exception:
+                logger.warning("Shrink-to-fit pass failed for document %s (returning as-is).", document_uid)
+
+        return SummarizeDocumentResponse(
+            document_uid=document_uid,
+            summary=abstract,
+            shrunk_for_budget=shrunk,
+            keywords=keywords or [],
+        )

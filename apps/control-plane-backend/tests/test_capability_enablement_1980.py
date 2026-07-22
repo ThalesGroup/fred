@@ -46,6 +46,7 @@ from control_plane_backend.capabilities.enablement import (
     validate_team_settings,
 )
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
+from control_plane_backend.product import service as product_service
 from fred_core import CapabilityPermission, RebacDisabledResult
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -141,6 +142,14 @@ class _FakeRebac:
         default_on_ids = _ids(org_key, "default_on")
         usable = (enabled_ids | default_on_ids) - disabled_ids
         return [RebacReference(type=resource_type, id=cid) for cid in usable]
+
+
+# Real `template_capability_id` output (GitHub #2004 item 4: `agent__`
+# namespace prefix) — derived, never hand-typed, so these tests can't drift
+# from the id `is_template_capability_instance` actually computes.
+SQL_EXPERT_TEMPLATE_ID = product_service.template_capability_id(
+    "runtime-a", "sql_expert"
+)
 
 
 def _entry(
@@ -367,7 +376,7 @@ async def test_enable_capability_for_team_rejects_agent_capability_missing_tool_
     rebac = _FakeRebac()
     settings = _FakeSettingsStore()
     sql_expert = _entry(
-        "runtime-a__sql_expert",
+        SQL_EXPERT_TEMPLATE_ID,
         kind="agent",
         default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
     )
@@ -384,7 +393,7 @@ async def test_enable_capability_for_team_rejects_agent_capability_missing_tool_
 
     # Rejected before any write: no tuple, no settings row.
     assert rebac.tuples == set()
-    assert ("team-a", "runtime-a__sql_expert") not in settings._rows
+    assert ("team-a", SQL_EXPERT_TEMPLATE_ID) not in settings._rows
 
 
 @pytest.mark.asyncio
@@ -395,7 +404,7 @@ async def test_enable_capability_for_team_allows_agent_capability_when_tool_depe
     settings = _FakeSettingsStore()
     tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
     sql_expert = _entry(
-        "runtime-a__sql_expert",
+        SQL_EXPERT_TEMPLATE_ID,
         kind="agent",
         default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
     )
@@ -422,7 +431,7 @@ async def test_enable_capability_for_team_allows_agent_capability_when_tool_depe
     assert (
         "team:team-a",
         "enabled",
-        "capability:runtime-a__sql_expert",
+        f"capability:{SQL_EXPERT_TEMPLATE_ID}",
     ) in rebac.tuples
 
 
@@ -435,7 +444,7 @@ async def test_disable_agent_template_capability_suspends_its_instances() -> Non
 
     rebac = _FakeRebac()
     settings = _FakeSettingsStore()
-    sql_expert = _entry("runtime-a__sql_expert", kind="agent")
+    sql_expert = _entry(SQL_EXPERT_TEMPLATE_ID, kind="agent")
     await enable_capability_for_team(
         rebac=rebac,
         settings_store=settings,
@@ -488,12 +497,12 @@ async def test_suspend_dependent_instances_is_idempotent_for_agent_template() ->
     first = await suspend_dependent_instances(
         agent_instance_store=store,
         team_id="team-a",
-        capability_id="runtime-a__sql_expert",
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
     )
     second = await suspend_dependent_instances(
         agent_instance_store=store,
         team_id="team-a",
-        capability_id="runtime-a__sql_expert",
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
     )
 
     assert first == 1
@@ -523,15 +532,15 @@ async def test_revive_dependent_instances_revives_agent_template_instance() -> N
     suspended = await suspend_dependent_instances(
         agent_instance_store=store,
         team_id="team-a",
-        capability_id="runtime-a__sql_expert",
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
     )
     assert suspended == 1
     assert instance.suspension_reason == "capability_access_revoked"
 
     revived = await enablement.revive_dependent_instances(
         agent_instance_store=store,
-        capability_id="runtime-a__sql_expert",
-        usable_capability_ids={"runtime-a__sql_expert"},
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
+        usable_capability_ids={SQL_EXPERT_TEMPLATE_ID},
         available_by_source={"runtime-a": frozenset()},
         team_id="team-a",
     )
@@ -560,7 +569,7 @@ async def test_revive_dependent_instances_keeps_agent_template_suspended_when_st
 
     revived = await enablement.revive_dependent_instances(
         agent_instance_store=store,
-        capability_id="runtime-a__sql_expert",
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
         usable_capability_ids=set(),  # still not usable
         available_by_source={"runtime-a": frozenset()},
         team_id="team-a",
@@ -581,7 +590,7 @@ async def test_personal_scope_enabled_rejects_agent_capability_missing_tool_depe
     rebac = _FakeRebac()
     store = _FakeAgentInstanceStore([])
     sql_expert = _entry(
-        "runtime-a__sql_expert",
+        SQL_EXPERT_TEMPLATE_ID,
         kind="agent",
         default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
     )
@@ -936,7 +945,7 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     async def _fake_fetch_agents(base_url: str, runtime_id: str):
         return [
             CapabilityCatalogEntry(
-                id=f"{runtime_id}__sentinel",
+                id=product_service.template_capability_id(runtime_id, "sentinel"),
                 version="1",
                 name="agent.sentinel.name",
                 description="agent.sentinel.description",
@@ -966,9 +975,74 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access", "runtime-a__sentinel"}
-    assert catalog["runtime-a__sentinel"].kind == "agent"
+    sentinel_id = product_service.template_capability_id("runtime-a", "sentinel")
+    assert set(catalog) == {"doc_access", sentinel_id}
+    assert catalog[sentinel_id].kind == "agent"
     assert catalog["doc_access"].kind == "tool"
+
+
+@pytest.mark.asyncio
+async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespace(
+    monkeypatch,
+) -> None:
+    """2026-07-20, GitHub #2004 item 4: `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+    (`agent__`) is reserved exclusively for `kind="agent"` template
+    projections. A `kind="tool"` entry that happens to land in that
+    namespace (a coincidental MCP-server/tool id, or a future authoring bug)
+    must be quarantined at the same chokepoint as an invalid-pattern id —
+    never silently admitted to shadow (or be shadowed by) the real agent
+    entry sharing that id."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+
+    colliding_tool_id = product_service.template_capability_id(
+        "runtime-a", "sql_expert"
+    )
+
+    async def _fake_fetch(base_url: str):
+        return [_entry("doc_access"), _entry(colliding_tool_id, kind="tool")]
+
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return [
+            CapabilityCatalogEntry(
+                id=colliding_tool_id,
+                version="1",
+                name="agent.sql_expert.name",
+                description="agent.sql_expert.description",
+                icon="smart_toy",
+                kind="agent",
+                team_scope=TeamScopePolicy.ADMIN_GATED,
+            )
+        ]
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod", runtime_id="runtime-a"
+                    )
+                ]
+            )
+        )
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    # The tool entry is refused; the real agent entry (fetched second) wins
+    # the id, never overwritten — the collision this prefix exists to prevent.
+    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert catalog[colliding_tool_id].kind == "agent"
 
 
 @pytest.mark.asyncio
@@ -1301,7 +1375,7 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_agent_templa
     from control_plane_backend.capabilities import service as capability_service
 
     rebac = _FakeRebac()
-    entry = _entry("runtime-a__sql_expert", kind="agent")
+    entry = _entry(SQL_EXPERT_TEMPLATE_ID, kind="agent")
 
     # The template's own id is never added to `selected_capability_ids` (only
     # tool capabilities an instance activated live there) — this instance
@@ -1316,7 +1390,7 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_agent_templa
     store = _FakeAgentInstanceStore([dependent])
 
     async def _fake_catalog(_deps):
-        return {"runtime-a__sql_expert": entry}
+        return {SQL_EXPERT_TEMPLATE_ID: entry}
 
     monkeypatch.setattr(
         capability_service, "aggregate_capability_catalog", _fake_catalog
@@ -1326,12 +1400,12 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_agent_templa
         store,
         rebac,
         available_by_source={"runtime-a": frozenset()},
-        usable_ids={"runtime-a__sql_expert"},
+        usable_ids={SQL_EXPERT_TEMPLATE_ID},
     )
 
     result = await capability_service.set_personal_scope(
         user=SimpleNamespace(uid="admin"),
-        capability_id="runtime-a__sql_expert",
+        capability_id=SQL_EXPERT_TEMPLATE_ID,
         scope="enabled",
         deps=deps,
     )

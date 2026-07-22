@@ -52,3 +52,7 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.fieldValueTall {
+  max-height: 400px;
+}

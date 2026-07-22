@@ -138,20 +138,22 @@ For engineers building agents with `fred-sdk`.
 
 ---
 
-### `data/` — Machine-readable sprint state
-
-Structured data layer for fast AI and tool queries. **Always update these files
-at the same time as the corresponding prose document** (STATUS.md or a backlog
-checkbox). Both layers must stay in sync.
+### `data/` — Machine-readable ID registry
 
 | File                                         | Purpose                                                                                   | Update trigger                                                     |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [`data/id-legend.yaml`](data/id-legend.yaml) | **Canonical ID registry** — every task ID, owner, status, domain, backlog cross-reference | When a new ID is created, a status changes, or a sub-item is added |
-| [`data/sprint.yaml`](data/sprint.yaml)       | **Live sprint state** — milestones with % done, in-progress, next-up, blockers, velocity  | At the start and end of each session; when a task moves state      |
+| [`data/id-legend.yaml`](data/id-legend.yaml) | **Canonical ID registry** — every RFC-backed task ID, owner, status, domain, backlog cross-reference | When a new ID is created, a status changes, or a sub-item is added |
 
 The IDs defined in `id-legend.yaml` are the same IDs used in commit messages,
 backlog checkboxes, and STATUS.md. Canonical ID convention: see
 [`../../CLAUDE.md §Task ID Convention`](../../CLAUDE.md).
+
+Sprint state, issues, and milestones are **not** tracked in this repo's docs —
+`PMO-BOARD.md` and `data/sprint.yaml` were removed (2026-07-21) because they
+duplicated GitHub without ever being kept current. GitHub Issues/Milestones
+(`gh issue list --milestone "swift-golive"` / `"swift ga"`) are the single
+source of truth; ask a developer or query GitHub directly for current sprint
+status, not a file in this tree.
 
 ---
 

@@ -14,11 +14,12 @@
 
 import logging
 import uuid
+from typing import NoReturn
 
 from fastapi import HTTPException
 
 
-def raise_internal_error(logger: logging.Logger, msg: str, exc: Exception):
+def raise_internal_error(logger: logging.Logger, msg: str, exc: Exception) -> NoReturn:
     """
     Raise a FastAPI HTTPException (500) while logging the full exception with a unique error ID.
 

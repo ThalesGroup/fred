@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
@@ -186,11 +187,15 @@ export default function EvaluationRunDetail({
   const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
 
   const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
+  // Unlike `run`/`cases` above, this poll had no isLive gate — it kept hitting
+  // the backend every 10s indefinitely, even long after the run went terminal,
+  // as long as the drawer stayed open. Match the sibling queries' pattern:
+  // poll while live, single fetch once terminal.
   const { data: langfuseSession } = useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery(
     { runId },
     {
       skip: !runId || !telemetry?.enabled,
-      pollingInterval: 10000,
+      pollingInterval: isLive ? 10000 : 0,
     },
   );
 
@@ -352,6 +357,7 @@ export default function EvaluationRunDetail({
       <div className={styles.statRow}>
         <StatCard label={t("rework.evaluation.detail.stats.passed")} value={run.passed_cases} tone="success" />
         <StatCard label={t("rework.evaluation.detail.stats.failed")} value={run.failed_cases} tone="error" />
+        <StatCard label={t("rework.evaluation.detail.stats.insufficient")} value={run.insufficient_cases} tone="info" />
         <StatCard
           label={t("rework.evaluation.detail.stats.execErrors")}
           value={run.execution_error_cases}
@@ -502,7 +508,7 @@ export default function EvaluationRunDetail({
         open={!!selectedCase}
         onClose={() => setSelectedCase(null)}
         title={t("rework.evaluation.detail.caseTitle")}
-        width="560px"
+        width="880px"
       >
         {selectedCase && <CaseDetail caseData={selectedCase} t={t} />}
       </InlineDrawer>
@@ -513,6 +519,32 @@ export default function EvaluationRunDetail({
 // ── Case drawer body ─────────────────────────────────────────────────────────
 
 function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: ReturnType<typeof useTranslation>["t"] }) {
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear a pending "reset to idle" timer on unmount (drawer closed within
+  // the 2s window) so it can't fire setCopied after this component is gone.
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  const handleCopy = () => {
+    // navigator.clipboard is undefined in non-secure contexts (plain HTTP,
+    // except localhost), older browsers, and some test DOM environments —
+    // accessing .writeText on it would throw synchronously.
+    if (!navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(JSON.stringify(caseData, null, 2))
+      .then(() => {
+        setCopied(true);
+        if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  };
+
   return (
     <div className={styles.caseBody}>
       <div className={styles.caseMetaRow}>
@@ -523,16 +555,25 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
         <span className={styles.muted}>
           {t("rework.evaluation.detail.col.status")}: {caseData.status}
         </span>
+        <span className={styles.spacer} />
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
+          aria-label={copied ? t("rework.evaluation.detail.copied") : t("rework.evaluation.detail.copyJson")}
+          onClick={handleCopy}
+        />
       </div>
 
       <FieldBlock label={t("rework.evaluation.detail.input")} value={caseData.input} />
       {(caseData.expected_output || caseData.actual_output) && (
         <div className={styles.compareGrid}>
           {caseData.expected_output && (
-            <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} />
+            <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} tall />
           )}
           {caseData.actual_output && (
-            <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} />
+            <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} tall />
           )}
         </div>
       )}

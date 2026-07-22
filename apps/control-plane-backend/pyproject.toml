@@ -1,7 +1,7 @@
 [project]
 name = "control-plane-backend"
 readme = "README.md"
-version = "1.6.0"
+version = "1.6.1"
 license = "Apache-2.0"
 description = "Minimal control-plane backend for team lifecycle and policy resolution"
 authors = [{ name = "Fred", email = "noreply@example.com" }]

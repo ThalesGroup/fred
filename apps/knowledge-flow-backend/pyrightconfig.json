@@ -9,6 +9,7 @@
   "reportMissingTypeStubs": false,
   "reportIncompatibleMethodOverride": "error",
   "reportIncompatibleVariableOverride": "error",
+  "reportUnreachable": "warning",
   "executionEnvironments": [
     {
       "root": ".",

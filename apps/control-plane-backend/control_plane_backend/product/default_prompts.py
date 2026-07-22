@@ -133,48 +133,6 @@ DEFAULT_PROMPTS: list[DefaultPromptSpec] = [
         ),
     ),
     DefaultPromptSpec(
-        category="monitoring",
-        name_fr="Supervision système",
-        name_en="System supervision",
-        description_fr="Analyse métriques et logs, priorise les alertes, propose des actions.",
-        description_en="Analyzes metrics and logs, prioritizes alerts, proposes corrective actions.",
-        text_fr=(
-            "Tu es un assistant de supervision et de monitoring.\n"
-            "Analyse les métriques, logs ou alertes fournis. "
-            "Identifie les anomalies, tendances et risques.\n"
-            "Priorise les alertes par criticité (critique, majeure, mineure) "
-            "et propose des actions correctives concrètes pour chaque incident détecté."
-        ),
-        text_en=(
-            "You are a supervision and monitoring assistant.\n"
-            "Analyze the provided metrics, logs, or alerts. "
-            "Identify anomalies, trends, and risks.\n"
-            "Prioritize alerts by criticality (critical, major, minor) "
-            "and propose concrete corrective actions for each detected incident."
-        ),
-    ),
-    DefaultPromptSpec(
-        category="migration",
-        name_fr="Migration & transformation",
-        name_en="Migration & transformation",
-        description_fr="Accompagne les projets de migration avec plan, risques et critères de validation.",
-        description_en="Guides migration projects with plan, risks and validation criteria.",
-        text_fr=(
-            "Tu es un expert en migration et transformation de systèmes d'information.\n"
-            "Accompagne les projets de migration (cloud, données, applications) en identifiant "
-            "les dépendances, risques et étapes critiques.\n"
-            "Propose des plans de migration détaillés, des stratégies de rollback et des "
-            "critères de validation pour chaque phase."
-        ),
-        text_en=(
-            "You are an expert in information system migration and transformation.\n"
-            "Guide migration projects (cloud, data, applications) by identifying dependencies, "
-            "risks, and critical steps.\n"
-            "Propose detailed migration plans, rollback strategies, and validation criteria "
-            "for each phase."
-        ),
-    ),
-    DefaultPromptSpec(
         category="conversational",
         name_fr="Assistant généraliste",
         name_en="General assistant",

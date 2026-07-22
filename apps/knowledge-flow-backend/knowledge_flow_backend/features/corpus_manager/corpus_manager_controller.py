@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import DocumentPermission, KeycloakUser, TagPermission, TeamPermission, get_current_user
@@ -63,7 +64,7 @@ class CorpusManagerController:
         for document_uid in scope.document_uids:
             await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
 
-    def _handle_exception(self, e: Exception, context: str):
+    def _handle_exception(self, e: Exception, context: str) -> NoReturn:
         logger.exception("[CORPUS] %s failed", context)
         raise HTTPException(500, "Internal server error")
 
@@ -107,7 +108,7 @@ class CorpusManagerController:
             try:
                 return self.service.build_corpus_toc(payload).model_dump()
             except Exception as e:
-                self._handle_exception(e, "build_toc")
+                return self._handle_exception(e, "build_toc")
 
         @router.post(
             "/corpus/revectorize",
@@ -125,7 +126,7 @@ class CorpusManagerController:
             try:
                 return self.service.revectorize_corpus(payload).model_dump()
             except Exception as e:
-                self._handle_exception(e, "revectorize")
+                return self._handle_exception(e, "revectorize")
 
         @router.post(
             "/corpus/purge-vectors",
@@ -143,7 +144,7 @@ class CorpusManagerController:
             try:
                 return self.service.purge_vectors(payload).model_dump()
             except Exception as e:
-                self._handle_exception(e, "purge_vectors")
+                return self._handle_exception(e, "purge_vectors")
 
         @router.post(
             "/corpus/tasks/get",
@@ -159,7 +160,7 @@ class CorpusManagerController:
             try:
                 return self.service.tasks_get(payload).model_dump()
             except Exception as e:
-                self._handle_exception(e, "tasks_get")
+                return self._handle_exception(e, "tasks_get")
 
         @router.post(
             "/corpus/tasks/result",
@@ -175,7 +176,7 @@ class CorpusManagerController:
             try:
                 return self.service.tasks_result(payload)
             except Exception as e:
-                self._handle_exception(e, "tasks_result")
+                return self._handle_exception(e, "tasks_result")
 
         @router.post(
             "/corpus/tasks/list",
@@ -191,4 +192,4 @@ class CorpusManagerController:
             try:
                 return self.service.tasks_list(payload)
             except Exception as e:
-                self._handle_exception(e, "tasks_list")
+                return self._handle_exception(e, "tasks_list")

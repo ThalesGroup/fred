@@ -42,8 +42,9 @@ Contract surface (import from here, never re-declare):
 | File | What it shows |
 | --- | --- |
 | `libs/fred-runtime/fred_runtime/capabilities/demo.py` (`DemoEchoCapability`) | **Minimal tracer**: one static tool, one scalar config field, plus one router + one owned table + one chat part + one side panel — the full vertical, smallest possible. |
-| `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: a live vector-search tool reaching a platform service through a typed `RuntimeServices` port, static config-field scoping, and one computed chat-turn control. The tutorial. |
+| `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: three live tools (vector search, `list_document_tree`, `summarize_document`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree` / `document_summarize`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial. |
 | `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. |
+| `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. |
 
 ---
 
@@ -53,7 +54,15 @@ Declared as ClassVars on the `AgentCapability` subclass; see `base.py` docstring
 authoritative rules. In one line each:
 
 - **`ConfigModel`** — what the user *sends* at agent creation (drives
-  `manifest.config_fields`).
+  `manifest.config_fields`). A `FieldSpec` may set `ui=UIHints(widget=...)` to
+  name a frontend stock **form** widget for the agent-creation form (#2023) —
+  distinct from chat-turn controls. Known ids: `document_libraries` (the
+  library/document tree picker for an array of library tag ids; see
+  `document_access.library_tag_ids`). Unknown ids fall back to the
+  type-derived default input, so older frontends degrade gracefully.
+  `ui.visible_when="<sibling_key>"` hides the field while that sibling's
+  effective value is falsy — display-only, the stored value is kept, so the
+  capability must still handle the field's value when its gate is off.
 - **`StoredConfigModel`** — what the platform *persists* after `validate_config`
   enrichment; defaults to `ConfigModel` (RFC §3.2, §3.8).
 - **`TurnOptionsModel`** — typed chat-time values from a chat control; `EmptyModel` if
@@ -96,7 +105,7 @@ by declaring a part with a `Literal` `type` discriminator in `manifest.chat_part
 | --- | --- | --- |
 | Tools + config + prompt fragment | an **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id (no prefix — #1988) | **zero** `[T1]` |
 | Full vertical (`validate_config`, middleware, `router`, `tables`, team settings) | a **capability package** built on `fred-sdk` | the package only |
-| First-party | same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
+| First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/fred-capability-ppt-filler`, #1903) | the package only |
 
 **Do not** build a "capability pod" and **do not** put capability runtime code in
 control-plane — it stays the proxy/registry/team-policy authority (RFC §7).

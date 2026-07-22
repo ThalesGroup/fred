@@ -17,7 +17,7 @@ import mimetypes
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from fred_core import KeycloakUser, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.download_token import (
@@ -91,6 +91,12 @@ class McpFilesystemController:
         return f"{prefix}/fs/download/{normalize_virtual_path(path)}"
 
     def _handle_exception(self, e: Exception, context: str) -> NoReturn:
+        if isinstance(e, AuthorizationError):
+            # An expected, routine denial — not a bug. The audit trail (see
+            # `_run` below) already carries the structured record; avoid a
+            # second ERROR-level traceback for what ReBAC already logged as a
+            # WARNING at the point of denial.
+            raise HTTPException(403, str(e))
         if isinstance(e, PermissionError):
             raise HTTPException(403, str(e))
         if isinstance(e, FileNotFoundError):
@@ -111,7 +117,7 @@ class McpFilesystemController:
             try:
                 return await self.service.ls(user, path)
             except Exception as e:
-                self._handle_exception(e, "List")
+                return self._handle_exception(e, "List")
 
         @router.get("/fs/stat/{path:path}", tags=["Filesystem"], summary="Get file information", operation_id="stat_file_or_directory")
         async def stat(
@@ -121,7 +127,7 @@ class McpFilesystemController:
             try:
                 return await self.service.stat(user, path)
             except Exception as e:
-                self._handle_exception(e, "Stat")
+                return self._handle_exception(e, "Stat")
 
         @router.get("/fs/cat/{path:path}", tags=["Filesystem"], summary="Read a file", operation_id="read_file")
         async def cat(
@@ -140,7 +146,7 @@ class McpFilesystemController:
                     max_chars=max_chars,
                 )
             except Exception as e:
-                self._handle_exception(e, "Cat")
+                return self._handle_exception(e, "Cat")
 
         @router.get(
             "/fs/page/{path:path}",
@@ -165,21 +171,21 @@ class McpFilesystemController:
                     max_chars=max_chars,
                 )
             except Exception as e:
-                self._handle_exception(e, "ReadFilePage")
+                return self._handle_exception(e, "ReadFilePage")
 
         @router.post("/fs/write/{path:path}", tags=["Filesystem"], summary="Write a file", operation_id="write_file")
         async def write(path: str, data: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.write(user, path, data)
             except Exception as e:
-                self._handle_exception(e, "Write")
+                return self._handle_exception(e, "Write")
 
         @router.delete("/fs/delete/{path:path}", tags=["Filesystem"], summary="Delete a file", operation_id="delete_file")
         async def delete(path: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.delete(user, path)
             except Exception as e:
-                self._handle_exception(e, "Delete")
+                return self._handle_exception(e, "Delete")
 
         @router.post(
             "/fs/copy-to-shared/{path:path}",
@@ -191,7 +197,7 @@ class McpFilesystemController:
             try:
                 return await self.service.copy_to_shared(user, path)
             except Exception as e:
-                self._handle_exception(e, "CopyToShared")
+                return self._handle_exception(e, "CopyToShared")
 
         @router.post("/fs/upload/{path:path}", tags=["Filesystem"], summary="Upload a binary file", operation_id="upload_file")
         async def upload(
@@ -210,7 +216,7 @@ class McpFilesystemController:
                     "download_url": self._download_href(request, path),
                 }
             except Exception as e:
-                self._handle_exception(e, "Upload")
+                return self._handle_exception(e, "Upload")
 
         @router.get("/fs/download/{path:path}", tags=["Filesystem"], summary="Download a binary file", operation_id="download_file")
         async def download(
@@ -227,7 +233,7 @@ class McpFilesystemController:
                 media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
                 return Response(content=data, media_type=media_type)
             except Exception as e:
-                self._handle_exception(e, "Download")
+                return self._handle_exception(e, "Download")
 
         @router.get(
             "/fs/share/{path:path}",
@@ -258,7 +264,7 @@ class McpFilesystemController:
             except HTTPException:
                 raise
             except Exception as e:
-                self._handle_exception(e, "Share")
+                return self._handle_exception(e, "Share")
 
         @router.post("/fs/edit/{path:path}", tags=["Filesystem"], summary="Edit a file", operation_id="edit_file")
         async def edit(
@@ -275,25 +281,25 @@ class McpFilesystemController:
                     replace_all=payload.replace_all,
                 )
             except Exception as e:
-                self._handle_exception(e, "Edit")
+                return self._handle_exception(e, "Edit")
 
         @router.get("/fs/glob", tags=["Filesystem"], summary="Find files matching a glob", operation_id="glob")
         async def glob(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.glob(user, pattern, path)
             except Exception as e:
-                self._handle_exception(e, "Glob")
+                return self._handle_exception(e, "Glob")
 
         @router.get("/fs/grep", tags=["Filesystem"], summary="Search files by regex", operation_id="grep")
         async def grep(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.grep(user, pattern, path)
             except Exception as e:
-                self._handle_exception(e, "Grep")
+                return self._handle_exception(e, "Grep")
 
         @router.post("/fs/mkdir/{path:path}", tags=["Filesystem"], summary="Create a directory/folder", operation_id="mkdir")
         async def mkdir(path: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.mkdir(user, path)
             except Exception as e:
-                self._handle_exception(e, "Mkdir")
+                return self._handle_exception(e, "Mkdir")

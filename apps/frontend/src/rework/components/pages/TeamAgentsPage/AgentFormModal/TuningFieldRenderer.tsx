@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
@@ -36,9 +37,20 @@ type TuningFieldRendererProps = {
   disabled: boolean;
   error?: string;
   teamId?: string;
+  /** Effective values (current input or declared default) of every sibling field
+   * in the same form — drives the `ui.visible_when` conditional display. */
+  allValues?: Record<string, unknown>;
 };
 
-export function TuningFieldRenderer({ field, value, onChange, disabled, error, teamId }: TuningFieldRendererProps) {
+export function TuningFieldRenderer({
+  field,
+  value,
+  onChange,
+  disabled,
+  error,
+  teamId,
+  allValues,
+}: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
   const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
@@ -83,6 +95,9 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   };
 
   if (field.ui?.hide) return null;
+  // `ui.visible_when`: show only while the referenced sibling's effective
+  // value is truthy. Display-only — the hidden field keeps its stored value.
+  if (field.ui?.visible_when && !allValues?.[field.ui.visible_when]) return null;
 
   const fieldValue = value ?? field.default ?? "";
   const label = `${field.title}${field.required ? " *" : ""}`;
@@ -182,6 +197,24 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
 
   if (field.type === "array") {
     const tags = Array.isArray(value) ? (value as string[]) : [];
+
+    // `ui.widget` stock form widgets. "document_libraries" renders the
+    // library/document tree picker instead of a raw tag-id text input; an
+    // unknown widget id falls through to the default TagInput.
+    if (field.ui?.widget === "document_libraries") {
+      return (
+        <div className={styles.field}>
+          <span className={styles.label}>{label}</span>
+          <DocumentLibraryScopePicker
+            teamId={teamId}
+            selectedTagIds={tags}
+            onChange={(tagIds) => onChange(field.key, tagIds)}
+          />
+          {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
+          {error && <p className={styles.error}>{error}</p>}
+        </div>
+      );
+    }
 
     return (
       <div className={styles.field}>

@@ -1705,6 +1705,41 @@ capability of `kind="agent"` in this exact same object space:
 > Not in this pass: `kind="tool"`/`kind="agent"` catalog-id namespace
 > separation (#2004 item 4, low likelihood, opportunistic).
 
+> **2026-07-20 — item 4 closed: `kind="tool"`/`kind="agent"` catalog-id
+> namespace separation.** Both kinds share one flat capability catalog dict
+> (`aggregate_capability_catalog`) and one FGA object type; nothing stopped a
+> tool/MCP-server id from coincidentally matching an (unprefixed)
+> `template_capability_id` and silently overwriting it (or being overwritten
+> by it) — later-registration-wins, no log, no error. Rejected a log-and-skip
+> collision guard (still lets one entry silently vanish from the catalog,
+> just with an unread log line) in favor of making the collision
+> structurally impossible:
+>
+> - `template_capability_id(runtime_id, agent_id)` now returns
+>   `f"agent__{runtime_id}__{agent_id}"` — `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+>   (`product/service.py`), a namespace reserved exclusively for `kind="agent"`
+>   projections.
+> - `aggregate_capability_catalog` (`capabilities/catalog.py`) rejects, at its
+>   existing invalid-id quarantine chokepoint, any `kind="tool"` entry whose
+>   id starts with that reserved prefix — logged as an error, not silently
+>   admitted. This closes the loophole a bare naming convention would leave
+>   open (nothing else stops a future tool/MCP-server author from choosing an
+>   `agent__`-prefixed id by accident).
+> - **Migration required:** live FGA tuples already exist under the
+>   un-prefixed id (anchor, `enabled`/`disabled` per team, `default_on`,
+>   `personal_on`/`personal_disabled`) from testing before this fix landed.
+>   `rename_agent_capability_ids_to_namespaced_form` (`product/service.py`,
+>   companion to `grant_existing_teams_served_templates`) renames each
+>   in place — same deploy-sequencing rule: run once, before this code
+>   deploys, rehearsed against a copy of real data first. Idempotent — a
+>   tuple already renamed (or never granted) has nothing to move and is
+>   skipped.
+>
+> Rejected alternative: a separate FGA object type for `kind="agent"` — would
+> reopen the "same object space, no new type" decision this section already
+> made (§7.5's rejection of a parallel admission model), for a problem a
+> reserved id prefix fully solves within the existing model.
+
 ---
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)
@@ -1858,16 +1893,89 @@ config + turn scoping the builtin cannot express); the builtin/catalog path
 stays reachable for back-compat and its retirement is a follow-up. Documented in
 the capability docstring; do NOT wire both on one instance.
 
-**Deferred: `list_document_tree` + `summarize_document`.** NOT registered
-(a registered tool the LLM can call but that returns "not implemented" erodes
-trust). They are blocked pending Knowledge Flow backend endpoints
-(`POST /documents/tree`; a synchronous `POST /documents/{uid}/summarize`) and
-pod-reachable session-attachment enumeration, none of which exist on Swift yet.
-Follow-up will add them once KF ships those endpoints.
+**Shipped (2026-07-21): `list_document_tree` + `summarize_document`.** The
+Knowledge Flow endpoints landed (`POST /documents/tree`, ReBAC-scoped through
+`TagService` with `owner_filter`/`team_id`; synchronous
+`POST /documents/{uid}/summarize` with steerable `instruction` + `max_chars`,
+attachment text reconstructed from session vectors), and both tools are now
+registered on `DocumentAccessCapability`, wired through the new
+`RuntimeServices.document_tree` / `document_summarize` ports
+(RUNTIME-EXECUTION-CONTRACT §8.21). Failures surface as `is_error` tool
+results (timeout / HTTP status detail) via the SDK-typed
+`DocumentPortCallError`, never raised exceptions. The per-agent
+`summarize_max_chars` config field is both the default and a hard cap.
+Still deferred: pod-reachable **session-attachment enumeration** — the tree's
+trailing "Session attachments" section from Kea. Attachments remain a search
+scope only (`attachments_only`); accordingly the tree tool lists the corpus
+only and is not registered at all in attachments-only mode.
 
 **Rename.** `mcp.servers.search_documents.name` → "Document access" (EN) /
 "Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`
 entry's display name.
+
+### 10.2 As-implemented (#1903 PPT filler, July 2026)
+
+Shipped `PptFillerCapability` as the **first out-of-tree capability package**:
+`libs/fred-capability-ppt-filler` (module `fred_capability_ppt_filler`),
+installed in the `fred-agents` pod via its `pyproject.toml` dependency + the
+`fred.capabilities` entry point — zero code edits in fred-runtime. It exercises
+the full §10 row: `validate_config` + asset upload, config-derived dynamic
+tools, a custom form widget, a contributed chat part (`ppt_preview`), a side
+panel (`ppt_preview_pane`), and the stateless `/analyze` route on
+`manifest.router`. The Kea functional spec (PPT-FILLER-TOOLKIT-RFC.md + images
+/ text-formatting / preview-pane extensions) is carried whole; Kea's bespoke
+`ToolkitAssetProcessor` seam is fully subsumed by
+`validate_config(config, uploads, ctx)` (base64-in-params transport retired —
+uploads are real multipart files).
+
+**Control-plane→pod multipart relay (the §3.4 deferred piece).** Two additive
+multipart companion routes: `POST /teams/{id}/agent-instances/with-assets` and
+`PATCH /teams/{id}/agent-instances/{iid}/with-assets` (a `request` JSON form
+field + parallel `asset_slots` (`{capability_id}:{slot_key}`) / `asset_files`
+arrays). Control-plane never opens the bytes; `_apply_capability_selection`
+forwards each capability's files into the existing `validate-config`
+round-trip as multipart fields keyed by slot key. The JSON routes are unchanged
+and remain the path for every save without uploads.
+
+**Agent-asset storage (the §3.8 dependency).** The KF virtual filesystem grew
+one sub-area: `/teams/{t}/agents/{agent_instance_id}/config/...` — read gated
+by team `CAN_READ` (any member chatting with the agent fetches assets at tool
+time), write gated by `CAN_UPDATE_RESOURCES` (same as `shared/`). Exposed to
+capabilities as the new typed `AgentAssetPort` (`RuntimeServices.agent_assets`,
+store/fetch/delete by slot-relative key; team + instance bind privately in the
+adapter). The agent-instance id is generated BEFORE capability validation on
+create, so the path exists for both create and edit.
+
+**Two more §10.1-doctrine ports** (image support): `DocumentContentPort`
+(original bytes by uid, KF `/raw_content/{uid}`) and `DocumentFolderPort`
+(author folder string → DOCUMENT tag id at save; folder-tag document listing at
+chat time via KF `/documents/metadata/browse`). Kea's `list_document_tree`
+dependency is replaced by a capability-owned `list_images_in_folder` tool that
+resolves folder paths against the save-time-resolved `folder_tag_id`s — the
+LLM never sees a tag id.
+
+**Frontend registry slots wired for the first time (§9 item 4).**
+`FieldSpec.ui.widget` (new SDK hint) + `CapabilityUiPlugin.configWidgets`: a
+config field naming a widget renders through the owning plugin's component
+inside the capability card (unknown ids fall back to the generic renderer).
+The agent form stages per-slot `File`s, gates Save on widget-reported blocking
+errors, and switches to the `with-assets` endpoints only when a file is staged.
+Per-capability base URLs are populated pre-save straight from the template
+catalog (`route_base_url`), the template-bound counterpart of the prep-time
+population. A capability-agnostic `sidePanelOpenRequest` slice lets a chat-part
+renderer open its own side panel (the page stays the single open-state
+authority) — how the `ppt_preview` card opens the PDF pane.
+
+**Deliberate deviations from the Kea spec.** (a) The mandatory `template` slot
+declares `min_count=0`: the platform slot gate runs on EVERY save, and
+`min_count=1` would force re-upload on ordinary edits; mandatory-ness is state
+3 of `validate_config`, exactly Kea's `asset_required` semantics. (b) The
+stateless `/analyze` reports every offline error code but not
+`folder_not_found` (needs platform access); the save round-trip resolves
+folders with a real resolver and remains the source of truth. (c) The preview
+part stores durable bearer-protected `/fs/download` hrefs (never a short-TTL
+signed URL — the part is persisted in the conversation), and the frontend
+bearer-fetches the PDF at open time.
 
 ---
 

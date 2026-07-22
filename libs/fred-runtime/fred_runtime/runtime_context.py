@@ -77,6 +77,11 @@ class RuntimeTimeouts:
     read: float = 30.0
     write: float | None = None
     pool: float | None = None
+    # Per-request read override for on-demand document summarization:
+    # Knowledge Flow runs map-reduce LLM passes over the whole document, which
+    # routinely exceeds the default read timeout for large PDFs. Not part of
+    # `as_httpx_timeout_config()` — applied per-request by KfDocumentClient.
+    summarize_read: float = 300.0
 
     def as_httpx_timeout_config(self) -> dict[str, float | None]:
         """
@@ -218,7 +223,7 @@ class RuntimeContext:
 _RUNTIME_CONTEXT: RuntimeContext | None = None
 
 
-def set_runtime_context(context: RuntimeContext) -> None:
+def set_runtime_context(context: RuntimeContext | None) -> None:
     """
     Set the global runtime context for fred-runtime adapters.
 
@@ -228,6 +233,8 @@ def set_runtime_context(context: RuntimeContext) -> None:
 
     How to use it:
     - call once during app startup after configuration is loaded
+    - `None` is accepted so tests can restore the pre-test state (including
+      "never set") without reaching into the private `_RUNTIME_CONTEXT` global
     """
 
     global _RUNTIME_CONTEXT
