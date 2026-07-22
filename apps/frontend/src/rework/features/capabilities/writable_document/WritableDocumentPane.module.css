@@ -1,0 +1,230 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* The pane fills the host InlineDrawer column (mirrors PptPreviewPane). */
+.pane {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background-color: var(--surface-container);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-m);
+}
+
+.titleGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saving {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: nowrap;
+}
+
+.empty {
+  margin-top: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--spacing-2xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-xs) 0;
+  overflow-x: auto;
+}
+
+.tab {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 14rem;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--on-surface);
+}
+
+.tabActive {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Editor area: constrains the MDXEditor so it fills the remaining height
+ * (MDXEditor otherwise sizes its root to content, leaving blank space). The
+ * scroll lives on the content child (below), NOT here — so the scrollbar never
+ * overlaps the toolbar and the toolbar never scrolls away. */
+.editorArea {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* MDXEditor root: flex column filling the area, plus a mapping of MDXEditor's
+ * internal theme variables onto our design tokens so the toolbar controls follow
+ * our theme instead of MDXEditor's default slate scale (white-on-pale on dark). */
+.editorArea :global(.mdxeditor) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+
+  --basePageBg: var(--surface-container-high);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--surface-container-high);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+}
+
+/* MDXEditor portals every popup (block-type dropdown, table popover, link dialog)
+ * into a single `.mdxeditor-popup-container` div appended to <body> — a SIBLING of
+ * `.mdxeditor`, not a child. So the mapping above never reaches the popups and they
+ * fall back to the default slate scale (unreadable on dark). Repeat the mapping on
+ * the popup container. The rule is unscoped on purpose (it lives outside .editorArea).
+ * The popup panel is deliberately one surface step ABOVE the pane/toolbar so it reads
+ * as an elevated floating layer. */
+:global(.mdxeditor-popup-container) {
+  --basePageBg: var(--surface-container-highest);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--state-on-surface-hover);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+}
+
+/* Lift every popup panel off the pane: a crisp border + soft shadow so the elevated
+ * surface reads as a distinct floating layer (block-type dropdown, table popover,
+ * link dialog). */
+:global(.mdxeditor-popup-container [class*="selectContainer"]),
+:global(.mdxeditor-popup-container [class*="PopoverContent"]),
+:global(.mdxeditor-popup-container [class*="dialogContent"]) {
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+}
+
+/* Toolbar: a fixed (non-scrolling) flex child so it always stays put. */
+.editorArea :global(.mdxeditor [role="toolbar"]) {
+  position: static;
+  row-gap: var(--spacing-2xs);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--outline-muted);
+  border-radius: 0;
+  background-color: var(--surface-container-high);
+  padding: var(--spacing-xs) var(--spacing-s);
+  overflow-x: visible;
+}
+
+/* The contenteditable wrapper is the scroll container, so only the document body
+ * scrolls (the scrollbar sits below the toolbar, not over it). */
+.editorArea :global(.mdxeditor-root-contenteditable) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Give the document body breathing room from the card edges. */
+.editorArea :global(.fred-writable-document) {
+  padding-right: var(--spacing-m);
+  padding-left: var(--spacing-m);
+}
+
+/* CodeMirror (codeBlockPlugin + codeMirrorPlugin) ships a generated theme with a
+ * hard-coded white background / near-black text that wins over the `--base*` mapping
+ * above, rendering white-on-pale on dark. Repaint its surfaces onto our tokens. */
+.editorArea :global(.mdxeditor .cm-editor) {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-scroller),
+.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
+.editorArea :global(.mdxeditor .cm-editor .cm-content) {
+  background-color: transparent;
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
+.editorArea :global(.mdxeditor .cm-editor .cm-lineNumbers) {
+  color: var(--on-surface-retreat);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLine),
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
+  background-color: var(--state-on-surface-hover);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
+  color: var(--on-surface);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-cursor),
+.editorArea :global(.mdxeditor .cm-editor .cm-cursor-primary) {
+  border-left-color: var(--on-surface);
+}
+
+/* Toolbar button tooltips portal into the same popup container but carry their own
+ * hard-coded light background the container mapping doesn't reach. Repaint onto the
+ * elevated surface with a border to match the other popup panels. */
+:global(.mdxeditor-popup-container [class*="tooltipContent"]) {
+  border: 1px solid var(--outline-muted);
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface);
+}

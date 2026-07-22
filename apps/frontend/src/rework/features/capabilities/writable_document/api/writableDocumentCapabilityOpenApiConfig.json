@@ -1,0 +1,8 @@
+{
+  "schemaFile": "./openapi.json",
+  "apiFile": "./writableDocumentCapabilityApi.ts",
+  "apiImport": "writableDocumentCapabilityApi",
+  "outputFile": "writableDocumentCapabilityOpenApi.ts",
+  "exportName": "writableDocumentCapabilityApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}
