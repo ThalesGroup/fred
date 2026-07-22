@@ -591,6 +591,32 @@ async def test_reverify_team_authorization_skips_for_personal_team() -> None:
     assert engine.calls == []
 
 
+@pytest.mark.asyncio
+async def test_reverify_team_authorization_skips_for_service_agent() -> None:
+    """Regression test for the EVAL-03 fix (PR #2060): the evaluation
+    worker's service identity is authorized once at turn start without any
+    OpenFGA tuple (`_authorize_execution_or_raise`, RFC EVAL-AUTH Solution
+    A) — the trusted verdict is stamped into `PortableContext.baggage` as
+    `is_service_agent`. The reverify must mirror that bypass instead of
+    re-running a ReBAC check this identity was never meant to satisfy, even
+    against a would-deny-everything engine."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(baggage={"is_service_agent": "true"})
+    )
+    request = _request(name="fake.search", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert result.content == "ok"
+    assert engine.calls == []
+
+
 def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> None:
     middleware = ToolObservabilityMiddleware(
         kpi=None,
