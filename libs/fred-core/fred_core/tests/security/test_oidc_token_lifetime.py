@@ -88,6 +88,27 @@ def test_token_exceeding_lifetime_ceiling_is_rejected(_rsa_keypair):
     assert "lifetime" in exc.value.detail.lower()
 
 
+def test_token_with_exp_before_iat_is_rejected(monkeypatch, _rsa_keypair):
+    """A malformed/confused-IdP token can claim iat after its own exp while
+    exp is still in the future — `verify_exp` alone would accept it, and the
+    ">" ceiling check silently passes a negative lifetime. Must be rejected
+    explicitly rather than falling through.
+
+    PyJWT itself rejects any iat beyond `leeway` in the future ("not yet
+    valid"), which would normally catch this first — so this needs a
+    positive `FRED_JWT_CLOCK_SKEW` (a real, supported deployment knob) to
+    construct an iat PyJWT tolerates while still exceeding exp.
+    """
+    priv_pem, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "CLOCK_SKEW_SECONDS", 60)
+    now = int(time.time())
+    token = _token(priv_pem, iat=now + 30, exp=now + 10, sub="u-5")
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(token)
+    assert exc.value.status_code == 401
+    assert "iat" in exc.value.detail.lower() or "exp" in exc.value.detail.lower()
+
+
 def test_token_without_iat_claim_is_not_checked(_rsa_keypair):
     """Some tokens omit `iat`; the ceiling check is skipped rather than
     guessing — `verify_exp` above still governs plain expiry."""

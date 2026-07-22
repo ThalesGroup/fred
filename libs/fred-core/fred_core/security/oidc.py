@@ -422,6 +422,26 @@ def decode_jwt(token: str) -> KeycloakUser:
     iat, exp = payload.get("iat"), payload.get("exp")
     if isinstance(iat, (int, float)) and isinstance(exp, (int, float)):
         lifetime_seconds = exp - iat
+        if lifetime_seconds < 0:
+            # `verify_exp` above only checks exp against "now" — it does not
+            # relate exp to iat, so a token claiming iat after its own exp
+            # (malformed, or a confused/misconfigured IdP) can still pass it
+            # as long as exp itself is still in the future. That negative
+            # lifetime would otherwise fail the ">" ceiling check below
+            # silently instead of being rejected.
+            logger.warning(
+                "[AUTH] JWT has negative lifetime (exp before iat): iat=%s exp=%s sub=%s",
+                iat,
+                exp,
+                payload.get("sub"),
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Token has invalid iat/exp claims",
+                headers={
+                    "WWW-Authenticate": "Bearer error='invalid_token', error_description='exp before iat'"
+                },
+            )
         if lifetime_seconds > MAX_TOKEN_LIFETIME_SECONDS:
             logger.warning(
                 "[AUTH] JWT lifetime exceeds policy ceiling: lifetime=%ss max=%ss sub=%s",
