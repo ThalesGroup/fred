@@ -77,8 +77,11 @@ from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import Any, Optional
 
+from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
+from fred_core.security.models import Resource
+from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.tool import ToolMessage
@@ -86,6 +89,7 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +154,52 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             name = getattr(request.tool, "name", None)
         return str(name) if name else "unknown"
 
+    @staticmethod
+    async def _reverify_team_authorization(
+        *, user_id: Optional[str], team_id: Optional[str]
+    ) -> None:
+        """
+        Per-tool-call ReBAC re-check (RUNTIME least-privilege gap, see
+        docs/swift audit): `_authorize_execution_or_raise` (agent_app.py)
+        verifies CAN_READ on the turn's team exactly once, at turn start.
+        Every tool call after that — potentially many, in a long ReAct loop —
+        ran unchecked, trusting that one decision for the rest of the turn.
+        This re-runs the same OpenFGA check at the one chokepoint every tool
+        call already passes through, so a stale/dropped team membership (or a
+        tool call scoped to a different team than the one authorized at turn
+        start) is caught here instead of silently trusted.
+
+        Uses the low-level `check_permission_or_raise` primitive (subject/
+        resource references, no `KeycloakUser`) because only the portable
+        `user_id`/`team_id` strings are available at this layer — the
+        personal-team self-heal and org-team bootstrap already ran once at
+        turn start for this exact team_id, so skipping them here is safe.
+
+        Scope: authorizes the *team* a call is scoped to, not any specific
+        resource a tool argument may reference (e.g. a document_uid) — that
+        remains each downstream service's own responsibility (several already
+        do it, e.g. knowledge-flow-backend's per-document ReBAC checks).
+        """
+        try:
+            rebac = get_runtime_context().config.rebac_engine
+        except RuntimeError:
+            # No pod-wide RuntimeContext set up (e.g. a unit test exercising
+            # this middleware in isolation) — nothing to check against.
+            return
+        if rebac is None or not rebac.enabled:
+            return  # dev/local (identity-only) or Noop engine — mirrors turn start
+        if not team_id or is_personal_team_id(team_id):
+            # Personal spaces aren't injected as a team_id into tool calls
+            # (`ContextAwareTool._inject_context_if_needed`); nothing to recheck.
+            return
+        if not user_id:
+            return
+        await rebac.check_permission_or_raise(
+            RebacReference(Resource.USER, user_id),
+            TeamPermission.CAN_READ,
+            RebacReference(Resource.TEAM, team_id),
+        )
+
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
@@ -177,6 +227,9 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         emit_audit_log("agent.tool.invocation.started", **base_dims)
         with timer_ctx as kpi_dims:
             try:
+                await self._reverify_team_authorization(
+                    user_id=base_dims.get("user_id"), team_id=base_dims.get("team_id")
+                )
                 result = await handler(request)
             except asyncio.CancelledError:
                 # Never swallow cancellation — record it as its own terminal

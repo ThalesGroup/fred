@@ -38,9 +38,15 @@ from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
+from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
+)
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    RuntimeContext,
+    set_runtime_context,
 )
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -436,6 +442,150 @@ async def test_native_capability_tool_gets_kpi_and_audit_coverage() -> None:
 # ---------------------------------------------------------------------------
 # _base_dims: identifiers only, sourced from BoundRuntimeContext
 # ---------------------------------------------------------------------------
+
+
+class _FakeRebacEngine:
+    """Minimal duck-typed stand-in for `RebacEngine` — only the two members
+    `_reverify_team_authorization` actually calls."""
+
+    def __init__(self, *, enabled: bool, deny: bool = False) -> None:
+        self.enabled = enabled
+        self._deny = deny
+        self.calls: List[tuple[str, str]] = []
+
+    async def check_permission_or_raise(
+        self, subject: Any, permission: Any, resource: Any, **_: Any
+    ) -> None:
+        self.calls.append((subject.id, resource.id))
+        if self._deny:
+            raise AuthorizationError(
+                subject.id, str(permission), Resource.TEAM, "denied by test double"
+            )
+
+
+def _with_rebac_engine(engine: _FakeRebacEngine | None):
+    """Context manager installing a fake pod-wide RuntimeContext for the
+    duration of one test, restoring whatever was there before on exit — the
+    global is process-wide (`set_runtime_context`), so tests must not leak it."""
+    import fred_runtime.runtime_context as runtime_context_module
+
+    class _Ctx:
+        def __enter__(self) -> None:
+            self._previous = runtime_context_module._RUNTIME_CONTEXT
+            set_runtime_context(
+                RuntimeContext(
+                    RuntimeConfig(
+                        knowledge_flow_url="http://kf.invalid",
+                        rebac_engine=engine,
+                    )
+                )
+            )
+
+        def __exit__(self, *exc_info: object) -> None:
+            runtime_context_module._RUNTIME_CONTEXT = self._previous
+
+    return _Ctx()
+
+
+@pytest.mark.asyncio
+async def test_reverify_team_authorization_blocks_denied_tool_call() -> None:
+    """The gap this closes: `_authorize_execution_or_raise` only checks
+    CAN_READ on the turn's team once, at turn start. This is the per-tool-call
+    re-check at the shared chokepoint — a denial here must block the handler
+    from ever running, exactly like any other tool-execution failure."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = _request(name="fake.search", tool_obj=None)
+    handler_called = False
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        nonlocal handler_called
+        handler_called = True
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine):
+        with _AuditEvents() as audit:
+            with pytest.raises(AuthorizationError):
+                await middleware.awrap_tool_call(request, handler)
+
+    assert handler_called is False
+    assert engine.calls == [("user-1", "team-1")]
+    assert audit.event_names() == [
+        "agent.tool.invocation.started",
+        "agent.tool.invocation.completed",
+    ]
+    assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
+    assert audit.records[1].error_code == "AuthorizationError"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_reverify_team_authorization_allows_when_rebac_grants() -> None:
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = _request(name="fake.search", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert result.content == "ok"
+    assert engine.calls == [("user-1", "team-1")]
+
+
+@pytest.mark.asyncio
+async def test_reverify_team_authorization_skips_when_rebac_disabled() -> None:
+    """A Noop/disabled engine (identity-only dev posture) must not block
+    anything — mirrors the same skip `_authorize_execution_or_raise` applies
+    at turn start."""
+    engine = _FakeRebacEngine(enabled=False, deny=True)
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = _request(name="fake.search", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_reverify_team_authorization_skips_for_personal_team() -> None:
+    """Personal spaces are never injected as a `team_id` into tool calls
+    (`ContextAwareTool._inject_context_if_needed`) — nothing to recheck, even
+    against a would-deny-everything engine."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    middleware = ToolObservabilityMiddleware(
+        kpi=None,
+        binding=BoundRuntimeContext(
+            runtime_context=PortableRuntimeContext(),
+            portable_context=PortableContext(
+                request_id="request-1",
+                correlation_id="correlation-1",
+                actor="user-1",
+                tenant="team-1",
+                environment=PortableEnvironment.DEV,
+                session_id="session-1",
+                user_id="user-1",
+                team_id="personal-user-1",
+            ),
+        ),
+    )
+    request = _request(name="fake.search", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert engine.calls == []
 
 
 def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> None:
