@@ -2244,13 +2244,11 @@ def _effective_capability_ids(
     `default_mcp_servers` ids; a selected id that is a known-but-DISABLED
     catalog MCP server is dropped (the live tool provider skips it anyway —
     #1988 keeps that tolerance), while an id the pod knows nothing about stays
-    and fails loudly downstream. Non-ReAct templates carry no capabilities.
-    When the registry is absent the raw selection is returned unfiltered — the
-    caller decides whether that is an error.
+    and fails loudly downstream. Resolved identically for ReAct and Graph
+    agents. When the registry is absent the raw selection is returned
+    unfiltered — the caller decides whether that is an error.
     """
 
-    if not isinstance(definition, ReActAgentDefinition):
-        return []
     selected = tuning.selected_capability_ids if tuning is not None else None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
@@ -2347,18 +2345,10 @@ def _build_capability_block(
     `_active_mcp_server_refs`: a `None` capability selection (template default)
     activates the template's `default_mcp_servers` as capabilities so their
     instructions are delivered — otherwise a default-configured agent would
-    silently lose its non-negotiable grounding contract.
+    silently lose its non-negotiable grounding contract. Built uniformly for
+    both ReAct and Graph agents; each runtime consumes the half that concerns
+    it (Graph's tool-carrying half is wired up separately).
     """
-
-    if not isinstance(definition, ReActAgentDefinition):
-        # Capabilities (incl. MCP instruction fragments) are ReAct-only (RFC §5).
-        # A non-ReAct template selecting real capabilities is still a loud error.
-        if tuning is not None and tuning.selected_capability_ids:
-            raise CapabilityError(
-                "Capabilities are only supported on ReAct agents (RFC §5); "
-                f"template '{definition.agent_id}' is not one."
-            )
-        return None
 
     selected = tuning.selected_capability_ids if tuning is not None else None
     capability_config = tuning.capability_config if tuning is not None else {}

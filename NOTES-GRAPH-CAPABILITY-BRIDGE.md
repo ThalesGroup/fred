@@ -195,16 +195,62 @@ Validation: `cd libs/fred-runtime && make code-quality && make test` — both
 green, 583 tests passed (up from 569 pre-Phase-1-merge baseline + 14 new/moved
 in this file), zero regressions, no other test file needed changes.
 
-### Phase 3 — remove the two ReAct-only gates
+### Phase 3 — remove the two ReAct-only gates — DONE (2026-07-22)
 File: `libs/fred-runtime/fred_runtime/app/agent_app.py`
-- `_effective_capability_ids` (~line 2222): drop the
-  `isinstance(definition, ReActAgentDefinition)` early return. Prerequisite —
-  without this, `_build_capability_block` never receives anything to assemble
-  for a Graph agent.
-- `_build_capability_block` (~line 2323): drop the `CapabilityError`-raising
-  branch entirely. The block is now built **uniformly** for both agent kinds;
-  each runtime consumes the half that concerns it. No more "capabilities
-  don't work on Graph" branch anywhere in the code.
+- `_effective_capability_ids` (~line 2234): dropped the
+  `isinstance(definition, ReActAgentDefinition)` early return — it now
+  resolves identically for `ReActAgentDefinition` and `GraphAgentDefinition`.
+  Docstring's stale "Non-ReAct templates carry no capabilities" sentence
+  replaced with "Resolved identically for ReAct and Graph agents."
+- `_build_capability_block` (~line 2318): dropped the `CapabilityError`-raising
+  branch entirely (the `isinstance` check plus its
+  `"Capabilities are only supported on ReAct agents (RFC §5)..."` raise and
+  early `return None`). The block is now built **uniformly** for both agent
+  kinds — no agent-kind branching left in this function at all. Docstring
+  updated to say so; the unrelated RFC §3.9 "never silently degrade"
+  paragraph (why a broken capability still raises loudly) was left untouched
+  as instructed — that principle is orthogonal to the gate removed here.
+- `_enforce_turn_options` (~line 2278, the pre-stream 422 gate): read, not
+  changed. It was already generic — it just forwards to
+  `_effective_capability_ids` and `validate_turn_options` with no
+  `isinstance`/agent-kind branch of its own — so fixing
+  `_effective_capability_ids` alone was sufficient; a Graph agent's
+  `turn_options` for a capability it legitimately selected now validates the
+  same way a ReAct agent's would, no code change needed.
+- Broader search (step 4): grepped `ReAct`, `CapabilityError`,
+  `isinstance.*ReActAgentDefinition` across the whole file. Two other
+  `isinstance(definition, ReActAgentDefinition)` sites remain
+  (`_bind_binding_and_services`'s `build_authored_tool_handlers` gate at
+  ~line 772, and `_apply_runtime_tuning`'s `system_prompt_template` overlay at
+  ~line 1075) — both read and confirmed **unrelated** to the
+  `AgentCapability`/capability-block system this phase touches (they gate
+  the separate `declared_tool_refs`/authored-tools and prompt-overlay
+  mechanisms, which stay legitimately ReAct-only and are out of this NOTES
+  file's scope). Left untouched. No stale comment, dead branch, or test mock
+  assuming "Graph agents never have capabilities" was found anywhere else.
+- Tests: no existing test asserted the old raise-on-non-ReAct behavior (grepped
+  `CapabilityError`, `_effective_capability_ids`, `only supported on ReAct`,
+  `GraphAgentDefinition` across `tests/` — zero hits combining a Graph
+  definition with a capability selection; the two direct `_build_capability_block`
+  tests in `test_agent_app.py` only exercise the MCP/ReAct lane and needed no
+  changes). Added
+  `test_build_capability_block_for_graph_agent_returns_tools` in
+  `libs/fred-runtime/tests/test_agent_app.py` — a minimal `GraphAgentDefinition`
+  (modeled on `fred-sdk`'s `_ConvAgent`/`_PlainAgent` test fixtures) plus a
+  minimal `tools()`-only capability, proving `_build_capability_block` returns
+  a `CapabilityAgentBlock` with the capability's tool in `.tools`, no error.
+- Validation: `cd libs/fred-runtime && make code-quality && make test` — both
+  green, 584 tests passed (583 Phase-2 baseline + 1 new), zero regressions.
+- End state confirmed exactly as scoped: a Graph agent can now select
+  capabilities and `_build_capability_block` returns a real, non-empty block
+  for it — but the one `GraphRuntime(...)` call site (~line 2551) still does
+  not accept or pass a `capability_block=` kwarg, so nothing yet reads
+  `.tools` on the Graph execution path. Graph capability selection is
+  correctly-built but inert until Phase 4. No stopgap wiring was added.
+- Nothing here changes the Phase 4-6 plan below — the deferred MCP-name-vs-
+  capability-name collision check and the plain-dict-invocation adapter
+  problem (both flagged at the end of Phase 1/2) remain exactly where they
+  were, still Phase 4's job.
 
 ### Phase 4 — `GraphRuntime` consumes `capability_block.tools`
 File: `libs/fred-runtime/fred_runtime/graph/graph_runtime.py`
@@ -310,11 +356,23 @@ Phase 2 implemented and verified (2026-07-22): `libs/fred-runtime` passes
 section above for the collision-handling decisions (cross-capability tool-name
 collision implemented; capability-vs-MCP collision explicitly deferred to
 Phase 4, not silently dropped) and the `DemoEchoCapability` migration note for
-whoever picks up later phases. Phases 3-6 not started.
+whoever picks up later phases.
 
-Next action: Phase 3 (drop the two ReAct-only gates in `agent_app.py`) — when
-picking it up, read the Phase 1 return-convention finding above first; the
-plain-dict-invocation adapter problem it flags becomes real once Phase 4 wires
-`capability_block.tools` into `GraphRuntime.runtime_tools`. Also re-read Phase
-2's MCP-collision deferral note — Phase 4 is where that check finally has both
-tool sources in scope to actually implement it.
+Phase 3 implemented and verified (2026-07-22): `libs/fred-runtime` passes
+`make code-quality && make test` (584 tests, zero regressions). The two
+ReAct-only gates in `agent_app.py` (`_effective_capability_ids`,
+`_build_capability_block`) are gone; `_enforce_turn_options` needed no change
+(already generic). End state: a Graph agent can select capabilities and get a
+real, non-empty `CapabilityAgentBlock` built for it, but the one
+`GraphRuntime(...)` call site still doesn't accept or pass
+`capability_block=` — nothing reads `.tools` on the Graph path yet. That is
+exactly Phase 4's job, left untouched here. Phases 4-6 not started.
+
+Next action: Phase 4 (`GraphRuntime` consumes `capability_block.tools` in
+`graph_runtime.py`) — when picking it up, read the Phase 1 return-convention
+finding above first; the plain-dict-invocation adapter problem it flags
+becomes real the moment `capability_block.tools` is merged into
+`GraphRuntime.runtime_tools`. Also re-read Phase 2's MCP-collision deferral
+note — Phase 4 is where that check finally has both tool sources
+(`capability_block.tools` and MCP-resolved runtime tool names) in scope to
+actually implement it.

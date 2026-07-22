@@ -1774,6 +1774,137 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     assert fragments == []
 
 
+def test_build_capability_block_for_graph_agent_returns_tools() -> None:
+    """
+    Ensure `_build_capability_block` builds a non-empty block for a Graph agent
+    (Phase 3, NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+
+    Why this exists:
+    - `_build_capability_block` and `_effective_capability_ids` used to gate
+      capabilities to `ReActAgentDefinition` only, raising `CapabilityError`
+      for any `GraphAgentDefinition` selecting a real (non-MCP) capability.
+      That gate is gone: a Graph agent can now select a capability and get
+      its `tools()` output collected into `block.tools`, exactly like a
+      ReAct agent would. Nothing yet reads `block.tools` on the Graph
+      execution path — `GraphRuntime` still ignores `capability_block`
+      entirely (Phase 4) — so this only proves the block builds without
+      error, not that a graph node can invoke the tool.
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_for_graph_agent_returns_tools -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+    )
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain_core.tools import BaseTool
+    from langchain_core.tools import tool as lc_tool
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _GraphToolCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="graph_tool_cap",
+            version="1.0.0",
+            name="cap.graph_tool_cap.name",
+            description="cap.graph_tool_cap.description",
+            icon="Build",
+        )
+        ConfigModel = _NoConfig
+
+        def tools(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[BaseTool]:
+            del ctx
+
+            @lc_tool
+            def graph_probe(text: str) -> str:
+                """Echo text back."""
+                return text
+
+            return [graph_probe]
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability"
+        role: str = "test"
+        description: str = "test"
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    registry = CapabilityRegistry()
+    registry.register(_GraphToolCapability())
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["graph_tool_cap"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    assert [t.name for t in block.tools] == ["graph_probe"]
+
+
 def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:
     """
     Ensure `build_mcp_capability` sets the manifest id to the plain catalog
