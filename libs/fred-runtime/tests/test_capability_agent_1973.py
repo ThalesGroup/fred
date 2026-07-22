@@ -36,6 +36,7 @@ from typing import Any, cast
 
 import pytest
 from fred_runtime.capabilities import (
+    CapabilityAssemblyError,
     CapabilityRegistry,
     build_capability_agent_block,
     build_capability_context,
@@ -83,20 +84,6 @@ class _GadgetConfig(BaseModel):
     workspace_root: str = "/workspace"
 
 
-class _GadgetMiddleware(AgentMiddleware):
-    def __init__(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> None:
-        super().__init__()
-
-        @tool
-        def demo_gadget(path: str) -> str:
-            """Operate the demo gadget on a path."""
-
-            GADGET_RUNS.append({"path": path})
-            return f"gadget ran on {path}"
-
-        self.tools = [demo_gadget]
-
-
 class _GadgetCapability(AgentCapability[_GadgetConfig, _GadgetConfig, EmptyModel]):
     """HITL tracer: one gated tool whose gate reads the typed config."""
 
@@ -123,10 +110,17 @@ class _GadgetCapability(AgentCapability[_GadgetConfig, _GadgetConfig, EmptyModel
     def hitl_specs(self) -> list[HitlSpec]:
         return [self._spec]
 
-    def middleware(
-        self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]
-    ) -> list[AgentMiddleware]:
-        return [_GadgetMiddleware(ctx)]
+    def tools(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> list[Any]:
+        del ctx
+
+        @tool
+        def demo_gadget(path: str) -> str:
+            """Operate the demo gadget on a path."""
+
+            GADGET_RUNS.append({"path": path})
+            return f"gadget ran on {path}"
+
+        return [demo_gadget]
 
 
 class _NamedMiddleware(AgentMiddleware):
@@ -239,6 +233,71 @@ def test_capability_block_is_sorted_by_id_with_authored_order_within() -> None:
         "zeta_cap-first",
         "zeta_cap-second",
     ]
+
+
+# ---------------------------------------------------------------------------
+# block.tools — capability.tools(ctx) is the one source for HITL binding and
+# for Graph agents (bridge, Phase 4); collisions across capabilities never
+# silently shadow (#1973 doctrine: a broken capability suspends, it never
+# silently degrades)
+# ---------------------------------------------------------------------------
+
+
+def _tool_capability(cap_id: str, tool_name: str) -> AgentCapability[Any, Any, Any]:
+    class _Cap(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id=cap_id,
+            version="1.0.0",
+            name=f"cap.{cap_id}.name",
+            description=f"cap.{cap_id}.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool(tool_name)
+            def _probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [_probe]
+
+    return _Cap()
+
+
+def test_block_tools_collects_capability_tools_deduped_by_name() -> None:
+    registry = CapabilityRegistry()
+    registry.register(_tool_capability("cap_a", "tool_a"))
+    registry.register(_tool_capability("cap_b", "tool_b"))
+
+    contexts = _contexts(registry, {"cap_a": {}, "cap_b": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"tool_a", "tool_b"}
+
+
+def test_hitl_binding_tool_comes_from_block_tools() -> None:
+    registry = _gadget_registry(require=True)
+    contexts = _contexts(registry, {"demo_gadget": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"demo_gadget"}
+    binding = block.hitl["demo_gadget"]
+    assert binding.tool is not None
+    assert binding.tool is next(t for t in block.tools if t.name == "demo_gadget")
+
+
+def test_two_capabilities_exposing_same_tool_name_raises() -> None:
+    registry = CapabilityRegistry()
+    registry.register(_tool_capability("cap_a", "shared_tool"))
+    registry.register(_tool_capability("cap_b", "shared_tool"))
+
+    contexts = _contexts(registry, {"cap_a": {}, "cap_b": {}})
+
+    with pytest.raises(CapabilityAssemblyError, match="shared_tool"):
+        build_capability_agent_block(registry, contexts)
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,10 @@ Why this module exists:
   change behavior), authored order preserved within one capability's stack
 - capability `HitlSpec`s never become middleware; they are collected here
   into `CapabilityHitlBinding`s for the single `FredHitlMiddleware` gate
+- `capability.tools(ctx)` — the primary, execution-model-agnostic authoring
+  surface (fred-sdk `AgentCapability.tools`) — is read once per selected
+  capability into one deduped-by-name map: `block.tools` for Graph agents
+  (bridge, Phase 4) and HITL-tool resolution below both read that one map
 
 How to use:
 - per selected capability, build its typed context with
@@ -31,7 +35,8 @@ How to use:
   are validated against the capability's own models — the RFC §3.5/§3.8
   slice-validation pattern)
 - then `build_capability_agent_block(registry, contexts)` and pass
-  `block.middleware` / `block.hitl` into the ReAct loop builder
+  `block.middleware` / `block.hitl` into the ReAct loop builder; `block.tools`
+  is the plain tool objects, execution-model-agnostic
 """
 
 from __future__ import annotations
@@ -52,6 +57,7 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
@@ -312,6 +318,7 @@ class CapabilityAgentBlock:
 
     middleware: tuple[AgentMiddleware, ...]
     hitl: Mapping[str, CapabilityHitlBinding]
+    tools: tuple[BaseTool, ...]
 
 
 def build_capability_agent_block(
@@ -324,26 +331,40 @@ def build_capability_agent_block(
     Determinism rule (RFC §5.3): iteration is `sorted(capability id)` — never
     selection order, never registration order — and each capability's
     authored middleware list order is preserved within its block.
+
+    `tools()` (not `middleware()`) is the single source of truth for a
+    capability's tool objects (RFC §3.2, §5): it is read directly, once per
+    selected capability, into one deduped-by-name map shared by two
+    consumers — `HitlSpec.tool` resolution below, and the `tools` field
+    Graph agents will consume starting Phase 4. Two DIFFERENT capabilities
+    exposing the same tool name is a collision this module can see (both
+    contexts are in hand right here) and never silently shadows, matching the
+    HITL-ownership collision below.
     """
 
     middleware: list[AgentMiddleware] = []
     hitl: dict[str, CapabilityHitlBinding] = {}
+    tools_by_name: dict[str, BaseTool] = {}
+    tool_owner: dict[str, str] = {}
     for cap_id in sorted(contexts):
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
-        stack = list(capability.middleware(ctx))
-        middleware.extend(stack)
+        middleware.extend(capability.middleware(ctx))
 
-        tools_by_name: dict[str, Any] = {}
-        for mw in stack:
-            for candidate in getattr(mw, "tools", None) or []:
-                candidate_name = getattr(candidate, "name", None)
-                if isinstance(candidate_name, str):
-                    tools_by_name[candidate_name] = candidate
+        for candidate in capability.tools(ctx):
+            owner = tool_owner.get(candidate.name)
+            if owner is not None and owner != cap_id:
+                raise CapabilityAssemblyError(
+                    f"Tool '{candidate.name}' is exposed by two capabilities "
+                    f"('{owner}' and '{cap_id}'). Capability tools must be "
+                    "uniquely named."
+                )
+            tools_by_name[candidate.name] = candidate
+            tool_owner[candidate.name] = cap_id
 
         for spec in capability.hitl_specs():
-            owner = hitl.get(spec.tool)
-            if owner is not None:
+            owner_binding = hitl.get(spec.tool)
+            if owner_binding is not None:
                 raise CapabilityAssemblyError(
                     f"Tool '{spec.tool}' has HitlSpec declarations from two "
                     f"capabilities (capability '{cap_id}' collides with an "
@@ -354,4 +375,6 @@ def build_capability_agent_block(
                 context=ctx,
                 tool=tools_by_name.get(spec.tool),
             )
-    return CapabilityAgentBlock(middleware=tuple(middleware), hitl=hitl)
+    return CapabilityAgentBlock(
+        middleware=tuple(middleware), hitl=hitl, tools=tuple(tools_by_name.values())
+    )
