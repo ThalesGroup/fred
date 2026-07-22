@@ -1643,6 +1643,8 @@
           "metrics": "Metrics"
         },
         "caseTitle": "Case detail",
+        "copyJson": "Copy JSON",
+        "copied": "Copied",
         "latency": "Latency",
         "input": "Input",
         "expected": "Expected output",

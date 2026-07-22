@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
@@ -507,7 +508,7 @@ export default function EvaluationRunDetail({
         open={!!selectedCase}
         onClose={() => setSelectedCase(null)}
         title={t("rework.evaluation.detail.caseTitle")}
-        width="560px"
+        width="880px"
       >
         {selectedCase && <CaseDetail caseData={selectedCase} t={t} />}
       </InlineDrawer>
@@ -518,6 +519,18 @@ export default function EvaluationRunDetail({
 // ── Case drawer body ─────────────────────────────────────────────────────────
 
 function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: ReturnType<typeof useTranslation>["t"] }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(JSON.stringify(caseData, null, 2))
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  };
+
   return (
     <div className={styles.caseBody}>
       <div className={styles.caseMetaRow}>
@@ -528,16 +541,25 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
         <span className={styles.muted}>
           {t("rework.evaluation.detail.col.status")}: {caseData.status}
         </span>
+        <span className={styles.spacer} />
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
+          aria-label={copied ? t("rework.evaluation.detail.copied") : t("rework.evaluation.detail.copyJson")}
+          onClick={handleCopy}
+        />
       </div>
 
       <FieldBlock label={t("rework.evaluation.detail.input")} value={caseData.input} />
       {(caseData.expected_output || caseData.actual_output) && (
         <div className={styles.compareGrid}>
           {caseData.expected_output && (
-            <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} />
+            <FieldBlock label={t("rework.evaluation.detail.expected")} value={caseData.expected_output} tall />
           )}
           {caseData.actual_output && (
-            <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} />
+            <FieldBlock label={t("rework.evaluation.detail.actual")} value={caseData.actual_output} tall />
           )}
         </div>
       )}
