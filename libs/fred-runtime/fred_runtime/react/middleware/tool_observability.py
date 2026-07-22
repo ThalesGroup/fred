@@ -156,7 +156,7 @@ class ToolObservabilityMiddleware(AgentMiddleware):
 
     @staticmethod
     async def _reverify_team_authorization(
-        *, user_id: Optional[str], team_id: Optional[str]
+        *, user_id: Optional[str], team_id: Optional[str], is_service_agent: bool
     ) -> None:
         """
         Per-tool-call ReBAC re-check (RUNTIME least-privilege gap, see
@@ -174,6 +174,14 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         `user_id`/`team_id` strings are available at this layer — the
         personal-team self-heal and org-team bootstrap already ran once at
         turn start for this exact team_id, so skipping them here is safe.
+
+        `is_service_agent` mirrors the *other* branch `_authorize_execution_or_raise`
+        takes at turn start (RFC EVAL-AUTH, Solution A): the evaluation worker's
+        service identity is authorized without any OpenFGA tuple, so re-running
+        the ReBAC check here would reject an identity that was never meant to
+        hold one. The flag is computed once from the trusted JWT at turn start
+        and threaded through `PortableContext.baggage` — never re-derived from
+        anything caller-suppliable at this layer.
 
         Scope: authorizes the *team* a call is scoped to, not any specific
         resource a tool argument may reference (e.g. a document_uid) — that
@@ -193,6 +201,8 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             # (`ContextAwareTool._inject_context_if_needed`); nothing to recheck.
             return
         if not user_id:
+            return
+        if is_service_agent:
             return
         await rebac.check_permission_or_raise(
             RebacReference(Resource.USER, user_id),
@@ -228,7 +238,12 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         with timer_ctx as kpi_dims:
             try:
                 await self._reverify_team_authorization(
-                    user_id=base_dims.get("user_id"), team_id=base_dims.get("team_id")
+                    user_id=base_dims.get("user_id"),
+                    team_id=base_dims.get("team_id"),
+                    is_service_agent=self._binding.portable_context.baggage.get(
+                        "is_service_agent"
+                    )
+                    == "true",
                 )
                 result = await handler(request)
             except asyncio.CancelledError:
