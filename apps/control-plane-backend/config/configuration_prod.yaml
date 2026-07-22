@@ -40,7 +40,14 @@ security:
     secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET # pragma: allowlist secret
   user:
     enabled: true
-    realm_url: http://app-keycloak:8080/realms/app
+    # Must be browser-reachable: this URL is served to the frontend
+    # (/frontend/config -> FrontendConfig.user_auth.realm_url) and used
+    # client-side by keycloak-js for silent token refresh (updateToken()).
+    # "app-keycloak" only resolves inside the docker-compose network, so
+    # every background refresh hangs forever once the initial login token
+    # ages past its validity window. security.m2m.realm_url above is
+    # correctly docker-internal since that one is backend-to-Keycloak only.
+    realm_url: http://localhost:8080/realms/app
     client_id: app
   authorized_origins:
     - http://localhost:5173

@@ -23,6 +23,9 @@ spec:
         {{- if .app.podAnnotations }}
 {{ toYaml .app.podAnnotations | nindent 8 }}
         {{- end }}
+        {{- if .app.migration.podAnnotations }}
+{{ toYaml .app.migration.podAnnotations | nindent 8 }}
+        {{- end }}
         {{- if .app.configuration }}
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
         {{- end }}
@@ -70,6 +73,9 @@ spec:
 
           volumeMounts:
 {{ toYaml .app.volumeMounts | nindent 12 }}
+          {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
+{{ toYaml .app.extraVolumeMounts | nindent 12 }}
+          {{- end }}
 
           {{- with .app.migration.resources }}
           resources:
@@ -78,6 +84,9 @@ spec:
 
       volumes:
 {{ toYaml .app.volumes | nindent 8 }}
+      {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
+{{ toYaml .app.extraVolumes | nindent 8 }}
+      {{- end }}
 
       {{- with .app.nodeSelector }}
       nodeSelector:

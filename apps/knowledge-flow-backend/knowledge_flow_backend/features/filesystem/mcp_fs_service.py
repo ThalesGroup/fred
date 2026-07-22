@@ -19,6 +19,7 @@ import logging
 from typing import List
 
 from fred_core import (
+    AuthorizationError,
     FilesystemResourceInfoResult,
     KeycloakUser,
 )
@@ -428,6 +429,12 @@ class McpFilesystemService:
             for entry in entries:
                 self._stamp_provenance(join_virtual_child(parent, entry.path), entry)
             return entries
+        except AuthorizationError:
+            # An expected, routine denial, not a bug — ReBAC already logged one
+            # bounded WARNING at the point of denial, and the caller's audit
+            # trail records the structured outcome. Don't double it with an
+            # ERROR-level traceback here.
+            raise
         except Exception:
             logger.exception("Failed to list filesystem entries")
             raise
@@ -474,6 +481,8 @@ class McpFilesystemService:
             # Stat targets one known path: derive provenance from it directly.
             self._stamp_provenance(absolute_virtual_path(path), entry)
             return entry
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to stat %s", path)
             raise
@@ -501,6 +510,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 return await self.corpus_area.cat_area(user, resolved.segments)
             return await self.scoped_areas.cat_area(user, resolved.segments)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to read %s", path)
             raise
@@ -528,6 +539,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus binaries are served by the content API, not /fs")
             return await self.scoped_areas.read_bytes_area(user, resolved.segments)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to read bytes %s", path)
             raise
@@ -547,6 +560,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.write_bytes_area(user, resolved.segments, data)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to write bytes %s", path)
             raise
@@ -607,6 +622,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.write_area(user, resolved.segments, data)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to write %s", path)
             raise
@@ -633,6 +650,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.delete_area(user, resolved.segments)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to delete %s", path)
             raise
@@ -673,6 +692,8 @@ class McpFilesystemService:
                 pattern,
                 resolved.segments,
             )
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Grep failed for pattern '%s' with prefix '%s'", pattern, prefix)
             raise
@@ -699,6 +720,8 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.mkdir_area(user, resolved.segments)
+        except AuthorizationError:
+            raise
         except Exception:
             logger.exception("Failed to create directory %s", path)
             raise

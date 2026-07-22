@@ -132,9 +132,10 @@ forwards that scalar into `RuntimeContext.context_prompt_text`; the runtime
 contract does not know about the ordered prompt list.
 
 Library-prompt resolution is scoped to the caller's authorized teams — the active
-team plus the caller's personal team (`PromptStore.get_for_team`), matching the
-union the context picker surfaces (§6). A session cannot resolve a prompt owned by
-an unrelated team by id.
+team plus the caller's personal team (`PromptStore.get_for_team`). This is wider
+than what the context picker surfaces (§6): the picker no longer offers personal
+prompts in a team space, but an already-attached personal prompt keeps resolving.
+A session cannot resolve a prompt owned by an unrelated team by id.
 
 At execution the runtime folds `context_prompt_text` into the final system prompt.
 `fred_runtime.react.react_prompting.compose_system_prompt` is the single composer
@@ -166,7 +167,9 @@ The shipped prompt UI has two parts:
 
 The context picker reads
 `GET /control-plane/v1/teams/{team_id}/prompts/context`, which returns the
-caller's personal prompts, current team prompts, and platform defaults. DB
+space's own prompts plus platform defaults. Personal prompts appear only in the
+personal space — a team context never exposes the caller's personal prompts
+(changed 2026-07-20, #2023; previously the endpoint returned the union). DB
 prompts are ordered by usage, and defaults are appended.
 
 Agent-form import/save/version-drift UX is not complete; it is tracked as

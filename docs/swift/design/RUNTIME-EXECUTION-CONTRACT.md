@@ -272,12 +272,13 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   (`fred_core.security.oidc`). Under the `c3` profile it validates issuer and
   audience strictly (`verify_aud=True`), and each pod validates `aud == its own
   client_id` (per-agent audience — anti-confused-deputy, decision D5c).
-- **Authorization** — for a **collaborative** `runtime_context.team_id` (anything
-  not a personal space), the pod runs a per-request OpenFGA check that the caller
-  holds `CAN_READ` on that team (the same relation the control-plane required
-  before it would mint a grant). This is the model already homologated on
-  `main`'s agentic-backend, re-instantiated per pod. A **personal space**
-  (`personal-<uid>`) is never checked against OpenFGA — see below.
+- **Authorization** — the pod runs a per-request OpenFGA check that the caller
+  holds `CAN_READ` on `runtime_context.team_id` (the same relation the
+  control-plane required before it would mint a grant). This is the model
+  already homologated on `main`'s agentic-backend, re-instantiated per pod, and
+  it applies uniformly to collaborative teams and **personal spaces** alike
+  (`personal-<uid>`) — see below for how a personal space's own `CAN_READ`
+  comes to hold true.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -286,37 +287,25 @@ authorizes teams the user actually has a relation to. A missing team on a manage
 request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
 survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
 
-**Personal spaces are intrinsic ownership, not an OpenFGA relation (AUTHZ-05 item
-8b, 2026-07-13).** A personal space is a synthetic, system-recognized team
-(`fred_core.common.personal_team_id(uid)`) with no `team_metadata` row and no
-stored OpenFGA tuple of any kind — it is not a collaborative team and was never
-meant to route through `CAN_READ`. `_authorize_execution_or_raise` therefore
-special-cases it, before the OpenFGA branch, purely by identity comparison:
+**Personal spaces are real ReBAC team objects.** A personal space
+(`fred_core.common.personal_team_id(uid)`) has no `team_metadata` row — it
+stays a synthetic, system-recognized team on the control-plane product
+surface (`build_personal_team`) — but it is a first-class object in the ReBAC
+graph, exactly like a collaborative team. `agent_app.py` carries no
+personal-space-specific authorization code at all; the plain
+`rebac.check_user_team_permission_or_raise(user, CAN_READ, team_id)` call
+below handles it correctly, because `fred-core` self-heals the owner's own
+tuple and write-guards every other write to a personal team — see
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
+for the full mechanism, shared by every backend, not just this runtime.
 
-- `team_id == personal_team_id(authenticated_user.uid)` (the caller's own
-  canonical personal space) → authorized as intrinsic ownership, audited
-  `personal_space_owner_authorized`, **no OpenFGA call**.
-- any other `personal-*` id (another user's personal space) → denied outright,
-  audited `personal_space_denied`, HTTP 403. This is a hard identity check, not
-  an OpenFGA lookup — a stray or residual OpenFGA tuple naming that id can never
-  grant access here.
-- the bare `"personal"` alias → also denied under this same rule once ReBAC is
-  active, rather than resolved as if it meant the caller's own space; it stays a
-  dev/CLI-only shorthand (see `fred_runtime/cli/entrypoint.py`).
-- any non-personal `team_id` (a real collaborative team) → unchanged, always the
-  OpenFGA `CAN_READ` check described above.
-- `service_agent` callers are unaffected: their team-scoped, OpenFGA-free
-  authorization (§ below, RFC EVAL-AUTH Solution A) is checked first and returns
-  before the personal-space branch is reached.
-- `platform_admin`/`platform_observer` confer no implicit access here, personal
-  or collaborative — this carve-out is identity-only (JWT subject vs. the
-  requested personal id), never role-based.
-
-No Keycloak group, claim, or role feeds this decision anywhere — the removal of
-`groups_list_to_relations`/`_user_contextual_relations` (item 8b) is unaffected;
-this carve-out replaces the contextual (never-persisted) `team_member` relation
-that helper used to grant for personal spaces, with an explicit, narrower check
-local to the runtime.
+Net effect at this call site: the caller's own personal space authorizes
+(audited `rebac_authorized`, same as any other team); another user's personal
+space, or the bare `"personal"` alias (for which no tuple is ever
+provisioned), denies (audited `rebac_denied`) — with no special-casing needed
+in this file. `service_agent` callers are unaffected: their team-scoped,
+OpenFGA-free authorization (§ below, RFC EVAL-AUTH Solution A) is checked
+first and returns before the `CAN_READ` check is reached.
 
 **Architectural constraint (unchanged):**
 
@@ -981,6 +970,14 @@ binding PRIVATELY (wrapping the same `VectorSearchClient` path as
 - No OpenAPI/wire-schema change: the port is internal DI, not a serialized
   request/response model.
 
+**Amendment (2026-07-21).** `search()` gained an additive keyword
+`attachments_only: bool = False`: the adapter then searches the session scope
+only (`include_session_scope=True, include_corpus_scope=False`) — the
+conversation's attached files, never the corpus. First consumer:
+`document_access.search_attachments_only` (the capability also drops its
+scope-picker chat control when the flag is on). `general_only` RAG scope keeps
+precedence (no search at all).
+
 ---
 
 ### 8.16 ✅ `agent_assets` / `document_content` / `document_folders` ports — #1903 PPT filler (July 2026)
@@ -1102,6 +1099,73 @@ unaudited in a shipped environment.
   not ReAct-specific.
 - Regression coverage:
   `libs/fred-runtime/tests/test_deep_agent_middleware.py`.
+
+### 8.18 ✅ `FieldSpec.ui.widget` stock form-widget hint — #2023 (2026-07-20)
+
+**What changed.** `UIHints` (`fred_sdk/contracts/models.py`) gained an optional
+`widget: str | None` field. It names a frontend stock **form** widget to render
+that field in the agent-creation/edit form instead of the type-derived default
+input — distinct from the chat-turn `ChatControlSpec.widget` registry. First
+consumer: `document_access.library_tag_ids` sets
+`ui=UIHints(widget="document_libraries")`, rendered by the frontend
+`TuningFieldRenderer` as the `DocumentLibraryScopePicker` tree instead of a raw
+tag-id `TagInput`. Control-plane's `ManagedAgentUiHints` mirror gained the same
+field.
+
+**Why.** Users had to hand-type library tag ids when configuring the
+document-access capability on an agent; the tree picker already existed for the
+chat composer. Additive and backward compatible: `None`/unknown widget ids fall
+back to the default input, and older pods simply omit the field.
+
+`controlPlaneOpenApi.ts` and `runtimeOpenApi.ts` regenerated
+(`make update-control-plane-api` / `make update-runtime-api`).
+
+**Amendment (2026-07-21).** `UIHints` also gained `visible_when: str | None` —
+the key of a sibling field in the same form; the field is only rendered while
+that sibling's effective value (current input or declared default) is truthy.
+Display-only: the hidden field keeps its stored value, and backends must not
+rely on it being hidden. First consumer: the legacy search tool's
+`chat_options.bound_library_ids` is gated on `chat_options.libraries_binding`
+in the pod `mcp_catalog.yaml`.
+
+### 8.19 ✅ Personal-team authorization moved to fred-core, real ReBAC tuple — AUTHZ-08 (2026-07-20)
+
+**What changed.** `agent_app.py::_authorize_execution_or_raise` no longer
+special-cases personal spaces (the identity-only guard from AUTHZ-05 item 8b is
+deleted). Personal teams are now real ReBAC team objects: `fred-core`'s
+`RebacEngine.check_user_permission_or_raise`/`has_user_permission` self-heal
+the owner's own `team_editor` tuple on a personal team on first touch, and
+`RebacEngine.add_relation` refuses any other tuple naming a personal team. See
+§2.2 above and [`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
+for the full design.
+
+**Why.** Live-stack testing (2026-07-20) found the AUTHZ-05 item 8b guard was
+never generalized past `agent_app.py` — every other consumer of a personal
+`team_id` (knowledge-flow-backend's filesystem/corpus/tag routes,
+`openai_compat_router.py`, `tasks/authz.py`, control-plane's evaluations API)
+still assumed OpenFGA held the answer, and it didn't: some crashed with an
+unhandled 500, most wrongly 403'd the space's own owner. A real, narrowly
+write-guarded tuple fixes every one of those call sites from one change in
+`fred-core`, with no per-caller special-casing, and unlike an identity-only
+guard it also makes `ListObjects`/enumeration (`lookup_user_resources`) work
+correctly for personal spaces.
+
+No OpenAPI/type changes — this is authorization-internals only.
+
+### 8.20 ✅ Personal-team enumeration self-heal — AUTHZ-08 follow-up (2026-07-21)
+
+**What changed.** §8.19's claim that a real tuple "makes `ListObjects`/
+enumeration (`lookup_user_resources`) work correctly for personal spaces" was
+not yet true when written: self-heal was wired into the permission-*check*
+methods only. `fred-core`'s `RebacEngine.lookup_user_resources` now self-heals
+the caller's own personal-team tuple too, before enumerating — see
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08).
+
+**Why.** A first-touch user whose first authenticated call was an
+enumeration (e.g. `GET /fs/list?path=/teams`, listing "teams I can read")
+rather than a permission check on a known team id got an empty result — their
+own personal team was silently missing until some other call happened to
+provision it first. No OpenAPI/type changes.
 
 ---
 

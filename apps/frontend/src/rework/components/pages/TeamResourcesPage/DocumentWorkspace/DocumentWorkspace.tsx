@@ -26,6 +26,7 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -129,6 +130,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const selectedNode = selectedFolderFull ? findNode(tree, selectedFolderFull) : null;
   const selectedTag = selectedNode?.tagsHere[0] ?? null;
@@ -231,6 +233,46 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     [processDocuments, showSuccess, showError, t, loadTagPage, perTag],
   );
 
+  // Deletes the folder's tag; the backend cascades to sub-folders and untags/
+  // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
+  // safe to offer for both empty and populated folders — the confirmation
+  // message just makes the blast radius explicit before it happens.
+  const confirmDeleteFolder = useCallback(
+    (node: TagNode) => {
+      const tag = node.tagsHere[0];
+      if (!tag) return;
+      const docCount = tag.item_ids?.length ?? 0;
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteFolderTitle"),
+        message:
+          docCount > 0
+            ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
+            : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
+        onConfirm: () =>
+          void deleteTag({ tagId: tag.id })
+            .unwrap()
+            .then(() => {
+              showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                next.delete(node.full);
+                return next;
+              });
+              setSelectedFolderFull((prev) => (prev === node.full ? null : prev));
+              void refetchTags();
+            })
+            .catch((e: unknown) => {
+              showError?.({
+                summary: t("validation.error"),
+                detail:
+                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+              });
+            }),
+      });
+    },
+    [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags],
+  );
+
   const moreActionsFor = useCallback(
     (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => {
       // Both actions below write to the tag/document (toggle-retrievable, delete),
@@ -312,6 +354,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                 : undefined
             }
             onCreateSubfolder={canCreateFolder ? () => openCreateFolder(node.full) : undefined}
+            onDelete={tag && canCreateFolder ? () => confirmDeleteFolder(node) : undefined}
           />
         </div>
 
@@ -325,7 +368,9 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                     {t("rework.resources.loading")}
                   </div>
                 )}
-                {page && !page.loading && page.docs.length === 0 && (
+                {/* Leaf folders only: a folder whose content IS its subfolders
+                    is not "empty", so no hint under the children. */}
+                {page && !page.loading && page.docs.length === 0 && children.length === 0 && (
                   <div className={styles.hint} style={{ paddingLeft: docIndent }}>
                     {t("rework.resources.empty.folder")}
                   </div>

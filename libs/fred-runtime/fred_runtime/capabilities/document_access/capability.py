@@ -78,11 +78,16 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.models import FieldSpec
+from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import DocumentSearchResult
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from fred_runtime.capabilities.mcp import (
+    RagScopeControlParams,
+    SearchPolicyControlParams,
+)
 
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
@@ -92,6 +97,7 @@ DOCUMENT_ACCESS_TOOL_REF = "document_access"
 # `chat_options.search_policy` enum). None on the config means "let the session
 # binding decide".
 _SEARCH_POLICIES = ("strict", "hybrid", "semantic")
+_RAG_SCOPES = ("corpus_only", "hybrid", "general_only")
 
 # Only the fields the LLM needs for citation and reasoning are exposed to the
 # model. URL and operational fields are excluded so the model cannot reproduce
@@ -129,22 +135,43 @@ def narrow_scope_ids(
 
 class DocumentAccessConfig(BaseModel):
     """
-    Agent-creation / stored config of the document-access capability (RFC §3.2).
+    Agent-creation / stored config of the document-access capability (RFC §3.2),
+    mirroring the legacy MCP search tool's configuration surface exactly.
 
-    The scope fields NARROW the searchable set at agent-creation time: an empty
-    list means "no capability-side narrowing at this level" (the session binding
-    still bounds it). `default_top_k` and `search_policy` set retrieval
-    defaults; `show_document_scope_control` toggles the computed chat control.
-    `min_source_score_ratio` bounds what's citable as a "source" in the chat
-    UI (RAG-DATASET-DISCOVERY-RFC.md §7) — it never narrows what the model
-    itself sees, only what a human is shown as evidence.
+    `bind_libraries` + `library_tag_ids` pin the agent to a fixed library set
+    (the bound ids are IGNORED while `bind_libraries` is off, like the legacy
+    tool); `document_uids` NARROWS to specific documents. An empty list means
+    "no capability-side narrowing at this level" (the session binding still
+    bounds it). `default_top_k` and `search_policy` set retrieval defaults;
+    the `show_*` toggles pick which computed chat controls the composer shows
+    (attach files, library/document scope, search policy, RAG scope). When
+    the search-policy picker is shown, `search_policy` acts as the picker's
+    DEFAULT and the per-turn choice (RuntimeContext) wins at search time;
+    when hidden, it is enforced as-is. `min_source_score_ratio` bounds what's
+    citable as a "source" in the chat UI (RAG-DATASET-DISCOVERY-RFC.md §7) —
+    it never narrows what the model itself sees, only what a human is shown
+    as evidence.
     """
 
     library_tag_ids: list[str] = []
     document_uids: list[str] = []
     default_top_k: int = 8
     search_policy: str | None = None
-    show_document_scope_control: bool = True
+    bind_libraries: bool = False
+    show_library_selection: bool = True
+    show_document_selection: bool = True
+    show_attach_files_control: bool = True
+    # Restrict search to the conversation's attached files, never the corpus.
+    # Enforced pod-side: the tool passes `attachments_only=True` to the
+    # DocumentSearchPort, whose adapter searches the session scope only
+    # (include_corpus_scope=False); the scope-picker chat control is dropped.
+    # Only meaningful while attachments are enabled: the field is gated on
+    # `show_attach_files_control` in the form AND inert without it (a stored
+    # True must not strand an agent that can no longer receive attachments).
+    search_attachments_only: bool = False
+    show_search_policy_control: bool = True
+    show_rag_scope_control: bool = True
+    default_rag_scope: str | None = None
     min_source_score_ratio: float = Field(
         default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
         ge=0.0,
@@ -155,6 +182,27 @@ class DocumentAccessConfig(BaseModel):
             "the model itself can read — only the human-facing Sources panel."
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_slices(cls, data: object) -> object:
+        """Slices stored before the split-toggle surface revalidate without
+        behavior change: the single scope toggle maps onto the split
+        library/document toggles, and a pre-`bind_libraries` library scope
+        stays binding."""
+
+        if isinstance(data, dict):
+            if (
+                "show_document_scope_control" in data
+                and "show_library_selection" not in data
+                and "show_document_selection" not in data
+            ):
+                shown = bool(data.get("show_document_scope_control"))
+                data["show_library_selection"] = shown
+                data["show_document_selection"] = shown
+            if "bind_libraries" not in data and data.get("library_tag_ids"):
+                data["bind_libraries"] = True
+        return data
 
 
 class DocumentAccessTurnOptions(BaseModel):
@@ -198,14 +246,26 @@ class _DocumentAccessMiddleware(AgentMiddleware):
         # Capability-config ∩ turn-option → the params handed to the port. This
         # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
         # result by the session binding (`⊆ session_binding`).
+        # Bound library ids only apply while the binding toggle is on — same
+        # semantics as the legacy tool (the tree's value is kept but inert
+        # when unbound).
+        bound_library_ids = (
+            (config.library_tag_ids or None) if config.bind_libraries else None
+        )
         scoped_library_tag_ids = narrow_scope_ids(
-            config.library_tag_ids or None, turn.library_tag_ids
+            bound_library_ids, turn.library_tag_ids
         )
         scoped_document_uids = narrow_scope_ids(
             config.document_uids or None, turn.document_uids
         )
         default_top_k = config.default_top_k if config.default_top_k > 0 else 8
-        search_policy = config.search_policy
+        # With the search-policy picker shown, the configured policy is only
+        # the picker's DEFAULT: pass None so the adapter falls back to the
+        # per-turn RuntimeContext value (which carries that default anyway).
+        # With the picker hidden, the configured policy is enforced.
+        search_policy = (
+            None if config.show_search_policy_control else config.search_policy
+        )
         min_source_score_ratio = config.min_source_score_ratio
 
         @tool(
@@ -249,6 +309,9 @@ class _DocumentAccessMiddleware(AgentMiddleware):
                 library_tag_ids=scoped_library_tag_ids,
                 document_uids=scoped_document_uids,
                 search_policy=search_policy,
+                attachments_only=(
+                    config.search_attachments_only and config.show_attach_files_control
+                ),
             )
             hits = result.hits
 
@@ -297,27 +360,84 @@ class DocumentAccessCapability(
 
     manifest = CapabilityManifest(
         id="document_access",
+        # Pre-GA: the version stays 0.1.0 while the platform has not shipped —
+        # config-surface changes land without bumps. Start bumping (it keys the
+        # stored-slice schema_version and the control-plane chat-controls
+        # cache) once real deployments hold stored configs.
         version="0.1.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
         config_fields=[
             FieldSpec(
+                key="show_library_selection",
+                type="boolean",
+                title="Document library picker",
+                description="Show a document library selector in the chat interface.",
+                default=True,
+                # `ui.group` drives the form's visual sections: the renderer
+                # draws a thin divider whenever the group changes between two
+                # consecutive visible fields.
+                ui=UIHints(group="scope"),
+            ),
+            FieldSpec(
+                key="bind_libraries",
+                type="boolean",
+                title="Bind to specific libraries",
+                description=(
+                    "Restrict this agent to a fixed set of document libraries "
+                    "chosen at configuration time."
+                ),
+                default=False,
+                ui=UIHints(group="scope"),
+            ),
+            FieldSpec(
                 key="library_tag_ids",
                 type="array",
                 item_type="string",
-                title="Document libraries",
+                title="Bound document libraries",
                 description=(
-                    "Restrict search to these document library tag ids. Empty = "
-                    "no capability-side restriction (still bounded by the session)."
+                    "Restrict the chat library picker to this preselected set "
+                    "of document libraries."
+                ),
+                # Library/document tree picker, only shown while the binding
+                # toggle above is on (the ids are ignored otherwise).
+                ui=UIHints(
+                    widget="document_libraries",
+                    visible_when="bind_libraries",
+                    group="scope",
                 ),
             ),
             FieldSpec(
-                key="document_uids",
-                type="array",
-                item_type="string",
-                title="Documents",
-                description="Restrict search to these specific document uids.",
+                key="show_document_selection",
+                type="boolean",
+                title="Document picker",
+                description="Show a document selector in the chat interface.",
+                default=True,
+                ui=UIHints(group="scope"),
+            ),
+            FieldSpec(
+                key="show_attach_files_control",
+                type="boolean",
+                title="File attachments",
+                description=(
+                    "Allow users to attach files (PDF, images, text) to their "
+                    "messages in the chat interface."
+                ),
+                default=True,
+                ui=UIHints(group="scope"),
+            ),
+            FieldSpec(
+                key="search_attachments_only",
+                type="boolean",
+                title="Search in attachments only",
+                description=(
+                    "Restrict the agent's document search to the files "
+                    "attached to the conversation — the corpus is never "
+                    "searched."
+                ),
+                default=False,
+                ui=UIHints(group="scope", visible_when="show_attach_files_control"),
             ),
             FieldSpec(
                 key="default_top_k",
@@ -326,23 +446,7 @@ class DocumentAccessCapability(
                 description="How many hits to retrieve when the model omits top_k.",
                 default=8,
                 min=1,
-            ),
-            FieldSpec(
-                key="search_policy",
-                type="select",
-                enum=list(_SEARCH_POLICIES),
-                title="Search policy",
-                description="Retrieval policy; empty lets the session decide.",
-            ),
-            FieldSpec(
-                key="show_document_scope_control",
-                type="boolean",
-                title="Show scope picker in chat",
-                description=(
-                    "Show the per-turn document-scope narrowing control in the "
-                    "chat composer."
-                ),
-                default=True,
+                ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(
                 key="min_source_score_ratio",
@@ -357,6 +461,49 @@ class DocumentAccessCapability(
                 default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
                 min=0.0,
                 max=1.0,
+                ui=UIHints(group="retrieval", advanced=True),
+            ),
+            FieldSpec(
+                key="show_search_policy_control",
+                type="boolean",
+                title="Search policy picker in chat",
+                description=(
+                    "Allow users to switch the search policy from the chat "
+                    "interface. The configured search policy then acts as the "
+                    "picker's default instead of being enforced."
+                ),
+                default=True,
+                ui=UIHints(group="search_policy", advanced=True),
+            ),
+            FieldSpec(
+                key="search_policy",
+                type="select",
+                enum=list(_SEARCH_POLICIES),
+                title="Default search policy",
+                description=(
+                    "Search strategy used when the user has not overridden it "
+                    "(enforced as-is when the picker is hidden)."
+                ),
+                ui=UIHints(group="search_policy", advanced=True),
+            ),
+            FieldSpec(
+                key="show_rag_scope_control",
+                type="boolean",
+                title="RAG scope picker in chat",
+                description=(
+                    "Allow users to switch the RAG scope (corpus only / hybrid "
+                    "/ general knowledge) from the chat interface."
+                ),
+                default=True,
+                ui=UIHints(group="rag_scope", advanced=True),
+            ),
+            FieldSpec(
+                key="default_rag_scope",
+                type="select",
+                enum=list(_RAG_SCOPES),
+                title="Default RAG scope",
+                description="Scope used when the user has not overridden it.",
+                ui=UIHints(group="rag_scope", advanced=True),
             ),
         ],
         # No new chat part / side panel / router / owned table — the pilot's
@@ -369,24 +516,61 @@ class DocumentAccessCapability(
 
     def chat_controls(self, config: DocumentAccessConfig) -> list[ChatControlSpec]:
         """
-        One computed `document_scope` narrowing control (RFC §3.3), shown only
-        when the instance opts in. `bound_library_ids` pins the picker to the
-        capability's configured library scope (read-only) when one is set.
+        The stock composer controls (RFC §3.3), each behind its config toggle —
+        the same widget set the legacy MCP search tool emits, so both paths
+        offer the same chat surface. `bound_library_ids` pins the scope picker
+        to the capability's configured library scope (read-only) when one is
+        set. Search-policy/RAG-scope choices travel on `RuntimeContext`, which
+        the document-search adapter already honors.
         """
 
-        if not config.show_document_scope_control:
-            return []
-        bound = config.library_tag_ids or None
-        return [
-            ChatControlSpec(
-                widget="document_scope",
-                params=DocumentScopeControlParams(
-                    libraries=True,
-                    documents=True,
-                    bound_library_ids=bound,
-                ),
+        controls: list[ChatControlSpec] = []
+        if config.show_attach_files_control:
+            controls.append(ChatControlSpec(widget="attach_files"))
+        # Same visibility algebra as the legacy MCP tool: binding replaces the
+        # free library picker with a read-only pinned list; the document picker
+        # is independent. Attachments-only pins the whole scope to the
+        # conversation's attached files, so no scope picker at all.
+        bound = (config.library_tag_ids or None) if config.bind_libraries else None
+        show_libraries = (not config.bind_libraries) and config.show_library_selection
+        show_documents = config.show_document_selection
+        if config.search_attachments_only and config.show_attach_files_control:
+            show_libraries = show_documents = False
+            bound = None
+        if show_libraries or show_documents or bound:
+            controls.append(
+                ChatControlSpec(
+                    widget="document_scope",
+                    params=DocumentScopeControlParams(
+                        libraries=show_libraries or bool(bound),
+                        documents=show_documents,
+                        bound_library_ids=bound,
+                    ),
+                )
             )
-        ]
+        if config.show_search_policy_control:
+            controls.append(
+                ChatControlSpec(
+                    widget="search_policy",
+                    params=(
+                        SearchPolicyControlParams(default=config.search_policy)  # type: ignore[arg-type]
+                        if config.search_policy in _SEARCH_POLICIES
+                        else SearchPolicyControlParams()
+                    ),
+                )
+            )
+        if config.show_rag_scope_control:
+            controls.append(
+                ChatControlSpec(
+                    widget="rag_scope",
+                    params=(
+                        RagScopeControlParams(default=config.default_rag_scope)  # type: ignore[arg-type]
+                        if config.default_rag_scope in _RAG_SCOPES
+                        else RagScopeControlParams()
+                    ),
+                )
+            )
+        return controls
 
     def middleware(
         self,

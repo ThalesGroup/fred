@@ -98,12 +98,35 @@ class UIHints(BaseModel):
     textarea: bool = False
     group: Optional[str] = None
     hide: bool = False
-    # Custom form-widget id (AGENT-CAPABILITY-RFC §9 item 4, #1903): when set on
-    # a capability config field, the frontend resolves it against the owning
-    # capability plugin's `configWidgets` and renders that component instead of
-    # the generic metadata-driven renderer. Unknown ids fall back to the generic
-    # renderer (forward-compatible, same policy as chat-control widgets).
-    widget: Optional[str] = None
+    widget: Optional[str] = Field(
+        default=None,
+        description=(
+            "Names a frontend form widget to render this field instead of "
+            "the type-derived default input. Resolved first against the "
+            "owning capability plugin's `configWidgets` (custom widgets, "
+            "AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock "
+            "widgets — known stock ids: 'document_libraries' "
+            "(library/document tree picker for an array of library tag ids). "
+            "Unknown ids fall back to the default input, so older frontends "
+            "degrade gracefully."
+        ),
+    )
+    visible_when: Optional[str] = Field(
+        default=None,
+        description=(
+            "Key of a sibling field in the same form: this field is only "
+            "shown while that sibling's effective value (current input or its "
+            "declared default) is truthy. Display-only — the value is kept, "
+            "and backends must not rely on the field being hidden."
+        ),
+    )
+    advanced: bool = Field(
+        default=False,
+        description=(
+            "Renders the field inside the form's collapsed 'Advanced "
+            "settings' disclosure instead of the main section. Display-only."
+        ),
+    )
 
 
 class FieldSpec(BaseModel):

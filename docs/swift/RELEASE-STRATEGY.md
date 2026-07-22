@@ -39,7 +39,6 @@ Every release branch carries its **complete documentation tree** under
 docs/swift/       ← all docs for the swift release
   STATUS.md
   WORKPLAN.md
-  data/sprint.yaml
   data/id-legend.yaml
   backlog/
   design/
@@ -87,14 +86,7 @@ sed -i 's|docs/swift/|docs/eagle/|g' .github/copilot-instructions.md .github/pul
 find apps -name "CLAUDE.md" -o -name "AGENTS.md" | xargs sed -i 's|docs/swift/|docs/eagle/|g'
 sed -i 's|docs/swift/|docs/eagle/|g' knowledge-flow-backend/CLAUDE.md knowledge-flow-backend/AGENTS.md
 
-# 4. Update the id-legend + sprint.yaml release marker
-sed -i "s|release: swift|release: eagle|g" docs/eagle/data/sprint.yaml
-
-# 5. Reset sprint.yaml for the new release cycle
-#    (archive the swift sprint state, start eagle with a clean slate)
-#    Edit docs/eagle/data/sprint.yaml manually: clear recently_closed, reset milestones.
-
-# 6. Commit
+# 4. Commit
 git add -A
 git commit -m "cut eagle release branch from swift"
 ```

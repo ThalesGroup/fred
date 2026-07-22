@@ -102,6 +102,16 @@ class ManagedAgentUiHints(BaseModel):
     textarea: bool = False
     group: str | None = None
     hide: bool = False
+    # Mirrors fred_sdk UIHints.widget: names a frontend stock form
+    # widget (e.g. "document_libraries"); unknown/None falls back to the
+    # type-derived default input.
+    widget: str | None = None
+    # Mirrors fred_sdk UIHints.visible_when: sibling-field key gating this
+    # field's visibility (display-only; the value is kept while hidden).
+    visible_when: str | None = None
+    # Mirrors fred_sdk UIHints.advanced: rendered inside the collapsed
+    # "Advanced settings" disclosure instead of the main section.
+    advanced: bool = False
 
 
 class ManagedAgentFieldSpec(BaseModel):
@@ -286,8 +296,37 @@ class LocalContentStorageConfig(BaseModel):
     )
 
 
+class GcsContentStorageConfig(BaseModel):
+    """
+    Google Cloud Storage content store. Authentication uses Application Default
+    Credentials / Workload Identity (no JSON key required).
+    """
+
+    type: Literal["gcs"]
+    bucket_name: str = Field(
+        default="control-plane-content",
+        description="Content store bucket name (suffix '-objects' is used for banner objects)",
+    )
+    project_id: str | None = Field(
+        default=None, description="GCP project id; inferred from ADC when empty."
+    )
+    signing_service_account_email: str | None = Field(
+        default=None,
+        description=(
+            "Service account email used to sign V4 signed URLs for browser-facing "
+            "banner/logo images, via IAM signBlob under Workload Identity (no JSON "
+            "key). Required for content_storage.type=gcs; startup fails clearly when "
+            "omitted. The Workload Identity service account must hold "
+            "iam.serviceAccounts.signBlob on this account, which must have "
+            "storage.objects.get on the objects bucket."
+        ),
+    )
+
+
 ContentStorageConfig = Annotated[
-    Union[LocalContentStorageConfig, MinioContentStorageConfig],
+    Union[
+        LocalContentStorageConfig, MinioContentStorageConfig, GcsContentStorageConfig
+    ],
     Field(discriminator="type"),
 ]
 

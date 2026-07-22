@@ -53,13 +53,18 @@ history in it — that's what closed GitHub issues are for._
 
 ---
 
-## Retired docs (2026-07-16)
+## Retired docs (2026-07-16, updated 2026-07-21)
 
-`docs/swift/backlog/BACKLOG.md`, `docs/swift/WORKPLAN.md`, and
-`docs/swift/PMO-BOARD.md` are frozen. They tracked one finite migration project
-and a larger team, both now outdated — `BACKLOG.md`'s migration is ~90% done,
-and the team is 3 people, not 6. They're kept as historical record, not
-maintained. Current tracking = GitHub Issues/Milestones + this file.
+`docs/swift/backlog/BACKLOG.md` and `docs/swift/WORKPLAN.md` are frozen. They
+tracked one finite migration project and a larger team, both now outdated —
+`BACKLOG.md`'s migration is ~90% done, and the team is 3 people, not 6. They're
+kept as historical record, not maintained.
+
+`docs/swift/PMO-BOARD.md` and `docs/swift/data/sprint.yaml` were removed
+(2026-07-21) rather than frozen — they duplicated GitHub without ever being
+kept current. Current tracking = GitHub Issues/Milestones + this file. Never
+recreate either file; if you need sprint/PMO-facing status, query GitHub
+directly.
 
 `docs/swift/data/id-legend.yaml` scope narrowed at the same time: register an
 ID only when the work is tied to an RFC or a genuine cross-cutting

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
+from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser
@@ -358,6 +359,7 @@ class RebacEngine(ABC):
         - Save `team thales owner tag cir`.
         Returns a backend-specific consistency token when available.
         """
+        self._reject_unsanctioned_personal_team_write(relation)
         token = await self._persist_relation(relation)
         if self.enabled:
             emit_audit_log(
@@ -368,6 +370,48 @@ class RebacEngine(ABC):
                 resource=f"{relation.resource.type.value}:{relation.resource.id}",
             )
         return token
+
+    @staticmethod
+    def _reject_unsanctioned_personal_team_write(relation: Relation) -> None:
+        """Enforce the personal-team tuple invariant at the one audited write chokepoint.
+
+        A personal team (`personal-<uid>`) is a real ReBAC team object (AUTHZ-08),
+        but the *only* tuples ever allowed to name one are:
+        - the owner's own `team_editor` grant, self-healed by
+          `_ensure_personal_team_editor` on first touch;
+        - the structural `organization -> team` edge written by
+          `ensure_team_organization_relations` (same shape used for every team).
+
+        Every other shape — a different user, an elevated role, another relation
+        type — is refused here, unconditionally, regardless of caller. This is
+        what makes writing a real tuple for personal teams safe: no admin API,
+        import/export path, or future caller can ever grant (or be tricked into
+        granting) access to someone else's personal space, because there is
+        exactly one write chokepoint (`add_relation`) and it only recognizes
+        these two shapes for personal-team resources.
+        """
+        if relation.resource.type != Resource.TEAM or not is_personal_team_id(
+            relation.resource.id
+        ):
+            return
+        is_owner_editor_grant = (
+            relation.subject.type == Resource.USER
+            and relation.relation == RelationType.TEAM_EDITOR
+            and relation.resource.id == personal_team_id(relation.subject.id)
+        )
+        is_organization_edge = (
+            relation.subject.type == Resource.ORGANIZATION
+            and relation.subject.id == ORGANIZATION_ID
+            and relation.relation == RelationType.ORGANIZATION
+        )
+        if is_owner_editor_grant or is_organization_edge:
+            return
+        raise ValueError(
+            f"Refusing to write {relation.relation.value} for "
+            f"{relation.subject.type.value}:{relation.subject.id} onto personal "
+            f"team {relation.resource.id!r} — only the space's own owner may hold "
+            f"team_editor there, and it is provisioned automatically."
+        )
 
     @abstractmethod
     async def _persist_relation(self, relation: Relation) -> str | None:
@@ -610,10 +654,21 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """List resources a user can access for one permission."""
+        resource_type = _resource_for_permission(permission)
+        # Self-heal the caller's own personal-team tuple before enumerating
+        # (AUTHZ-08 follow-up): `lookup_resources`/OpenFGA `ListObjects` never
+        # goes through `has_user_permission`/`check_user_team_permission_or_raise`,
+        # so without this a first-touch user's own personal team was silently
+        # missing from "list my teams" results (e.g. the `/fs` virtual `/teams`
+        # directory) until some other check-triggering call happened to
+        # provision it first.
+        await self._ensure_personal_team_editor(
+            user, resource_type, personal_team_id(user.uid)
+        )
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
-            resource_type=_resource_for_permission(permission),
+            resource_type=resource_type,
             consistency_token=consistency_token,
         )
 
@@ -629,6 +684,38 @@ class RebacEngine(ABC):
     ) -> bool:
         """Return `True` when a subject is authorized for an action."""
 
+    async def _ensure_personal_team_editor(
+        self, user: KeycloakUser, resource_type: Resource, resource_id: str
+    ) -> None:
+        """Self-heal a personal team's own `team_editor` tuple on first touch (AUTHZ-08).
+
+        Personal teams (`personal-<uid>`) are real ReBAC team objects, but carry
+        no tuple until the owner's first permission check touches one — this
+        lazily provisions exactly one (`user:<uid> team_editor team:personal-
+        <uid>`), matching `build_personal_team`'s hardcoded permission set
+        (`can_read`, `can_update_resources`, `can_update_agents` — all implied
+        by `team_editor`). Runs before every `check_user_permission_or_raise`/
+        `has_user_permission` call so it applies uniformly across every backend,
+        with no per-caller special-casing.
+
+        Never provisions for another user's personal team — `add_relation`'s own
+        write-guard would refuse that shape regardless, but this check avoids
+        even attempting (and audit-logging) a doomed write on every such call.
+        """
+        if not self.enabled or resource_type != Resource.TEAM:
+            return
+        if not is_personal_team_id(resource_id):
+            return
+        if resource_id != personal_team_id(user.uid):
+            return
+        team_ref = RebacReference(Resource.TEAM, resource_id)
+        user_ref = RebacReference(Resource.USER, user.uid)
+        if await self.has_direct_relation(user_ref, RelationType.TEAM_EDITOR, team_ref):
+            return
+        await self.add_user_relation(
+            user, RelationType.TEAM_EDITOR, Resource.TEAM, resource_id
+        )
+
     async def has_user_permission(
         self,
         user: KeycloakUser,
@@ -639,6 +726,7 @@ class RebacEngine(ABC):
     ) -> bool:
         """Check one permission for one user/resource pair."""
         resource_type = _resource_for_permission(permission)
+        await self._ensure_personal_team_editor(user, resource_type, resource_id)
         return await self.has_permission(
             RebacReference(Resource.USER, user.uid),
             permission,
@@ -692,6 +780,7 @@ class RebacEngine(ABC):
     ) -> None:
         """User-focused wrapper around `check_permission_or_raise`."""
         resource_type = _resource_for_permission(permission)
+        await self._ensure_personal_team_editor(user, resource_type, resource_id)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,

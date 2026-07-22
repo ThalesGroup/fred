@@ -1250,7 +1250,51 @@ unconditionally and silently showed zero results for any team-admin-only caller.
 `controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`). No other
 route or schema changed.
 
-## 19. Contract Notes — #1903 capability asset uploads (2026-07-17)
+## 19. Contract Notes — audit-name resolution + `updated_by` (2026-07-20, #1952)
+
+**New endpoint:** `GET /users/by-ids?ids=<uid>&ids=<uid>` → `list[UserSummary]`
+(max 100 ids). Open to any authenticated user — it only exposes display identity
+(name/username/email), never roles or credentials. Every requested id yields
+exactly one entry, in request order, deduplicated; unknown ids (or a disabled
+Keycloak M2M client) degrade to an id-only summary so callers can always fall
+back to rendering the uid. Wraps the pre-existing internal service
+`users/service.py::get_users_by_ids`. The frontend agent-edit footer resolves
+`created_by`/`updated_by` through it (`useUsersByIdsQuery`) instead of showing
+raw uids (#1952); the unpaginated `platform_admin`-only `GET /users` stays
+untouched.
+
+**Schema:** `ManagedAgentInstanceSummary.updated_by: str | null` (read-only,
+server-authoritative). Backed by a new nullable `agent_instance.updated_by`
+column (Alembic `0285dc3a0cdc`, plain ADD COLUMN, SQLite-compatible), stamped
+with the acting user's uid on every `PATCH
+/teams/{team_id}/agent-instances/{id}`. NULL means never user-edited
+(seed/startup saves have no acting user).
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`).
+
+## 20. Contract Notes — prompts-context personal scoping (2026-07-20, #2023)
+
+**Behavior change:** `GET /teams/{team_id}/prompts/context` no longer merges
+the caller's personal prompts into a non-personal team's context (#2023) — a
+team space returns the team's prompts + platform defaults only; the personal
+space returns the caller's prompts (scope `personal`) + defaults. Response
+shape unchanged. Already-attached personal prompts keep resolving at
+prepare-execution (see `design/PROMPTS.md` §5/§6).
+
+## 21. Contract Notes — personal team isolation rule (CTRLP-10 / AUTHZ-08)
+
+**Personal team isolation rule:** the personal team ID is `personal-{user.uid}`
+(`fred_core.common.personal_team_id`) — no two users share a personal team.
+Every team-scoped session, agent-instance, and prompt endpoint enforces
+isolation by team membership; no additional per-resource `user_id` filter is
+required or maintained for personal-space resources. The `"personal"` string
+accepted on some routes is a bootstrap-era URL alias resolved server-side to
+the caller's own canonical ID — it is never itself a stored value. Full
+authorization mechanism (self-provisioned ReBAC tuple, write-guarded):
+[`platform/REBAC.md` § Personal
+teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08).
+
+## 22. Contract Notes — #1903 capability asset uploads (2026-07-17)
 
 ### Multipart companion routes for agent saves that carry capability assets
 

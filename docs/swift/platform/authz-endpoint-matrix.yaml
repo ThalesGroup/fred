@@ -404,6 +404,13 @@ operations:
     path: /control-plane/v1/users
     review_status: pending_review
     required_permission: pending_review
+  # Batch uid -> display-identity resolution for audit fields (#1952). Any
+  # authenticated user; exposes name/username/email only, never roles.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/by-ids
+    review_status: approved
+    required_permission: authenticated_user
   - service: control-plane
     method: POST
     path: /control-plane/v1/users

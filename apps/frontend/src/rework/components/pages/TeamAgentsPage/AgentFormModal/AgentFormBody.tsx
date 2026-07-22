@@ -24,7 +24,9 @@ import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
+  UserSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import styles from "./AgentFormBody.module.css";
@@ -52,6 +54,13 @@ function routeField(field: ManagedAgentFieldSpec): "prompts" | "settings" | "cha
   if (g === "prompts") return "prompts";
   if (g === "chat") return "chat";
   return "settings";
+}
+
+/** Human display for a resolved user: full name, else username, else the raw uid (#1952). */
+function userDisplayName(uid: string, summary: UserSummary | undefined): string {
+  if (!summary) return uid;
+  const fullName = [summary.first_name, summary.last_name].filter(Boolean).join(" ");
+  return fullName || summary.username || uid;
 }
 
 function formatRelativeDate(dateStr: string | null | undefined): string {
@@ -126,6 +135,13 @@ export function AgentFormBody({
   const { t } = useTranslation();
   const dispatch = useDispatch();
 
+  // Resolve audit uids (created_by / updated_by) to display names (#1952).
+  const auditUids = Array.from(
+    new Set([editInstance?.created_by, editInstance?.updated_by].filter((uid): uid is string => Boolean(uid))),
+  );
+  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
+  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
+
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
   const capabilities = selectedTemplate?.available_capabilities ?? [];
@@ -188,6 +204,13 @@ export function AgentFormBody({
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
 
+  // Effective value (current input or declared default) of every tuning field,
+  // across sections — drives `ui.visible_when` even when the gating field lives
+  // in another section.
+  const effectiveTuningValues = Object.fromEntries(
+    (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
+  );
+
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
     fields.map((field) => (
       <TuningFieldRenderer
@@ -197,6 +220,7 @@ export function AgentFormBody({
         onChange={onTuningChange}
         disabled={isSubmitting}
         teamId={teamId}
+        allValues={effectiveTuningValues}
         error={
           submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
         }
@@ -325,8 +349,19 @@ export function AgentFormBody({
 
       {mode === "edit" && editInstance?.created_by && (
         <p className={styles.metadataFooter}>
-          {t("rework.teams.formAgent.createdBy", { user: editInstance.created_by })}
+          {t("rework.teams.formAgent.createdBy", {
+            user: userDisplayName(editInstance.created_by, auditUserById.get(editInstance.created_by)),
+          })}
           {editInstance.created_at && ` · ${formatRelativeDate(editInstance.created_at)}`}
+          {editInstance.updated_by && (
+            <>
+              {" — "}
+              {t("rework.teams.formAgent.updatedBy", {
+                user: userDisplayName(editInstance.updated_by, auditUserById.get(editInstance.updated_by)),
+              })}
+              {editInstance.updated_at && ` · ${formatRelativeDate(editInstance.updated_at)}`}
+            </>
+          )}
         </p>
       )}
     </div>

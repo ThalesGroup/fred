@@ -81,6 +81,12 @@ _PROBE_ENTRY = CapabilityCatalogEntry(
     icon="hub",
 )
 
+# Real `template_capability_id` output (GitHub #2004 item 4: `agent__`
+# namespace prefix) — derived, never hand-typed, so these tests can't drift.
+RAGS_SAMPLE_ECHO_TEMPLATE_ID = service.template_capability_id(
+    "runtime-a", "rags.sample.echo"
+)
+
 
 def _template_payload(
     default_capability_ids: list[str] | None = None,
@@ -413,7 +419,7 @@ async def test_enroll_no_selection_materializes_only_granted_defaults(
 ) -> None:
     _wire_rebac(
         monkeypatch,
-        {"personal": {"demo_echo", "runtime-a__rags.sample.echo"}},
+        {"personal": {"demo_echo", RAGS_SAMPLE_ECHO_TEMPLATE_ID}},
     )
     app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
     calls = _fake_pod_validate(monkeypatch)
@@ -498,7 +504,7 @@ async def test_enroll_no_selection_rejected_when_no_default_capability_is_usable
     instance would be silently created with `selected_capability_ids=[]`;
     now it must be rejected (422) instead."""
 
-    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
     app, store = _setup(monkeypatch, default_capability_ids=["demo_echo", "probe_echo"])
     _fake_pod_validate(monkeypatch)
     async with AsyncClient(
@@ -521,7 +527,7 @@ async def test_enroll_explicit_selection_denied_by_rebac_is_403(
 ) -> None:
     # Template itself granted (else this would 404 before ever reaching the
     # capability-selection check) but not the explicitly-requested capability.
-    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
     app, store = _setup(monkeypatch)
     _fake_pod_validate(monkeypatch)
     async with AsyncClient(
@@ -576,7 +582,7 @@ async def test_update_capability_config_only_materializes_still_none_instance(
     reached `_apply_capability_selection(selected_ids=None)` and skipped the
     ReBAC check the same way enroll did.
 
-    Also grants the template capability itself (`runtime-a__rags.sample.echo`)
+    Also grants the template capability itself (`RAGS_SAMPLE_ECHO_TEMPLATE_ID`)
     so this update clears the separate, later "2026-07-19 fix (GitHub #2004
     item 1)" template-access gate at the top of `update_agent_instance` — this
     test isolates the capability-selection gap, not that one (covered by
@@ -584,7 +590,7 @@ async def test_update_capability_config_only_materializes_still_none_instance(
     """
     record = _make_record()
     assert record.tuning.selected_capability_ids is None
-    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo", "demo_echo"}})
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "demo_echo"}})
     app, store = _setup(
         monkeypatch,
         records=[record],
@@ -764,8 +770,17 @@ async def test_update_unknown_capability_id_is_typed_422(
 
 def test_template_capability_id_is_colon_free() -> None:
     cap_id = service.template_capability_id("runtime-a", "rags.sample.echo")
-    assert cap_id == "runtime-a__rags.sample.echo"
+    assert cap_id == "agent__runtime-a__rags.sample.echo"
     assert ":" not in cap_id
+
+
+def test_template_capability_id_is_namespaced_under_reserved_prefix() -> None:
+    """2026-07-20, GitHub #2004 item 4: every `kind="agent"` id must start
+    with `AGENT_CAPABILITY_NAMESPACE_PREFIX` — `aggregate_capability_catalog`
+    relies on this to reject a colliding `kind="tool"` id at admission time."""
+
+    cap_id = service.template_capability_id("runtime-a", "rags.sample.echo")
+    assert cap_id.startswith(service.AGENT_CAPABILITY_NAMESPACE_PREFIX)
 
 
 @pytest.mark.asyncio
@@ -795,7 +810,7 @@ async def test_agent_projection_always_hardcodes_admin_gated(
     assert entries is not None and len(entries) == 1
     assert entries[0].kind == "agent"
     assert entries[0].team_scope == TeamScopePolicy.ADMIN_GATED
-    assert entries[0].id == "runtime-a__rags.sample.echo"
+    assert entries[0].id == RAGS_SAMPLE_ECHO_TEMPLATE_ID
 
 
 @pytest.mark.asyncio
@@ -861,7 +876,7 @@ async def test_list_agent_templates_hides_template_team_is_not_granted(
 async def test_list_agent_templates_shows_template_when_granted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _wire_rebac(monkeypatch, {"personal": {"runtime-a__rags.sample.echo"}})
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}})
     app, _store = _setup(monkeypatch)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -950,7 +965,7 @@ async def test_grant_existing_teams_served_templates_migration(
             )
 
     rebac = _FakeTemplateGrantRebac(
-        already_granted={"team-already-granted": {"runtime-a__rags.sample.echo"}}
+        already_granted={"team-already-granted": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}}
     )
     deps = SimpleNamespace(
         team_dependencies=SimpleNamespace(
@@ -979,7 +994,7 @@ async def test_grant_existing_teams_served_templates_migration(
     assert summary.templates_checked == 1
     assert summary.already_granted == 1
     assert summary.grants_written == 1
-    assert rebac.enabled_writes == [("team-needs-grant", "runtime-a__rags.sample.echo")]
+    assert rebac.enabled_writes == [("team-needs-grant", RAGS_SAMPLE_ECHO_TEMPLATE_ID)]
 
 
 @pytest.mark.asyncio
@@ -1015,7 +1030,7 @@ async def test_grant_existing_teams_served_templates_migration_preserves_explici
             )
 
     rebac = _FakeTemplateGrantRebac(
-        already_disabled={"team-explicitly-disabled": {"runtime-a__rags.sample.echo"}}
+        already_disabled={"team-explicitly-disabled": {RAGS_SAMPLE_ECHO_TEMPLATE_ID}}
     )
     deps = SimpleNamespace(
         team_dependencies=SimpleNamespace(

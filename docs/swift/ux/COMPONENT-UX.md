@@ -1293,6 +1293,74 @@ _(none yet)_
 
 ---
 
+## Swift UX bug pass — #2023 / #1952 (2026-07-20)
+
+Fixes shipped together from live-testing feedback; all `Functional`, awaiting
+design review.
+
+### `CapabilityCard` (agent form Tools tab)
+
+Toggling a capability no longer changes the name's font size
+(`--font-label-medium` → `--font-title-small` caused every card below to jump).
+Active emphasis is now weight + `--primary` color at identical metrics; only
+the config sub-form still expands, which is expected.
+
+### `TeamFilesystemBrowser` / `AgentFilesystemBrowser` (Resources tabs)
+
+Expanding an empty folder now shows the same explanatory hint pattern as the
+corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an
+empty dropdown: generic `rework.resources.empty.folder` for folders, dedicated
+`empty.agentFiles` inside an agent's space, and `empty.agents` when no agent
+has files at all.
+
+### `TuningFieldRenderer` — `document_libraries` widget (agent form)
+
+An array field whose `ui.widget` is `document_libraries`
+(document_access `library_tag_ids`) renders the `DocumentLibraryScopePicker`
+tree instead of the raw tag-id `TagInput`. Unknown widget ids fall back to the
+`TagInput`.
+
+### `AgentFormBody` audit footer (#1952)
+
+"Created by" resolves the uid to first/last name (fallback username, then uid)
+via `GET /users/by-ids`, and shows "Updated by …" when the instance has been
+user-edited (`updated_by`).
+
+### `document_access` config/chat parity with the legacy search tool
+
+The Document access capability now offers the exact configuration surface and
+composer controls of "Document search (legacy)": Document library picker and
+Document picker toggles (split), Bind to specific libraries gating the
+bound-libraries tree (`ui.visible_when`; bound ids are inert while unbound,
+like the legacy tool), File attachments, Search policy picker (configured
+policy becomes the picker default; enforced only when the picker is hidden),
+RAG scope picker + default. All emitted as the same stock widgets — the
+choices travel on `RuntimeContext`, which the v2 document-search adapter
+already honors. The manifest version stays 0.1.0 pre-GA; stored older slices
+revalidate unchanged (the single scope toggle maps onto the split ones, and a
+pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
+document libraries" raw tag-id input now renders as the library tree, gated
+on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
+`mcp_catalog.yaml`.
+
+### `DocumentWorkspace` — library deletion
+
+Corpus library folders now carry a delete action (same `canUpdateResources`
+gate as upload/new-folder), with a confirmation dialog. Deletion cascades
+server-side: sub-folders and the untagging of contained documents are the
+backend's `delete_tag_for_user`. Errors surface as a toast with the backend
+detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
+### `CategoryPicker` / prompt category surfaces
+
+Pickers and filters offer exactly 7 functional categories (doc-assist,
+summary, extraction, writing, analysis, conversational, integration).
+`monitoring`, `migration` and `other` are retired from selection but keep
+their pill rendering on pre-existing prompts; the "show more" fold is gone
+(7 visible).
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

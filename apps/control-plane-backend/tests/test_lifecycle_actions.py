@@ -149,7 +149,13 @@ async def test_erase_at_expiry_leaves_queued_on_partial_receipt() -> None:
     the next tick retries. A hidden-but-never-erased conversation is a defect."""
 
     async def _erase(**_kwargs: Any) -> Any:
-        return SimpleNamespace(ok=False)
+        return SimpleNamespace(
+            ok=False,
+            stores=[
+                SimpleNamespace(store="attachments", ok=True, error=None),
+                SimpleNamespace(store="runtime_checkpoint", ok=False, error="boom"),
+            ],
+        )
 
     queue = _FakeQueueStore()
     result = await delete_conversation_and_mark_done(
@@ -306,7 +312,13 @@ async def test_repeatedly_failing_erasure_flags_stalled_but_keeps_retrying(
 
     async def _erase_partial(**_kwargs: Any) -> Any:
         return SimpleNamespace(
-            ok=False, stores=[SimpleNamespace(ok=True), SimpleNamespace(ok=False)]
+            ok=False,
+            stores=[
+                SimpleNamespace(store="attachments", ok=True, error=None),
+                SimpleNamespace(
+                    store="runtime_checkpoint", ok=False, error="unresolved runtime"
+                ),
+            ],
         )
 
     queue = _FakeQueueStore()

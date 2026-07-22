@@ -54,7 +54,15 @@ Declared as ClassVars on the `AgentCapability` subclass; see `base.py` docstring
 authoritative rules. In one line each:
 
 - **`ConfigModel`** — what the user *sends* at agent creation (drives
-  `manifest.config_fields`).
+  `manifest.config_fields`). A `FieldSpec` may set `ui=UIHints(widget=...)` to
+  name a frontend stock **form** widget for the agent-creation form (#2023) —
+  distinct from chat-turn controls. Known ids: `document_libraries` (the
+  library/document tree picker for an array of library tag ids; see
+  `document_access.library_tag_ids`). Unknown ids fall back to the
+  type-derived default input, so older frontends degrade gracefully.
+  `ui.visible_when="<sibling_key>"` hides the field while that sibling's
+  effective value is falsy — display-only, the stored value is kept, so the
+  capability must still handle the field's value when its gate is off.
 - **`StoredConfigModel`** — what the platform *persists* after `validate_config`
   enrichment; defaults to `ConfigModel` (RFC §3.2, §3.8).
 - **`TurnOptionsModel`** — typed chat-time values from a chat control; `EmptyModel` if

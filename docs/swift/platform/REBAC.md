@@ -150,6 +150,46 @@ Cannot:
 
 - configure any team-wide setting, policy, or shared resource
 
+### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
+
+A personal team (`personal-<uid>`, format decided by CTRLP-10) is a real ReBAC
+team object with no `team_metadata` row, but it does **not** follow the
+"granted through bootstrap or explicit admin action" rule above — that rule is
+about *collaborative* teams, where ownership must be assigned because it isn't
+otherwise knowable. A personal team's owner is knowable by construction (the
+uid is embedded in the team id), so it is provisioned automatically instead:
+
+- `RebacEngine.check_user_permission_or_raise`/`has_user_permission`/
+  `lookup_user_resources` (`fred-core`, shared by every backend — permission
+  checks **and** "list my teams" enumeration alike) self-heal exactly one
+  tuple — `user:<uid> team_editor team:personal-<uid>` — the first time its
+  own owner touches anything about their personal team. `team_editor`
+  reproduces control-plane's synthetic `build_personal_team` DTO permission
+  set (`can_read`, `can_update_resources`, `can_update_agents`) exactly.
+- `RebacEngine.add_relation` — the one audited chokepoint every relation write
+  funnels through, collaborative or personal — refuses any tuple naming a
+  personal team except that owner self-grant and the structural
+  `organization -> team` edge every team gets. No admin API, import/export
+  path, or future caller can write a tuple granting anyone else access to
+  someone else's personal space; this invariant is what makes writing a real,
+  persisted tuple safe for a resource type that otherwise has no assignable
+  owner.
+
+Never add a personal team to `initial_team_admin_ids`, a member-role grant
+endpoint, or any bulk relation-writing tool — `add_relation` rejects it, by
+design, regardless of caller.
+
+**Why a real tuple, not an identity-only guard.** A cheaper-looking
+alternative is a hardcoded check ("is `team_id` this caller's own
+`personal_team_id`?") local to each call site, writing nothing to OpenFGA.
+Rejected: it has to be reimplemented correctly at every place that checks a
+team permission (one whack-a-mole guard per caller, easy to miss — this is
+exactly what happened before AUTHZ-08), and it cannot support enumeration
+("list every team I can read") at all, since that question has no single
+`team_id` to compare against. A real, narrowly write-guarded tuple fixes every
+call site — including enumeration — from one place in `fred-core`, with no
+per-caller special-casing.
+
 ### Team registry governance — platform admin, existence only
 
 Three narrow, `platform_admin`-only capabilities govern the team *registry*

@@ -23,7 +23,7 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import RebacReference, RelationType
+from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
@@ -515,6 +515,19 @@ async def _available_capabilities_for_source(
     return list(merged.values())
 
 
+AGENT_CAPABILITY_NAMESPACE_PREFIX = "agent__"
+"""Reserved id prefix for every `kind="agent"` catalog entry (GitHub #2004
+item 4). `kind="tool"` entries share the SAME flat capability catalog dict
+(`capabilities/catalog.py::aggregate_capability_catalog`) and the same FGA
+object type — nothing stopped a tool/MCP-server id from coincidentally
+matching an (unprefixed) template id, which silently overwrote one or the
+other (later-registration-wins). Reserving this prefix for agent projections
+and rejecting any `kind="tool"` entry that lands in it (enforced in
+`aggregate_capability_catalog`) makes the collision structurally impossible
+rather than merely unlikely. See `rename_agent_capability_ids_to_namespaced_form`
+below for the one-time tuple-rename migration this prefix required."""
+
+
 def template_capability_id(runtime_id: str, agent_id: str) -> str:
     """
     Colon-free FGA-safe capability id for one agent template (CAPAB-01, RFC
@@ -524,9 +537,12 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
     the same crash class `#1988` fixed for `mcp:<id>` capabilities. This is a
     parallel identifier used ONLY for ReBAC checks and the admin catalog —
     never for routing, which keeps using `template_id`.
+
+    2026-07-20 (GitHub #2004 item 4): prefixed with `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+    so this id can never collide with a `kind="tool"` id (see that constant).
     """
 
-    return f"{runtime_id}__{agent_id}"
+    return f"{AGENT_CAPABILITY_NAMESPACE_PREFIX}{runtime_id}__{agent_id}"
 
 
 async def _agent_capabilities_for_source(
@@ -591,25 +607,33 @@ async def _agent_capabilities_for_source(
 
 
 async def _fetch_chat_controls(
-    base_url: str, request: ChatControlsRequest
+    base_url: str,
+    request: ChatControlsRequest,
+    authorization: str | None = None,
 ) -> ChatControlsResponse | None:
     """
     Ask one pod to evaluate a batch of capabilities' chat controls (#1976).
 
-    POST `/agents/capabilities/chat-controls` — the same bearer-less control-
-    plane→pod call path as `_fetch_mcp_catalog`. Returns None when the pod is
-    unreachable: the missed capabilities' controls are then simply ABSENT from
-    this prep (logged, best-effort — the same silent-degrade contract as the
-    catalog fetch), never served from a stale entry, since a cache MISS by
-    construction has no entry to fall back to.
+    POST `/agents/capabilities/chat-controls` — forwards the acting user's
+    bearer: the pod route requires authentication ("reuses the same bearer
+    the pod validates for `/agents/*`"), so on auth-enabled deployments a
+    bearer-less call 401s and silently kills every composer control.
+    Returns None when the pod is unreachable: the missed capabilities'
+    controls are then simply ABSENT from this prep (logged, best-effort — the
+    same silent-degrade contract as the catalog fetch), never served from a
+    stale entry, since a cache MISS by construction has no entry to fall back
+    to.
     """
 
     if not request.items:
         return ChatControlsResponse(results=[])
     url = f"{base_url.rstrip('/')}/agents/capabilities/chat-controls"
+    headers = {"Authorization": authorization} if authorization else None
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(url, json=request.model_dump(mode="json"))
+            response = await client.post(
+                url, json=request.model_dump(mode="json"), headers=headers
+            )
         response.raise_for_status()
         return ChatControlsResponse.model_validate(response.json())
     except Exception as exc:
@@ -621,6 +645,7 @@ async def _resolve_chat_controls(
     tuning: ManagedAgentTuning,
     available_capabilities: Sequence[CapabilityCatalogEntry],
     base_url: str,
+    authorization: str | None = None,
 ) -> list[ChatControlDescriptor]:
     """
     Resolve one instance's chat controls at session prep, cache-aside (#1976).
@@ -679,7 +704,7 @@ async def _resolve_chat_controls(
 
     if misses:
         response = await _fetch_chat_controls(
-            base_url, ChatControlsRequest(items=misses)
+            base_url, ChatControlsRequest(items=misses), authorization=authorization
         )
         if response is not None:
             for result in response.results:
@@ -1705,6 +1730,123 @@ async def grant_existing_teams_served_templates(
     return summary
 
 
+_ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+
+
+@dataclass
+class TemplateIdNamespaceMigrationSummary:
+    templates_checked: int = 0
+    skipped_unreachable_sources: int = 0
+    tuples_renamed: int = 0
+
+
+async def rename_agent_capability_ids_to_namespaced_form(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> TemplateIdNamespaceMigrationSummary:
+    """
+    One-time compatibility migration for the `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+    fix (GitHub #2004 item 4, RFC §8.6 2026-07-20 dated entry).
+
+    `template_capability_id` used to return the un-prefixed
+    `f"{runtime_id}__{agent_id}"`. Any FGA tuple written before this migration
+    ships (anchor, `enabled`/`disabled` per team, `default_on`,
+    `personal_on`/`personal_disabled`) is keyed on that old id. Simply
+    changing the id-generating function would silently orphan every one of
+    those tuples — teams that already had a template enabled would
+    instantly lose access the moment this code deploys.
+
+    Renames each such tuple in place: writes the identical
+    (subject, relation) pair under the new `agent__`-prefixed resource id,
+    then deletes the old one. Idempotent and safe to re-run — a tuple already
+    renamed (or never granted) has nothing to move under the old id and is
+    silently skipped, exactly like `grant_existing_teams_served_templates`.
+
+    How to use it: run once, before this code deploys, the same
+    deploy-sequencing rule as `grant_existing_teams_served_templates` (both
+    rehearsed against a copy of real data first, never attempted for the
+    first time in production). `dry_run=True` reports what WOULD be renamed
+    without writing.
+    """
+
+    rebac = deps.team_dependencies.rebac
+    template_entries: dict[str, CapabilityCatalogEntry] = {}
+    unreachable_sources = 0
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        entries = await _agent_capabilities_for_source(
+            source.base_url, source.runtime_id
+        )
+        if entries is None:
+            unreachable_sources += 1
+            continue
+        for entry in entries:
+            template_entries[entry.id] = entry
+    summary = TemplateIdNamespaceMigrationSummary(
+        templates_checked=len(template_entries),
+        skipped_unreachable_sources=unreachable_sources,
+    )
+
+    teams = await deps.team_dependencies.get_team_metadata_store().list_all()
+
+    for new_id in template_entries:
+        old_id = new_id.removeprefix(AGENT_CAPABILITY_NAMESPACE_PREFIX)
+        if old_id == new_id:
+            # Defensive: template_capability_id always applies the prefix, so
+            # a catalog entry without it would mean a non-agent-projection id
+            # ended up in `template_entries` — never move a tuple in that case.
+            continue
+        old_ref = RebacReference(type=Resource.CAPABILITY, id=old_id)
+        new_ref = RebacReference(type=Resource.CAPABILITY, id=new_id)
+
+        # Org-subject tuples: anchor + the three platform-wide class markers.
+        for relation in (
+            RelationType.ORGANIZATION,
+            RelationType.DEFAULT_ON,
+            RelationType.PERSONAL_ON,
+            RelationType.PERSONAL_DISABLED,
+        ):
+            if await rebac.has_direct_relation(_ORG_REF, relation, old_ref):
+                summary.tuples_renamed += 1
+                if not dry_run:
+                    await rebac.add_relation(
+                        Relation(subject=_ORG_REF, relation=relation, resource=new_ref)
+                    )
+                    await rebac.delete_relation(
+                        Relation(subject=_ORG_REF, relation=relation, resource=old_ref)
+                    )
+
+        # Team-subject tuples: the per-team enable/disable grant.
+        for team in teams:
+            team_ref = RebacReference(type=Resource.TEAM, id=str(team.id))
+            for relation in (RelationType.ENABLED, RelationType.DISABLED):
+                if await rebac.has_direct_relation(team_ref, relation, old_ref):
+                    summary.tuples_renamed += 1
+                    if not dry_run:
+                        await rebac.add_relation(
+                            Relation(
+                                subject=team_ref, relation=relation, resource=new_ref
+                            )
+                        )
+                        await rebac.delete_relation(
+                            Relation(
+                                subject=team_ref, relation=relation, resource=old_ref
+                            )
+                        )
+
+    logger.info(
+        "[template-id-namespace-migration] sweep done dry_run=%s "
+        "templates_checked=%d tuples_renamed=%d skipped_unreachable_sources=%d",
+        dry_run,
+        summary.templates_checked,
+        summary.tuples_renamed,
+        summary.skipped_unreachable_sources,
+    )
+    return summary
+
+
 def _make_slice_validator(*, base_url: str, team_id: TeamId):
     """
     Build the `validate_slice` callable the config-health reconcile uses: it
@@ -1778,6 +1920,7 @@ def _record_to_summary(
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
+        updated_by=record.updated_by,
         tuning_field_values=record.tuning.values,
         selected_capability_ids=(
             list(record.tuning.selected_capability_ids)
@@ -2281,6 +2424,7 @@ async def update_agent_instance(
         description=request.description,
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
+        updated_by=user.uid,
     )
     # A save that re-validated every ACTIVE capability slice through the pod
     # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
@@ -2461,6 +2605,7 @@ async def prepare_execution(
     session_id: str | None = None,
     lang: str = "en",
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -2570,7 +2715,12 @@ async def prepare_execution(
     # no controls this prep (logged), never a failed prep.
     available_capabilities = await _available_capabilities_for_source(source.base_url)
     chat_controls = await _resolve_chat_controls(
-        instance.tuning, available_capabilities, source.base_url
+        instance.tuning,
+        available_capabilities,
+        source.base_url,
+        # The pod's chat-controls route authenticates the caller; forward the
+        # acting user's bearer like the validate-config round-trip.
+        authorization=authorization,
     )
 
     return ExecutionPreparation(
@@ -2990,10 +3140,12 @@ async def list_context_prompts(
     *,
     lang: str = "en",
 ) -> list[ContextPromptSummary]:
-    """Return personal + team prompts + platform defaults for the context picker.
+    """Return the space's own prompts + platform defaults for the context picker.
 
-    DB records are ordered by session_count DESC; defaults are appended at the end
-    so frequently-used custom prompts appear first.
+    Personal prompts appear only in the personal space — a team context
+    exposes the team's prompts, never the caller's personal ones. DB records are
+    ordered by session_count DESC; defaults are appended at the end so
+    frequently-used custom prompts appear first.
     """
 
     store = deps.get_prompt_store()

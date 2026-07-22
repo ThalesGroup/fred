@@ -52,3 +52,30 @@ storage:
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml
+
+platform:
+  # Must mirror configuration_prod.yaml's runtime_catalog_sources — the
+  # lifecycle worker resolves a session's runtime here (checkpoint + history
+  # erase) via ConversationErasureService._resolve_runtime_base_url. Left
+  # empty, every source lookup misses regardless of which runtime is actually
+  # registered, and conversation erasure never converges (CTRLP-12): each
+  # tick logs "unresolved runtime: source '<id>' is disabled or missing" and
+  # re-queues the same sessions forever.
+  knowledge_flow_base_url: http://127.0.0.1:8111/knowledge-flow/v1
+  runtime_catalog_sources:
+    - runtime_id: fred-samples-agents
+      base_url: http://127.0.0.1:8010/samples/agents/v1
+      enabled: true
+      ingress_prefix: /samples/agents/v1
+    - runtime_id: fred-agents
+      base_url: http://127.0.0.1:8000/fred/agents/v2
+      enabled: true
+      ingress_prefix: /fred/agents/v2
+    - runtime_id: rags-agents
+      base_url: http://127.0.0.1:8013/rags/agents/v2
+      enabled: true
+      ingress_prefix: /rags/agents/v2
+    - runtime_id: dt-agents
+      base_url: http://127.0.0.1:8020/dt/agents/v2
+      enabled: true
+      ingress_prefix: /dt/agents/v2

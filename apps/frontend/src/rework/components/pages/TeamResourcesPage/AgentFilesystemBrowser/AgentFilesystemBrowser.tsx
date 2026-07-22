@@ -17,6 +17,7 @@ import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useLsQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import TeamFilesystemBrowser from "../TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
+import styles from "./AgentFilesystemBrowser.module.css";
 
 /** One /fs/list entry (only `path` = agent_instance_id, and `type` matter here). */
 interface FsEntry {
@@ -43,16 +44,22 @@ interface AgentFilesystemBrowserProps {
  * (download/delete + the généré provenance badge).
  */
 export default function AgentFilesystemBrowser({ fsTeamId, userId }: AgentFilesystemBrowserProps) {
+  const { t } = useTranslation();
   const agentsRoot = `teams/${fsTeamId}/agents`;
   const { data: instances, isLoading: namesLoading } =
     useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery({ teamId: fsTeamId });
-  const { data: agentDirs } = useLsQuery({ path: agentsRoot });
+  const { data: agentDirs, isLoading: dirsLoading } = useLsQuery({ path: agentsRoot });
 
   // Wait for names before labelling, so a real agent never flashes "Removed agent".
   if (namesLoading) return null;
 
   const labelById = buildAgentLabels(instances ?? []);
   const folders = (Array.isArray(agentDirs) ? (agentDirs as FsEntry[]) : []).filter((entry) => isDirectory(entry.type));
+
+  // No agent has files yet: explain what the area is for instead of rendering nothing.
+  if (!dirsLoading && folders.length === 0) {
+    return <div className={styles.hint}>{t("rework.resources.empty.agents")}</div>;
+  }
 
   return (
     <>
@@ -116,7 +123,9 @@ function AgentFolder({ instanceId, name, filesRoot }: AgentFolderProps) {
         onToggle={() => setExpanded((value) => !value)}
       />
       {/* baseDepth=1 indents the agent's files one level under its folder, matching the rest of the tree. */}
-      {expanded && <TeamFilesystemBrowser root={filesRoot} baseDepth={1} />}
+      {expanded && (
+        <TeamFilesystemBrowser root={filesRoot} baseDepth={1} emptyHintKey="rework.resources.empty.agentFiles" />
+      )}
     </>
   );
 }

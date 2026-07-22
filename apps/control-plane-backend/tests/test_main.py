@@ -169,6 +169,7 @@ class _FakeAgentInstanceStore:
         description: str | None = None,
         enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
+        updated_by: str | None = None,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -188,6 +189,8 @@ class _FakeAgentInstanceStore:
             record.enabled = enabled
         if tuning is not None:
             record.tuning = tuning
+        if updated_by is not None:
+            record.updated_by = updated_by
         return record
 
     async def list_all(self) -> list[AgentInstanceRecord]:
@@ -523,12 +526,13 @@ class _FakePromptStore:
     ) -> list:
         from control_plane_backend.prompts.store import ContextPromptRecord
 
+        # Mirrors the real store: personal prompts only in the personal space.
+        scope = "personal" if str(personal_team_id) == str(team_id) else "team"
         seen_ids: set[str] = set()
         results = []
         for r in self._records:
-            if r.team_id in (personal_team_id, team_id) and r.prompt_id not in seen_ids:
+            if r.team_id == str(team_id) and r.prompt_id not in seen_ids:
                 seen_ids.add(r.prompt_id)
-                scope = "personal" if r.team_id == personal_team_id else "team"
                 results.append(
                     ContextPromptRecord(
                         prompt_id=r.prompt_id,
@@ -667,6 +671,23 @@ async def test_list_users_returns_empty_without_keycloak_m2m() -> None:
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_get_users_by_ids_degrades_to_id_only_without_keycloak() -> None:
+    """/users/by-ids answers one entry per unique id, in order, even with no Keycloak (#1952)."""
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            "/control-plane/v1/users/by-ids",
+            params=[("ids", "u-1"), ("ids", "u-2"), ("ids", "u-1")],
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == [{"id": "u-1"}, {"id": "u-2"}]
 
 
 @pytest.mark.asyncio
@@ -2132,6 +2153,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
                     created_by VARCHAR,
+                    updated_by VARCHAR,
                     tuning_json TEXT,
                     prompt_refs_json TEXT,
                     created_at DATETIME NOT NULL DEFAULT (now()),
@@ -5492,6 +5514,37 @@ async def test_patch_agent_instance_updates_display_name(
 
 
 @pytest.mark.asyncio
+async def test_patch_agent_instance_stamps_updated_by(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH stamps the acting user's uid into updated_by (#1952)."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_record()
+    assert record.updated_by is None
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"display_name": "Renamed Echo Agent"},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    # No-security mode authenticates as the mock "admin" subject.
+    assert payload["updated_by"] == "admin"
+    assert record.updated_by == "admin"
+
+
+@pytest.mark.asyncio
 async def test_patch_agent_instance_updates_tuning_field_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -6292,16 +6345,21 @@ def _wire_capability_catalog(
 
 
 def _stub_chat_controls(
-    monkeypatch: pytest.MonkeyPatch, response: ChatControlsResponse | None
+    monkeypatch: pytest.MonkeyPatch,
+    response: ChatControlsResponse | None,
+    captured_authorization: list | None = None,
 ) -> list[int]:
     """Stub the control-plane→pod chat-controls call (#1976). Returns a
     one-element counter of how many times the pod was asked — misses only, so a
-    cache hit leaves it unchanged."""
+    cache hit leaves it unchanged. Pass `captured_authorization` to record the
+    bearer forwarded on each pod call."""
 
     calls = [0]
 
-    async def _fake_fetch_chat_controls(_base_url, _request):
+    async def _fake_fetch_chat_controls(_base_url, _request, authorization=None):
         calls[0] += 1
+        if captured_authorization is not None:
+            captured_authorization.append(authorization)
         return response
 
     monkeypatch.setattr(
@@ -6407,6 +6465,44 @@ async def test_prepare_execution_attaches_computed_chat_controls(
         },
         {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_forwards_bearer_to_chat_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pod's chat-controls route authenticates the caller, so prep must
+    forward the acting user's Authorization header — a bearer-less call 401s
+    on auth-enabled deployments and silently empties the composer."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cc-auth")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    captured_auth: list = []
+    _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[ChatControlItem(widget="rag_scope")],
+                )
+            ]
+        ),
+        captured_authorization=captured_auth,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cc-auth/prepare-execution",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 200
+    assert captured_auth == ["Bearer test-token"]
 
 
 @pytest.mark.asyncio
@@ -6960,10 +7056,10 @@ async def test_prompt_update_increments_version(
 
 
 @pytest.mark.asyncio
-async def test_get_context_prompts_returns_personal_and_team(
+async def test_get_context_prompts_excludes_personal_in_team_space(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """GET /prompts/context returns the union of personal and team prompts with scope field."""
+    """GET /prompts/context on a team never exposes the caller's personal prompts."""
 
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
@@ -6988,12 +7084,45 @@ async def test_get_context_prompts_returns_personal_and_team(
     assert resp.status_code == 200
     body = resp.json()
     ids = [item["id"] for item in body]
-    assert "p-personal" in ids
+    assert "p-personal" not in ids
     assert "p-team" in ids
-    # team prompt has higher session_count so should appear first
     assert body[0]["id"] == "p-team"
     assert body[0]["scope"] == "team"
-    assert body[1]["scope"] == "personal"
+
+
+@pytest.mark.asyncio
+async def test_get_context_prompts_personal_space_returns_personal_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /prompts/context on the personal team returns the user's prompts as scope=personal."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    personal = _make_prompt_record(
+        prompt_id="p-personal", team_id=_PERSONAL_TEAM_ID, name="My prompt"
+    )
+    team_p = _make_prompt_record(
+        prompt_id="p-team", team_id="bid-team", name="Team prompt"
+    )
+    store = _FakePromptStore([personal, team_p])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/prompts/context"
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = [item["id"] for item in body]
+    assert "p-personal" in ids
+    assert "p-team" not in ids
+    assert body[0]["scope"] == "personal"
 
 
 @pytest.mark.asyncio

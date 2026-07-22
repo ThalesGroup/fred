@@ -50,6 +50,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users`, method: "POST", body: queryArg.createUserRequest }),
     }),
+    getUsersByIdsControlPlaneV1UsersByIdsGet: build.query<
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse,
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/by-ids`,
+        params: {
+          ids: queryArg.ids,
+        },
+      }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -806,6 +817,10 @@ export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Succes
 export type CreateUserControlPlaneV1UsersPostApiArg = {
   createUserRequest: CreateUserRequest;
 };
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
+  ids: string[];
+};
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
@@ -1494,6 +1509,9 @@ export type ManagedAgentUiHints = {
   textarea?: boolean;
   group?: string | null;
   hide?: boolean;
+  widget?: string | null;
+  visible_when?: string | null;
+  advanced?: boolean;
 };
 export type ManagedAgentFieldSpec = {
   key: string;
@@ -1523,7 +1541,12 @@ export type UiHints = {
   textarea?: boolean;
   group?: string | null;
   hide?: boolean;
+  /** Names a frontend form widget to render this field instead of the type-derived default input. Resolved first against the owning capability plugin's `configWidgets` (custom widgets, AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock widgets — known stock ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
   widget?: string | null;
+  /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
+  visible_when?: string | null;
+  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
+  advanced?: boolean;
 };
 export type FieldSpec = {
   key: string;
@@ -1637,6 +1660,8 @@ export type ManagedAgentInstanceSummary = {
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
+  /** Uid of the last user who edited the instance (#1952). Server-authoritative and read-only; null when the instance was never user-edited (seed/startup saves have no acting user). */
+  updated_by?: string | null;
   /** Current user-set values for this instance's tunable fields. Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised. */
   tuning_field_values?: {
     [key: string]:
@@ -2320,6 +2345,8 @@ export const {
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,
+  useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,

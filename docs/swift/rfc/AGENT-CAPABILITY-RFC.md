@@ -1705,6 +1705,41 @@ capability of `kind="agent"` in this exact same object space:
 > Not in this pass: `kind="tool"`/`kind="agent"` catalog-id namespace
 > separation (#2004 item 4, low likelihood, opportunistic).
 
+> **2026-07-20 — item 4 closed: `kind="tool"`/`kind="agent"` catalog-id
+> namespace separation.** Both kinds share one flat capability catalog dict
+> (`aggregate_capability_catalog`) and one FGA object type; nothing stopped a
+> tool/MCP-server id from coincidentally matching an (unprefixed)
+> `template_capability_id` and silently overwriting it (or being overwritten
+> by it) — later-registration-wins, no log, no error. Rejected a log-and-skip
+> collision guard (still lets one entry silently vanish from the catalog,
+> just with an unread log line) in favor of making the collision
+> structurally impossible:
+>
+> - `template_capability_id(runtime_id, agent_id)` now returns
+>   `f"agent__{runtime_id}__{agent_id}"` — `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+>   (`product/service.py`), a namespace reserved exclusively for `kind="agent"`
+>   projections.
+> - `aggregate_capability_catalog` (`capabilities/catalog.py`) rejects, at its
+>   existing invalid-id quarantine chokepoint, any `kind="tool"` entry whose
+>   id starts with that reserved prefix — logged as an error, not silently
+>   admitted. This closes the loophole a bare naming convention would leave
+>   open (nothing else stops a future tool/MCP-server author from choosing an
+>   `agent__`-prefixed id by accident).
+> - **Migration required:** live FGA tuples already exist under the
+>   un-prefixed id (anchor, `enabled`/`disabled` per team, `default_on`,
+>   `personal_on`/`personal_disabled`) from testing before this fix landed.
+>   `rename_agent_capability_ids_to_namespaced_form` (`product/service.py`,
+>   companion to `grant_existing_teams_served_templates`) renames each
+>   in place — same deploy-sequencing rule: run once, before this code
+>   deploys, rehearsed against a copy of real data first. Idempotent — a
+>   tuple already renamed (or never granted) has nothing to move and is
+>   skipped.
+>
+> Rejected alternative: a separate FGA object type for `kind="agent"` — would
+> reopen the "same object space, no new type" decision this section already
+> made (§7.5's rejection of a parallel admission model), for a problem a
+> reserved id prefix fully solves within the existing model.
+
 ---
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)

@@ -19,7 +19,12 @@ from fred_core.scheduler import (
     resolve_scheduler_backend,
 )
 from fred_core.sql import create_async_engine_from_config
-from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
+from fred_core.store import (
+    ContentStore,
+    GcsContentStore,
+    LocalContentStore,
+    MinioContentStore,
+)
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 from prometheus_client import start_http_server
@@ -33,6 +38,7 @@ from control_plane_backend.capabilities.settings_store import (
 from control_plane_backend.config.loader import get_loaded_config_file_path
 from control_plane_backend.config.models import (
     Configuration,
+    GcsContentStorageConfig,
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
@@ -136,6 +142,7 @@ class ApplicationContext:
         return self._kpi_writer
 
     def get_kpi_store(self):  # -> OpenSearchKPIStore | None
+        from fred_core.common.resilient_sink import ResilientSinkStore
         from fred_core.kpi.kpi_writer import KPIWriter
         from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
         from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
@@ -146,6 +153,11 @@ class ApplicationContext:
         store = writer.store
         if isinstance(store, PrometheusKPIStore):
             store = store._delegate
+        # ResilientSinkStore (#2009) wraps the real store for fail-open writes —
+        # unwrap it too, or every read-side KPI-preset query 503s even though
+        # the write path underneath is a perfectly healthy OpenSearchKPIStore.
+        if isinstance(store, ResilientSinkStore):
+            store = store.wrapped
         return store if isinstance(store, OpenSearchKPIStore) else None
 
     def start_metrics_exporter(self) -> None:
@@ -200,6 +212,26 @@ class ApplicationContext:
                     secure=cfg.secure,
                     public_endpoint=cfg.public_endpoint,
                     public_secure=cfg.public_secure,
+                )
+            elif isinstance(cfg, GcsContentStorageConfig):
+                # Fail fast at startup: banner/logo images are served straight to the
+                # browser via get_presigned_url, which needs a signing SA to mint V4
+                # signed URLs via IAM signBlob (no per-feature flag to detect that
+                # usage later, so a missing email must stop the boot here rather than
+                # surfacing as an opaque runtime error on first team-banner render).
+                if not cfg.signing_service_account_email:
+                    raise ValueError(
+                        "content_storage.type=gcs requires 'signing_service_account_email' "
+                        "to sign V4 signed URLs for team banner/logo images (IAM signBlob "
+                        "under Workload Identity, no JSON key). Set it to the signing "
+                        "service account that holds storage.objects.get on the objects "
+                        "bucket and on which the Workload Identity service account has "
+                        "iam.serviceAccounts.signBlob."
+                    )
+                self._content_store = GcsContentStore(
+                    bucket_name=f"{cfg.bucket_name}-objects",
+                    project_id=cfg.project_id,
+                    signing_service_account_email=cfg.signing_service_account_email,
                 )
             elif isinstance(cfg, LocalContentStorageConfig):
                 self._content_store = LocalContentStore(root_path=cfg.root_path)

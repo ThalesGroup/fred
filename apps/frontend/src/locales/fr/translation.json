@@ -132,7 +132,7 @@
     },
     "document_access": {
       "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
+      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
     },
     "ppt_filler": {
       "name": "PPT Filler",
@@ -1107,10 +1107,15 @@
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteTitle": "Retirer le document",
+        "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
+        "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe"
       },
       "empty": {
+        "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
+        "agents": "Aucun fichier d'agent pour l'instant. Les fichiers créés pour vous par vos agents apparaîtront ici, regroupés par agent.",
         "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
         "folder": "Ce dossier est vide."
       },
@@ -1147,6 +1152,8 @@
       },
       "title": "Ressources",
       "toast": {
+        "deleteFolderError": "Impossible de supprimer le dossier",
+        "deleteFolderSuccess": "Dossier supprimé",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
       }
@@ -1440,7 +1447,9 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}"
       },
       "formAgent": {
+        "advancedSettings": "Paramètres avancés",
         "createdBy": "Créé par {{user}}",
+        "updatedBy": "Modifié par {{user}}",
         "fields": {
           "description": {
             "label": "Description",
