@@ -356,6 +356,7 @@ export default function EvaluationRunDetail({
       <div className={styles.statRow}>
         <StatCard label={t("rework.evaluation.detail.stats.passed")} value={run.passed_cases} tone="success" />
         <StatCard label={t("rework.evaluation.detail.stats.failed")} value={run.failed_cases} tone="error" />
+        <StatCard label={t("rework.evaluation.detail.stats.insufficient")} value={run.insufficient_cases} tone="info" />
         <StatCard
           label={t("rework.evaluation.detail.stats.execErrors")}
           value={run.execution_error_cases}

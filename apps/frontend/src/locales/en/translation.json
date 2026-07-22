@@ -1610,6 +1610,7 @@
         "stats": {
           "passed": "Passed",
           "failed": "Failed",
+          "insufficient": "Insufficient",
           "execErrors": "Exec. errors",
           "scoringErrors": "Scoring errors"
         },
