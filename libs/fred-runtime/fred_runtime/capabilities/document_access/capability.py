@@ -80,7 +80,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import DocumentSearchResult
-from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, model_validator
 
@@ -229,121 +228,6 @@ class DocumentScopeControlParams(BaseModel):
     libraries: bool = True
     documents: bool = True
     bound_library_ids: list[str] | None = None
-
-
-class _DocumentAccessMiddleware(AgentMiddleware):
-    """Carries the single vector-search tool, bound to the turn's typed context."""
-
-    def __init__(
-        self,
-        ctx: CapabilityContext[DocumentAccessConfig, DocumentAccessTurnOptions],
-    ) -> None:
-        super().__init__()
-        config = ctx.config
-        turn = ctx.turn_options
-        services = ctx.services
-
-        # Capability-config ∩ turn-option → the params handed to the port. This
-        # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
-        # result by the session binding (`⊆ session_binding`).
-        # Bound library ids only apply while the binding toggle is on — same
-        # semantics as the legacy tool (the tree's value is kept but inert
-        # when unbound).
-        bound_library_ids = (
-            (config.library_tag_ids or None) if config.bind_libraries else None
-        )
-        scoped_library_tag_ids = narrow_scope_ids(
-            bound_library_ids, turn.library_tag_ids
-        )
-        scoped_document_uids = narrow_scope_ids(
-            config.document_uids or None, turn.document_uids
-        )
-        default_top_k = config.default_top_k if config.default_top_k > 0 else 8
-        # With the search-policy picker shown, the configured policy is only
-        # the picker's DEFAULT: pass None so the adapter falls back to the
-        # per-turn RuntimeContext value (which carries that default anyway).
-        # With the picker hidden, the configured policy is enforced.
-        search_policy = (
-            None if config.show_search_policy_control else config.search_policy
-        )
-        min_source_score_ratio = config.min_source_score_ratio
-
-        @tool(
-            "search_documents_using_vectorization",
-            response_format="content_and_artifact",
-        )
-        async def search_documents_using_vectorization(
-            question: str,
-            top_k: int | None = None,
-        ) -> tuple[str, ToolInvocationResult]:
-            """Search the selected document libraries using semantic similarity (RAG).
-
-            Call this tool BEFORE answering any factual, technical, or
-            domain-specific question — the corpus may hold more specific or more
-            recent information than you already know. Skip it only for purely
-            conversational exchanges (greetings, thanks, clarifying what was just
-            said).
-
-            Covers prose/text documents. If a hit describes a structured/tabular
-            dataset (a "dataset pointer"), do not answer from it directly — pivot
-            to the tabular/SQL tool it names instead.
-
-            Returns ranked hits with title and content. Only use information
-            actually present in the returned hits; never invent facts beyond
-            them.
-            """
-
-            port = services.document_search
-            if port is None:
-                # No platform port injected (e.g. a bare test harness). Fail
-                # LOUD in the tool result rather than silently returning nothing.
-                raise RuntimeError(
-                    "document_access: RuntimeServices.document_search is not "
-                    "available on this execution path."
-                )
-
-            effective_top_k = top_k if isinstance(top_k, int) and top_k > 0 else None
-            result: DocumentSearchResult = await port.search(
-                question,
-                top_k=effective_top_k or default_top_k,
-                library_tag_ids=scoped_library_tag_ids,
-                document_uids=scoped_document_uids,
-                search_policy=search_policy,
-                attachments_only=(
-                    config.search_attachments_only and config.show_attach_files_control
-                ),
-            )
-            hits = result.hits
-
-            content = {
-                "query": question,
-                "hits": [
-                    {
-                        k: v
-                        for k, v in hit.model_dump(mode="json").items()
-                        if k in _LLM_FIELDS
-                    }
-                    for hit in hits
-                ],
-            }
-            # `blocks` feed the LLM the full hit set (the model needs to see a
-            # dataset pointer to know to pivot to the tabular tool, and every
-            # hit to reason with) — `sources` (the chat Sources panel) is
-            # narrowed separately: never a pointer chunk (no real content to
-            # cite), and never a hit that's noise relative to the best match
-            # in this call (found live citing near-zero-relevance paragraphs
-            # from an unrelated document, RAG-DATASET-DISCOVERY-RFC.md §7).
-            artifact = ToolInvocationResult(
-                tool_ref=DOCUMENT_ACCESS_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
-                sources=select_citable_sources(
-                    hits, min_score_ratio=min_source_score_ratio
-                ),
-            )
-            return json.dumps(content), artifact
-
-        tools: Sequence[BaseTool] = [search_documents_using_vectorization]
-        self.tools = tools
 
 
 class DocumentAccessCapability(
@@ -572,8 +456,140 @@ class DocumentAccessCapability(
             )
         return controls
 
-    def middleware(
+    def tools(
         self,
         ctx: CapabilityContext[DocumentAccessConfig, DocumentAccessTurnOptions],
-    ) -> list[AgentMiddleware]:
-        return [_DocumentAccessMiddleware(ctx)]
+    ) -> Sequence[BaseTool]:
+        """
+        Build the single vector-search tool, bound to the turn's typed
+        context (RFC §3.2, §5). This is the ONLY runtime contribution of this
+        capability — `AgentCapability.middleware()`'s default wraps this for
+        `create_agent()`; no ReAct-loop-specific hook is needed.
+
+        Return-convention note (Phase 1, NOTES-GRAPH-CAPABILITY-BRIDGE.md):
+        kept as `@tool(..., response_format="content_and_artifact")` returning
+        a `(content, ToolInvocationResult)` tuple. Verified empirically
+        (`test_capability_tool_return_convention.py`) that this is correct for the only
+        execution path this tool goes through today — `create_agent()`'s real
+        ToolCall-based tool-calling loop, which builds a `ToolMessage` whose
+        `.artifact` carries the `ToolInvocationResult` (and its `.sources`)
+        intact. A plain-dict `.ainvoke()` call (the shape Graph's
+        `invoke_runtime_tool` and the MCP runtime-provider resolver both use)
+        does NOT preserve this: LangChain collapses a `content_and_artifact`
+        response to the bare content string with NO tuple and NO artifact at
+        all when there is no `ToolCall` to attach it to — worse than the
+        tuple-collapse the original plan assumed. Switching to a bare
+        `ToolInvocationResult` return (`KfVectorSearchToolkit`'s convention)
+        would fix that path but breaks THIS one: without
+        `response_format="content_and_artifact"`, `create_agent()`'s ToolCall
+        loop stringifies the whole model into `ToolMessage.content` and never
+        populates `.artifact`. Since Phase 1 does not wire this tool into any
+        plain-dict invocation path (that's Phase 4), the existing convention
+        is correct as-is; Phase 2+ must adapt at the tool-carrier/assembly
+        seam rather than change this tool's return shape again.
+        """
+
+        config = ctx.config
+        turn = ctx.turn_options
+        services = ctx.services
+
+        # Capability-config ∩ turn-option → the params handed to the port. This
+        # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
+        # result by the session binding (`⊆ session_binding`).
+        # Bound library ids only apply while the binding toggle is on — same
+        # semantics as the legacy tool (the tree's value is kept but inert
+        # when unbound).
+        bound_library_ids = (
+            (config.library_tag_ids or None) if config.bind_libraries else None
+        )
+        scoped_library_tag_ids = narrow_scope_ids(
+            bound_library_ids, turn.library_tag_ids
+        )
+        scoped_document_uids = narrow_scope_ids(
+            config.document_uids or None, turn.document_uids
+        )
+        default_top_k = config.default_top_k if config.default_top_k > 0 else 8
+        # With the search-policy picker shown, the configured policy is only
+        # the picker's DEFAULT: pass None so the adapter falls back to the
+        # per-turn RuntimeContext value (which carries that default anyway).
+        # With the picker hidden, the configured policy is enforced.
+        search_policy = (
+            None if config.show_search_policy_control else config.search_policy
+        )
+        min_source_score_ratio = config.min_source_score_ratio
+
+        @tool(
+            "search_documents_using_vectorization",
+            response_format="content_and_artifact",
+        )
+        async def search_documents_using_vectorization(
+            question: str,
+            top_k: int | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Search the selected document libraries using semantic similarity (RAG).
+
+            Call this tool BEFORE answering any factual, technical, or
+            domain-specific question — the corpus may hold more specific or more
+            recent information than you already know. Skip it only for purely
+            conversational exchanges (greetings, thanks, clarifying what was just
+            said).
+
+            Covers prose/text documents. If a hit describes a structured/tabular
+            dataset (a "dataset pointer"), do not answer from it directly — pivot
+            to the tabular/SQL tool it names instead.
+
+            Returns ranked hits with title and content. Only use information
+            actually present in the returned hits; never invent facts beyond
+            them.
+            """
+
+            port = services.document_search
+            if port is None:
+                # No platform port injected (e.g. a bare test harness). Fail
+                # LOUD in the tool result rather than silently returning nothing.
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_search is not "
+                    "available on this execution path."
+                )
+
+            effective_top_k = top_k if isinstance(top_k, int) and top_k > 0 else None
+            result: DocumentSearchResult = await port.search(
+                question,
+                top_k=effective_top_k or default_top_k,
+                library_tag_ids=scoped_library_tag_ids,
+                document_uids=scoped_document_uids,
+                search_policy=search_policy,
+                attachments_only=(
+                    config.search_attachments_only and config.show_attach_files_control
+                ),
+            )
+            hits = result.hits
+
+            content = {
+                "query": question,
+                "hits": [
+                    {
+                        k: v
+                        for k, v in hit.model_dump(mode="json").items()
+                        if k in _LLM_FIELDS
+                    }
+                    for hit in hits
+                ],
+            }
+            # `blocks` feed the LLM the full hit set (the model needs to see a
+            # dataset pointer to know to pivot to the tabular tool, and every
+            # hit to reason with) — `sources` (the chat Sources panel) is
+            # narrowed separately: never a pointer chunk (no real content to
+            # cite), and never a hit that's noise relative to the best match
+            # in this call (found live citing near-zero-relevance paragraphs
+            # from an unrelated document, RAG-DATASET-DISCOVERY-RFC.md §7).
+            artifact = ToolInvocationResult(
+                tool_ref=DOCUMENT_ACCESS_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
+                sources=select_citable_sources(
+                    hits, min_score_ratio=min_source_score_ratio
+                ),
+            )
+            return json.dumps(content), artifact
+
+        return [search_documents_using_vectorization]
