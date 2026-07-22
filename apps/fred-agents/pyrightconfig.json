@@ -4,6 +4,7 @@
   "venvPath": ".",
   "venv": ".venv",
   "reportMissingTypeStubs": false,
+  "reportUnreachable": "warning",
   "extraPaths": [
     "../../libs/fred-core",
     "../../libs/fred-sdk",

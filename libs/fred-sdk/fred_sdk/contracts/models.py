@@ -252,7 +252,7 @@ class MCPServerRef(BaseModel):
     """
 
     id: str = Field(..., validation_alias=AliasChoices("id", "name"))
-    require_tools: list[str] = []
+    require_tools: list[str] = Field(default_factory=list)
     locked: bool = Field(
         default=False,
         description=(
@@ -862,7 +862,7 @@ class ReActPolicy(FrozenModel):
     - "Operations copilot": tools + explicit approval on risky actions
     """
 
-    system_prompt_template: str | None = Field(
+    system_prompt_template: str = Field(
         ...,
         min_length=1,
         description=(

@@ -95,12 +95,14 @@ export function StatusPill({ label, tone }: { label: string; tone: StatusTone })
   return <span className={`${styles.pill} ${toneClass[tone]}`}>{label}</span>;
 }
 
-/** Labelled, monospace, scrollable text block (case input/output, etc.). */
-export function FieldBlock({ label, value }: { label: string; value: string }) {
+/** Labelled, monospace, scrollable text block (case input/output, etc.).
+ * `tall` raises the scroll cap for contexts with room to spare (the case
+ * drawer) — compact contexts (e.g. a `CaseCard` preview) keep the default. */
+export function FieldBlock({ label, value, tall = false }: { label: string; value: string; tall?: boolean }) {
   return (
     <div className={styles.fieldBlock}>
       <span className={styles.fieldLabel}>{label}</span>
-      <pre className={styles.fieldValue}>{value}</pre>
+      <pre className={`${styles.fieldValue} ${tall ? styles.fieldValueTall : ""}`}>{value}</pre>
     </div>
   );
 }

@@ -42,6 +42,22 @@
 > never routed to OpenFGA. Collaborative teams are unchanged: still OpenFGA
 > `CAN_READ`, still fail-closed. See §2.2.
 
+> ✅ **Per-tool-call reverify / service-agent regression fix — 2026-07-22
+> (EVAL-03 follow-up).** `ToolObservabilityMiddleware._reverify_team_authorization`
+> (added the same day to close a least-privilege gap — a stale/revoked team
+> membership was trusted for a whole ReAct turn after the one OpenFGA check at
+> turn start) called the low-level `check_permission_or_raise` primitive
+> unconditionally, without the `is_service_agent` bypass `_authorize_execution_or_raise`
+> already grants at turn start (EVAL-AUTH Solution A, above). This broke every
+> tool call made by the evaluation worker's service identity — turn start
+> passed, the first tool call then failed closed with `AuthorizationError`.
+> Fix: `_authorize_and_resolve` now stamps the trusted `is_service_agent`
+> verdict (computed once from the JWT, never from caller-supplied `context`)
+> into `PortableContext.baggage`; the per-tool-call reverify reads it and skips
+> the ReBAC check for service-agent callers, mirroring the turn-start decision
+> instead of re-deriving a stricter one. Regular users are unaffected — the
+> least-privilege re-check still runs for every non-service-agent call.
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.

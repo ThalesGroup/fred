@@ -6,5 +6,6 @@
   "venv": ".venv",
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
+  "reportUnreachable": "warning",
   "stubPath": "stubs"
 }

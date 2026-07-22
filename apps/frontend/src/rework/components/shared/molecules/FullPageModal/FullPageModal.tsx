@@ -49,13 +49,7 @@ export const FullPageModal = ({ isOpen, onClose, children, id }: FullPageModalPr
 
   return (
     <Portal id="modal-portal">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${id}-title`}
-        className={styles.modal}
-        data-state={isOpen ? "open" : "closed"}
-      >
+      <div role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} className={styles.modal} data-state="open">
         {children}
       </div>
     </Portal>

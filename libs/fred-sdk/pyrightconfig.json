@@ -4,6 +4,7 @@
   "include": ["fred_sdk", "tests"],
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
+  "reportUnreachable": "warning",
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": [

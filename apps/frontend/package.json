@@ -6,14 +6,16 @@
   "overrides": {
     "pdfjs-dist": "4.3.136",
     "canvas": "npm:@napi-rs/canvas@^0.1.59",
-    "@mapbox/node-pre-gyp": "^2"
+    "@mapbox/node-pre-gyp": "^2",
+    "dompurify": "^3.4.12"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "prettier --check .",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
@@ -63,10 +65,13 @@
     "@svgr/rollup": "^8.1.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "8.65.0",
+    "@typescript-eslint/parser": "8.65.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^4.1.7",
     "dayjs": "^1.11.13",
     "eslint": "^10.0.1",
+    "eslint-plugin-react-hooks": "7.1.1",
     "happy-dom": "^20.10.6",
     "prettier": "3.5.3",
     "prettier-plugin-css-order": "^2.2.0",
@@ -75,13 +80,6 @@
     "vite": "^6.4.2",
     "vite-tsconfig-paths": "6.1.1",
     "vitest": "^4.1.7"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest",
-      "plugin:@typescript-eslint/recommended"
-    ]
   },
   "browserslist": {
     "production": [
