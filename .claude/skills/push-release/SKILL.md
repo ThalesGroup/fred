@@ -124,6 +124,9 @@ Then ask for an explicit go / no-go, and for confirmation of the version number.
 to Step 6 without a clear yes.** If the developer edits the wording or the version, apply it and
 re-present.
 
+The developer may also edit `release.md` **directly in their editor** while reviewing — expect it.
+Re-read the file before any further edit and keep their changes; never revert them.
+
 ## Step 6 — commit, tag, push (only after approval)
 
 ```bash
@@ -136,30 +139,49 @@ git commit -m "docs: release notes for v$V"
 git tag -a "code/v$V"  -m "Release v$V"
 git tag -a "chart/v$V" -m "Helm Charts Release $V"
 
-git push origin "$BRANCH" --tags
+git push origin "$BRANCH" "code/v$V" "chart/v$V"
 ```
 
-Both tags land on the release-notes commit. `git push --tags` pushes the branch commit and both
-new tags together.
+Both tags land on the release-notes commit. Push the branch and the two tags **by name** —
+**never `git push --tags`**: it pushes every local tag missing on the remote, and GitHub
+**silently skips push events when more than three tags arrive in one push**, so neither release
+workflow fires (this bit the v2.1.11 cut — ~17 stale local tags rode along and both workflows
+stayed silent). It also litters the remote with stale local tags.
 
 Tag-title convention (deliberate — do not "normalize"): the **code** tag reads `Release vX.Y.Z`
 (with the `v`), the **chart** tag reads `Helm Charts Release X.Y.Z` (no `v`). Same version on both.
 
-## Step 7 — confirm the release is building
+## Step 7 — confirm the release is building (mandatory)
 
-Report back:
+Verify that **both tag-triggered runs actually started** — do not report success on the push
+alone:
 
-- The two tags pushed and the commit they point at.
+```bash
+gh run list --limit 8
+```
+
+You must see two runs whose ref column shows the **tag names**:
+
 - `code/vX.Y.Z` → `.github/workflows/Build-and-push-docker.yml` (images to
   `ghcr.io/thalesgroup/fred-agent/*`).
 - `chart/vX.Y.Z` → `.github/workflows/Package-and-push-charts.yml` (chart to
   `oci://ghcr.io/thalesgroup/fred-helm/fred`).
 
-Optionally verify the workflows started:
+Beware the decoy: the branch push also fires "Build and Push Docker Images" with ref `swift` —
+that is **not** the release build. Tag runs can lag the push by ~30–60 s; re-check before
+concluding they are missing.
+
+**Recovery — tag workflows never fired.** Neither workflow has `workflow_dispatch`, so the only
+re-trigger is to delete the two tags on the remote and re-push them (the local tag objects and
+the commit are untouched — this only re-fires the push events):
 
 ```bash
-gh run list --limit 5
+git push origin :refs/tags/"code/v$V" :refs/tags/"chart/v$V"
+git push origin "code/v$V"
+git push origin "chart/v$V"
 ```
+
+Then re-run `gh run list` and confirm both tag runs appear.
 
 Do **not** touch `deploy/charts/fred/Chart.yaml` — the chart workflow injects `version`/`appVersion`
 at build time; the value committed in the file is not used.
