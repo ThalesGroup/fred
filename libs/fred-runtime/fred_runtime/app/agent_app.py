@@ -147,6 +147,8 @@ from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     DocumentSearchAdapter,
+    DocumentSummarizeAdapter,
+    DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredWorkspaceFs,
@@ -733,6 +735,16 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Companion document-access ports: tree listing + on-demand summarization,
+    # same private-binding doctrine as the search adapter.
+    document_tree = DocumentTreeAdapter(
+        binding=binding,
+        settings=settings,
+    )
+    document_summarize = DocumentSummarizeAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -783,6 +795,8 @@ def _build_runtime_services(
         checkpointer=runtime_config.checkpointer,
         agent_invoker=agent_invoker,
         document_search=document_search,
+        document_tree=document_tree,
+        document_summarize=document_summarize,
     )
 
 

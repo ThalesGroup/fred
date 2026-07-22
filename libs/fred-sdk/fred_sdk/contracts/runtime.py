@@ -631,6 +631,100 @@ class DocumentSearchPort(ABC):
         """
 
 
+class DocumentTreeResult(FrozenModel):
+    """Typed result of one capability-scoped document tree listing."""
+
+    tree: str = ""
+    truncated: bool = False
+
+
+class DocumentSummaryResult(FrozenModel):
+    """Typed result of one on-demand document summarization."""
+
+    document_uid: str
+    summary: str = ""
+    shrunk_for_budget: bool = False
+    keywords: tuple[str, ...] = ()
+
+
+class DocumentPortCallError(Exception):
+    """
+    Typed transport failure raised by document port adapters.
+
+    Why this exists: a failing document tool must surface a clean `is_error`
+    tool result (actionable detail, never a raised exception reaching the
+    runtime's ToolNode) — but the capability must not import the adapter's
+    HTTP stack to introspect the failure. Adapters map their transport errors
+    (timeout, HTTP status) onto this exception; capabilities render it.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.status_code = status_code
+
+
+class DocumentTreePort(ABC):
+    """
+    Capability-safe folder/document tree listing over the platform corpus
+    (same doctrine as `DocumentSearchPort`): the port takes SCOPE PARAMETERS
+    only — never a caller-supplied context, identity, or access token. Auth
+    and identity come solely from the adapter's privately-captured per-turn
+    binding, which never enters `CapabilityContext`.
+    """
+
+    @abstractmethod
+    async def tree(
+        self,
+        *,
+        working_directory: str | None = None,
+        library_tag_ids: Sequence[str] | None = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        """
+        Return the caller's authorized folder/document tree as rendered text.
+
+        `library_tag_ids` is the capability's already-narrowed library scope
+        (None = "no capability-side narrowing"); the adapter further bounds it
+        by the session binding before calling Knowledge Flow, completing
+        `turn_option ⊆ capability_config ⊆ session_binding`. Raises
+        `DocumentPortCallError` on transport failure.
+        """
+
+
+class DocumentSummarizePort(ABC):
+    """
+    Capability-safe on-demand document summarization (same doctrine as
+    `DocumentSearchPort`): scope parameters only, identity stays private to
+    the adapter. No scope narrowing here — the caller already holds a concrete
+    `document_uid` (from a search hit, tree listing, or the conversation's
+    attached-files context) and Knowledge Flow's own per-document ReBAC is the
+    real authorization gate. Document uids are internal working identifiers:
+    tools use them freely, but they are never surfaced to the end user.
+    """
+
+    @abstractmethod
+    async def summarize(
+        self,
+        document_uid: str,
+        *,
+        instruction: str | None = None,
+        max_chars: int = 2000,
+    ) -> DocumentSummaryResult:
+        """
+        Summarize one document by uid, optionally steered by `instruction`,
+        bounded by `max_chars`. Long-running server-side (map-reduce over the
+        whole document); adapters use an extended read timeout. Raises
+        `DocumentPortCallError` on transport failure.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -663,6 +757,10 @@ class RuntimeServices:
     # `ctx.services.document_search`; the port takes scope parameters only — the
     # per-turn binding and raw access token stay private to the adapter.
     document_search: DocumentSearchPort | None = None
+    # Companion document-access ports (same doctrine and optionality):
+    # scoped folder/document tree listing and on-demand summarization.
+    document_tree: DocumentTreePort | None = None
+    document_summarize: DocumentSummarizePort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

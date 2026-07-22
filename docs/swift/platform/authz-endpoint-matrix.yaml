@@ -540,6 +540,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/tree
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/documents/{document_uid}/chunks
     review_status: pending_review
@@ -562,6 +567,11 @@ operations:
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/documents/{document_uid}/labels/{label}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/{document_uid}/summarize
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

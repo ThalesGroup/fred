@@ -355,6 +355,26 @@ const injectedRtkApi = api.injectEndpoints({
     rerankDocuments: build.mutation<RerankDocumentsApiResponse, RerankDocumentsApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/rerank`, method: "POST", body: queryArg.rerankRequest }),
     }),
+    getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/tree`,
+        method: "POST",
+        body: queryArg.documentTreeRequest,
+      }),
+    }),
+    summarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePost: build.mutation<
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse,
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/summarize`,
+        method: "POST",
+        body: queryArg.summarizeDocumentRequest,
+      }),
+    }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
       QueryKnowledgeFlowV1KpiQueryPostApiArg
@@ -1121,6 +1141,17 @@ export type TestPostSuccessApiArg = void;
 export type RerankDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type RerankDocumentsApiArg = {
   rerankRequest: RerankRequest;
+};
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
+  /** status 200 Successful Response */ DocumentTreeResponse;
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
+  documentTreeRequest: DocumentTreeRequest;
+};
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse =
+  /** status 200 Successful Response */ SummarizeDocumentResponse;
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
+  documentUid: string;
+  summarizeDocumentRequest: SummarizeDocumentRequest;
 };
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
@@ -1999,6 +2030,36 @@ export type RerankRequest = {
   /** Number of top-reranked chunks to consider */
   top_r?: number;
 };
+export type DocumentTreeResponse = {
+  tree: string;
+  /** True if any branch was pruned or items were omitted to fit max_chars. */
+  truncated: boolean;
+};
+export type DocumentTreeRequest = {
+  /** Folder path prefix to start from, e.g. 'Sales/HR'. None lists from the root. */
+  working_directory?: string | null;
+  /** Restrict the listing to these folder tag ids (and their descendants), when set. */
+  tag_ids?: string[] | null;
+  /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
+  max_chars?: number;
+  /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  team_id?: string | null;
+};
+export type SummarizeDocumentResponse = {
+  document_uid: string;
+  summary: string;
+  /** True if a corrective pass had to shrink the summary to fit max_chars. */
+  shrunk_for_budget: boolean;
+  keywords?: string[];
+};
+export type SummarizeDocumentRequest = {
+  /** Free-text instruction steering the summary: focus area, audience, what to look for, desired length/tone. */
+  instruction?: string | null;
+  /** Target ceiling for the returned summary length, in characters. */
+  max_chars?: number;
+};
 export type KpiQueryResultRow = {
   group: {
     [key: string]: any;
@@ -2458,6 +2519,8 @@ export const {
   useLazyGetVisualEvidenceArtifactQuery,
   useTestPostSuccessMutation,
   useRerankDocumentsMutation,
+  useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
+  useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,

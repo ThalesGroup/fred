@@ -102,11 +102,17 @@ export function buildAttachmentsMarkdown(persisted: SessionAttachment[], transie
   // Persisted files are ingested for this session, so the agent can find them via
   // document search. Inline image data is only listed as metadata here; the runtime
   // must not place raw data URLs in the system prompt.
-  const persistedLines = persisted.map((attachment) => `- ${attachment.name}: conversation document`);
+  // The bracketed identifier is the internal document uid: the agent context is an
+  // internal surface, so carrying it here is fine — document tools accept the
+  // file name and resolve internally, and also tolerate this bracketed form.
+  const uidSuffix = (documentUid?: string) => (documentUid ? ` [${documentUid}]` : "");
+  const persistedLines = persisted.map(
+    (attachment) => `- ${attachment.name}${uidSuffix(attachment.documentUid)}: conversation document`,
+  );
   const inlineImageLines = transient.flatMap((attachment) =>
     attachment.imageContext
       ? [
-          `- ${attachment.name}: conversation image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
+          `- ${attachment.name}${uidSuffix(attachment.documentUid)}: conversation image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
           `  data: ${attachment.imageContext.dataUrl}`,
         ]
       : [],
