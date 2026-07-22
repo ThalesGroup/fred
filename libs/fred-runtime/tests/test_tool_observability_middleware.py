@@ -46,6 +46,7 @@ from fred_runtime.react.middleware.tool_observability import (
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     RuntimeContext,
+    get_runtime_context,
     set_runtime_context,
 )
 from fred_sdk.contracts.context import (
@@ -467,11 +468,13 @@ def _with_rebac_engine(engine: _FakeRebacEngine | None):
     """Context manager installing a fake pod-wide RuntimeContext for the
     duration of one test, restoring whatever was there before on exit — the
     global is process-wide (`set_runtime_context`), so tests must not leak it."""
-    import fred_runtime.runtime_context as runtime_context_module
 
     class _Ctx:
         def __enter__(self) -> None:
-            self._previous = runtime_context_module._RUNTIME_CONTEXT
+            try:
+                self._previous: RuntimeContext | None = get_runtime_context()
+            except RuntimeError:
+                self._previous = None
             set_runtime_context(
                 RuntimeContext(
                     RuntimeConfig(
@@ -482,7 +485,7 @@ def _with_rebac_engine(engine: _FakeRebacEngine | None):
             )
 
         def __exit__(self, *exc_info: object) -> None:
-            runtime_context_module._RUNTIME_CONTEXT = self._previous
+            set_runtime_context(self._previous)
 
     return _Ctx()
 

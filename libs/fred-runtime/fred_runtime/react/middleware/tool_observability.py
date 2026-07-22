@@ -181,7 +181,7 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         the ReBAC check here would reject an identity that was never meant to
         hold one. The flag is computed once from the trusted JWT at turn start
         and threaded through `PortableContext.baggage` — never re-derived from
-        anything caller-suppliable at this layer.
+        anything caller-supplied at this layer.
 
         Scope: authorizes the *team* a call is scoped to, not any specific
         resource a tool argument may reference (e.g. a document_uid) — that

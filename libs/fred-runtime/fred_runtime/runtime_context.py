@@ -218,7 +218,7 @@ class RuntimeContext:
 _RUNTIME_CONTEXT: RuntimeContext | None = None
 
 
-def set_runtime_context(context: RuntimeContext) -> None:
+def set_runtime_context(context: RuntimeContext | None) -> None:
     """
     Set the global runtime context for fred-runtime adapters.
 
@@ -228,6 +228,8 @@ def set_runtime_context(context: RuntimeContext) -> None:
 
     How to use it:
     - call once during app startup after configuration is loaded
+    - `None` is accepted so tests can restore the pre-test state (including
+      "never set") without reaching into the private `_RUNTIME_CONTEXT` global
     """
 
     global _RUNTIME_CONTEXT
