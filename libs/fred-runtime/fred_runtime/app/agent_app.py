@@ -2552,6 +2552,7 @@ async def _iterate_runtime_event_payloads(
             runtime = GraphRuntime(
                 definition=definition,
                 services=services,
+                capability_block=capability_block,
             )
             runtime.bind(binding)
             await runtime.activate()

@@ -357,10 +357,58 @@ instead of silently shadowing. `GraphRuntime` itself still isn't
 constructed with `capability_block=` anywhere — the one call site in
 `agent_app.py` (~line 2551) is untouched, exactly as scoped; that's Phase 5.
 
-### Phase 5 — wire it at the one call site
-File: `agent_app.py` (~line 2531-2535), the only place that constructs
-`GraphRuntime` — pass `capability_block=capability_block` (already computed
-above for the ReAct branch).
+### Phase 5 — wire it at the one call site — DONE (2026-07-22)
+File: `libs/fred-runtime/fred_runtime/app/agent_app.py`
+
+- Confirmed by reading the full enclosing function
+  (`_iterate_runtime_event_payloads`, module-level, not a class method as the
+  plan's "~line 2531-2535"/"class" framing loosely implied): `capability_block`
+  is computed once, unconditionally, at line 2525 — before the
+  `if isinstance(definition, GraphAgentDefinition): ... else: ...` split at
+  line 2551 — and is already passed to `ReActRuntime(...)` in the `else`
+  branch. It is in scope, correctly typed (`CapabilityAgentBlock | None`), and
+  computed identically for both agent kinds (Phase 3's doing). No mismatch
+  with the plan's assumption; exactly the "verify, don't assume" check came
+  back clean.
+- The one-line change: `GraphRuntime(definition=definition, services=services)`
+  → `GraphRuntime(definition=definition, services=services,
+  capability_block=capability_block)`. No other line touched. Grepped the file
+  for stale "Graph agents never get capabilities"-style comments near the
+  call site and file-wide (`graph.*never`, `ReAct-only`, `only supported on
+  ReAct`) — none found; Phase 3 already cleaned up the only such comment
+  (the `_build_capability_block` docstring).
+
+Tests: searched for any existing test exercising `_iterate_runtime_event_payloads`
+(the function containing this call site) un-mocked, for either agent kind —
+none exists. Every test that touches it (`test_agent_app.py`,
+`test_capability_chat_controls_1976.py`, etc.) monkeypatches the whole
+function out; there is no precedent test, ReAct or Graph, that drives a real
+turn through it. Building one would require real `RuntimeServices`
+construction (`_build_runtime_services`: real `get_runtime_context().config`,
+`FredMcpToolProvider`, `FredKnowledgeSearchToolInvoker`, chat model factory,
+etc.) — large new scaffolding with no existing pattern to extend, exactly the
+"awkward, don't force it" case the task called out. No new test added here;
+relying on the existing chain of unit coverage instead:
+`test_build_capability_block_for_graph_agent_returns_tools` (Phase 3, proves
+the block builds for a Graph agent) + `test_graph_capability_bridge.py`'s
+`build_executor` tests (Phase 4, proves a `GraphRuntime` constructed *with*
+`capability_block=` merges and adapts its tools correctly end to end through
+`invoke_runtime_tool`) together prove every link this one-line wire now
+connects for real. Validation: `cd libs/fred-runtime && make code-quality &&
+make test` — both green, 592 tests passed (Phase 4 baseline, unchanged —
+no new test, no regressions).
+
+**End-to-end confirmation:** with this change, a Graph agent that selects a
+capability now genuinely gets, for the first time: capability selection
+resolved (Phase 3) → `CapabilityAgentBlock` built with real tools (Phase 2)
+→ tools adapted and merged into `runtime_tools` at `GraphRuntime.build_executor`
+time (Phase 4) → **that `GraphRuntime` is now actually constructed with the
+block that makes this happen** (Phase 5, this change) → callable from a graph
+node via `context.invoke_runtime_tool(tool_name, args)` with sources/blocks
+intact. The full bridge is real end to end, not just phase-by-phase unit
+coverage — the only untested seam is the outer HTTP/streaming plumbing
+(`_iterate_runtime_event_payloads` itself), which is unrelated to the bridge
+and, per above, has zero test precedent either way today.
 
 ### Phase 6 — end-to-end proof
 - Extend `apps/fred-agents/fred_agents/test_assistant/graph_agent.py` with a
@@ -479,11 +527,22 @@ capability tools into `runtime_tools`. Nothing outside
 `graph_runtime.py`/its tests was touched — `agent_app.py`'s one
 `GraphRuntime(...)` call site still doesn't pass `capability_block=`.
 
-Next action: Phase 5 (wire `capability_block=capability_block` into the one
-`GraphRuntime(...)` construction call in `agent_app.py`, ~line 2551 — the
-`capability_block` local is already computed above that call for the ReAct
-branch, per Phase 3's end-state note). No known open design questions remain
-for Phase 5 — Phase 4 closed the last one (plain-dict-invocation adapter +
-MCP-collision) flagged by earlier phases. Phase 6 (end-to-end proof agent
-scenario) still has its `DemoEchoCapability` migration TODO pending, flagged
-in the Phase 2 section above.
+Phase 5 implemented and verified (2026-07-22): `libs/fred-runtime` passes
+`make code-quality && make test` (592 tests, same count as the Phase 4
+baseline — no new test, zero regressions; see the Phase 5 section above for
+why no new test was added). The one `GraphRuntime(...)` construction in
+`agent_app.py`'s `_iterate_runtime_event_payloads` now passes
+`capability_block=capability_block`. **The bridge is complete and real
+end to end**: a Graph agent selecting a capability now has its tools resolved,
+built, adapted, merged into `runtime_tools`, AND actually delivered to the
+constructed `GraphRuntime` for that turn — a graph node's
+`context.invoke_runtime_tool(...)` reaches the real tool with sources intact.
+This was individually proven phase-by-phase (Phases 2-4's unit tests) and is
+now wired together for real by this change, not merely composed on paper.
+
+Next action: Phase 6 (end-to-end proof agent scenario in
+`apps/fred-agents/fred_agents/test_assistant/graph_agent.py`, dispatched
+separately). It still has the `DemoEchoCapability` migration TODO pending
+from Phase 2 (migrate it from `middleware()`-override to `tools()` so the
+in-tree reference capability matches the convention every future capability
+author copies) — flag this again when picking up Phase 6.
