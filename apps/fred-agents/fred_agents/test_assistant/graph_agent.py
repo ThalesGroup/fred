@@ -37,6 +37,14 @@ Tool coverage:
   declared_tool_refs   knowledge.search (required=True, locked)
                        artifacts.publish_text (required=False, toggleable)
 
+Capability coverage:
+  document scenario   AgentCapability tool invocation via
+                       context.invoke_runtime_tool (NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+                       "document_access" is selected per-instance via
+                       tuning.selected_capability_ids — NOT declared on this
+                       class the way default_mcp_servers is. Degrades to a
+                       helpful message when the capability isn't selected.
+
 Workflow overview (keyword-routed by dispatch_step):
 
     dispatch
@@ -50,6 +58,7 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ long        ──► long_step         ──► finalize
      ├─ files       ──► files_step        ──► finalize
      ├─ geo         ──► geo_step          ──► finalize
+     ├─ document    ──► document_step     ──► finalize
      └─ fallback    ──► fallback_step     ──► finalize
 
 No model provider is needed. No MCP servers are required.
@@ -75,6 +84,7 @@ from pydantic import BaseModel
 from .graph_state import TestInput, TestState
 from .graph_steps import (
     dispatch_step,
+    document_step,
     echo_step,
     error_step,
     fallback_step,
@@ -94,7 +104,7 @@ _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords to trigger a scenario:\n"
     "  echo | model | planning | hitl choice | hitl text | "
-    "trace | error | think | markdown | long | files | geo\n\n"
+    "trace | error | think | markdown | long | files | geo | document\n\n"
     "Any other message shows this help menu."
 )
 
@@ -332,6 +342,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "long": long_step,
             "files": files_step,
             "geo": geo_step,
+            "document": document_step,
             "fallback": fallback_step,
             "finalize": finalize_step,
         },
@@ -346,6 +357,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "long": "finalize",
             "files": "finalize",
             "geo": "finalize",
+            "document": "finalize",
             "fallback": "finalize",
         },
         error_routes={
@@ -365,6 +377,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "long": "long",
                 "files": "files",
                 "geo": "geo",
+                "document": "document",
                 "fallback": "fallback",
             },
         },

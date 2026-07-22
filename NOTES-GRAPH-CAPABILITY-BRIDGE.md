@@ -1,5 +1,11 @@
 # NOTES — Graph agents ↔ AgentCapability bridge (branch `consolidation-22-07`)
 
+**Status: COMPLETE (2026-07-22).** All 6 phases implemented and verified —
+Graph agents can select and use `AgentCapability`-based tools end to end
+(capability selection → block assembly → adapter → wiring → a real agent
+scenario proving it), and the Phase 2 `DemoEchoCapability` TODO is resolved.
+See the Status section at the bottom for the full phase-by-phase record.
+
 Tracker for the in-progress work making `AgentCapability` (currently ReAct-only for
 its tool-carrying half) usable from Graph agents too, without polluting the Graph
 SDK surface. Companion to the chat conversation that produced it — this file is the
@@ -182,14 +188,18 @@ That said, this was NOT verified with the same rigor as `document_access`
 untested assumption, not a settled fact. Its tool is invisible to
 `CapabilityAgentBlock.tools` as things stand (it declares no `hitl_specs`,
 so nothing currently reads it through that field either).
-**Action needed before this bridge is considered complete for the general
-case (not just `document_access`):** migrate `DemoEchoCapability` to
-`tools()` the same way Phase 1 migrated `document_access`, specifically
-because it's the reference implementation every future capability author
-copies — leaving it on the old pattern signals the wrong convention by
-example. Do this as part of Phase 6 (end-to-end proof) or as an explicit
-follow-up immediately after; do not close out this NOTES file with it still
-pending.
+**Resolved in Phase 6 (2026-07-22):** `DemoEchoCapability` is migrated to
+`tools()`, the same way Phase 1 migrated `document_access` — `_DemoEchoMiddleware`
+deleted, its body moved verbatim into a `tools()` method, `middleware()` no
+longer overridden (the base class's default wrap now serves it). No behavior
+change: `demo_echo`'s own return convention (`@tool(...,
+response_format="content_and_artifact")`) is untouched, exactly as Phase 1
+settled for `document_access`. The one pre-existing test that reaches into
+`.middleware(ctx)` directly (`test_capability_chat_parts_1977.py::test_demo_tool_emits_demo_card_part_as_artifact`,
+which does `(middleware,) = capability.middleware(ctx); (demo_tool,) =
+middleware.tools`) needed **zero changes** — the default `_ToolCarrierMiddleware`
+wrap serves the same shape, exactly as Phase 1 found for `document_access`'s
+equivalent test. See the Phase 6 section below for the full validation.
 
 Validation: `cd libs/fred-runtime && make code-quality && make test` — both
 green, 583 tests passed (up from 569 pre-Phase-1-merge baseline + 14 new/moved
@@ -410,14 +420,107 @@ coverage — the only untested seam is the outer HTTP/streaming plumbing
 (`_iterate_runtime_event_payloads` itself), which is unrelated to the bridge
 and, per above, has zero test precedent either way today.
 
-### Phase 6 — end-to-end proof
-- Extend `apps/fred-agents/fred_agents/test_assistant/graph_agent.py` with a
-  scenario: node calls `document_access`'s tool via `invoke_runtime_tool`, then
-  a `choice_step` HITL gate, then branches on the answer — `document_access`
-  selected via `tuning.selected_capability_ids`, not `default_mcp_servers`.
-- Unit tests: update `test_capability_document_access_1906.py` for the new
-  `tools()` contract; add a `test_graph_capability_bridge.py` verifying
-  `GraphRuntime` exposes capability tools to `invoke_runtime_tool`.
+### Phase 6 — end-to-end proof — DONE (2026-07-22)
+
+**A — `test_assistant` "document" scenario.**
+Files: `apps/fred-agents/fred_agents/test_assistant/{graph_agent,graph_state,graph_steps}.py`.
+
+Added one new scenario, keyword `document` (reused the existing `test_assistant`
+— no new sample agent, per the developer's explicit instruction), mirroring the
+file's existing conventions exactly (docstrings, keyword lists, the workflow
+diagram, `TestState` field reuse, the `choice_step`/`hitl_choice_step` HITL
+pattern):
+
+- `document_step` (new node in `graph_steps.py`): calls
+  `context.invoke_runtime_tool("search_documents_using_vectorization",
+  {"question": ..., "top_k": 3})` — the question is the text after the
+  `document` keyword, or a built-in probe (`"What is Fred?"`) when the user
+  supplies none.
+- **Graceful failure (capability not selected):** `document_access` is a
+  managed-instance selection (`tuning.selected_capability_ids`), never
+  declared on `TestAssistantGraphAgent` the way `default_mcp_servers` is. When
+  it isn't selected, `invoke_runtime_tool` raises `RuntimeError("Runtime tool
+  '...' is not available.")` (`GraphRuntime.invoke_runtime_tool`); `document_step`
+  catches exactly that `RuntimeError` (no broader `except Exception` — no
+  other failure mode is real here, per the task's own scoping) and returns a
+  helpful `final_text` telling the tester to enable "Document access" on this
+  instance, `done_reason="document_capability_unavailable"`. No crash, no
+  swallowed exception class.
+- **On success:** the adapted tool's normalized result is a dict
+  (`ToolInvocationResult.model_dump(mode="json")`, Phase 4's finding); the
+  top hit's title/score/content are shown and the node pauses on a
+  `choice_step` HITL gate (`stage="test_document_confirm"`, choices
+  `confirm` / `discard`) — reusing the exact `choice_step` helper
+  `hitl_choice_step` already uses, no new HITL plumbing.
+- **Branch on resume:** `confirm` writes the hit(s) into the existing
+  `sources_data` state field (the same field `trace_step` already uses to
+  feed `build_output`'s Sources-panel conversion — reused, not duplicated)
+  and a confirmation `final_text`; `discard` returns a discard `final_text`;
+  no selection (`None`) mirrors `hitl_choice_step`'s own `None` handling.
+  All three converge on `finalize` like every other scenario.
+- **No new `TestState` field was needed** for "stashing" the search result
+  across the HITL pause: this deterministic graph re-runs a node from its
+  start on resume (`_DeterministicGraphExecutor._execute_loop` re-invokes the
+  whole handler with the captured pre-interrupt state; `request_human_input`
+  short-circuits to the resume payload only on the second pass) — so the
+  search naturally (and safely, given the fake/deterministic port in tests)
+  re-executes on resume, and `sources_data` is populated only once the node
+  actually completes with a `confirm` outcome. Investigated empirically
+  before deciding not to add a field, per the task's own quality bar
+  ("prefer less code over more").
+- Updated in lockstep: the module docstring's keyword list, the workflow
+  ASCII diagram, `_DEFAULT_SYSTEM_PROMPT`'s scenario list, `graph_steps.py`'s
+  module-level scenario-routing docstring and `dispatch_step`'s own
+  docstring/elif-chain, `_SCENARIO_TABLE` (fallback help text), and
+  `graph_state.py`'s trigger-keyword list + `sources_data`'s field comment.
+
+**B — `DemoEchoCapability` migration to `tools()`.**
+File: `libs/fred-runtime/fred_runtime/capabilities/demo.py`. See the Phase 2
+section above (the TODO note) for the resolution: `_DemoEchoMiddleware`
+deleted, its body moved into a `tools()` method, `middleware()` no longer
+overridden. Zero behavior change; zero test changes needed.
+
+**Tests (offline, mocked ports — no live Knowledge Flow backend, pod, or
+docker, per established practice this session):**
+
+`apps/fred-agents/tests/test_test_assistant_document_scenario.py` (new file,
+2 tests) — the full user scenario proven through REAL code, not a hand-rolled
+mock of the bridge:
+- builds a real `CapabilityRegistry` with `DocumentAccessCapability`
+  registered, a fake `DocumentSearchPort` returning one known hit,
+  `build_capability_contexts(..., selected_capability_ids=["document_access"])`
+  + `build_capability_agent_block(...)` (both real, from
+  `fred_runtime.capabilities.assembly`) — exactly how `agent_app.py` would
+  assemble the block for a managed instance;
+- constructs a real `GraphRuntime(definition=TestAssistantGraphAgent(),
+  services=..., capability_block=block)`, binds it, and drives the actual
+  `Executor.stream(...)` twice: first call runs "document ..." through to the
+  `AwaitingHumanRuntimeEvent` (asserts `stage == "test_document_confirm"` and
+  the two choice ids), second call resumes with
+  `resume_payload={"choice_id": "confirm"}` and asserts the `FinalRuntimeEvent`
+  carries the confirmed title in `.content` and the hit's `uid` in `.sources` —
+  proving search → HITL → branch survives the real
+  assembly/adapter/merge/wiring chain (Phases 2-5) on a genuine
+  end-user-shaped agent, not just an internal test fixture.
+- a second test constructs the same `GraphRuntime` with NO capability block at
+  all (nobody selected `document_access` on this instance) and asserts the
+  first turn's `FinalRuntimeEvent.content` is the helpful "enable Document
+  access" message — the graceful-failure path, proven end to end too.
+
+Validation:
+```
+cd libs/fred-runtime && make code-quality && make test   # 592 passed, zero regressions (Phase 5 baseline, unchanged)
+cd apps/fred-agents && make code-quality && make test    # 42 passed (40 pre-existing + 2 new)
+```
+
+**End state:** the bridge designed in Phases 1-5 is now proven on a real,
+user-recognizable agent scenario a developer can manually try in the chat UI
+(send `document` to `fred.github.test_assistant` on an instance with
+"Document access" selected) and the in-tree reference capability
+(`demo.py`) matches the `tools()`-primary convention every future capability
+author copies. Nothing outside the four touched files
+(`graph_agent.py`, `graph_state.py`, `graph_steps.py`, `demo.py`) plus the one
+new test file was changed.
 
 ### Explicitly out of scope for this prototype
 - Chat controls / composer widgets for Graph (library picker in the chat UI) —
@@ -540,9 +643,20 @@ constructed `GraphRuntime` for that turn — a graph node's
 This was individually proven phase-by-phase (Phases 2-4's unit tests) and is
 now wired together for real by this change, not merely composed on paper.
 
-Next action: Phase 6 (end-to-end proof agent scenario in
-`apps/fred-agents/fred_agents/test_assistant/graph_agent.py`, dispatched
-separately). It still has the `DemoEchoCapability` migration TODO pending
-from Phase 2 (migrate it from `middleware()`-override to `tools()` so the
-in-tree reference capability matches the convention every future capability
-author copies) — flag this again when picking up Phase 6.
+Phase 6 implemented and verified (2026-07-22): `libs/fred-runtime` passes
+`make code-quality && make test` (592 tests, unchanged from the Phase 5
+baseline — Phase 6 touched no fred-runtime source, only `demo.py`, which
+needed zero new tests); `apps/fred-agents` passes `make code-quality && make
+test` (42 tests, 40 pre-existing + 2 new). `test_assistant` gained a
+`document` scenario proving the full bridge (search → HITL confirm/discard →
+branch) end to end on a real `GraphRuntime` + real `CapabilityAgentBlock`,
+including the graceful-failure path when `document_access` isn't selected on
+the instance. `DemoEchoCapability` is migrated to `tools()`, closing the
+Phase 2 TODO — the in-tree reference capability now matches the convention
+every future capability author copies, with zero behavior change and zero
+test changes. See the Phase 6 section above for full detail.
+
+**This completes the plan.** All 6 phases are implemented and verified; no
+further action is pending on this NOTES file. Out-of-scope items (chat
+controls/composer widgets for Graph, frontend Tools-tab picker filtering,
+`McpCapability` changes) remain explicitly out of scope, as stated above.

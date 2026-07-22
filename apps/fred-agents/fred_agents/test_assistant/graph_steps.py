@@ -29,6 +29,7 @@ Scenario routing (handled by dispatch_step):
   "long"        → dispatch routes "long"         → long_step        → finalize
   "files"       → dispatch routes "files"        → files_step       → finalize
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
+  "document"    → dispatch routes "document"    → document_step    → finalize
   (other)       → dispatch routes "fallback"     → fallback_step    → finalize
 """
 
@@ -169,6 +170,7 @@ async def dispatch_step(
       "long"        → long_step
       "files"       → files_step
       "geo"         → geo_step
+      "document"    → document_step
       "fallback"    → fallback_step
     """
     planning = context.tuning_values.get("prompts.planning", "")
@@ -203,6 +205,8 @@ async def dispatch_step(
         scenario = "files"
     elif text.startswith("geo"):
         scenario = "geo"
+    elif text.startswith("document"):
+        scenario = "document"
     else:
         scenario = "fallback"
 
@@ -1421,6 +1425,116 @@ async def geo_step(
     )
 
 
+# ── Step: document ────────────────────────────────────────────────────────────
+
+_DOCUMENT_PROBE_QUESTION = "What is Fred?"
+
+
+@typed_node(TestState)
+async def document_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Search documents through the `document_access` capability's
+    `search_documents_using_vectorization` tool via `context.invoke_runtime_tool`
+    (the Graph <-> AgentCapability bridge, NOTES-GRAPH-CAPABILITY-BRIDGE.md),
+    then pause on a HITL choice to confirm or discard the top hit.
+
+    Unlike `default_mcp_servers`, this tool is not declared on the agent
+    class — `document_access` must be selected per-instance via
+    `tuning.selected_capability_ids`. When it isn't, `invoke_runtime_tool`
+    raises `RuntimeError('Runtime tool ... is not available.')`; this step
+    catches that and degrades to a helpful final_text instead of crashing
+    the node.
+
+    Content: the text after the `document` keyword, or a built-in probe
+    question when the user supplies none.
+
+    SSE events exercised: status (x2), tool_call/tool_result (from
+    invoke_runtime_tool), awaiting_human (choice), final (confirm/discard
+    branch — sources attached only when confirmed).
+    """
+    delay = _delay_seconds(context)
+    remainder = state.latest_user_text.strip()[len("document") :].strip()
+    question = remainder or _DOCUMENT_PROBE_QUESTION
+
+    context.emit_status("document", f"Searching documents for: {question}")
+    await asyncio.sleep(0.05 + delay)
+
+    try:
+        result = await context.invoke_runtime_tool(
+            "search_documents_using_vectorization",
+            {"question": question, "top_k": 3},
+        )
+    except RuntimeError as exc:
+        return StepResult(
+            state_update={
+                "final_text": (
+                    "**Document search is unavailable on this agent instance.**\n\n"
+                    'Enable the "Document access" capability on this instance '
+                    "(`tuning.selected_capability_ids`), then try again.\n\n"
+                    f"_Detail: {exc}_"
+                ),
+                "done_reason": "document_capability_unavailable",
+            }
+        )
+
+    sources = result.get("sources") if isinstance(result, dict) else None
+    hits = list(sources) if sources else []
+    if not hits:
+        return StepResult(
+            state_update={
+                "final_text": f"No documents matched: _{question}_.",
+                "done_reason": "document_no_hits",
+            }
+        )
+
+    top_hit = hits[0]
+    title = top_hit.get("title", "untitled")
+    score = top_hit.get("score", 0.0)
+    content = top_hit.get("content", "")
+
+    context.emit_status("document", "Awaiting confirmation of the top hit.")
+    choice_id = await choice_step(
+        context,
+        stage="test_document_confirm",
+        title="Test HITL — Confirm Document Result",
+        question=(
+            f"**Top hit:** {title} (score {score:.2f})\n\n{content}\n\n"
+            "Keep this result, or discard it?"
+        ),
+        choices=[
+            HumanChoiceOption(id="confirm", label="Confirm — keep this result"),
+            HumanChoiceOption(id="discard", label="Discard — not relevant"),
+        ],
+    )
+
+    if choice_id == "confirm":
+        return StepResult(
+            state_update={
+                "sources_data": hits,
+                "final_text": (
+                    f"Document search confirmed. Keeping **{title}** as the answer source."
+                ),
+                "done_reason": "document_confirmed",
+            }
+        )
+    if choice_id == "discard":
+        return StepResult(
+            state_update={
+                "final_text": "Document search result discarded at your request.",
+                "done_reason": "document_discarded",
+            }
+        )
+    return StepResult(
+        state_update={
+            "final_text": "Document confirmation test: no selection received (None).",
+            "done_reason": "document_none",
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -1437,7 +1551,8 @@ _SCENARIO_TABLE = """\
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
-| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (interactive map) |"""
+| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (interactive map) |
+| `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |"""
 
 
 @typed_node(TestState)

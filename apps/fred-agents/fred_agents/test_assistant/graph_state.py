@@ -29,6 +29,10 @@ Trigger keywords (case-insensitive prefix match):
   long          → ~30 short sentences streamed word-by-word
   files         → unified /fs round-trip: write to the agent's space, read back, list
   geo           → renders a sample GeoJSON FeatureCollection as a GeoPart ui_part
+  document      → search via the document_access capability's tool
+                  (context.invoke_runtime_tool), then a HITL confirm/discard
+                  gate on the top hit — degrades to a helpful message when the
+                  capability isn't selected on this agent instance
   (anything else) → fallback with scenario list
 """
 
@@ -54,7 +58,8 @@ class TestState(BaseModel):
     # Accumulated free-text HITL reply (written by hitl_text step)
     human_text_reply: str = ""
 
-    # Mock sources written by trace_step; consumed by build_output override
+    # Sources written by trace_step (mock) or document_step (real capability
+    # hit, only on confirm); consumed by build_output override
     sources_data: list[dict[str, object]] = Field(default_factory=list)
 
     # LinkPart ui_parts written by files_step; consumed by build_output override

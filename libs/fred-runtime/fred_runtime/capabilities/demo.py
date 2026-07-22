@@ -47,7 +47,6 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.context import ToolInvocationResult, UiPart
 from fred_sdk.contracts.models import FieldSpec
-from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
 from sqlalchemy import Boolean, DateTime, String
@@ -150,33 +149,6 @@ class DemoCardPart(BaseModel):
     body: str = ""
 
 
-class _DemoEchoMiddleware(AgentMiddleware):
-    """Carries the `demo_echo` tool, bound to the instance's typed config."""
-
-    def __init__(self, ctx: CapabilityContext[DemoEchoConfig, EmptyModel]) -> None:
-        super().__init__()
-        config = ctx.config
-
-        @tool(response_format="content_and_artifact")
-        def demo_echo(text: str) -> tuple[str, ToolInvocationResult]:
-            """Echo the given text back to the conversation."""
-
-            content = text.upper() if config.uppercase else text
-            # The artifact carries the capability's chat part; the runtime
-            # merges `ui_parts` onto the tool_result/final events (#1977).
-            # The cast is the reference pattern for capability parts: the
-            # static `UiPart` alias is the frozen base union, while the
-            # registry extends the RUNTIME union with this part at boot.
-            artifact = ToolInvocationResult(
-                tool_ref="demo_echo",
-                ui_parts=(cast(UiPart, DemoCardPart(title="Demo echo", body=content)),),
-            )
-            return content, artifact
-
-        tools: Sequence[BaseTool] = [demo_echo]
-        self.tools = tools
-
-
 class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyModel]):
     """One static tool + one scalar config field (RFC §3, tracer for #1973)."""
 
@@ -211,7 +183,32 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
 
         return str(Path(__file__).resolve().parent / "demo_migrations")
 
-    def middleware(
+    def tools(
         self, ctx: CapabilityContext[DemoEchoConfig, EmptyModel]
-    ) -> list[AgentMiddleware]:
-        return [_DemoEchoMiddleware(ctx)]
+    ) -> Sequence[BaseTool]:
+        """
+        The `demo_echo` tool, bound to the instance's typed config. This is
+        the capability's ONLY runtime contribution — `AgentCapability.middleware()`'s
+        default wraps this for `create_agent()`; no ReAct-loop-specific hook
+        is needed (mirrors `DocumentAccessCapability.tools`).
+        """
+
+        config = ctx.config
+
+        @tool(response_format="content_and_artifact")
+        def demo_echo(text: str) -> tuple[str, ToolInvocationResult]:
+            """Echo the given text back to the conversation."""
+
+            content = text.upper() if config.uppercase else text
+            # The artifact carries the capability's chat part; the runtime
+            # merges `ui_parts` onto the tool_result/final events (#1977).
+            # The cast is the reference pattern for capability parts: the
+            # static `UiPart` alias is the frozen base union, while the
+            # registry extends the RUNTIME union with this part at boot.
+            artifact = ToolInvocationResult(
+                tool_ref="demo_echo",
+                ui_parts=(cast(UiPart, DemoCardPart(title="Demo echo", body=content)),),
+            )
+            return content, artifact
+
+        return [demo_echo]
