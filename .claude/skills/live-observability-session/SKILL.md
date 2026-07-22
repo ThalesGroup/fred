@@ -110,21 +110,59 @@ session if it's been a while — it's the target spec, not always the current di
    supposed to appear in either stream — check for it if you're chasing a content-leak report).
 3. **KPIs / metrics** — operational KPIs only, never prompt/response content. This stack has no
    standalone Prometheus (see Preconditions), so read them by curling each backend's own metrics
-   endpoint directly, e.g. `curl localhost:8222/metrics` (control-plane), `localhost:8111/metrics`
-   (knowledge-flow), `localhost:8000/metrics` (fred-agents) — grep the raw Prometheus-exposition
-   text output for the metric name you care about. `fred-evaluation-backend` (8336) is the
-   exception — its prod config disables `prometheus`, so it has no `/metrics` route; don't curl
-   it, its signal is stdout only. If the developer's session *does* have a real
-   Prometheus reachable (a different, non-default setup), `curl localhost:9090/api/v1/query?query=...`
-   works the same way — don't assume either way, check the port first. Every label actually
-   reaching the KPI store is filtered through `PROMETHEUS_ALLOWED_LABELS` in
-   `libs/fred-core/fred_core/kpi/prometheus_kpi_store.py` — if a finding claims a label is
-   missing or present, check that allow-list before concluding anything; it's an enforced
-   allow-list, not a convention callers might violate.
+   endpoint directly. **The metrics port is not always the API port — check each app's own
+   `configuration_prod.yaml` (`logging.prometheus.port`), never assume it equals the API port:**
+
+   | App | API port | Metrics port | Source |
+   |---|---|---|---|
+   | control-plane-backend | 8222 | **9222** | `configuration_prod.yaml` → `logging.prometheus.port` |
+   | knowledge-flow-backend | 8111 | **9111** | same |
+   | fred-agents | 8000 | none | no `logging`/`prometheus` block at all in `configuration_prod.yaml` — this app does not expose metrics in this stack, not merely "disabled" |
+   | fred-evaluation-backend | 8336 | none | `logging.prometheus.enabled: false` (see above) |
+
+   e.g. `curl localhost:9222/metrics` (control-plane), `curl localhost:9111/metrics`
+   (knowledge-flow) — grep the raw Prometheus-exposition text output for the metric name you care
+   about. Don't curl `fred-agents` or `fred-evaluation-backend` for metrics — neither exposes a
+   `/metrics` route in this stack, for two different reasons (see table). If the developer's
+   session *does* have a real Prometheus reachable (a different, non-default setup), `curl
+   localhost:9090/api/v1/query?query=...` works the same way — don't assume either way, check the
+   port first. Every label actually reaching the KPI store is filtered through
+   `PROMETHEUS_ALLOWED_LABELS` in `libs/fred-core/fred_core/kpi/prometheus_kpi_store.py` — if a
+   finding claims a label is missing or present, check that allow-list before concluding anything;
+   it's an enforced allow-list, not a convention callers might violate.
 
 Metric name note: dots are sanitized to underscores on the wire (`llm.call_latency_ms` in code →
 `llm_call_latency_ms` both in the raw `/metrics` exposition text and in a PromQL query, if one is
 available).
+
+## Watching KPI hygiene and completeness, not just a one-shot curl
+
+A single `curl .../metrics` only tells you the KPI state at the instant you ran it — it won't tell
+you whether an action the developer just took in the UI actually produced the expected metric, or
+whether an unexpected label slipped past `PROMETHEUS_ALLOWED_LABELS`. Treat metrics as a third live
+stream to watch continuously via **Monitor**, the same way stdout is — not as an on-demand lookup
+done once at session start and never revisited.
+
+Diff-poll each exposing app's metrics endpoint (correct port — see table above) and emit only what
+changed, the same "poll external state, emit one line per new thing" pattern Monitor uses for
+polling a GitHub PR for new comments:
+
+    prev=""
+    while true; do
+      cur=$(curl -s --max-time 3 http://localhost:9222/metrics | grep -v '^#')
+      diff <(echo "$prev") <(echo "$cur") | grep -E '^[<>]' || true
+      prev="$cur"
+      sleep 5
+    done
+
+Run one such loop per app that actually exposes `/metrics` (control-plane, knowledge-flow in this
+stack — not fred-agents or fred-evaluation-backend). Use it to confirm, in near-real time as the
+developer drives the UI: a new metric family appears the first time an action fires it
+(completeness — did this action actually emit a KPI at all), a counter/histogram that should
+increment on a given action actually does (correctness), and no label value shows up that isn't in
+`PROMETHEUS_ALLOWED_LABELS` (hygiene). Report a finding the same way as any other — reproduction,
+extract (the diff line), channel (`KPIs`), classification — don't just note "metrics look fine"
+without a concrete diff to back it.
 
 ## The protocol
 

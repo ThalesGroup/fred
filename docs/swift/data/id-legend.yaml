@@ -979,6 +979,18 @@ items:
       (shape-detection + tool_use filtering). Offline suites green
       (fred-sdk 233, fred-runtime 565, frontend 503), all code-quality green.
 
+      **Amendment (2026-07-22).** Manual UI testing found the Monaco JSON
+      pane heavy (forced `vs-dark`, editor chrome, imposed fixed heights) for
+      a 3-line payload, with a scattered copy button per view. `InlineDrawer`
+      gained a `headerActions` slot (next to the close button) hosting a
+      single copy action — SQL query text for the SQL view, curated JSON for
+      the generic fallback, nothing for RAG (sources are browsed via
+      `SourcesPanel`). The generic fallback and the SQL row preview now
+      render through `CodeBlock` instead of `MonacoPane`. `MonacoPane` is no
+      longer referenced anywhere in the frontend — the atom and its
+      `@monaco-editor/react`/`monaco-editor` dependencies were removed
+      entirely (`npm install` regenerated `package-lock.json`).
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01
