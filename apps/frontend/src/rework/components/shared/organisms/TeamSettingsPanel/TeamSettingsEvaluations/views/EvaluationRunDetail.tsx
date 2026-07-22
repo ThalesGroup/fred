@@ -522,6 +522,10 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
+    // navigator.clipboard is undefined in non-secure contexts (plain HTTP,
+    // except localhost), older browsers, and some test DOM environments —
+    // accessing .writeText on it would throw synchronously.
+    if (!navigator.clipboard) return;
     navigator.clipboard
       .writeText(JSON.stringify(caseData, null, 2))
       .then(() => {
