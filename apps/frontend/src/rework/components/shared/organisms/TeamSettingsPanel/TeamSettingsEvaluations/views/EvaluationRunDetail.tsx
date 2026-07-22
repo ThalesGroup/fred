@@ -520,6 +520,15 @@ export default function EvaluationRunDetail({
 
 function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: ReturnType<typeof useTranslation>["t"] }) {
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear a pending "reset to idle" timer on unmount (drawer closed within
+  // the 2s window) so it can't fire setCopied after this component is gone.
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
 
   const handleCopy = () => {
     // navigator.clipboard is undefined in non-secure contexts (plain HTTP,
@@ -530,7 +539,8 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
       .writeText(JSON.stringify(caseData, null, 2))
       .then(() => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
       })
       .catch(() => {});
   };
