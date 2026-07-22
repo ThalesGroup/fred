@@ -192,7 +192,9 @@ _FILL_INSTRUCTIONS = (
     "there — derive the values from the conversation and, when a field "
     "description points at documents, from the document tools (search, "
     "summarize, tree) before calling. Only ask the user for values you "
-    "genuinely cannot derive."
+    "genuinely cannot derive. Keep every value SLIDE-READABLE: a few short "
+    "bullet lines, telegraphic style — never paragraphs or exhaustive lists; "
+    "a slide is not a document."
 )
 
 
