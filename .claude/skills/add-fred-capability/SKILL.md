@@ -28,13 +28,28 @@ Do not skip this. Open and skim:
   `TeamScopePolicy`, `UploadedFile`; `FieldSpec` lives in `fred_sdk.contracts.models`),
   `context.py` (`CapabilityContext`, `CapabilityIdentity`, `SaveContext`, `EmptyModel`),
   `hitl.py` (`HitlSpec`). Platform ports: `fred_sdk/contracts/runtime.py`
-  (`RuntimeServices`, `DocumentSearchPort`).
+  (`RuntimeServices`, `DocumentSearchPort`, `DocumentTreePort`,
+  `DocumentSummarizePort`, `DocumentPortCallError` — adapters map transport
+  failures onto that typed error so capability tools can render `is_error`
+  results without importing any HTTP stack).
 - **The canonical worked example** — `libs/fred-runtime/fred_runtime/capabilities/document_access/capability.py`
   (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
   typed port, config-field scoping, one computed chat control. **Copy its shape.**
 - **The minimal tracer** — `libs/fred-runtime/fred_runtime/capabilities/demo.py`
   (`DemoEchoCapability`): one static tool + one config field + router + owned table +
   chat part + side panel. The smallest full vertical.
+- **The out-of-tree / asset-bearing reference** — `libs/fred-capability-ppt-filler/`
+  (`PptFillerCapability`, #1903): its OWN pip package installed in the `fred-agents`
+  pod (entry point in its own `pyproject.toml`, uv path source in
+  `apps/fred-agents/pyproject.toml`); an `AssetSlot` upload parsed + stored in
+  `validate_config` via `ctx.services.agent_assets` (keys only, never bytes, in the
+  stored config); config-derived dynamic tool schemas; a custom form widget
+  (`FieldSpec.ui.widget` → frontend plugin `configWidgets`); a contributed chat part +
+  side panel; a stateless `/analyze` route on `manifest.router`. **Copy its shape for
+  any capability that ships as a package or uploads a file.** Note its `min_count=0`
+  trick: the platform slot gate runs on every save, so a mandatory asset is enforced
+  as `validate_config` content logic, not slot cardinality — otherwise every ordinary
+  edit would demand a re-upload.
 - **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).

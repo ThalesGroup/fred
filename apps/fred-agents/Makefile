@@ -16,6 +16,7 @@ include ../../scripts/makefiles/help.mk
 .PHONY: docker-build
 docker-build: ## Build the Docker image
 	docker build \
+		--network=$(API_DOCKER_NETWORK) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
@@ -33,26 +34,6 @@ run-docker: ## Run fred-agents in Docker (uses host network by default)
 docker-run: run-docker ## Backward-compatible alias for run-docker
 
 PORT ?= 8000
-##@ Docker
-
-.PHONY: docker-build
-docker-build: ## Build the Docker image
-	docker build \
-		-f $(DOCKERFILE_PATH) \
-		-t $(IMAGE_FULL) \
-		$(DOCKER_CONTEXT)
-
-.PHONY: run-docker
-run-docker: ## Run fred-agents in Docker (uses host network by default)
-	@echo "🚀 Running fred-agents in Docker..."
-	docker run --rm -it \
-		--name $(API_CONTAINER_NAME) \
-		--network $(API_DOCKER_NETWORK) \
-		-v $(realpath config):/app/config:ro \
-		$(IMAGE_FULL)
-
-.PHONY: docker-run
-docker-run: run-docker ## Backward-compatible alias for run-docker
 
 .PHONY: cli
 cli: dev ## Open the interactive CLI for a running agent pod

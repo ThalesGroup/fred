@@ -714,6 +714,11 @@
           ],
           "default": null,
           "title": "Pool"
+        },
+        "summarize_read": {
+          "default": 300.0,
+          "title": "Summarize Read",
+          "type": "number"
         }
       },
       "title": "RuntimeTimeouts",

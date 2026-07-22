@@ -996,6 +996,36 @@ precedence (no search at all).
 
 ---
 
+### 8.16 ✅ `agent_assets` / `document_content` / `document_folders` ports — #1903 PPT filler (July 2026)
+
+**What changed.** Three more OPTIONAL, additive ports on `RuntimeServices`
+(`fred_sdk/contracts/runtime.py`), same class of change and same §8.15 doctrine
+(scope/key parameters only; binding + token captured privately by the
+fred-runtime adapters):
+
+- `agent_assets: AgentAssetPort | None` — per-agent-instance config-asset
+  storage (`store`/`fetch`/`delete` by slot-relative key). Backed by the KF
+  virtual-filesystem sub-area `teams/{t}/agents/{agent_instance_id}/config/...`
+  (`AgentConfigAssetsAdapter`). Injected BOTH turn-time
+  (`_build_runtime_services`) and save-time
+  (`_build_capability_save_services`, which now also receives the
+  `agent_instance_id` from the validate-config form and stamps it on the
+  privately-held `RuntimeContext`).
+- `document_content: DocumentContentPort | None` — a corpus document's
+  ORIGINAL bytes by uid (KF `GET /raw_content/{uid}`, `DocumentContentAdapter`
+  over the new minimal `KfDocumentClient`).
+- `document_folders: DocumentFolderPort | None` — author folder string →
+  DOCUMENT tag id (save/analyze-time validation) and folder-tag document
+  listing (KF `GET /tags` + `POST /documents/metadata/browse`,
+  `DocumentFolderAdapter` over the new `KfTagClient`).
+
+No OpenAPI/wire-schema change on the execution surface. The pod's
+`validate-config` endpoint behavior is unchanged except that its save services
+now carry the three ports, letting an asset-bearing capability store binaries
+and resolve folders during `validate_config` (RFC AGENT-CAPABILITY §3.4/§3.8).
+
+---
+
 ### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
 
 **What changed.** `RuntimeContext.user_groups` (`fred_sdk.contracts.context`,
@@ -1205,6 +1235,61 @@ query and RAG hits (per-tool `sources` on `ToolResultRuntimeEvent` exist too,
 but are still only consumed in aggregate on the final message — wiring
 per-call `sources` through `ToolResultPart` is a possible fast-follow, not
 done here since `content` already covers the citation case).
+
+---
+
+### 8.21 ✅ `RuntimeServices.document_tree` + `document_summarize` ports — #1906 follow-up (2026-07-21)
+
+**What changed.** Two new OPTIONAL, additive ports on the frozen
+`RuntimeServices` dataclass (`fred_sdk/contracts/runtime.py`), completing the
+#1906 document-access pilot — the same class of change as §8.15 (default
+`None`, backward-compatible, no wire-schema impact):
+
+```python
+class DocumentTreePort(ABC):
+    async def tree(
+        self,
+        *,
+        working_directory: str | None = None,
+        library_tag_ids: Sequence[str] | None = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult: ...
+
+class DocumentSummarizePort(ABC):
+    async def summarize(
+        self,
+        document_uid: str,
+        *,
+        instruction: str | None = None,
+        max_chars: int = 2000,
+    ) -> DocumentSummaryResult: ...
+
+@dataclass(frozen=True, slots=True)
+class RuntimeServices:
+    ...
+    document_tree: DocumentTreePort | None = None
+    document_summarize: DocumentSummarizePort | None = None
+```
+
+**Backing endpoints (Knowledge Flow).** `POST /documents/tree` (scoped
+folder/document listing rendered as indented text, ReBAC-scoped through
+`TagService.list_all_tags_for_user` with `owner_filter`/`team_id`, leaves
+ReBAC-filtered via `MetadataService`) and synchronous
+`POST /documents/{document_uid}/summarize` (steerable `instruction`,
+`max_chars` budget, map-reduce for large documents; session attachments
+reconstructed from their vectors when the corpus lookup is denied/missing).
+
+**Doctrine.** Same as §8.15: scope parameters only; the adapters
+(`DocumentTreeAdapter`, `DocumentSummarizeAdapter`, fred-runtime) capture the
+per-turn binding privately through `KfDocumentClient`, stamp the
+`owner_filter`/`team_id` seam (tree — the #1899 team-leak guard), and are
+wired in `_build_runtime_services`. Transport failures are mapped onto the
+SDK-typed `DocumentPortCallError` (timeout flag + HTTP status) so the
+capability renders `is_error` tool results without importing the HTTP stack.
+`KfBaseClient._request_with_token_refresh` gained an additive per-request
+`read_timeout` override (`RuntimeTimeouts.summarize_read`, default 300s) for
+the long-running summarize path. First consumer: `document_access`'s
+`list_document_tree` + `summarize_document` tools (RFC §10.1).
 
 ---
 

@@ -24,6 +24,7 @@ COPY scripts/makefiles /workspace/scripts/makefiles
 COPY libs/fred-core /workspace/libs/fred-core
 COPY libs/fred-runtime /workspace/libs/fred-runtime
 COPY libs/fred-sdk /workspace/libs/fred-sdk
+COPY libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
 
 RUN make dev VENV=/app/venv TARGET=/app/target
 
@@ -53,6 +54,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/fred_agents /workspace/apps
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runtime
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
 
 # Runtime pods keep the startup contract externalized: .env + configuration
 # are mounted at /app/config, while the default catalogs can ship in-image.

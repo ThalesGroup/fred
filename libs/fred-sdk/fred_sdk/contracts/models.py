@@ -101,11 +101,14 @@ class UIHints(BaseModel):
     widget: Optional[str] = Field(
         default=None,
         description=(
-            "Names a frontend stock form widget to render this field instead "
-            "of the type-derived default input. Known ids: "
-            "'document_libraries' (library/document tree picker for an array "
-            "of library tag ids). Unknown ids fall back to the default input, "
-            "so older frontends degrade gracefully."
+            "Names a frontend form widget to render this field instead of "
+            "the type-derived default input. Resolved first against the "
+            "owning capability plugin's `configWidgets` (custom widgets, "
+            "AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock "
+            "widgets — known stock ids: 'document_libraries' "
+            "(library/document tree picker for an array of library tag ids). "
+            "Unknown ids fall back to the default input, so older frontends "
+            "degrade gracefully."
         ),
     )
     visible_when: Optional[str] = Field(

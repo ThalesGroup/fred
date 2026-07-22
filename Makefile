@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-ppt-filler apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-ppt-filler apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 
 .DEFAULT_GOAL := help

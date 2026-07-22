@@ -105,8 +105,8 @@ def _document_access_tool():
         config={},
     )
     tools = cap.tools(ctx)
-    assert len(tools) == 1
-    return tools[0]
+    by_name = {t.name: t for t in tools}
+    return by_name["search_documents_using_vectorization"]
 
 
 # ---------------------------------------------------------------------------

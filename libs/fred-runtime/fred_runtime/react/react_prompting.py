@@ -222,7 +222,13 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         "search tool, scoped to this conversation. The raw image bytes are NOT "
         "included in this prompt, so to answer any question about an attached file "
         "you MUST first call the search tool to retrieve its content — do not claim "
-        "you cannot see or analyze an attachment before searching for it.\n\n"
+        "you cannot see or analyze an attachment before searching for it. "
+        "When a file line below shows a bracketed identifier, that is the "
+        "file's internal document uid: pass exactly that value — never the "
+        "file name — to document tools that take a document_uid (e.g. "
+        "summarize_document). These identifiers are internal working ids: "
+        "NEVER repeat them in your answers — always refer to files by their "
+        "display name.\n\n"
         f"{safe_attachments_markdown}"
     )
 

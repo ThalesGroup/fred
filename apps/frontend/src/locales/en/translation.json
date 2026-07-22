@@ -133,6 +133,56 @@
     "document_access": {
       "name": "Document access",
       "description": "Search documents uploaded using semantic similarity (RAG)."
+    },
+    "ppt_filler": {
+      "name": "PPT Filler",
+      "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
+      "form": {
+        "uploadTemplate": "Upload a .pptx template",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A template is configured for this agent.",
+        "templateRequired": "PPT Filler requires a PowerPoint template. Upload a .pptx file.",
+        "templateInvalid": "Fix the template errors below before saving.",
+        "analyzing": "Analyzing the template…",
+        "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "schemaTitle": "Fields the agent will fill",
+        "learnMore": "How does this work? What should I upload?",
+        "slide": "Slide {{number}}",
+        "imageBadge": "image · {{folder}}",
+        "noDescription": "No description"
+      },
+      "errors": {
+        "key_without_description": "{{placeholder}} appears on slide {{slide}} but has no description in the slide notes.",
+        "described_but_not_in_slide": "{{placeholder}} is described in the notes of slide {{slide}} but never appears in a text box on that slide.",
+        "unknown_metadata": "{{placeholder}} in the notes of slide {{slide}} declares an unknown metadata key (only 'type' and 'folder' are recognized).",
+        "unknown_type": "{{placeholder}} in the notes of slide {{slide}} declares an unknown type (only 'text' and 'image' are recognized).",
+        "duplicated_metadata": "{{placeholder}} in the notes of slide {{slide}} declares the same metadata key more than once.",
+        "image_without_folder": "{{placeholder}} in the notes of slide {{slide}} is an image but does not give a folder.",
+        "empty_folder": "{{placeholder}} in the notes of slide {{slide}} gives a folder but leaves it blank.",
+        "folder_without_image_type": "{{placeholder}} in the notes of slide {{slide}} gives a folder but is not an image (set 'type: image' to use a folder).",
+        "folder_not_found": "{{placeholder}} on slide {{slide}} points to a folder that does not exist in this space.",
+        "image_key_invalid_location": "{{placeholder}} on slide {{slide}} sits in a table cell, which cannot hold a picture. Move it into a text box or a rectangle.",
+        "invalid_upload": "The uploaded file could not be read as a .pptx. Re-select the file and try again.",
+        "asset_required": "PPT Filler requires a PowerPoint template, but none was provided."
+      },
+      "preview": {
+        "untitled": "Presentation",
+        "open": "Open preview",
+        "cardAria": "Presentation preview",
+        "download": "Download .pptx",
+        "downloadError": "Download failed",
+        "close": "Close preview",
+        "loadError": "Failed to load preview.",
+        "loading": "Loading preview…",
+        "empty": "No preview yet. Ask the assistant to fill a deck."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Presentation preview"
+        }
+      }
     }
   },
   "chatbot": {
