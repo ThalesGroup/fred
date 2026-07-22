@@ -962,6 +962,13 @@ _(none yet)_
 
 Non-blocking right-side panel. `position: fixed`, slides in from the right via `transform: translateX(100%)` → `translateX(0)`. ESC key closes. `--drawer-width` CSS variable, default `480px`. Does not trap focus (main content stays interactive).
 
+Push layout supports opt-in drag-to-resize (`resizable` prop, 2026-07-22): a col-resize
+grip on the left edge, bounds 320–900px capped at 45vw, width persisted per
+`persistKey` — the legacy chat's `ResizablePaneShell` UX ported to the rework.
+`CapabilitySidePanelHost` enables it with one shared key, so the
+writable-document editor and the PPT preview panels share a persisted width.
+Hidden below the 720px breakpoint (push drawers go fixed full-width there).
+
 #### Open UX issues
 
 - **Focus trap** — deliberately no focus trap (main content stays interactive per RFC §2.5). Confirm with accessibility review: WCAG 2.1 SC 2.1.2 applies to modal dialogs, not drawers; but screen reader users should be informed the drawer is open.
@@ -1253,6 +1260,13 @@ documents. Tab strip when the session has several documents; editor remounts on 
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
 Mounted by `CapabilitySidePanelHost` when the capability is active.
+
+Auto-open (2026-07-22): opening a conversation that already holds a document
+opens the editor pane immediately (`WritableDocumentAutoOpenProbe`, a headless
+`sessionProbes` plugin entry evaluated once per conversation-open against the
+authoritative list API). Live writes mid-conversation keep their existing pop
+via the card renderer; a list refresh never re-opens a pane the user closed.
+writable_document only — the PPT preview declares no probe.
 
 #### Open UX issues
 

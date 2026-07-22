@@ -18,6 +18,7 @@
 // the collaborative Markdown editor side pane. No config widget, no chat control.
 
 import type { CapabilityUiPlugin } from "../types";
+import { WritableDocumentAutoOpenProbe } from "./WritableDocumentAutoOpenProbe";
 import { WritableDocumentCardRenderer } from "./WritableDocumentCardRenderer";
 import { WritableDocumentPane } from "./WritableDocumentPane";
 
@@ -27,4 +28,6 @@ export const writableDocumentCapability: CapabilityUiPlugin = {
   partRenderers: { writable_document: WritableDocumentCardRenderer },
   // Keyed by the backend manifest's SidePanelSpec.widget (#1979).
   sidePanels: { writable_document_pane: WritableDocumentPane },
+  // A conversation that already holds documents re-opens straight in the editor.
+  sessionProbes: [WritableDocumentAutoOpenProbe],
 };
