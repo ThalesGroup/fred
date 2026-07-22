@@ -575,6 +575,37 @@ def build_fill_tools(
         validated = args_schema(**kwargs)
         provided = validated.model_dump()
 
+        # An all-empty call on a template with TEXT fields would silently
+        # blank every {{key}} and still report success — the deck LOOKS
+        # generated but is empty (each leaf field is Optional and an omitted
+        # key fills as ""). Reject it and steer the model to gather content
+        # first. Image-only templates are exempt: omitting an image key is
+        # the documented way to have its empty placeholder removed. Once at
+        # least one real value is supplied, the Kea per-field
+        # "omitted -> empty string" behavior is kept unchanged.
+        has_text_fields = any(
+            key_field.key not in image_keys_by_slide.get(slide_schema.slide, set())
+            for slide_schema in schema_slides
+            for key_field in slide_schema.keys
+        )
+        provided_values = [
+            value
+            for field_name, slide_args in provided.items()
+            if _slide_number_from_field(field_name) is not None
+            for value in _raw_values_for_slide(slide_args).values()
+        ]
+        if has_text_fields and not any(
+            isinstance(value, str) and value.strip() for value in provided_values
+        ):
+            return (
+                "No field values were provided — the deck was NOT generated. "
+                "Derive each field's value first (each field's own description "
+                "says what to put there; use the document tools when it points "
+                "at documents or the conversation's attached files), then call "
+                "this tool again with the values filled in.",
+                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+            )
+
         session_id = identity.session_id
         started = time.monotonic()
 

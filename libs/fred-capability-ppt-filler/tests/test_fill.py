@@ -938,6 +938,35 @@ async def test_list_images_empty_folder_returns_message():
     assert folders.list_calls == ["tag-logos"]
 
 
+# --- All-empty call guard ----------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_all_empty_call_on_text_template_is_rejected():
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    assets = FakeAssets({PPT_FILLER_TEMPLATE_KEY: deck})
+    workspace = FakeWorkspace()
+    ctx = _ctx(schema_slides(deck), assets=assets, workspace=workspace)
+
+    content, artifact = await _fill_tool(ctx).coroutine(slide_1={})
+
+    assert artifact.is_error is True
+    assert "NOT generated" in content
+    assert workspace.writes == []
+
+
+@pytest.mark.asyncio
+async def test_one_real_value_keeps_the_per_field_empty_fallback(no_pdf):
+    """One supplied value → the call proceeds (Kea parity: other keys blank)."""
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    assets = FakeAssets({PPT_FILLER_TEMPLATE_KEY: deck})
+    ctx = _ctx(schema_slides(deck), assets=assets)
+
+    _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
+
+    assert artifact.is_error is False
+
+
 # --- Instructions overlay (system-prompt fragment) ---------------------------------
 
 
