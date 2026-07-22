@@ -146,7 +146,8 @@
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",
       "geoSummary_one": "Données cartographiques ({{count}} entité)",
-      "geoSummary_other": "Données cartographiques ({{count}} entités)"
+      "geoSummary_other": "Données cartographiques ({{count}} entités)",
+      "geoError": "La carte n'a pas pu être affichée : GeoJSON invalide"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {

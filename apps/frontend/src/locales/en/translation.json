@@ -146,7 +146,8 @@
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
       "geoSummary_one": "Map data ({{count}} feature)",
-      "geoSummary_other": "Map data ({{count}} features)"
+      "geoSummary_other": "Map data ({{count}} features)",
+      "geoError": "Map could not be rendered: invalid GeoJSON"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {

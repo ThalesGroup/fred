@@ -15,6 +15,7 @@
 // Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
 // of the part-renderer registry (#1977). Capability kinds come from plugins.
 
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -26,16 +27,15 @@ function LinkPartRenderer({ part }: UiPartRendererProps) {
   return <ArtifactLinkChip link={part as unknown as LinkPart} />;
 }
 
-/**
- * Minimal geo summary chip: no map library ships with the frontend today, so
- * the base `geo` kind renders a typed placeholder (feature count) instead of
- * being silently dropped, as it was before the registry existed.
- */
-function GeoPartRenderer({ part }: UiPartRendererProps) {
-  const { t } = useTranslation();
-  const geo = part as unknown as GeoPart;
-  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
+// `leaflet` touches `window`/`document` at module-load time (browser feature
+// detection), which throws under the node-environment unit tests. Loading the
+// map only via a dynamic import — gated behind a post-mount `ready` flag, never
+// during the initial synchronous render — keeps it out of every eager import
+// graph (tests, SSR) and off the main bundle until a `geo` part actually renders.
+const LazyGeoMap = lazy(() => import("../../components/shared/molecules/GeoMap/GeoMap"));
 
+function GeoSummaryChip({ features }: { features: number }) {
+  const { t } = useTranslation();
   return (
     <span className={styles.geoChip} role="note" aria-label={t("chatbot.uiParts.geoAria")}>
       <span className={styles.geoIcon} aria-hidden>
@@ -43,6 +43,34 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
       </span>
       {t("chatbot.uiParts.geoSummary", { count: features })}
     </span>
+  );
+}
+
+/**
+ * Renders a `geo` part as an interactive Leaflet map. Mounts the map lazily
+ * (see `LazyGeoMap`) and shows the feature-count chip as a synchronous first
+ * paint / fallback while the map module loads.
+ */
+function GeoPartRenderer({ part }: UiPartRendererProps) {
+  const geo = part as unknown as GeoPart;
+  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => setReady(true), []);
+
+  if (!ready) {
+    return <GeoSummaryChip features={features} />;
+  }
+
+  return (
+    <Suspense fallback={<GeoSummaryChip features={features} />}>
+      <LazyGeoMap
+        geojson={geo.geojson}
+        popupProperty={geo.popup_property}
+        fitBounds={geo.fit_bounds}
+        style={geo.style}
+      />
+    </Suspense>
   );
 }
 
