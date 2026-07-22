@@ -68,9 +68,14 @@ from fred_sdk.contracts.runtime import (
     ChatModelFactoryPort,
     DocumentContentPort,
     DocumentFolderPort,
+    DocumentPortCallError,
     DocumentRawContent,
     DocumentSearchPort,
     DocumentSearchResult,
+    DocumentSummarizePort,
+    DocumentSummaryResult,
+    DocumentTreePort,
+    DocumentTreeResult,
     FolderDocumentEntry,
     SpanPort,
     ToolInvokerPort,
@@ -956,6 +961,119 @@ class DocumentFolderAdapter(DocumentFolderPort):
         return tuple(
             FolderDocumentEntry(document_uid=uid, document_name=name)
             for uid, name in pairs
+        )
+
+
+def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
+    """
+    Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
+    so capabilities can render an actionable `is_error` tool result without
+    importing the adapter's HTTP stack.
+    """
+
+    timed_out = isinstance(exc, httpx.TimeoutException)
+    status_code = (
+        exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    )
+    detail = str(exc).strip() or type(exc).__name__
+    return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
+
+
+class DocumentTreeAdapter(DocumentTreePort):
+    """
+    Runtime adapter behind `RuntimeServices.document_tree`.
+
+    Same shape as `DocumentSearchAdapter`: the per-turn binding is captured
+    PRIVATELY (through `_VectorSearchAgentShim` + `KfDocumentClient`, which own
+    the access token and its refresh) and only the capability-safe `tree(...)`
+    surface is exposed. The caller-supplied `library_tag_ids` are the
+    capability's already-narrowed scope; this adapter intersects them with the
+    session binding's own library scope and stamps the owner_filter/team_id
+    seam, so the Knowledge Flow listing can never leak folders across team
+    boundaries.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def tree(
+        self,
+        *,
+        working_directory: str | None = None,
+        library_tag_ids: Sequence[str] | None = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        runtime_context = self._binding.runtime_context
+        effective_libs = _narrow_scope_ids(
+            get_document_library_tags_ids(runtime_context), library_tag_ids
+        )
+        team_id = self._settings.team_id
+        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
+        try:
+            result = await self._client.tree(
+                working_directory=working_directory,
+                tag_ids=effective_libs,
+                max_chars=max_chars,
+                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+                team_id=team_id if scoped_team else None,
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
+
+
+class DocumentSummarizeAdapter(DocumentSummarizePort):
+    """
+    Runtime adapter behind `RuntimeServices.document_summarize`.
+
+    No scope narrowing here: the caller already holds a concrete
+    `document_uid` (from a search hit, tree listing, or the conversation's
+    attached-files context), and Knowledge Flow's own per-document ReBAC is
+    the real authorization gate. The binding/token stay private;
+    `KfDocumentClient` applies the extended summarize read timeout.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def summarize(
+        self,
+        document_uid: str,
+        *,
+        instruction: str | None = None,
+        max_chars: int = 2000,
+    ) -> DocumentSummaryResult:
+        try:
+            result = await self._client.summarize(
+                document_uid=document_uid,
+                instruction=instruction,
+                max_chars=max_chars,
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentSummaryResult(
+            document_uid=result.document_uid,
+            summary=result.summary,
+            shrunk_for_budget=result.shrunk_for_budget,
+            keywords=tuple(result.keywords),
         )
 
 

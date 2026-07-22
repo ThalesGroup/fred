@@ -12,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Minimal Knowledge Flow document client for the v2 runtime (#1903).
+"""Knowledge Flow document client for the v2 runtime.
 
-Ports only the raw-content fetch from Kea's `KfDocumentClient`: the PPT-filler
-image support needs a document's ORIGINAL uploaded bytes by uid (to embed a
-picked image into the deck). Search and rerank stay on their existing Swift
-clients; do not grow this one beyond content fetch without checking there
-first.
+Covers the document surface beyond vector search:
+
+- raw-content fetch (#1903): a document's ORIGINAL uploaded bytes by uid — the
+  PPT-filler image support embeds a picked image into the deck
+- on-demand summarization and the recursive folder/document tree (#1906)
+
+Search and rerank stay on their existing Swift clients; do not grow this one
+beyond these surfaces without checking there first. Scope resolution (library
+binding, session narrowing) is NOT done here — the v2 adapters own it; this
+client is wire-format only.
 """
 
 from __future__ import annotations
@@ -26,12 +31,16 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Sequence
+
+from fred_core.common import OwnerFilter
+from pydantic import BaseModel
 
 from fred_runtime.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
 )
+from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +69,27 @@ def _filename_from_content_disposition(header: Optional[str], fallback: str) -> 
     return fallback
 
 
+class SummarizeDocumentResult(BaseModel):
+    document_uid: str
+    summary: str
+    shrunk_for_budget: bool
+    keywords: list[str] = []
+
+
+class DocumentTreeResult(BaseModel):
+    tree: str
+    truncated: bool
+
+
 class KfDocumentClient(KfBaseClient):
     """
-    Authenticated client for Knowledge Flow's document-content surface.
+    Authenticated client for Knowledge Flow's document surface: raw-content
+    fetch (#1903), on-demand summarization and the recursive folder/document
+    tree (#1906).
 
     Propagates the end-user identity like the other KF clients; constructed
     from an agent context (`agent=...`) or a bare token (`access_token=...`).
+    Inherits session and retry logic from KfBaseClient.
     """
 
     def __init__(
@@ -76,10 +100,13 @@ class KfDocumentClient(KfBaseClient):
         refresh_user_access_token: Optional[Callable[[], str]] = None,
     ):
         super().__init__(
-            allowed_methods=frozenset({"GET"}),
+            allowed_methods=frozenset({"GET", "POST"}),
             agent=agent,
             access_token=access_token,
             refresh_user_access_token=refresh_user_access_token,
+        )
+        self._summarize_read_timeout = float(
+            get_runtime_context().config.timeouts.summarize_read
         )
 
     async def fetch_raw_content(
@@ -113,3 +140,74 @@ class KfDocumentClient(KfBaseClient):
             filename=filename,
             size=len(content),
         )
+
+    async def tree(
+        self,
+        *,
+        working_directory: Optional[str] = None,
+        tag_ids: Optional[Sequence[str]] = None,
+        max_chars: int = 6000,
+        owner_filter: Optional[OwnerFilter] = None,
+        team_id: Optional[str] = None,
+    ) -> DocumentTreeResult:
+        """
+        Wire format (matches controller):
+          POST /documents/tree
+          {
+            "working_directory": str?,
+            "tag_ids": [str]?,
+            "max_chars": int,
+            "owner_filter": str?,
+            "team_id": str?
+          }
+        """
+        payload: Dict[str, Any] = {"max_chars": max_chars}
+        if working_directory:
+            payload["working_directory"] = working_directory
+        if tag_ids:
+            payload["tag_ids"] = list(tag_ids)
+        if owner_filter:
+            payload["owner_filter"] = owner_filter.value
+        if team_id:
+            payload["team_id"] = team_id
+
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path="/documents/tree",
+            phase_name="kf_document_tree",
+            json=payload,
+        )
+        r.raise_for_status()
+        return DocumentTreeResult.model_validate(r.json())
+
+    async def summarize(
+        self,
+        *,
+        document_uid: str,
+        instruction: Optional[str] = None,
+        max_chars: int = 2000,
+    ) -> SummarizeDocumentResult:
+        """
+        Wire format (matches controller):
+          POST /documents/{document_uid}/summarize
+          {
+            "instruction": str?,
+            "max_chars": int
+          }
+        """
+        payload: Dict[str, Any] = {"max_chars": max_chars}
+        if instruction:
+            payload["instruction"] = instruction
+
+        # Summarization runs map-reduce LLM passes over the whole document on the
+        # Knowledge Flow side and routinely exceeds the default read timeout for
+        # large PDFs. Override the read timeout for this request only.
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path=f"/documents/{document_uid}/summarize",
+            phase_name="kf_document_summarize",
+            json=payload,
+            read_timeout=self._summarize_read_timeout,
+        )
+        r.raise_for_status()
+        return SummarizeDocumentResult.model_validate(r.json())

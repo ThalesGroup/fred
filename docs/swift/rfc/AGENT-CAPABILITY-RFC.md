@@ -1893,12 +1893,21 @@ config + turn scoping the builtin cannot express); the builtin/catalog path
 stays reachable for back-compat and its retirement is a follow-up. Documented in
 the capability docstring; do NOT wire both on one instance.
 
-**Deferred: `list_document_tree` + `summarize_document`.** NOT registered
-(a registered tool the LLM can call but that returns "not implemented" erodes
-trust). They are blocked pending Knowledge Flow backend endpoints
-(`POST /documents/tree`; a synchronous `POST /documents/{uid}/summarize`) and
-pod-reachable session-attachment enumeration, none of which exist on Swift yet.
-Follow-up will add them once KF ships those endpoints.
+**Shipped (2026-07-21): `list_document_tree` + `summarize_document`.** The
+Knowledge Flow endpoints landed (`POST /documents/tree`, ReBAC-scoped through
+`TagService` with `owner_filter`/`team_id`; synchronous
+`POST /documents/{uid}/summarize` with steerable `instruction` + `max_chars`,
+attachment text reconstructed from session vectors), and both tools are now
+registered on `DocumentAccessCapability`, wired through the new
+`RuntimeServices.document_tree` / `document_summarize` ports
+(RUNTIME-EXECUTION-CONTRACT §8.21). Failures surface as `is_error` tool
+results (timeout / HTTP status detail) via the SDK-typed
+`DocumentPortCallError`, never raised exceptions. The per-agent
+`summarize_max_chars` config field is both the default and a hard cap.
+Still deferred: pod-reachable **session-attachment enumeration** — the tree's
+trailing "Session attachments" section from Kea. Attachments remain a search
+scope only (`attachments_only`); accordingly the tree tool lists the corpus
+only and is not registered at all in attachments-only mode.
 
 **Rename.** `mcp.servers.search_documents.name` → "Document access" (EN) /
 "Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`

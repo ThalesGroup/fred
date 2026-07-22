@@ -150,6 +150,8 @@ from ..integrations.v2_runtime.adapters import (
     DocumentContentAdapter,
     DocumentFolderAdapter,
     DocumentSearchAdapter,
+    DocumentSummarizeAdapter,
+    DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredWorkspaceFs,
@@ -736,6 +738,16 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Companion document-access ports: tree listing + on-demand summarization,
+    # same private-binding doctrine as the search adapter.
+    document_tree = DocumentTreeAdapter(
+        binding=binding,
+        settings=settings,
+    )
+    document_summarize = DocumentSummarizeAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -792,6 +804,8 @@ def _build_runtime_services(
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_content=DocumentContentAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
+        document_tree=document_tree,
+        document_summarize=document_summarize,
     )
 
 

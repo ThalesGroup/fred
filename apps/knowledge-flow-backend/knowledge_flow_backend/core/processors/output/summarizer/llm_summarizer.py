@@ -51,25 +51,35 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
         # Build a tiny chain once: (prompt | chat_model) returns an AIMessage
         self.chain: Runnable = self.prompt | self.model
 
-    def _complete(self, system: str, user: str, *, max_tokens: Optional[int] = None) -> str:
+    def _complete(self, system: str, user: str) -> str:
         """
         Why this helper:
-        - Central place to control generation knobs (e.g., max_tokens later).
+        - Central place to issue a single system+user completion.
         - Works across OpenAI/Azure/Ollama since all are LangChain ChatModels.
+
+        Note on output length: we deliberately do NOT bind ``max_tokens`` here.
+        Recent langchain-openai rewrites ``max_tokens`` to ``max_completion_tokens``
+        on the wire, which some OpenAI-compatible gateways reject with HTTP 400
+        (strict OpenAPI validation). Output length is instead bounded by the
+        prompt (``≤max_words``) and overall latency by the model's request_timeout.
         """
         messages = [
             ("system", system),
             ("user", user),
         ]
-        # for OpenAI/Azure models, max_tokens is honored; for Ollama it's ignored safely.
-        # If you want hard limits, pass via model config (e.g., settings={"max_tokens": 512}).
         result = self.chain.invoke({"messages": messages})
-        # `result` is an AIMessage for ChatModels; safeguard for plain strings:
-        return getattr(result, "content", result).strip()
+        # `result` is an AIMessage for ChatModels; safeguard for plain strings and
+        # list-shaped content (some providers return content blocks).
+        content = getattr(result, "content", result)
+        return content.strip() if isinstance(content, str) else str(content).strip()
 
-    def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
-        user = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone.\n\n---\n{text}"
-        return self._complete(_ABSTRACT_SYS, user, max_tokens=700)
+    def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
+        if instruction:
+            task = f"Write a summary following this instruction: {instruction}\n\nKeep it focused and within about {max_words} words."
+        else:
+            task = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone."
+        user = f"{task}\n\n---\n{text}"
+        return self._complete(_ABSTRACT_SYS, user)
 
     def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
         user = (
@@ -78,7 +88,7 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
             "No duplicates, avoid stopwords.\n\n---\n"
             f"{text}"
         )
-        raw = self._complete(_TOKENS_SYS, user, max_tokens=400)
+        raw = self._complete(_TOKENS_SYS, user)
         toks = [t.strip().lower() for t in raw.split(",") if t.strip()]
         seen, out = set(), []
         for t in toks:

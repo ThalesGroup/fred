@@ -28,7 +28,10 @@ Do not skip this. Open and skim:
   `TeamScopePolicy`, `UploadedFile`; `FieldSpec` lives in `fred_sdk.contracts.models`),
   `context.py` (`CapabilityContext`, `CapabilityIdentity`, `SaveContext`, `EmptyModel`),
   `hitl.py` (`HitlSpec`). Platform ports: `fred_sdk/contracts/runtime.py`
-  (`RuntimeServices`, `DocumentSearchPort`).
+  (`RuntimeServices`, `DocumentSearchPort`, `DocumentTreePort`,
+  `DocumentSummarizePort`, `DocumentPortCallError` — adapters map transport
+  failures onto that typed error so capability tools can render `is_error`
+  results without importing any HTTP stack).
 - **The canonical worked example** — `libs/fred-runtime/fred_runtime/capabilities/document_access/capability.py`
   (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
   typed port, config-field scoping, one computed chat control. **Copy its shape.**
