@@ -50,6 +50,15 @@ CLOCK_SKEW_SECONDS = int(os.getenv("FRED_JWT_CLOCK_SKEW", "0"))  # optional leew
 JWT_CACHE_ENABLED = read_env_bool("FRED_JWT_CACHE_ENABLED", default=True)
 JWT_CACHE_TTL_SECONDS = int(os.getenv("FRED_JWT_CACHE_TTL", "60"))
 JWT_CACHE_MAX_SIZE = int(os.getenv("FRED_JWT_CACHE_SIZE", "512"))
+# Application-side ceiling on token lifetime (exp - iat), independent of
+# whatever an IdP was configured to issue. Unlike STRICT_ISSUER/STRICT_AUDIENCE
+# (opt-in, gated behind the c3 profile, never enabled by any config in this
+# repo), this stays on by default: a misconfigured or unfamiliar IdP issuing
+# long-lived tokens should not be silently trusted. Fred's own M2M provider
+# (`backend_to_backend_auth.py`) already mints short-lived, auto-refreshed
+# tokens per call, so this does not affect normal service-to-service traffic
+# — raise the env var if a deployment genuinely needs a longer ceiling.
+MAX_TOKEN_LIFETIME_SECONDS = int(os.getenv("FRED_JWT_MAX_LIFETIME_SECONDS", "3600"))
 
 # Initialize global variables (to be set later)
 KEYCLOAK_ENABLED = False
@@ -403,6 +412,30 @@ def decode_jwt(token: str) -> KeycloakUser:
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
         )
+
+    # Defense-in-depth ceiling on token lifetime, independent of the issuing
+    # IdP's own configuration (see MAX_TOKEN_LIFETIME_SECONDS docstring above).
+    # `verify_exp` above only rejects a token that has already expired; this
+    # additionally rejects one that was never supposed to live this long in
+    # the first place, regardless of whether it currently happens to still be
+    # valid.
+    iat, exp = payload.get("iat"), payload.get("exp")
+    if isinstance(iat, (int, float)) and isinstance(exp, (int, float)):
+        lifetime_seconds = exp - iat
+        if lifetime_seconds > MAX_TOKEN_LIFETIME_SECONDS:
+            logger.warning(
+                "[AUTH] JWT lifetime exceeds policy ceiling: lifetime=%ss max=%ss sub=%s",
+                lifetime_seconds,
+                MAX_TOKEN_LIFETIME_SECONDS,
+                payload.get("sub"),
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Token lifetime exceeds the maximum permitted duration",
+                headers={
+                    "WWW-Authenticate": "Bearer error='invalid_token', error_description='token lifetime too long'"
+                },
+            )
 
     # Extract client roles
     client_roles = []
