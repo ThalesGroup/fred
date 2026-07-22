@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CapabilityConfigWidgetProps } from "../types";
@@ -159,6 +160,10 @@ export function PptFillerConfigForm({
           <span className={styles.fileName}>{t("capability.ppt_filler.form.currentTemplate")}</span>
         )}
       </div>
+
+      <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="noopener noreferrer">
+        {t("capability.ppt_filler.form.learnMore")}
+      </Link>
 
       {blockingError && <p className={styles.blocking}>{blockingError}</p>}
       {isAnalyzing && <p className={styles.hint}>{t("capability.ppt_filler.form.analyzing")}</p>}

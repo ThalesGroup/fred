@@ -37,6 +37,18 @@
   font-size: inherit;
 }
 
+.learnMoreLink {
+  align-self: flex-start;
+  margin-top: var(--spacing-3xs);
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.learnMoreLink:hover {
+  text-decoration: underline;
+}
+
 .hint {
   margin: 0;
   color: var(--on-surface-variant, #666);

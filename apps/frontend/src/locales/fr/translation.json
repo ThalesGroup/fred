@@ -148,6 +148,7 @@
         "analyzing": "Analyse du modèle…",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
         "schemaTitle": "Champs que l'agent remplira",
+        "learnMore": "Comment ça marche ? Que dois-je uploader ?",
         "slide": "Diapositive {{number}}",
         "imageBadge": "image · {{folder}}",
         "noDescription": "Pas de description"

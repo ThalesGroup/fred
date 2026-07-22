@@ -148,6 +148,7 @@
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
         "schemaTitle": "Fields the agent will fill",
+        "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
         "imageBadge": "image · {{folder}}",
         "noDescription": "No description"
