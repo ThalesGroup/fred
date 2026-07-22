@@ -14,7 +14,6 @@
 
 import { useState } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import MonacoPane from "@shared/atoms/MonacoPane/MonacoPane";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -27,13 +26,13 @@ import {
   detailTextForEntry,
   entryLabel,
   formatLatencyMs,
-  humanizeToolName,
+  genericToolPayload,
   parseToolResultContent,
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
-  toolName,
+  toolCopyText,
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
@@ -44,18 +43,6 @@ interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
   entry: TraceEntry | null;
   onClose: () => void;
-}
-
-function toolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): unknown {
-  // Expose only the humanized action name and execution outcome.
-  // Raw tool names, arguments, and result payloads must not be shown to end users.
-  const action = humanizeToolName(toolName(entry.call));
-  if (!entry.result) return { action, status: "running" };
-  return {
-    action,
-    status: toolResultOk(entry.result) ? "completed" : "failed",
-    latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
-  };
 }
 
 /** Pretty, markdown-rendered view for reasoning / note text entries. */
@@ -119,7 +106,7 @@ function SqlToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
   return (
     <div className={styles.detail}>
       <ToolMeta entry={entry} />
-      <CodeBlock code={data.sql_query} language="sql" />
+      <CodeBlock code={data.sql_query} language="sql" hideCopy />
       {data.error ? (
         <div className={styles.errorBox}>{data.error}</div>
       ) : (
@@ -128,11 +115,7 @@ function SqlToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
             {data.rows.length} ligne{data.rows.length > 1 ? "s" : ""}
           </span>
           {data.rows.length > 0 && (
-            <MonacoPane
-              value={JSON.stringify(data.rows.slice(0, 50), null, 2)}
-              height="min(50vh, 400px)"
-              options={{ lineNumbers: "off", folding: true }}
-            />
+            <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" hideCopy />
           )}
         </>
       )}
@@ -151,40 +134,13 @@ function RagToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
   );
 }
 
-/** Fallback: redacted {action, status, latency} JSON view for unrecognized tools. */
+/** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
-  const payload = toolPayload(entry);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText(JSON.stringify(payload, null, 2))
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {});
-  };
-
+  const payload = genericToolPayload(entry);
   return (
-    <>
-      <div className={styles.toolbar}>
-        <span className={styles.spacer} />
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
-          aria-label={copied ? "Copied" : "Copy JSON"}
-          onClick={handleCopy}
-        />
-      </div>
-      <MonacoPane
-        value={JSON.stringify(payload, null, 2)}
-        height="calc(100vh - 160px)"
-        options={{ lineNumbers: "off", folding: true }}
-      />
-    </>
+    <div className={styles.detail}>
+      <CodeBlock code={JSON.stringify(payload, null, 2)} language="json" hideCopy />
+    </div>
   );
 }
 
@@ -198,11 +154,46 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
   return <GenericToolDetail entry={entry} />;
 }
 
-export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
-  const label = entry ? entryLabel(entry) : "";
+/** Single copy affordance for the drawer header — copies the SQL query, the curated
+ *  JSON payload, or nothing (RAG sources are browsed, not copied as text). */
+function CopyHeaderAction({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  };
 
   return (
-    <InlineDrawer open={entry !== null} onClose={onClose} title={label} layout="overlay" width="460px">
+    <IconButton
+      color="on-surface"
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
+      aria-label={copied ? "Copied" : "Copy"}
+      onClick={handleCopy}
+    />
+  );
+}
+
+export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
+  const label = entry ? entryLabel(entry) : "";
+  const copyText = entry ? toolCopyText(entry) : null;
+
+  return (
+    <InlineDrawer
+      open={entry !== null}
+      onClose={onClose}
+      title={label}
+      headerActions={copyText ? <CopyHeaderAction text={copyText} key={label} /> : undefined}
+      layout="overlay"
+      width="460px"
+    >
       {entry && (entry.kind === "combo" ? <ToolDetail entry={entry} /> : <TextDetail entry={entry} />)}
     </InlineDrawer>
   );

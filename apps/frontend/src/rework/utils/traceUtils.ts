@@ -277,6 +277,28 @@ export function asRagSearchResult(data: Record<string, unknown> | null): RagSear
   return null;
 }
 
+/** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
+export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
+  const action = humanizeToolName(toolName(entry.call));
+  if (!entry.result) return { action, status: "running" };
+  return {
+    action,
+    status: toolResultOk(entry.result) ? "completed" : "failed",
+    latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
+  };
+}
+
+/** Text for the drawer header's single copy action, or null when there's nothing to copy. */
+export function toolCopyText(entry: TraceEntry): string | null {
+  if (entry.kind !== "combo") return null;
+  const data = entry.result ? parseToolResultContent(entry.result) : null;
+  const sqlResult = asSqlQueryResult(data);
+  if (sqlResult) return sqlResult.sql_query;
+  const ragResult = asRagSearchResult(data);
+  if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
+  return JSON.stringify(genericToolPayload(entry), null, 2);
+}
+
 export type ThoughtExtras = {
   thought_id?: string;
   phase?: string;

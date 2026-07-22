@@ -116,6 +116,13 @@
   font: var(--font-title-small);
 }
 
+.headerActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
 .body {
   flex: 1;
   padding: var(--spacing-m);

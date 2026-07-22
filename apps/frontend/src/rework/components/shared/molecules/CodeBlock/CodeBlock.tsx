@@ -24,6 +24,8 @@ interface CodeBlockProps {
   inline?: boolean;
   streaming?: boolean;
   streamingLabel?: string;
+  /** Hide the built-in copy button — use when the host already offers one (e.g. in a drawer header). */
+  hideCopy?: boolean;
 }
 
 export function CodeBlock({
@@ -32,6 +34,7 @@ export function CodeBlock({
   inline = false,
   streaming = false,
   streamingLabel = "Generating code block...",
+  hideCopy = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isDark = useIsDark();
@@ -51,9 +54,11 @@ export function CodeBlock({
     <div className={styles.block}>
       <div className={styles.header}>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
-        <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">
-          {copied ? "✓ Copied" : "Copy"}
-        </button>
+        {!hideCopy && (
+          <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">
+            {copied ? "✓ Copied" : "Copy"}
+          </button>
+        )}
       </div>
       {streaming ? (
         <div className={`${styles.body} ${styles.streamingBody}`}>

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, useEffect, useId } from "react";
+import { PropsWithChildren, ReactNode, useEffect, useId } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import styles from "./InlineDrawer.module.css";
 
@@ -20,6 +20,8 @@ interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Optional action(s) rendered in the header, immediately left of the close button. */
+  headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
   /**
@@ -38,6 +40,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  headerActions,
   width = "480px",
   layout = "overlay",
   children,
@@ -76,14 +79,17 @@ export function InlineDrawer({
             <span id={titleId} className={styles.title}>
               {title}
             </span>
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "close" }}
-              aria-label="Close panel"
-              onClick={onClose}
-            />
+            <div className={styles.headerActions}>
+              {headerActions}
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "close" }}
+                aria-label="Close panel"
+                onClick={onClose}
+              />
+            </div>
           </div>
           <div className={styles.body}>{children}</div>
         </div>

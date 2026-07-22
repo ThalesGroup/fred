@@ -1,15 +1,3 @@
-/* ── Tool (JSON) view ──────────────────────────────────────────────────── */
-.toolbar {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  padding: var(--spacing-xs) var(--spacing-s);
-}
-
-.spacer {
-  flex: 1;
-}
-
 /* ── Text / reasoning view ─────────────────────────────────────────────── */
 .detail {
   display: flex;
