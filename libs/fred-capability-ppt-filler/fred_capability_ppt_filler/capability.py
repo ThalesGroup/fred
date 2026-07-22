@@ -50,7 +50,7 @@ exactly like Kea's `asset_required`.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import List
 
 from fastapi import APIRouter, File, UploadFile
@@ -66,6 +66,8 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
@@ -177,12 +179,44 @@ def _build_ppt_filler_router() -> APIRouter:
     return router
 
 
+# Non-negotiable behavioral fragment delivered whenever the instance has a
+# configured template (same prompt-fragment delivery path as the MCP
+# capabilities' `agent_instructions`, #1978 AC4). Without it, models treat
+# "generate the slides" as an open-ended request and ask the user to upload a
+# template that is ALREADY configured server-side.
+_FILL_INSTRUCTIONS = (
+    "PPT FILLER: this agent already has a PowerPoint template configured by "
+    "its owner — NEVER ask the user to upload, name, or provide a template. "
+    "When the user asks to produce, generate, or fill the deck/slides, call "
+    "the 'fill_ppt_template' tool: each of its fields describes what to put "
+    "there — derive the values from the conversation and, when a field "
+    "description points at documents, from the document tools (search, "
+    "summarize, tree) before calling. Only ask the user for values you "
+    "genuinely cannot derive."
+)
+
+
 class _PptFillerMiddleware(AgentMiddleware):
-    """Carries the fill tools, bound to the instance's typed stored config."""
+    """Carries the fill tools, bound to the instance's typed stored config,
+    and overlays the fill instructions on the system prompt while a template
+    is configured (mirrors `_McpInstructionsMiddleware`)."""
 
     def __init__(self, ctx: CapabilityContext[PptFillerConfig, EmptyModel]) -> None:
         super().__init__()
         self.tools = build_fill_tools(ctx)
+        self._fragment = _FILL_INSTRUCTIONS if self.tools else ""
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        if not self._fragment:
+            return await handler(request)
+        base = request.system_prompt or ""
+        merged = f"{base}\n\n{self._fragment}" if base else self._fragment
+        request = request.override(system_message=SystemMessage(content=merged))
+        return await handler(request)
 
 
 class PptFillerCapability(

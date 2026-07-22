@@ -936,3 +936,52 @@ async def test_list_images_empty_folder_returns_message():
 
     assert "empty" in result.lower()
     assert folders.list_calls == ["tag-logos"]
+
+
+# --- Instructions overlay (system-prompt fragment) ---------------------------------
+
+
+class _FakeModelRequest:
+    """Duck-typed stand-in for langchain's ModelRequest: the middleware only
+    reads ``system_prompt`` and calls ``override(system_message=...)``."""
+
+    def __init__(self, system_prompt):
+        self.system_prompt = system_prompt
+        self.system_message = None
+
+    def override(self, *, system_message):
+        self.system_message = system_message
+        return self
+
+
+async def _passthrough(request):
+    return request
+
+
+@pytest.mark.asyncio
+async def test_middleware_overlays_fill_instructions_when_template_configured():
+    from fred_capability_ppt_filler.capability import PptFillerCapability
+
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    (mw,) = PptFillerCapability().middleware(_ctx(schema_slides(deck)))
+    request = _FakeModelRequest("BASE PROMPT")
+
+    await mw.awrap_model_call(request, _passthrough)
+
+    assert request.system_message is not None
+    merged = request.system_message.content
+    assert merged.startswith("BASE PROMPT")
+    assert "fill_ppt_template" in merged
+    assert "NEVER ask the user to upload" in merged
+
+
+@pytest.mark.asyncio
+async def test_middleware_stays_silent_without_a_configured_template():
+    from fred_capability_ppt_filler.capability import PptFillerCapability
+
+    (mw,) = PptFillerCapability().middleware(_ctx([]))
+    request = _FakeModelRequest("BASE PROMPT")
+
+    await mw.awrap_model_call(request, _passthrough)
+
+    assert request.system_message is None
