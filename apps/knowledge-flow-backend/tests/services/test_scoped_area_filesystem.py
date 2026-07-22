@@ -85,6 +85,15 @@ class _RebacStub:
         return []
 
 
+class _DenyUpdateRebac(_RebacStub):
+    """Grants CAN_READ (box entry) but denies CAN_UPDATE_RESOURCES (write gate)."""
+
+    async def check_user_permission_or_raise(self, user, permission, resource_id):
+        if permission == TeamPermission.CAN_UPDATE_RESOURCES:
+            raise PermissionError("update denied")
+        await super().check_user_permission_or_raise(user, permission, resource_id)
+
+
 def _scoped_filesystem() -> tuple[ScopedAreaFilesystem, _ScopedStorageStub, _RebacStub]:
     """Build one team-rooted scoped-area router with storage and rebac stubs."""
 
@@ -237,6 +246,159 @@ async def test_agent_user_path_requires_users_segment():
 
     with pytest.raises(FileNotFoundError, match="Agent path must be"):
         await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "draft.pptx"))
+
+
+# ── agent-config assets (agents/{id}/config, #1903) ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_agent_config_read_checks_membership_only():
+    scoped_fs, storage, rebac = _scoped_filesystem()
+
+    # Any member chatting with the agent fetches config assets: read is gated by
+    # CAN_READ (box entry) only — the stronger CAN_UPDATE_RESOURCES is NOT required.
+    content = await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"))
+
+    assert content == "hello"
+    assert rebac.checks == [(_user(), TeamPermission.CAN_READ, "acme")]
+    assert storage.calls == [
+        (
+            "get_text",
+            (_user(), "agents/slide-builder/config/template.pptx"),
+            {"owner_override": "acme", "root_prefix": "teams"},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_config_read_bytes_routes_to_storage():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    data = await scoped_fs.read_bytes_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"))
+
+    assert data == b"\x89PNG"
+    assert storage.calls == [
+        (
+            "get_bytes",
+            (_user(), "agents/slide-builder/config/template.pptx"),
+            {"owner_override": "acme", "root_prefix": "teams"},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_config_write_requires_update_resources():
+    scoped_fs, storage, rebac = _scoped_filesystem()
+
+    await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), "x")
+
+    # Membership first (box entry), then the stronger write permission — same
+    # rule as shared/: agent-config assets are a team-owned, admin-managed area.
+    assert rebac.checks == [
+        (_user(), TeamPermission.CAN_READ, "acme"),
+        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
+    ]
+    assert storage.calls == [
+        (
+            "put",
+            (_user(), "agents/slide-builder/config/template.pptx", "x"),
+            {"owner_override": "acme", "root_prefix": "teams"},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_config_write_denied_without_update_resources():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+    scoped_fs.rebac = _DenyUpdateRebac()
+
+    with pytest.raises(PermissionError, match="update denied"):
+        await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), "x")
+
+    # The write permission is enforced before any storage mutation.
+    assert storage.calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_config_delete_requires_update_resources():
+    scoped_fs, storage, rebac = _scoped_filesystem()
+
+    await scoped_fs.delete_area(_user(), ("acme", "agents", "slide-builder", "config", "old.pptx"))
+
+    assert rebac.checks == [
+        (_user(), TeamPermission.CAN_READ, "acme"),
+        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
+    ]
+    assert storage.calls == [
+        (
+            "delete",
+            (_user(), "agents/slide-builder/config/old.pptx"),
+            {"owner_override": "acme", "root_prefix": "teams"},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_id_root_lists_users_and_config():
+    scoped_fs, _storage, rebac = _scoped_filesystem()
+
+    entries = await scoped_fs.list_area(_user(), ("acme", "agents", "slide-builder"))
+
+    # An agent box exposes exactly its two sub-areas: per-user space and the
+    # shared agent-config area (#1903).
+    assert [entry.path for entry in entries] == ["users", "config"]
+    assert rebac.checks == [(_user(), TeamPermission.CAN_READ, "acme")]
+
+
+@pytest.mark.asyncio
+async def test_agent_config_stat_is_synthetic_dir():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    entry = await scoped_fs.stat_area(_user(), ("acme", "agents", "slide-builder", "config"))
+
+    # The `config` directory level is synthetic (not a stored object) — no
+    # storage round-trip, and it reports as a directory.
+    assert entry.path == "config"
+    assert entry.is_dir()
+    assert storage.calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_config_grep_scope_routes_to_storage():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    matches = await scoped_fs.grep_area(_user(), "logo", ("acme", "agents", "slide-builder", "config"))
+
+    assert matches == ["/teams/acme/notes.txt"]
+    assert storage.calls[-1] == (
+        "grep",
+        (_user(), "logo", "agents/slide-builder/config"),
+        {"owner_override": "acme", "root_prefix": "teams"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_path_neither_users_nor_config_is_rejected():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    # A path under agents/{id} that is neither users/ nor config/ is malformed
+    # and must be rejected before any storage access.
+    with pytest.raises(FileNotFoundError, match="Agent path must be"):
+        await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "bogus", "x.pptx"))
+
+    assert storage.calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_users_other_uid_still_rejected():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    # Regression: the config sub-area must not have loosened the ownership rule
+    # on the sibling per-user agent space.
+    with pytest.raises(PermissionError, match="another user's personal space"):
+        await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "users", "someone-else", "draft.pptx"))
+
+    assert storage.calls == []
 
 
 # ── grep, roots, malformed ─────────────────────────────────────────────────

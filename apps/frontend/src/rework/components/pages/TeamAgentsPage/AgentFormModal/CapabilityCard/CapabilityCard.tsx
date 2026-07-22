@@ -16,6 +16,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Fragment, type PropsWithChildren, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
@@ -27,35 +28,46 @@ interface CapabilityCardProps {
   disabled: boolean;
   /** Per-capability config values keyed by the field's local key (matches config_fields[].key). */
   configValues: Record<string, unknown>;
+  /** Pending asset files for this capability, keyed by AssetSlot.key (#1903). */
+  assetFiles: Record<string, File | undefined>;
   onToggle: () => void;
   onConfigChange: (key: string, value: unknown) => void;
+  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  onBlockingErrorChange: (message: string | null) => void;
 }
 
 /**
- * One selectable capability in the agent Tools tab: a switch that activates the
- * capability plus, when active, its `config_fields` rendered through the shared
- * metadata-driven {@link TuningFieldRenderer} (no bespoke per-field UI here).
- */
-/**
- * The active capability's `config_fields` form. Fields sharing a `ui.group`
- * form a visual section: a thin divider is drawn whenever the group changes
- * between two consecutive VISIBLE fields (hidden fields — `ui.hide` or an
- * unsatisfied `ui.visible_when` — never produce dangling dividers). Fields
- * flagged `ui.advanced` render inside a collapsed "Advanced settings"
- * disclosure below the main section.
+ * The active capability's `config_fields` form. A field whose `ui.widget`
+ * resolves in the owning capability's plugin `configWidgets` renders through
+ * the plugin's custom form widget (RFC §9 item 4, #1903) — a widget id is
+ * rendered at most once even when several fields name it. Remaining fields go
+ * through the shared metadata-driven {@link TuningFieldRenderer}. Fields
+ * sharing a `ui.group` form a visual section: a thin divider is drawn
+ * whenever the group changes between two consecutive VISIBLE fields (hidden
+ * fields — `ui.hide` or an unsatisfied `ui.visible_when` — never produce
+ * dangling dividers). Fields flagged `ui.advanced` render inside a collapsed
+ * "Advanced settings" disclosure below the main section.
  */
 function CapabilityConfigForm({
+  capability,
   configFields,
   configValues,
   disabled,
   teamId,
+  assetFiles,
   onConfigChange,
+  onAssetFileChange,
+  onBlockingErrorChange,
 }: {
+  capability: CapabilityCatalogEntry;
   configFields: NonNullable<CapabilityCatalogEntry["config_fields"]>;
   configValues: Record<string, unknown>;
   disabled: boolean;
   teamId?: string;
+  assetFiles: Record<string, File | undefined>;
   onConfigChange: (key: string, value: unknown) => void;
+  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  onBlockingErrorChange: (message: string | null) => void;
 }) {
   const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
@@ -65,24 +77,49 @@ function CapabilityConfigForm({
   const mainFields = visibleFields.filter((f) => !f.ui?.advanced);
   const advancedFields = visibleFields.filter((f) => f.ui?.advanced);
 
+  const renderedWidgets = new Set<string>();
+
   const renderGrouped = (fields: typeof visibleFields) =>
-    fields.map((field, index) => (
-      <Fragment key={field.key}>
-        {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
-        {/* A ui.visible_when field only exists under its gating sibling — a
-            slight indent makes the subordination readable. */}
-        <div className={field.ui?.visible_when ? styles.dependentField : undefined}>
-          <TuningFieldRenderer
-            field={field}
-            value={configValues[field.key]}
-            onChange={onConfigChange}
-            disabled={disabled}
-            teamId={teamId}
-            allValues={effectiveValues}
-          />
-        </div>
-      </Fragment>
-    ));
+    fields.map((field, index) => {
+      const Widget = configWidgetFor(capability.id, field.ui?.widget);
+      if (Widget) {
+        const widgetId = field.ui?.widget as string;
+        if (renderedWidgets.has(widgetId)) return null;
+        renderedWidgets.add(widgetId);
+        return (
+          <Fragment key={widgetId}>
+            {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
+            <Widget
+              capabilityId={capability.id}
+              teamId={teamId}
+              disabled={disabled}
+              configValues={configValues}
+              onConfigChange={onConfigChange}
+              assetFiles={assetFiles}
+              onAssetFileChange={onAssetFileChange}
+              onBlockingErrorChange={onBlockingErrorChange}
+            />
+          </Fragment>
+        );
+      }
+      return (
+        <Fragment key={field.key}>
+          {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
+          {/* A ui.visible_when field only exists under its gating sibling — a
+              slight indent makes the subordination readable. */}
+          <div className={field.ui?.visible_when ? styles.dependentField : undefined}>
+            <TuningFieldRenderer
+              field={field}
+              value={configValues[field.key]}
+              onChange={onConfigChange}
+              disabled={disabled}
+              teamId={teamId}
+              allValues={effectiveValues}
+            />
+          </div>
+        </Fragment>
+      );
+    });
 
   return (
     <div className={styles.subForm}>
@@ -114,14 +151,22 @@ function AdvancedSection({ title, children }: PropsWithChildren<{ title: string 
   );
 }
 
+/**
+ * One selectable capability in the agent Tools tab: a switch that activates
+ * the capability plus, when active, its `config_fields` rendered through
+ * {@link CapabilityConfigForm}.
+ */
 export function CapabilityCard({
   capability,
   teamId,
   checked,
   disabled,
   configValues,
+  assetFiles,
   onToggle,
   onConfigChange,
+  onAssetFileChange,
+  onBlockingErrorChange,
 }: CapabilityCardProps) {
   const { t } = useTranslation();
   const switchId = useId();
@@ -140,7 +185,12 @@ export function CapabilityCard({
         </label>
       </div>
 
-      {hasOptions && <CapabilityConfigForm {...{ configFields, configValues, disabled, teamId, onConfigChange }} />}
+      {hasOptions && (
+        <CapabilityConfigForm
+          {...{ capability, configFields, configValues, disabled, teamId, assetFiles, onConfigChange }}
+          {...{ onAssetFileChange, onBlockingErrorChange }}
+        />
+      )}
     </li>
   );
 }

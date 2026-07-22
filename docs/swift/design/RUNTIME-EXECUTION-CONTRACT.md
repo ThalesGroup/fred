@@ -996,6 +996,36 @@ precedence (no search at all).
 
 ---
 
+### 8.16 ✅ `agent_assets` / `document_content` / `document_folders` ports — #1903 PPT filler (July 2026)
+
+**What changed.** Three more OPTIONAL, additive ports on `RuntimeServices`
+(`fred_sdk/contracts/runtime.py`), same class of change and same §8.15 doctrine
+(scope/key parameters only; binding + token captured privately by the
+fred-runtime adapters):
+
+- `agent_assets: AgentAssetPort | None` — per-agent-instance config-asset
+  storage (`store`/`fetch`/`delete` by slot-relative key). Backed by the KF
+  virtual-filesystem sub-area `teams/{t}/agents/{agent_instance_id}/config/...`
+  (`AgentConfigAssetsAdapter`). Injected BOTH turn-time
+  (`_build_runtime_services`) and save-time
+  (`_build_capability_save_services`, which now also receives the
+  `agent_instance_id` from the validate-config form and stamps it on the
+  privately-held `RuntimeContext`).
+- `document_content: DocumentContentPort | None` — a corpus document's
+  ORIGINAL bytes by uid (KF `GET /raw_content/{uid}`, `DocumentContentAdapter`
+  over the new minimal `KfDocumentClient`).
+- `document_folders: DocumentFolderPort | None` — author folder string →
+  DOCUMENT tag id (save/analyze-time validation) and folder-tag document
+  listing (KF `GET /tags` + `POST /documents/metadata/browse`,
+  `DocumentFolderAdapter` over the new `KfTagClient`).
+
+No OpenAPI/wire-schema change on the execution surface. The pod's
+`validate-config` endpoint behavior is unchanged except that its save services
+now carry the three ports, letting an asset-bearing capability store binaries
+and resolve folders during `validate_config` (RFC AGENT-CAPABILITY §3.4/§3.8).
+
+---
+
 ### 8.13 ✅ `RuntimeContext.user_groups` removed — AUTHZ-05 final sweep (July 2026)
 
 **What changed.** `RuntimeContext.user_groups` (`fred_sdk.contracts.context`,
