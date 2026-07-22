@@ -527,9 +527,9 @@ class ProcessingConfig(BaseModel):
     def normalize_profile(self, profile: IngestionProcessingProfile | str | None) -> IngestionProcessingProfile:
         if profile is None:
             return self.default_profile
-        if isinstance(profile, str):
-            return IngestionProcessingProfile(profile)
-        return profile
+        # IngestionProcessingProfile is itself a str subclass, so this also covers
+        # (and is idempotent for) an already-valid enum member.
+        return IngestionProcessingProfile(profile)
 
     def get_profile_config(self, profile: IngestionProcessingProfile | str | None) -> "ProcessingConfig.ProfileConfig":
         profile = self.normalize_profile(profile)
