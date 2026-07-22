@@ -53,7 +53,6 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { CapabilitySidePanelProps } from "../types";
 import { useWritableDocuments } from "./useWritableDocuments";
 import WritableDocumentDownloadButton from "./WritableDocumentDownloadButton";
@@ -62,7 +61,7 @@ import styles from "./WritableDocumentPane.module.css";
 const isDarkTheme = () =>
   typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
 
-export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
+export function WritableDocumentPane(_props: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session") ?? "";
@@ -77,7 +76,6 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
   );
 
   const untitled = t("capability.writable_document.untitled");
-  const closeLabel = t("capability.writable_document.close");
 
   return (
     <div className={styles.pane}>
@@ -94,14 +92,6 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
             title={selected.title}
           />
         )}
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "close" }}
-          onClick={onClose}
-          aria-label={closeLabel}
-        />
       </div>
 
       {!sessionId && <div className={styles.empty}>{t("capability.writable_document.noSession")}</div>}

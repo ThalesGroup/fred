@@ -1268,6 +1268,12 @@ authoritative list API). Live writes mid-conversation keep their existing pop
 via the card renderer; a list refresh never re-opens a pane the user closed.
 writable_document only — the PPT preview declares no probe.
 
+Double close removed (2026-07-22): the pane (and `PptPreviewPane`) shipped its
+own header close button — a Kea-port leftover from `ResizablePaneShell`, which
+had no chrome. Inside `InlineDrawer` that made two ✕ with the same action; the
+drawer's header ✕ is now the single close affordance, like every other push
+drawer.
+
 #### Open UX issues
 
 - **Not yet design-reviewed** — MDXEditor toolbar density, tab strip styling, and the
