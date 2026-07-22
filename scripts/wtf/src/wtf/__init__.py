@@ -226,8 +226,11 @@ def find_free_port(used: set[int]) -> int:
             for match in re.findall(r"localhost:(\d+)", ports_file.read_text()):
                 used.add(int(match))
 
-    for _ in range(200):
-        port = random.randint(*PORT_RANGE)
+    start, end = PORT_RANGE
+    candidates = list(range(start, end + 1))
+    random.shuffle(candidates)
+
+    for port in candidates:
         if port in used:
             continue
         # Check if the port is actually free on the OS
@@ -571,7 +574,8 @@ def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_t
     vscode_dir = wt / ".vscode"
     vscode_dir.mkdir(exist_ok=True)
     for f in (FRED_ROOT / ".vscode").iterdir():
-        shutil.copy2(f, vscode_dir / f.name)
+        if f.is_file():
+            shutil.copy2(f, vscode_dir / f.name)
 
     color = pick_color()
     patch_workspace_file(wt, color, branch)
@@ -779,7 +783,10 @@ def create(
         if branch_exists_local:
             run(["git", "worktree", "add", str(wt), branch], env=git_env)
         elif branch_exists_remote:
-            run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
+            run(
+                ["git", "worktree", "add", "--track", "-b", branch, str(wt), f"origin/{branch}"],
+                env=git_env,
+            )
         else:
             cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
             if from_ref:
@@ -862,8 +869,16 @@ def remove_worktree_and_branch(branch: str, prune: bool) -> None:
     ok(f"Worktree removed: {wt}")
 
     # Delete the branch if fully merged
-    result = subprocess.run(["git", "branch", "--merged"], capture_output=True, text=True)
-    if branch in result.stdout:
+    try:
+        result = run_quiet(["git", "branch", "--merged"])
+    except subprocess.CalledProcessError:
+        raise click.ClickException("git failed to list merged branches — see error above")
+    merged_branches = {
+        line.strip().removeprefix("* ").strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    }
+    if branch in merged_branches:
         if prune or click.confirm(f"Branch '{branch}' is fully merged. Delete it?", default=False):
             run(["git", "branch", "-d", branch])
             ok(f"Branch deleted: {click.style(branch, fg='yellow')}")
@@ -902,8 +917,11 @@ def clean(prune: bool):
 
     branches = [wt.name.removeprefix("fred-wt-") for wt in candidates]
     picked = multi_select(branches)
+    if picked is None:
+        click.echo(click.style("Aborted.", fg="bright_black"))
+        return
     if not picked:
-        click.echo(click.style("Nothing removed.", fg="bright_black"))
+        click.echo(click.style("Nothing selected.", fg="bright_black"))
         return
 
     names = [branches[i] for i in picked]

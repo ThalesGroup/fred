@@ -500,7 +500,6 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                     chunk_uid, vec, text = row
                 else:
                     chunk_uid, vec = row
-                    text = ""
                 entry: Dict[str, Any] = {"chunk_uid": chunk_uid, "vector": list(vec)}
                 if with_document:
                     entry["text"] = text or ""

@@ -14,6 +14,7 @@
 
 import logging
 import re
+import sys
 import traceback
 from datetime import datetime, timezone
 from typing import Dict, Optional, TypeVar
@@ -42,7 +43,7 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
             config: Dict = yaml.safe_load(f)
         except yaml.YAMLError as e:
             print(f"Error while parsing configuration file {configuration_path}: {e}")
-            exit(1)
+            sys.exit(1)
     return Configuration(**config)
 
 

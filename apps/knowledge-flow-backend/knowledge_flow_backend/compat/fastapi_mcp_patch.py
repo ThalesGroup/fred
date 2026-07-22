@@ -93,11 +93,21 @@ fastapi_mcp_utils.resolve_schema_references = resolve_schema_references
 
 async def _ensure_session_manager_started_stateless(self) -> None:
     """Patched version: creates the session manager with stateless=True."""
+    # A fixed sleep() after spawning the manager task only protects the caller that
+    # started it. A concurrent caller sees _manager_started already True and returns
+    # immediately, racing the still-starting task group ("Task group is not
+    # initialized") under any concurrent first-request load. An Event makes every
+    # caller wait for the manager to actually be running instead.
+    if getattr(self, "_manager_ready", None) is None:
+        self._manager_ready = asyncio.Event()
+
     if self._manager_started:
+        await self._manager_ready.wait()
         return
 
     async with self._startup_lock:
         if self._manager_started:
+            await self._manager_ready.wait()
             return
 
         _logger.debug("Starting StreamableHTTP session manager (stateless=True)")
@@ -114,6 +124,7 @@ async def _ensure_session_manager_started_stateless(self) -> None:
             try:
                 async with self._session_manager.run():
                     _logger.info("StreamableHTTP session manager is running (stateless)")
+                    self._manager_ready.set()
                     await asyncio.Event().wait()
             except asyncio.CancelledError:
                 _logger.info("StreamableHTTP session manager is shutting down")
@@ -121,10 +132,15 @@ async def _ensure_session_manager_started_stateless(self) -> None:
             except Exception:
                 _logger.exception("Error in StreamableHTTP session manager")
                 raise
+            finally:
+                # Unblock any caller waiting on readiness even if run() failed before
+                # starting, so they fail fast on the real error instead of hanging.
+                self._manager_ready.set()
 
         self._manager_task = asyncio.create_task(_run_manager())
         self._manager_started = True
-        await asyncio.sleep(0.1)
+
+    await self._manager_ready.wait()
 
 
 FastApiHttpSessionManager._ensure_session_manager_started = _ensure_session_manager_started_stateless

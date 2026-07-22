@@ -34,9 +34,7 @@ def build_resource_from_create(payload: ResourceCreate, library_tag_id: str, use
         raise ValueError(f"YAML kind '{yaml_kind}' does not match payload.kind '{payload.kind.value}'")
 
     schema = header.get("schema")
-    if not schema:
-        schema = {}
-    elif not isinstance(schema, dict):
+    if schema and not isinstance(schema, dict):
         raise ValueError("Missing or invalid 'schema' in header.")
 
     # 3) body must exist

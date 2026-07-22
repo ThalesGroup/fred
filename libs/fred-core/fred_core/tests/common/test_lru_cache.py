@@ -45,12 +45,14 @@ class TestThreadSafeLRUCacheBasicOps:
     def test_delete_existing_returns_value(self) -> None:
         cache: ThreadSafeLRUCache[str, int] = ThreadSafeLRUCache()
         cache.set("k", 99)
-        assert cache.delete("k") == 99
+        deleted = cache.delete("k")
+        assert deleted == 99
         assert cache.get("k") is None
 
     def test_delete_missing_returns_none(self) -> None:
         cache: ThreadSafeLRUCache[str, int] = ThreadSafeLRUCache()
-        assert cache.delete("ghost") is None
+        deleted = cache.delete("ghost")
+        assert deleted is None
 
     def test_keys_empty(self) -> None:
         cache: ThreadSafeLRUCache[str, int] = ThreadSafeLRUCache()

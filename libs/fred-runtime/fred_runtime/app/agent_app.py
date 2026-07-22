@@ -1500,6 +1500,18 @@ async def _authorize_and_resolve(
     await _enforce_session_ownership(request, authenticated_user, container)
     await _authorize_execution_or_raise(request, authenticated_user, container)
     internal_req = _to_internal_request(request)
+    # Stamp the trusted service-agent verdict (never the caller-supplied
+    # context) so per-tool-call re-authorization can mirror the bypass
+    # `_authorize_execution_or_raise` already granted above (RFC EVAL-AUTH,
+    # Solution A) instead of re-running a ReBAC check this identity was
+    # never meant to satisfy. Overwritten unconditionally, both ways, so a
+    # caller can't spoof it via a body-supplied `context.is_service_agent`.
+    ctx = dict(internal_req.context or {})
+    if authenticated_user is not None and is_service_agent(authenticated_user):
+        ctx["is_service_agent"] = "true"
+    else:
+        ctx.pop("is_service_agent", None)
+    internal_req.context = ctx
     target = await _resolve_agent_instance(
         request=internal_req,
         registry=registry,
@@ -2432,6 +2444,7 @@ async def _iterate_runtime_event_payloads(
                 "checkpoint_id": resolved_checkpoint_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
+                "is_service_agent": ctx.get("is_service_agent"),
             }.items()
             if isinstance(value, str) and value
         },

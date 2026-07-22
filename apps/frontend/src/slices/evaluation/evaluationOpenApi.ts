@@ -56,6 +56,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/evaluation/v1/runs/${queryArg.runId}/cases/${queryArg.caseId}` }),
     }),
+    getRunReportEvaluationV1RunsRunIdReportGet: build.query<
+      GetRunReportEvaluationV1RunsRunIdReportGetApiResponse,
+      GetRunReportEvaluationV1RunsRunIdReportGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/runs/${queryArg.runId}/report` }),
+    }),
     streamRunEventsEvaluationV1RunsRunIdEventsGet: build.query<
       StreamRunEventsEvaluationV1RunsRunIdEventsGetApiResponse,
       StreamRunEventsEvaluationV1RunsRunIdEventsGetApiArg
@@ -106,6 +112,12 @@ const injectedRtkApi = api.injectEndpoints({
           team_id: queryArg.teamId,
         },
       }),
+    }),
+    deleteEvaluationEvaluationV1EvaluationsEvaluationIdDelete: build.mutation<
+      DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiResponse,
+      DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/evaluations/${queryArg.evaluationId}`, method: "DELETE" }),
     }),
     listTasksEvaluationV1TasksGet: build.query<
       ListTasksEvaluationV1TasksGetApiResponse,
@@ -184,6 +196,11 @@ export type GetRunCaseEvaluationV1RunsRunIdCasesCaseIdGetApiArg = {
   runId: string;
   caseId: string;
 };
+export type GetRunReportEvaluationV1RunsRunIdReportGetApiResponse =
+  /** status 200 Successful Response */ RunReportResponse;
+export type GetRunReportEvaluationV1RunsRunIdReportGetApiArg = {
+  runId: string;
+};
 export type StreamRunEventsEvaluationV1RunsRunIdEventsGetApiResponse = /** status 200 Successful Response */ any;
 export type StreamRunEventsEvaluationV1RunsRunIdEventsGetApiArg = {
   runId: string;
@@ -216,6 +233,10 @@ export type ListEvaluationsEvaluationV1EvaluationsGetApiResponse =
   /** status 200 Successful Response */ EvaluationListResponse;
 export type ListEvaluationsEvaluationV1EvaluationsGetApiArg = {
   teamId: string;
+};
+export type DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiResponse = unknown;
+export type DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiArg = {
+  evaluationId: string;
 };
 export type ListTasksEvaluationV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksEvaluationV1TasksGetApiArg = {
@@ -316,12 +337,15 @@ export type EvaluationRun = {
   target: ManagedInstanceTarget | RuntimeAgentTarget;
   profile: string;
   judge_profile_id: string;
+  metrics: string[];
+  custom_metrics: CustomMetricSpecInput[];
   operational_state: string;
   verdict: "pending" | "passed" | "failed" | "inconclusive";
   total_cases: number;
   completed_cases: number;
   passed_cases: number;
   failed_cases: number;
+  insufficient_cases: number;
   execution_error_cases: number;
   scoring_error_cases: number;
   snapshot: RunSnapshot;
@@ -375,13 +399,17 @@ export type EvaluationCaseListResponse = {
   cases: EvaluationCaseResponse[];
   total: number;
 };
-export type TelemetrySessionResponse = {
-  available: boolean;
-  url?: string | null;
-};
-export type TelemetryInfoResponse = {
-  enabled: boolean;
-  langfuse_session_url?: string | null;
+export type RunReportEvaluation = {
+  evaluation_id: string;
+  name: string;
+  version: string;
+  team_id: string;
+  team_name?: string | null;
+  author: string | null;
+  created_by: string;
+  origin: string;
+  completeness: string;
+  created_at: string;
 };
 export type RunAnalysisResult = {
   summary: string;
@@ -389,6 +417,25 @@ export type RunAnalysisResult = {
   weaknesses: string[];
   recommendations: string[];
   risk_level: string;
+};
+export type RunReportResponse = {
+  schema_version?: "1";
+  generated_at: string;
+  evaluation: RunReportEvaluation;
+  run: EvaluationRun;
+  metric_averages?: {
+    [key: string]: number;
+  } | null;
+  analysis?: RunAnalysisResult | null;
+  cases: EvaluationCaseResponse[];
+};
+export type TelemetrySessionResponse = {
+  available: boolean;
+  url?: string | null;
+};
+export type TelemetryInfoResponse = {
+  enabled: boolean;
+  langfuse_session_url?: string | null;
 };
 export type RunAnalysisResponse = {
   run_id: string;
@@ -408,7 +455,8 @@ export type EvaluationDetailResponse = {
   evaluation_id: string;
   name: string;
   version: string;
-  author: string;
+  author: string | null;
+  created_by: string;
   team_id: string;
   origin: "capture" | "upload" | "manual";
   completeness: EvaluationCompleteness;
@@ -419,6 +467,8 @@ export type EvaluationDetailResponse = {
 export type CreateEvaluationRequest = {
   team_id: string;
   name: string;
+  version?: string | null;
+  author?: string | null;
   origin: "upload" | "manual";
   source_filename?: string | null;
   cases: EvaluationCase[];
@@ -427,7 +477,8 @@ export type EvaluationSummaryResponse = {
   evaluation_id: string;
   name: string;
   version: string;
-  author: string;
+  author: string | null;
+  created_by: string;
   team_id: string;
   origin: "capture" | "upload" | "manual";
   completeness: EvaluationCompleteness;
@@ -546,6 +597,8 @@ export const {
   useLazyListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useGetRunCaseEvaluationV1RunsRunIdCasesCaseIdGetQuery,
   useLazyGetRunCaseEvaluationV1RunsRunIdCasesCaseIdGetQuery,
+  useGetRunReportEvaluationV1RunsRunIdReportGetQuery,
+  useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery,
   useStreamRunEventsEvaluationV1RunsRunIdEventsGetQuery,
   useLazyStreamRunEventsEvaluationV1RunsRunIdEventsGetQuery,
   useCancelRunEvaluationV1RunsRunIdCancelPostMutation,
@@ -557,6 +610,7 @@ export const {
   useCreateEvaluationEvaluationV1EvaluationsPostMutation,
   useListEvaluationsEvaluationV1EvaluationsGetQuery,
   useLazyListEvaluationsEvaluationV1EvaluationsGetQuery,
+  useDeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteMutation,
   useListTasksEvaluationV1TasksGetQuery,
   useLazyListTasksEvaluationV1TasksGetQuery,
   useGetTaskEvaluationV1TasksTaskIdGetQuery,
