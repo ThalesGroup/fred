@@ -92,13 +92,20 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
     pdfjs.GlobalWorkerOptions.workerPort = worker;
   }, [remountKey]);
 
-  // Terminate the worker created for the current key when the key changes or the
-  // pane unmounts. The closure captures the instance from THIS run, so a cleanup
-  // firing after the next key's useMemo can never kill the newer worker.
+  // Terminate the worker created for the current key once it is no longer the
+  // active port (the next key's useMemo has already swapped a fresh one in by
+  // the time this cleanup fires). Guarding on the ACTIVE port matters under
+  // StrictMode: its simulated unmount runs this cleanup while the worker is
+  // still current and no re-render re-provisions one — unconditionally
+  // terminating here left react-pdf waiting forever on a dead worker
+  // (endless "Loading preview…"). The still-active worker is deliberately
+  // left running on the final unmount, like the legacy pane.
   useEffect(() => {
     const worker = workerRef.current;
     return () => {
-      worker?.terminate();
+      if (worker && pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+        worker.terminate();
+      }
     };
   }, [remountKey]);
 
