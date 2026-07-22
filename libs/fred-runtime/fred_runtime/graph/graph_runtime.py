@@ -86,10 +86,12 @@ from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
@@ -1824,11 +1826,20 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
     - pending HITL lifecycle: `_pending_checkpoints`
     """
 
-    def __init__(self, *, definition: GraphAgentDefinition, services: RuntimeServices):
+    def __init__(
+        self,
+        *,
+        definition: GraphAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+    ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
         # Session-scoped pending checkpoints must survive executor rebuilds on bind().
         self._pending_checkpoints: dict[str, _PendingGraphCheckpoint] = {}
+        # Selected capabilities' tools (Graph bridge, NOTES-GRAPH-CAPABILITY-
+        # BRIDGE.md Phase 4). None when the agent selects no capabilities.
+        self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -1848,17 +1859,21 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
     async def build_executor(
         self, binding: BoundRuntimeContext
     ) -> Executor[BaseModel, BaseModel]:
-        runtime_tools = (
+        mcp_tools = (
             cast(tuple[BaseTool, ...], self.services.tool_provider.get_tools())
             if self.services.tool_provider is not None
             else ()
+        )
+        capability_tools = _adapted_capability_tools(
+            self._capability_block,
+            mcp_tool_names={tool.name for tool in mcp_tools},
         )
         return _DeterministicGraphExecutor(
             definition=self.definition,
             binding=binding,
             services=self.services,
             model=self._model,
-            runtime_tools=runtime_tools,
+            runtime_tools=mcp_tools + capability_tools,
             pending_checkpoints=self._pending_checkpoints,
         )
 
@@ -1867,6 +1882,88 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             await self.services.tool_provider.aclose()
         self._model = None
         self._pending_checkpoints.clear()
+
+
+def _adapted_capability_tools(
+    capability_block: CapabilityAgentBlock | None,
+    *,
+    mcp_tool_names: set[str],
+) -> tuple[BaseTool, ...]:
+    """
+    Bridge a Graph agent's selected-capability tools into `runtime_tools`
+    (NOTES-GRAPH-CAPABILITY-BRIDGE.md Phase 4).
+
+    Each tool is re-wrapped by `_adapt_capability_tool_for_graph` (see there
+    for why a plain merge would silently drop `ToolInvocationResult` sources).
+
+    Also raises the capability-vs-MCP tool name collision deferred from
+    Phase 2 (`assembly.build_capability_agent_block` cannot see MCP-resolved
+    names; this is the first place both sources are in scope together): a
+    capability tool must never silently shadow, or be shadowed by, an
+    MCP-resolved runtime tool of the same name.
+    """
+    if capability_block is None or not capability_block.tools:
+        return ()
+    adapted: list[BaseTool] = []
+    for source_tool in capability_block.tools:
+        if source_tool.name in mcp_tool_names:
+            raise CapabilityAssemblyError(
+                f"Tool '{source_tool.name}' is exposed by both a capability and "
+                "an MCP server selected on this agent. Capability and MCP tool "
+                "names must be unique."
+            )
+        adapted.append(_adapt_capability_tool_for_graph(source_tool))
+    return tuple(adapted)
+
+
+def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
+    """
+    Wrap one ReAct-shaped capability tool so it survives a Graph node's
+    plain-dict `invoke_runtime_tool` call intact.
+
+    Why this exists (NOTES-GRAPH-CAPABILITY-BRIDGE.md Phase 1/4,
+    `test_capability_tool_return_convention.py`): a capability tool built
+    with `@tool(..., response_format="content_and_artifact")` (the
+    `document_access` convention) silently loses its `ToolInvocationResult`
+    artifact when invoked through `BaseTool.ainvoke()` with a plain args dict
+    — the shape `invoke_runtime_tool` uses, as opposed to the `ToolCall` dict
+    `create_agent()`'s real ReAct loop uses. `.ainvoke()`'s response-shape
+    handling is what drops it; calling the tool's own underlying `.coroutine`
+    directly sidesteps `.ainvoke()` entirely and returns the function's real
+    Python return value, with no ambiguity.
+
+    The wrapper then re-shapes that return value into the one convention
+    Phase 1 proved survives a plain-dict `.ainvoke()` unchanged: a bare
+    `ToolInvocationResult`, no `response_format` override (LangChain's
+    "content" default already does the right thing here).
+    - `(content, artifact)` 2-tuple (the `content_and_artifact` shape): keep
+      the artifact.
+    - anything else (already a bare `ToolInvocationResult`, or any other
+      capability tool return): pass through unchanged.
+
+    `document_access`'s tool definition itself is untouched by this — the
+    adaptation lives entirely at this bridge/merge seam, not in capability
+    authoring (RFC invariant B).
+    """
+    coroutine = getattr(source_tool, "coroutine", None)
+    if coroutine is None:
+        # No capability tool relies on the sync-only `.func` path today; pass
+        # through unchanged rather than guessing at an adaptation for a shape
+        # that doesn't exist yet.
+        return source_tool
+
+    async def _invoke(**kwargs: object) -> object:
+        raw = await coroutine(**kwargs)
+        if isinstance(raw, tuple) and len(raw) == 2:
+            return raw[1]
+        return raw
+
+    return StructuredTool.from_function(
+        name=source_tool.name,
+        description=source_tool.description,
+        args_schema=source_tool.args_schema,
+        coroutine=_invoke,
+    )
 
 
 def _validated_handlers(

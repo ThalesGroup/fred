@@ -252,13 +252,110 @@ File: `libs/fred-runtime/fred_runtime/app/agent_app.py`
   problem (both flagged at the end of Phase 1/2) remain exactly where they
   were, still Phase 4's job.
 
-### Phase 4 — `GraphRuntime` consumes `capability_block.tools`
+### Phase 4 — `GraphRuntime` consumes `capability_block.tools` — DONE (2026-07-22)
 File: `libs/fred-runtime/fred_runtime/graph/graph_runtime.py`
-- `GraphRuntime.__init__` gains `capability_block: CapabilityAgentBlock | None = None`.
-- `build_executor` (~line 1851): merge `capability_block.tools` into the
-  `runtime_tools` tuple before constructing `_DeterministicGraphExecutor` — no
-  change needed to the executor itself (`{tool.name: tool for tool in
-  runtime_tools}` stays as-is).
+
+- `GraphRuntime.__init__` gains `capability_block: CapabilityAgentBlock | None
+  = None` (imported from `fred_runtime.capabilities.assembly`, mirroring
+  `ReActRuntime.__init__`'s existing parameter exactly — same name, same
+  `self._capability_block` storage). `build_executor` now builds
+  `mcp_tools` (unchanged, from `services.tool_provider.get_tools()`) and
+  `capability_tools = _adapted_capability_tools(self._capability_block,
+  mcp_tool_names={t.name for t in mcp_tools})`, and passes
+  `runtime_tools=mcp_tools + capability_tools` into
+  `_DeterministicGraphExecutor` — unchanged itself, exactly as scoped (it
+  already just does `{tool.name: tool for tool in runtime_tools}`).
+
+**The adapter — investigated empirically, not assumed.** Confirmed
+`langchain-core==1.4.9` (this repo's pin, `>=0.3.0` in `pyproject.toml`) via a
+throwaway introspection script against a real `document_access` tool
+instance: `StructuredTool` (what `@tool` produces) exposes its underlying
+async function directly on `.coroutine` — a plain `Callable[..., Awaitable]`
+taking the tool's own keyword arguments (`question=...`), NOT the single-dict
+signature `.ainvoke()` uses. Calling `.coroutine(**kwargs)` directly returns
+the function body's real Python return value with zero interference from
+`BaseTool.ainvoke()`'s response-shape handling — for
+`document_access`'s tool, the genuine `(content_str, ToolInvocationResult)`
+2-tuple, confirmed by direct invocation in the same script.
+
+Landed on `_adapt_capability_tool_for_graph(source_tool: BaseTool) ->
+BaseTool` (`graph_runtime.py`, next to `GraphRuntime`): reads
+`getattr(source_tool, "coroutine", None)` (plain `BaseTool` doesn't type this
+attribute — `getattr` avoids a basedpyright error without a defensive branch
+that can actually fire for today's capability tools), builds a new
+`StructuredTool.from_function(name=..., description=..., args_schema=...,
+coroutine=_invoke)` where `_invoke` awaits the original coroutine and, if the
+result is a 2-tuple, returns only its second element (the artifact) —
+otherwise passes the raw result through unchanged (covers a capability tool
+that already returns a bare `ToolInvocationResult`, matching Phase 1's other
+proven-safe shape). The wrapper's own `response_format` is left at
+LangChain's default (`"content"`) deliberately — that is the shape Phase 1
+proved survives a plain-dict `.ainvoke()` intact. No new tool class, no
+config knob, ~15 lines. `document_access`'s tool definition is untouched;
+the adaptation lives entirely at this merge seam (RFC invariant B holds).
+
+Considered and rejected: reusing `react_tool_resolution._resolve_runtime_provider_tool`'s
+three-way return-shape handling as the template, per the task's suggestion —
+checked it first. Its `_invoke` still calls `runtime_tool.ainvoke(payload)`
+(not the underlying coroutine), so for a `content_and_artifact` tool it hits
+the exact same collapse Phase 1 found: the 2-tuple branch it contains is
+unreachable for this tool shape, just like `_normalize_runtime_tool_output`'s
+own dead branch noted in Phase 1. Not reusable for this problem — the fix
+had to bypass `.ainvoke()` entirely, which is a materially different
+mechanism, not a copy of that function.
+
+**Empirical proof test** (`tests/test_graph_capability_bridge.py`):
+`test_adapted_capability_tool_sources_survive_invoke_runtime_tool` builds
+`document_access`'s real tool, adapts it with `_adapt_capability_tool_for_graph`
+exactly as `build_executor` does, registers it on a real
+`_GraphNodeExecutionContext` (the concrete class `GraphNodeContext` is at
+runtime — same harness pattern as the pre-existing
+`test_graph_runtime_invoke_agent.py`), and calls its real, unmocked
+`invoke_runtime_tool("search_documents_using_vectorization", {"question":
+...})`. Result: a dict (`_normalize_runtime_tool_output` `model_dump`s the
+bare `ToolInvocationResult` — no special-cased handling for it exists, and
+none was needed) with `result["sources"][0]["uid"] == "d1"` intact. A sibling
+control test, `test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool`,
+registers the RAW (unadapted) tool through the same real path and asserts
+`"sources" not in result` — reproducing Phase 1's finding through the actual
+production code path and proving the adapter is load-bearing, not a no-op.
+A third unit test, `test_adapt_preserves_bare_tool_invocation_result_tools_unchanged`,
+covers the other proven-safe shape (bare `ToolInvocationResult`, no
+`response_format`) round-tripping through the adapter unchanged.
+
+**MCP-vs-capability collision (resolved here, deferred from Phase 2):**
+`_adapted_capability_tools(capability_block, *, mcp_tool_names: set[str])`
+raises `CapabilityAssemblyError` (imported from
+`fred_runtime.capabilities.errors`, same class the Phase 2 cross-capability
+collision uses — no new error type) naming the tool the moment a capability
+tool's name is already present in `mcp_tool_names`, before any adaptation
+happens. `build_executor` computes `mcp_tool_names` from the same
+`mcp_tools` tuple it already builds from `tool_provider.get_tools()`, so both
+sides of the collision (capability tool names, MCP-resolved runtime tool
+names) are finally in scope together, exactly where Phase 2 said they would
+be. Tests: `test_capability_tool_colliding_with_mcp_tool_name_raises` and
+`test_capability_tools_merge_cleanly_when_no_mcp_name_collision` exercise
+`_adapted_capability_tools` directly; `test_build_executor_raises_on_capability_mcp_name_collision`
+and `test_build_executor_merges_mcp_and_adapted_capability_tools` exercise
+the full `GraphRuntime.build_executor` wiring (fake `ToolProviderPort` +
+real `CapabilityAgentBlock` + a minimal `GraphAgentDefinition` fixture
+modeled on `test_agent_app.py`'s), proving the merged executor's
+`_runtime_tools` carries both tool sources by name, and that the capability
+tool actually registered on the executor is the adapted wrapper (asserted via
+`response_format == "content"`, not the raw tool's `"content_and_artifact"`).
+
+Tests: `libs/fred-runtime/tests/test_graph_capability_bridge.py` (new file,
+8 tests). Validation: `cd libs/fred-runtime && make code-quality && make
+test` — both green, 592 tests passed (584 Phase-3 baseline + 8 new), zero
+regressions.
+
+End state: a Graph agent that selects capabilities now gets their tools
+merged into `runtime_tools`, invocable via `invoke_runtime_tool` with full
+`ToolInvocationResult` fidelity (sources, blocks), and a capability tool name
+colliding with an MCP-resolved tool name fails loudly at executor build time
+instead of silently shadowing. `GraphRuntime` itself still isn't
+constructed with `capability_block=` anywhere — the one call site in
+`agent_app.py` (~line 2551) is untouched, exactly as scoped; that's Phase 5.
 
 ### Phase 5 — wire it at the one call site
 File: `agent_app.py` (~line 2531-2535), the only place that constructs
@@ -368,11 +465,25 @@ real, non-empty `CapabilityAgentBlock` built for it, but the one
 `capability_block=` — nothing reads `.tools` on the Graph path yet. That is
 exactly Phase 4's job, left untouched here. Phases 4-6 not started.
 
-Next action: Phase 4 (`GraphRuntime` consumes `capability_block.tools` in
-`graph_runtime.py`) — when picking it up, read the Phase 1 return-convention
-finding above first; the plain-dict-invocation adapter problem it flags
-becomes real the moment `capability_block.tools` is merged into
-`GraphRuntime.runtime_tools`. Also re-read Phase 2's MCP-collision deferral
-note — Phase 4 is where that check finally has both tool sources
-(`capability_block.tools` and MCP-resolved runtime tool names) in scope to
-actually implement it.
+Phase 4 implemented and verified (2026-07-22): `libs/fred-runtime` passes
+`make code-quality && make test` (592 tests, zero regressions). The Phase
+1 plain-dict-invocation problem is resolved at the merge seam (not by
+touching `document_access`'s tool) via `_adapt_capability_tool_for_graph`,
+proven empirically against the real `invoke_runtime_tool` path (see the
+Phase 4 section above for the adapter mechanism and the control test that
+reproduces Phase 1's bug when the adapter is skipped). The Phase 2
+capability-vs-MCP tool-name collision deferral is also resolved here
+(`_adapted_capability_tools`, raises `CapabilityAssemblyError`). `GraphRuntime`
+now accepts and stores `capability_block`; `build_executor` merges adapted
+capability tools into `runtime_tools`. Nothing outside
+`graph_runtime.py`/its tests was touched — `agent_app.py`'s one
+`GraphRuntime(...)` call site still doesn't pass `capability_block=`.
+
+Next action: Phase 5 (wire `capability_block=capability_block` into the one
+`GraphRuntime(...)` construction call in `agent_app.py`, ~line 2551 — the
+`capability_block` local is already computed above that call for the ReAct
+branch, per Phase 3's end-state note). No known open design questions remain
+for Phase 5 — Phase 4 closed the last one (plain-dict-invocation adapter +
+MCP-collision) flagged by earlier phases. Phase 6 (end-to-end proof agent
+scenario) still has its `DemoEchoCapability` migration TODO pending, flagged
+in the Phase 2 section above.
