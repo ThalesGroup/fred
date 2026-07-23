@@ -1358,7 +1358,7 @@ It does **not** exercise rich content rendering. No existing scenario produces:
 | Fenced code block with language (`python`, `bash`, …) | Syntax highlighting     |
 | Mermaid diagram                                       | `Mermaid` renderer      |
 | GFM table                                             | Table rendering         |
-| GeoJSON `FeatureCollection`                           | Leaflet map renderer    |
+| GeoJSON `FeatureCollection`                           | Geo summary chip        |
 | KaTeX inline math                                     | Math rendering          |
 | KaTeX block math                                      | Math rendering          |
 | `:::details` collapsible                              | remark-directive plugin |
