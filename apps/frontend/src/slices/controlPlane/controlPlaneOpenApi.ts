@@ -1480,6 +1480,14 @@ export type PermissionSummary = {
   /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
   is_platform_observer?: boolean;
 };
+export type UploadWarning = {
+  /** Visual severity variant of the banner. */
+  severity?: "info" | "warning" | "error" | "success";
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+};
 export type FrontendBootstrap = {
   current_user: UserSummary;
   active_team: TeamWithPermissions;
@@ -1487,6 +1495,8 @@ export type FrontendBootstrap = {
   gcu_version?: string | null;
   feature_flags: FrontendFeatureFlags;
   permissions: PermissionSummary;
+  /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */
+  upload_warning?: UploadWarning | null;
 };
 export type FrontendUserAuthConfig = {
   enabled: boolean;

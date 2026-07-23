@@ -267,7 +267,9 @@
       "processingDone": "Done",
       "processingFailed": "Failed",
       "processingFast": "Fast processing",
-      "processingPrepare": "Preparing processing"
+      "processingPrepare": "Preparing processing",
+      "uploadWarningConfirm": "I understand",
+      "uploadWarningTitle": "Before attaching files"
     },
     "composerActions": {
       "dialogAria": "Chat actions",

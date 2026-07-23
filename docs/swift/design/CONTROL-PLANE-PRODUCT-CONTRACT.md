@@ -115,6 +115,9 @@ Phase 3a uses one control-plane-owned bootstrap payload:
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`
   - `permissions`
+  - `upload_warning`
+    - optional deployer-configured upload notice (severity + locale→message
+      map) shown on upload surfaces — see Contract Note §23 (MIGR-01.01)
 
 `FrontendBootstrap` must not carry deployment branding labels. Static branding
 and frontend display strings (`siteDisplayName`, `siteTitle`, `siteSubtitle`,
@@ -1325,3 +1328,27 @@ propagates verbatim (the uniform-422 convention of §17). Mismatched
 422 before any pod call. Files addressed to a capability that is not active in
 the save are ignored, mirroring the config-values policy. Responses and
 authorization (`CAN_UPDATE_AGENTS`) are identical to the JSON routes.
+
+## 23. Contract Notes — upload warning banner (MIGR-01.01, 2026-07-23, #2077)
+
+`FrontendBootstrap` gains one optional field, `upload_warning`
+(`UploadWarning`: `severity: info|warning|error|success` + `messages: {locale
+→ string}`), sourced from control-plane deployment config
+`platform.frontend.upload_warning`. When set, the frontend renders one shared
+banner (`UploadWarningBanner`) on upload surfaces — the document upload
+drawer and the chat session-attachments drawer — resolving the message from
+the active i18next locale with `en` fallback. `null`/omitted → nothing
+rendered, the pre-#2077 behavior.
+
+Ported from the main-branch `Properties.uploadWarning` (#1597, #1634), whose
+serving surface (agentic-backend frontend properties) no longer exists on
+swift.
+
+Boundary rationale (§3.1): this is **not** a branding label — it is a
+deployer *policy/compliance notice* (e.g. "do not upload classified
+documents"), structured (severity + locale map), which the static
+`config.json` `properties` surface (`Record<string, string>`) cannot express.
+It follows the `gcu_version` precedent: deployment-config-owned policy
+exposed on the authenticated bootstrap. Deliberately not on the pre-auth
+`FrontendConfig`, which stays minimal — upload surfaces only render
+post-auth.

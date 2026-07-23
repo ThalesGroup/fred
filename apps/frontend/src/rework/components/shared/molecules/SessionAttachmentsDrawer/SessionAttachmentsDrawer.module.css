@@ -1,3 +1,7 @@
+.uploadWarning {
+  margin-bottom: var(--spacing-xs);
+}
+
 .list {
   display: flex;
   flex-direction: column;
