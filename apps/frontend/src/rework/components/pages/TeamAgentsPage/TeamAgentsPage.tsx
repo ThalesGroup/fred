@@ -16,7 +16,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
@@ -93,8 +93,8 @@ function extractApiErrorDetail(error: unknown): string {
  * Lists the managed agent instances for the current team and exposes
  * create / edit / delete operations for team admins.
  *
- * Enabled agents are wrapped in a <Link> so the whole card navigates to the
- * managed-chat route. Disabled agents render the card without navigation.
+ * Chat is a dedicated button inside `AgentCard` (#2076), not a whole-card
+ * click — `AgentCard` builds its own managed-chat link from `teamId`.
  */
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
@@ -147,6 +147,7 @@ export default function TeamAgentsPage() {
     const request: CreateAgentInstanceRequest = {
       template_id: payload.templateId,
       display_name: payload.displayName,
+      role: payload.role || undefined,
       description: payload.description || undefined,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
@@ -187,6 +188,7 @@ export default function TeamAgentsPage() {
     if (!teamId || !editingInstance) return;
     const request: UpdateAgentInstanceRequest = {
       display_name: payload.displayName,
+      role: payload.role || undefined,
       description: payload.description || undefined,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
@@ -341,34 +343,18 @@ export default function TeamAgentsPage() {
             .filter((instance) => canManageAgents || !instance.suspension_reason)
             .map((instance) => {
               const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-              const card = (
+              return (
                 <AgentCard
+                  key={instance.agent_instance_id}
                   instance={instance}
                   templateDisplayName={template?.display_name || instance.template_id}
-                  templateCategory={template?.category}
                   runtimeId={template?.source_runtime_id}
+                  teamId={teamId}
                   canManageAgents={canManageAgents}
                   offline={templatesUnavailable}
                   onEdit={() => setEditingInstance(instance)}
                   onToggleEnabled={() => handleToggleEnabled(instance)}
                 />
-              );
-
-              // A suspended instance never gets a chat link even if its stored
-              // status is still "enabled" (#1975, RFC §3.9): execution would be
-              // refused server-side, so it falls into the non-navigating branch.
-              return instance.status === "enabled" && !instance.suspension_reason ? (
-                <Link
-                  key={instance.agent_instance_id}
-                  to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
-                  className={styles.chatLink}
-                >
-                  {card}
-                </Link>
-              ) : (
-                <div key={instance.agent_instance_id} className={styles.disabledCard}>
-                  {card}
-                </div>
               );
             })}
         </div>
