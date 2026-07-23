@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { materialIcons, type MaterialIconType } from "@shared/utils/Type.ts";
 import { guessAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useTranslation } from "react-i18next";
@@ -52,6 +53,11 @@ export default function AgentCard({
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
+  const toggleTooltip = isSuspended
+    ? t("rework.agentCard.suspendedToggleLocked")
+    : isEnabled
+      ? t("rework.agentCard.deactivate")
+      : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
   // the site's configured default icon when nothing matches (#2076 follow-up).
   // `agentIconName` is an untyped site-config string; guessAgentIcon's
@@ -106,28 +112,31 @@ export default function AgentCard({
       <div className={styles.actions}>
         {canManageAgents && (
           <div className={styles.actionsLeft}>
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
-              // the fix is in the edit form, not a re-enable. Disable it so an
-              // editor cannot toggle a broken agent back into the catalog.
-              disabled={isSuspended}
-              title={isSuspended ? t("rework.agentCard.suspendedToggleLocked") : undefined}
-              icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
-              onClick={() => {
-                if (isSuspended) return;
-                onToggleEnabled();
-              }}
-            />
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "edit" }}
-              onClick={onEdit}
-            />
+            <Tooltip text={toggleTooltip}>
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="medium"
+                // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
+                // the fix is in the edit form, not a re-enable. Disable it so an
+                // editor cannot toggle a broken agent back into the catalog.
+                disabled={isSuspended}
+                icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
+                onClick={() => {
+                  if (isSuspended) return;
+                  onToggleEnabled();
+                }}
+              />
+            </Tooltip>
+            <Tooltip text={t("rework.agentCard.edit")}>
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "edit" }}
+                onClick={onEdit}
+              />
+            </Tooltip>
           </div>
         )}
         {isEnabled && teamId ? (

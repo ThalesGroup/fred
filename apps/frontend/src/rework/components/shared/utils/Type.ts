@@ -119,6 +119,16 @@ export const materialIcons = [
   "code",
   "campaign",
   "travel_explore",
+  "cloud",
+  "bug_report",
+  "architecture",
+  "assignment",
+  "school",
+  "receipt_long",
+  "shopping_cart",
+  "handshake",
+  "request_quote",
+  "history",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];
