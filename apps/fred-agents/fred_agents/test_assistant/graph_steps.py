@@ -1411,8 +1411,8 @@ async def geo_step(
 
     reply = (
         "**Sample map.** Two pins (Paris, Berlin) and one styled polygon, "
-        "sent as a `GeoPart` ui_part — rendered below as an interactive map, "
-        "not as a markdown code block."
+        "sent as a `GeoPart` ui_part — rendered below as a feature-count "
+        "summary chip, not as a markdown code block."
     )
     context.emit_assistant_delta(reply)
 
@@ -1553,7 +1553,7 @@ _SCENARIO_TABLE = """\
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
-| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (interactive map) |
+| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |"""
 
 

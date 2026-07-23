@@ -112,7 +112,7 @@ function SqlToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
       ) : (
         <>
           <span className={styles.metaInfo}>
-            {data.rows.length} ligne{data.rows.length > 1 ? "s" : ""}
+            {data.rows.length} row{data.rows.length > 1 ? "s" : ""}
           </span>
           {data.rows.length > 0 && (
             <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" hideCopy />

@@ -393,9 +393,9 @@ def build_capability_agent_block(
                 # capability or not.
                 if owner == cap_id:
                     raise CapabilityAssemblyError(
-                        f"Tool '{candidate.name}' is returned twice by "
-                        f"capability '{cap_id}''s own tools(). Capability "
-                        "tools must be uniquely named."
+                        f"Tool '{candidate.name}' is returned twice by its own "
+                        f"capability's tools() ('{cap_id}'). Capability tools "
+                        "must be uniquely named."
                     )
                 raise CapabilityAssemblyError(
                     f"Tool '{candidate.name}' is exposed by two capabilities "
