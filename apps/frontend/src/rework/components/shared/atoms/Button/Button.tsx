@@ -26,6 +26,7 @@ interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
 }
 export default function Button({ children, color, variant, size, icon, className, ...props }: ButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
+  if (className) buttonClasses.push(className);
   const layerClasses = [styles["state-layer"], styles[`icon-${icon ? "left" : "none"}`]];
 
   return (

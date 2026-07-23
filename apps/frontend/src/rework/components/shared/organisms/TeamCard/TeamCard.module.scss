@@ -5,10 +5,13 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 290px;
-  overflow: hidden;
+  /* No overflow: hidden here — an admin-avatar tooltip in the footer must be
+   * able to escape the card bounds. The banner below clips its own square
+   * corners to match the card's rounded top instead. */
 }
 
 .teamBanner {
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
   width: 100%;
   height: 96px;
   object-fit: cover;

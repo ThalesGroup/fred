@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { IconType } from "@shared/utils/Type.ts";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import { materialIcons, type MaterialIconType } from "@shared/utils/Type.ts";
+import { guessAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
@@ -23,8 +27,9 @@ import styles from "./AgentCard.module.scss";
 export interface AgentCardProps {
   instance: ManagedAgentInstanceSummary;
   templateDisplayName?: string;
-  templateCategory?: string;
   runtimeId?: string;
+  /** Needed to build the managed-chat route for the Chat button. */
+  teamId?: string;
   canManageAgents: boolean;
   offline?: boolean;
   onEdit: () => void;
@@ -34,8 +39,8 @@ export interface AgentCardProps {
 export default function AgentCard({
   instance,
   templateDisplayName,
-  templateCategory,
   runtimeId,
+  teamId,
   canManageAgents,
   offline = false,
   onEdit,
@@ -48,78 +53,100 @@ export default function AgentCard({
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
+  const toggleTooltip = isSuspended
+    ? t("rework.agentCard.suspendedToggleLocked")
+    : isEnabled
+      ? t("rework.agentCard.deactivate")
+      : t("rework.agentCard.activate");
+  // Best-effort keyword guess from the agent's own identity, falling back to
+  // the site's configured default icon when nothing matches (#2076 follow-up).
+  // `agentIconName` is an untyped site-config string; guessAgentIcon's
+  // fallback must be a real MaterialIconType, so it's validated the same way
+  // `toIconType` does, narrowed to the material (non-custom) subset.
+  const defaultIcon: MaterialIconType = (materialIcons as readonly string[]).includes(agentIconName)
+    ? (agentIconName as MaterialIconType)
+    : "smart_toy";
+  const iconName = guessAgentIcon(instance.display_name, instance.role, instance.description ?? "", defaultIcon);
+  // Raw source_runtime_id, not a prettified label (e.g. "fred-agents"), per
+  // the agent card redesign (#2076).
+  const origin = [runtimeId, templateDisplayName].filter(Boolean).join(" · ");
+
+  const chatButton = (
+    <Button
+      color="primary"
+      variant="outlined"
+      size="medium"
+      icon={{ category: "outlined", type: "reviews" }}
+      className={styles.chatButton}
+      disabled={!isEnabled}
+    >
+      {t("rework.agentCard.chat")}
+    </Button>
+  );
 
   return (
     <div className={styles.agentCard} data-enabled={isEnabled}>
-      <div className={styles.stateLayer}>
-        <div className={styles.agentInfo}>
-          <div className={styles.agentPresentation}>
-            <div className={styles.agentIcon}>
-              <Icon category={"outlined"} type={agentIconName as IconType} />
-            </div>
-            <div className={styles.agentIdentity}>
-              <div className={styles.agentName}>{instance.display_name}</div>
-              <div className={styles.agentMeta}>
-                {templateCategory && <span className={styles.agentCategory}>{templateCategory}</span>}
-                {templateDisplayName && <span className={styles.agentTemplate}>{templateDisplayName}</span>}
-                {runtimeId && <span className={styles.agentPod}>{runtimeId}</span>}
-              </div>
-            </div>
+      <div className={styles.agentInfo}>
+        <div className={styles.agentPresentation}>
+          <div className={styles.agentIcon}>
+            <Icon category={"outlined"} type={iconName} />
           </div>
-          <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
+          <div className={styles.agentIdentity}>
+            {origin && <div className={styles.agentOrigin}>{origin}</div>}
+            <div className={styles.agentName}>{instance.display_name}</div>
+            <div className={styles.agentRole}>{instance.role}</div>
+          </div>
         </div>
-
-        {isSuspended ? (
-          <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>
-        ) : (
-          instance.catalog_warnings &&
-          instance.catalog_warnings.length > 0 && (
-            <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
-          )
-        )}
-
-        {canManageAgents && (
-          <div className={styles.actions}>
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
-              // the fix is in the edit form, not a re-enable. Disable it so an
-              // editor cannot toggle a broken agent back into the catalog.
-              disabled={isSuspended}
-              title={isSuspended ? t("rework.agentCard.suspendedToggleLocked") : undefined}
-              icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (isSuspended) return;
-                onToggleEnabled();
-              }}
-            />
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "edit" }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onEdit();
-              }}
-            />
-          </div>
-        )}
+        <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
       </div>
 
-      {isEnabled && (
-        <div className={styles.newChat}>
-          <span className={styles.newChatIcon}>
-            <Icon category={"outlined"} type={"reviews"} />
-          </span>
-          {t("rework.agentCard.startChat")}
-        </div>
+      {isSuspended ? (
+        <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>
+      ) : (
+        instance.catalog_warnings &&
+        instance.catalog_warnings.length > 0 && (
+          <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
+        )
       )}
+
+      <div className={styles.actions}>
+        {canManageAgents && (
+          <div className={styles.actionsLeft}>
+            <Tooltip text={toggleTooltip}>
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="medium"
+                // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
+                // the fix is in the edit form, not a re-enable. Disable it so an
+                // editor cannot toggle a broken agent back into the catalog.
+                disabled={isSuspended}
+                icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
+                onClick={() => {
+                  if (isSuspended) return;
+                  onToggleEnabled();
+                }}
+              />
+            </Tooltip>
+            <Tooltip text={t("rework.agentCard.edit")}>
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "edit" }}
+                onClick={onEdit}
+              />
+            </Tooltip>
+          </div>
+        )}
+        {isEnabled && teamId ? (
+          <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
+            {chatButton}
+          </Link>
+        ) : (
+          chatButton
+        )}
+      </div>
     </div>
   );
 }

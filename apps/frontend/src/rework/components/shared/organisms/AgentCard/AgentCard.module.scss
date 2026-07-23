@@ -13,7 +13,6 @@
   --agent-icon-background-color: var(--secondary-container);
   --agent-icon-color: var(--on-secondary-container);
   --agent-icon-opacity: 1;
-  --agent-card-cursor: pointer;
 }
 
 .agentCard[data-enabled="false"] {
@@ -23,35 +22,22 @@
   --agent-icon-background-color: var(--surface-container-lowest);
   --agent-icon-color: var(--on-surface-retreat);
   --agent-icon-opacity: 0.2;
-  --agent-card-cursor: default;
 }
 
 /* ── Card shell ────────────────────────────────────────────────────────────── */
+/* The card itself is no longer an interactive/clickable surface (#2076) — only
+   the edit/toggle icon buttons and the Chat button are, each with their own
+   hover state. No card-level cursor or hover treatment here. */
 
 .agentCard {
-  position: relative;
-  animation: rotate-gradient 2s linear infinite;
-  animation-play-state: paused;
-  cursor: var(--agent-card-cursor);
-  border: 2px solid transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--spacing-2xs);
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 100%;
   height: 100%;
-  --blur: 0px;
-  --newChatDisplay: none;
-
-  &:hover:not([data-enabled="false"]) {
-    --blur: 5px;
-    --newChatDisplay: flex;
-    animation-play-state: running;
-    /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white).
-       No semantic token family covers this rainbow sequence; discretising to 5 tokens
-       would destroy the animation effect. Approved exception — do not replace with tokens. */
-    background:
-      linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-      conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
-  }
 }
 
 @keyframes rotate-gradient {
@@ -62,20 +48,10 @@
 
 /* ── Inner layout ──────────────────────────────────────────────────────────── */
 
-.stateLayer {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--spacing-2xs);
-  height: 100%;
-}
-
 .agentInfo {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  filter: blur(var(--blur));
-  transition: filter 150ms ease;
   padding: var(--spacing-m) var(--spacing-m) var(--spacing-2xs);
 }
 
@@ -103,8 +79,18 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-3xs);
   min-width: 0;
+}
+
+/* Origin · template, e.g. "fred-agents · Generalist" — raw source_runtime_id,
+   not a prettified label (#2076). */
+.agentOrigin {
+  overflow: hidden;
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agentName {
@@ -115,26 +101,14 @@
   white-space: nowrap;
 }
 
-.agentMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.agentCategory {
+/* Short one-line summary of what the agent does (#2076) — distinct from the
+   longer `agentDescription` below. */
+.agentRole {
+  overflow: hidden;
   color: var(--agent-meta-color);
-  font: var(--font-label-large);
-}
-
-.agentTemplate {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-}
-
-.agentPod {
-  color: var(--on-surface-muted);
-  font: var(--font-label-small);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .catalogWarning {
@@ -167,32 +141,68 @@
   font: var(--font-body-medium);
 }
 
-/* ── Actions row (not blurred — stays accessible on hover) ─────────────────── */
+/* ── Actions row — edit/toggle grouped left, Chat flush right (#2076) ───────── */
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  padding: 0 var(--spacing-2xs) var(--spacing-2xs);
-}
-
-/* ── "Start Chat" hover overlay ────────────────────────────────────────────── */
-
-.newChat {
-  display: var(--newChatDisplay);
-  position: absolute;
-  top: 0;
-  left: 0;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  gap: var(--spacing-2xs);
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  color: var(--on-surface);
-  font: var(--font-title-medium);
+  gap: var(--spacing-xs);
+  padding: 0 var(--spacing-s) var(--spacing-s);
 }
 
-.newChatIcon {
-  font-size: 1.25rem;
+.actionsLeft {
+  display: flex;
+  gap: var(--spacing-3xs);
+  margin-right: auto;
+}
+
+.chatLink {
+  text-decoration: none;
+}
+
+/* Label never wraps regardless of container width (design-system rule). */
+.chatButton {
+  white-space: nowrap;
+}
+
+/* The rotating conic-gradient border that used to signal the whole card was
+   clickable now lives on the Chat button instead (#2076) — it's the one
+   action that starts a conversation. Tripled class for guaranteed
+   specificity: Button's own `.btn-primary.btn-outlined` (and its `:hover`
+   variant) match at the same weight otherwise, which would make the winner
+   depend on stylesheet load order alone. */
+.chatButton {
+  animation: rotate-gradient 2s linear infinite;
+  animation-play-state: paused;
+}
+
+/* Default border uses the neutral outline token instead of Button's own
+   primary-colored outline. The real border is reserved at the hover width
+   (2px) at all times and made transparent — the visible 1px rest-state line
+   is drawn with an inset box-shadow instead, which doesn't take up layout
+   space. Without this, animating border-width from 1px to 2px on hover grows
+   the button's intrinsic (content-sized, non-fixed-width) footprint by 2px
+   and shifts it and its neighbors. */
+.chatButton.chatButton.chatButton {
+  border-width: 2px;
+  --btn-border: transparent;
+  box-shadow: inset 0 0 0 1px var(--outline);
+}
+
+.chatButton.chatButton.chatButton:hover:not(:disabled) {
+  animation-play-state: running;
+  box-shadow: none;
+  /* Cancels Button's own outlined-hover state layer (a semi-transparent
+     on-surface tint on the inner `.state-layer` div) — without this it paints
+     over the gradient background below and the dark interior visibly
+     lightens on hover, which reads as competing with the gradient border. */
+  --btn-background-surface: transparent;
+  --btn-text-color: var(--on-surface);
+  /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white),
+     matching the card's former hover treatment. No semantic token family covers this rainbow
+     sequence; discretising to 5 tokens would destroy the animation effect. */
+  background:
+    linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
+    conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
 }

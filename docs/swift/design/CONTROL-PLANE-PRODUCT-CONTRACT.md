@@ -276,6 +276,12 @@ The control plane is a **pure proxy** for these values — it does not interpret
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
 - `display_name`, `description`, `status`
+- `role: str` — **added 2026-07-23 (#2076).** Short one-line summary of what
+  the agent does, distinct from the longer `description`; shown on the agent
+  card. Independently settable via `CreateAgentInstanceRequest.role` /
+  `UpdateAgentInstanceRequest.role` (both optional); server-defaults to
+  `display_name` when omitted at creation, and is left unchanged on update
+  when omitted.
 - ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open. See RFC AGENT-CAPABILITY-RFC §3.3/§3.7.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
