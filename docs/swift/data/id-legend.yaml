@@ -1911,6 +1911,30 @@ items:
       Docker dev/prod/devcontainer images already ship LibreOffice). Mechanical
       Makefile + code alignment — no RFC.
 
+  - id: OPS-08
+    title: "Per-deployment frontend branding assets synced from object storage (init-container)"
+    status: open
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/FRONTEND-BRANDING-ASSETS-RFC.md"
+      issue: "GitHub issue #2070"
+    notes: >
+      Branding binaries (favicon, logos, default team banner/avatars) are baked into
+      the frontend nginx image; config.json properties can only reference baked files,
+      so a branding swap requires an image rebuild. OPS-07 adds an optional chart-level
+      initContainer that syncs an S3 branding prefix into an emptyDir mounted at
+      /usr/share/nginx/html/images/custom/ AND /usr/share/nginx/html/contrib/ (per-brand
+      gcu/gdpr/release.md overrides the frontend already probes via releaseBrand) —
+      served as plain statics (pre-auth favicon, normal caching), properties point at
+      custom/* files via the existing ConfigMap override. RFC §2.0 carries the verified
+      property→URL→file→object-key mapping table the sync must match exactly. Zero
+      frontend/backend code change; deliberately stays out of the frozen
+      product contract (branding remains frontend-static per issue #1850 and
+      CONTROL-PLANE-PRODUCT-CONTRACT.md §3.1). Alternatives (control-plane presigned
+      URLs, control-plane byte serving, ConfigMap binaryData) analyzed and
+      rejected/deferred in the RFC; the self-service upload path (option C) remains a
+      compatible future evolution writing to the same bucket prefix.
+
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"
     status: open
