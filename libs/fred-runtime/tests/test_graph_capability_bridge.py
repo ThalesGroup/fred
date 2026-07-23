@@ -189,6 +189,42 @@ def test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool() -> No
     assert "sources" not in result
 
 
+def test_real_demo_echo_capability_answer_survives_invoke_runtime_tool() -> None:
+    """
+    PR #2067 review (Codex), end to end against the REAL in-tree reference
+    capability, not a synthetic stand-in: `demo_echo` puts its answer in
+    `content` and returns an artifact with only `ui_parts`, no `blocks`.
+    Before the content-folding fix, a Graph node calling it through
+    `invoke_runtime_tool` got back an artifact with no textual answer at
+    all — this proves the fix against the real capability + the real
+    adapter + the real `invoke_runtime_tool` path together.
+    """
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_runtime.capabilities.demo import DemoEchoCapability
+
+    cap = DemoEchoCapability()
+    # Boot always validates the registry (extending the UiPart union) before
+    # any tool can run; mirror that here so the artifact's ui_parts validate
+    # (test_capability_chat_parts_1977.py's pattern).
+    registry = CapabilityRegistry()
+    registry.register(cap)
+    registry.validate(env={})
+    ctx_cap = build_capability_context(
+        cap,
+        identity=CapabilityIdentity(user_id="u-1", session_id="s-1", team_id=None),
+        services=RuntimeServices(),
+        config={"uppercase": True},
+    )
+    (source_tool,) = cap.tools(ctx_cap)
+    adapted = _adapt_capability_tool_for_graph(source_tool)
+    ctx = _node_context({adapted.name: adapted})
+
+    result = asyncio.run(ctx.invoke_runtime_tool("demo_echo", {"text": "hello"}))
+
+    assert isinstance(result, dict)
+    assert result["blocks"][0]["text"] == "HELLO"
+
+
 # ---------------------------------------------------------------------------
 # _adapt_capability_tool_for_graph — direct unit coverage
 # ---------------------------------------------------------------------------
@@ -213,6 +249,53 @@ def test_adapt_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
 
     assert isinstance(result, ToolInvocationResult)
     assert result.tool_ref == "probe"
+
+
+def test_adapt_folds_content_into_blocks_when_artifact_carries_none() -> None:
+    """
+    PR #2067 review (Codex): `document_access`'s tools duplicate their
+    answer into `artifact.blocks`, so keeping only the artifact is safe for
+    them — but a tool shaped like `demo_echo` (the in-tree reference
+    capability) puts its real answer in `content` and returns an artifact
+    carrying only `ui_parts` (a UI card), no `blocks` at all. Discarding
+    `content` unconditionally would silently drop the answer for any such
+    tool. The adapter must fold `content` into `blocks` when the artifact
+    doesn't already carry any.
+    """
+
+    @lc_tool("demo_echo_shaped", response_format="content_and_artifact")
+    async def _demo_echo_shaped(text: str) -> tuple[str, ToolInvocationResult]:
+        """Mirrors demo_echo's exact shape: answer in content, artifact has
+        only ui_parts, no blocks."""
+        return text.upper(), ToolInvocationResult(tool_ref="demo_echo_shaped")
+
+    adapted = _adapt_capability_tool_for_graph(_demo_echo_shaped)
+    result = asyncio.run(adapted.ainvoke({"text": "hello"}))
+
+    assert isinstance(result, ToolInvocationResult)
+    assert result.blocks[0].text == "HELLO"
+
+
+def test_adapt_does_not_override_artifact_blocks_already_present() -> None:
+    """The content-folding safety net must not run when the artifact already
+    carries its own `blocks` (`document_access`'s pattern) — it only fills
+    the gap, never overrides deliberately-populated data."""
+
+    @lc_tool("has_blocks_tool", response_format="content_and_artifact")
+    async def _has_blocks_tool(x: str) -> tuple[str, ToolInvocationResult]:
+        """An artifact that already carries its own blocks."""
+        del x
+        return "ignored content", ToolInvocationResult(
+            tool_ref="has_blocks_tool",
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="real payload"),),
+        )
+
+    adapted = _adapt_capability_tool_for_graph(_has_blocks_tool)
+    result = asyncio.run(adapted.ainvoke({"x": "y"}))
+
+    assert isinstance(result, ToolInvocationResult)
+    assert len(result.blocks) == 1
+    assert result.blocks[0].text == "real payload"
 
 
 def test_adapt_only_unwraps_tuples_declared_content_and_artifact() -> None:

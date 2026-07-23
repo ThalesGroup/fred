@@ -382,7 +382,21 @@ def build_capability_agent_block(
 
         for candidate in capability_tools:
             owner = tool_owner.get(candidate.name)
-            if owner is not None and owner != cap_id:
+            if owner is not None:
+                # PR #2067 review: this used to only check `owner != cap_id`
+                # (cross-capability), so a SINGLE capability's own tools()
+                # returning two tools with the same .name silently kept
+                # whichever came last in tools_by_name — and a `HitlSpec`
+                # naming that tool would then bind to whichever object won,
+                # not necessarily the one the author meant to gate. "Tools
+                # must be uniquely named" now means that literally, same
+                # capability or not.
+                if owner == cap_id:
+                    raise CapabilityAssemblyError(
+                        f"Tool '{candidate.name}' is returned twice by "
+                        f"capability '{cap_id}''s own tools(). Capability "
+                        "tools must be uniquely named."
+                    )
                 raise CapabilityAssemblyError(
                     f"Tool '{candidate.name}' is exposed by two capabilities "
                     f"('{owner}' and '{cap_id}'). Capability tools must be "

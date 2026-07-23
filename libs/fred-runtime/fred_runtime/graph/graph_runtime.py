@@ -47,6 +47,8 @@ from fred_sdk.contracts.context import (
     FsEntry,
     InvocationScope,
     PublishedArtifact,
+    ToolContentBlock,
+    ToolContentKind,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -1968,7 +1970,15 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
       declared response_format (CAPAB-02), not "any 2-tuple" — a plain tool
       whose normal return value happens to be some unrelated 2-tuple must
       round-trip unchanged, not have its second element silently
-      reinterpreted as an artifact.
+      reinterpreted as an artifact. **If the artifact's own `blocks` are
+      empty, `content` is folded in as one `ToolContentBlock` before the
+      artifact is returned** (PR #2067 review): `document_access`'s tools
+      duplicate their answer into `blocks` themselves, but a tool like
+      `demo_echo` puts its actual answer only in `content`, with an artifact
+      carrying nothing but `ui_parts` — discarding `content` outright would
+      silently drop the answer for any such tool. This is a safety net, not
+      a substitute for a capability author populating `blocks` directly
+      (`document_access` is still the reference pattern to copy).
     - anything else (already a bare `ToolInvocationResult`, or any other
       capability tool return): pass through unchanged.
 
@@ -2015,7 +2025,30 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
     async def _invoke(**kwargs: object) -> object:
         raw = await coroutine(**kwargs)
         if is_content_and_artifact and isinstance(raw, tuple) and len(raw) == 2:
-            return raw[1]
+            content, artifact = raw
+            # PR #2067 review (Codex): keeping ONLY the artifact is correct
+            # for a tool like `document_access`'s, whose artifact duplicates
+            # its answer into `blocks` — but a tool like `demo_echo`'s puts
+            # the actual answer in `content` and an artifact carrying only
+            # `ui_parts` (a UI card), never `blocks`. Unwrapping to the
+            # artifact alone would silently drop the answer for any such
+            # tool. If the artifact has no `blocks` of its own, fold the
+            # discarded `content` in as one — never lose the answer just
+            # because a capability author didn't think to duplicate it.
+            if (
+                isinstance(artifact, ToolInvocationResult)
+                and not artifact.blocks
+                and isinstance(content, str)
+                and content
+            ):
+                artifact = artifact.model_copy(
+                    update={
+                        "blocks": (
+                            ToolContentBlock(kind=ToolContentKind.TEXT, text=content),
+                        )
+                    }
+                )
+            return artifact
         return raw
 
     return StructuredTool.from_function(

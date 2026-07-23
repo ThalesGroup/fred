@@ -392,6 +392,49 @@ def test_two_capabilities_exposing_same_tool_name_raises() -> None:
         build_capability_agent_block(registry, contexts)
 
 
+def test_one_capability_returning_two_same_named_tools_raises() -> None:
+    """
+    PR #2067 review: the collision guard used to check `owner != cap_id`
+    only, so a SINGLE capability's own `tools()` returning two DIFFERENT
+    tool objects with the same `.name` silently kept whichever won in
+    `tools_by_name` — and a `HitlSpec` naming that tool could then bind to
+    the wrong object. "Tools must be uniquely named" now holds within one
+    capability's own list too, not just across capabilities.
+    """
+
+    class _DupeCap(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="dupe_cap",
+            version="1.0.0",
+            name="cap.dupe_cap.name",
+            description="cap.dupe_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool("dupe_tool")
+            def _first(x: str) -> str:
+                """First."""
+                return x
+
+            @tool("dupe_tool")
+            def _second(x: str) -> str:
+                """Second — same name as _first, a capability-authoring bug."""
+                return x
+
+            return [_first, _second]
+
+    registry = CapabilityRegistry()
+    registry.register(_DupeCap())
+    contexts = _contexts(registry, {"dupe_cap": {}})
+
+    with pytest.raises(CapabilityAssemblyError, match="dupe_tool"):
+        build_capability_agent_block(registry, contexts)
+
+
 # ---------------------------------------------------------------------------
 # Demo capability tool callable in chat (enabled in code — no product surface)
 # ---------------------------------------------------------------------------

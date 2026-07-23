@@ -90,10 +90,23 @@ export function GeoMap({ geojson, popupProperty, fitBounds = true, style }: GeoM
     if (value) setAccent(value);
   }, []);
 
-  const data = useMemo(
-    () => (isFeatureCollection(geojson) ? (geojson as unknown as FeatureCollection) : null),
-    [geojson],
-  );
+  const data = useMemo(() => {
+    if (!isFeatureCollection(geojson)) return null;
+    const candidate = geojson as unknown as FeatureCollection;
+    // `isFeatureCollection` only checks the envelope shape — a feature's own
+    // geometry/coordinates can still be malformed (this data may be
+    // agent-supplied, e.g. RAG content). Leaflet throws deep inside its own
+    // parsing for that case, outside any try/catch in the render path below,
+    // which would crash the component tree instead of showing the error box.
+    // Attempting the same L.geoJSON() parse react-leaflet's <GeoJSON> does
+    // internally catches that here instead.
+    try {
+      L.geoJSON(candidate as never);
+    } catch {
+      return null;
+    }
+    return candidate;
+  }, [geojson]);
   const baseStyle = (style ?? {}) as Record<string, unknown>;
 
   if (!data) {

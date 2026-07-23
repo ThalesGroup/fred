@@ -38,7 +38,7 @@ import {
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { PROMPT_CATEGORIES } from "../../../config/promptCategories.ts";
 import styles from "./PromptsPage.module.scss";
 
