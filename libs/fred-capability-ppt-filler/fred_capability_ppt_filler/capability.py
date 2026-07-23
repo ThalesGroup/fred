@@ -187,8 +187,10 @@ def _build_ppt_filler_router() -> APIRouter:
 _FILL_INSTRUCTIONS = (
     "PPT FILLER: this agent already has a PowerPoint template configured by "
     "its owner — NEVER ask the user to upload, name, or provide a template. "
-    "When the user asks to produce, generate, or fill the deck/slides, call "
-    "the 'fill_ppt_template' tool: each of its fields describes what to put "
+    "When the user asks — in any wording or language — to produce, generate, "
+    "create, or fill a PPT, PowerPoint, presentation, deck, or slides, you "
+    "MUST call the 'fill_ppt_template' tool; never answer with slide content "
+    "in the chat instead. Each of the tool's fields describes what to put "
     "there — derive the values from the conversation and, when a field "
     "description points at documents, from the document tools (search, "
     "summarize, tree) before calling. Only ask the user for values you "

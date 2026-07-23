@@ -164,7 +164,7 @@
       }
     },
     "ppt_filler": {
-      "name": "PPT Filler",
+      "name": "PowerPoint generator",
       "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
       "form": {
         "uploadTemplate": "Upload a .pptx template",
@@ -172,7 +172,7 @@
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
-        "templateRequired": "PPT Filler requires a PowerPoint template. Upload a .pptx file.",
+        "templateRequired": "The PowerPoint generator requires a PowerPoint template. Upload a .pptx file.",
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
@@ -194,7 +194,7 @@
         "folder_not_found": "{{placeholder}} on slide {{slide}} points to a folder that does not exist in this space.",
         "image_key_invalid_location": "{{placeholder}} on slide {{slide}} sits in a table cell, which cannot hold a picture. Move it into a text box or a rectangle.",
         "invalid_upload": "The uploaded file could not be read as a .pptx. Re-select the file and try again.",
-        "asset_required": "PPT Filler requires a PowerPoint template, but none was provided."
+        "asset_required": "The PowerPoint generator requires a PowerPoint template, but none was provided."
       },
       "preview": {
         "untitled": "Presentation",

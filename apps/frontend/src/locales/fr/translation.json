@@ -164,7 +164,7 @@
       }
     },
     "ppt_filler": {
-      "name": "PPT Filler",
+      "name": "Générateur PowerPoint",
       "description": "Faites remplir votre propre modèle PowerPoint depuis la conversation : l'agent extrait les valeurs et produit une présentation finalisée.",
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
@@ -172,7 +172,7 @@
         "uploadAria": "Fichier de modèle PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",
-        "templateRequired": "PPT Filler nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
+        "templateRequired": "Le générateur PowerPoint nécessite un modèle PowerPoint. Téléversez un fichier .pptx.",
         "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
         "analyzing": "Analyse du modèle…",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
@@ -194,7 +194,7 @@
         "folder_not_found": "{{placeholder}} sur la diapositive {{slide}} pointe vers un dossier qui n'existe pas dans cet espace.",
         "image_key_invalid_location": "{{placeholder}} sur la diapositive {{slide}} se trouve dans une cellule de tableau, qui ne peut pas contenir d'image. Déplacez-le dans une zone de texte ou un rectangle.",
         "invalid_upload": "Le fichier téléversé n'a pas pu être lu comme un .pptx. Sélectionnez à nouveau le fichier et réessayez.",
-        "asset_required": "PPT Filler nécessite un modèle PowerPoint, mais aucun n'a été fourni."
+        "asset_required": "Le générateur PowerPoint nécessite un modèle PowerPoint, mais aucun n'a été fourni."
       },
       "preview": {
         "untitled": "Présentation",

@@ -155,12 +155,13 @@ async def test_awrap_model_call_overlays_open_documents_catalog(
     assert result.overridden is not None
     merged = str(result.overridden.content)
     assert "BASE PROMPT" in merged
+    assert "WRITABLE DOCUMENT" in merged
     assert "Collaborative documents already open in the editor" in merged
     assert "- 'Report' (document_id=doc-1)" in merged
 
 
 @pytest.mark.asyncio
-async def test_awrap_model_call_noop_without_documents(
+async def test_awrap_model_call_overlays_write_instructions_without_documents(
     fake_store: FakeWritableDocumentStore,
 ):
     middleware = _middleware()
@@ -169,6 +170,12 @@ async def test_awrap_model_call_noop_without_documents(
     async def handler(req: _FakeRequest) -> _FakeRequest:
         return req
 
-    result = await middleware.awrap_model_call(request, handler)  # type: ignore[arg-type]
-    # No documents in the session -> the prompt is not overlaid.
-    assert result.overridden is None
+    await middleware.awrap_model_call(request, handler)  # type: ignore[arg-type]
+    # No documents in the session -> the write instructions are still overlaid
+    # (so "write me a report" triggers the tool), but no catalog fragment.
+    # The fake's `override` mutates the request in place, so assert on it.
+    assert request.overridden is not None
+    merged = str(request.overridden.content)
+    assert merged.startswith("BASE PROMPT")
+    assert "write_document" in merged
+    assert "Collaborative documents already open in the editor" not in merged

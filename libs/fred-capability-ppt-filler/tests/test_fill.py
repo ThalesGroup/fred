@@ -1002,6 +1002,9 @@ async def test_middleware_overlays_fill_instructions_when_template_configured():
     assert merged.startswith("BASE PROMPT")
     assert "fill_ppt_template" in merged
     assert "NEVER ask the user to upload" in merged
+    # The trigger list must cover the words users actually say ("generate a
+    # ppt / a presentation"), not just "deck/slides".
+    assert "PPT, PowerPoint, presentation, deck, or slides" in merged
 
 
 @pytest.mark.asyncio
