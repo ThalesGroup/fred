@@ -43,11 +43,7 @@ export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded }: Docu
     return <PdfStreamingDocumentViewer documentUid={documentUid} />;
   }
   return (
-    <MarkdownDocumentBody
-      documentUid={documentUid}
-      onLoaded={onMarkdownLoaded}
-      fullWidth={isTabularFile(fileName)}
-    />
+    <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
   );
 }
 
@@ -97,11 +93,7 @@ function MarkdownDocumentBody({
 
   return (
     <div className={styles.markdownBody}>
-      {loading ? (
-        <p className={styles.loading}>Loading…</p>
-      ) : (
-        <MarkdownRenderer text={content} fullWidth={fullWidth} />
-      )}
+      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} fullWidth={fullWidth} />}
     </div>
   );
 }
