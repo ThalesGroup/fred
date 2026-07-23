@@ -23,6 +23,8 @@ function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
 const EMPTY_CAPABILITY_STATE = {
   selectedCapabilityIds: [] as string[],
   capabilityConfigValues: {} as Record<string, Record<string, unknown>>,
+  capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
+  capabilityBlockingErrors: {} as Record<string, string | null>,
 };
 
 describe("buildAgentFormSubmitPayload", () => {
@@ -51,6 +53,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         description: "",
         tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["ghost-cap"],
         capabilityConfigValues: { "ghost-cap": { tone: "warm" } },
       },
@@ -69,6 +72,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         description: "",
         tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
         // "gone" is not advertised; "unselected" is advertised but not ticked.
         selectedCapabilityIds: ["ppt-filler", "gone"],
         capabilityConfigValues: {
@@ -92,6 +96,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         description: "",
         tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["knowledge-flow-mcp-text"],
         capabilityConfigValues: {
           "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },

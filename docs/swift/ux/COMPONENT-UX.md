@@ -962,6 +962,13 @@ _(none yet)_
 
 Non-blocking right-side panel. `position: fixed`, slides in from the right via `transform: translateX(100%)` → `translateX(0)`. ESC key closes. `--drawer-width` CSS variable, default `480px`. Does not trap focus (main content stays interactive).
 
+Push layout supports opt-in drag-to-resize (`resizable` prop, 2026-07-22): a col-resize
+grip on the left edge, bounds 320–900px capped at 45vw, width persisted per
+`persistKey` — the legacy chat's `ResizablePaneShell` UX ported to the rework.
+`CapabilitySidePanelHost` enables it with one shared key, so the
+writable-document editor and the PPT preview panels share a persisted width.
+Hidden below the 720px breakpoint (push drawers go fixed full-width there).
+
 #### Open UX issues
 
 - **Focus trap** — deliberately no focus trap (main content stays interactive per RFC §2.5). Confirm with accessibility review: WCAG 2.1 SC 2.1.2 applies to modal dialogs, not drawers; but screen reader users should be informed the drawer is open.
@@ -1235,6 +1242,114 @@ by default when warnings are present. A `failed` task renders `task.error` inlin
   counter disclosure's layout, the "With warnings" flag's visual weight against the
   state badge, or density once a migration result has most of its ~15 counters
   populated at once.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `WritableDocumentPane` (writable_document capability)
+
+**Location:** `src/rework/features/capabilities/writable_document/WritableDocumentPane.tsx`
+**Status:** `Functional`
+
+The right-column side panel of the `writable_document` capability (#1905, Kea port):
+a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-write
+documents. Tab strip when the session has several documents; editor remounts on agent
+writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
+debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
+Mounted by `CapabilitySidePanelHost` when the capability is active.
+
+Auto-open (2026-07-22): opening a conversation that already holds a document
+opens the editor pane immediately (`WritableDocumentAutoOpenProbe`, a headless
+`sessionProbes` plugin entry evaluated once per conversation-open against the
+authoritative list API). Live writes mid-conversation keep their existing pop
+via the card renderer; a list refresh never re-opens a pane the user closed.
+writable_document only — the PPT preview declares no probe.
+
+Double close removed (2026-07-22): the pane (and `PptPreviewPane`) shipped its
+own header close button — a Kea-port leftover from `ResizablePaneShell`, which
+had no chrome. Inside `InlineDrawer` that made two ✕ with the same action; the
+drawer's header ✕ is now the single close affordance, like every other push
+drawer.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — MDXEditor toolbar density, tab strip styling, and the
+  saving indicator's placement have had no designer pass; the editor ships MDXEditor's
+  default theme which may clash with the design tokens in dark mode.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `WritableDocumentCardRenderer` (writable_document capability)
+
+**Location:** `src/rework/features/capabilities/writable_document/WritableDocumentCardRenderer.tsx`
+**Status:** `Functional`
+
+The `writable_document` chat-part card shown in an assistant message after the agent
+writes or revises a document: title, last-author caption, open-in-panel action, and
+the export menu. Auto-opens the pane once per `(document_id, updated_at)` for fresh
+parts only (>5 s history-replay guard, same heuristic as the ppt_filler preview card).
+
+#### Open UX issues
+
+_(none)_
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+## #1903 PPT Filler capability organisms
+
+### `PptFillerConfigForm`
+
+**Location:** `src/rework/features/capabilities/ppt_filler/PptFillerConfigForm.tsx`
+**Status:** `Functional`
+
+The ppt_filler capability's custom agent-form widget (rendered inside its
+`CapabilityCard` via the `configWidgets` plugin slot, RFC §9 item 4): `.pptx`
+upload/replace control, instant per-slide schema preview through the
+capability's stateless `/analyze` pod route, slide-numbered template errors
+i18n'd by stable code, and Save gating while the mandatory template is missing
+or invalid. The staged file travels with the atomic save (multipart
+`with-assets` endpoints); the preview never persists anything.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — upload row layout, schema-preview density on
+  templates with many slides, and error-list prominence all need a designer
+  pass.
+- **No drag-and-drop** — file selection is button+picker only.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `PptPreviewCardRenderer` + `PptPreviewPane`
+
+**Location:** `src/rework/features/capabilities/ppt_filler/PptPreviewCardRenderer.tsx`, `.../PptPreviewPane.tsx`
+**Status:** `Functional`
+
+The `ppt_preview` chat part (compact card: title, open-preview, `.pptx`
+download) and the PDF side pane it opens (react-pdf, all pages vertical,
+width-fitted, fresh pdf.js worker per mount). A live fill auto-opens the pane
+once per deck version (5s page-age gate keeps history replay from popping it);
+the pane mounts through the capability side-panel host's push drawer.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — card visual weight in the thread, pane default
+  width, and the auto-open heuristic all need product validation.
+- **No page thumbnails / jump navigation** — long decks scroll only.
 
 #### Resolved
 

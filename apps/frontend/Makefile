@@ -195,6 +195,30 @@ update-demo-echo-capability-api: check-node node_modules ## Regenerate the demo_
 	@echo "🎯 Generating RTK Query hooks for demo_echo capability..."
 	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/demo_echo/api/demoEchoCapabilityOpenApiConfig.json
 
+# writable_document (#1905) is installed in the fred-agents pod (not fred-runtime),
+# so its OpenAPI dump must run from apps/fred-agents' venv — the same entry-point
+# discovery the pod uses at boot.
+.PHONY: update-writable-document-capability-api
+update-writable-document-capability-api: check-node node_modules ## Regenerate the writable_document capability client only
+	@echo "🔧 Dumping writable_document capability OpenAPI document..."
+	cd ../fred-agents && $(MAKE) --no-print-directory dev >/dev/null && \
+		.venv/bin/python -m fred_runtime dump-openapi writable_document \
+		> ../frontend/src/rework/features/capabilities/writable_document/api/openapi.json
+	@echo "🎯 Generating RTK Query hooks for writable_document capability..."
+	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/writable_document/api/writableDocumentCapabilityOpenApiConfig.json
+
+# ppt_filler (#1903) is installed in the fred-agents pod (not fred-runtime),
+# so its OpenAPI dump runs from apps/fred-agents' environment — the same
+# entry-point discovery the pod uses at boot.
+.PHONY: update-ppt-filler-capability-api
+update-ppt-filler-capability-api: check-node node_modules ## Regenerate the ppt_filler capability client only
+	@echo "🔧 Dumping ppt_filler capability OpenAPI document..."
+	cd ../fred-agents && $(MAKE) --no-print-directory dev >/dev/null && \
+		.venv/bin/python -m fred_runtime dump-openapi ppt_filler \
+		> ../frontend/src/rework/features/capabilities/ppt_filler/api/openapi.json
+	@echo "🎯 Generating RTK Query hooks for ppt_filler capability..."
+	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/ppt_filler/api/pptFillerCapabilityOpenApiConfig.json
+
 ##@ Clean
 
 .PHONY: clean

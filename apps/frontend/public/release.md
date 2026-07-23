@@ -1,3 +1,31 @@
+**v2.1.11** — 2026-07-22
+
+- **Summary**
+
+  Agents can now work directly with your document library: they browse the folders you
+  have access to, summarize any document or chat attachment on demand, and use those
+  summaries to search your corpus far more effectively. This release also adds two more
+  capabilities: documents the agent and you write together in a live side pane (with
+  Word/Markdown export), and PowerPoint templates filled straight from a conversation.
+
+- **Features**
+
+  - Writable Documents: the agent drafts a document in a side pane you can edit together — it sees your changes and revises in place, and you can export to Word or Markdown (#1905, #2027)
+  - PPT Filler: give an agent your PowerPoint template and it fills the slides from the conversation and your documents, with an in-chat preview and a built-in authoring guide (#1903, #2020)
+  - Agents can now browse your document library and summarize any document or chat attachment on demand, making corpus search far more effective (#1906, #2056)
+
+- **Security**
+
+  - Routine dependency updates: pyasn1 and setuptools (Python), fast-uri, immutable and svgo (frontend) (#2062, #2063)
+
+- **Bug Fixes**
+
+  - Clicking "Process" on a document now shows a live Processing status that flips to Ready/Failed on its own, instead of staying stale until a page reload (#2020)
+
+- **Deployment note**
+
+  Additive only — the new capabilities ship in the standard images and their database tables are created by the usual migration step on upgrade; the new `timeouts.summarize_read` knob is optional with a sensible default. Admins enable the new capabilities for their teams; no other operator action needed.
+
 **v2.1.10** — 2026-07-22
 
 - **Summary**

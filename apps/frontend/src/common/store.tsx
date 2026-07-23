@@ -20,6 +20,11 @@ import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
 import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
 import { demoEchoCapabilityApi } from "../rework/features/capabilities/demo_echo/api/demoEchoCapabilityApi.ts";
+import { writableDocumentCapabilityApi } from "../rework/features/capabilities/writable_document/api/writableDocumentCapabilityApi.ts";
+import writableDocumentReducer from "../rework/features/capabilities/writable_document/writableDocumentSlice.ts";
+import { pptFillerCapabilityApi } from "../rework/features/capabilities/ppt_filler/api/pptFillerCapabilityApi.ts";
+import pptPreviewReducer from "../rework/features/capabilities/ppt_filler/pptPreviewSlice.ts";
+import { sidePanelOpenRequestSlice } from "../rework/features/capabilities/sidePanelOpenRequestSlice.ts";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -52,6 +57,11 @@ const combinedReducer = combineReducers({
   tasks: taskSlice.reducer,
   capabilityRouting: capabilityRoutingSlice.reducer,
   [demoEchoCapabilityApi.reducerPath]: demoEchoCapabilityApi.reducer,
+  [writableDocumentCapabilityApi.reducerPath]: writableDocumentCapabilityApi.reducer,
+  writableDocument: writableDocumentReducer,
+  [pptFillerCapabilityApi.reducerPath]: pptFillerCapabilityApi.reducer,
+  pptPreview: pptPreviewReducer,
+  capabilitySidePanelOpenRequest: sidePanelOpenRequestSlice.reducer,
 });
 
 // Configure store
@@ -64,6 +74,8 @@ export const store = configureStore({
       controlPlaneApi.middleware,
       evaluationApi.middleware,
       demoEchoCapabilityApi.middleware,
+      writableDocumentCapabilityApi.middleware,
+      pptFillerCapabilityApi.middleware,
       loggingMiddleware,
     ),
   devTools: true,

@@ -631,6 +631,188 @@ class DocumentSearchPort(ABC):
         """
 
 
+class AgentAssetPort(ABC):
+    """
+    Capability-safe storage for one agent instance's configuration assets
+    (#1903, RFC AGENT-CAPABILITY §3.4, §3.8).
+
+    Doctrine: `validate_config` must never persist an asset binary inside the
+    stored config — it stores the bytes through THIS port and keeps only the
+    returned key. The adapter privately binds the acting identity, the team,
+    and the agent instance (the KF path is
+    `teams/{team}/agents/{agent_instance_id}/config/{key}`); a capability only
+    ever names the slot-relative `key`. The per-turn binding and raw access
+    token never enter `CapabilityContext`.
+
+    Reads are team-membership-gated on the KF side, so ANY user chatting with
+    the agent can fetch the asset at tool time; writes require the same team
+    resource-update permission as the team-shared space.
+    """
+
+    @abstractmethod
+    async def store(
+        self,
+        key: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+        filename: str | None = None,
+    ) -> str:
+        """Store one asset under `key` and return the stored key."""
+
+    @abstractmethod
+    async def fetch(self, key: str) -> bytes:
+        """Fetch one asset's bytes by `key`; raise if it does not exist."""
+
+    @abstractmethod
+    async def delete(self, key: str) -> None:
+        """Delete one asset by `key` (missing keys are a no-op)."""
+
+
+class DocumentRawContent(FrozenModel):
+    """Original uploaded bytes of one corpus document (#1903 image support)."""
+
+    content: bytes
+    content_type: str = "application/octet-stream"
+    filename: str = ""
+
+
+class DocumentContentPort(ABC):
+    """
+    Capability-safe fetch of a corpus document's ORIGINAL bytes by uid
+    (#1903, PPT-filler image support; RFC AGENT-CAPABILITY §3.8 doctrine).
+
+    Takes only the document uid — auth and identity come from the adapter's
+    privately-captured per-turn binding, never from the caller.
+    """
+
+    @abstractmethod
+    async def fetch_raw(self, document_uid: str) -> DocumentRawContent:
+        """Fetch one document's original bytes; raise on missing/forbidden."""
+
+
+class FolderDocumentEntry(FrozenModel):
+    """One document inside a resolved folder (#1903 image support)."""
+
+    document_uid: str
+    document_name: str
+
+
+class DocumentFolderPort(ABC):
+    """
+    Capability-safe access to author folders (DOCUMENT tags) (#1903, PPT-filler
+    image support).
+
+    The adapter binds the space (team vs personal) privately; the capability
+    passes only the author's folder string (e.g. ``"images/flags"``) or an
+    already-resolved tag id.
+    """
+
+    @abstractmethod
+    async def resolve_folder(self, folder: str) -> str | None:
+        """Resolve one folder string to its DOCUMENT tag id, else None."""
+
+    @abstractmethod
+    async def list_folder_documents(
+        self, folder_tag_id: str
+    ) -> tuple[FolderDocumentEntry, ...]:
+        """List the documents carried by one folder tag (uid + display name)."""
+
+
+class DocumentTreeResult(FrozenModel):
+    """Typed result of one capability-scoped document tree listing."""
+
+    tree: str = ""
+    truncated: bool = False
+
+
+class DocumentSummaryResult(FrozenModel):
+    """Typed result of one on-demand document summarization."""
+
+    document_uid: str
+    summary: str = ""
+    shrunk_for_budget: bool = False
+    keywords: tuple[str, ...] = ()
+
+
+class DocumentPortCallError(Exception):
+    """
+    Typed transport failure raised by document port adapters.
+
+    Why this exists: a failing document tool must surface a clean `is_error`
+    tool result (actionable detail, never a raised exception reaching the
+    runtime's ToolNode) — but the capability must not import the adapter's
+    HTTP stack to introspect the failure. Adapters map their transport errors
+    (timeout, HTTP status) onto this exception; capabilities render it.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.status_code = status_code
+
+
+class DocumentTreePort(ABC):
+    """
+    Capability-safe folder/document tree listing over the platform corpus
+    (same doctrine as `DocumentSearchPort`): the port takes SCOPE PARAMETERS
+    only — never a caller-supplied context, identity, or access token. Auth
+    and identity come solely from the adapter's privately-captured per-turn
+    binding, which never enters `CapabilityContext`.
+    """
+
+    @abstractmethod
+    async def tree(
+        self,
+        *,
+        working_directory: str | None = None,
+        library_tag_ids: Sequence[str] | None = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        """
+        Return the caller's authorized folder/document tree as rendered text.
+
+        `library_tag_ids` is the capability's already-narrowed library scope
+        (None = "no capability-side narrowing"); the adapter further bounds it
+        by the session binding before calling Knowledge Flow, completing
+        `turn_option ⊆ capability_config ⊆ session_binding`. Raises
+        `DocumentPortCallError` on transport failure.
+        """
+
+
+class DocumentSummarizePort(ABC):
+    """
+    Capability-safe on-demand document summarization (same doctrine as
+    `DocumentSearchPort`): scope parameters only, identity stays private to
+    the adapter. No scope narrowing here — the caller already holds a concrete
+    `document_uid` (from a search hit, tree listing, or the conversation's
+    attached-files context) and Knowledge Flow's own per-document ReBAC is the
+    real authorization gate. Document uids are internal working identifiers:
+    tools use them freely, but they are never surfaced to the end user.
+    """
+
+    @abstractmethod
+    async def summarize(
+        self,
+        document_uid: str,
+        *,
+        instruction: str | None = None,
+        max_chars: int = 2000,
+    ) -> DocumentSummaryResult:
+        """
+        Summarize one document by uid, optionally steered by `instruction`,
+        bounded by `max_chars`. Long-running server-side (map-reduce over the
+        whole document); adapters use an extended read timeout. Raises
+        `DocumentPortCallError` on transport failure.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -663,6 +845,20 @@ class RuntimeServices:
     # `ctx.services.document_search`; the port takes scope parameters only — the
     # per-turn binding and raw access token stay private to the adapter.
     document_search: DocumentSearchPort | None = None
+    # Per-agent-instance config-asset storage (#1903, RFC §3.4/§3.8): the
+    # save-time path stores uploaded asset binaries here (keys only in the
+    # stored config); the turn-time path fetches them back. Same doctrine as
+    # `document_search` — identity/team/instance bind privately in the adapter.
+    agent_assets: AgentAssetPort | None = None
+    # Original-bytes fetch of a corpus document by uid (#1903 image support).
+    document_content: DocumentContentPort | None = None
+    # Author folder string → DOCUMENT tag id resolution (#1903 image support);
+    # used at save/analyze time to validate image folders.
+    document_folders: DocumentFolderPort | None = None
+    # Companion document-access ports (same doctrine and optionality):
+    # scoped folder/document tree listing and on-demand summarization.
+    document_tree: DocumentTreePort | None = None
+    document_summarize: DocumentSummarizePort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

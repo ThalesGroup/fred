@@ -81,6 +81,46 @@
   width: var(--drawer-width);
 }
 
+/* ── Drag-to-resize handle (push + `resizable`) ───────────────────────────
+ * The grip idiom ported from the legacy chat's ResizablePaneShell: a slim
+ * col-resize strip hugging the drawer's left edge, with a small rounded bar
+ * that highlights while hovered or dragged. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color 0.15s,
+    height 0.15s;
+  border-radius: var(--radius-s);
+  background: var(--outline-variant);
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.drawer[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+  height: 56px;
+}
+
+/* A width transition mid-drag would lag the pointer — the drag must be 1:1. */
+.drawer[data-layout="push"][data-dragging="true"] {
+  transition: none;
+}
+
 /* Below this width, min(width, 45vw) leaves too little room for a push
  * drawer's own content (e.g. ~169px on a 375px phone) — go full-width and
  * fixed instead, the same footprint as the overlay layout, so narrow
@@ -99,6 +139,11 @@
 
   .drawer[data-layout="push"] .panel {
     width: 100%;
+  }
+
+  /* Full-width fixed panel — nothing to resize. */
+  .resizeHandle {
+    display: none;
   }
 }
 

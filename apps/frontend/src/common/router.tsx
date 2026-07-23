@@ -24,6 +24,7 @@ import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
@@ -310,6 +311,12 @@ export const routes: RouteObject[] = [
   {
     path: "/release-notes",
     element: <ReleaseNotesPage />,
+  },
+  {
+    // PPT Filler capability documentation — opened in a new tab from the
+    // agent-creation form, so it renders without the app chrome.
+    path: "/ppt-filler-help",
+    element: <PptFillerHelpPage />,
   },
   {
     path: "/settings",
