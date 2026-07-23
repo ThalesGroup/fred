@@ -1480,6 +1480,14 @@ export type PermissionSummary = {
   /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
   is_platform_observer?: boolean;
 };
+export type UploadWarning = {
+  /** Visual severity variant of the banner. */
+  severity?: "info" | "warning" | "error" | "success";
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+};
 export type FrontendBootstrap = {
   current_user: UserSummary;
   active_team: TeamWithPermissions;
@@ -1487,6 +1495,8 @@ export type FrontendBootstrap = {
   gcu_version?: string | null;
   feature_flags: FrontendFeatureFlags;
   permissions: PermissionSummary;
+  /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */
+  upload_warning?: UploadWarning | null;
 };
 export type FrontendUserAuthConfig = {
   enabled: boolean;
@@ -1655,6 +1665,8 @@ export type ManagedAgentInstanceSummary = {
   template_id: string;
   display_name: string;
   description?: string | null;
+  /** Short one-line summary of what this agent does, distinct from the longer `description` — shown on the agent card so a teammate can recall the agent's purpose without reading the full description. Server-set to `display_name` at enrollment until independently edited (#2076). */
+  role: string;
   status: "enabled" | "disabled";
   /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
   suspension_reason?: SuspensionReason | null;
@@ -1693,6 +1705,8 @@ export type CreateAgentInstanceRequest = {
   template_id: string;
   display_name: string;
   description?: string | null;
+  /** Optional short one-line summary of what this agent does. Defaults to `display_name` when omitted (#2076). */
+  role?: string | null;
   /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are ignored. Known values are validated against the declared field type and constraints. */
   tuning_field_values?: {
     [key: string]:
@@ -1717,6 +1731,8 @@ export type CreateAgentInstanceRequest = {
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
   description?: string | null;
+  /** Short one-line summary of what this agent does. Omit to leave the current role unchanged (#2076). */
+  role?: string | null;
   /** Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged. */
   status?: ("enabled" | "disabled") | null;
   /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Omit the field to leave existing values unchanged; pass null to clear the stored agent tuning values. */

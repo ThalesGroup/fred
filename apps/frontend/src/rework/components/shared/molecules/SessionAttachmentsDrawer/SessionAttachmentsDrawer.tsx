@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
 import type { SessionAttachment } from "@rework/types/attachments";
@@ -74,6 +75,7 @@ export function SessionAttachmentsDrawer({
         width="460px"
         layout="push"
       >
+        <UploadWarningBanner className={styles.uploadWarning} />
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>

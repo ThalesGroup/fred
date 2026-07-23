@@ -316,6 +316,7 @@ async def build_frontend_bootstrap(
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
+        upload_warning=deps.configuration.platform.frontend.upload_warning,
     )
 
 
@@ -1922,6 +1923,7 @@ def _record_to_summary(
         template_id=record.template_id,
         display_name=record.display_name,
         description=record.description,
+        role=record.tuning.role,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2199,7 +2201,7 @@ async def enroll_agent_instance(
 
     tuning = template.default_tuning.model_copy(
         update={
-            "role": request.display_name,
+            "role": request.role or request.display_name,
             "description": request.description or request.display_name,
         }
     )
@@ -2427,6 +2429,17 @@ async def update_agent_instance(
                 asset_uploads=asset_uploads,
             )
         new_tuning = base
+
+    if request.role is not None:
+        # A role rename is a plain string edit — unlike tuning_field_values/
+        # capability_ids above, it never needs the live-pod contract refresh,
+        # so it's applied independently instead of joining that trigger set
+        # (#2076). Same "None means unchanged" convention as display_name/
+        # description below. Layers on top of `new_tuning` when the heavier
+        # branch above already ran for the same request.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"role": request.role}
+        )
 
     updated = await store.update(
         agent_instance_id=agent_instance_id,

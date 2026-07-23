@@ -81,6 +81,13 @@ policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml
 
 platform:
+  # # Banner shown on upload surfaces (document upload drawer, chat attachments).
+  # frontend:
+  #   upload_warning:
+  #     severity: warning
+  #     messages:
+  #       en: "Do not upload sensitive or classified documents."
+  #       fr: "Ne téléversez pas de documents sensibles ou classifiés."
   # Runtime pod references only. Managed agent instance enrollment is DB-backed.
   knowledge_flow_base_url: http://127.0.0.1:8111/knowledge-flow/v1
   runtime_catalog_sources:

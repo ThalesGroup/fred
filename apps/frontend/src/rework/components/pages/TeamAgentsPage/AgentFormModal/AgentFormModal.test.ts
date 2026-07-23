@@ -28,11 +28,12 @@ const EMPTY_CAPABILITY_STATE = {
 };
 
 describe("buildAgentFormSubmitPayload", () => {
-  it("trims display name and description on create submit", () => {
+  it("trims display name, role, and description on create submit", () => {
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",
         displayName: "  DT Aegis  ",
+        role: "  Guardian  ",
         description: "  Guardrails  ",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
@@ -42,6 +43,7 @@ describe("buildAgentFormSubmitPayload", () => {
 
     expect(payload).toMatchObject({
       displayName: "DT Aegis",
+      role: "Guardian",
       description: "Guardrails",
     });
   });
@@ -51,6 +53,7 @@ describe("buildAgentFormSubmitPayload", () => {
       {
         templateId: "runtime:agent",
         displayName: "Agent",
+        role: "",
         description: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
@@ -70,6 +73,7 @@ describe("buildAgentFormSubmitPayload", () => {
       {
         templateId: "runtime:agent",
         displayName: "Agent",
+        role: "",
         description: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
@@ -94,6 +98,7 @@ describe("buildAgentFormSubmitPayload", () => {
       {
         templateId: "runtime:agent",
         displayName: "Agent",
+        role: "",
         description: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,

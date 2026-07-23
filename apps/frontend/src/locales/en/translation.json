@@ -267,7 +267,9 @@
       "processingDone": "Done",
       "processingFailed": "Failed",
       "processingFast": "Fast processing",
-      "processingPrepare": "Preparing processing"
+      "processingPrepare": "Preparing processing",
+      "uploadWarningConfirm": "I understand",
+      "uploadWarningTitle": "Before attaching files"
     },
     "composerActions": {
       "dialogAria": "Chat actions",
@@ -919,9 +921,12 @@
       }
     },
     "agentCard": {
+      "activate": "Activate",
       "catalogWarning": "MCP configuration drift — recreate to resolve",
+      "chat": "Chat",
+      "deactivate": "Deactivate",
+      "edit": "Edit",
       "noDescription": "No description yet.",
-      "startChat": "New chat",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it."
     },

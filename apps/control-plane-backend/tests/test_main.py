@@ -1398,6 +1398,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "template_id": "runtime-a:rags.sample.echo",
             "display_name": "Echo Team Agent",
             "description": "Managed echo agent",
+            "role": "Echo Team Agent",
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},

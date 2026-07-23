@@ -94,6 +94,16 @@ body {
    * silently fell back to the browser default serif); use the real Geist token so every
    * inherited-font surface matches. */
   font-family: var(--font-family-base);
+  /* Interface chrome (titles, labels, avatar initials, counters...) never
+   * shows the i-beam cursor. Reactivated explicitly only for real inputs and
+   * long-form reading zones — never the other way around. */
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
 }
 
 [data-color="primary"] {

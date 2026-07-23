@@ -267,7 +267,9 @@
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",
-      "processingPrepare": "Préparation du traitement"
+      "processingPrepare": "Préparation du traitement",
+      "uploadWarningConfirm": "J'ai compris",
+      "uploadWarningTitle": "Avant d'ajouter des fichiers"
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
@@ -919,9 +921,12 @@
       }
     },
     "agentCard": {
+      "activate": "Activer",
       "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
+      "chat": "Discuter",
+      "deactivate": "Désactiver",
+      "edit": "Modifier",
       "noDescription": "Pas encore de description.",
-      "startChat": "Nouveau chat",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver."
     },
