@@ -19,8 +19,7 @@ import re
 from pathlib import Path
 from typing import List
 
-import fitz
-import pymupdf4llm
+import pypdf
 from markitdown import MarkItDown
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
@@ -36,15 +35,21 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
 
 logger = logging.getLogger(__name__)
 
+try:
+    import pymupdf4llm  # pyright: ignore[reportMissingImports]  # AGPL-3.0/Artifex-dual-licensed, optional (LICENSE-01)
+except ImportError:
+    pymupdf4llm = None
+
 
 class LitePdfToMdExtractor(BaseLiteMdProcessor):
     """
     Lightweight PDF → Markdown.
 
     Fred rationale:
-    - Use `pymupdf4llm` as the primary extractor: fast, reliable, and page‑oriented.
-    - Fall back to `markitdown` only when PyMuPDF4LLM extraction fails.
-    - Preserve Fred's page-oriented UX when needed via PyMuPDF4LLM page scans.
+    - Use `markitdown` as the default extractor — no copyleft dependency required.
+    - Opportunistically use `pymupdf4llm` (page‑oriented, often higher quality) when the
+      optional `pymupdf` extra is installed; see LICENSE-01 in
+      docs/swift/COPYLEFT-DEPENDENCIES.md. Never required for the default install.
     - Keep token budgets predictable via normalization + max_chars cap.
     """
 
@@ -85,11 +90,13 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
 
     def _extract_pymupdf4llm(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
         """
-        Extract Markdown using pymupdf4llm (primary engine).
+        Extract Markdown using pymupdf4llm (opportunistic engine, only called when
+        the optional `pymupdf` extra is installed — see `extract()`).
         - Page‑wise extraction
         - Normalization + cleaning
         - max_chars truncation support
         """
+        assert pymupdf4llm is not None, "_extract_pymupdf4llm called without the optional 'pymupdf' extra installed"
         count_char: int = 0
         truncated: bool = False
 
@@ -140,27 +147,28 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
     def extract(self, file_path: Path, options: LiteMarkdownOptions | None = None) -> LiteMarkdownResult:
         """
         Strategy:
-        - If caller: use PyMuPDF4llm (best quality, deterministic).
-        - Else prefer markitdown (fast/maintenance for whole-doc).
+        - Default: markitdown (no copyleft dependency required).
+        - If the optional `pymupdf` extra is installed (LICENSE-01), prefer
+          PyMuPDF4LLM instead — page-wise, deterministic, often higher quality.
         - On failures, log and fall back to the other path when possible.
         """
         opts = options or LiteMarkdownOptions()
 
-        # Primary extraction: PyMuPDF4LLM
-        try:
-            result: LiteMarkdownResult = self._extract_pymupdf4llm(file_path, opts)
-            logger.info(
-                "[LITE_PDF][IMPLEM] Pymupdf4llm page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
-                file_path.name,
-                result.page_count,
-                result.total_chars,
-                result.truncated,
-            )
-            return result
-        except Exception as e:
-            logger.warning(f"Pymupdf4llm PDF extraction failed, trying markitdown: {e}")
+        if pymupdf4llm is not None:
+            try:
+                result: LiteMarkdownResult = self._extract_pymupdf4llm(file_path, opts)
+                logger.info(
+                    "[LITE_PDF][IMPLEM] Pymupdf4llm page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
+                    file_path.name,
+                    result.page_count,
+                    result.total_chars,
+                    result.truncated,
+                )
+                return result
+            except Exception as e:
+                logger.warning(f"Pymupdf4llm PDF extraction failed, trying markitdown: {e}")
 
-        # Fallback extraction: Markitdown
+        # Default extraction: Markitdown
         try:
             result = self._extract_with_markitdown(file_path, opts)
             logger.info(
@@ -195,16 +203,14 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def check_file_validity(self, file_path: Path) -> bool:
         """
-        Basic validity check using PyMuPDF: the file must be a readable
+        Basic validity check using pypdf: the file must be a readable
         PDF with at least one page.
         """
         try:
-            doc = fitz.open(str(file_path))
-            if doc.page_count <= 0:
-                doc.close()
+            reader = pypdf.PdfReader(str(file_path))
+            if len(reader.pages) <= 0:
                 logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
                 return False
-            doc.close()
             return True
         except Exception as e:
             logger.error("LitePdfMarkdownProcessor: invalid PDF %s: %s", file_path, e)
@@ -212,22 +218,21 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         """
-        Lightweight metadata extraction based on PyMuPDF.
+        Lightweight metadata extraction based on pypdf.
         Returns only fields that are cheap to compute.
         """
         try:
-            doc = fitz.open(str(file_path))
-            info = doc.metadata or {}
-            doc.close()
+            reader = pypdf.PdfReader(str(file_path))
+            info = reader.metadata or {}
             return {
-                "title": info.get("title") or None,
-                "author": info.get("author") or None,
+                "title": info.get("/Title") or None,
+                "author": info.get("/Author") or None,
                 "document_name": file_path.name,
-                "page_count": doc.page_count,
+                "page_count": len(reader.pages),
                 "extras": {
-                    "pdf.subject": info.get("subject") or None,
-                    "pdf.producer": info.get("producer") or None,
-                    "pdf.creator": info.get("creator") or None,
+                    "pdf.subject": info.get("/Subject") or None,
+                    "pdf.producer": info.get("/Producer") or None,
+                    "pdf.creator": info.get("/Creator") or None,
                 },
             }
         except Exception as e:

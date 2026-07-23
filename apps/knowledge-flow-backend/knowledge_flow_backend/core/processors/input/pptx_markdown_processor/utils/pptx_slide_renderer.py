@@ -21,7 +21,7 @@ import shutil
 import subprocess  # nosec
 from pathlib import Path
 
-import fitz
+import pypdfium2 as pdfium
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +74,12 @@ def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: P
     out_dir.mkdir(parents=True, exist_ok=True)
     rendered: dict[int, Path] = {}
 
-    doc = fitz.open(pdf_path)
+    doc = pdfium.PdfDocument(str(pdf_path))
     try:
+        page_count = len(doc)
         for slide_number in slide_numbers:
             page_index = slide_number - 1
-            if page_index < 0 or page_index >= len(doc):
+            if page_index < 0 or page_index >= page_count:
                 logger.warning(
                     "[PROCESSOR][PPTX] Requested slide %s is out of PDF page range for %s",
                     slide_number,
@@ -86,11 +87,15 @@ def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: P
                 )
                 continue
 
-            page = doc.load_page(page_index)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            png_path = out_dir / f"slide_{slide_number:03d}.png"
-            pix.save(str(png_path))
-            rendered[slide_number] = png_path
+            page = doc[page_index]
+            try:
+                # scale=2 matches fitz.Matrix(2, 2)'s 2x zoom in both axes.
+                bitmap = page.render(scale=2)
+                png_path = out_dir / f"slide_{slide_number:03d}.png"
+                bitmap.to_pil().save(str(png_path))
+                rendered[slide_number] = png_path
+            finally:
+                page.close()
 
         logger.info(
             "[PROCESSOR][PPTX] Rendered %s slide PNG(s) from %s into %s",

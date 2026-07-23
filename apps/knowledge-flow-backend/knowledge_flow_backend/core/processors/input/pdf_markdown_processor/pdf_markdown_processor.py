@@ -35,16 +35,10 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.base_pdf_extractor import BasePdfExtractor
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.docling_processor import DoclingPdfExtractor
-from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import ImageTranscription
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.images_feature_extraction import calcul_canny, calcul_pourcentage_area
 
 logger = logging.getLogger(__name__)
-
-_EXTRACTORS: dict[str, type[BasePdfExtractor]] = {
-    "docling": DoclingPdfExtractor,
-    "pymupdf": PyMuPdfExtractor,
-}
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
@@ -52,8 +46,10 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     PDF → Markdown processor with optional image transcription.
 
     Text extraction engine is selected via `processing.profiles.<profile>.pdf.extractor`:
-    - 'pymupdf'  — fast, page-oriented, deterministic (default).
-    - 'docling'  — layout-aware, table-structure, OCR-capable.
+    - 'docling'  — layout-aware, table-structure, OCR-capable (default; MIT-licensed).
+    - 'pymupdf'  — fast, page-oriented, deterministic. AGPL-3.0/Artifex-dual-licensed
+      (LICENSE-01); requires the optional `pymupdf` extra to be installed
+      (`uv sync --extra pymupdf`) and is never installed by default.
 
     Image transcription (when enabled by processing profile):
     - PaddleOCR detects text regions in images.
@@ -129,13 +125,28 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             raise RuntimeError(f"[PDF][PROCESSOR] Failed to use image describer : {get_configuration().vision_model}") from e
 
     def _build_extractor(self, extractor_name: str, docling_num_threads: int = 4) -> BasePdfExtractor:
-        extractor_cls = _EXTRACTORS.get(extractor_name)
-        if extractor_cls is None:
-            logger.warning("[PROCESSOR][PDF] Unknown extractor '%s', falling back to 'pymupdf'", extractor_name)
-            extractor_cls = PyMuPdfExtractor
-        if extractor_cls is DoclingPdfExtractor:
-            return DoclingPdfExtractor(num_threads=docling_num_threads)
-        return extractor_cls()
+        """Build the configured extractor.
+
+        `pymupdf` is imported lazily here, not at module load, so the default
+        (docling) path never requires the optional AGPL-licensed `pymupdf` extra
+        to be installed. See LICENSE-01 in docs/swift/COPYLEFT-DEPENDENCIES.md.
+        """
+        if extractor_name == "pymupdf":
+            try:
+                from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
+            except ImportError as e:
+                raise RuntimeError(
+                    "processing.profiles.<profile>.pdf.extractor is set to 'pymupdf', but the "
+                    "optional 'pymupdf' extra is not installed. Install it explicitly "
+                    "(`uv sync --extra pymupdf` or `pip install knowledge-flow-backend[pymupdf]`) "
+                    "if you accept its AGPL-3.0/Artifex licensing terms for this deployment — "
+                    "see LICENSE-01 in docs/swift/COPYLEFT-DEPENDENCIES.md — or switch the "
+                    "extractor back to 'docling'."
+                ) from e
+            return PyMuPdfExtractor()
+        if extractor_name != "docling":
+            logger.warning("[PROCESSOR][PDF] Unknown extractor '%s', falling back to 'docling'", extractor_name)
+        return DoclingPdfExtractor(num_threads=docling_num_threads)
 
     def _extract_md(self, file_path: Path, work_dir: str):
         """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown.
