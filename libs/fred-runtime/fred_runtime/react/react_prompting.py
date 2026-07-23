@@ -318,10 +318,11 @@ def compose_system_prompt(
 
     Why this exists:
     - both runtimes need the identical suffix chain (tools, guardrails, global base
-      contract, then the per-turn conversation context: selected prompts and
-      attachments). Each runtime used to hand-roll that chain, and they had already
-      drifted — attachments reached ReAct but not Deep, and neither injected the
-      selected chat-context prompts (#1915). One owner keeps them from drifting again.
+      contract, tool-failure recovery notice, then the per-turn conversation context:
+      selected prompts and attachments). Each runtime used to hand-roll that chain,
+      and they had already drifted — attachments reached ReAct but not Deep, and
+      neither injected the selected chat-context prompts (#1915). One owner keeps
+      them from drifting again.
 
     Ordering rationale (last suffix carries the most recency weight for the model):
     - ``base_prompt`` — the rendered agent template
