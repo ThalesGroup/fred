@@ -1581,6 +1581,8 @@ now the KPI metric a dashboard or alert would actually query.
 
 `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9.
 
+---
+
 ### 8.27 ✅ Tool-failure recovery notice added to the ReAct/Deep system prompt (2026-07-23)
 
 **What changed.** The §8.12 suffix chain gains one more hard-invariant
