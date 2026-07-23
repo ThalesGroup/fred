@@ -14,6 +14,7 @@
 
 # tests/test_pdf_processor.py
 
+import importlib.util
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -210,9 +211,16 @@ def test_pdf_processor_describes_images_with_vision_model(
 def test_build_extractor_raises_configuration_error_when_pymupdf_extra_missing(processor: PdfMarkdownProcessor):
     """LICENSE-01: extractor: pymupdf without the optional extra installed must fail
     with a clear, actionable error — not a bare ImportError, and not a silent
-    fallback to a different engine."""
-    with pytest.raises(ExtractorConfigurationError, match="pymupdf"):
-        processor._build_extractor("pymupdf")
+    fallback to a different engine. Environment-robust: if a developer has opted
+    into the extra locally, _build_extractor should succeed instead — the point
+    is that one of the two outcomes always holds, never a bare ImportError."""
+    if importlib.util.find_spec("pymupdf4llm") is None:
+        with pytest.raises(ExtractorConfigurationError, match="pymupdf"):
+            processor._build_extractor("pymupdf")
+    else:
+        from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
+
+        assert isinstance(processor._build_extractor("pymupdf"), PyMuPdfExtractor)
 
 
 def test_convert_file_to_markdown_reraises_extractor_configuration_error(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):

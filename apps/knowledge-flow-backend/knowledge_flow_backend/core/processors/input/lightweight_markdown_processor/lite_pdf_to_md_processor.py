@@ -96,26 +96,27 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
     # ---- page-wise extraction (pypdf) -------------------------------------
 
     def _extract_pages_with_pypdf(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
-        reader = pypdf.PdfReader(str(file_path))
-        page_count = len(reader.pages)
+        with open(file_path, "rb") as f:
+            reader = pypdf.PdfReader(f)
+            page_count = len(reader.pages)
 
-        start_p, end_p = self._safe_page_range(page_count, opts.page_range)
-        pages_md: List[LitePageMarkdown] = []
+            start_p, end_p = self._safe_page_range(page_count, opts.page_range)
+            pages_md: List[LitePageMarkdown] = []
 
-        for pno in range(start_p, end_p + 1):
-            # Plain text is enough for the lightweight path; keeps speed & determinism.
-            raw_text = reader.pages[pno - 1].extract_text() or ""
-            text = self._normalize(raw_text, opts).strip()
+            for pno in range(start_p, end_p + 1):
+                # Plain text is enough for the lightweight path; keeps speed & determinism.
+                raw_text = reader.pages[pno - 1].extract_text() or ""
+                text = self._normalize(raw_text, opts).strip()
 
-            if opts.add_page_headings:
-                if text:
-                    body = f"## Page {pno}\n\n{text}"
+                if opts.add_page_headings:
+                    if text:
+                        body = f"## Page {pno}\n\n{text}"
+                    else:
+                        body = f"## Page {pno}"
                 else:
-                    body = f"## Page {pno}"
-            else:
-                body = text
+                    body = text
 
-            pages_md.append(LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body)))
+                pages_md.append(LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body)))
 
         combined = "\n\n".join(p.markdown for p in pages_md)
         combined, truncated = enforce_max_chars(combined, opts.max_chars)
@@ -266,11 +267,12 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
         PDF with at least one page.
         """
         try:
-            reader = pypdf.PdfReader(str(file_path))
-            if len(reader.pages) <= 0:
-                logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
-                return False
-            return True
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                if len(reader.pages) <= 0:
+                    logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
+                    return False
+                return True
         except Exception as e:
             logger.error("LitePdfMarkdownProcessor: invalid PDF %s: %s", file_path, e)
             return False
@@ -281,19 +283,20 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
         Returns only fields that are cheap to compute.
         """
         try:
-            reader = pypdf.PdfReader(str(file_path))
-            info = reader.metadata or {}
-            return {
-                "title": info.get("/Title") or None,
-                "author": info.get("/Author") or None,
-                "document_name": file_path.name,
-                "page_count": len(reader.pages),
-                "extras": {
-                    "pdf.subject": info.get("/Subject") or None,
-                    "pdf.producer": info.get("/Producer") or None,
-                    "pdf.creator": info.get("/Creator") or None,
-                },
-            }
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                info = reader.metadata or {}
+                return {
+                    "title": info.get("/Title") or None,
+                    "author": info.get("/Author") or None,
+                    "document_name": file_path.name,
+                    "page_count": len(reader.pages),
+                    "extras": {
+                        "pdf.subject": info.get("/Subject") or None,
+                        "pdf.producer": info.get("/Producer") or None,
+                        "pdf.creator": info.get("/Creator") or None,
+                    },
+                }
         except Exception as e:
             logger.error("LitePdfMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
             return {"document_name": file_path.name, "error": str(e)}
