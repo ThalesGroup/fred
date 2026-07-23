@@ -1583,6 +1583,46 @@ now the KPI metric a dashboard or alert would actually query.
 
 ---
 
+### 8.27 ✅ Tool-failure recovery notice added to the ReAct/Deep system prompt (2026-07-23)
+
+**What changed.** The §8.12 suffix chain gains one more hard-invariant
+suffix. `fred_runtime.react.react_prompting.build_tool_failure_recovery_suffix()`
+is now composed in `compose_system_prompt` right after
+`build_global_base_prompt_suffix()` and before `runtime_suffixes`:
+
+```
+system_prompt
+  + tool_suffix
+  + build_guardrail_suffix(definition)
+  + build_global_base_prompt_suffix()
+  + build_tool_failure_recovery_suffix()        # NEW
+  + *runtime_suffixes
+  + build_context_prompt_suffix(binding, agent_id=agent_id)
+  + build_attachment_context_suffix(binding)
+```
+
+The suffix tells the model that when a tool call fails or returns an
+error/troubleshooting message, it must never surface that raw text as the
+final answer — it should retry with corrected arguments, or answer from
+context already gathered if that suffices, and only report a failure to the
+user after reasonably exhausting recovery options.
+
+**Why.** Found via eval run `eval-run-3ba7e559` (`fred.github.assistant`,
+case `case-39a41df8`, issue #2073): `summarize_document`
+(`document_access/capability.py:781-867`) catches its own exception and
+returns a recovery message as an ordinary tool result instead of raising.
+The agent surfaced that raw message as its final answer instead of retrying
+or falling back to four already-successful search results that covered most
+of the expected facts (`AnswerRelevancyMetric=0`, `ContextualRecallMetric=0.25`,
+despite `FaithfulnessMetric=1.0` / `ContextualPrecisionMetric=1.0` confirming
+retrieval itself was fine). Nothing in the shared ReAct prompt previously
+told the model how to behave after a tool failure. This is prompt-only:
+whether `summarize_document`/`list_document_tree` should raise instead of
+returning error text as a normal result is a separate, larger structural
+fix (tracked in a follow-up issue linked from #2073), not addressed here.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

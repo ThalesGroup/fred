@@ -193,6 +193,40 @@ def build_global_base_prompt_suffix() -> str:
     return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
 
 
+def build_tool_failure_recovery_suffix() -> str:
+    """
+    Render the shared guidance for behaving after a tool call fails.
+
+    Why this exists:
+    - some capability tools (e.g. `summarize_document`) catch their own
+      exceptions and return a troubleshooting message as an ordinary tool
+      result instead of raising. Without explicit guidance the model has
+      surfaced that raw recovery text as its final answer instead of acting
+      on it, even when the message states exactly how to retry and other
+      already-gathered context was enough to answer (#2073).
+    - this is a hard invariant for every ReAct/Deep turn, not per-turn
+      context, so it is composed alongside the guardrails and global base
+      contract rather than passed in as a runtime suffix.
+
+    How to use:
+    - append the returned text during final system-prompt composition,
+      alongside the other hard-invariant suffixes.
+
+    Example:
+    - `system_prompt += build_tool_failure_recovery_suffix()`
+    """
+
+    return (
+        "\n\nIf a tool call fails or returns an error or troubleshooting "
+        "message, never present that raw text as your final answer to the "
+        "user. Instead: retry the call with corrected arguments when the "
+        "message explains what to fix, or answer from what other calls have "
+        "already returned if that is enough to address the request. Only "
+        "tell the user about a failure after you have genuinely exhausted "
+        "reasonable ways to obtain the requested information."
+    )
+
+
 def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     """
     Render current conversation attachments as a per-turn system-prompt suffix.
@@ -284,15 +318,17 @@ def compose_system_prompt(
 
     Why this exists:
     - both runtimes need the identical suffix chain (tools, guardrails, global base
-      contract, then the per-turn conversation context: selected prompts and
-      attachments). Each runtime used to hand-roll that chain, and they had already
-      drifted — attachments reached ReAct but not Deep, and neither injected the
-      selected chat-context prompts (#1915). One owner keeps them from drifting again.
+      contract, tool-failure recovery notice, then the per-turn conversation context:
+      selected prompts and attachments). Each runtime used to hand-roll that chain,
+      and they had already drifted — attachments reached ReAct but not Deep, and
+      neither injected the selected chat-context prompts (#1915). One owner keeps
+      them from drifting again.
 
     Ordering rationale (last suffix carries the most recency weight for the model):
     - ``base_prompt`` — the rendered agent template
     - ``tool_suffix`` — runtime tool descriptions (passed in; runtime-owned)
-    - guardrails, then the global base output contract — hard invariants
+    - guardrails, then the global base output contract, then the tool-failure
+      recovery notice — hard invariants
     - ``runtime_suffixes`` — runtime-specific system notices (e.g. Deep filesystem)
     - selected chat-context prompts, then conversation attachments — per-turn user
       context, placed last so it is freshest while the envelope in
@@ -309,6 +345,7 @@ def compose_system_prompt(
             tool_suffix,
             build_guardrail_suffix(definition),
             build_global_base_prompt_suffix(),
+            build_tool_failure_recovery_suffix(),
             *runtime_suffixes,
             build_context_prompt_suffix(binding, agent_id=agent_id),
             build_attachment_context_suffix(binding),

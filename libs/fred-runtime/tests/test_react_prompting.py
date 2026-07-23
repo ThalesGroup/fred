@@ -19,6 +19,7 @@ from fred_runtime.react.react_prompting import (
     build_attachment_context_suffix,
     build_context_prompt_suffix,
     build_global_base_prompt_suffix,
+    build_tool_failure_recovery_suffix,
     compose_system_prompt,
 )
 from fred_sdk.contracts.context import (
@@ -77,6 +78,20 @@ def test_global_base_prompt_suffix_injects_mermaid_contract() -> None:
 def test_global_base_prompt_suffix_starts_with_a_blank_separator() -> None:
     # Composed onto the end of the system prompt, so it must self-separate.
     assert build_global_base_prompt_suffix().startswith("\n\n")
+
+
+def test_tool_failure_recovery_suffix_tells_model_not_to_surface_raw_errors() -> None:
+    # Regression for #2073: some capability tools catch their own exceptions and
+    # return a troubleshooting message as an ordinary tool result. Without this
+    # guidance the model has surfaced that raw text as its final answer instead
+    # of retrying or falling back to context already gathered.
+    suffix = build_tool_failure_recovery_suffix()
+
+    assert "never present that raw text as your final answer" in suffix
+    assert "retry the call with corrected arguments" in suffix
+    assert "answer from what other calls have already returned" in suffix
+    # Composed onto the end of the system prompt, so it must self-separate.
+    assert suffix.startswith("\n\n")
 
 
 def test_attachment_context_suffix_announces_current_files() -> None:
@@ -193,11 +208,16 @@ def test_compose_system_prompt_folds_selected_prompt_and_attachment() -> None:
     assert "TOOL-SUFFIX" in prompt
     assert "Always respond in Spanish." in prompt
     assert "- report.pdf" in prompt
-    # Ordering: the global-base output contract precedes the per-turn user
-    # context, and the selected prompt precedes the (freshest) attachment block.
+    assert "never present that raw text as your final answer" in prompt
+    # Ordering: the global-base output contract and the tool-failure recovery
+    # notice (both hard invariants) precede the per-turn user context, and the
+    # selected prompt precedes the (freshest) attachment block.
     assert prompt.index(_EXPECTED_MERMAID_FRAGMENT) < prompt.index(
-        "Always respond in Spanish."
+        "never present that raw text as your final answer"
     )
+    assert prompt.index(
+        "never present that raw text as your final answer"
+    ) < prompt.index("Always respond in Spanish.")
     assert prompt.index("Always respond in Spanish.") < prompt.index("- report.pdf")
 
 
