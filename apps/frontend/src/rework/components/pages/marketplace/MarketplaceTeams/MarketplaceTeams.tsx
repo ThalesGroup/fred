@@ -19,6 +19,7 @@ import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPla
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { Link, Navigate } from "react-router-dom";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
+import { isPersonalTeamId } from "@shared/utils/teamId";
 
 /**
  * Render the collaborative team marketplace only when collaborative teams exist.
@@ -46,8 +47,11 @@ export default function MarketplaceTeams() {
     skip: collaborativeTeams.length === 0,
   });
 
-  const yourTeams = teams && teams.filter((t) => t.is_member);
-  const otherTeams = teams && teams.filter((t) => !t.is_member);
+  // `GET /teams` intentionally includes personal spaces (it also feeds the
+  // bootstrap-driven sidebar/team switcher), but the marketplace must never
+  // list one, including the caller's own — see #2068.
+  const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
+  const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id));
 
   // Wait for bootstrap before redirecting away: redirecting on the first,
   // pre-bootstrap render sends the user to the bare "personal" alias, then a
