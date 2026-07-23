@@ -91,20 +91,45 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
     pdfjs.GlobalWorkerOptions.workerPort = worker;
   }, [remountKey]);
 
+  // Tracks whether this component instance is currently mounted, independent of
+  // remountKey churn. StrictMode double-invokes effects (mount, cleanup, remount)
+  // synchronously in dev, so a cleanup can't tell "final unmount" from a StrictMode
+  // drill by itself — the drill flips this back to true before the deferred check
+  // below ever runs.
+  const isAliveRef = useRef(true);
+  useEffect(() => {
+    isAliveRef.current = true;
+    return () => {
+      isAliveRef.current = false;
+    };
+  }, []);
+
   // Terminate the worker created for the current key once it is no longer the
   // active port (the next key's useMemo has already swapped a fresh one in by
-  // the time this cleanup fires). Guarding on the ACTIVE port matters under
-  // StrictMode: its simulated unmount runs this cleanup while the worker is
-  // still current and no re-render re-provisions one — unconditionally
-  // terminating here left react-pdf waiting forever on a dead worker
-  // (endless "Loading preview…"). The still-active worker is deliberately
-  // left running on the final unmount, like the legacy pane.
+  // the time this cleanup fires) — that one's orphaned, safe to terminate now.
+  // Otherwise this is either a StrictMode dev drill (about to remount) or the
+  // real final unmount (no next key coming, e.g. the pane's last preview closes).
+  // Unconditionally terminating here used to leave react-pdf waiting forever on a
+  // dead worker during the StrictMode drill (endless "Loading preview…"), so defer
+  // one tick: a genuine remount's isAliveRef flip, or another consumer's port swap,
+  // can win first; terminate only if neither happened by then.
   useEffect(() => {
     const worker = workerRef.current;
     return () => {
-      if (worker && pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+      if (!worker) return;
+      if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
         worker.terminate();
+        return;
       }
+      setTimeout(() => {
+        if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+          // Some other consumer claimed the port in the meantime — orphaned now.
+          worker.terminate();
+        } else if (!isAliveRef.current) {
+          // Still nobody claimed it and this instance never came back — final unmount.
+          worker.terminate();
+        }
+      }, 0);
     };
   }, [remountKey]);
 
