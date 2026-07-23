@@ -148,7 +148,7 @@
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
+  padding: 0 var(--spacing-s) var(--spacing-s);
 }
 
 .actionsLeft {
@@ -168,18 +168,37 @@
 
 /* The rotating conic-gradient border that used to signal the whole card was
    clickable now lives on the Chat button instead (#2076) — it's the one
-   action that starts a conversation. Doubled class for specificity: Button's
-   own `.btn-primary.btn-outlined` sets `--btn-border` unconditionally (same
-   0-2-0 weight), so a single `.chatButton:hover` would tie and lose on
-   source order alone. */
+   action that starts a conversation. Tripled class for guaranteed
+   specificity: Button's own `.btn-primary.btn-outlined` (and its `:hover`
+   variant) match at the same weight otherwise, which would make the winner
+   depend on stylesheet load order alone. */
 .chatButton {
   animation: rotate-gradient 2s linear infinite;
   animation-play-state: paused;
 }
 
-.chatButton.chatButton:hover:not(:disabled) {
-  animation-play-state: running;
+/* Default border uses the neutral outline token instead of Button's own
+   primary-colored outline. The real border is reserved at the hover width
+   (2px) at all times and made transparent — the visible 1px rest-state line
+   is drawn with an inset box-shadow instead, which doesn't take up layout
+   space. Without this, animating border-width from 1px to 2px on hover grows
+   the button's intrinsic (content-sized, non-fixed-width) footprint by 2px
+   and shifts it and its neighbors. */
+.chatButton.chatButton.chatButton {
+  border-width: 2px;
   --btn-border: transparent;
+  box-shadow: inset 0 0 0 1px var(--outline);
+}
+
+.chatButton.chatButton.chatButton:hover:not(:disabled) {
+  animation-play-state: running;
+  box-shadow: none;
+  /* Cancels Button's own outlined-hover state layer (a semi-transparent
+     on-surface tint on the inner `.state-layer` div) — without this it paints
+     over the gradient background below and the dark interior visibly
+     lightens on hover, which reads as competing with the gradient border. */
+  --btn-background-surface: transparent;
+  --btn-text-color: var(--on-surface);
   /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white),
      matching the card's former hover treatment. No semantic token family covers this rainbow
      sequence; discretising to 5 tokens would destroy the animation effect. */
