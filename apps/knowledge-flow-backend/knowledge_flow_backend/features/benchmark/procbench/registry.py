@@ -68,14 +68,14 @@ class _ProfiledPdfMarkdownProcessor(PdfMarkdownProcessor):
         self._pinned_pdf_config = pdf_config
         self._pinned_process_images = process_images
 
-    def _extract_md(self, file_path: Path):
+    def _extract_md(self, file_path: Path, work_dir: str):
         """Orchestrate extraction using pinned profile config (no ApplicationContext required)."""
         extractor_name = self._pinned_pdf_config.extractor
         use_ocr = self._pinned_pdf_config.do_ocr
 
-        extractor = self._build_extractor(extractor_name)
+        extractor = self._build_extractor(extractor_name, self._pinned_pdf_config.docling_num_threads)
         try:
-            md_text, images_transcription = extractor.extract(file_path, self.folder)
+            md_text, images_transcription = extractor.extract(file_path, work_dir)
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
 

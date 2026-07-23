@@ -58,9 +58,11 @@ from .errors import (
     DefaultOnRequiredSettingsError,
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
+    InvalidExecutionModelError,
     MissingRequiredEnvError,
     UnknownCapabilityError,
 )
+from .mcp import McpCapability
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +175,7 @@ class CapabilityRegistry:
         self._validate_required_env(environment)
         self._validate_team_scope()
         self._validate_table_hygiene()
+        self._validate_execution_models()
         # Registration contributes chat parts to the `UiPart` union at
         # model-build time (#1977, RFC §4): once the kinds are proven
         # unambiguous, fold them in so runtime events, tool results, and the
@@ -221,6 +224,64 @@ class CapabilityRegistry:
                     f"TeamSettingsModel has required field(s) "
                     f"{', '.join(required)} (RFC §8.2). Default-on enablement "
                     "cannot depend on settings no team admin ever provided."
+                )
+
+    def _validate_execution_models(self) -> None:
+        """
+        A capability that overrides `middleware()` without implementing
+        `tools()` has ZERO Graph-visible runtime contribution — `tools()` is
+        the only thing a Graph agent ever reads, and this capability never
+        implements it. `"graph"` in its `manifest.execution_models` is
+        therefore always wrong for this shape, whether the author left the
+        field at its class default (`("react", "graph")`) or wrote that
+        value out explicitly (CAPAB-02, RFC §3.2, §3.9) — either way,
+        selecting it on a Graph agent would silently contribute no tools,
+        exactly the trap this field exists to prevent. The check is on the
+        VALUE, not on whether the field was mentioned: an explicit,
+        deliberate `("react", "graph")` on a `middleware()`-only capability
+        is just as wrong as never having written it.
+
+        `model_fields_set` is used only to make the diagnostic precise
+        (distinguishing "you never declared this" from "you declared it,
+        but to the wrong value") — not to decide whether to raise.
+
+        `McpCapability` is exempt: its tools reach every execution model
+        through `FredMcpToolProvider`, a path entirely outside `tools()` /
+        `middleware()` — only its `middleware()` override (the prompt
+        fragment) is legitimately ReAct-only, a known, documented gap
+        (`RUNTIME-EXECUTION-CONTRACT.md` §8.24), not this rule's concern.
+        """
+
+        for cap_id, capability in self._capabilities.items():
+            if isinstance(capability, McpCapability):
+                continue
+            cls = type(capability)
+            overrides_middleware = cls.middleware is not AgentCapability.middleware
+            implements_tools = cls.tools is not AgentCapability.tools
+            if (
+                overrides_middleware
+                and not implements_tools
+                and "graph" in capability.manifest.execution_models
+            ):
+                if "execution_models" not in capability.manifest.model_fields_set:
+                    raise InvalidExecutionModelError(
+                        f"Capability '{cap_id}' overrides middleware() "
+                        "without implementing tools(), but its manifest "
+                        "never explicitly declared execution_models — left "
+                        'at the default ("react", "graph"), it would '
+                        "silently contribute zero tools to a Graph agent "
+                        "that selects it. Declare "
+                        'execution_models=("react",) explicitly in the '
+                        "manifest (RFC §3.2)."
+                    )
+                raise InvalidExecutionModelError(
+                    f"Capability '{cap_id}' declares execution_models="
+                    f"{capability.manifest.execution_models!r} but overrides "
+                    "middleware() without implementing tools() — it has no "
+                    "Graph-visible runtime contribution at all, so claiming "
+                    '"graph" is always wrong for this shape. Declare '
+                    'execution_models=("react",), or implement tools() for '
+                    "the portion that should reach a Graph agent (RFC §3.2)."
                 )
 
     def _validate_table_hygiene(self) -> None:

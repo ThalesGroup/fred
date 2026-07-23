@@ -319,6 +319,13 @@ class ProcessingConfig(BaseModel):
             default=False,
             description="Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
         )
+        docling_num_threads: int = Field(
+            default=4,
+            ge=1,
+            description="OMP/accelerator threads docling uses per PDF extraction. Tune down when "
+            "scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the "
+            "CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+        )
 
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")

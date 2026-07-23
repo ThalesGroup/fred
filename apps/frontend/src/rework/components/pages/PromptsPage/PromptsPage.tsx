@@ -38,6 +38,7 @@ import {
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { PROMPT_CATEGORIES } from "../../../config/promptCategories.ts";
 import styles from "./PromptsPage.module.scss";
 
@@ -49,6 +50,16 @@ type FormState = {
   text: string;
 };
 const emptyForm: FormState = { name: "", description: "", category: "other", tags: [], text: "" };
+
+/** Human display for a resolved user: full name, else username, else the raw uid (#1952 pattern). */
+function userDisplayName(
+  uid: string,
+  summary: { first_name?: string | null; last_name?: string | null; username?: string } | undefined,
+): string {
+  if (!summary) return uid;
+  const fullName = [summary.first_name, summary.last_name].filter(Boolean).join(" ");
+  return fullName || summary.username || uid;
+}
 
 export default function PromptsPage() {
   const { teamId } = useParams<{ teamId: string }>();
@@ -115,6 +126,15 @@ export default function PromptsPage() {
       setSeededForId(editDetail.id);
     }
   }, [editingPrompt, editDetail, seededForId]);
+
+  // Resolve `created_by` uids to display names for the card footer (#2010), same
+  // batch-lookup pattern as the agent-instance audit fields (#1952).
+  const authorUids = useMemo(
+    () => Array.from(new Set(prompts.map((p) => p.created_by).filter((uid): uid is string => !!uid))),
+    [prompts],
+  );
+  const { data: authorUsers = [] } = useUsersByIdsQuery({ ids: authorUids }, { skip: authorUids.length === 0 });
+  const authorNameById = useMemo(() => new Map(authorUsers.map((u) => [u.id, u])), [authorUsers]);
 
   // Collect categories actually used in the current prompt list
   const usedCategories = useMemo(() => {
@@ -297,6 +317,11 @@ export default function PromptsPage() {
             <PromptCard
               key={prompt.id}
               prompt={prompt}
+              authorName={
+                prompt.created_by
+                  ? userDisplayName(prompt.created_by, authorNameById.get(prompt.created_by))
+                  : undefined
+              }
               canManage={!prompt.is_default}
               onEdit={() => openPrompt(prompt)}
             />

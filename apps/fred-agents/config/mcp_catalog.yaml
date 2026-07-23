@@ -92,6 +92,73 @@ servers:
     sse_read_timeout: 2000
     enabled: true
     auth_mode: "user_token"
+    agent_instructions: |
+      ## Tabular data access (read-only SQL over ingested spreadsheets)
+
+      These tools give read-only SQL access to ingested tabular documents: CSV
+      files (one table each) and Excel workbooks (one or several extracted
+      tables), stored as Parquet and queried through DuckDB.
+
+      Follow this order before answering a data question — do not guess table or
+      column names. Use only the tools you actually need to answer the user's
+      request: skip any step whose information you already have or that is not
+      required for the current question.
+
+      1. `list_tabular_documents` — returns every populated tabular document the
+         agent has access to (CSV and Excel), together with the exact SQL aliases
+         of their tables.
+      2. `get_tabular_document_markdown` — for Excel workbooks only (not plain
+         CSV documents). Returns the metadata of the workbook, and for each
+         sheet: its exact SQL alias, the titles and context of its data ranges,
+         the exact name of every identified column, and any additional textual
+         residuals present on the sheet.
+      3. `get_tabular_documents_schemas` — get the column-level schemas for the
+         documents you intend to query (use this to confirm exact column names
+         and types, especially for CSV documents that have no markdown catalog).
+      4. `read_query` — run ONE read-only SELECT over the mounted tables. Joins
+         across several tables are supported, including tables from different
+         documents, as long as each one is mounted via `dataset_uids`.
+      5. `search_tabular_values` — a LAST-RESORT locator for when a workbook (or
+         corpus) has many tables and you cannot tell from the catalog which one
+         holds a specific value the user named (a reference code, a name, an
+         amount). For Excel workbooks, use it only AFTER step 2: never call it
+         before reading the markdown catalog, and never to discover what a
+         workbook contains — steps 2 and 3 already do that. Give it ONE precise
+         keyword (matching ignores case, accents and spaces and covers numeric
+         columns); it returns the table(s) and column(s) holding that value plus
+         a few matching rows, so you can then run one targeted `read_query`
+         (step 4). Use it sparingly — a generic term matches too many tables and
+         cannot disambiguate; if the response sets `tables_truncated` or a
+         table's `row_truncated`, the result is partial, so refine the keyword or
+         go back to the catalog.
+
+      Always scope `read_query` with `dataset_uids` (document uids — one
+      spreadsheet uid mounts every table of the workbook).
+
+      The `query_alias` returned by these tools is an internal technical
+      identifier, used ONLY to build your queries. NEVER expose a `query_alias`
+      to the user or mention it in your answer. When you refer to a table or
+      sheet, use its human-readable name — the sheet or table title — not its
+      `query_alias`.
+
+      For Excel workbooks only: the markdown catalog from
+      `get_tabular_document_markdown` lists every sheet, table, data range and
+      identified column of the workbook. When — and only when — that catalog
+      makes clear beyond any doubt that the workbook holds nothing about what the
+      user asks (no column, table or context relates to the concept), answer that
+      the information is absent and do NOT run `read_query`. If any doubt remains,
+      query instead of guessing. This shortcut requires having read the markdown
+      first and applies to Excel only — plain CSV documents have no markdown
+      catalog, so confirm their columns with `get_tabular_documents_schemas`.
+
+      When you do query, only use `LIKE`/`ILIKE` on text columns. Never apply
+      `LIKE` to a numeric column — DuckDB rejects it with a binder error and the
+      query fails. Filter numeric columns with `=`, `<`, `>` or ranges, and
+      confirm each column's type before writing the WHERE clause — only
+      `get_tabular_documents_schemas` reports column types.
+
+      Only read-only SELECT queries are available. Never attempt INSERT, UPDATE,
+      DELETE, DROP, ALTER, or TRUNCATE — no write operations exist on these tables.
 
   - id: "mcp-knowledge-flow-opensearch-ops"
     name: "mcp.servers.search_opensearch.name"

@@ -50,7 +50,10 @@ from fred_runtime.react.react_model_adapter import (
     infer_react_model_operation_from_messages,
 )
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
-from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+from fred_runtime.react.react_tool_loop import (
+    _V2_MAX_HISTORY_MESSAGES,
+    build_tool_loop_compiled_react_agent,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -567,29 +570,35 @@ async def test_history_is_trimmed_to_human_boundary() -> None:
     model = RecordingModel(script=[AIMessage(content="trimmed answer")])
     agent = _compile_agent(model, approval_enabled=False)
 
+    # Build strictly more than the bounded window (`_V2_MAX_HISTORY_MESSAGES`) so
+    # trimming actually fires, regardless of the exact configured window size.
+    # Assertions are derived from the constant rather than hard-coded, so tuning
+    # the window (e.g. 10 → 500 for tabular workflows) does not silently break
+    # this regression: it still guards the two invariants that matter — the
+    # payload is capped at the window, and it always starts on a HumanMessage so
+    # it never begins mid tool-call/result pair.
+    pairs = _V2_MAX_HISTORY_MESSAGES // 2 + 5  # → 2*pairs + 1 messages, > window
     history: list[BaseMessage] = []
-    for i in range(1, 7):  # H1 A1 ... H6 A6
+    for i in range(1, pairs + 1):  # H1 A1 ... H_pairs A_pairs
         history.append(HumanMessage(f"question {i}"))
         history.append(AIMessage(content=f"answer {i}"))
-    history.append(HumanMessage("question 7"))  # 13 messages total
+    history.append(HumanMessage(f"question {pairs + 1}"))
 
     await _drive(agent, {"messages": history}, "t-trim")
 
     assert len(model.calls) == 1
     model_input = model.calls[0]
     non_system = [m for m in model_input if not isinstance(m, SystemMessage)]
-    # 13 messages → last 10 → advanced to the first HumanMessage → H3..H7.
+    # Trimmed to the last `_V2_MAX_HISTORY_MESSAGES`, then advanced forward to the
+    # first HumanMessage in that window.
+    assert 0 < len(non_system) <= _V2_MAX_HISTORY_MESSAGES
+    assert isinstance(non_system[0], HumanMessage)
+    # The window is a contiguous suffix of the original history (the latest turn,
+    # "question {pairs + 1}", is always preserved).
     assert [m.content for m in non_system] == [
-        "question 3",
-        "answer 3",
-        "question 4",
-        "answer 4",
-        "question 5",
-        "answer 5",
-        "question 6",
-        "answer 6",
-        "question 7",
+        m.content for m in history[len(history) - len(non_system) :]
     ]
+    assert non_system[-1].content == f"question {pairs + 1}"
 
 
 # ---------------------------------------------------------------------------

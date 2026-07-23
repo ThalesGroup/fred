@@ -52,6 +52,14 @@ def _post_deck(
     )
 
 
+def test_manifest_declares_react_only_execution_model():
+    # CAPAB-02: the fill tool's schema is built dynamically per turn from the
+    # parsed template — a genuine ReAct-only need `tools()` cannot express.
+    # Must declare itself incompatible with Graph agents rather than silently
+    # contributing zero tools if one selects it.
+    assert PptFillerCapability.manifest.execution_models == ("react",)
+
+
 def test_analyze_valid_template_returns_200_schema_and_empty_errors(client):
     deck = build_deck(
         [

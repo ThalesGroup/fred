@@ -51,7 +51,13 @@ from fred_sdk.contracts.capability import (
     UploadedFile,
 )
 from fred_sdk.contracts.capability.context import SaveContext
-from fred_sdk.contracts.models import MCPServerRef
+from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.models import (
+    GraphAgentDefinition,
+    GraphDefinition,
+    GraphNodeDefinition,
+    MCPServerRef,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
@@ -215,6 +221,118 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         assert entry["assets"] == []
     finally:
         client.__exit__(None, None, None)
+
+
+class _MinGraphInput(BaseModel):
+    message: str = ""
+
+
+class _MinGraphState(BaseModel):
+    message: str = ""
+
+
+class _MinGraphAgent(GraphAgentDefinition):
+    """The smallest valid `GraphAgentDefinition` — for catalog-filtering tests only."""
+
+    agent_id: str = "test.graph_catalog_filter"
+    role: str = "test"
+    description: str = "test"
+
+    def build_graph(self) -> GraphDefinition:
+        return GraphDefinition(
+            state_model_name="MinGraphState",
+            entry_node="n",
+            nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+        )
+
+    def input_model(self) -> type[BaseModel]:
+        return _MinGraphInput
+
+    def state_model(self) -> type[BaseModel]:
+        return _MinGraphState
+
+    def output_model(self) -> type[BaseModel]:
+        return _MinGraphInput
+
+    def build_initial_state(
+        self, input_model: BaseModel, binding: BoundRuntimeContext
+    ) -> BaseModel:
+        return _MinGraphState(message=getattr(input_model, "message", ""))
+
+    def node_handlers(self) -> Mapping[str, object]:
+        return {}
+
+    def build_output(self, state: BaseModel) -> BaseModel:
+        return _MinGraphInput(message=getattr(state, "message", ""))
+
+
+class _ReactOnlyProbeCapability(
+    AgentCapability[_ProbeConfig, _ProbeConfig, EmptyModel]
+):
+    manifest = CapabilityManifest(
+        id="react_only_probe",
+        version="1.0.0",
+        name="cap.react_only_probe.name",
+        description="cap.react_only_probe.description",
+        icon="Build",
+        execution_models=("react",),
+    )
+    ConfigModel = _ProbeConfig
+
+    def middleware(
+        self, ctx: CapabilityContext[_ProbeConfig, EmptyModel]
+    ) -> list[AgentMiddleware]:
+        return [_ProbeMiddleware(ctx)]
+
+
+def test_templates_hide_react_only_capabilities_from_graph_templates(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    CAPAB-02: `_build_capability_block` already refuses a Graph agent's
+    selection of a `execution_models=("react",)` capability with a loud
+    `CapabilityError` — but a picker that still LISTS it invites exactly the
+    "select it, save it, discover the incompatibility at first launch" flow
+    that refusal exists to prevent. `GET /agents/templates` must filter
+    `available_capabilities` per template by execution model.
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    react_definition = _EchoAgent()
+    graph_definition = _MinGraphAgent()
+    app = create_agent_app(
+        registry={
+            react_definition.agent_id: react_definition,
+            graph_definition.agent_id: graph_definition,
+        },
+        config=_build_test_config(tmp_path),
+    )
+    client = TestClient(app)
+    with client:
+        app.state.capability_registry.register(_ReactOnlyProbeCapability())
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        by_id = {t["template_agent_id"]: t for t in response.json()}
+
+        react_ids = {
+            e["id"] for e in by_id[react_definition.agent_id]["available_capabilities"]
+        }
+        graph_ids = {
+            e["id"] for e in by_id[graph_definition.agent_id]["available_capabilities"]
+        }
+
+        assert "react_only_probe" in react_ids
+        assert "react_only_probe" not in graph_ids
+        # A tools()-based capability (default execution_models) stays offered
+        # to both — the filter must not over-hide.
+        assert "demo_echo" in react_ids
+        assert "demo_echo" in graph_ids
 
 
 def test_default_capability_id_unknown_fails_pod_boot(tmp_path, monkeypatch) -> None:

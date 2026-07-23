@@ -86,3 +86,23 @@ def test_inspect_read_options_rejects_invalid_csv_path(tmp_path):
 
     with pytest.raises(ValueError, match="File invalid or not found"):
         processor.inspect_read_options(tmp_path / "missing.csv")
+
+
+def test_ragged_semicolon_export_is_tolerated(tmp_path):
+    """Real-world Jira-style export: multi-line quoted fields with embedded
+    delimiters/newlines plus a malformed trailing line. DuckDB's strict sniffer
+    rejects this outright; the processor must skip only the broken row."""
+    processor = CsvTabularProcessor()
+    csv_path = tmp_path / "jira.csv"
+    csv_path.write_text(
+        'Résumé;Clé;Description\nx1;PHRS-1;"panel:\nligne;avec;points-virgules"\nx2;PHRS-2;ok\nligne-cassée\n',
+        encoding="utf-8",
+    )
+
+    options = processor.inspect_read_options(csv_path)
+    assert options.delimiter == ";"
+    assert options.encoding == "utf-8"
+
+    metadata = processor.extract_file_metadata(csv_path)
+    assert metadata["num_columns"] == 3
+    assert metadata["sample_columns"] == ["Résumé", "Clé", "Description"]

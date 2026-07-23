@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { PdfStreamingDocumentViewer } from "../../../../../common/PdfStreamingDocumentViewer";
 import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { decodeMaybeBase64Utf8, isPdfFile } from "../../../../utils/documentViewerUtils";
+import { decodeMaybeBase64Utf8, isPdfFile, isTabularFile } from "../../../../utils/documentViewerUtils";
 import styles from "./DocumentViewer.module.css";
 
 interface DocumentViewerProps {
@@ -42,15 +42,19 @@ export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded }: Docu
   if (isPdfFile(fileName)) {
     return <PdfStreamingDocumentViewer documentUid={documentUid} />;
   }
-  return <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />;
+  return (
+    <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+  );
 }
 
 function MarkdownDocumentBody({
   documentUid,
   onLoaded,
+  fullWidth,
 }: {
   documentUid: string;
   onLoaded?: (content: string) => void;
+  fullWidth?: boolean;
 }) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -89,7 +93,7 @@ function MarkdownDocumentBody({
 
   return (
     <div className={styles.markdownBody}>
-      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} />}
+      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} fullWidth={fullWidth} />}
     </div>
   );
 }

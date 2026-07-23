@@ -267,6 +267,12 @@ class PptFillerCapability(
         chat_parts=[PptPreviewPart],
         side_panels=[SidePanelSpec(widget="ppt_preview_pane")],
         router=_build_ppt_filler_router(),
+        # CAPAB-02: the fill tool's schema is built dynamically per turn from
+        # the parsed template (`wrap_model_call`, ReAct-only — `tools()`
+        # cannot express a schema that isn't known until the middleware runs).
+        # Explicitly ReAct-only rather than silently contributing zero tools
+        # to a Graph agent that selects this capability.
+        execution_models=("react",),
     )
     ConfigModel = PptFillerConfig
 

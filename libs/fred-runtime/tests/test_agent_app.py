@@ -1774,6 +1774,458 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     assert fragments == []
 
 
+def test_build_capability_block_for_graph_agent_returns_tools() -> None:
+    """
+    Ensure `_build_capability_block` builds a non-empty block for a Graph agent
+    (Phase 3, NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+
+    Why this exists:
+    - `_build_capability_block` and `_effective_capability_ids` used to gate
+      capabilities to `ReActAgentDefinition` only, raising `CapabilityError`
+      for any `GraphAgentDefinition` selecting a real (non-MCP) capability.
+      That gate is gone: a Graph agent can now select a capability and get
+      its `tools()` output collected into `block.tools`, exactly like a
+      ReAct agent would. Nothing yet reads `block.tools` on the Graph
+      execution path — `GraphRuntime` still ignores `capability_block`
+      entirely (Phase 4) — so this only proves the block builds without
+      error, not that a graph node can invoke the tool.
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_for_graph_agent_returns_tools -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+    )
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain_core.tools import BaseTool
+    from langchain_core.tools import tool as lc_tool
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _GraphToolCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="graph_tool_cap",
+            version="1.0.0",
+            name="cap.graph_tool_cap.name",
+            description="cap.graph_tool_cap.description",
+            icon="Build",
+        )
+        ConfigModel = _NoConfig
+
+        def tools(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[BaseTool]:
+            del ctx
+
+            @lc_tool
+            def graph_probe(text: str) -> str:
+                """Echo text back."""
+                return text
+
+            return [graph_probe]
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability"
+        role: str = "test"
+        description: str = "test"
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    registry = CapabilityRegistry()
+    registry.register(_GraphToolCapability())
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["graph_tool_cap"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    assert [t.name for t in block.tools] == ["graph_probe"]
+
+
+def test_build_capability_block_rejects_react_only_capability_for_graph_agent() -> None:
+    """
+    A capability declaring `execution_models=("react",)` (a `middleware()`-only
+    hook `tools()` can't express) must fail LOUDLY when a Graph agent selects
+    it — never silently build with zero tools (CAPAB-02, RFC §3.9 "never
+    silently degrade"). Companion to
+    `test_build_capability_block_for_graph_agent_returns_tools` above, which
+    proves the graph-capable ("react", "graph") case still works.
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_react_only_capability_for_graph_agent -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import CapabilityError, _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+    )
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain.agents.middleware import AgentMiddleware
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _ReactOnlyCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="react_only_cap",
+            version="1.0.0",
+            name="cap.react_only_cap.name",
+            description="cap.react_only_cap.description",
+            icon="Build",
+            execution_models=("react",),
+        )
+        ConfigModel = _NoConfig
+
+        def middleware(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[AgentMiddleware]:
+            del ctx
+            return []
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability_react_only"
+        role: str = "test"
+        description: str = "test"
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    registry = CapabilityRegistry()
+    registry.register(_ReactOnlyCapability())
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["react_only_cap"],
+    )
+
+    with pytest.raises(CapabilityError, match="react_only_cap"):
+        _build_capability_block(
+            registry,
+            tuning,
+            definition=definition,
+            services=RuntimeServices(),
+            user_id=None,
+            session_id=None,
+            team_id=None,
+            agent_instance_id=None,
+        )
+
+
+def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() -> None:
+    """
+    CAPAB-02 stopgap: `GraphRuntime` never consults `CapabilityAgentBlock.hitl`
+    (`invoke_runtime_tool` calls the tool directly) — a capability declaring a
+    `HitlSpec` approval gate would silently run ungated on a Graph agent. Full
+    Graph HITL enforcement is deferred (id-legend.yaml CAPAB-02); until then,
+    selecting such a capability on a Graph agent must fail loudly, not run
+    unapproved.
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import CapabilityError, _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+        HitlSpec,
+    )
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain_core.tools import BaseTool
+    from langchain_core.tools import tool as lc_tool
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _HitlGatedCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="hitl_gated_cap",
+            version="1.0.0",
+            name="cap.hitl_gated_cap.name",
+            description="cap.hitl_gated_cap.description",
+            icon="Build",
+        )
+        ConfigModel = _NoConfig
+
+        def tools(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[BaseTool]:
+            del ctx
+
+            @lc_tool
+            def gated_probe(text: str) -> str:
+                """Echo text back."""
+                return text
+
+            return [gated_probe]
+
+        def hitl_specs(self) -> list[HitlSpec]:
+            return [HitlSpec(tool="gated_probe", require=True)]
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability_hitl_gated"
+        role: str = "test"
+        description: str = "test"
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    registry = CapabilityRegistry()
+    registry.register(_HitlGatedCapability())
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["hitl_gated_cap"],
+    )
+
+    with pytest.raises(CapabilityError, match="hitl_gated_cap"):
+        _build_capability_block(
+            registry,
+            tuning,
+            definition=definition,
+            services=RuntimeServices(),
+            user_id=None,
+            session_id=None,
+            team_id=None,
+            agent_instance_id=None,
+        )
+
+
+def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name() -> (
+    None
+):
+    """
+    Ensure two selected MCP servers with `agent_instructions` yield middleware
+    with DISTINCT `.name`s.
+
+    Why this exists:
+    - `create_agent` rejects a middleware list with duplicate `.name`s
+      ("Please remove duplicate middleware instances."). `AgentMiddleware.name`
+      defaults to the class name, so before the per-server `.name` override two
+      `_McpInstructionsMiddleware` instances collided and blew up executor
+      build for any agent selecting >1 MCP server with `agent_instructions`.
+    - guards the fix: `.name` keys on the catalog server id.
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name -q`
+    """
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
+    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        MCPServerConfiguration,
+        MCPServerRef,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    definition = _EchoAgent().model_copy(
+        update={
+            "default_mcp_servers": (
+                MCPServerRef(id="mcp-search"),
+                MCPServerRef(id="mcp-storage"),
+            )
+        }
+    )
+    registry = CapabilityRegistry()
+    register_mcp_capabilities(
+        registry,
+        [
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-search",
+                    "name": "Search",
+                    "agent_instructions": "Always cite retrieved claims.",
+                }
+            ),
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-storage",
+                    "name": "Storage",
+                    "agent_instructions": "Prefer the newest object version.",
+                }
+            ),
+        ],
+    )
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["mcp-search", "mcp-storage"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    names = [
+        mw.name for mw in block.middleware if isinstance(mw, _McpInstructionsMiddleware)
+    ]
+    assert names == ["McpInstructions[mcp-search]", "McpInstructions[mcp-storage]"]
+    # The invariant create_agent enforces: no duplicate middleware names.
+    assert len(set(names)) == len(names)
+
+
 def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:
     """
     Ensure `build_mcp_capability` sets the manifest id to the plain catalog

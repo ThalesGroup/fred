@@ -365,13 +365,16 @@ def create_app() -> FastAPI:
             app,
             name="Knowledge Flow Tabular MCP",
             description=(
-                "SQL access layer exposed through SQLAlchemy. "
-                "Provides agents with read and query capabilities over relational data "
-                "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
-                "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
-                "Covers structured/tabular data (CSV, spreadsheets, database tables) — not prose "
-                "or free-text documents; use a document/semantic-search tool for those instead. "
-                "Create, update and drop tables if asked by the user if allowed."
+                "Read-only SQL access to the tabular documents ingested in Knowledge Flow: "
+                "CSV files (one table each) and Excel workbooks (one or several extracted tables), "
+                "stored as Parquet and queried through DuckDB. "
+                "Recommended flow: list_tabular_documents to discover documents and their table aliases; "
+                "get_tabular_documents_schemas for column-level schemas; "
+                "get_tabular_document_markdown to read a spreadsheet's extraction catalog "
+                "(sheet layout, table context and ranges, residual notes, exact SQL aliases); "
+                "read_query to run one read-only SELECT over the mounted tables. "
+                "Always scope read_query with dataset_uids (document uids — one spreadsheet uid mounts "
+                "every table of the workbook). No write operations are available."
             ),
             include_tags=["Tabular"],
             describe_all_responses=True,

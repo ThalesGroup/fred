@@ -176,29 +176,34 @@ export function DocumentUploadDrawer({
     if (!files.length || isLoading || isQuotaExceeded) return;
     setIsLoading(true);
     try {
-      for (const file of files) {
-        const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-        // Register each task the instant the server first reports its id (the first
-        // line of the stream), not after the whole upload finishes — so the tray
-        // lights up and starts its SSE subscription while the upload streams. The
-        // drawer itself only waits for that signal (see `scheduleFile`), not for
-        // the file's full ingestion pipeline, so it can close promptly.
-        await scheduleFile(
-          file,
-          uploadMode,
-          requestMetadata,
-          ({ taskId, documentUid }) => {
-            dispatch(
-              taskRegistered({
-                taskId,
-                kind: "ingestion",
-                target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
-              }),
-            );
-          },
-          (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
-        );
-      }
+      // Schedule every file concurrently rather than one-at-a-time: each
+      // `scheduleFile` already only waits for its own task_id to be discovered
+      // (see its doc comment), not the file's full ingestion pipeline, so a
+      // batch should close as soon as the slowest single file is scheduled —
+      // not after the sum of every file's upload time.
+      await Promise.all(
+        files.map((file) => {
+          const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+          // Register each task the instant the server first reports its id (the first
+          // line of the stream), not after the whole upload finishes — so the tray
+          // lights up and starts its SSE subscription while the upload streams.
+          return scheduleFile(
+            file,
+            uploadMode,
+            requestMetadata,
+            ({ taskId, documentUid }) => {
+              dispatch(
+                taskRegistered({
+                  taskId,
+                  kind: "ingestion",
+                  target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
+                }),
+              );
+            },
+            (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
+          );
+        }),
+      );
       onUploadComplete?.();
     } finally {
       setIsLoading(false);

@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 import re
 import shutil
-import uuid
+import tempfile
 from pathlib import Path
 
 import pypdf
@@ -63,11 +62,6 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     DESCRIPTION = "PDF-to-Markdown converter"
     BASE_FOLDER = "/tmp"
-
-    def __init__(self):
-        super().__init__()
-        self.folder = os.path.join(self.BASE_FOLDER, uuid.uuid4().hex)
-        os.makedirs(self.folder, exist_ok=True)
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -134,15 +128,23 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         except Exception as e:
             raise RuntimeError(f"[PDF][PROCESSOR] Failed to use image describer : {get_configuration().vision_model}") from e
 
-    def _build_extractor(self, extractor_name: str) -> BasePdfExtractor:
+    def _build_extractor(self, extractor_name: str, docling_num_threads: int = 4) -> BasePdfExtractor:
         extractor_cls = _EXTRACTORS.get(extractor_name)
         if extractor_cls is None:
             logger.warning("[PROCESSOR][PDF] Unknown extractor '%s', falling back to 'pymupdf'", extractor_name)
             extractor_cls = PyMuPdfExtractor
+        if extractor_cls is DoclingPdfExtractor:
+            return DoclingPdfExtractor(num_threads=docling_num_threads)
         return extractor_cls()
 
-    def _extract_md(self, file_path: Path):
-        """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown."""
+    def _extract_md(self, file_path: Path, work_dir: str):
+        """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown.
+
+        `work_dir` must be exclusive to this call — the processor instance is a shared
+        singleton (see application_context.get_input_processor_instance), and concurrent
+        Temporal activities call this method in parallel. A shared work directory would
+        let one activity's cleanup delete another's in-flight images (FileNotFoundError).
+        """
         use_ocr = False
         use_image_describer = False
 
@@ -165,9 +167,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             use_image_describer,
         )
 
-        extractor = self._build_extractor(extractor_name)
+        extractor = self._build_extractor(extractor_name, profile_cfg.pdf.docling_num_threads)
         try:
-            md_text, images_transcription = extractor.extract(file_path, self.folder)
+            md_text, images_transcription = extractor.extract(file_path, work_dir)
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
 
@@ -227,10 +229,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         output_markdown_path = output_dir / "output.md"
 
         # Primary extraction: configured extractor
+        work_dir = tempfile.mkdtemp(dir=self.BASE_FOLDER)
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            md_content = self._extract_md(file_path)
+            md_content = self._extract_md(file_path, work_dir)
             logger.info("[PROCESSOR][PDF] Extraction succeeded | file=%s", file_path.name)
 
             with open(output_markdown_path, "w", encoding="utf-8") as f:
@@ -242,9 +245,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 "message": "Conversion to markdown succeeded.",
             }
         except Exception as e:
-            logger.warning(f"PDF extraction failed, trying markitdown: {e}")
+            logger.warning(f"PDF extraction failed, trying markitdown: {e}", exc_info=True)
         finally:
-            self._remove_all_files(self.folder)
+            self._remove_all_files(work_dir)
 
         # Fallback extraction: Markitdown
         try:

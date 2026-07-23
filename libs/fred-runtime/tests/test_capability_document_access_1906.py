@@ -780,6 +780,11 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
     assert message.content == "Sales/\n  doc-a [u1]"
     assert message.artifact.tool_ref == "list_document_tree"
     assert message.artifact.is_error is False
+    # CAPAB-02: the tree text must also live in `blocks` — a Graph agent's
+    # plain-dict invocation keeps only the artifact half of a
+    # `content_and_artifact` return (`_adapt_capability_tool_for_graph`), so an
+    # artifact with no payload would silently lose the tree for a Graph node.
+    assert message.artifact.blocks[0].text == "Sales/\n  doc-a [u1]"
 
 
 @pytest.mark.asyncio
@@ -799,6 +804,11 @@ async def test_tree_tool_failure_returns_is_error_result() -> None:
 
     assert message.artifact.is_error is True
     assert "HTTP 503" in message.content
+    # CAPAB-02: the diagnostic must also live in `blocks` — a Graph agent's
+    # plain-dict invocation keeps only the artifact half of a
+    # `content_and_artifact` return, so an artifact with `is_error=True` but
+    # no message tells a Graph node THAT it failed but not WHY.
+    assert message.artifact.blocks[0].text == message.content
     assert "list the document tree" in message.content
 
 
@@ -828,6 +838,9 @@ async def test_summarize_tool_passes_instruction_and_returns_summary() -> None:
     assert message.content == "the summary"
     assert message.artifact.tool_ref == "summarize_document"
     assert message.artifact.is_error is False
+    # CAPAB-02: same reason as list_document_tree above — the summary text
+    # must also live in `blocks`, not only in `content`.
+    assert message.artifact.blocks[0].text == "the summary"
 
 
 @pytest.mark.asyncio
@@ -889,6 +902,11 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
     assert message.artifact.is_error is True
     assert "opaque uid" in message.content
     assert "list_document_tree" in message.content
+    # CAPAB-02: the recovery hint is appended to `message` AFTER
+    # `_document_tool_failure` already built the artifact — it must also
+    # land in `blocks`, or a Graph agent (which keeps only the artifact)
+    # loses exactly the guidance a model needs to self-correct.
+    assert message.artifact.blocks[0].text == message.content
 
 
 @pytest.mark.asyncio

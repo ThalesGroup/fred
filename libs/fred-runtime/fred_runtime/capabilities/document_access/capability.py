@@ -95,7 +95,6 @@ from fred_sdk.contracts.runtime import (
     DocumentSummaryResult,
     DocumentTreeResult,
 )
-from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, model_validator
 
@@ -194,7 +193,16 @@ def _document_tool_failure(
     target = f" (document_uid={document_uid})" if document_uid else ""
     detail = f": {raw}" if raw else ""
     message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
-    return message, ToolInvocationResult(tool_ref=tool_ref, is_error=True)
+    # `blocks` carries the same diagnostic as `content` (CAPAB-02, same reason
+    # as the success-path artifacts above): a Graph agent's plain-dict
+    # invocation keeps only the artifact half of a `content_and_artifact`
+    # return — an artifact with `is_error=True` but no message tells a Graph
+    # node THAT the call failed but not WHY.
+    return message, ToolInvocationResult(
+        tool_ref=tool_ref,
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
 
 
 def narrow_scope_ids(
@@ -322,263 +330,6 @@ class DocumentScopeControlParams(BaseModel):
     libraries: bool = True
     documents: bool = True
     bound_library_ids: list[str] | None = None
-
-
-class _DocumentAccessMiddleware(AgentMiddleware):
-    """Carries the document-access tools (vector search, tree listing,
-    on-demand summarize), bound to the turn's typed context."""
-
-    def __init__(
-        self,
-        ctx: CapabilityContext[DocumentAccessConfig, DocumentAccessTurnOptions],
-    ) -> None:
-        super().__init__()
-        config = ctx.config
-        turn = ctx.turn_options
-        services = ctx.services
-
-        # Capability-config ∩ turn-option → the params handed to the port. This
-        # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
-        # result by the session binding (`⊆ session_binding`).
-        # Bound library ids only apply while the binding toggle is on — same
-        # semantics as the legacy tool (the tree's value is kept but inert
-        # when unbound).
-        bound_library_ids = (
-            (config.library_tag_ids or None) if config.bind_libraries else None
-        )
-        scoped_library_tag_ids = narrow_scope_ids(
-            bound_library_ids, turn.library_tag_ids
-        )
-        scoped_document_uids = narrow_scope_ids(
-            config.document_uids or None, turn.document_uids
-        )
-        default_top_k = config.default_top_k if config.default_top_k > 0 else 8
-        # With the search-policy picker shown, the configured policy is only
-        # the picker's DEFAULT: pass None so the adapter falls back to the
-        # per-turn RuntimeContext value (which carries that default anyway).
-        # With the picker hidden, the configured policy is enforced.
-        search_policy = (
-            None if config.show_search_policy_control else config.search_policy
-        )
-        min_source_score_ratio = config.min_source_score_ratio
-
-        @tool(
-            "search_documents_using_vectorization",
-            response_format="content_and_artifact",
-        )
-        async def search_documents_using_vectorization(
-            question: str,
-            top_k: int | None = None,
-        ) -> tuple[str, ToolInvocationResult]:
-            """Search the selected document libraries using semantic similarity (RAG).
-
-            Call this tool BEFORE answering any factual, technical, or
-            domain-specific question — the corpus may hold more specific or more
-            recent information than you already know. Skip it only for purely
-            conversational exchanges (greetings, thanks, clarifying what was just
-            said).
-
-            Covers prose/text documents. If a hit describes a structured/tabular
-            dataset (a "dataset pointer"), do not answer from it directly — pivot
-            to the tabular/SQL tool it names instead.
-
-            Returns ranked hits with title and content. Only use information
-            actually present in the returned hits; never invent facts beyond
-            them.
-            """
-
-            port = services.document_search
-            if port is None:
-                # No platform port injected (e.g. a bare test harness). Fail
-                # LOUD in the tool result rather than silently returning nothing.
-                raise RuntimeError(
-                    "document_access: RuntimeServices.document_search is not "
-                    "available on this execution path."
-                )
-
-            effective_top_k = top_k if isinstance(top_k, int) and top_k > 0 else None
-            result: DocumentSearchResult = await port.search(
-                question,
-                top_k=effective_top_k or default_top_k,
-                library_tag_ids=scoped_library_tag_ids,
-                document_uids=scoped_document_uids,
-                search_policy=search_policy,
-                attachments_only=(
-                    config.search_attachments_only and config.show_attach_files_control
-                ),
-            )
-            hits = result.hits
-
-            content = {
-                "query": question,
-                "hits": [
-                    {
-                        k: v
-                        for k, v in hit.model_dump(mode="json").items()
-                        if k in _LLM_FIELDS
-                    }
-                    for hit in hits
-                ],
-            }
-            # `blocks` feed the LLM the full hit set (the model needs to see a
-            # dataset pointer to know to pivot to the tabular tool, and every
-            # hit to reason with) — `sources` (the chat Sources panel) is
-            # narrowed separately: never a pointer chunk (no real content to
-            # cite), and never a hit that's noise relative to the best match
-            # in this call (found live citing near-zero-relevance paragraphs
-            # from an unrelated document, RAG-DATASET-DISCOVERY-RFC.md §7).
-            artifact = ToolInvocationResult(
-                tool_ref=DOCUMENT_ACCESS_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
-                sources=select_citable_sources(
-                    hits, min_score_ratio=min_source_score_ratio
-                ),
-            )
-            return json.dumps(content), artifact
-
-        attachments_only = (
-            config.search_attachments_only and config.show_attach_files_control
-        )
-        summarize_cap = config.summarize_max_chars
-
-        @tool("list_document_tree", response_format="content_and_artifact")
-        async def list_document_tree(
-            working_directory: str | None = None,
-            max_chars: int = 6000,
-        ) -> tuple[str, ToolInvocationResult]:
-            """List the folders and documents in the user's document scope as a tree.
-
-            Call this first to orient on what's available before searching or
-            summarizing — it shows folder structure and, for each document, its
-            name, uid, and upload date, not its content.
-
-            Documents are rendered as "name [document_uid] (uploaded date)" —
-            use that uid as the `document_uid` argument to summarize_document.
-            The bracketed identifiers are internal working ids for YOUR tool
-            calls only: NEVER repeat them in your answer to the user — always
-            refer to documents by their display name.
-
-            `working_directory` narrows the listing to a specific folder (e.g.
-            "Sales/HR"); omit it to start from the root. The tree is rendered as
-            indented text, with documents appearing as leaves under every folder
-            they belong to (a document can be in more than one folder).
-
-            If the corpus is too large to show in full, the deepest branches are
-            pruned and a note tells you how many items were omitted — when that
-            happens, narrow `working_directory` or switch to
-            search_documents_using_vectorization instead of trying to browse
-            everything.
-            """
-
-            port = services.document_tree
-            if port is None:
-                raise RuntimeError(
-                    "document_access: RuntimeServices.document_tree is not "
-                    "available on this execution path."
-                )
-
-            effective_max_chars = _clamp(max_chars, _TREE_MAX_CHARS_BOUNDS)
-            started = time.monotonic()
-            try:
-                result: DocumentTreeResult = await port.tree(
-                    working_directory=working_directory,
-                    library_tag_ids=scoped_library_tag_ids,
-                    max_chars=effective_max_chars,
-                )
-            except Exception as exc:
-                return _document_tool_failure(
-                    tool_ref="list_document_tree",
-                    action="list the document tree",
-                    exc=exc,
-                    elapsed_s=time.monotonic() - started,
-                )
-            artifact = ToolInvocationResult(tool_ref="list_document_tree")
-            return result.tree, artifact
-
-        @tool("summarize_document", response_format="content_and_artifact")
-        async def summarize_document(
-            document_uid: str,
-            instruction: str | None = None,
-            max_chars: int | None = None,
-        ) -> tuple[str, ToolInvocationResult]:
-            """Generate a fresh, on-demand summary of one document by its uid.
-
-            Use this when you need to understand a document's content in depth —
-            e.g. to decide whether it's relevant, or to extract specific
-            information — without pulling its full text into your own context. A
-            fresh model reads the whole document (using map-reduce for large
-            documents) and returns just the summary.
-
-            `document_uid` MUST be the document's opaque uid, not its name or
-            title. Get it from a prior search_documents_using_vectorization
-            hit's 'uid' field, from list_document_tree (the value shown in
-            '[...]' after each document name), or from the conversation's
-            attached-files list (the bracketed value after the file name). If
-            you only know a document's name, resolve its uid with one of those
-            first — never pass the name here. The uid is an internal working
-            identifier for YOUR tool calls only: NEVER repeat it in your answer
-            to the user — always refer to the document by its display name.
-
-            Pass `instruction` to steer the summary: focus area, what to look
-            for, audience, tone, desired length — e.g. "focus on financial risks
-            and list every action item". Without it, you get a generic abstract.
-
-            `max_chars` bounds the returned summary length; raise it for a more
-            detailed summary, lower it for a terse one. Leave it unset to use
-            the agent's configured default. The agent may also impose a hard
-            maximum, in which case a larger request is clamped down to it.
-            """
-
-            port = services.document_summarize
-            if port is None:
-                raise RuntimeError(
-                    "document_access: RuntimeServices.document_summarize is not "
-                    "available on this execution path."
-                )
-
-            effective_max_chars = resolve_summarize_max_chars(summarize_cap, max_chars)
-            started = time.monotonic()
-            try:
-                result: DocumentSummaryResult = await port.summarize(
-                    document_uid,
-                    instruction=instruction,
-                    max_chars=effective_max_chars,
-                )
-            except Exception as exc:
-                message, artifact = _document_tool_failure(
-                    tool_ref="summarize_document",
-                    action="summarize the document",
-                    exc=exc,
-                    elapsed_s=time.monotonic() - started,
-                    document_uid=document_uid,
-                )
-                # 403/404 almost always means the model passed a file NAME (or
-                # a stale/foreign uid) — the backend fails closed on unknown
-                # resources. Tell the model how to recover instead of letting
-                # it give up and echo the error.
-                if getattr(exc, "status_code", None) in (403, 404):
-                    message += (
-                        " If you passed a file name, that is the likely cause: "
-                        "document_uid must be the opaque uid. Find it in the "
-                        "conversation's attached-files list (the bracketed "
-                        "value after the file name), in a search hit's 'uid' "
-                        "field, or via list_document_tree — then call "
-                        "summarize_document again with that uid. Do not "
-                        "repeat the uid to the user."
-                    )
-                return message, artifact
-            artifact = ToolInvocationResult(tool_ref="summarize_document")
-            return result.summary, artifact
-
-        tools: list[BaseTool] = [search_documents_using_vectorization]
-        # The corpus tree is meaningless in attachments-only mode (the corpus
-        # is out of the agent's scope by definition), and there is no
-        # session-attachment enumeration yet (see module docstring) — so the
-        # listing tool is dropped rather than registered-but-empty.
-        if not attachments_only:
-            tools.append(list_document_tree)
-        tools.append(summarize_document)
-        self.tools = tools
 
 
 class DocumentAccessCapability(
@@ -823,8 +574,313 @@ class DocumentAccessCapability(
             )
         return controls
 
-    def middleware(
+    def tools(
         self,
         ctx: CapabilityContext[DocumentAccessConfig, DocumentAccessTurnOptions],
-    ) -> list[AgentMiddleware]:
-        return [_DocumentAccessMiddleware(ctx)]
+    ) -> Sequence[BaseTool]:
+        """
+        Build the single vector-search tool, bound to the turn's typed
+        context (RFC §3.2, §5). This is the ONLY runtime contribution of this
+        capability — `AgentCapability.middleware()`'s default wraps this for
+        `create_agent()`; no ReAct-loop-specific hook is needed.
+
+        Return-convention note (Phase 1, NOTES-GRAPH-CAPABILITY-BRIDGE.md):
+        kept as `@tool(..., response_format="content_and_artifact")` returning
+        a `(content, ToolInvocationResult)` tuple. Verified empirically
+        (`test_capability_tool_return_convention.py`) that this is correct for the only
+        execution path this tool goes through today — `create_agent()`'s real
+        ToolCall-based tool-calling loop, which builds a `ToolMessage` whose
+        `.artifact` carries the `ToolInvocationResult` (and its `.sources`)
+        intact. A plain-dict `.ainvoke()` call (the shape Graph's
+        `invoke_runtime_tool` and the MCP runtime-provider resolver both use)
+        does NOT preserve this: LangChain collapses a `content_and_artifact`
+        response to the bare content string with NO tuple and NO artifact at
+        all when there is no `ToolCall` to attach it to — worse than the
+        tuple-collapse the original plan assumed. Switching to a bare
+        `ToolInvocationResult` return (`KfVectorSearchToolkit`'s convention)
+        would fix that path but breaks THIS one: without
+        `response_format="content_and_artifact"`, `create_agent()`'s ToolCall
+        loop stringifies the whole model into `ToolMessage.content` and never
+        populates `.artifact`. Since Phase 1 does not wire this tool into any
+        plain-dict invocation path (that's Phase 4), the existing convention
+        is correct as-is; Phase 2+ must adapt at the tool-carrier/assembly
+        seam rather than change this tool's return shape again.
+        """
+
+        config = ctx.config
+        turn = ctx.turn_options
+        services = ctx.services
+
+        # Capability-config ∩ turn-option → the params handed to the port. This
+        # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
+        # result by the session binding (`⊆ session_binding`).
+        # Bound library ids only apply while the binding toggle is on — same
+        # semantics as the legacy tool (the tree's value is kept but inert
+        # when unbound).
+        bound_library_ids = (
+            (config.library_tag_ids or None) if config.bind_libraries else None
+        )
+        scoped_library_tag_ids = narrow_scope_ids(
+            bound_library_ids, turn.library_tag_ids
+        )
+        scoped_document_uids = narrow_scope_ids(
+            config.document_uids or None, turn.document_uids
+        )
+        default_top_k = config.default_top_k if config.default_top_k > 0 else 8
+        # With the search-policy picker shown, the configured policy is only
+        # the picker's DEFAULT: pass None so the adapter falls back to the
+        # per-turn RuntimeContext value (which carries that default anyway).
+        # With the picker hidden, the configured policy is enforced.
+        search_policy = (
+            None if config.show_search_policy_control else config.search_policy
+        )
+        min_source_score_ratio = config.min_source_score_ratio
+        attachments_only = (
+            config.search_attachments_only and config.show_attach_files_control
+        )
+        summarize_cap = config.summarize_max_chars
+
+        @tool(
+            "search_documents_using_vectorization",
+            response_format="content_and_artifact",
+        )
+        async def search_documents_using_vectorization(
+            question: str,
+            top_k: int | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Search the selected document libraries using semantic similarity (RAG).
+
+            Call this tool BEFORE answering any factual, technical, or
+            domain-specific question — the corpus may hold more specific or more
+            recent information than you already know. Skip it only for purely
+            conversational exchanges (greetings, thanks, clarifying what was just
+            said).
+
+            Covers prose/text documents. If a hit describes a structured/tabular
+            dataset (a "dataset pointer"), do not answer from it directly — pivot
+            to the tabular/SQL tool it names instead.
+
+            Returns ranked hits with title and content. Only use information
+            actually present in the returned hits; never invent facts beyond
+            them.
+            """
+
+            port = services.document_search
+            if port is None:
+                # No platform port injected (e.g. a bare test harness). Fail
+                # LOUD in the tool result rather than silently returning nothing.
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_search is not "
+                    "available on this execution path."
+                )
+
+            effective_top_k = top_k if isinstance(top_k, int) and top_k > 0 else None
+            result: DocumentSearchResult = await port.search(
+                question,
+                top_k=effective_top_k or default_top_k,
+                library_tag_ids=scoped_library_tag_ids,
+                document_uids=scoped_document_uids,
+                search_policy=search_policy,
+                attachments_only=(
+                    config.search_attachments_only and config.show_attach_files_control
+                ),
+            )
+            hits = result.hits
+
+            content = {
+                "query": question,
+                "hits": [
+                    {
+                        k: v
+                        for k, v in hit.model_dump(mode="json").items()
+                        if k in _LLM_FIELDS
+                    }
+                    for hit in hits
+                ],
+            }
+            # `blocks` feed the LLM the full hit set (the model needs to see a
+            # dataset pointer to know to pivot to the tabular tool, and every
+            # hit to reason with) — `sources` (the chat Sources panel) is
+            # narrowed separately: never a pointer chunk (no real content to
+            # cite), and never a hit that's noise relative to the best match
+            # in this call (found live citing near-zero-relevance paragraphs
+            # from an unrelated document, RAG-DATASET-DISCOVERY-RFC.md §7).
+            artifact = ToolInvocationResult(
+                tool_ref=DOCUMENT_ACCESS_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),
+                sources=select_citable_sources(
+                    hits, min_score_ratio=min_source_score_ratio
+                ),
+            )
+            return json.dumps(content), artifact
+
+        @tool("list_document_tree", response_format="content_and_artifact")
+        async def list_document_tree(
+            working_directory: str | None = None,
+            max_chars: int = 6000,
+        ) -> tuple[str, ToolInvocationResult]:
+            """List the folders and documents in the user's document scope as a tree.
+
+            Call this first to orient on what's available before searching or
+            summarizing — it shows folder structure and, for each document, its
+            name, uid, and upload date, not its content.
+
+            Documents are rendered as "name [document_uid] (uploaded date)" —
+            use that uid as the `document_uid` argument to summarize_document.
+            The bracketed identifiers are internal working ids for YOUR tool
+            calls only: NEVER repeat them in your answer to the user — always
+            refer to documents by their display name.
+
+            `working_directory` narrows the listing to a specific folder (e.g.
+            "Sales/HR"); omit it to start from the root. The tree is rendered as
+            indented text, with documents appearing as leaves under every folder
+            they belong to (a document can be in more than one folder).
+
+            If the corpus is too large to show in full, the deepest branches are
+            pruned and a note tells you how many items were omitted — when that
+            happens, narrow `working_directory` or switch to
+            search_documents_using_vectorization instead of trying to browse
+            everything.
+            """
+
+            port = services.document_tree
+            if port is None:
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_tree is not "
+                    "available on this execution path."
+                )
+
+            effective_max_chars = _clamp(max_chars, _TREE_MAX_CHARS_BOUNDS)
+            started = time.monotonic()
+            try:
+                result: DocumentTreeResult = await port.tree(
+                    working_directory=working_directory,
+                    library_tag_ids=scoped_library_tag_ids,
+                    max_chars=effective_max_chars,
+                )
+            except Exception as exc:
+                return _document_tool_failure(
+                    tool_ref="list_document_tree",
+                    action="list the document tree",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            # `blocks` carries the same tree text as `content` (CAPAB-02): a
+            # Graph agent's plain-dict invocation keeps only the artifact half
+            # of a `content_and_artifact` return (`_adapt_capability_tool_for_graph`,
+            # `graph_runtime.py`) — an artifact with no payload silently loses
+            # the tree for a Graph node, exactly the "never silently degrade"
+            # failure RFC §3.9 forbids. ReAct is unaffected: `content` is
+            # still what the model reads.
+            artifact = ToolInvocationResult(
+                tool_ref="list_document_tree",
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=result.tree),),
+            )
+            return result.tree, artifact
+
+        @tool("summarize_document", response_format="content_and_artifact")
+        async def summarize_document(
+            document_uid: str,
+            instruction: str | None = None,
+            max_chars: int | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Generate a fresh, on-demand summary of one document by its uid.
+
+            Use this when you need to understand a document's content in depth —
+            e.g. to decide whether it's relevant, or to extract specific
+            information — without pulling its full text into your own context. A
+            fresh model reads the whole document (using map-reduce for large
+            documents) and returns just the summary.
+
+            `document_uid` MUST be the document's opaque uid, not its name or
+            title. Get it from a prior search_documents_using_vectorization
+            hit's 'uid' field, from list_document_tree (the value shown in
+            '[...]' after each document name), or from the conversation's
+            attached-files list (the bracketed value after the file name). If
+            you only know a document's name, resolve its uid with one of those
+            first — never pass the name here. The uid is an internal working
+            identifier for YOUR tool calls only: NEVER repeat it in your answer
+            to the user — always refer to the document by its display name.
+
+            Pass `instruction` to steer the summary: focus area, what to look
+            for, audience, tone, desired length — e.g. "focus on financial risks
+            and list every action item". Without it, you get a generic abstract.
+
+            `max_chars` bounds the returned summary length; raise it for a more
+            detailed summary, lower it for a terse one. Leave it unset to use
+            the agent's configured default. The agent may also impose a hard
+            maximum, in which case a larger request is clamped down to it.
+            """
+
+            port = services.document_summarize
+            if port is None:
+                raise RuntimeError(
+                    "document_access: RuntimeServices.document_summarize is not "
+                    "available on this execution path."
+                )
+
+            effective_max_chars = resolve_summarize_max_chars(summarize_cap, max_chars)
+            started = time.monotonic()
+            try:
+                result: DocumentSummaryResult = await port.summarize(
+                    document_uid,
+                    instruction=instruction,
+                    max_chars=effective_max_chars,
+                )
+            except Exception as exc:
+                message, artifact = _document_tool_failure(
+                    tool_ref="summarize_document",
+                    action="summarize the document",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                    document_uid=document_uid,
+                )
+                # 403/404 almost always means the model passed a file NAME (or
+                # a stale/foreign uid) — the backend fails closed on unknown
+                # resources. Tell the model how to recover instead of letting
+                # it give up and echo the error.
+                if getattr(exc, "status_code", None) in (403, 404):
+                    message += (
+                        " If you passed a file name, that is the likely cause: "
+                        "document_uid must be the opaque uid. Find it in the "
+                        "conversation's attached-files list (the bracketed "
+                        "value after the file name), in a search hit's 'uid' "
+                        "field, or via list_document_tree — then call "
+                        "summarize_document again with that uid. Do not "
+                        "repeat the uid to the user."
+                    )
+                    # CAPAB-02: `_document_tool_failure` already baked the
+                    # (shorter) pre-hint message into `artifact.blocks`; the
+                    # recovery hint appended above must reach `blocks` too, or
+                    # a Graph agent — which keeps only the artifact half of
+                    # this return — loses exactly the guidance a model needs
+                    # to self-correct and retry.
+                    artifact = artifact.model_copy(
+                        update={
+                            "blocks": (
+                                ToolContentBlock(
+                                    kind=ToolContentKind.TEXT, text=message
+                                ),
+                            )
+                        }
+                    )
+                return message, artifact
+            # `blocks` carries the same summary text as `content` — same
+            # reason as `list_document_tree` above (CAPAB-02).
+            artifact = ToolInvocationResult(
+                tool_ref="summarize_document",
+                blocks=(
+                    ToolContentBlock(kind=ToolContentKind.TEXT, text=result.summary),
+                ),
+            )
+            return result.summary, artifact
+
+        tools: list[BaseTool] = [search_documents_using_vectorization]
+        # The corpus tree is meaningless in attachments-only mode (the corpus
+        # is out of the agent's scope by definition), and there is no
+        # session-attachment enumeration yet (see module docstring) — so the
+        # listing tool is dropped rather than registered-but-empty.
+        if not attachments_only:
+            tools.append(list_document_tree)
+        tools.append(summarize_document)
+        return tools

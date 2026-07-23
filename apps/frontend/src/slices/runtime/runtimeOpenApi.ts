@@ -618,6 +618,7 @@ export type ToolResultRuntimeEvent = {
   content?: string;
   is_error?: boolean;
   kind?: "tool_result";
+  latency_ms?: number | null;
   sequence?: number;
   sources?: VectorSearchHit[];
   tool_name?: string | null;
@@ -855,6 +856,7 @@ export type CapabilityCatalogEntry = {
   default_capability_ids?: string[];
   /** i18n key */
   description: string;
+  execution_models?: ("react" | "graph")[];
   /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   id: string;

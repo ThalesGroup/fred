@@ -38,8 +38,10 @@ from knowledge_flow_backend.common.structures import (
 from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
+    TABULAR_MULTI_EXTENSION_KEY,
     document_artifact_prefix,
     read_tabular_artifact,
+    read_tabular_multi_artifact,
 )
 
 logger = logging.getLogger(__name__)
@@ -444,28 +446,35 @@ class MetadataService:
                     )
                 )
 
-            # --- SQL table node (per-document) ------------------------------------
-            artifact = read_tabular_artifact(metadata)
-            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and artifact is not None:
-                table_name = artifact.dataset_uid
-                table_node_id = f"table:{table_name}"
-                nodes.append(
-                    ProcessingGraphNode(
-                        id=table_node_id,
-                        kind="table",
-                        label=table_name,
-                        document_uid=doc_uid,
-                        table_name=table_name,
-                        row_count=artifact.row_count,
+            # --- SQL table nodes (one per dataset table) ---------------------------
+            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
+                artifact = read_tabular_artifact(metadata)
+                multi_artifact = read_tabular_multi_artifact(metadata)
+                if artifact is not None:
+                    table_facts = [(artifact.dataset_uid, artifact.row_count)]
+                elif multi_artifact is not None:
+                    table_facts = [(table.query_alias, table.row_count) for table in multi_artifact.tables]
+                else:
+                    table_facts = []
+                for table_name, row_count in table_facts:
+                    table_node_id = f"table:{table_name}"
+                    nodes.append(
+                        ProcessingGraphNode(
+                            id=table_node_id,
+                            kind="table",
+                            label=table_name,
+                            document_uid=doc_uid,
+                            table_name=table_name,
+                            row_count=row_count,
+                        )
                     )
-                )
-                edges.append(
-                    ProcessingGraphEdge(
-                        source=doc_node_id,
-                        target=table_node_id,
-                        kind="sql_indexed",
+                    edges.append(
+                        ProcessingGraphEdge(
+                            source=doc_node_id,
+                            target=table_node_id,
+                            kind="sql_indexed",
+                        )
                     )
-                )
 
         return ProcessingGraph(nodes=nodes, edges=edges)
 
@@ -591,8 +600,9 @@ class MetadataService:
         """
 
         artifact = read_tabular_artifact(metadata)
-        if artifact is None:
-            logger.info("[TABULAR] No %s payload found for '%s'", TABULAR_EXTENSION_KEY, metadata.document_name)
+        multi_artifact = read_tabular_multi_artifact(metadata)
+        if artifact is None and multi_artifact is None:
+            logger.info("[TABULAR] No %s/%s payload found for '%s'", TABULAR_EXTENSION_KEY, TABULAR_MULTI_EXTENSION_KEY, metadata.document_name)
             return
 
         prefix = document_artifact_prefix(
@@ -869,7 +879,14 @@ class MetadataService:
         """
 
         artifact = read_tabular_artifact(metadata)
-        if artifact is None:
+        multi_artifact = read_tabular_multi_artifact(metadata)
+        if artifact is not None:
+            current_keys = {artifact.object_key}
+        elif multi_artifact is not None:
+            current_keys = {table.object_key for table in multi_artifact.tables}
+        else:
+            return
+        if not current_keys:
             return
 
         prefix = document_artifact_prefix(
@@ -878,7 +895,7 @@ class MetadataService:
         )
         try:
             for stored_object in self.content_store.list_objects(prefix):
-                if stored_object.key != artifact.object_key:
+                if stored_object.key not in current_keys:
                     self.content_store.delete_object(stored_object.key)
         except Exception as exc:  # noqa: BLE001
             logger.warning(

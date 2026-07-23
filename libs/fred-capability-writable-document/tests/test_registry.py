@@ -49,3 +49,10 @@ def test_manifest_declares_chat_part_side_panel_and_router():
     # No agent-creation config, no upload slots (config-less capability).
     assert manifest.config_fields == []
     assert manifest.assets == []
+
+
+def test_manifest_declares_react_only_execution_model():
+    # CAPAB-02: needs `before_model`/`wrap_model_call` hooks `tools()` cannot
+    # express — must declare itself incompatible with Graph agents rather than
+    # silently contributing zero tools if one selects it.
+    assert WritableDocumentCapability.manifest.execution_models == ("react",)

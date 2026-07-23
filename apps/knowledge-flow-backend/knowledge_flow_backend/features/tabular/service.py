@@ -33,16 +33,25 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
+    TabularTableArtifactV1,
     build_default_query_alias,
     read_tabular_artifact,
+    read_tabular_multi_artifact,
 )
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularDatasetResponse,
-    TabularDatasetSchemaResponse,
+    TabularDocumentKind,
+    TabularDocumentResponse,
+    TabularDocumentSchemaResponse,
     TabularQueryRequest,
+    TabularSearchRequest,
+    TabularSearchResponse,
+    TabularTableMatch,
+    TabularTableSchema,
+    TabularTableSummary,
 )
-from knowledge_flow_backend.features.tabular.utils import validate_read_query
+from knowledge_flow_backend.features.tabular.utils import quote_identifier, quote_string_literal, validate_read_query
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
@@ -99,6 +108,26 @@ class TabularDatasetReadError(RuntimeError):
     """
 
 
+class TabularQueryError(ValueError):
+    """
+    Raised when DuckDB rejects a caller-supplied read query for an authoring reason.
+
+    Why this exists:
+    - A binder/parser/catalog/type error (e.g. `LIKE` on a numeric column, an
+      unknown column, or a syntax error) means the caller's SQL is invalid — not
+      that the server failed. It must surface as an HTTP 400, not a 500 with a
+      stack trace: the failure is expected (an LLM caller reads the message and
+      rewrites its query), and logging it as a 500 is noise that hides real
+      outages.
+    - Subclassing `ValueError` lets the controller map it to 400 through the same
+      branch it already uses for other invalid-input errors.
+
+    How to use:
+    - Raised by `_redacting_query_execution_errors()` around the query `execute`;
+      carries a redacted message safe to return to the caller.
+    """
+
+
 # Matches any http(s) URL up to the first whitespace or quote. Broad on purpose:
 # it redacts GCS V4 (`X-Goog-Signature`) and S3/MinIO (`X-Amz-Signature`) signed
 # URLs alike, and local file paths never match.
@@ -129,6 +158,39 @@ def _redacting_dataset_read_errors():
         raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
 
 
+@contextmanager
+def _redacting_query_execution_errors():
+    """Classify DuckDB errors raised while executing a caller-supplied SQL query.
+
+    Why this exists:
+    - Query execution fails in two very different ways. Either the SQL is invalid
+      (binder/parser/catalog/type error → the caller's fault → HTTP 400), or a
+      backing Parquet read fails (IO/`httpfs` error → server-side → HTTP 500).
+      The first must not be logged as a 500 stack trace: it is expected traffic
+      (the LLM caller self-corrects) and treating it as a server fault is pure
+      log noise that also hides real outages and skews availability metrics.
+
+    How to use:
+    - Wrap only the DuckDB call that runs the user's SQL. Mounting and plain
+      Parquet preview reads keep `_redacting_dataset_read_errors` (IO only).
+      `from None` severs the original cause so an un-redacted signed URL cannot
+      resurface in the chain, exactly as the sibling helper does.
+    """
+    try:
+        yield
+    except (duckdb.ProgrammingError, duckdb.DataError) as exc:
+        message = _redact_signed_urls(str(exc))
+        logger.warning("[TABULAR] read query rejected by DuckDB: %s", message)
+        raise TabularQueryError(message) from None
+    except duckdb.Error as exc:
+        raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
+
+
+# Below this length a keyword is too generic to locate anything useful; the
+# value-locator rejects it rather than matching a large fraction of every table.
+_MIN_KEYWORD_LENGTH = 2
+
+
 class TabularService:
     """
     Dataset-centric tabular service backed by document metadata and content storage.
@@ -138,9 +200,9 @@ class TabularService:
       exposing every ingested table globally.
 
     How to use:
-    - The controller calls `list_datasets`, `describe_dataset`, and `query_read`.
-      `read_dataset_frame` is available for other in-process callers that need
-      an in-memory DataFrame.
+    - The tabular controller calls `list_documents`, `describe_documents`,
+      `get_document_markdown`, and `query_read`; the statistic feature and
+      document previews call `list_datasets` and the frame readers.
     - Every method filters datasets through document-level permissions before
       exposing schema or data.
     """
@@ -196,43 +258,173 @@ class TabularService:
         )
         return [self._dataset_to_response(dataset) for dataset in datasets]
 
-    async def describe_dataset(
+    async def list_documents(
         self,
         user: KeycloakUser,
-        document_uid: str,
         *,
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
-    ) -> TabularDatasetSchemaResponse:
+    ) -> list[TabularDocumentResponse]:
         """
-        Return the schema of one authorized dataset.
+        List every tabular document the current user is allowed to read.
 
         Why this exists:
-        - Dataset schema exposure must follow the same document-level access
-          checks as query execution.
-        - Team/personal scope selection must hide datasets outside the active
-          area even when the user can read them elsewhere.
+        - Agents pick sources at document level: one CSV maps to one table,
+          one Excel workbook to several. The per-table dataset listing
+          repeated the document identity once per table.
 
         How to use:
-        - Call from `GET /tabular/datasets/{document_uid}/schema`.
+        - Call from `GET /tabular/documents`.
+        - Table columns are intentionally absent; follow up with
+          `describe_documents(...)` for column-level schemas.
         """
 
-        dataset = await self._get_dataset_or_raise(
-            user=user,
-            document_uid=document_uid,
+        datasets = await self._resolve_authorized_datasets(
+            user,
             document_library_tags_ids=document_library_tags_ids,
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        return TabularDatasetSchemaResponse(
-            document_uid=dataset.metadata.document_uid,
-            document_name=dataset.metadata.document_name,
+        return [
+            TabularDocumentResponse(
+                document_uid=document_datasets[0].metadata.document_uid,
+                document_name=document_datasets[0].metadata.document_name,
+                kind=self._document_kind(document_datasets),
+                tables=[self._table_summary(dataset) for dataset in document_datasets],
+                tag_ids=list(document_datasets[0].metadata.tags.tag_ids or []),
+                tag_names=list(document_datasets[0].metadata.tags.tag_names or []),
+                source_tag=document_datasets[0].metadata.source_tag,
+            )
+            for document_datasets in self._group_datasets_by_document(datasets).values()
+        ]
+
+    async def describe_documents(
+        self,
+        user: KeycloakUser,
+        document_uids: list[str],
+        *,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> list[TabularDocumentSchemaResponse]:
+        """
+        Return the full table schemas of one or several authorized documents.
+
+        Why this exists:
+        - Schema exposure must cover every table of a multi-table workbook,
+          not only the first one, and one batch call keeps agent round trips
+          low when a query joins several documents.
+
+        How to use:
+        - Call from `GET /tabular/documents/schemas` with the document uids
+          selected from `list_documents(...)`.
+        - Raises `PermissionError` when one requested uid is not readable and
+          `FileNotFoundError` when it carries no tabular artifact.
+        """
+
+        if not document_uids:
+            raise ValueError("At least one document uid is required")
+
+        datasets = await self._resolve_authorized_datasets(
+            user,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
+        datasets_by_uid = self._group_datasets_by_document(datasets)
+        requested_uids = list(dict.fromkeys(document_uids))
+
+        missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
+        if missing_uids:
+            permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
+            forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
+            if forbidden_uids:
+                raise PermissionError(f"Not authorized to read datasets: {', '.join(forbidden_uids)}")
+            raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
+
+        return [
+            TabularDocumentSchemaResponse(
+                document_uid=document_uid,
+                document_name=datasets_by_uid[document_uid][0].metadata.document_name,
+                kind=self._document_kind(datasets_by_uid[document_uid]),
+                tables=[self._table_schema(dataset) for dataset in datasets_by_uid[document_uid]],
+                source_tag=datasets_by_uid[document_uid][0].metadata.source_tag,
+            )
+            for document_uid in requested_uids
+        ]
+
+    async def get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
+        """
+        Return the `output.md` extraction catalog of one spreadsheet document.
+
+        Why this exists:
+        - The spreadsheet markdown summary is the LLM-readable catalog (sheet
+          layout, table context, ranges, residuals, exact `query_alias` per
+          table); agents on the tabular MCP need it without leaving the
+          tabular surface.
+
+        How to use:
+        - Call from `GET /tabular/documents/{document_uid}/markdown`.
+        - Spreadsheet documents only: raises `FileNotFoundError` when the
+          document carries no `tabular_multi_v1` artifact.
+        """
+
+        if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
+            raise PermissionError(f"Not authorized to read dataset '{document_uid}'")
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+        if metadata is None:
+            raise FileNotFoundError(f"Tabular document '{document_uid}' was not found")
+        if read_tabular_multi_artifact(metadata) is None:
+            raise FileNotFoundError(f"Document '{document_uid}' is not a spreadsheet document with a markdown catalog")
+
+        # The content service owns preview resolution (output.md lookup) and
+        # re-checks document-level ReBAC; the guard above only scopes this
+        # route to spreadsheet documents.
+        from knowledge_flow_backend.features.content.content_service import ContentService
+
+        return await ContentService().get_markdown_preview(user, document_uid)
+
+    @staticmethod
+    def _group_datasets_by_document(datasets: list[ResolvedDataset]) -> dict[str, list[ResolvedDataset]]:
+        """Group resolved datasets by document uid, preserving resolution order."""
+
+        datasets_by_uid: dict[str, list[ResolvedDataset]] = {}
+        for dataset in datasets:
+            datasets_by_uid.setdefault(dataset.metadata.document_uid, []).append(dataset)
+        return datasets_by_uid
+
+    @staticmethod
+    def _document_kind(document_datasets: list[ResolvedDataset]) -> TabularDocumentKind:
+        """Return the document kind from the artifact type of its tables."""
+
+        return "spreadsheet" if isinstance(document_datasets[0].artifact, TabularTableArtifactV1) else "csv"
+
+    @staticmethod
+    def _table_summary(dataset: ResolvedDataset) -> TabularTableSummary:
+        """Build the lightweight table view exposed by the document list."""
+
+        artifact = dataset.artifact
+        return TabularTableSummary(
             query_alias=dataset.query_alias,
-            columns=dataset.artifact.columns,
-            row_count=dataset.artifact.row_count,
-            source_tag=dataset.metadata.source_tag,
-            generated_at=dataset.artifact.generated_at,
+            sheet=artifact.sheet if isinstance(artifact, TabularTableArtifactV1) else None,
+            title=artifact.title if isinstance(artifact, TabularTableArtifactV1) else None,
+            row_count=artifact.row_count,
+            generated_at=artifact.generated_at,
+        )
+
+    @staticmethod
+    def _table_schema(dataset: ResolvedDataset) -> TabularTableSchema:
+        """Build the full table view (columns included) exposed by the schemas endpoint."""
+
+        artifact = dataset.artifact
+        return TabularTableSchema(
+            query_alias=dataset.query_alias,
+            sheet=artifact.sheet if isinstance(artifact, TabularTableArtifactV1) else None,
+            title=artifact.title if isinstance(artifact, TabularTableArtifactV1) else None,
+            row_count=artifact.row_count,
+            generated_at=artifact.generated_at,
+            columns=artifact.columns,
         )
 
     async def read_dataset_frame(
@@ -334,7 +526,7 @@ class TabularService:
         )
         selected_datasets = await self._select_query_datasets(
             user=user,
-            request=request,
+            requested_uids=request.dataset_uids,
             available_datasets=available_datasets,
         )
         if not selected_datasets:
@@ -355,7 +547,7 @@ class TabularService:
         try:
             await self._mount_datasets(connection=connection, datasets=selected_datasets)
             limited_query = f"SELECT * FROM ({sql_query}) AS fred_result LIMIT {effective_max_rows}"
-            with _redacting_dataset_read_errors():
+            with _redacting_query_execution_errors():
                 rows_df = connection.execute(limited_query).df()
             rows = rows_df.to_dict(orient="records")
         finally:
@@ -380,6 +572,184 @@ class TabularService:
             query_aliases=[dataset.query_alias for dataset in selected_datasets],
         )
 
+    async def search_values(
+        self,
+        user: KeycloakUser,
+        *,
+        request: TabularSearchRequest,
+    ) -> TabularSearchResponse:
+        """
+        Locate a keyword across the tables of authorized documents.
+
+        Why this exists:
+        - The catalog and schemas expose a workbook's structure but never its
+          cell values, so a question about a value forces the agent to scan every
+          table one `read_query` at a time — one MCP/LLM round trip per table.
+          This runs that fan-out once, server-side, and returns which tables and
+          columns hold the value plus a bounded sample of matching rows, so the
+          agent can then issue one targeted query.
+
+        How to use:
+        - Provide a precise `keyword`; scope with `request.dataset_uids` when
+          possible. Matching is a normalized substring test — case, accents and
+          whitespace insensitive, decimal comma treated as point — over every
+          column cast to text, so numeric columns are searchable too.
+        - Authorization, scoping and mounting reuse the same path as
+          `query_read`; the result is bounded by `max_rows_per_table` and
+          `max_matching_tables`, with truncation signalled explicitly.
+        """
+
+        raw_keyword = request.keyword.strip()
+        if len(raw_keyword) < _MIN_KEYWORD_LENGTH:
+            raise ValueError(f"Keyword must be at least {_MIN_KEYWORD_LENGTH} characters long")
+
+        available_datasets = await self._resolve_authorized_datasets(
+            user,
+            document_library_tags_ids=request.document_library_tags_ids,
+            owner_filter=request.owner_filter,
+            team_id=request.team_id,
+        )
+        selected_datasets = await self._select_query_datasets(
+            user=user,
+            requested_uids=request.dataset_uids,
+            available_datasets=available_datasets,
+        )
+        if not selected_datasets:
+            raise ValueError("No authorized tabular datasets are available for this search")
+
+        started_at = time.perf_counter()
+        connection = duckdb.connect(database=":memory:")
+        try:
+            # Normalize the keyword through the exact same DuckDB expression the
+            # column values pass through, so both operands are strictly comparable.
+            keyword_probe_sql = f"SELECT {self._normalize_expr(quote_string_literal(raw_keyword))}"
+            probe_row = connection.execute(keyword_probe_sql).fetchone()
+            normalized_keyword = probe_row[0] if probe_row else None
+            if not normalized_keyword:
+                raise ValueError("Keyword is empty after normalization; provide a more specific value")
+
+            await self._mount_datasets(connection=connection, datasets=selected_datasets)
+
+            matches: list[TabularTableMatch] = []
+            tables_truncated = False
+            with _redacting_dataset_read_errors():
+                for dataset in selected_datasets:
+                    if len(matches) >= request.max_matching_tables:
+                        # The cap is reached and at least one more table remains
+                        # unscanned: other occurrences may exist beyond what we return.
+                        tables_truncated = True
+                        break
+                    match = self._search_one_table(
+                        connection=connection,
+                        dataset=dataset,
+                        normalized_keyword=normalized_keyword,
+                        max_rows_per_table=request.max_rows_per_table,
+                    )
+                    if match is not None:
+                        matches.append(match)
+        finally:
+            connection.close()
+
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        # The keyword itself is not logged: it may carry sensitive terms, exactly
+        # as query_read logs a SQL hash rather than the SQL text.
+        logger.info(
+            "[TABULAR] search user=%s datasets=%s matches=%s tables_truncated=%s duration_ms=%.2f",
+            user.uid,
+            [dataset.metadata.document_uid for dataset in selected_datasets],
+            len(matches),
+            tables_truncated,
+            duration_ms,
+        )
+
+        return TabularSearchResponse(
+            keyword=raw_keyword,
+            normalized_keyword=normalized_keyword,
+            matches=matches,
+            tables_truncated=tables_truncated,
+            searched_dataset_uids=list(dict.fromkeys(dataset.metadata.document_uid for dataset in selected_datasets)),
+        )
+
+    @staticmethod
+    def _normalize_expr(expr: str) -> str:
+        """
+        Wrap a text-yielding SQL expression with the search normalization chain.
+
+        Why this exists:
+        - Keyword search must be insensitive to case, accents and whitespace and
+          treat a decimal comma as a point, applied identically to the cell value
+          and the keyword so the two are comparable.
+
+        How to use:
+        - Pass any SQL expression that yields text, e.g. `CAST(col AS VARCHAR)` or
+          a quoted string literal. Returns the normalized SQL expression.
+        """
+
+        # lower -> strip accents -> remove every whitespace char -> comma to point.
+        return f"replace(regexp_replace(strip_accents(lower({expr})), '\\s', '', 'g'), ',', '.')"
+
+    def _search_one_table(
+        self,
+        *,
+        connection: duckdb.DuckDBPyConnection,
+        dataset: ResolvedDataset,
+        normalized_keyword: str,
+        max_rows_per_table: int,
+    ) -> TabularTableMatch | None:
+        """
+        Scan one mounted table for the normalized keyword.
+
+        Why this exists:
+        - The locator needs, per table, both the exhaustive set of columns that
+          contain the keyword (one aggregate pass) and a bounded sample of
+          matching rows (one limited pass).
+
+        How to use:
+        - Call on a table already mounted in `connection` under
+          `dataset.query_alias`. Returns `None` when the table holds no match.
+        """
+
+        columns = [column.name for column in dataset.artifact.columns]
+        if not columns:
+            return None
+
+        alias_sql = quote_identifier(dataset.query_alias)
+        keyword_literal = quote_string_literal(normalized_keyword)
+        column_conditions: list[str] = []
+        for column_name in columns:
+            cast_expr = f"CAST({quote_identifier(column_name)} AS VARCHAR)"
+            column_conditions.append(f"contains({self._normalize_expr(cast_expr)}, {keyword_literal})")
+
+        # Pass 1 — which columns match anywhere in the table (exhaustive). Every
+        # relation, column and literal below is machine-generated and quoted with
+        # quote_identifier / quote_string_literal, never caller text.
+        count_select = ", ".join(f"count(*) FILTER (WHERE {condition}) AS m{index}" for index, condition in enumerate(column_conditions))
+        count_sql = f"SELECT {count_select} FROM {alias_sql}"  # nosec B608 — machine-built; relation/columns quoted, no caller text
+        count_row = connection.execute(count_sql).fetchone()
+        matched_columns = [name for index, name in enumerate(columns) if count_row and count_row[index]]
+        if not matched_columns:
+            return None
+
+        # Pass 2 — a bounded sample of matching rows (one extra row detects truncation).
+        where_any_column = " OR ".join(column_conditions)
+        sample_sql = f"SELECT * FROM {alias_sql} WHERE {where_any_column} LIMIT {max_rows_per_table + 1}"  # nosec B608 — machine-built; relation/columns quoted, no caller text
+        rows_df = connection.execute(sample_sql).df()
+        row_truncated = len(rows_df) > max_rows_per_table
+        rows = rows_df.head(max_rows_per_table).to_dict(orient="records")
+
+        artifact = dataset.artifact
+        is_table_artifact = isinstance(artifact, TabularTableArtifactV1)
+        return TabularTableMatch(
+            document_uid=dataset.metadata.document_uid,
+            document_name=dataset.metadata.document_name,
+            query_alias=dataset.query_alias,
+            sheet=artifact.sheet if is_table_artifact else None,
+            title=artifact.title if is_table_artifact else None,
+            matched_columns=matched_columns,
+            rows=rows,
+            row_truncated=row_truncated,
+        )
+
     async def _resolve_authorized_datasets(
         self,
         user: KeycloakUser,
@@ -402,6 +772,9 @@ class TabularService:
           selection or API formatting.
         - When ReBAC is enabled, the service resolves only the authorized
           document uids instead of scanning the whole metadata catalog.
+        - Multi-table documents (spreadsheets carrying `tabular_multi_v1`)
+          expand into one dataset per table; authorization stays at the
+          document level, upstream of this expansion.
         """
 
         authorized_document_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
@@ -431,28 +804,54 @@ class TabularService:
 
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()
-        for metadata in visible_documents:
-            if scoped_tag_ids is not None and not (set(metadata.tags.tag_ids or []) & scoped_tag_ids):
-                continue
-            artifact = read_tabular_artifact(metadata)
-            if artifact is None:
-                continue
 
-            base_alias = build_default_query_alias(metadata.document_uid, metadata.document_name)
+        def _claim_alias(base_alias: str) -> str:
             query_alias = base_alias
             suffix = 2
             while query_alias in used_aliases:
                 query_alias = f"{base_alias}_{suffix}"
                 suffix += 1
             used_aliases.add(query_alias)
+            return query_alias
 
-            resolved_datasets.append(
-                ResolvedDataset(
-                    metadata=metadata,
-                    artifact=artifact,
-                    query_alias=query_alias,
+        for metadata in visible_documents:
+            if scoped_tag_ids is not None and not (set(metadata.tags.tag_ids or []) & scoped_tag_ids):
+                continue
+
+            artifact = read_tabular_artifact(metadata)
+            if artifact is not None:
+                resolved_datasets.append(
+                    ResolvedDataset(
+                        metadata=metadata,
+                        artifact=artifact,
+                        query_alias=_claim_alias(build_default_query_alias(metadata.document_uid, metadata.document_name)),
+                    )
                 )
-            )
+                continue
+
+            multi_artifact = read_tabular_multi_artifact(metadata)
+            if multi_artifact is None:
+                continue
+            for table in multi_artifact.tables:
+                # The stored alias was computed at ingestion time with the
+                # shared deterministic helper; `_claim_alias` only guards the
+                # theoretical cross-document collision.
+                claimed_alias = _claim_alias(table.query_alias)
+                if claimed_alias != table.query_alias:
+                    logger.warning(
+                        "[TABULAR] alias collision: table %s of document %s served as %s, diverging from the output.md catalog alias %s",
+                        table.table_id,
+                        metadata.document_uid,
+                        claimed_alias,
+                        table.query_alias,
+                    )
+                resolved_datasets.append(
+                    ResolvedDataset(
+                        metadata=metadata,
+                        artifact=table,
+                        query_alias=claimed_alias,
+                    )
+                )
 
         return resolved_datasets
 
@@ -469,13 +868,15 @@ class TabularService:
         Return one authorized dataset or raise the appropriate access/not-found error.
 
         Why this exists:
-        - Schema lookup and explicit query scoping need one clear path that does
-          not leak unauthorized datasets.
+        - DataFrame reads (statistic feature, document previews) need one clear
+          path that does not leak unauthorized datasets.
         - Active team/personal/library scope must be enforced consistently for
           direct dataset access.
 
         How to use:
         - Pass the current user and target document uid.
+        - For multi-table documents the first table wins: frame reads predate
+          table-level addressing (tracked as INGEST-05).
         """
 
         datasets = await self._resolve_authorized_datasets(
@@ -484,7 +885,9 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        dataset_by_uid = {dataset.metadata.document_uid: dataset for dataset in datasets}
+        dataset_by_uid: dict[str, ResolvedDataset] = {}
+        for dataset in datasets:
+            dataset_by_uid.setdefault(dataset.metadata.document_uid, dataset)
         if document_uid in dataset_by_uid:
             return dataset_by_uid[document_uid]
 
@@ -496,28 +899,33 @@ class TabularService:
         self,
         *,
         user: KeycloakUser,
-        request: TabularQueryRequest,
+        requested_uids: list[str] | None,
         available_datasets: list[ResolvedDataset],
     ) -> list[ResolvedDataset]:
         """
-        Resolve the dataset subset requested for one SQL query.
+        Resolve the dataset subset requested for one SQL query or value search.
 
         Why this exists:
-        - Query callers may scope execution to a subset of readable datasets.
-        - Explicitly requested datasets must return `403` when the user is not
-          allowed to read them.
+        - Query and search callers may scope execution to a subset of readable
+          datasets, and both must return `403` when the user is not allowed to
+          read an explicitly requested document.
 
         How to use:
-        - Pass the full readable dataset list from `_resolve_authorized_datasets`.
+        - Pass the full readable dataset list from `_resolve_authorized_datasets`
+          and the caller-requested document uids (`None`/empty selects all).
+        - Requesting one multi-table document uid selects every table of that
+          document.
         """
 
-        if not request.dataset_uids:
+        if not requested_uids:
             return available_datasets
 
-        requested_uids = list(dict.fromkeys(request.dataset_uids))
-        dataset_by_uid = {dataset.metadata.document_uid: dataset for dataset in available_datasets}
+        requested_uids = list(dict.fromkeys(requested_uids))
+        datasets_by_uid: dict[str, list[ResolvedDataset]] = {}
+        for dataset in available_datasets:
+            datasets_by_uid.setdefault(dataset.metadata.document_uid, []).append(dataset)
 
-        missing_uids = [document_uid for document_uid in requested_uids if document_uid not in dataset_by_uid]
+        missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
         if missing_uids:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
@@ -526,7 +934,7 @@ class TabularService:
                 raise PermissionError(f"Not authorized to read datasets: {', '.join(forbidden_uids)}")
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
-        return [dataset_by_uid[document_uid] for document_uid in requested_uids]
+        return [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
 
     async def _resolve_scope_tag_ids(
         self,

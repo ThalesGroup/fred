@@ -24,6 +24,10 @@ Why this module exists:
   change behavior), authored order preserved within one capability's stack
 - capability `HitlSpec`s never become middleware; they are collected here
   into `CapabilityHitlBinding`s for the single `FredHitlMiddleware` gate
+- `capability.tools(ctx)` — the primary, execution-model-agnostic authoring
+  surface (fred-sdk `AgentCapability.tools`) — is read once per selected
+  capability into one deduped-by-name map: `block.tools` for Graph agents
+  (bridge, Phase 4) and HITL-tool resolution below both read that one map
 
 How to use:
 - per selected capability, build its typed context with
@@ -31,7 +35,8 @@ How to use:
   are validated against the capability's own models — the RFC §3.5/§3.8
   slice-validation pattern)
 - then `build_capability_agent_block(registry, contexts)` and pass
-  `block.middleware` / `block.hitl` into the ReAct loop builder
+  `block.middleware` / `block.hitl` into the ReAct loop builder; `block.tools`
+  is the plain tool objects, execution-model-agnostic
 """
 
 from __future__ import annotations
@@ -49,9 +54,11 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     ChatControlsResult,
     StoredCapabilityConfig,
+    ToolCarrierMiddleware,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
@@ -312,6 +319,7 @@ class CapabilityAgentBlock:
 
     middleware: tuple[AgentMiddleware, ...]
     hitl: Mapping[str, CapabilityHitlBinding]
+    tools: tuple[BaseTool, ...]
 
 
 def build_capability_agent_block(
@@ -324,26 +332,82 @@ def build_capability_agent_block(
     Determinism rule (RFC §5.3): iteration is `sorted(capability id)` — never
     selection order, never registration order — and each capability's
     authored middleware list order is preserved within its block.
+
+    `tools()` (not `middleware()`) is the single source of truth for a
+    capability's tool objects (RFC §3.2, §5): it is read directly, EXACTLY
+    once per selected capability (CAPAB-02), into one deduped-by-name map
+    shared by three consumers — the ReAct middleware binding (via
+    `ToolCarrierMiddleware`, built directly from these same instances), the
+    `HitlSpec.tool` resolution below, and the `tools` field Graph agents
+    consume. One call means one set of tool objects: no risk of a
+    stateful/non-deterministic `tools()` implementation producing a different
+    instance for the ReAct binding than the one `HitlGateRequest.tool`
+    exposes to a `when` predicate.
+
+    `tools()` and `middleware()` compose, they are not either/or: a
+    `ToolCarrierMiddleware` is added whenever `tools()` returns anything,
+    AND, separately, an overridden `middleware()` is always also called (for
+    the genuine ReAct-only hook `tools()` cannot express — RFC §3.2's
+    "implement `tools()` too; do not fold the tools into the middleware
+    override" case). Only the DEFAULT `middleware()` is skipped — calling it
+    would just rebuild the same `ToolCarrierMiddleware` from a second,
+    redundant `tools(ctx)` call, exactly what the single-call rule above
+    prevents. Two DIFFERENT capabilities exposing the same tool name is a
+    collision this module can see (both contexts are in hand right here) and
+    never silently shadows, matching the HITL-ownership collision below.
     """
 
     middleware: list[AgentMiddleware] = []
     hitl: dict[str, CapabilityHitlBinding] = {}
+    tools_by_name: dict[str, BaseTool] = {}
+    tool_owner: dict[str, str] = {}
     for cap_id in sorted(contexts):
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
-        stack = list(capability.middleware(ctx))
-        middleware.extend(stack)
+        capability_tools = tuple(capability.tools(ctx))
+        # These two are NOT mutually exclusive: a capability can implement
+        # `tools()` for its plain tools AND override `middleware()` for a
+        # genuine ReAct-only hook (RFC §3.2 — "implement tools() too; do not
+        # fold the tools into the middleware override"). An earlier version
+        # of this loop treated them as either/or, which silently dropped a
+        # combining capability's tools() output from the ReAct binding
+        # (block.tools/HITL still saw it, but create_agent() never did).
+        if capability_tools:
+            middleware.append(ToolCarrierMiddleware(capability_tools))
+        if type(capability).middleware is not AgentCapability.middleware:
+            # Overridden: call it too, for the hook tools() cannot express.
+            # No double-computation risk — the default middleware() (which
+            # would call tools(ctx) again internally) is never reached here.
+            middleware.extend(capability.middleware(ctx))
 
-        tools_by_name: dict[str, Any] = {}
-        for mw in stack:
-            for candidate in getattr(mw, "tools", None) or []:
-                candidate_name = getattr(candidate, "name", None)
-                if isinstance(candidate_name, str):
-                    tools_by_name[candidate_name] = candidate
+        for candidate in capability_tools:
+            owner = tool_owner.get(candidate.name)
+            if owner is not None:
+                # PR #2067 review: this used to only check `owner != cap_id`
+                # (cross-capability), so a SINGLE capability's own tools()
+                # returning two tools with the same .name silently kept
+                # whichever came last in tools_by_name — and a `HitlSpec`
+                # naming that tool would then bind to whichever object won,
+                # not necessarily the one the author meant to gate. "Tools
+                # must be uniquely named" now means that literally, same
+                # capability or not.
+                if owner == cap_id:
+                    raise CapabilityAssemblyError(
+                        f"Tool '{candidate.name}' is returned twice by its own "
+                        f"capability's tools() ('{cap_id}'). Capability tools "
+                        "must be uniquely named."
+                    )
+                raise CapabilityAssemblyError(
+                    f"Tool '{candidate.name}' is exposed by two capabilities "
+                    f"('{owner}' and '{cap_id}'). Capability tools must be "
+                    "uniquely named."
+                )
+            tools_by_name[candidate.name] = candidate
+            tool_owner[candidate.name] = cap_id
 
         for spec in capability.hitl_specs():
-            owner = hitl.get(spec.tool)
-            if owner is not None:
+            owner_binding = hitl.get(spec.tool)
+            if owner_binding is not None:
                 raise CapabilityAssemblyError(
                     f"Tool '{spec.tool}' has HitlSpec declarations from two "
                     f"capabilities (capability '{cap_id}' collides with an "
@@ -354,4 +418,6 @@ def build_capability_agent_block(
                 context=ctx,
                 tool=tools_by_name.get(spec.tool),
             )
-    return CapabilityAgentBlock(middleware=tuple(middleware), hitl=hitl)
+    return CapabilityAgentBlock(
+        middleware=tuple(middleware), hitl=hitl, tools=tuple(tools_by_name.values())
+    )

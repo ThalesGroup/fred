@@ -1358,7 +1358,7 @@ It does **not** exercise rich content rendering. No existing scenario produces:
 | Fenced code block with language (`python`, `bash`, …) | Syntax highlighting     |
 | Mermaid diagram                                       | `Mermaid` renderer      |
 | GFM table                                             | Table rendering         |
-| GeoJSON `FeatureCollection`                           | Leaflet map renderer    |
+| GeoJSON `FeatureCollection`                           | Geo summary chip        |
 | KaTeX inline math                                     | Math rendering          |
 | KaTeX block math                                      | Math rendering          |
 | `:::details` collapsible                              | remark-directive plugin |
@@ -1742,6 +1742,70 @@ instead of in the MCP catalog (RFC §3.5 left it behind).
 
 ---
 
+## 17 Phase CHAT-16 — Restore tool-call detail in the trace (SQL, RAG sources, latency)
+
+**ID:** `CHAT-16` · **Owner:** Dimitri · **RFC:** [`AGENT-THINKING-API-RFC.md` Amendment B](../rfc/AGENT-THINKING-API-RFC.md)
+
+Execution: GitHub issue #1774
+
+### 17.1 Goal
+
+CHAT-14's tool-trace redaction fix (raw tool identifiers/args/JSON payloads were
+unreadable and noisy — issue #1774) overcorrected: it also discarded the SQL query
+behind a numeric answer and the sources behind a RAG citation, the two things users
+actually look for when they open a trace step's drawer. Separately, the chain-of-thought
+list repeated a content-free "Done" once per tool call, and the drawer's `latency` field
+was always empty because no event in the pipeline ever populated it.
+
+### 17.2 Tasks
+
+- [x] Add `latency_ms: int | None` to `ToolResultRuntimeEvent`
+      (`fred_sdk/contracts/runtime.py`) — additive, backward-compatible.
+- [x] `react_runtime.py`: reuse the elapsed-time value already computed to close the
+      paired `tool_use` `ThoughtEndEvent` and attach it to the `ToolResultRuntimeEvent`
+      too, instead of only the bookkeeping thought.
+- [x] Thread `latency_ms` through `agent_app.py`'s history-persistence call to
+      `make_tool_result(...)` (the `ToolResultPart.latency_ms` field already existed in
+      `fred-core`, just never populated by any caller).
+- [x] Regenerate the runtime OpenAPI spec + frontend RTK client
+      (`make update-runtime-api`).
+- [x] Frontend `useChatSse.ts`: copy `event.latency_ms` onto the `ToolResultPart` built
+      for the `tool_result` SSE case.
+- [x] `traceUtils.groupTraceEntries()`: filter out the synthetic `tool_use`-phase solo
+      thought entry — its title ("Calling `<tool>`") and conclusion ("Done"/"Error") are
+      always hardcoded placeholders, fully redundant with the paired combo row, which now
+      also carries real latency. Non-`tool_use` thought phases (planning, reflection,
+      synthesis) are untouched — their `conclusion` is real agent-authored text.
+- [x] `TraceDetailDrawer`: recognize two curated tool-result content shapes instead of the
+      blanket `{action, status, latency}` redaction — SQL (`{sql_query, rows, error}`) via
+      `CodeBlock` + row preview, and RAG (`{query, hits}`) via the existing `SourcesPanel`
+      molecule. Any other tool shape still falls back to the original redacted view.
+- [x] Remove the now-fully-dead `summarizeToolResultCompact` (flagged as a CHAT-14
+      follow-up, confirmed unused).
+- [x] New `traceUtils.test.ts` coverage: shape-detection helpers
+      (`asSqlQueryResult`/`asRagSearchResult`/`parseToolResultContent`) and the
+      `tool_use`-filtering behavior of `groupTraceEntries`.
+- [x] `make code-quality` + `make test` for fred-sdk, fred-runtime, and frontend
+      (fred-sdk 233 / fred-runtime 565 / frontend 503 passed; all code-quality green).
+- [x] **Amendment (2026-07-22), from manual UI testing:** add a `headerActions` slot to
+      `InlineDrawer` (next to the close button) hosting a single copy action per view (SQL
+      query text / curated JSON / none for RAG); replace `MonacoPane` with `CodeBlock` for
+      the generic fallback and the SQL row preview (no editor chrome, no imposed height);
+      `CodeBlock` gains a `hideCopy` prop. `MonacoPane` is now unused anywhere in the
+      frontend — removed the atom and its `@monaco-editor/react`/`monaco-editor`
+      dependencies from `package.json`, regenerated `package-lock.json`.
+
+### 17.3 Out of scope
+
+- Per-call curated `sources` (via `select_citable_sources()`) are not wired through
+  `ToolResultPart` — the RAG view reads `hits` straight out of the tool's raw `content`,
+  which already carries enough for useful citations. A dedicated `sources` field is a
+  fast-follow if the narrower curation is needed.
+- No new recognized content shapes beyond SQL and RAG — other tools keep the CHAT-14
+  redacted default.
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1752,7 +1816,7 @@ instead of in the MCP catalog (RFC §3.5 left it behind).
 | Code quality audit                          | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`).                                                                                                                                                                                                                                                                                                                                                                     |
 | CHAT-03 – Agent options & debug tools       | 🔄 In progress       | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
 | CHAT-04 – Chat attachments & advanced parts | ✅ Done (2026-06-11) | Completed the Option A attachment slice with persistence: composer attach-file control, upload to existing `/knowledge-flow/v1/storage/user/upload`, chips in `RichInputField.topSlot`, runtime context paths via `attachments_markdown`, base64 image context, drag-and-drop ingestion, scheduler task UI reuse, control-plane `session_attachments` persistence (`summary_md` kept, `storage_key` added), session reload hydration, right-side conversation files drawer with markdown preview, and strong delete orchestration through Knowledge Flow cleanup. FILES-01 now tracks the MCP filesystem-first generated-content path: KF MCP FS binary/link hardening, SDK `ctx.fs`/`context.fs`, runtime MCP integration, LinkPart replay/rendering, and minimal slide-template validation. Validation: control-plane, knowledge-flow, and frontend `make code-quality` + `make test`. |
-| CHAT-05 – DS enrichment & refonte           | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
+| CHAT-05 – DS enrichment & refonte           | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`. **Fix (2026-07-06):** `remark-directive` was silently swallowing any plain-prose `word:word` token (e.g. Excel ranges like `A1:C8`, times, ratios) by misparsing the colon as a text/leaf directive marker with no registered renderer. Added `makeReclaimUnknownDirectives()` (`shared/molecules/MarkdownRenderer/markdownDirectives.ts`), appended last in the remark pipeline, which turns back any text/leaf directive not on an explicit whitelist into its literal source text; container directives (`:::details`) are untouched. Same fix applied to the legacy `src/components/markdown/MarkdownRenderer.tsx` / `MarkdownRendererWithHighlights.tsx` pair (still used by `DocumentWorkspace` and `ProcessorRunDetail`), via a `preserveDirectives` prop so the `:highlight` directive stays whitelisted.                                                                                                                                                                                                                                                                                              |
 | CHAT-06 – test_assistant rich content       | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CHAT-07 – Composer state hardening          | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | CHAT-09 – Streaming render guard            | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                   |
@@ -1761,5 +1825,6 @@ instead of in the MCP catalog (RFC §3.5 left it behind).
 | CHAT-12 – Harmonize popover menus           | ✅ Done (2026-06-19) | Frontend-only. Shared `MenuPopover` + `MenuPopoverItem` molecule extracted on the profile-menu token set; `UserProfile` and `SearchConfig` are now instances of it. `SearchConfig` drops its boxed rows + uppercase section labels: Attach becomes a normal "Joindre des fichiers" row, Document/Search/Scope become homogeneous rows with inline muted values + chevron sub-menus. PROMPT-05 "Prompts" row is a future drop-in (blocked on PROMPT-03). |
 | CHAT-14 – Human-friendly tool-call labels   | ✅ Done (2026-06-24) | Frontend-only. External contribution (PR #1816, @pdubey28-sketch). `humanizeToolName` renders raw MCP tool identifiers as readable action labels; trace no longer exposes raw tool names, args, or result payloads — `TraceDetailDrawer` shows action + status + latency only; `groupTraceEntries` dedups tool_calls by call_id. New `traceUtils.test.ts` coverage. (PR self-labelled CHAT-12 in error; registered as CHAT-14, CHAT-13 reserved for #1819.) Follow-up: drop now-dead `summarizeToolResultCompact`/`toolResultContent`. |
 | CHAT-15 – Attachments default-on with search tool | ✅ Implemented (2026-06-29) — awaiting review | RFC: `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §10`. `chat_options.attach_files` declared next to `documents_selection` on `mcp-knowledge-flow-mcp-text` (default true) + `mcp-knowledge-flow-corpus` (default false) in `mcp_catalog.yaml`, and on `mcp-text` in Helm `values.yaml`. Resolver reads it purely from active-server `config_fields` (no legacy agent-level seed — no deployed instances). Generic `McpServerCard` `config_fields` loop renders it (special-case + dead `serverCarriesChatOptions` removed); agent-level `FieldSpec` dropped from `general_assistant`/`react_rag_mcp` (`test_assistant` fixture kept). No OpenAPI regen. Offline suites green (cp 175 / agents 33 / frontend 276). |
+| CHAT-16 – Restore SQL/RAG/latency detail in the trace | ✅ Done (2026-07-22) | RFC: `docs/swift/rfc/AGENT-THINKING-API-RFC.md` Amendment B. Follow-up to CHAT-14's over-broad redaction. `ToolResultRuntimeEvent`/`ToolResultPart` gain `latency_ms` (additive, populated from the elapsed-time value already computed in `react_runtime.py`), threaded through `agent_app.py`, `useChatSse.ts`, and the regenerated runtime OpenAPI client. `groupTraceEntries` drops the synthetic `tool_use` thought row (hardcoded "Done"/"Error", redundant with the combo row). `TraceDetailDrawer` renders SQL and RAG (`SourcesPanel`) tool results richly; other tools keep the CHAT-14 redacted default. Removed dead `summarizeToolResultCompact`. New `traceUtils.test.ts` coverage. Offline suites green (fred-sdk 233 / fred-runtime 565 / frontend 503), all code-quality green. **Amendment (2026-07-22):** `InlineDrawer` gained a `headerActions` slot with a single copy action per view; `MonacoPane` replaced by `CodeBlock` for the generic/SQL-row views and removed from the frontend entirely, along with its `@monaco-editor/react`/`monaco-editor` npm dependencies. |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

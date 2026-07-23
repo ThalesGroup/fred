@@ -33,6 +33,10 @@ describe("deriveDocStatus", () => {
     expect(deriveDocStatus(doc({ raw: "done", vector: "done" })).status).toBe("ready");
   });
 
+  it("returns ready when the sql stage is done (tabular CSV/Excel files)", () => {
+    expect(deriveDocStatus(doc({ raw: "done", preview: "done", sql: "done" })).status).toBe("ready");
+  });
+
   it("returns processing when a stage is in progress", () => {
     expect(deriveDocStatus(doc({ raw: "done", vector: "in_progress" })).status).toBe("processing");
   });

@@ -33,6 +33,7 @@ from fred_runtime.capabilities import (
     DefaultOnRequiredSettingsError,
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
+    InvalidExecutionModelError,
     MissingRequiredEnvError,
     boot_capability_registry,
 )
@@ -66,6 +67,11 @@ def _capability(
         name=f"cap.{cap_id}.name",
         description=f"cap.{cap_id}.description",
         icon="TestIcon",
+        # This factory always builds a middleware()-only capability (below);
+        # declare it explicitly so tests exercising an unrelated boot
+        # invariant don't also trip the new `execution_models` one (CAPAB-02)
+        # — tests for that invariant itself override this back out.
+        execution_models=("react",),
     )
     manifest_kwargs.update(manifest_overrides)
 
@@ -169,6 +175,108 @@ def test_default_on_with_all_default_team_settings_passes_boot() -> None:
             team_settings_model=_OptionalTeamSettings,
         )
     )
+    registry.validate(env={})
+
+
+# ---------------------------------------------------------------------------
+# execution_models — a middleware()-only capability must declare it
+# explicitly, or it silently claims Graph compatibility it doesn't have
+# (CAPAB-02, RFC §3.2, §3.9)
+# ---------------------------------------------------------------------------
+
+
+def test_middleware_only_capability_forgetting_execution_models_fails_boot() -> None:
+    """
+    The trap the third independent review found: a `middleware()`-only
+    capability that never mentions `execution_models` at all keeps the class
+    default (`("react", "graph")`), which claims Graph compatibility it does
+    not have. A capability author forgetting this must fail LOUD at boot,
+    not silently ship a Graph no-op. Deliberately NOT using the `_capability`
+    factory above — it injects `execution_models=("react",)` by default
+    precisely so OTHER tests don't trip this invariant; this test's whole
+    point is the case where the field is never mentioned at all.
+    """
+
+    class _ForgotCap(AgentCapability[_Config, _Config, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="cap_forgot",
+            version="1.0.0",
+            name="cap.cap_forgot.name",
+            description="cap.cap_forgot.description",
+            icon="TestIcon",
+        )
+        ConfigModel = _Config
+
+        def middleware(self, ctx: CapabilityContext[_Config, EmptyModel]) -> list[Any]:
+            return []
+
+    registry = CapabilityRegistry()
+    registry.register(_ForgotCap())
+    with pytest.raises(InvalidExecutionModelError, match="cap_forgot"):
+        registry.validate(env={})
+
+
+def test_middleware_only_capability_declaring_execution_models_passes_boot() -> None:
+    registry = CapabilityRegistry()
+    registry.register(_capability("cap_declared", execution_models=("react",)))
+    registry.validate(env={})
+
+
+def test_middleware_only_capability_explicitly_claiming_graph_fails_boot() -> None:
+    """
+    The gap the fourth independent review found: the boot check only caught
+    a capability that never MENTIONED `execution_models`. Writing
+    `execution_models=("react", "graph")` out explicitly on a
+    `middleware()`-only capability is exactly as wrong — it still has zero
+    `tools()` output, so it is still a Graph no-op — but it used to pass,
+    since the field was technically "declared". The check must be on the
+    VALUE, not on whether the author bothered to type it.
+    """
+    registry = CapabilityRegistry()
+    registry.register(
+        _capability("cap_wrongly_graph", execution_models=("react", "graph"))
+    )
+    with pytest.raises(InvalidExecutionModelError, match="cap_wrongly_graph"):
+        registry.validate(env={})
+
+
+def test_tools_based_capability_needs_no_execution_models_declaration() -> None:
+    """A `tools()`-based capability is execution-model-agnostic by
+    construction — it never needs to declare `execution_models` at all."""
+
+    class _ToolsCap(AgentCapability[_Config, _Config, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="cap_tools_only",
+            version="1.0.0",
+            name="cap.cap_tools_only.name",
+            description="cap.cap_tools_only.description",
+            icon="TestIcon",
+        )
+        ConfigModel = _Config
+
+        def tools(self, ctx: CapabilityContext[_Config, EmptyModel]) -> list[Any]:
+            del ctx
+            return []
+
+    registry = CapabilityRegistry()
+    registry.register(_ToolsCap())
+    registry.validate(env={})
+
+
+def test_mcp_capability_is_exempt_from_execution_models_declaration() -> None:
+    """
+    `McpCapability` overrides `middleware()` (the instruction-fragment
+    prompt) without implementing `tools()`, exactly the shape
+    `_validate_execution_models` otherwise flags — but its tools reach every
+    execution model through `FredMcpToolProvider`, a path entirely outside
+    `tools()`/`middleware()`. It must stay exempt.
+    """
+    from fred_runtime.capabilities.mcp import build_mcp_capability
+    from fred_sdk.contracts.models import MCPServerConfiguration
+
+    server = MCPServerConfiguration.model_validate({"id": "mcp-search", "name": "S"})
+    registry = CapabilityRegistry()
+    registry.register(build_mcp_capability(server))
     registry.validate(env={})
 
 

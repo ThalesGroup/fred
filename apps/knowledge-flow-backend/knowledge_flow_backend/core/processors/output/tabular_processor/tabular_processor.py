@@ -23,7 +23,6 @@ from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvReadOptions, CsvTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import flat_metadata_from, sanitize_chunk_metadata
@@ -371,12 +370,12 @@ class TabularProcessor(BaseOutputProcessor):
             if not raw_relation.columns and csv_path.stat().st_size > 0:
                 raise ValueError(f"Failed to parse tabular file: {csv_path}")
 
-            raw_relation.create_view("source_csv_raw")
-            column_projection = self._build_column_projection(raw_relation.columns)
-            # The projection is built only from quoted identifiers derived from
-            # discovered CSV headers.
-            projection_query = f"CREATE OR REPLACE TEMP VIEW source_csv AS SELECT {column_projection} FROM source_csv_raw"  # nosec B608
-            connection.execute(projection_query)
+            # DuckDB's CSV reader already returns unique column names — it suffixes
+            # duplicate headers (e.g. Sprint / Sprint_1) while preserving the
+            # original casing, accents and spaces. We keep those human-readable
+            # names verbatim in the Parquet artifact rather than sanitizing them;
+            # SQL callers quote the identifiers when querying via /tabular/query.
+            raw_relation.create_view("source_csv")
 
             quoted_path = str(parquet_path).replace("'", "''")
             compression = self.tabular_config.compression.replace("'", "''")
@@ -387,45 +386,6 @@ class TabularProcessor(BaseOutputProcessor):
             return GeneratedParquetMetadata(row_count=row_count, columns=columns)
         finally:
             connection.close()
-
-    def _build_column_projection(self, column_names: list[str]) -> str:
-        """
-        Return the sanitized SQL projection used before Parquet export.
-
-        Why this exists:
-        - CSV headers may contain spaces, punctuation, or duplicates that should
-          become stable SQL-safe column names in the final Parquet dataset.
-
-        How to use:
-        - Pass the column names discovered by DuckDB after CSV inspection.
-        """
-        aliases = self._sanitize_output_column_names(column_names)
-        projection_parts = [f"{self._quote_identifier(source_name)} AS {self._quote_identifier(alias)}" for source_name, alias in zip(column_names, aliases)]
-        return ", ".join(projection_parts)
-
-    def _sanitize_output_column_names(self, column_names: list[str]) -> list[str]:
-        """
-        Sanitize and deduplicate CSV column names for SQL exposure.
-
-        Why this exists:
-        - Large CSV ingestion still needs deterministic SQL-safe column names
-          even though the conversion no longer passes through pandas.
-
-        How to use:
-        - Pass the column names exposed by DuckDB's CSV reader.
-        """
-        used_names: set[str] = set()
-        sanitized_names: list[str] = []
-        for index, column_name in enumerate(column_names, start=1):
-            base_name = sanitize_sql_name(column_name) or f"column_{index}"
-            candidate = base_name
-            suffix = 2
-            while candidate in used_names:
-                candidate = f"{base_name}_{suffix}"
-                suffix += 1
-            used_names.add(candidate)
-            sanitized_names.append(candidate)
-        return sanitized_names
 
     def _read_parquet_row_count(self, connection: duckdb.DuckDBPyConnection, parquet_path: Path) -> int:
         """

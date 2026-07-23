@@ -720,6 +720,91 @@ items:
 
   # ── CAPAB ─────────────────────────────────────────────────────────────
 
+  - id: CAPAB-02
+    title: "AgentCapability.tools() — Graph agents can use capabilities"
+    status: done
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-CAPABILITY-RFC.md §3.2, §3.9, §5.1"
+      execution: "GitHub issue: pending creation (drafted 2026-07-23)"
+    notes: >
+      Retroactively registered (2026-07-23) — implemented 2026-07-22 across 6 phases
+      on branch `consolidation-22-07` before this ID existed. Closes the gap RFC §3.9
+      originally documented as "Execution is ReAct-only": `AgentCapability.tools()`
+      is now the primary, execution-model-agnostic runtime surface (`middleware()`
+      becomes the ReAct-only escape hatch, defaulting to a wrap of `tools()`); a
+      `GraphAgentDefinition` selecting a capability resolves and executes it exactly
+      like a ReAct agent does, through `CapabilityAgentBlock.tools` and
+      `GraphRuntime`'s `_adapt_capability_tool_for_graph` merge seam. `document_access`
+      and `demo.py` migrated onto `tools()`.
+      First correction (2026-07-23, independent review #1 — see
+      `RUNTIME-EXECUTION-CONTRACT.md` §8.23): the first landing let a Graph agent
+      silently SELECT a `middleware()`-only capability (`ppt_filler`/`writable_document`)
+      and get zero tools with no error. `CapabilityManifest.execution_models` now lets a
+      capability declare itself ReAct-only, enforced as a loud `CapabilityError` at
+      assembly. Also fixed: `document_access`'s tree/summarize artifacts carried no
+      payload (silently corrupted on Graph); `tools(ctx)` was called twice per assembly;
+      `demo.py`'s tool was sync.
+      Second correction (2026-07-23, independent review #2 — see §8.24): §8.23's
+      single-call fix made `tools()` and an overridden `middleware()` either/or instead
+      of composed, silently dropping a combining capability's plain tools under ReAct
+      (fixed). The capability catalog (`GET /agents/templates`) still offered
+      ReAct-only capabilities to Graph templates — now filtered per template. A
+      capability with an active `HitlSpec` selected on a Graph agent now fails loudly
+      (stopgap — `CapabilityAgentBlock.hitl` is still never consulted by `GraphRuntime`;
+      full Graph HITL support remains a deferred, real design task, not implemented).
+      `document_access`'s FAILURE-path artifacts also carried no payload (fixed);
+      `invoke_runtime_tool` hardcoded `is_error=False` on its trace event regardless of
+      the tool's real answer (fixed). The Graph adapter now refuses loudly rather than
+      silently break on a sync `content_and_artifact` tool, and its 2-tuple unwrap is
+      gated on the tool's declared `response_format` instead of firing for any 2-tuple.
+      `McpCapability`'s `agent_instructions` prompt fragment is confirmed ReAct-only —
+      documented as such, not fixed (no Graph-side prompt-injection mechanism exists).
+      `runtimeOpenApi.ts`/`controlPlaneOpenApi.ts` regenerated for the new
+      `execution_models` field.
+      Third correction (2026-07-23, independent review #3 — see §8.25): the loud
+      refusal only caught a capability that EXPLICITLY declared itself ReAct-only —
+      an author who simply never mentioned `execution_models` on a `middleware()`-only
+      capability kept the class default (both models), which still silently passed
+      every check and still shipped a Graph no-op. Fixed with a BOOT invariant, not a
+      runtime one: `CapabilityRegistry._validate_execution_models`
+      (`InvalidExecutionModelError`) uses pydantic `model_fields_set` to detect
+      "never declared" vs "explicitly declared the default" and fails pod startup for
+      the former (McpCapability exempt). `CapabilityManifest` also now requires
+      `"react"` always be present (no capability shape is Graph-only). Two pre-existing
+      test fixtures needed the same explicit declaration this invariant now demands.
+      Also fixed: `document_access`'s 403/404 recovery hint was appended to the message
+      AFTER the artifact was already built, so it reached ReAct but not the Graph-kept
+      artifact; `invoke_runtime_tool` read `is_error` off the normalized dict (risking a
+      false positive on an unrelated tool's own `is_error`-named field) and never
+      populated `sources`/`ui_parts` on its event — now reads the typed
+      `ToolInvocationResult` directly, only when genuinely one.
+      Fourth correction (2026-07-23, independent review #4 — see §8.26): round 3's boot
+      check only caught a capability that never MENTIONED `execution_models` — one that
+      explicitly wrote `execution_models=("react", "graph")` on a `middleware()`-only
+      shape still passed every check (boot, manifest validator, Graph assembly) while
+      still having zero `tools()` output, reproducing the exact silent no-op. Fixed:
+      `_validate_execution_models` (renamed `InvalidExecutionModelError`, was
+      `UndeclaredExecutionModelError`) now checks the VALUE — any `middleware()`-only
+      capability whose `execution_models` contains `"graph"` fails boot regardless of
+      whether that came from the default or an explicit declaration; `model_fields_set`
+      is now used only to make the error message precise. Also fixed:
+      `invoke_runtime_tool`'s KPI timer never captured `kpi_dims`, so a reported
+      `is_error=True` (no exception raised) still recorded `status=ok` in the metric —
+      now mirrors `invoke_tool`'s `kpi_dims["status"] = "error"` pattern.
+      Still open, explicitly not fixed: full HITL enforcement on the Graph path (a
+      real design task reconciling Graph's node-level pause/resume with the per-tool
+      gate); whether a capability's ReAct-only middleware contributions (prompt
+      fragments, dynamic schemas) should ever become expressible to Graph agents.
+      Also noted, unrelated to CAPAB-02, not fixed here: `RUNTIME-EXECUTION-CONTRACT.md`
+      has pre-existing duplicate §8.x numbers (§8.13, §8.16, §8.21 each appear twice)
+      predating this work — a doc-hygiene issue across many past contributors, flagged
+      rather than silently renumbered in a change this large already.
+      See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22–§8.26 for the full
+      implementation record. Phase-by-phase design log of the original landing
+      (superseded by the RFC amendment as the canonical source):
+      `NOTES-GRAPH-CAPABILITY-BRIDGE.md` at the branch root.
+
   - id: CAPAB-01
     title: "Agent capability team-scoping — ReBAC gating, enablement, selection"
     status: in_progress
@@ -944,6 +1029,52 @@ items:
       EffectiveChatOptions.attach_files already exists.
       Implemented 2026-06-29; offline suites green (cp 175 / agents 33 / frontend 276),
       all code-quality green. Awaiting review.
+
+  - id: CHAT-16
+    title: "Restore tool-call detail in the chain-of-thought trace and drawer (SQL, RAG sources, latency)"
+    status: done
+    owner: Dimitri
+    closed: "2026-07-22"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §17"
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md Amendment B"
+      execution: "GitHub issue #1774"
+    notes: >
+      Follow-up to CHAT-14's redaction fix, which overcorrected by discarding
+      all tool-result detail (raw content already carried the SQL query and
+      RAG hits). `ToolResultRuntimeEvent`/`ToolResultPart` gain `latency_ms`
+      (additive; populated from the same elapsed-time computation already
+      used to close the paired `tool_use` thought — see
+      RUNTIME-EXECUTION-CONTRACT.md §8.21), threaded through `agent_app.py`
+      persistence, `useChatSse.ts`, and the OpenAPI-generated runtime client.
+      `traceUtils.groupTraceEntries()` stops emitting the synthetic
+      `tool_use`-phase thought row (title "Calling `<tool>`", conclusion
+      always the hardcoded literal "Done"/"Error") — redundant with the
+      paired combo row, which now also shows real latency; the repeated
+      "Done" spam is gone. `TraceDetailDrawer` now recognizes two curated
+      tool-result content shapes and renders them richly instead of the
+      blanket `{action, status, latency}` redaction: SQL
+      (`{sql_query, rows, error}`) via `CodeBlock` + row preview, and RAG
+      (`{query, hits}`) via the existing `SourcesPanel` molecule. Any other
+      tool shape still falls back to the original redacted view — the
+      CHAT-14 security posture is preserved as the default, only these two
+      specifically useful shapes are exempted. Removed the now-fully-dead
+      `summarizeToolResultCompact` (flagged as a follow-up in CHAT-14's
+      notes). New tests in `traceUtils.test.ts`
+      (shape-detection + tool_use filtering). Offline suites green
+      (fred-sdk 233, fred-runtime 565, frontend 503), all code-quality green.
+
+      **Amendment (2026-07-22).** Manual UI testing found the Monaco JSON
+      pane heavy (forced `vs-dark`, editor chrome, imposed fixed heights) for
+      a 3-line payload, with a scattered copy button per view. `InlineDrawer`
+      gained a `headerActions` slot (next to the close button) hosting a
+      single copy action — SQL query text for the SQL view, curated JSON for
+      the generic fallback, nothing for RAG (sources are browsed via
+      `SourcesPanel`). The generic fallback and the SQL row preview now
+      render through `CodeBlock` instead of `MonacoPane`. `MonacoPane` is no
+      longer referenced anywhere in the frontend — the atom and its
+      `@monaco-editor/react`/`monaco-editor` dependencies were removed
+      entirely (`npm install` regenerated `package-lock.json`).
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
@@ -1410,13 +1541,24 @@ items:
 
   - id: INGEST-02
     title: "Excel Extraction — Strategies and Deterministic Reconstruction Pipeline"
-    status: proposed
+    status: done
     owner: Timothé
     parent: INGEST-01
     refs:
       rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
-    notes: "RFC authored 2026-06-26. Covers the three Excel extraction strategies and details the deterministic pipeline (phases A/B/C). Awaiting developer confirmation (Step 3)."
+      issue: "https://github.com/ThalesGroup/fred/issues/1927"
+      branch: "swift"
+    notes: >-
+      RFC authored 2026-06-26; strategy A (deterministic reconstruction) confirmed and
+      implemented end-to-end on branch swift. Input stage ExcelProcessor +
+      ExcelTableRegistrationProcessor output stage, new "spreadsheet" category (skips
+      vectorization), .xlsx/.xls/.xlsm wired across all config profiles. As-built pipeline
+      is A1–A5 / B1–B5 (not A1–A3 / B1–B9 / C): multi-level headers, unpivot and the LLM
+      fallback were deferred; numeric columns are recognised-not-converted; .xls handled via
+      LibreOffice recalc (closes open item 7.4). Divergences recorded in RFC §11. Issues:
+      input #1927/#1928, output stage #1929/#1930. Tests green (make code-quality && make
+      test). Awaiting review/merge.
 
   - id: INGEST-03
     title: "Legacy/OpenDocument Office support (.doc, .ppt, .odt) via LibreOffice upgrade"
@@ -1427,6 +1569,78 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
       issue: "https://github.com/ThalesGroup/fred/issues/1878"
     notes: "Adds .doc/.ppt (legacy OLE binary) and .odt (OpenDocument) support by converting to .docx/.pptx with headless LibreOffice and reusing the existing DOCX/PPTX extractors across corpus ingestion, chat attachments (fast-text registry) and the lite markdown service. Reuses the established soffice pattern (pptx_slide_renderer); LibreOffice already shipped in both Dockerfiles. Extends INGEST-01 (EDP) — no new architecture."
+
+  - id: INGEST-04
+    title: "Tabular MCP: document-centric surface (CSV + Excel)"
+    status: in_progress
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      branch: "swift"
+    notes: >-
+      RFC §10 amendment authored 2026-07-06; confirmed and implemented
+      2026-07-07 on branch swift — awaiting review. Replaces the dataset-centric
+      tabular routes with document-centric ones (dry removal): GET
+      /tabular/documents, GET /tabular/documents/schemas (batch, all tables per
+      document — fixes first-table-wins), GET /tabular/documents/{uid}/markdown
+      (spreadsheet output.md). POST /tabular/query unchanged. Stale mcp-tabular
+      mount description rewritten in main.py; frontend knowledgeFlowOpenApi.ts
+      regenerated. Offline suite: 17/17 tabular tests green (2 unrelated KPI
+      failures come from a local config/.env PROMETHEUS_BEARER_TOKEN leaking
+      into the full run). GitHub issue pending.
+
+      Extended 2026-07-20 (RFC §12): adds one read-only locator tool POST
+      /tabular/search (operation_id search_tabular_values) that locates a
+      keyword across the tables of the requested documents and returns, per
+      matching table, the matched columns and a bounded sample of matching
+      rows, so the agent issues one targeted read_query instead of
+      brute-forcing read_query table by table. Implemented 2026-07-20 on branch
+      1927-ingest-02-excel-tabular-extraction-pipeline; ships under this ID (no
+      separate ID or issue). Also added the missing authz-endpoint-matrix rows
+      for the whole document-centric tabular surface (the §10 routes had never
+      been registered). Normalized
+      substring match (lower, strip_accents, all whitespace removed, decimal
+      comma->point) over every column cast to VARCHAR (numeric columns
+      searchable); bounds max_rows_per_table=5 / max_matching_tables=30 with
+      row_truncated / tables_truncated signals. Additive on the knowledge-flow
+      OpenAPI surface; frontend knowledgeFlowOpenApi.ts regenerated;
+      mcp_catalog agent_instructions extended.
+
+  - id: INGEST-05
+    title: "Statistic feature: multi-table documents resolve to table 1 only"
+    status: proposed
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+    notes: >-
+      Defect noted during INGEST-04 design (2026-07-06):
+      TabularService.read_dataset_frame / read_dataset_preview_frame resolve
+      multi-table documents with first-table-wins, so the Statistic MCP silently
+      analyses only table 1 of a workbook. Needs table-level addressing before
+      implementation.
+
+  - id: INGEST-06
+    title: "Tabular Artifact & DuckDB SQL-Mounting Contract"
+    status: done
+    owner: Timothé
+    parent: INGEST-01
+    refs:
+      rfc: "docs/swift/rfc/TABULAR-ARTIFACT-CONTRACT-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      branch: "swift"
+    notes: >-
+      As-built RFC authored 2026-07-08 — documents the already-shipped tabular
+      contract that had no RFC home: the tabular_v1 (CSV single-table) and
+      tabular_multi_v1 (spreadsheet multi-table) metadata extensions, the
+      content-addressed object-store layout (artifacts_prefix/<uid>/<rev>/),
+      deterministic stored SQL aliases, the DTypes schema vocabulary, and the
+      read-only per-query DuckDB mounting model (document-level ReBAC, table-level
+      SQL exposure, signed-URL redaction). Producers: CSV path + INGEST-02
+      (Excel). Consumers: INGEST-04 (MCP surface), INGEST-05 (statistic). No new
+      code — documentation convergence only. Open item 9.1 == INGEST-05.
 
   # ── LICENSE ───────────────────────────────────────────────────────────
 
@@ -1679,6 +1893,23 @@ items:
       which conflicts with transformers>=5.4.0's huggingface_hub>=2.0 requirement (and
       5.0.x-5.3.x are excluded by docling-ibm-models itself). Closes 22/23 alerts; the last
       (transformers, high) stays open pending an upstream docling-ibm-models release.
+
+  - id: OPS-07
+    title: "LibreOffice availability for Excel recalc — soffice standardization + make run check"
+    status: in_progress
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §OPS-06"
+      execution: "waived GitHub issue for local session"
+    notes: >
+      Excel processor recalc (recalc_with_libreoffice) now invokes the soffice
+      binary with an isolated LibreOffice user profile, converging on the shared
+      legacy_office / pptx_slide_renderer pattern instead of the libreoffice
+      wrapper. make run gains a tools-check warning plus an opt-in
+      install-system-deps target so the missing host dependency is surfaced (the
+      Docker dev/prod/devcontainer images already ship LibreOffice). Mechanical
+      Makefile + code alignment — no RFC.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"

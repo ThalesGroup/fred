@@ -61,6 +61,12 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
         - suffix: ".csv"
           class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
         - suffix: ".txt"
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
@@ -101,6 +107,8 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -116,6 +124,12 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
         - suffix: ".csv"
           class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
         - suffix: ".txt"
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
@@ -156,6 +170,8 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -171,6 +187,12 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
         - suffix: ".csv"
           class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
         - suffix: ".txt"
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
