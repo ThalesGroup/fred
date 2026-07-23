@@ -1,3 +1,26 @@
+**v2.1.12** — 2026-07-23
+
+- **Summary**
+
+  Excel spreadsheets can now be ingested into your corpus with full tabular extraction
+  (formulas recalculated before indexing), joining the existing document types. Agents
+  built on the newer "Graph" execution model can now use capabilities — document access,
+  PPT Filler, Writable Documents — the same way classic agents do, with a clear error
+  instead of silent no-ops when a capability isn't Graph-compatible.
+
+- **Features**
+
+  - Excel (XLSX) documents can now be ingested with full tabular extraction, formulas recalculated before indexing, alongside the existing CSV/tabular pipeline (#2064)
+  - Graph agents can now select and use capabilities (document access, PPT Filler, Writable Documents, …) the same way ReAct agents do; a capability that isn't Graph-compatible is refused with a clear error instead of silently doing nothing (#2067)
+
+- **Bug Fixes**
+
+  - Uploading several documents at once no longer waits for each one to finish before starting the next — the upload drawer now closes as soon as the slowest file completes, not the sum of all of them (#2067)
+  - Fixed PDF ingestion silently falling back to lower-quality text extraction instead of surfacing the real error (#2067)
+  - Long single-word table column headers (e.g. in tabular dataset previews) no longer collapse and wrap one letter per line (#2067)
+  - The "Create a new Agent" template picker grid is now centered instead of left-anchored when there are fewer templates than grid columns (#2067)
+  - Prompt cards now show the author's display name instead of a raw user ID (#2067)
+
 **v2.1.11** — 2026-07-22
 
 - **Summary**
