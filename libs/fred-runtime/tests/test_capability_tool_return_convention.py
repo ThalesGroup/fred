@@ -53,6 +53,7 @@ correct for the only path this tool is exercised through today.
 
 from __future__ import annotations
 
+import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.capabilities import build_capability_context
 from fred_runtime.capabilities.document_access import DocumentAccessCapability
@@ -69,7 +70,6 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
-import pytest
 
 
 def _identity() -> CapabilityIdentity:

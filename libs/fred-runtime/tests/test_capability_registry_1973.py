@@ -33,8 +33,8 @@ from fred_runtime.capabilities import (
     DefaultOnRequiredSettingsError,
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
-    MissingRequiredEnvError,
     InvalidExecutionModelError,
+    MissingRequiredEnvError,
     boot_capability_registry,
 )
 from fred_runtime.capabilities.demo import DemoEchoCapability

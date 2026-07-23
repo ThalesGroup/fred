@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.capabilities import (
     CapabilityAssemblyError,
@@ -65,7 +66,6 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
 )
 from langchain_core.tools import tool as lc_tool
-import pytest
 
 
 class _FakeDocumentSearchPort(DocumentSearchPort):
