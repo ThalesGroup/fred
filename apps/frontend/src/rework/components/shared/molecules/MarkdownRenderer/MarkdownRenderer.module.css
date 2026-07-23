@@ -3,6 +3,9 @@
   max-width: var(--content-prose-max-width);
   color: var(--on-surface);
   font: var(--font-body-large);
+  /* Long-form reading zone (chat messages, document preview) — opts back
+   * into selection against the page-wide `user-select: none` default. */
+  user-select: text;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
