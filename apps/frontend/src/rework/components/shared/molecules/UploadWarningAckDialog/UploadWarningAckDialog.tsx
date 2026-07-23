@@ -14,6 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { useLocalizedUploadWarning } from "../../../../core/hooks/useLocalizedUploadWarning";
 
 interface UploadWarningAckDialogProps {
@@ -51,7 +52,9 @@ export function UploadWarningAckDialog({ open, onConfirm, onCancel }: UploadWarn
     <ConfirmationDialog
       open={open}
       title={t("chatbot.attachments.uploadWarningTitle")}
-      message={uploadWarningMessage}
+      // The notice itself renders as the shared severity-styled banner (icon +
+      // accent), not as plain dialog text — same visual as the upload drawer.
+      details={<UploadWarningBanner />}
       confirmLabel={t("chatbot.attachments.uploadWarningConfirm")}
       cancelLabel={t("common.cancel")}
       onConfirm={onConfirm}
