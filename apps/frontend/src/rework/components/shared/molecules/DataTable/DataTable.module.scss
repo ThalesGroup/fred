@@ -48,3 +48,7 @@
   z-index: 1;
   background-color: var(--datatable-background-color);
 }
+
+.first-column-inset .datatable-cell:first-child {
+  padding-left: var(--spacing-l);
+}
