@@ -766,6 +766,52 @@ existing call sites that never set `item.color` are unaffected.
 
 ---
 
+### `TeamContentNavbar` / `TeamSettingsPage` — self-service team leave (AUTHZ-09)
+
+**Location:** `src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
+`src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`
+**Status:** `Functional`
+
+The team-settings gear icon (previously `canAdministerAdmins`-gated, admin
+only) is now visible to every team member (`canReadMembers`). What a member
+sees inside scales with their role:
+
+- a plain member: a read-only "Members" list (no invite field, no actions
+  column; the role column stays visible with the same chips as the editable
+  view, just non-interactive, so a plain member can still see who holds
+  elevated roles) and nothing else in the sidebar;
+- editors/analysts/admins: the same sections as before (Members with edit
+  controls, Parameters gated on `can_update_info`, Activity/Evaluations per
+  their existing gates) — Activity's gate moved from `canReadMembers` (now
+  true for everyone) to a new `hasElevatedTeamRole` helper
+  (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
+
+**New: "Leave team" button.** Full-width, `16px` side gutter, anchored to
+the bottom of the settings sidebar (`margin-top: auto` inside the existing
+full-height flex column) below the section list — `filled` / `error`
+`Button`. Disabled with an explanatory `title` tooltip only for a team's
+sole remaining `team_admin` (computed client-side from the members list
+already fetched for the table; the backend's last-admin invariant is the
+actual source of truth and still applies server-side regardless). Confirms
+via `ConfirmationDialog`, then redirects to `/team/personal/agents`.
+
+#### `ConfirmationDialog` — per-call button emphasis override
+
+Added optional `cancelVariant`/`cancelColor`/`confirmVariant` props
+(threaded through `ConfirmationDialogProvider`'s `showConfirmationDialog`),
+defaulting to the existing fixed styling (`Cancel` = outlined/on-surface,
+`Confirm` = filled) so every other call site is unaffected. The leave-team
+dialog is the first consumer to invert the usual emphasis — `Annuler` =
+filled (the safe, reversible choice stays visually dominant), `Quitter` =
+text + error (the destructive choice is low-emphasis, M3 "Text" tier) — a
+deliberate risk-reduction pattern, not the default hierarchy.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
 ### `Toast` / `ToastProvider`
 
 **Location:** `src/rework/components/shared/molecules/Toast/Toast.tsx`

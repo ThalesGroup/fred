@@ -1382,12 +1382,41 @@ joinability on migration day.
 grants themselves `team_member` and only `team_member`, only when the
 team's stored `joining_mode` is `open` (checked server-side, 403
 `TeamNotOpenForJoiningError` otherwise — the client's belief about the mode
-is never trusted). This is the only membership-write route on `/teams` that
-does not require the caller to already hold an administer-permission over
-the target team; every other membership route (`add_team_member` and
-siblings) is unchanged and remains team-admin-gated.
+is never trusted). Every other membership-write route
+(`add_team_member`/`grant_team_member_role`/`revoke_team_member_role` and
+siblings) remains team-admin-gated; `remove_team_member` gains its own
+same-identity, non-admin-gated path in `§25` below.
 
 `request_only` and `invite_only` currently have identical server-side
 enforcement (both simply reject self-join) — they differ only in marketplace
 presentation (a disabled "Request" affordance vs. no affordance at all) until
 a notification system exists to route `request_only` asks to team admins.
+
+## 25. Contract Notes — AUTHZ-09, self-service team leave (2026-07-23)
+
+**No route or schema change.** `DELETE /teams/{team_id}/members/{user_id}`
+(`RemoveTeamMemberResponse`, unchanged) already accepted any `user_id`; the
+service-layer permission check now bypasses the admin-only
+"administer"-permission gate when the caller's own id equals the target
+(`user.uid == user_id` — a "leave team" call is the same request an admin
+would send to remove that member, just self-directed). Full design: RFC
+`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 9 (§43-46).
+
+Everything else about the operation is unchanged and applies identically to
+a self-removal:
+
+- the "team must keep at least one `team_admin`" invariant still fires
+  unconditionally whenever the caller holds `team_admin` — the sole
+  remaining admin cannot remove themselves;
+- the same session/conversation retention-policy purge that runs for an
+  admin-initiated removal runs for a self-removal (`RemoveTeamMemberResponse`
+  reports the same `sessions_enqueued`/`scheduled_delete_at`/`policy_mode`
+  fields either way) — leaving a team has the same conversation-lifecycle
+  consequence as being removed from it.
+
+**Frontend:** the team-settings entry point (gear icon, previously gated on
+`canAdministerAdmins`) is now gated on `canReadMembers` — every team member
+reaches a settings surface, scoped by their existing per-section capability
+gates (a plain member sees a read-only Members list plus a new "Leave team"
+action; elevated roles keep today's full panel plus the same action). No new
+`TeamPermission` was added — see RFC Part 9 §45 for why.

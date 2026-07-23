@@ -1476,6 +1476,16 @@
           "maxIdle": "Maximum idle period",
           "maxIdleDesc": "A conversation with no activity for this long is erased automatically."
         }
+      },
+      "leaveTeam": {
+        "title": "Leave this team?",
+        "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an admin had removed you.",
+        "confirmLabel": "Leave",
+        "lastAdminTooltip": "You are the only admin of this team — promote another admin before leaving.",
+        "errors": {
+          "summary": "Failed to leave team",
+          "fallbackDetail": "Could not leave the team."
+        }
       }
     },
     "teams": {

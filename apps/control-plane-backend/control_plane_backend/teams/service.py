@@ -944,12 +944,16 @@ async def remove_team_member(
         for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
     ]
 
+    # AUTHZ-09 (RFC Part 9 §43-44): a caller removing themselves ("leave
+    # team") needs no administer permission — the last-admin invariant above
+    # already covers the one case that must still be blocked.
     await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         permissions_to_check,
         deps,
+        skip_permission_check=user.uid == user_id,
     )
     await _remove_all_team_member_relations(rebac, team_id, user_id)
 
@@ -1343,6 +1347,8 @@ async def _validate_team_and_check_permission(
     rebac: RebacEngine,
     permissions: list[TeamPermission],
     deps: TeamServiceDependencies,
+    *,
+    skip_permission_check: bool = False,
 ) -> tuple[TeamMetadata, str | None]:
     """
     Load one team's metadata and verify the caller has the requested permissions.
@@ -1355,6 +1361,10 @@ async def _validate_team_and_check_permission(
     - pass the current user, target team id, required permissions, and the
       explicit team-service dependency bundle
     - expect `TeamNotFoundError` on an unknown team id
+    - pass `skip_permission_check=True` for a same-identity action that needs
+      no "administer" permission (AUTHZ-09, RFC Part 9 §43-44 — a
+      self-removal from a team): team existence is still verified, only the
+      ReBAC permission check is skipped
 
     Example:
     - `metadata, token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
@@ -1362,6 +1372,9 @@ async def _validate_team_and_check_permission(
     metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
+
+    if skip_permission_check:
+        return metadata, None
 
     permissions_are_read_only = (
         set(permissions) <= SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS
