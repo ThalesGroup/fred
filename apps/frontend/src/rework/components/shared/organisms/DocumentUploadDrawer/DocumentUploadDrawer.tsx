@@ -39,6 +39,9 @@ interface DocumentUploadDrawerProps {
   teamId?: string;
   /** Destination folder path shown prominently in the header, e.g. "CIR" or "CIR/Sub". */
   destinationPath?: string;
+  /** Files picked before the drawer opened (dropped on a folder row) — seeded into the
+   * list on open so the user only has to choose mode/profile and save. */
+  initialFiles?: File[];
 }
 
 /**
@@ -98,6 +101,7 @@ export function DocumentUploadDrawer({
   metadata,
   teamId,
   destinationPath,
+  initialFiles,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -138,6 +142,12 @@ export function DocumentUploadDrawer({
   );
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Seed on open only: `files` stays local state afterwards (user can still add
+  // or remove entries), and closing resets it via handleClose as usual.
+  useEffect(() => {
+    if (isOpen && initialFiles?.length) setFiles(initialFiles);
+  }, [isOpen, initialFiles]);
 
   const resolvedTeamId = teamId ?? "personal";
   const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });

@@ -41,7 +41,11 @@ export async function streamUploadOrProcessDocument(
 ): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
-  formData.append("files", file);
+  // A file picked out of a folder (webkitdirectory input, dropped directory)
+  // uploads under its RELATIVE path as the multipart filename per the HTML spec
+  // — the backend then 404s trying to write temp storage under the missing
+  // subdirectories. Pin the part's filename to the leaf name explicitly.
+  formData.append("files", file, file.name.split("/").pop() || file.name);
   formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
   const endpoint =

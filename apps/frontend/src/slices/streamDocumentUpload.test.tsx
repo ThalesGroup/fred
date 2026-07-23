@@ -89,3 +89,22 @@ describe("streamUploadOrProcessDocument", () => {
     expect(discovered).toEqual([]);
   });
 });
+
+describe("multipart filename pinning", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uploads a folder-originated file under its leaf name, never its relative path", async () => {
+    // Browsers put the RELATIVE path (webkitRelativePath) in the multipart
+    // filename for files picked out of a folder — the backend then 404s writing
+    // temp storage under the missing subdirectories. The part filename must be
+    // pinned to the leaf name.
+    stubFetch([]);
+    await streamUploadOrProcessDocument(new File(["x"], "data/sub/a.csv"), "process", {});
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    const part = body.get("files") as File;
+    expect(part.name).toBe("a.csv");
+  });
+});
