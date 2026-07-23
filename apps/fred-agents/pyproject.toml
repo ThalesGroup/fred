@@ -12,6 +12,7 @@ dependencies = [
   "fred-runtime[app]>=3.3.0",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
+  "fred-capability-writable-document>=0.1.0",
   "fred-capability-ppt-filler>=0.1.0",
   "uvicorn>=0.35",
 ]
@@ -48,6 +49,7 @@ testpaths = ["tests"]
 fred-core = { path = "../../libs/fred-core", editable = true }
 fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-runtime = { path = "../../libs/fred-runtime", editable = true }
+fred-capability-writable-document = { path = "../../libs/fred-capability-writable-document", editable = true }
 fred-capability-ppt-filler = { path = "../../libs/fred-capability-ppt-filler", editable = true }
 
 [dependency-groups]

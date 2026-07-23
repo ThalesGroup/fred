@@ -134,6 +134,35 @@
       "name": "Document access",
       "description": "Search documents uploaded using semantic similarity (RAG)."
     },
+    "writable_document": {
+      "name": "Writable document",
+      "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
+      "panel": {
+        "writable_document_pane": {
+          "title": "Document"
+        }
+      },
+      "untitled": "Document",
+      "saving": "Saving…",
+      "close": "Close panel",
+      "download": "Download",
+      "downloadError": "Download failed",
+      "noSession": "No session — open a chat to see its documents.",
+      "empty": "No document yet. Ask the agent to draft one.",
+      "card": {
+        "aria": "Collaborative document",
+        "open": "Open",
+        "updatedByAgent": "Updated by the agent",
+        "updatedByUser": "Edited by you"
+      },
+      "format": {
+        "word": "Microsoft Word",
+        "markdown": "Markdown"
+      },
+      "code": {
+        "plainText": "Plain text"
+      }
+    },
     "ppt_filler": {
       "name": "PPT Filler",
       "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",

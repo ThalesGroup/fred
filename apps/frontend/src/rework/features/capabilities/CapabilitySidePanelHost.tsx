@@ -25,6 +25,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
+import { sessionProbesForCapabilities } from "./sessionProbeRegistry";
 import { sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
 import styles from "./CapabilitySidePanelHost.module.css";
 
@@ -46,9 +47,12 @@ const entryKey = (entry: SidePanelEntry): string => `${entry.capabilityId}:${ent
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
+  const probes = useMemo(() => sessionProbesForCapabilities(capabilityIds), [capabilityIds]);
 
-  // No active capability contributes a panel — the slot stays inert (zero chrome).
-  if (entries.length === 0) return null;
+  // No active capability contributes a panel or a probe — the slot stays inert
+  // (zero chrome). Probes mount even while every panel is closed: they are the
+  // "observe the opened conversation" path (#1905 auto-open).
+  if (entries.length === 0 && probes.length === 0) return null;
 
   const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
   // Each panel's launcher/drawer title resolves against the plugin's i18n keys;
@@ -58,31 +62,42 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
 
   return (
     <>
-      <div className={styles.rail}>
-        {entries.map((entry) => {
-          const key = entryKey(entry);
-          if (key === activeKey) return null; // launcher hides while its panel is open
-          return (
-            <IconButton
-              key={key}
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "edit_note" }}
-              aria-label={titleOf(entry)}
-              onClick={() => onActiveKeyChange(key)}
-            />
-          );
-        })}
-      </div>
-      <InlineDrawer
-        open={active !== null}
-        onClose={() => onActiveKeyChange(null)}
-        title={active ? titleOf(active) : ""}
-        layout="push"
-      >
-        {active && <active.Component capabilityId={active.capabilityId} onClose={() => onActiveKeyChange(null)} />}
-      </InlineDrawer>
+      {probes.map(({ capabilityId, Probe }, index) => (
+        <Probe key={`${capabilityId}:${index}`} capabilityId={capabilityId} />
+      ))}
+      {entries.length > 0 && (
+        <>
+          <div className={styles.rail}>
+            {entries.map((entry) => {
+              const key = entryKey(entry);
+              if (key === activeKey) return null; // launcher hides while its panel is open
+              return (
+                <IconButton
+                  key={key}
+                  color="on-surface"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "edit_note" }}
+                  aria-label={titleOf(entry)}
+                  onClick={() => onActiveKeyChange(key)}
+                />
+              );
+            })}
+          </div>
+          <InlineDrawer
+            open={active !== null}
+            onClose={() => onActiveKeyChange(null)}
+            title={active ? titleOf(active) : ""}
+            layout="push"
+            // One shared width across every capability panel (writable-document
+            // editor, PPT preview, …) — the same behaviour the legacy chat's
+            // ResizablePaneShell had with its single persisted pane width.
+            resizable={{ persistKey: "capability-side-panel" }}
+          >
+            {active && <active.Component capabilityId={active.capabilityId} onClose={() => onActiveKeyChange(null)} />}
+          </InlineDrawer>
+        </>
+      )}
     </>
   );
 }

@@ -36,7 +36,6 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { CapabilitySidePanelProps } from "../types";
 import { selectCurrentPreview } from "./pptPreviewSlice";
 import { usePptPreview } from "./usePptPreview";
@@ -49,7 +48,7 @@ const PDF_SCALE = 0.95;
 // `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
-export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
+export function PptPreviewPane(_props: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const current = useSelector(selectCurrentPreview);
   const { objectUrl, isLoading, error } = usePptPreview(current);
@@ -115,7 +114,6 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   }, [remountKey]);
 
   const untitled = t("capability.ppt_filler.preview.untitled", { defaultValue: "Presentation" });
-  const closeLabel = t("capability.ppt_filler.preview.close", { defaultValue: "Close preview" });
   const loadErrorMsg = t("capability.ppt_filler.preview.loadError", { defaultValue: "Failed to load preview." });
 
   const shownError = error ? loadErrorMsg : loadError;
@@ -130,14 +128,6 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
         {current?.pptx_download_url && (
           <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
         )}
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "close" }}
-          onClick={onClose}
-          aria-label={closeLabel}
-        />
       </div>
 
       <div className={styles.body} ref={contentRef}>

@@ -1,0 +1,79 @@
+[project]
+name = "fred-capability-writable-document"
+version = "0.1.0"
+description = "Fred agent capability: co-author a session-scoped Markdown document from chat (writable_document)."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
+dependencies = [
+  "fred-core>=3.4.1",
+  "fred-sdk>=3.3.0",
+  # fred-runtime supplies the pod config loader the store + Alembic env read to
+  # build their async engine (`load_agent_pod_config().storage.postgres`).
+  "fred-runtime>=3.3.0",
+  "pydantic>=2.7.0,<3.0.0",
+  "langchain-core>=0.3.0",
+  "langchain>=0.3.0",
+  "fastapi>=0.110",
+  "python-docx>=1.1",
+  "sqlalchemy>=2.0",
+]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+]
+urls = { Homepage = "https://fredk8.dev", Repository = "https://github.com/ThalesGroup/fred" }
+
+# Installing this package IS the registration (AGENT-CAPABILITY-RFC §4/§7):
+# the fred-agents pod auto-discovers the capability at boot via this entry point.
+[project.entry-points."fred.capabilities"]
+writable_document = "fred_capability_writable_document.capability:WritableDocumentCapability"
+
+[project.optional-dependencies]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_capability_writable_document*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+markers = ["integration: marks tests that require external services"]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+# Local path overrides for mono-repo development only.
+# These are ignored when the package is built and published — the published
+# wheel resolves fred-core / fred-sdk / fred-runtime from PyPI via
+# [project.dependencies].
+fred-core = { path = "../fred-core", editable = true }
+fred-sdk = { path = "../fred-sdk", editable = true }
+fred-runtime = { path = "../fred-runtime", editable = true }
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]
