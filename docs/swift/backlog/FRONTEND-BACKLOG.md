@@ -313,6 +313,10 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 - [ ] Preserve selection and scroll position when safe.
 - [x] Surface task progress without polling the whole library tree.
       _(`DocRow` reads `selectActiveTaskForTarget`.)_
+- [x] Refresh a document's metadata when its ingestion task **completes**, so the
+      badge moves off the pre-processing stages instead of falling back to
+      "raw"/"Brut" until a manual reload.
+      _(`pagesToRefreshOnTaskCompletion` + effect in `DocumentWorkspace`; unit-tested.)_
 
 #### FRONT-09.E — Detail Drawer And UX Polish
 

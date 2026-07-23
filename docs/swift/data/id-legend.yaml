@@ -1456,13 +1456,24 @@ items:
 
   - id: INGEST-02
     title: "Excel Extraction — Strategies and Deterministic Reconstruction Pipeline"
-    status: proposed
+    status: done
     owner: Timothé
     parent: INGEST-01
     refs:
       rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
-    notes: "RFC authored 2026-06-26. Covers the three Excel extraction strategies and details the deterministic pipeline (phases A/B/C). Awaiting developer confirmation (Step 3)."
+      issue: "https://github.com/ThalesGroup/fred/issues/1927"
+      branch: "swift"
+    notes: >-
+      RFC authored 2026-06-26; strategy A (deterministic reconstruction) confirmed and
+      implemented end-to-end on branch swift. Input stage ExcelProcessor +
+      ExcelTableRegistrationProcessor output stage, new "spreadsheet" category (skips
+      vectorization), .xlsx/.xls/.xlsm wired across all config profiles. As-built pipeline
+      is A1–A5 / B1–B5 (not A1–A3 / B1–B9 / C): multi-level headers, unpivot and the LLM
+      fallback were deferred; numeric columns are recognised-not-converted; .xls handled via
+      LibreOffice recalc (closes open item 7.4). Divergences recorded in RFC §11. Issues:
+      input #1927/#1928, output stage #1929/#1930. Tests green (make code-quality && make
+      test). Awaiting review/merge.
 
   - id: INGEST-03
     title: "Legacy/OpenDocument Office support (.doc, .ppt, .odt) via LibreOffice upgrade"
@@ -1473,6 +1484,78 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
       issue: "https://github.com/ThalesGroup/fred/issues/1878"
     notes: "Adds .doc/.ppt (legacy OLE binary) and .odt (OpenDocument) support by converting to .docx/.pptx with headless LibreOffice and reusing the existing DOCX/PPTX extractors across corpus ingestion, chat attachments (fast-text registry) and the lite markdown service. Reuses the established soffice pattern (pptx_slide_renderer); LibreOffice already shipped in both Dockerfiles. Extends INGEST-01 (EDP) — no new architecture."
+
+  - id: INGEST-04
+    title: "Tabular MCP: document-centric surface (CSV + Excel)"
+    status: in_progress
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      branch: "swift"
+    notes: >-
+      RFC §10 amendment authored 2026-07-06; confirmed and implemented
+      2026-07-07 on branch swift — awaiting review. Replaces the dataset-centric
+      tabular routes with document-centric ones (dry removal): GET
+      /tabular/documents, GET /tabular/documents/schemas (batch, all tables per
+      document — fixes first-table-wins), GET /tabular/documents/{uid}/markdown
+      (spreadsheet output.md). POST /tabular/query unchanged. Stale mcp-tabular
+      mount description rewritten in main.py; frontend knowledgeFlowOpenApi.ts
+      regenerated. Offline suite: 17/17 tabular tests green (2 unrelated KPI
+      failures come from a local config/.env PROMETHEUS_BEARER_TOKEN leaking
+      into the full run). GitHub issue pending.
+
+      Extended 2026-07-20 (RFC §12): adds one read-only locator tool POST
+      /tabular/search (operation_id search_tabular_values) that locates a
+      keyword across the tables of the requested documents and returns, per
+      matching table, the matched columns and a bounded sample of matching
+      rows, so the agent issues one targeted read_query instead of
+      brute-forcing read_query table by table. Implemented 2026-07-20 on branch
+      1927-ingest-02-excel-tabular-extraction-pipeline; ships under this ID (no
+      separate ID or issue). Also added the missing authz-endpoint-matrix rows
+      for the whole document-centric tabular surface (the §10 routes had never
+      been registered). Normalized
+      substring match (lower, strip_accents, all whitespace removed, decimal
+      comma->point) over every column cast to VARCHAR (numeric columns
+      searchable); bounds max_rows_per_table=5 / max_matching_tables=30 with
+      row_truncated / tables_truncated signals. Additive on the knowledge-flow
+      OpenAPI surface; frontend knowledgeFlowOpenApi.ts regenerated;
+      mcp_catalog agent_instructions extended.
+
+  - id: INGEST-05
+    title: "Statistic feature: multi-table documents resolve to table 1 only"
+    status: proposed
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+    notes: >-
+      Defect noted during INGEST-04 design (2026-07-06):
+      TabularService.read_dataset_frame / read_dataset_preview_frame resolve
+      multi-table documents with first-table-wins, so the Statistic MCP silently
+      analyses only table 1 of a workbook. Needs table-level addressing before
+      implementation.
+
+  - id: INGEST-06
+    title: "Tabular Artifact & DuckDB SQL-Mounting Contract"
+    status: done
+    owner: Timothé
+    parent: INGEST-01
+    refs:
+      rfc: "docs/swift/rfc/TABULAR-ARTIFACT-CONTRACT-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      branch: "swift"
+    notes: >-
+      As-built RFC authored 2026-07-08 — documents the already-shipped tabular
+      contract that had no RFC home: the tabular_v1 (CSV single-table) and
+      tabular_multi_v1 (spreadsheet multi-table) metadata extensions, the
+      content-addressed object-store layout (artifacts_prefix/<uid>/<rev>/),
+      deterministic stored SQL aliases, the DTypes schema vocabulary, and the
+      read-only per-query DuckDB mounting model (document-level ReBAC, table-level
+      SQL exposure, signed-URL redaction). Producers: CSV path + INGEST-02
+      (Excel). Consumers: INGEST-04 (MCP surface), INGEST-05 (statistic). No new
+      code — documentation convergence only. Open item 9.1 == INGEST-05.
 
   # ── LICENSE ───────────────────────────────────────────────────────────
 
@@ -1725,6 +1808,23 @@ items:
       which conflicts with transformers>=5.4.0's huggingface_hub>=2.0 requirement (and
       5.0.x-5.3.x are excluded by docling-ibm-models itself). Closes 22/23 alerts; the last
       (transformers, high) stays open pending an upstream docling-ibm-models release.
+
+  - id: OPS-07
+    title: "LibreOffice availability for Excel recalc — soffice standardization + make run check"
+    status: in_progress
+    owner: Timothé
+    parent: INGEST-02
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §OPS-06"
+      execution: "waived GitHub issue for local session"
+    notes: >
+      Excel processor recalc (recalc_with_libreoffice) now invokes the soffice
+      binary with an isolated LibreOffice user profile, converging on the shared
+      legacy_office / pptx_slide_renderer pattern instead of the libreoffice
+      wrapper. make run gains a tools-check warning plus an opt-in
+      install-system-deps target so the missing host dependency is surfaced (the
+      Docker dev/prod/devcontainer images already ship LibreOffice). Mechanical
+      Makefile + code alignment — no RFC.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"

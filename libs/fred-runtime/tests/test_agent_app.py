@@ -1905,6 +1905,91 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     assert [t.name for t in block.tools] == ["graph_probe"]
 
 
+def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name() -> (
+    None
+):
+    """
+    Ensure two selected MCP servers with `agent_instructions` yield middleware
+    with DISTINCT `.name`s.
+
+    Why this exists:
+    - `create_agent` rejects a middleware list with duplicate `.name`s
+      ("Please remove duplicate middleware instances."). `AgentMiddleware.name`
+      defaults to the class name, so before the per-server `.name` override two
+      `_McpInstructionsMiddleware` instances collided and blew up executor
+      build for any agent selecting >1 MCP server with `agent_instructions`.
+    - guards the fix: `.name` keys on the catalog server id.
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name -q`
+    """
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
+    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        MCPServerConfiguration,
+        MCPServerRef,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    definition = _EchoAgent().model_copy(
+        update={
+            "default_mcp_servers": (
+                MCPServerRef(id="mcp-search"),
+                MCPServerRef(id="mcp-storage"),
+            )
+        }
+    )
+    registry = CapabilityRegistry()
+    register_mcp_capabilities(
+        registry,
+        [
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-search",
+                    "name": "Search",
+                    "agent_instructions": "Always cite retrieved claims.",
+                }
+            ),
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-storage",
+                    "name": "Storage",
+                    "agent_instructions": "Prefer the newest object version.",
+                }
+            ),
+        ],
+    )
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["mcp-search", "mcp-storage"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    names = [
+        mw.name for mw in block.middleware if isinstance(mw, _McpInstructionsMiddleware)
+    ]
+    assert names == ["McpInstructions[mcp-search]", "McpInstructions[mcp-storage]"]
+    # The invariant create_agent enforces: no duplicate middleware names.
+    assert len(set(names)) == len(names)
+
+
 def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:
     """
     Ensure `build_mcp_capability` sets the manifest id to the plain catalog

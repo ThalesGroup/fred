@@ -7,11 +7,25 @@
   overflow-wrap: anywhere;
 }
 
-/* Full-width variant — lift the prose cap so wide content (e.g. CSV tables in a
-   full-page preview) can use the whole container instead of a 680px column. */
+/* Full-width variant — used by the document preview. Running text sits in a
+   centred, comfortable reading column (like the old fixed reading column) while
+   wide blocks (tables) break out to the full width. Implemented as a 3-track
+   grid: symmetric gutters on the sides, the reading measure in the middle. */
 .fullWidth {
+  display: grid;
+  grid-template-columns: 1fr min(var(--content-prose-max-width), 100%) 1fr;
   width: 100%;
   max-width: none;
+}
+
+/* Everything lands in the centred middle track by default… */
+.fullWidth > :global(*) {
+  grid-column: 2;
+}
+
+/* …except wide blocks, which span all three tracks to use the whole width. */
+.fullWidth > :global(table) {
+  grid-column: 1 / -1;
 }
 
 /* ---- Vertical rhythm — lobotomized owl on direct children ---- */
@@ -134,18 +148,25 @@
   border: 0.5px solid var(--outline-muted);
   padding: var(--spacing-2xs) var(--spacing-xs);
   text-align: left;
-  /* .root inherits overflow-wrap: anywhere for prose, which also shrinks a
-     cell's *minimum* content width to ~1 character — combined with the
-     table's own shrink-to-fit sizing (width: max-content above), a short
-     value (a coordinate, a column name) collapsed to a 1-char-wide column
-     and wrapped vertically, one character per line. Cells never wrap;
-     the table scrolls horizontally instead (see .root :global(table) above). */
-  white-space: nowrap;
+  word-break: normal;
+  /* Tables opt out of the root's aggressive break rules: without this, cells in
+     wide many-column previews (e.g. a 200-column Jira CSV) shatter one letter
+     per line instead of letting the table scroll horizontally. */
+  overflow-wrap: normal;
 }
 
 .root :global(th) {
   background: var(--surface-container);
   font-weight: 600;
+  /* Header labels stay on one line so each column sizes to its name and the
+     table scrolls sideways rather than stacking characters vertically. */
+  white-space: nowrap;
+}
+
+/* Cap long free-text cells so a single paragraph can't stretch the whole table;
+   they wrap at word boundaries within the cap. */
+.root :global(td) {
+  max-width: 60ch;
 }
 
 .root :global(tr:nth-child(even)) {

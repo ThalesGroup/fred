@@ -1,10 +1,9 @@
-/* Reading column, matching the markdown extract's line length regardless of
-   host (full page or drawer). Only the markdown branch gets this constraint —
-   the PDF branch fills its host's full width. */
+/* The markdown body spans the host's full width so wide tables (CSV/Excel
+   extracts) can use all available space. Running text keeps a comfortable
+   reading measure via the MarkdownRenderer `fullWidth` per-block cap, so only
+   tables and other wide blocks actually fill the width. */
 .markdownBody {
-  margin: 0 auto;
   padding: var(--spacing-xl) var(--spacing-l);
-  max-width: 760px;
 }
 
 .loading {
