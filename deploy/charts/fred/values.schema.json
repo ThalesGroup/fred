@@ -4561,6 +4561,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
@@ -4722,6 +4729,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
@@ -4883,6 +4897,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
@@ -9077,6 +9098,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
@@ -9238,6 +9266,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
@@ -9399,6 +9434,13 @@
                                   "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
                                   "title": "Do Ocr",
                                   "type": "boolean"
+                                },
+                                "docling_num_threads": {
+                                  "default": 4,
+                                  "description": "OMP/accelerator threads docling uses per PDF extraction. Tune down when scheduler.temporal.ingestion_max_concurrent_activities x this value exceeds the CPU cores available to the worker (host or pod), or extractions will thrash instead of progressing.",
+                                  "minimum": 1,
+                                  "title": "Docling Num Threads",
+                                  "type": "integer"
                                 }
                               },
                               "title": "PdfPipelineConfig",
