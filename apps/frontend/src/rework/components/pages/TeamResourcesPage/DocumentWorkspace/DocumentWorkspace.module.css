@@ -43,6 +43,15 @@
   border-top: none;
 }
 
+/* A folder subtree (row + expanded contents) targeted by an OS-file drag: same
+ * affordance as the upload drawer's dropzone (primary dashed outline + tint) so
+ * "drop here" reads instantly. Outline (not border) keeps row layout untouched. */
+.list [data-drag-over] {
+  outline: 1.5px dashed var(--primary);
+  outline-offset: -1.5px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
 .hint {
   padding: var(--spacing-2xs) var(--spacing-xs);
   color: var(--on-surface-muted);

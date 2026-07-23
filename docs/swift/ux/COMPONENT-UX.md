@@ -1457,6 +1457,24 @@ server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
 
+### `DocumentWorkspace` — drag-and-drop onto folder rows
+
+Dropping OS files anywhere on a corpus folder's subtree — its row or, when
+expanded, its document rows/hints — opens the ingestion drawer
+(`DocumentUploadDrawer`) pre-seeded with the dropped files and targeting that
+folder (innermost tagged folder wins when subtrees nest), so the user only
+picks mode/profile (fast/medium/rich) and saves. A dropped directory is
+expanded into all its files, recursively and flat — same `file-selector`
+traversal as the drawer's own dropzone, which already accepted folders.
+Folder-originated files upload under their leaf name: browsers put the
+relative path in the multipart filename (this surfaced as one opaque
+"Upload failed: 404" per file, found live 2026-07-23), now pinned frontend-side
+and sanitized backend-side (`upload_basename`). The
+targeted row shows the drawer dropzone's affordance (dashed `--primary`
+outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
+the row's explicit upload action; rows without a tag (pure path prefixes) are
+not drop targets.
+
 ### `CategoryPicker` / prompt category surfaces
 
 Pickers and filters offer exactly 7 functional categories (doc-assist,

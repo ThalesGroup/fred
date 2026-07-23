@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
@@ -126,6 +127,10 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     {},
   );
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Files dropped on a folder row, handed to the upload drawer as its initial list;
+  // cleared on close so a later "+"-opened drawer starts empty.
+  const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   // undefined => create at the top level; a path => create a subfolder under it.
   const [createParentPath, setCreateParentPath] = useState<string | undefined>(undefined);
@@ -406,6 +411,53 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     [perTag, runningDocIds],
   );
 
+  /** OS-file drag-and-drop onto a folder's whole subtree (its row AND, when
+   * expanded, its document rows/hints): pre-select that folder and open the
+   * ingestion drawer seeded with the dropped files, so the user only has to pick a
+   * processing profile (fast/medium/rich). A dropped directory is expanded into all
+   * its files, recursively and flat — via the same `file-selector` traversal
+   * react-dropzone applies inside the drawer's dropzone, so both drop surfaces
+   * accept folders identically. Handlers stop propagation so the INNERMOST tagged
+   * folder wins when subtrees nest. Same gating as the row's upload action. */
+  const folderDropProps = (node: TagNode, droppable: boolean) => {
+    if (!droppable) return {};
+    const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
+    return {
+      "data-drag-over": dragOverFolder === node.full || undefined,
+      onDragOver: (event: React.DragEvent) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+      },
+      onDragEnter: (event: React.DragEvent) => {
+        if (!isFileDrag(event)) return;
+        event.stopPropagation();
+        setDragOverFolder(node.full);
+      },
+      onDragLeave: (event: React.DragEvent) => {
+        // Enter/leave also fire when crossing the subtree's own children; only a
+        // leave that actually exits the subtree clears the highlight (no flicker).
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDragOverFolder((prev) => (prev === node.full ? null : prev));
+      },
+      onDrop: (event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDragOverFolder(null);
+        // fromEvent must start synchronously: the DataTransfer entries needed to
+        // walk a dropped directory are dead once the drop handler has returned.
+        void fromEvent(event.nativeEvent).then((items) => {
+          const dropped = items.filter((item): item is File => item instanceof File);
+          if (dropped.length === 0) return;
+          setSelectedFolderFull(node.full);
+          setDroppedFiles(dropped);
+          setUploadOpen(true);
+        });
+      },
+    };
+  };
+
   const renderNode = (node: TagNode, depth: number): React.ReactNode => {
     const tag = node.tagsHere[0];
     const isExpanded = expanded.has(node.full);
@@ -416,7 +468,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     const docIndent = (depth + 1) * INDENT_STEP + 8;
 
     return (
-      <div key={node.full}>
+      <div key={node.full} {...folderDropProps(node, Boolean(tag) && canCreateFolder)}>
         <div className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
           <FolderRow
             id={node.full}
@@ -516,7 +568,11 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
       </InlineDrawer>
       <DocumentUploadDrawer
         isOpen={uploadOpen}
-        onClose={() => setUploadOpen(false)}
+        onClose={() => {
+          setUploadOpen(false);
+          setDroppedFiles(undefined);
+        }}
+        initialFiles={droppedFiles}
         teamId={teamId}
         destinationPath={selectedNode?.full}
         metadata={{ tags: selectedTag ? [selectedTag.id] : [] }}
