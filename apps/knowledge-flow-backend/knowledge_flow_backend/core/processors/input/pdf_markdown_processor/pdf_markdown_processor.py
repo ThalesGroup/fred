@@ -41,6 +41,14 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.i
 logger = logging.getLogger(__name__)
 
 
+class ExtractorConfigurationError(RuntimeError):
+    """Raised when the configured PDF extractor can't be used due to a deployer
+    misconfiguration (e.g. `extractor: pymupdf` set without the optional extra
+    installed). Deliberately not caught by convert_file_to_markdown's
+    extraction-failure fallback — silently degrading to a different engine would
+    defeat the point of failing loudly on misconfiguration."""
+
+
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
     """
     PDF → Markdown processor with optional image transcription.
@@ -135,7 +143,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             try:
                 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
             except ImportError as e:
-                raise RuntimeError(
+                raise ExtractorConfigurationError(
                     "processing.profiles.<profile>.pdf.extractor is set to 'pymupdf', but the "
                     "optional 'pymupdf' extra is not installed. Install it explicitly "
                     "(`uv sync --extra pymupdf` or `pip install knowledge-flow-backend[pymupdf]`) "
@@ -255,6 +263,10 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 "md_file": str(output_markdown_path),
                 "message": "Conversion to markdown succeeded.",
             }
+        except ExtractorConfigurationError:
+            # Deployer misconfiguration (e.g. extractor: pymupdf without the extra
+            # installed) — fail loudly, don't silently degrade to markitdown.
+            raise
         except Exception as e:
             logger.warning(f"PDF extraction failed, trying markitdown: {e}", exc_info=True)
         finally:

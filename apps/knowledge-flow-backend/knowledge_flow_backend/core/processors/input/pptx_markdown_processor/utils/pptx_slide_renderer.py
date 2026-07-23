@@ -91,9 +91,12 @@ def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: P
             try:
                 # scale=2 matches fitz.Matrix(2, 2)'s 2x zoom in both axes.
                 bitmap = page.render(scale=2)
-                png_path = out_dir / f"slide_{slide_number:03d}.png"
-                bitmap.to_pil().save(str(png_path))
-                rendered[slide_number] = png_path
+                try:
+                    png_path = out_dir / f"slide_{slide_number:03d}.png"
+                    bitmap.to_pil().save(str(png_path))
+                    rendered[slide_number] = png_path
+                finally:
+                    bitmap.close()
             finally:
                 page.close()
 

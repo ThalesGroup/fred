@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
+    ExtractorConfigurationError,
     PdfMarkdownProcessor,
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import (
@@ -204,6 +205,28 @@ def test_pdf_processor_describes_images_with_vision_model(
     md_text = Path(result["md_file"]).read_text(encoding="utf-8")
     assert "There is an image showing a mocked description." in md_text
     assert str(img_path) not in md_text
+
+
+def test_build_extractor_raises_configuration_error_when_pymupdf_extra_missing(processor: PdfMarkdownProcessor):
+    """LICENSE-01: extractor: pymupdf without the optional extra installed must fail
+    with a clear, actionable error — not a bare ImportError, and not a silent
+    fallback to a different engine."""
+    with pytest.raises(ExtractorConfigurationError, match="pymupdf"):
+        processor._build_extractor("pymupdf")
+
+
+def test_convert_file_to_markdown_reraises_extractor_configuration_error(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    """LICENSE-01: a deployer misconfiguration must propagate to the caller, not be
+    swallowed by the extraction-failure fallback and silently answered with
+    markitdown output instead."""
+
+    def _boom(*_args, **_kwargs):
+        raise ExtractorConfigurationError("extractor: pymupdf but the extra isn't installed")
+
+    monkeypatch.setattr(processor, "_extract_md", _boom)
+
+    with pytest.raises(ExtractorConfigurationError):
+        processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-misconfigured")
 
 
 @pytest.mark.integration

@@ -96,7 +96,8 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         - Normalization + cleaning
         - max_chars truncation support
         """
-        assert pymupdf4llm is not None, "_extract_pymupdf4llm called without the optional 'pymupdf' extra installed"
+        if pymupdf4llm is None:
+            raise RuntimeError("_extract_pymupdf4llm called without the optional 'pymupdf' extra installed")
         count_char: int = 0
         truncated: bool = False
 
