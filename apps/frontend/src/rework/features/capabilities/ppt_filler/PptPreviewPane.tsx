@@ -122,7 +122,11 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
         return;
       }
       setTimeout(() => {
-        if (!isAliveRef.current && pdfjs.GlobalWorkerOptions.workerPort === worker) {
+        if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+          // Some other consumer claimed the port in the meantime — orphaned now.
+          worker.terminate();
+        } else if (!isAliveRef.current) {
+          // Still nobody claimed it and this instance never came back — final unmount.
           worker.terminate();
         }
       }, 0);

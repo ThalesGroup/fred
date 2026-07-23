@@ -84,9 +84,13 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
       // Still the active port at cleanup time: either a StrictMode dev drill (about
       // to remount) or the real final unmount (no next key coming). Defer one tick
       // so a genuine remount's isAliveRef flip, or another consumer's port swap,
-      // can win first; terminate only if neither happened by then.
+      // can win first.
       setTimeout(() => {
-        if (!isAliveRef.current && pdfjs.GlobalWorkerOptions.workerPort === worker) {
+        if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+          // Some other consumer claimed the port in the meantime — orphaned now.
+          worker.terminate();
+        } else if (!isAliveRef.current) {
+          // Still nobody claimed it and this instance never came back — final unmount.
           worker.terminate();
         }
       }, 0);
