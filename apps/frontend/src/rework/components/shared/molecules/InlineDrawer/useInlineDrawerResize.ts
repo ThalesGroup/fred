@@ -70,7 +70,11 @@ export function useInlineDrawerResize({
     (value: number) => {
       // Mirror the CSS `min(width, 45vw)` cap so the stored width can never
       // diverge from the rendered one (a diverged drag feels dead past the cap).
-      const cap = Math.min(maxWidth, Math.floor(window.innerWidth * 0.45));
+      // `window` is absent outside a browser (SSR / non-jsdom test render) —
+      // this hook runs unconditionally from every InlineDrawer, so it must not
+      // assume one exists.
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : maxWidth;
+      const cap = Math.min(maxWidth, Math.floor(viewportWidth * 0.45));
       return Math.min(cap, Math.max(minWidth, value));
     },
     [minWidth, maxWidth],

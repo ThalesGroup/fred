@@ -130,8 +130,27 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
 
 def trim_to_human_boundary(messages: list, max_messages: int) -> list:
     """
-    Keep the last `max_messages` entries, then scan forward to the first
-    HumanMessage so the context never starts mid tool-call/result pair.
+    Keep the last `max_messages` entries, then advance to a safe boundary so the
+    trimmed context never starts mid tool-call/result pair.
+
+    Why this matters:
+    - A tool round replays as one AIMessage(tool_calls) immediately followed by
+      its ToolMessages. A naive tail slice can land inside that group, so the
+      window starts on orphan ToolMessages whose AIMessage was cut off the front.
+      OpenAI-compatible providers (Mistral, OpenAI) then reject the whole request
+      with "messages with role 'tool' must be a response to a preceding message
+      with 'tool_calls'", which crashes the turn instead of answering the user.
+    - This is easy to hit when a single reasoning step fans out many tool calls
+      (e.g. a batch of failed `read_query` calls) that alone exceed
+      `max_messages`: every message in the window is then a bare tool result.
+
+    Boundary rule:
+    - prefer to start on the first HumanMessage inside the window (keeps the most
+      context while remaining a valid start);
+    - otherwise drop any leading orphan ToolMessages so the window starts on an
+      AIMessage or later — never on a bare tool result. A ToolMessage's matching
+      AIMessage always precedes it, so a leading ToolMessage here is provably an
+      orphan and safe to drop.
     """
     if len(messages) <= max_messages:
         return messages
@@ -139,7 +158,24 @@ def trim_to_human_boundary(messages: list, max_messages: int) -> list:
     for i, msg in enumerate(trimmed):
         if isinstance(msg, HumanMessage):
             return trimmed[i:]
-    return trimmed
+    # No HumanMessage in the window: strip leading orphan ToolMessages so the
+    # payload does not begin with a tool result that has no matching tool_calls.
+    for i, msg in enumerate(trimmed):
+        if not isinstance(msg, ToolMessage):
+            if i:
+                logger.debug(
+                    "[TOOL LOOP] dropped %d leading orphan ToolMessage(s) after trim "
+                    "to keep a valid provider payload",
+                    i,
+                )
+            return trimmed[i:]
+    # Window is entirely orphan ToolMessages: drop them rather than send an
+    # invalid payload. The system prompt alone still lets the model answer.
+    logger.debug(
+        "[TOOL LOOP] trimmed window was all orphan ToolMessages; dropped to avoid "
+        "an invalid provider payload"
+    )
+    return []
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:

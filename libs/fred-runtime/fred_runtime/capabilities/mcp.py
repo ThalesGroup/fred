@@ -153,9 +153,19 @@ class _McpInstructionsMiddleware(AgentMiddleware):
     call so it survives across turns without being persisted.
     """
 
-    def __init__(self, fragment: str) -> None:
+    def __init__(self, fragment: str, *, server_id: str) -> None:
         super().__init__()
         self._fragment = fragment
+        self._server_id = server_id
+
+    @property
+    def name(self) -> str:
+        # Unique per MCP server. An agent may select several MCP capabilities,
+        # each contributing one of these instances; `create_agent` rejects a
+        # middleware list with duplicate `.name`s ("Please remove duplicate
+        # middleware instances."), and the base default is the shared class
+        # name. Keying on the catalog server id keeps every instance distinct.
+        return f"McpInstructions[{self._server_id}]"
 
     async def awrap_model_call(
         self,
@@ -263,7 +273,7 @@ class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel
         fragment = (self._server.agent_instructions or "").strip()
         if not fragment:
             return []
-        return [_McpInstructionsMiddleware(fragment)]
+        return [_McpInstructionsMiddleware(fragment, server_id=self._server.id)]
 
 
 def build_mcp_capability(server: MCPServerConfiguration) -> McpCapability:

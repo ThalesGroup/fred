@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
@@ -40,6 +40,7 @@ import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlane
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import { deriveDocStatus } from "./deriveDocStatus.ts";
+import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 import { ResourcePagination } from "./ResourcePagination/ResourcePagination.tsx";
 import styles from "./DocumentWorkspace.module.css";
 
@@ -380,6 +381,18 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
       ),
     [activeTasks],
   );
+
+  // When a document's ingestion task finishes, its row hands off from the live task
+  // state ("processing") back to the stored `processing.stages`. Those stages were
+  // snapshotted by `loadTagPage` before the pipeline completed, so without a refetch
+  // the badge falls back to "raw"/"Brut" until a manual reload. Re-load any loaded
+  // page holding a just-finished document so the derived status catches up to "ready".
+  const prevRunningDocIds = useRef<Set<string | undefined>>(new Set());
+  useEffect(() => {
+    const pages = pagesToRefreshOnTaskCompletion(prevRunningDocIds.current, runningDocIds, perTag);
+    prevRunningDocIds.current = runningDocIds;
+    for (const { tagId, offset } of pages) void loadTagPage(tagId, offset);
+  }, [runningDocIds, perTag, loadTagPage]);
 
   const aggregateFor = useCallback(
     (node: TagNode) => {

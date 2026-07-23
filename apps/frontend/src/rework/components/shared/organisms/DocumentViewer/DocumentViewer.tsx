@@ -89,7 +89,7 @@ function MarkdownDocumentBody({
 
   return (
     <div className={styles.markdownBody}>
-      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} />}
+      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} fullWidth />}
     </div>
   );
 }

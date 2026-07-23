@@ -19,8 +19,10 @@ import pytest
 
 from knowledge_flow_backend.features.tabular.service import (
     TabularDatasetReadError,
+    TabularQueryError,
     _redact_signed_urls,
     _redacting_dataset_read_errors,
+    _redacting_query_execution_errors,
 )
 
 _GCS_SIGNED_URL = (
@@ -83,3 +85,47 @@ def test_context_manager_passes_through_non_duckdb_errors():
     with pytest.raises(ValueError, match="unrelated"):
         with _redacting_dataset_read_errors():
             raise ValueError("unrelated")
+
+
+# ---------------------------------------------------------------------------
+# Query-execution error classification: invalid SQL -> 400, IO failure -> 500
+# ---------------------------------------------------------------------------
+
+
+def test_query_execution_maps_binder_error_to_client_error():
+    """An invalid-SQL binder error (e.g. LIKE on a numeric column) becomes a
+    TabularQueryError so the controller returns HTTP 400, not a 500."""
+    with pytest.raises(TabularQueryError) as exc_info:
+        with _redacting_query_execution_errors():
+            raise duckdb.BinderException("Binder Error: No function matches '~~(BIGINT, STRING_LITERAL)'")
+
+    # ValueError subclass → controller maps it to 400 via its ValueError branch.
+    assert isinstance(exc_info.value, ValueError)
+    # Not a server read error, so it never reaches the generic 500 path.
+    assert not isinstance(exc_info.value, TabularDatasetReadError)
+
+
+def test_query_execution_keeps_io_error_as_server_error():
+    """A DuckDB IO error during execution stays a TabularDatasetReadError (500)
+    and is still redacted."""
+    with pytest.raises(TabularDatasetReadError) as exc_info:
+        with _redacting_query_execution_errors():
+            raise duckdb.IOException(f"IO Error: could not read '{_GCS_SIGNED_URL}'")
+
+    assert "<redacted-signed-url>" in str(exc_info.value)
+    assert "X-Goog-Signature" not in str(exc_info.value)
+    # An IO failure is a server fault, not a client (ValueError) error.
+    assert not isinstance(exc_info.value, ValueError)
+
+
+def test_query_execution_redacts_and_severs_cause_on_client_error():
+    """Defense in depth: a query-authoring error is redacted and its cause severed
+    before it is returned to the caller, exactly like read errors."""
+    with pytest.raises(TabularQueryError) as exc_info:
+        with _redacting_query_execution_errors():
+            raise duckdb.CatalogException(f"Catalog Error near '{_GCS_SIGNED_URL}'")
+
+    assert "<redacted-signed-url>" in str(exc_info.value)
+    assert "storage.googleapis.com" not in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__suppress_context__ is True

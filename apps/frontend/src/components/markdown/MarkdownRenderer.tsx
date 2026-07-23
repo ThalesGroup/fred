@@ -31,6 +31,7 @@ import type { PluggableList } from "unified";
 import { visit } from "unist-util-visit";
 import { useLazyDownloadMarkdownMediaBlobQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
+import { makeReclaimUnknownDirectives } from "./markdownDirectives";
 import Mermaid from "./Mermaid.tsx";
 
 // --- NEW CITATION INTERFACES ---
@@ -53,6 +54,8 @@ export interface MarkdownRendererProps {
   citations?: CitationHooks; // <-- ADDED PROP
   /** If provided, relative media paths like media/image.png will be resolved against this document */
   documentUidForMedia?: string;
+  /** Text/leaf directive names to preserve; all others are reclaimed as literal text (see markdownDirectives.ts) */
+  preserveDirectives?: string[];
 }
 
 const MARKDOWN_MEDIA_PATH_REGEX = /\/knowledge-flow\/v1\/markdown\/([^/]+)\/media\/([^/?#]+)/;
@@ -426,6 +429,7 @@ export default function MarkdownRenderer({
   remarkPlugins = [],
   citations,
   documentUidForMedia,
+  preserveDirectives = [],
   ...props
 }: MarkdownRendererProps) {
   const theme = useTheme();
@@ -532,7 +536,14 @@ export default function MarkdownRenderer({
       <ReactMarkdown
         skipHtml={false}
         components={finalComponents}
-        remarkPlugins={[remarkGfm, remarkMath, remarkDirective, remarkDetailsContainers, ...remarkPlugins]}
+        remarkPlugins={[
+          remarkGfm,
+          remarkMath,
+          remarkDirective,
+          remarkDetailsContainers,
+          ...remarkPlugins,
+          makeReclaimUnknownDirectives(preserveDirectives),
+        ]}
         rehypePlugins={[rehypeRaw, rehypeCitations, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
       >
         {finalContent}

@@ -24,6 +24,7 @@ import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
+import { makeReclaimUnknownDirectives } from "./markdownDirectives";
 import { getStreamingMarkdownState, type PendingStreamingFence } from "./streamingGuard";
 
 interface MarkdownRendererProps {
@@ -151,6 +152,7 @@ const REMARK_PLUGINS: Parameters<typeof ReactMarkdown>[0]["remarkPlugins"] = [
   remarkGfm,
   remarkDirective,
   remarkDetailsDirective,
+  makeReclaimUnknownDirectives(),
 ];
 
 const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [

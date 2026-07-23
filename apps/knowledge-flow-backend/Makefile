@@ -172,3 +172,27 @@ OUTPUT_DIR ?= ./target/markdown-profile-tests
 BASE_URL ?= http://localhost:8111/knowledge-flow/v1
 TEST_STATE_DIR ?= ./.fred-test
 TEST_DOCKER_USER ?= $(shell id -u):$(shell id -g)
+
+##@ System dependencies
+
+.PHONY: libreoffice-check
+libreoffice-check:
+	@if ! command -v soffice >/dev/null 2>&1; then \
+		echo "================================================================================"; \
+		echo "WARNING: LibreOffice (soffice) not found on PATH. Excel recalc and legacy"; \
+		echo "Office (.doc/.ppt/.odt) conversions will fail locally."; \
+		echo "Install it: make install-system-deps   (or: sudo apt-get install -y libreoffice)"; \
+		echo "================================================================================"; \
+	fi
+
+# Surface a missing LibreOffice before the API server starts (make run -> run-local)
+# and fold the same probe into the aggregate tools-check the worker already runs.
+# soffice is the canonical binary the processors invoke; it ships in every Docker image.
+run-local: libreoffice-check
+tools-check: libreoffice-check
+
+.PHONY: install-system-deps
+install-system-deps: ## Install host system deps for document ingestion (Debian/Ubuntu, needs sudo)
+	@echo "📦 Installing system dependencies (LibreOffice, pandoc, poppler-utils, inkscape)..."
+	sudo apt-get update
+	sudo apt-get install -y libreoffice pandoc poppler-utils inkscape
