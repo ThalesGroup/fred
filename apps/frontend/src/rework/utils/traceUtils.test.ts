@@ -423,6 +423,14 @@ describe("humanizeToolName", () => {
   it("includes provider label for non-web MCP tools with no verb object", () => {
     expect(humanizeToolName("mcp__github__search")).toBe("Searching GitHub");
   });
+
+  it("handles the ppt_filler capability tool (fill_ppt_template)", () => {
+    expect(humanizeToolName("fill_ppt_template")).toBe("Generating the PowerPoint");
+  });
+
+  it("handles the writable_document capability tool (write_document)", () => {
+    expect(humanizeToolName("write_document")).toBe("Writing document");
+  });
 });
 
 // ── parseToolResultContent / asSqlQueryResult / asRagSearchResult ───────────

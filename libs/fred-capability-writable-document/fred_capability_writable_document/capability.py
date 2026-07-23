@@ -35,8 +35,9 @@ replace:
   clears it (router PUT), and this hook injects the SAME system note Kea injected,
   then stamps the flag so the note fires exactly once.
 - `awrap_model_call` replaces the orchestrator's model-only "documents already open"
-  reminder, overlaying the SAME catalog text on the system prompt per model call
-  (the `_McpInstructionsMiddleware` delivery path) so it survives across turns
+  reminder, overlaying the write-instructions fragment (always) and the SAME catalog
+  text (when documents exist) on the system prompt per model call (the
+  `_McpInstructionsMiddleware` delivery path) so they survive across turns
   without being persisted.
 """
 
@@ -120,6 +121,22 @@ def _open_documents_fragment(records: Sequence[WritableDocumentRecord]) -> str:
         "is updated in place. Only omit document_id when the user clearly "
         "wants a brand-new, separate document."
     )
+
+
+# Non-negotiable behavioral fragment delivered whenever the capability is
+# active (same prompt-fragment delivery path as the MCP capabilities'
+# `agent_instructions` and the PPT filler's fill instructions). Without it,
+# models answer "write me a report" inline in the chat instead of opening
+# the collaborative editor.
+_WRITE_INSTRUCTIONS = (
+    "WRITABLE DOCUMENT: when the user asks — in any wording or language — to "
+    "write, create, draft, or produce a document, report, email, memo, "
+    "meeting notes, or any other textual deliverable, you MUST call the "
+    "'write_document' tool; never write the deliverable itself in the chat. "
+    "The tool opens the document in a side-by-side editor where the user can "
+    "review, edit, and export it. In the chat, reply only with a short "
+    "summary of what you put in the document."
+)
 
 
 class _WritableDocumentMiddleware(AgentMiddleware):
@@ -268,13 +285,15 @@ class _WritableDocumentMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        """Overlay the open-documents catalog on the system prompt (per model call).
+        """Overlay the write instructions and the open-documents catalog (per model call).
 
         Mirrors `_McpInstructionsMiddleware`: the static composed system prompt reaches
-        `create_agent`; this middleware overlays the capability fragment per model call
-        so the "revise in place" reminder survives across turns without being persisted.
+        `create_agent`; this middleware overlays the capability fragments per model call
+        so the "use write_document" and "revise in place" reminders survive across
+        turns without being persisted.
         """
 
+        fragments = [_WRITE_INSTRUCTIONS]
         if self._session_id:
             store = get_writable_document_store()
             try:
@@ -286,10 +305,11 @@ class _WritableDocumentMiddleware(AgentMiddleware):
                 )
                 records = []
             if records:
-                fragment = _open_documents_fragment(records)
-                base = request.system_prompt or ""
-                merged = f"{base}\n\n{fragment}" if base else fragment
-                request = request.override(system_message=SystemMessage(content=merged))
+                fragments.append(_open_documents_fragment(records))
+        base = request.system_prompt or ""
+        overlay = "\n\n".join(fragments)
+        merged = f"{base}\n\n{overlay}" if base else overlay
+        request = request.override(system_message=SystemMessage(content=merged))
         return await handler(request)
 
 

@@ -97,6 +97,8 @@ const SLUG_OVERRIDES: Record<string, string> = {
   // tavily-mcp v0.2.x reports its tool as "tavily-search"
   "tavily-search": "Searching the web",
   tavily_search: "Searching the web",
+  // ppt_filler capability: the raw tool name would render as "Fill Ppt Template"
+  fill_ppt_template: "Generating the PowerPoint",
 };
 
 // Action verb stems → gerund display form.
@@ -118,6 +120,7 @@ const GERUNDS: Record<string, string> = {
   execute: "Executing",
   query: "Querying",
   browse: "Browsing",
+  write: "Writing",
 };
 
 function toTitleCase(s: string): string {
