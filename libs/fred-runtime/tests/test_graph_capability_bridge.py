@@ -62,6 +62,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     RuntimeToolHandle,
     ToolProviderPort,
+    ToolResultRuntimeEvent,
 )
 from langchain_core.tools import tool as lc_tool
 import pytest
@@ -210,6 +211,117 @@ def test_adapt_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
 
     assert isinstance(result, ToolInvocationResult)
     assert result.tool_ref == "probe"
+
+
+def test_adapt_only_unwraps_tuples_declared_content_and_artifact() -> None:
+    """
+    CAPAB-02 hardening: the 2-tuple unwrap must be gated on the tool's own
+    `response_format`, not fire for "any 2-tuple" — a plain tool whose normal
+    return value happens to be an unrelated 2-tuple must round-trip through
+    the adapter unchanged, not have its second element silently reinterpreted
+    as an artifact.
+    """
+
+    @lc_tool("plain_pair_tool")
+    async def _plain_pair_tool(x: str) -> tuple[bool, str]:
+        """Returns an ordinary (success, message) pair — NOT content_and_artifact."""
+        return True, f"processed {x}"
+
+    adapted = _adapt_capability_tool_for_graph(_plain_pair_tool)
+    result = asyncio.run(adapted.ainvoke({"x": "hello"}))
+
+    assert result == (True, "processed hello")
+
+
+def test_adapt_refuses_sync_tool_with_content_and_artifact() -> None:
+    """
+    CAPAB-02 hardening: a sync-only tool (`.func`, no `.coroutine`) with
+    `response_format="content_and_artifact"` cannot be adapted (there is no
+    coroutine to call) and would silently lose its artifact if passed
+    through unchanged — refuse loudly instead of guessing.
+    """
+
+    @lc_tool("sync_artifact_tool", response_format="content_and_artifact")
+    def _sync_artifact_tool(x: str) -> tuple[str, ToolInvocationResult]:
+        """A synchronous content_and_artifact tool — should never exist."""
+        return x, ToolInvocationResult(tool_ref="sync_artifact_tool")
+
+    with pytest.raises(CapabilityAssemblyError, match="sync_artifact_tool"):
+        _adapt_capability_tool_for_graph(_sync_artifact_tool)
+
+
+def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
+    """
+    CAPAB-02: a capability tool reports failure by returning
+    `is_error=True` (RFC §3.9 — never raise for an expected failure). The
+    `ToolResultRuntimeEvent` `invoke_runtime_tool` emits must reflect that,
+    not hardcode `is_error=False` on every non-exception return.
+    """
+
+    @lc_tool("failing_probe", response_format="content_and_artifact")
+    async def _failing_probe(x: str) -> tuple[str, ToolInvocationResult]:
+        """A tool that reports failure via is_error, never raises."""
+        del x
+        return "boom", ToolInvocationResult(tool_ref="failing_probe", is_error=True)
+
+    adapted = _adapt_capability_tool_for_graph(_failing_probe)
+    ctx = _node_context({adapted.name: adapted})
+
+    result = asyncio.run(ctx.invoke_runtime_tool("failing_probe", {"x": "y"}))
+
+    assert isinstance(result, dict)
+    assert result["is_error"] is True
+    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    assert event.tool_name == "failing_probe"
+    assert event.is_error is True
+
+
+def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> None:
+    """CAPAB-02: the event's `sources`/`ui_parts` must come from the real
+    `ToolInvocationResult`, not silently stay empty on the Graph path while
+    ReAct's own trace already carries them."""
+
+    hit = VectorSearchHit(
+        uid="d1", title="Doc", content="body", score=1.0, type="document"
+    )
+
+    @lc_tool("sourced_probe", response_format="content_and_artifact")
+    async def _sourced_probe(x: str) -> tuple[str, ToolInvocationResult]:
+        """A tool whose artifact carries sources."""
+        del x
+        return "ok", ToolInvocationResult(tool_ref="sourced_probe", sources=(hit,))
+
+    adapted = _adapt_capability_tool_for_graph(_sourced_probe)
+    ctx = _node_context({adapted.name: adapted})
+
+    asyncio.run(ctx.invoke_runtime_tool("sourced_probe", {"x": "y"}))
+
+    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    assert event.sources[0].uid == "d1"
+
+
+def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -> None:
+    """
+    CAPAB-02 hardening: `is_error` must be read off a genuine
+    `ToolInvocationResult` instance, not off ANY dict that happens to carry
+    an `is_error`-named key for an unrelated reason (e.g. an MCP tool's own
+    business payload) — that would misclassify a normal answer as this
+    platform's error contract.
+    """
+
+    @lc_tool("mcp_like_probe")
+    async def _mcp_like_probe(x: str) -> dict:
+        """A plain (non-capability) tool returning an ordinary dict payload."""
+        del x
+        return {"is_error": "not-a-bool-business-value", "answer": 42}
+
+    ctx = _node_context({"mcp_like_probe": _mcp_like_probe})
+
+    result = asyncio.run(ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
+
+    assert result == {"is_error": "not-a-bool-business-value", "answer": 42}
+    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    assert event.is_error is False
 
 
 # ---------------------------------------------------------------------------

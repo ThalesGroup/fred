@@ -1293,6 +1293,260 @@ the long-running summarize path. First consumer: `document_access`'s
 
 ---
 
+### 8.22 ✅ `AgentCapability.tools()` — Graph agents can use capabilities (2026-07-22)
+
+**What changed.** `AgentCapability` (`fred-sdk/contracts/capability/base.py`) gains
+`tools(ctx) -> Sequence[BaseTool]`, the primary, execution-model-agnostic runtime
+surface (RFC §3.2); `middleware()` loses its `@abstractmethod` and defaults to
+wrapping `tools()` for `create_agent()`. `CapabilityAgentBlock` (`assembly.py`) gains a
+`tools` field built directly from `capability.tools(ctx)`, deduped by name with a named
+`CapabilityAssemblyError` on a cross-capability name collision. `agent_app.py`'s two
+ReAct-only gates (`_effective_capability_ids`, `_build_capability_block`) are removed —
+the block is now built identically for `ReActAgentDefinition` and `GraphAgentDefinition`.
+`GraphRuntime` (`graph_runtime.py`) accepts `capability_block` and merges
+`_adapted_capability_tools(...)` into `runtime_tools`, so a Graph node's
+`context.invoke_runtime_tool(...)` reaches a selected capability's tool.
+
+**The adapter.** A capability tool built `@tool(..., response_format="content_and_artifact")`
+(the `document_access` convention) silently drops its `ToolInvocationResult` artifact
+when invoked through `BaseTool.ainvoke()` with a plain args dict — the shape
+`invoke_runtime_tool` uses, versus the `ToolCall` dict `create_agent()`'s real ReAct
+loop uses. `_adapt_capability_tool_for_graph` (`graph_runtime.py`) calls the tool's
+underlying `.coroutine` directly (bypassing `.ainvoke()`'s response-shape handling
+entirely) and re-wraps the result as a bare `ToolInvocationResult` — the one return
+shape proven to survive a plain-dict `.ainvoke()` intact. `document_access`'s tool
+definition is unchanged; the adaptation lives entirely at this merge seam. A capability
+tool name colliding with an MCP-resolved runtime tool name raises
+`CapabilityAssemblyError` here too (both name spaces are in scope together for the
+first time at this seam).
+
+**Migrated onto `tools()`:** `document_access`, `demo.py`. **Deliberately `middleware()`-only:**
+`ppt_filler`, `writable_document` — genuine ReAct-specific hooks. This first landing left
+a real gap here (nothing stopped either from being *selected* on a Graph agent, where
+they'd silently contribute no tools) — closed the next day, §8.23.
+
+**Proof.** `apps/fred-agents/fred_agents/test_assistant` gained a `document` scenario
+(search → HITL confirm/discard → branch) exercised end to end on a real `GraphRuntime` +
+`CapabilityAgentBlock`, including the graceful-failure path when the capability isn't
+selected. `libs/fred-runtime/tests/test_graph_capability_bridge.py` proves the adapter
+is load-bearing with a control test that reproduces the artifact-loss bug when it is
+skipped. Validated against three real external agents that predate this change and use
+neither `tools()` nor `middleware()`-based capabilities (`dt-agents/aegis`,
+`dt-agents/dva_risk_validator_team`, `fred-samples/cvem_watch`) — zero regression.
+
+**Why.** Capabilities were designed ReAct-only (`middleware()` was the only hook); any
+`GraphAgentDefinition` selecting a real capability failed loudly. Teams building Graph
+agents (deterministic multi-step workflows, not just ReAct loops) had no way to reuse a
+shared capability like `document_access` — every Graph agent that needed the same
+document search had to hand-roll it via `declared_tool_refs`/`invoke_tool` instead. See
+RFC §3.2/§3.9 for the full design; `docs/swift/capabilities/AUTHORING.md` for the
+authoring-facing summary.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.1.
+
+---
+
+### 8.23 ✅ Four correctness gaps in the Graph/capability bridge, closed (2026-07-23)
+
+**What changed.** Independent review (Codex) of §8.22's landing found four real gaps,
+verified against the code before fixing:
+
+1. **Silent capability loss on Graph, now loud.** Nothing stopped a Graph agent from
+   *selecting* `ppt_filler`/`writable_document` — they'd build without error and
+   silently contribute zero tools. `CapabilityManifest` gains
+   `execution_models: tuple[Literal["react", "graph"], ...] = ("react", "graph")`
+   (`fred-sdk/contracts/capability/manifest.py`); `ppt_filler` and `writable_document`
+   now declare `("react",)` explicitly. `_build_capability_block` (`agent_app.py`)
+   rejects a `GraphAgentDefinition`'s selection of a declared-ReAct-only capability with
+   a named `CapabilityError`, before any turn runs.
+2. **`document_access` silently corrupted two of its three tools on Graph.**
+   `list_document_tree` and `summarize_document` built their `ToolInvocationResult`
+   artifact with no payload (`tool_ref` only) — the real tree/summary text lived
+   entirely in `content`, which `_adapt_capability_tool_for_graph` (§8.22) discards by
+   design. A Graph node calling either got back a near-empty result. Fixed by mirroring
+   `search_documents_using_vectorization`'s pattern: the payload is now duplicated into
+   `blocks` (`ToolContentBlock(kind=TEXT, text=...)`). ReAct is unaffected — `content`
+   was and remains what the model reads.
+3. **`tools(ctx)` called twice per capability per assembly.** The default `middleware()`
+   calls `self.tools(ctx)` internally; `build_capability_agent_block` (`assembly.py`)
+   also called `capability.tools(ctx)` separately for `block.tools`/HITL binding — two
+   independent calls, a latent identity ambiguity for any future stateful `tools()`
+   implementation (today's are pure closures, so harmless in practice, but not
+   guaranteed by the contract). Fixed: `AgentCapability`'s tool-carrier middleware class
+   is now public (`ToolCarrierMiddleware`, exported from
+   `fred_sdk.contracts.capability`); `build_capability_agent_block` calls
+   `capability.tools(ctx)` exactly once and, when `middleware()` is the unoverridden
+   default, builds `ToolCarrierMiddleware` directly from that same result instead of
+   calling `middleware(ctx)` a second time.
+4. **`demo.py`'s tool was sync**, the one capability tool on the `.func`-only path
+   `_adapt_capability_tool_for_graph`'s own comment assumed nothing used — it would have
+   silently lost its `ui_parts` artifact under a Graph agent, via the same
+   plain-dict-`.ainvoke()` collapse §8.22's adapter exists to work around. Made `async`;
+   zero behavior change, no test changes needed.
+
+**Why.** All four are instances of the same failure mode RFC §3.9 names first: a broken
+or incompatible capability must suspend/fail loudly, never silently degrade. §8.22's
+landing enforced this for the *tools it built*; these four gaps were in what fed that
+mechanism (an undeclared incompatible capability, an artifact with nothing in it, an
+ambiguous tool identity, an unguarded sync path) — each one a way the "never silently
+degrade" rule could be violated without tripping any of the loud checks §8.22 added.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
+
+---
+
+### 8.24 ✅ Eight more correctness gaps in the Graph/capability bridge, closed (2026-07-23)
+
+**What changed.** A second independent review (Codex) of §8.23's fixes found that
+one of them was itself incomplete, plus seven more real gaps. All verified against
+the code before fixing, all fixed the same day:
+
+1. **`tools()` + overridden `middleware()` were either/or, not composed.**
+   §8.23's single-call fix (`build_capability_agent_block`) added a
+   `ToolCarrierMiddleware` only when `middleware()` was the unoverridden
+   default — a capability implementing BOTH `tools()` for plain tools AND
+   overriding `middleware()` for a genuine ReAct-only hook (the documented
+   pattern) silently lost its plain tools under `create_agent()` (they still
+   reached `block.tools`/Graph, but never ReAct's own binding). Fixed: a
+   `ToolCarrierMiddleware` is now added whenever `tools()` returns anything,
+   AND an overridden `middleware()` is always also called — only the default
+   `middleware()` is skipped (it would just rebuild the same thing from a
+   second `tools(ctx)` call).
+2. **The catalog still offered ReAct-only capabilities to Graph templates.**
+   `execution_models` was enforced at assembly (§8.23) but not reflected in
+   `GET /agents/templates`' `available_capabilities` — a user could select
+   `ppt_filler` on a Graph template in the UI and discover the incompatibility
+   only at first launch. `list_agent_templates` (`agent_app.py`) now filters
+   per template: a Graph template's `available_capabilities` excludes any
+   entry without `"graph"` in `execution_models`.
+3. **Capability HITL is still bypassed on Graph (stopgap, not full support).**
+   `CapabilityAgentBlock.hitl` is built but `GraphRuntime.invoke_runtime_tool`
+   never consults it. No production capability declares an active `HitlSpec`
+   today, so this was not yet a live regression — but the RFC presents
+   `HitlSpec` as a single, fail-closed, universal gate, which was not true for
+   Graph. `_build_capability_block` now refuses (named `CapabilityError`) a
+   Graph agent's selection of any capability with non-empty `hitl_specs()`.
+   Full Graph HITL support (reconciling Graph's own node-level pause/resume
+   with the per-tool gate) is real design work, deliberately deferred — this
+   stopgap keeps the "never silently degrade" guarantee intact meanwhile.
+4. **`document_access`'s FAILURE path was still degraded on Graph.** §8.23
+   fixed the success-path artifacts (tree/summary text duplicated into
+   `blocks`); `_document_tool_failure`'s artifact still carried only
+   `is_error=True` with no message — a Graph node learned THAT a call failed
+   but not WHY, and lost the "you likely passed a name instead of a uid"
+   recovery hint entirely. Fixed the same way: the diagnostic message is now
+   also in `blocks`.
+5. **`invoke_runtime_tool` hardcoded `is_error=False`** on its emitted
+   `ToolResultRuntimeEvent` regardless of what the tool actually reported — a
+   capability tool that correctly returns `is_error=True` (RFC §3.9: report,
+   never raise) had its own runtime trace contradict it. The graph node's own
+   `dict` return value was unaffected (it always carried the real
+   `is_error`), but the trace/observability layer was lying. Fixed: the event
+   now reads `is_error` off the normalized result.
+6. **The Graph adapter silently broke on a sync capability tool.** `_adapt_capability_tool_for_graph`
+   passed a `.coroutine`-less (sync-only) tool through unchanged, including
+   one declared `content_and_artifact` — which would silently lose its
+   artifact under Graph exactly like the async case the adapter exists to
+   fix, with no `.coroutine` available to adapt it correctly. Fixed: now
+   refuses loudly (`CapabilityAssemblyError`) instead of passing it through
+   broken. No capability tool in this codebase is sync today (§8.23 made the
+   last one, `demo.py`, async) — this closes the general SDK contract gap,
+   not just that one instance.
+7. **The adapter's 2-tuple unwrap fired for ANY 2-tuple return**, not only a
+   declared `content_and_artifact` one — a plain tool whose ordinary return
+   value happened to be some unrelated 2-tuple would have its second element
+   silently reinterpreted as an artifact. Fixed: gated on the tool's own
+   `response_format`.
+8. **`McpCapability`'s `agent_instructions` "non-negotiable grounding
+   contract" is ReAct-only, but the code said "each runtime consumes the half
+   that concerns it"** — true for tools (a separate, already
+   execution-model-agnostic path, `FredMcpToolProvider`), false-by-omission
+   for the prompt fragment, which only `middleware()` carries and Graph never
+   reads. Not fixed (no Graph-side prompt-injection mechanism exists to wire
+   it into) — the `_build_capability_block` docstring now says so explicitly
+   instead of implying parity that doesn't exist.
+
+**Also regenerated:** `GET /agents/templates`'/`available_capabilities`'
+`execution_models` field is additive on `CapabilityCatalogEntry` — the
+committed `runtimeOpenApi.ts` and `controlPlaneOpenApi.ts` clients were stale
+relative to the backend model (mandatory per this repo's contract-generation
+rule) and have been regenerated (`make update-runtime-api`,
+`make update-control-plane-api`; both are one-line additive diffs).
+
+**Why.** Same rule as §8.23: a broken or incompatible capability must fail
+loudly, never silently degrade (RFC §3.9). Each of these eight was a way that
+guarantee could still be violated after §8.23's fixes — an either/or that
+dropped a valid authoring pattern, a picker that still offered what the
+runtime would refuse, an enforcement gap in a mechanism the RFC calls
+universal, a diagnostic that vanished exactly when it mattered most, an event
+that misreported its own tool's answer, an adapter narrower than the contract
+it claims to implement, and a doc claim broader than the code beneath it.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.4.
+
+---
+
+### 8.25 ✅ `execution_models` can no longer be silently forgotten; two more Graph diagnostics fixed (2026-07-23)
+
+**What changed.** A third independent review found that §8.23/§8.24's loud
+refusal only covered a capability that EXPLICITLY declared itself ReAct-only
+— an author who simply forgot to set `execution_models` on a
+`middleware()`-only capability kept the class default (`("react", "graph")`),
+which still silently passed the Graph assembly check and still contributed
+zero tools. Fixed with a new boot invariant, not a runtime one:
+`CapabilityRegistry._validate_execution_models` (new
+`UndeclaredExecutionModelError`) fails pod startup for any capability that
+overrides `middleware()` without implementing `tools()` and never explicitly
+set `execution_models` — detected via pydantic's `model_fields_set`, which
+distinguishes "the author wrote `execution_models=(...)`" from "the field
+kept its default," something a plain equality check cannot (writing the
+default value explicitly is indistinguishable from never mentioning it).
+`McpCapability` is exempt (its tools reach every execution model through
+`FredMcpToolProvider`, entirely outside `tools()`/`middleware()`). Two
+existing test fixtures (`corp_drive`, `greeter` in
+`test_capability_selection_1974.py`) needed the same explicit declaration
+`ppt_filler`/`writable_document` already carry — this invariant would have
+caught them too. `CapabilityManifest` also now rejects any `execution_models`
+that omits `"react"` — there is no Graph-only capability shape (every
+Graph-visible tool is also ReAct-visible, since `tools()` feeds both), so a
+declaration missing `"react"` cannot correspond to anything the runtime can
+build.
+
+Two more diagnostics gaps closed the same review found:
+- `document_access`'s 403/404 recovery hint (the "you likely passed a file
+  name" guidance) was appended to `message` AFTER `_document_tool_failure`
+  had already built the artifact from the shorter pre-hint message — so the
+  hint reached ReAct's `content` but not the artifact `blocks` a Graph agent
+  keeps. Fixed: the artifact is rebuilt with the final message.
+- `invoke_runtime_tool` read `is_error` off the NORMALIZED dict (§8.24's
+  fix), which could misclassify a coincidental `is_error`-named key on an
+  unrelated (e.g. MCP) tool's business payload as this platform's error
+  contract, and never populated `sources`/`ui_parts` on the event at all.
+  Fixed: `is_error`/`sources`/`ui_parts` are now read off the raw result
+  BEFORE normalization, and only when it is a genuine `ToolInvocationResult`
+  instance — never off an arbitrary dict. The span status also now reflects
+  `is_error` instead of always reporting "ok" on any non-exception return.
+
+**Why.** Same rule each of §8.22–§8.25 exists to enforce (RFC §3.9): a
+capability must fail loudly when it cannot do what's asked of it, never
+silently degrade. §8.23/§8.24 closed the cases where a capability KNEW it
+was incompatible; this round closes the case where the platform itself
+couldn't tell an author had never made that declaration at all, plus two
+more spots where a real diagnostic still silently evaporated on the one path
+(Graph) that only ever sees the artifact half of a tool's answer.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

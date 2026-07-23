@@ -720,6 +720,78 @@ items:
 
   # ── CAPAB ─────────────────────────────────────────────────────────────
 
+  - id: CAPAB-02
+    title: "AgentCapability.tools() — Graph agents can use capabilities"
+    status: done
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-CAPABILITY-RFC.md §3.2, §3.9, §5.1"
+      execution: "GitHub issue: pending creation (drafted 2026-07-23)"
+    notes: >
+      Retroactively registered (2026-07-23) — implemented 2026-07-22 across 6 phases
+      on branch `consolidation-22-07` before this ID existed. Closes the gap RFC §3.9
+      originally documented as "Execution is ReAct-only": `AgentCapability.tools()`
+      is now the primary, execution-model-agnostic runtime surface (`middleware()`
+      becomes the ReAct-only escape hatch, defaulting to a wrap of `tools()`); a
+      `GraphAgentDefinition` selecting a capability resolves and executes it exactly
+      like a ReAct agent does, through `CapabilityAgentBlock.tools` and
+      `GraphRuntime`'s `_adapt_capability_tool_for_graph` merge seam. `document_access`
+      and `demo.py` migrated onto `tools()`.
+      First correction (2026-07-23, independent review #1 — see
+      `RUNTIME-EXECUTION-CONTRACT.md` §8.23): the first landing let a Graph agent
+      silently SELECT a `middleware()`-only capability (`ppt_filler`/`writable_document`)
+      and get zero tools with no error. `CapabilityManifest.execution_models` now lets a
+      capability declare itself ReAct-only, enforced as a loud `CapabilityError` at
+      assembly. Also fixed: `document_access`'s tree/summarize artifacts carried no
+      payload (silently corrupted on Graph); `tools(ctx)` was called twice per assembly;
+      `demo.py`'s tool was sync.
+      Second correction (2026-07-23, independent review #2 — see §8.24): §8.23's
+      single-call fix made `tools()` and an overridden `middleware()` either/or instead
+      of composed, silently dropping a combining capability's plain tools under ReAct
+      (fixed). The capability catalog (`GET /agents/templates`) still offered
+      ReAct-only capabilities to Graph templates — now filtered per template. A
+      capability with an active `HitlSpec` selected on a Graph agent now fails loudly
+      (stopgap — `CapabilityAgentBlock.hitl` is still never consulted by `GraphRuntime`;
+      full Graph HITL support remains a deferred, real design task, not implemented).
+      `document_access`'s FAILURE-path artifacts also carried no payload (fixed);
+      `invoke_runtime_tool` hardcoded `is_error=False` on its trace event regardless of
+      the tool's real answer (fixed). The Graph adapter now refuses loudly rather than
+      silently break on a sync `content_and_artifact` tool, and its 2-tuple unwrap is
+      gated on the tool's declared `response_format` instead of firing for any 2-tuple.
+      `McpCapability`'s `agent_instructions` prompt fragment is confirmed ReAct-only —
+      documented as such, not fixed (no Graph-side prompt-injection mechanism exists).
+      `runtimeOpenApi.ts`/`controlPlaneOpenApi.ts` regenerated for the new
+      `execution_models` field.
+      Third correction (2026-07-23, independent review #3 — see §8.25): the loud
+      refusal only caught a capability that EXPLICITLY declared itself ReAct-only —
+      an author who simply never mentioned `execution_models` on a `middleware()`-only
+      capability kept the class default (both models), which still silently passed
+      every check and still shipped a Graph no-op. Fixed with a BOOT invariant, not a
+      runtime one: `CapabilityRegistry._validate_execution_models`
+      (`UndeclaredExecutionModelError`) uses pydantic `model_fields_set` to detect
+      "never declared" vs "explicitly declared the default" and fails pod startup for
+      the former (McpCapability exempt). `CapabilityManifest` also now requires
+      `"react"` always be present (no capability shape is Graph-only). Two pre-existing
+      test fixtures needed the same explicit declaration this invariant now demands.
+      Also fixed: `document_access`'s 403/404 recovery hint was appended to the message
+      AFTER the artifact was already built, so it reached ReAct but not the Graph-kept
+      artifact; `invoke_runtime_tool` read `is_error` off the normalized dict (risking a
+      false positive on an unrelated tool's own `is_error`-named field) and never
+      populated `sources`/`ui_parts` on its event — now reads the typed
+      `ToolInvocationResult` directly, only when genuinely one.
+      Still open, explicitly not fixed: full HITL enforcement on the Graph path (a
+      real design task reconciling Graph's node-level pause/resume with the per-tool
+      gate); whether a capability's ReAct-only middleware contributions (prompt
+      fragments, dynamic schemas) should ever become expressible to Graph agents.
+      Also noted, unrelated to CAPAB-02, not fixed here: `RUNTIME-EXECUTION-CONTRACT.md`
+      has pre-existing duplicate §8.x numbers (§8.13, §8.16, §8.21 each appear twice)
+      predating this work — a doc-hygiene issue across many past contributors, flagged
+      rather than silently renumbered in a change this large already.
+      See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22–§8.25 for the full
+      implementation record. Phase-by-phase design log of the original landing
+      (superseded by the RFC amendment as the canonical source):
+      `NOTES-GRAPH-CAPABILITY-BRIDGE.md` at the branch root.
+
   - id: CAPAB-01
     title: "Agent capability team-scoping — ReBAC gating, enablement, selection"
     status: in_progress

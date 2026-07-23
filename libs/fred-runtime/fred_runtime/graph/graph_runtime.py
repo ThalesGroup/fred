@@ -726,17 +726,42 @@ class _GraphNodeExecutionContext:
             try:
                 raw_result = await tool.ainvoke(arguments)
                 normalized = _normalize_runtime_tool_output(raw_result)
+                # CAPAB-02: a capability tool reports failure by returning an
+                # `is_error=True` ToolInvocationResult, not by raising (RFC
+                # §3.9 — a failing tool must never crash the turn). Read
+                # is_error/sources/ui_parts off the TYPED result — before
+                # normalization erases its identity — rather than off the
+                # normalized dict's `is_error` key, which any plain MCP tool
+                # could coincidentally also carry for an unrelated reason.
+                # `raw_result` is the actual `ToolInvocationResult` instance
+                # for a capability tool (default "content" response_format
+                # survives a plain-dict `.ainvoke()` unchanged, per Phase 1);
+                # never true for an MCP-resolved tool, so this never
+                # misclassifies a business payload as this platform's own
+                # error contract.
+                typed_result = (
+                    raw_result if isinstance(raw_result, ToolInvocationResult) else None
+                )
+                reported_error = (
+                    typed_result.is_error if typed_result is not None else False
+                )
                 self._events.append(
                     ToolResultRuntimeEvent(
                         sequence=0,
                         call_id=call_id,
                         tool_name=tool_name,
                         content=_stringify_content(normalized),
-                        is_error=False,
+                        is_error=reported_error,
+                        sources=typed_result.sources
+                        if typed_result is not None
+                        else (),
+                        ui_parts=typed_result.ui_parts
+                        if typed_result is not None
+                        else (),
                     )
                 )
                 if span is not None:
-                    span.set_attribute("status", "ok")
+                    span.set_attribute("status", "error" if reported_error else "ok")
                 return normalized
             except Exception as exc:
                 self._events.append(
@@ -1936,10 +1961,19 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
     Phase 1 proved survives a plain-dict `.ainvoke()` unchanged: a bare
     `ToolInvocationResult`, no `response_format` override (LangChain's
     "content" default already does the right thing here).
-    - `(content, artifact)` 2-tuple (the `content_and_artifact` shape): keep
-      the artifact.
+    - `(content, artifact)` 2-tuple AND `source_tool.response_format ==
+      "content_and_artifact"`: keep the artifact. Gated on the tool's own
+      declared response_format (CAPAB-02), not "any 2-tuple" — a plain tool
+      whose normal return value happens to be some unrelated 2-tuple must
+      round-trip unchanged, not have its second element silently
+      reinterpreted as an artifact.
     - anything else (already a bare `ToolInvocationResult`, or any other
       capability tool return): pass through unchanged.
+
+    A SYNC tool (`.func`, no `.coroutine`) with `content_and_artifact` cannot
+    be adapted this way at all — there's no coroutine for this wrapper to
+    call — so it's refused loudly instead (CAPAB-02): every capability tool
+    in this codebase is `async def` today specifically so that never fires.
 
     `document_access`'s tool definition itself is untouched by this — the
     adaptation lives entirely at this bridge/merge seam, not in capability
@@ -1947,14 +1981,38 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
     """
     coroutine = getattr(source_tool, "coroutine", None)
     if coroutine is None:
-        # No capability tool relies on the sync-only `.func` path today; pass
-        # through unchanged rather than guessing at an adaptation for a shape
-        # that doesn't exist yet.
+        # A sync-only tool (`.func`, no `.coroutine`) whose response_format
+        # is "content_and_artifact" would silently lose its artifact under a
+        # plain-dict `.ainvoke()`, exactly like the async case above — but
+        # there is no `.coroutine` for this function to call, so it cannot be
+        # adapted the same way. Refuse loudly rather than pass it through
+        # broken (RFC §3.9 "never silently degrade"); every capability tool
+        # in this codebase is `async def` today (CAPAB-02) specifically so
+        # this branch never fires in practice.
+        if getattr(source_tool, "response_format", "content") == "content_and_artifact":
+            raise CapabilityAssemblyError(
+                f"Capability tool '{source_tool.name}' is synchronous "
+                "(no .coroutine) with response_format='content_and_artifact', "
+                "which loses its artifact under a Graph agent's plain-dict "
+                "invocation. Make the tool `async def`, or return a bare "
+                "ToolInvocationResult (no response_format override)."
+            )
+        # Any other sync tool (a plain string/JSON return, no artifact to
+        # lose) passes through unchanged — nothing for this adapter to do.
         return source_tool
+
+    # Gate the tuple-unwrap on the tool's OWN declared response_format,
+    # rather than "any 2-tuple" — a plain tool returning some unrelated
+    # 2-tuple (not the content_and_artifact convention) must round-trip
+    # through this adapter unchanged, not have its second element silently
+    # reinterpreted as an artifact.
+    is_content_and_artifact = (
+        getattr(source_tool, "response_format", "content") == "content_and_artifact"
+    )
 
     async def _invoke(**kwargs: object) -> object:
         raw = await coroutine(**kwargs)
-        if isinstance(raw, tuple) and len(raw) == 2:
+        if is_content_and_artifact and isinstance(raw, tuple) and len(raw) == 2:
             return raw[1]
         return raw
 

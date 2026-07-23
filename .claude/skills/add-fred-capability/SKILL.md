@@ -1,12 +1,12 @@
 ---
 name: add-fred-capability
-description: Author a new Fred agent capability (manifest + middleware) built on fred-sdk. Picks the right authoring lane, maps each runtime need to a middleware hook, wires entry-point registration, and enforces the capability boundary (never hand-edit union/registry hotspots, no capability code in control-plane, no runtime info in LLM tool signatures).
+description: Author a new Fred agent capability (manifest + tools/middleware) built on fred-sdk, execution-model-agnostic (ReAct and Graph agents). Picks the right authoring lane, maps each runtime need to tools() or a middleware hook, wires entry-point registration, and enforces the capability boundary (never hand-edit union/registry hotspots, no capability code in control-plane, no runtime info in LLM tool signatures).
 user-invocable: true
 ---
 
 Add a new Fred **capability** — one modular agent feature carried end to end by one
-object (declaration + runtime middleware), not a feature scattered across the codebase
-(RFC `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §1–§2).
+object (declaration + `tools()`, its execution-model-agnostic runtime), not a feature
+scattered across the codebase (RFC `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §1–§2).
 
 **The code is the spec; you are the map.** Read the live types and the in-tree pilot
 before writing anything; never restate a manifest field from memory — it drifts.
@@ -23,7 +23,7 @@ confirmed that tier is implemented on their branch — check the imports actuall
 Do not skip this. Open and skim:
 
 - **SDK contracts** — `libs/fred-sdk/fred_sdk/contracts/capability/`:
-  `base.py` (`AgentCapability`, the four ClassVar models, `middleware()`),
+  `base.py` (`AgentCapability`, the four ClassVar models, `tools()`, `middleware()`),
   `manifest.py` (`CapabilityManifest`, `AssetSlot`, `ChatControlSpec`, `SidePanelSpec`,
   `TeamScopePolicy`, `UploadedFile`; `FieldSpec` lives in `fred_sdk.contracts.models`),
   `context.py` (`CapabilityContext`, `CapabilityIdentity`, `SaveContext`, `EmptyModel`),
@@ -32,9 +32,13 @@ Do not skip this. Open and skim:
   `DocumentSummarizePort`, `DocumentPortCallError` — adapters map transport
   failures onto that typed error so capability tools can render `is_error`
   results without importing any HTTP stack).
+  **Implement `tools()` — it is the primary authoring surface, execution-model-agnostic
+  (works on both ReAct and Graph agents).** `middleware()` has a default that wraps
+  `tools()`; only override it directly for a hook `tools()` cannot express (see Step 3).
 - **The canonical worked example** — `libs/fred-runtime/fred_runtime/capabilities/document_access/capability.py`
   (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
-  typed port, config-field scoping, one computed chat control. **Copy its shape.**
+  typed port, config-field scoping, one computed chat control, implemented via `tools()`.
+  **Copy its shape.**
 - **The minimal tracer** — `libs/fred-runtime/fred_runtime/capabilities/demo.py`
   (`DemoEchoCapability`): one static tool + one config field + router + owned table +
   chat part + side panel. The smallest full vertical.
@@ -49,7 +53,13 @@ Do not skip this. Open and skim:
   any capability that ships as a package or uploads a file.** Note its `min_count=0`
   trick: the platform slot gate runs on every save, so a mandatory asset is enforced
   as `validate_config` content logic, not slot cardinality — otherwise every ordinary
-  edit would demand a re-upload.
+  edit would demand a re-upload. It implements only `middleware()` (a dynamically-built
+  tool schema, a genuine ReAct-only hook per Step 3) and declares
+  `manifest.execution_models = ("react",)` — do not copy the `middleware()`-only part
+  unless your capability has the same need; if it also needs plain tools, implement
+  `tools()` too and leave `execution_models` at its default (both). **Forgetting to
+  declare `execution_models=("react",)` on a `middleware()`-only capability is not a
+  silent no-op** — a Graph agent selecting it fails loudly at assembly instead.
 - **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).
@@ -92,24 +102,38 @@ config, turn options, and services reach the tool through the middleware closure
 
 ---
 
-## Step 3 — Map each runtime need to a middleware hook (RFC §5.1)
+## Step 3 — Map each runtime need to a hook (RFC §5.1)
 
-Do not invent a hook; use the primitive:
+Do not invent a hook; use the primitive. **Start with `tools()`** — it is the primary
+authoring surface and the only row below that runs on both ReAct and Graph agents. Every
+other row is a `middleware()` override — reachable from ReAct agents only; a Graph agent
+never sees it. If your capability needs both plain tools AND one of these ReAct-only
+hooks, implement `tools()` for the former and override `middleware()` for the latter —
+do not fold tools into the `middleware()` override, or they vanish for Graph agents.
 
 | Need | Hook |
 | --- | --- |
-| Add tools | `middleware.tools` (static) |
-| Tool built at chat time | `wrap_model_call` editing `request.tools` `[T2]` |
-| Runtime context split from LLM args | `CapabilityContext` via the closure |
-| Edit conversation state | `before_model` returning a state-update dict `[T2]` |
-| System-prompt fragment | `wrap_model_call` / `modify_model_request` |
-| Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
+| Add tools | `tools(ctx)` — execution-model-agnostic, works on ReAct and Graph |
+| Tool built at chat time | `middleware()` override, `wrap_model_call` editing `request.tools` `[T2]` — ReAct only |
+| Runtime context split from LLM args | `CapabilityContext` via the closure (either surface) |
+| Edit conversation state | `middleware()` override, `before_model` returning a state-update dict `[T2]` — ReAct only |
+| System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
+| Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
 
 Chat-time controls → return `ChatControlSpec`s from `chat_controls(config)` (computed at
 prep, never persisted). Custom chat card → a `BaseModel` with a `Literal` `type`
 discriminator in `manifest.chat_parts` (the registry extends the `UiPart` union at boot;
 you do **not** edit the union).
+
+**Used any ReAct-only row above (and not `tools()`)?** Declare
+`manifest.execution_models = ("react",)`. This is not optional — the default is
+`("react", "graph")`, and a Graph agent selecting a capability that left the default
+while only implementing `middleware()` fails loudly at assembly with a `CapabilityError`
+naming the capability, rather than silently getting no tools. You don't even have to
+remember this rule to be safe: pod boot itself refuses registration
+(`UndeclaredExecutionModelError`) for any `middleware()`-only capability that never
+explicitly set `execution_models`.
 
 ---
 

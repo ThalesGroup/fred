@@ -107,11 +107,13 @@ capability declares its whole vertical surface, in one place." Concretely:
 - **A capability owns its whole vertical**: the tools it exposes, its agent-creation and
   chat-time fields, the custom chat parts it emits (§3.6), its side panel, its routes,
   its tables, and its per-team enablement policy — declared together, registered once.
-- **Runtime behavior is expressed as LangChain middleware.** Adding tools, building
-  tools dynamically per turn, editing conversation state, and intercepting model/tool
-  calls are all `AgentMiddleware` hooks (§5). This is not a Fred-invented hook system;
-  it is the stock LangChain `create_agent` middleware API, which swift **already runs in
-  production** for `DeepAgentRuntime`.
+- **Runtime behavior is plain tools, execution-model-agnostic.** A capability's
+  `tools()` runs unchanged under `create_agent` (ReAct) and a Graph agent's
+  `invoke_runtime_tool` (§3.2, §5.1). ReAct-specific needs — a tool built dynamically
+  per turn, editing conversation state, intercepting model/tool calls — are
+  `AgentMiddleware` hooks (§5), the same stock LangChain `create_agent` API swift
+  **already runs in production** for `DeepAgentRuntime`; not a Fred-invented hook
+  system, and not reachable from a Graph agent.
 
 ### 2.1 Why LangChain middleware as the spine
 
@@ -152,6 +154,7 @@ class CapabilityManifest(BaseModel):
     required_env: list[str]              # env vars this capability needs — checked at pod boot (§7.2)
 
     team_scope: TeamScopePolicy          # §7 — default_on | admin_gated (ReBAC)
+    execution_models: tuple[Literal["react", "graph"], ...]  # §3.9 — default (react, graph)
 ```
 
 > **As implemented (2026-07-10, #1973 — `fred_sdk/contracts/capability/`).**
@@ -183,7 +186,14 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
     def upgrade_config(self, stored: dict, from_version: str) -> StoredT: ...  # optional — old stored shapes (§3.9)
 
-    def middleware(self, ctx: CapabilityContext[StoredT, TurnOptionsT]) -> Sequence[AgentMiddleware]: ...  # runtime half (§5)
+    def tools(self, ctx: CapabilityContext[StoredT, TurnOptionsT]) -> Sequence[BaseTool]: ...
+        # THE runtime half (§5). Execution-model-agnostic: the same tools() implementation
+        # runs under ReAct (create_agent) and a Graph agent (invoke_runtime_tool). Implement this.
+
+    def middleware(self, ctx: CapabilityContext[StoredT, TurnOptionsT]) -> Sequence[AgentMiddleware]: ...
+        # ReAct-loop-only escape hatch. Default wraps tools() for create_agent(); override
+        # only for a hook tools() cannot express (dynamic per-turn schema, before_model
+        # state edit, prompt injection). Graph agents never see this.
 ```
 
 - **Two config schemas, deliberately.** `ConfigModel` is what the user *sends* (it
@@ -203,18 +213,67 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
   unchanged (their `StoredConfigModel` *is* `ConfigModel`).
 - `chat_controls(config)` computes the chat-time control descriptors for one agent
   instance — evaluated at session-prep time, never persisted (§3.3, §3.7).
-- `middleware(ctx)` returns the LangChain middleware **stack** that carries this
-  capability's tools and hooks, bound to the turn's context. A list, deliberately: most
-  capabilities return one middleware, but the list lets a capability compose its custom
-  hook with **prebuilt LangChain middleware** (e.g. `ToolCallLimitMiddleware` scoped to
-  its own tools) instead of hand-wrapping them, and lets a capability with several
-  concerns (tools + a `before_model` state edit) keep each middleware small. List order
-  is preserved within the capability's block (§5.3). Two guardrails: returned middleware
-  must act only on the capability's own tools/state channels — agent-global concerns
-  (summarization, model fallback, context editing) belong to the platform frame or
-  assembly config, never a capability return (they would break §5.3
-  order-independence); and interrupt/HITL middleware is excluded — capabilities declare
-  `HitlSpec`s instead (§5.4).
+- **`tools(ctx)` is the primary runtime surface — implement this.** It returns the plain
+  LangChain tools this capability's turn exposes, bound to `ctx`. This is what makes a
+  capability execution-model-agnostic: the same `tools()` implementation is what a ReAct
+  agent binds via `create_agent()` AND what a Graph agent resolves through
+  `context.invoke_runtime_tool(...)` (§5.1) — write one method, it works under both. Most
+  capabilities need nothing else.
+- **`middleware(ctx)` is the ReAct-loop-only escape hatch.** Its default wraps `tools()`
+  in one generic tool-carrier middleware — correct for any capability whose only runtime
+  need is exposing tools, which is why most capabilities never override it. Override it
+  directly only for a hook `tools()` cannot express: a tool schema built dynamically per
+  turn, a `before_model` state edit, or a prompt-fragment injection (`McpCapability`'s
+  case — §5.1). **A capability that overrides `middleware()` without also implementing
+  `tools()` MUST declare `manifest.execution_models = ("react",)`** — the default is
+  `("react", "graph")`, correct for the common `tools()`-only case, but wrong for a
+  `middleware()`-only capability: left at the default, selecting it on a Graph agent
+  would silently contribute no tools. Declared explicitly, selecting it on a Graph agent
+  instead fails loudly at assembly (`CapabilityError`, named, before any turn runs) — the
+  RFC §3.9 "never silently degrade" rule, enforced at the seam this gap was found at
+  (CAPAB-02). A capability needing both a ReAct-specific hook and Graph-visible tools
+  implements `tools()` too, declares both execution models (the default), and does not
+  fold the tools into the middleware override. When `middleware()` IS overridden it
+  returns the LangChain
+  middleware **stack** carrying the capability's tools and hooks — a list, deliberately:
+  it lets a capability compose its custom hook with **prebuilt LangChain middleware**
+  (e.g. `ToolCallLimitMiddleware` scoped to its own tools) instead of hand-wrapping them,
+  and lets a capability with several concerns (tools + a `before_model` state edit) keep
+  each middleware small. List order is preserved within the capability's block (§5.3).
+  Two guardrails regardless: returned middleware must act only on the capability's own
+  tools/state channels — agent-global concerns (summarization, model fallback, context
+  editing) belong to the platform frame, never a capability return (they would break
+  §5.3 order-independence); and interrupt/HITL middleware is excluded — capabilities
+  declare `HitlSpec`s instead (§5.4).
+
+> **As implemented (2026-07-22, execution-model parity; corrected 2026-07-23,
+> CAPAB-02).** `tools()` was added as the primary authoring surface —
+> originally only `middleware()` existed, and a `GraphAgentDefinition`
+> selecting a capability failed loudly (§3.9's superseded "Execution is
+> ReAct-only" note). `document_access` and `demo.py` are migrated onto
+> `tools()`. The first landing (2026-07-22) left a real gap: `ppt_filler` and
+> `writable_document` implement only `middleware()`, and nothing stopped a
+> Graph agent from selecting them — it would build without error and
+> silently get no tools. Corrected 2026-07-23: both now declare
+> `execution_models=("react",)` explicitly (genuine ReAct-specific hooks —
+> dynamic per-turn schema for the former, `before_model` state edits for the
+> latter), and `_build_capability_block` (`agent_app.py`) rejects a Graph
+> agent's selection of either with a named `CapabilityError` before any turn
+> runs. Two more correctness gaps found and fixed in the same pass: (1)
+> `document_access`'s `list_document_tree`/`summarize_document` artifacts
+> carried no payload (`ToolInvocationResult(tool_ref=...)` only) — the actual
+> tree/summary text lived solely in `content`, which the Graph adapter
+> discards, so both tools silently returned near-empty results to a Graph
+> node; fixed by mirroring `search_documents_using_vectorization`'s pattern
+> (payload duplicated into `blocks`). (2) `capability.tools(ctx)` was called
+> twice per assembly for the common case (once inside the default
+> `middleware()`, once directly for `block.tools`/HITL binding) — a latent
+> identity ambiguity if a future `tools()` implementation were ever stateful;
+> `build_capability_agent_block` now calls it exactly once and builds
+> `ToolCarrierMiddleware` directly from that result when `middleware()` is
+> the default. `demo.py`'s tool was also made `async` — it was the one
+> capability tool still on the sync-only `.func` path the Graph adapter
+> (`_adapt_capability_tool_for_graph`) explicitly assumed nothing used.
 
 ### 3.3 Config fields (static) + chat controls (computed) — retires chat-options
 
@@ -655,10 +714,29 @@ longer valid — reset them and re-save the agent"). The convention keeping this
 >   first asset-bearing capability port (#1903 PPT filler)** — the pod-side
 >   `POST /agents/capabilities/{id}/validate-config` path is in place and
 >   test-covered; only the control-plane→pod multipart relay is pending.
-> - **Execution is ReAct-only.** A graph agent definition that carries a capability
->   selection fails loudly with `CapabilityError` (§5.4 / §3.9 "never silently
->   degrade"); typed contexts + the `HitlSpec` gate reach the tool loop through the
->   #1973 middleware frame.
+> - **Execution is uniform across ReAct and Graph agents (superseded 2026-07-22 — see
+>   §3.2's `tools()`/`middleware()` split).** A `GraphAgentDefinition` selecting a
+>   capability now resolves and executes it exactly like a ReAct agent does, through the
+>   same `_effective_capability_ids` / `_build_capability_block` path. The tool objects a
+>   Graph node calls via `context.invoke_runtime_tool(...)` are the capability's
+>   `tools(ctx)` output, merged into `runtime_tools` and adapted at the one seam where a
+>   `content_and_artifact` tool's plain-dict invocation would otherwise silently drop its
+>   `ToolInvocationResult` (`GraphRuntime.build_executor` /
+>   `_adapt_capability_tool_for_graph`, `graph_runtime.py`) — never by changing how a
+>   capability author writes a tool; a capability's own artifact must still carry its real
+>   payload for this seam to have anything to keep (`document_access`'s
+>   `list_document_tree`/`summarize_document` shipped 2026-07-22 with empty artifacts —
+>   fixed 2026-07-23, CAPAB-02, see §3.2's implementation note). A capability tool name
+>   colliding with an MCP-resolved tool name still fails loudly rather than shadowing (the
+>   same "never silently degrade" rule this section opened with). A capability that cannot
+>   express its runtime need as `tools()` at all declares itself
+>   `execution_models = ("react",)` (§3.1, §3.2) — selecting it on a Graph agent fails
+>   loudly at assembly instead of silently contributing nothing. Validated with zero
+>   regressions
+>   against three real external Graph/ReAct agents that predate this change
+>   (`dt-agents/aegis`, `dt-agents/dva_risk_validator_team`,
+>   `fred-samples/cvem_watch`) — none use package capabilities yet, all run unmodified
+>   through mechanisms this change does not touch.
 
 > **As implemented (2026-07-11, #1975 — suspension lifecycle in
 > `control_plane_backend/agent_instances/suspension.py`, `product/service.py`,
@@ -804,10 +882,15 @@ an externally-authored package, *installing it is the registration*.
 
 ### 5.1 Requirement → hook mapping
 
-| Capability requirement | LangChain middleware primitive |
+Map a runtime need to a primitive; do not invent a new hook. The first row is
+execution-model-agnostic — implement `tools()` and it runs under both ReAct and Graph
+agents. Every other row is a `middleware()`-only hook, reachable from ReAct agents alone
+(§3.2's escape hatch); a Graph agent never sees it.
+
+| Capability requirement | Primitive |
 | --- | --- |
-| Add tools to the agent | `middleware.tools` (static) |
-| Dynamic tool built at chat time (PPT filler: schema from parsed template) | `wrap_model_call` editing `request.tools` per model call |
+| Add tools to the agent | `AgentCapability.tools(ctx)` — execution-model-agnostic |
+| Dynamic tool built at chat time (PPT filler: schema from parsed template) | `middleware()` override, `wrap_model_call` editing `request.tools` per model call — ReAct only |
 | Runtime context split from LLM args | `context_schema` → `runtime.context` = `CapabilityContext` |
 | Edit conversation state (WritableDocument edit notice; attachment-added note) | `before_model` returning a state-update dict via reducers |
 | Custom conversation state (small bookkeeping — see below) | `state_schema` with `NotRequired` fields + reducers |

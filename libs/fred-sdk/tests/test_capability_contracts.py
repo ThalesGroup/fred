@@ -42,6 +42,7 @@ from fred_sdk.contracts.capability import (
     SidePanelSpec,
     StoredCapabilityConfig,
     TeamScopePolicy,
+    ToolCarrierMiddleware,
     UploadedFile,
     chat_part_kind,
 )
@@ -103,6 +104,24 @@ class _MinimalCapability(AgentCapability[_Config, _Config, EmptyModel]):
         return []
 
 
+class _ToolsOnlyCapability(AgentCapability[_Config, _Config, EmptyModel]):
+    """Implements only `tools()` — relies on the default `middleware()` wrap
+    (CAPAB-02: the primary authoring surface, execution-model-agnostic)."""
+
+    manifest = _manifest(id="tools_only_cap")
+    ConfigModel = _Config
+
+    def tools(self, ctx: CapabilityContext[_Config, EmptyModel]) -> list[Any]:
+        from langchain_core.tools import tool
+
+        @tool
+        def echo(text: str) -> str:
+            """Echo text back."""
+            return text
+
+        return [echo]
+
+
 def _identity() -> CapabilityIdentity:
     return CapabilityIdentity(user_id="user-1", session_id="session-1")
 
@@ -150,6 +169,50 @@ def test_default_chat_controls_and_hitl_specs_are_empty() -> None:
     cap = _FullCapability()
     assert cap.chat_controls(_StoredConfig()) == []
     assert list(cap.hitl_specs()) == []
+
+
+def test_default_tools_is_empty() -> None:
+    # `tools()` is the primary authoring surface (CAPAB-02); a capability that
+    # doesn't implement it (e.g. a middleware()-only, ReAct-specific one) gets
+    # the empty default, never an AttributeError.
+    cap = _FullCapability()
+    ctx = CapabilityContext(
+        identity=_identity(),
+        config=_StoredConfig(),
+        turn_options=_TurnOptions(),
+        services=RuntimeServices(),
+    )
+    assert list(cap.tools(ctx)) == []
+
+
+def test_default_middleware_wraps_tools_in_tool_carrier_middleware() -> None:
+    cap = _ToolsOnlyCapability()
+    ctx = CapabilityContext(
+        identity=_identity(),
+        config=_Config(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(),
+    )
+    (middleware,) = cap.middleware(ctx)
+    assert isinstance(middleware, ToolCarrierMiddleware)
+    assert [t.name for t in middleware.tools] == ["echo"]
+
+
+def test_default_middleware_is_empty_when_tools_is_empty() -> None:
+    # A capability implementing neither tools() nor middleware() (both base
+    # class defaults) contributes nothing — not a crash.
+    class _BareCapability(AgentCapability[_Config, _Config, EmptyModel]):
+        manifest = _manifest(id="bare_cap")
+        ConfigModel = _Config
+
+    cap = _BareCapability()
+    ctx = CapabilityContext(
+        identity=_identity(),
+        config=_Config(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(),
+    )
+    assert list(cap.middleware(ctx)) == []
 
 
 def test_empty_model_forbids_fields() -> None:
@@ -271,6 +334,34 @@ def test_manifest_defaults() -> None:
     assert manifest.state_models == []
     assert manifest.router is None
     assert manifest.team_scope is TeamScopePolicy.ADMIN_GATED
+    assert manifest.execution_models == ("react", "graph")
+
+
+def test_manifest_execution_models_can_be_declared_react_only() -> None:
+    # CAPAB-02: a middleware()-only capability (a ReAct-specific hook tools()
+    # cannot express) must declare this explicitly — the default claims both.
+    manifest = _manifest(execution_models=("react",))
+    assert manifest.execution_models == ("react",)
+
+
+def test_manifest_rejects_empty_execution_models() -> None:
+    with pytest.raises(ValidationError):
+        _manifest(execution_models=())
+
+
+def test_manifest_rejects_execution_models_without_react() -> None:
+    # No capability runtime need is Graph-only: tools() is the only
+    # Graph-visible surface and it feeds the ReAct binding identically —
+    # there is no equivalent "ReAct-only" mechanism in reverse.
+    with pytest.raises(ValidationError, match="react"):
+        _manifest(execution_models=("graph",))
+
+
+def test_catalog_entry_carries_execution_models() -> None:
+    manifest = _manifest(execution_models=("react",))
+    entry = CapabilityCatalogEntry.from_manifest(manifest)
+    assert entry.execution_models == ("react",)
+    assert CapabilityCatalogEntry.model_validate_json(entry.model_dump_json()) == entry
 
 
 def test_manifest_rejects_blank_id() -> None:

@@ -32,7 +32,7 @@ How to use:
 from __future__ import annotations
 
 from ..models import StoredCapabilityConfig
-from .base import AgentCapability
+from .base import AgentCapability, ToolCarrierMiddleware
 from .chat_controls import (
     ChatControlsRequest,
     ChatControlsRequestItem,
@@ -80,6 +80,7 @@ __all__ = [
     "SidePanelSpec",
     "StoredCapabilityConfig",
     "TeamScopePolicy",
+    "ToolCarrierMiddleware",
     "UploadedFile",
     "chat_part_kind",
 ]

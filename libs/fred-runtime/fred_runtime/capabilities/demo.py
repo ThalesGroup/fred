@@ -196,7 +196,7 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
         config = ctx.config
 
         @tool(response_format="content_and_artifact")
-        def demo_echo(text: str) -> tuple[str, ToolInvocationResult]:
+        async def demo_echo(text: str) -> tuple[str, ToolInvocationResult]:
             """Echo the given text back to the conversation."""
 
             content = text.upper() if config.uppercase else text

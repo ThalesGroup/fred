@@ -211,11 +211,21 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         tools = self.tools(ctx)
         if not tools:
             return []
-        return [_ToolCarrierMiddleware(tools)]
+        return [ToolCarrierMiddleware(tools)]
 
 
-class _ToolCarrierMiddleware(AgentMiddleware):
-    """Carries one capability's `tools()` output for `create_agent()` to bind."""
+class ToolCarrierMiddleware(AgentMiddleware):
+    """
+    Carries one capability's `tools()` output for `create_agent()` to bind.
+
+    Public (not `_`-prefixed) so the runtime assembly loop
+    (`fred_runtime.capabilities.assembly.build_capability_agent_block`) can
+    build it directly from the SAME `tools(ctx)` call used for
+    `CapabilityAgentBlock.tools`/HITL binding, instead of letting the default
+    `middleware()` above call `tools(ctx)` a second, separate time (CAPAB-02)
+    — one `tools()` call per capability per assembly, one set of tool
+    instances shared by every consumer.
+    """
 
     def __init__(self, tools: Sequence["BaseTool"]) -> None:
         super().__init__()

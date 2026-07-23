@@ -289,6 +289,98 @@ def test_hitl_binding_tool_comes_from_block_tools() -> None:
     assert binding.tool is next(t for t in block.tools if t.name == "demo_gadget")
 
 
+def test_default_middleware_tools_are_the_same_objects_as_block_tools() -> None:
+    """
+    CAPAB-02: for a capability relying on the default `middleware()` (i.e. it
+    implements only `tools()`), the ReAct middleware's `.tools` and
+    `block.tools`/HITL binding must be the SAME tool instances, not two
+    independently-built closures. `tools(ctx)` is called exactly once per
+    capability per assembly.
+    """
+    calls: list[int] = []
+
+    class _CountingCapability(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="counting_cap",
+            version="1.0.0",
+            name="cap.counting_cap.name",
+            description="cap.counting_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+            calls.append(1)
+
+            @tool
+            def counting_probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [counting_probe]
+
+    registry = CapabilityRegistry()
+    registry.register(_CountingCapability())
+    contexts = _contexts(registry, {"counting_cap": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert len(calls) == 1
+    (middleware,) = block.middleware
+    assert list(middleware.tools) == list(block.tools)  # type: ignore[attr-defined]
+    assert middleware.tools[0] is block.tools[0]  # type: ignore[attr-defined]
+
+
+def test_tools_and_overridden_middleware_compose_not_either_or() -> None:
+    """
+    CAPAB-02 regression: a capability implementing BOTH `tools()` (plain
+    tools) AND overriding `middleware()` (a genuine ReAct-only hook) must get
+    BOTH contributions in `block.middleware` — an earlier version of the
+    assembly loop treated them as either/or, so a capability following the
+    documented "implement tools() too; don't fold tools into the middleware
+    override" pattern silently lost its plain tools under ReAct (they still
+    reached `block.tools`/Graph, but never `create_agent()`'s tool binding).
+    """
+
+    class _ComposingCapability(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="composing_cap",
+            version="1.0.0",
+            name="cap.composing_cap.name",
+            description="cap.composing_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool
+            def composing_probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [composing_probe]
+
+        def middleware(
+            self, ctx: CapabilityContext[_StackConfig, EmptyModel]
+        ) -> list[AgentMiddleware]:
+            del ctx
+            return [_NamedMiddleware("composing_cap-hook")]
+
+    registry = CapabilityRegistry()
+    registry.register(_ComposingCapability())
+    contexts = _contexts(registry, {"composing_cap": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"composing_probe"}
+    tool_carriers = [mw for mw in block.middleware if hasattr(mw, "tools")]
+    assert len(tool_carriers) == 1
+    assert [t.name for t in tool_carriers[0].tools] == ["composing_probe"]
+    named = [mw for mw in block.middleware if isinstance(mw, _NamedMiddleware)]
+    assert [mw.label for mw in named] == ["composing_cap-hook"]
+
+
 def test_two_capabilities_exposing_same_tool_name_raises() -> None:
     registry = CapabilityRegistry()
     registry.register(_tool_capability("cap_a", "shared_tool"))

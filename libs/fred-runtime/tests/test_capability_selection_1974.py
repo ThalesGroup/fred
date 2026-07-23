@@ -81,6 +81,8 @@ class GreeterCapability(AgentCapability[GreeterConfigV2, GreeterConfigV2, EmptyM
         name="capability.greeter.name",
         description="capability.greeter.description",
         icon="EmojiPeople",
+        # middleware()-only, no tools() — must declare explicitly (CAPAB-02).
+        execution_models=("react",),
     )
     ConfigModel = GreeterConfigV2
 
@@ -121,6 +123,8 @@ class DriveCapability(AgentCapability[DriveConfig, DriveConfig, EmptyModel]):
         name="capability.corp_drive.name",
         description="capability.corp_drive.description",
         icon="Folder",
+        # middleware()-only, no tools() — must declare explicitly (CAPAB-02).
+        execution_models=("react",),
     )
     ConfigModel = DriveConfig
     TeamSettingsModel = DriveTeamSettings

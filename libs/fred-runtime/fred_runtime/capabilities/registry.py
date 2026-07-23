@@ -59,8 +59,10 @@ from .errors import (
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
     MissingRequiredEnvError,
+    UndeclaredExecutionModelError,
     UnknownCapabilityError,
 )
+from .mcp import McpCapability
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +175,7 @@ class CapabilityRegistry:
         self._validate_required_env(environment)
         self._validate_team_scope()
         self._validate_table_hygiene()
+        self._validate_execution_models()
         # Registration contributes chat parts to the `UiPart` union at
         # model-build time (#1977, RFC §4): once the kinds are proven
         # unambiguous, fold them in so runtime events, tool results, and the
@@ -222,6 +225,45 @@ class CapabilityRegistry:
                     f"{', '.join(required)} (RFC §8.2). Default-on enablement "
                     "cannot depend on settings no team admin ever provided."
                 )
+
+    def _validate_execution_models(self) -> None:
+        """
+        A capability that overrides `middleware()` without implementing
+        `tools()` MUST explicitly declare `manifest.execution_models`
+        (CAPAB-02, RFC §3.2, §3.9) — left at the class default
+        (`("react", "graph")`), it would silently contribute zero tools to
+        any Graph agent that selects it, exactly the trap this field exists
+        to prevent. `model_fields_set` distinguishes "the author wrote
+        `execution_models=(...)`" from "the field kept its default value" —
+        a plain equality check against the default cannot, since explicitly
+        writing `execution_models=("react", "graph")` is indistinguishable
+        from never mentioning it at all.
+
+        `McpCapability` is exempt: its tools reach every execution model
+        through `FredMcpToolProvider`, a path entirely outside `tools()` /
+        `middleware()` — only its `middleware()` override (the prompt
+        fragment) is legitimately ReAct-only, a known, documented gap
+        (`RUNTIME-EXECUTION-CONTRACT.md` §8.24), not this rule's concern.
+        """
+
+        for cap_id, capability in self._capabilities.items():
+            if isinstance(capability, McpCapability):
+                continue
+            cls = type(capability)
+            overrides_middleware = cls.middleware is not AgentCapability.middleware
+            implements_tools = cls.tools is not AgentCapability.tools
+            if overrides_middleware and not implements_tools:
+                if "execution_models" not in capability.manifest.model_fields_set:
+                    raise UndeclaredExecutionModelError(
+                        f"Capability '{cap_id}' overrides middleware() "
+                        "without implementing tools(), but its manifest "
+                        "never explicitly declared execution_models — left "
+                        'at the default ("react", "graph"), it would '
+                        "silently contribute zero tools to a Graph agent "
+                        "that selects it. Declare "
+                        'execution_models=("react",) explicitly in the '
+                        "manifest (RFC §3.2)."
+                    )
 
     def _validate_table_hygiene(self) -> None:
         """

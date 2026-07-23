@@ -54,6 +54,7 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     ChatControlsResult,
     StoredCapabilityConfig,
+    ToolCarrierMiddleware,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
@@ -333,13 +334,27 @@ def build_capability_agent_block(
     authored middleware list order is preserved within its block.
 
     `tools()` (not `middleware()`) is the single source of truth for a
-    capability's tool objects (RFC §3.2, §5): it is read directly, once per
-    selected capability, into one deduped-by-name map shared by two
-    consumers — `HitlSpec.tool` resolution below, and the `tools` field
-    Graph agents will consume starting Phase 4. Two DIFFERENT capabilities
-    exposing the same tool name is a collision this module can see (both
-    contexts are in hand right here) and never silently shadows, matching the
-    HITL-ownership collision below.
+    capability's tool objects (RFC §3.2, §5): it is read directly, EXACTLY
+    once per selected capability (CAPAB-02), into one deduped-by-name map
+    shared by three consumers — the ReAct middleware binding (via
+    `ToolCarrierMiddleware`, built directly from these same instances), the
+    `HitlSpec.tool` resolution below, and the `tools` field Graph agents
+    consume. One call means one set of tool objects: no risk of a
+    stateful/non-deterministic `tools()` implementation producing a different
+    instance for the ReAct binding than the one `HitlGateRequest.tool`
+    exposes to a `when` predicate.
+
+    `tools()` and `middleware()` compose, they are not either/or: a
+    `ToolCarrierMiddleware` is added whenever `tools()` returns anything,
+    AND, separately, an overridden `middleware()` is always also called (for
+    the genuine ReAct-only hook `tools()` cannot express — RFC §3.2's
+    "implement `tools()` too; do not fold the tools into the middleware
+    override" case). Only the DEFAULT `middleware()` is skipped — calling it
+    would just rebuild the same `ToolCarrierMiddleware` from a second,
+    redundant `tools(ctx)` call, exactly what the single-call rule above
+    prevents. Two DIFFERENT capabilities exposing the same tool name is a
+    collision this module can see (both contexts are in hand right here) and
+    never silently shadows, matching the HITL-ownership collision below.
     """
 
     middleware: list[AgentMiddleware] = []
@@ -349,9 +364,23 @@ def build_capability_agent_block(
     for cap_id in sorted(contexts):
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
-        middleware.extend(capability.middleware(ctx))
+        capability_tools = tuple(capability.tools(ctx))
+        # These two are NOT mutually exclusive: a capability can implement
+        # `tools()` for its plain tools AND override `middleware()` for a
+        # genuine ReAct-only hook (RFC §3.2 — "implement tools() too; do not
+        # fold the tools into the middleware override"). An earlier version
+        # of this loop treated them as either/or, which silently dropped a
+        # combining capability's tools() output from the ReAct binding
+        # (block.tools/HITL still saw it, but create_agent() never did).
+        if capability_tools:
+            middleware.append(ToolCarrierMiddleware(capability_tools))
+        if type(capability).middleware is not AgentCapability.middleware:
+            # Overridden: call it too, for the hook tools() cannot express.
+            # No double-computation risk — the default middleware() (which
+            # would call tools(ctx) again internally) is never reached here.
+            middleware.extend(capability.middleware(ctx))
 
-        for candidate in capability.tools(ctx):
+        for candidate in capability_tools:
             owner = tool_owner.get(candidate.name)
             if owner is not None and owner != cap_id:
                 raise CapabilityAssemblyError(

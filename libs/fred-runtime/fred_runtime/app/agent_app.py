@@ -2341,13 +2341,18 @@ def _build_capability_block(
     Returns None when the agent selects no capabilities.
 
     MCP handling (#1978, #1988): an MCP-server capability delivers its catalog
-    `agent_instructions` as a prompt fragment. The effective selection mirrors
+    `agent_instructions` as a prompt fragment via `middleware()`
+    (`_McpInstructionsMiddleware`). The effective selection mirrors
     `_active_mcp_server_refs`: a `None` capability selection (template default)
     activates the template's `default_mcp_servers` as capabilities so their
-    instructions are delivered — otherwise a default-configured agent would
-    silently lose its non-negotiable grounding contract. Built uniformly for
-    both ReAct and Graph agents; each runtime consumes the half that concerns
-    it (Graph's tool-carrying half is wired up separately).
+    instructions are delivered — otherwise a default ReAct agent would silently
+    lose its non-negotiable grounding contract. This block is built identically
+    for both agent kinds (CAPAB-02), but a Graph agent reads only `block.tools`
+    — MCP tools reach it (a separate, already execution-model-agnostic path,
+    `FredMcpToolProvider`), the `agent_instructions` prompt fragment does NOT
+    (Graph never reads `block.middleware` at all). A Graph agent that needs an
+    MCP server's grounding instructions must currently author them into its own
+    system prompt — this is an explicit, known gap, not yet closed (CAPAB-02).
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
@@ -2370,6 +2375,49 @@ def _build_capability_block(
     effective = _effective_capability_ids(tuning, definition, capability_registry)
     if not effective:
         return None
+    if isinstance(definition, GraphAgentDefinition):
+        # CAPAB-02: a capability can declare itself ReAct-only
+        # (`CapabilityManifest.execution_models`) when its runtime need is a
+        # `middleware()` hook `tools()` cannot express (e.g. PPT filler's
+        # dynamic per-turn tool schema). Selecting one on a Graph agent must
+        # fail loudly here — never silently contribute zero tools (RFC §3.9
+        # "never silently degrade").
+        react_only = [
+            cap_id
+            for cap_id in effective
+            if cap_id in capability_registry
+            and "graph"
+            not in capability_registry.capability(cap_id).manifest.execution_models
+        ]
+        if react_only:
+            raise CapabilityError(
+                f"Agent selects capabilities {react_only} which are ReAct-only "
+                "(CapabilityManifest.execution_models) and cannot run on a "
+                "Graph agent."
+            )
+        # CAPAB-02 stopgap: `CapabilityAgentBlock.hitl` is built (assembly.py)
+        # but `GraphRuntime.invoke_runtime_tool` never consults it — a
+        # capability's `HitlSpec` gates a ReAct tool call but not a Graph
+        # one. No production capability declares an active `HitlSpec` today,
+        # so refusing here costs nothing real yet; reconciling Graph's own
+        # node-level pause/resume with the per-tool HITL gate is real design
+        # work, deferred (id-legend.yaml CAPAB-02). Refusing loudly keeps the
+        # RFC §3.9 "never silently degrade" guarantee intact in the meantime
+        # — a capability with `HitlSpec`s that silently ran ungated on Graph
+        # would be exactly the kind of governance gap this platform exists to
+        # prevent.
+        hitl_gated = [
+            cap_id
+            for cap_id in effective
+            if cap_id in capability_registry
+            and capability_registry.capability(cap_id).hitl_specs()
+        ]
+        if hitl_gated:
+            raise CapabilityError(
+                f"Agent selects capabilities {hitl_gated} which declare "
+                "HitlSpec approval gates; Graph agents do not yet enforce "
+                "capability HITL (CAPAB-02) and cannot run them."
+            )
     contexts = build_capability_contexts(
         capability_registry,
         selected_capability_ids=effective,
@@ -2819,7 +2867,7 @@ def _build_agent_router(
         """
 
         capability_registry = _capability_registry_of(http_request)
-        available_capabilities = (
+        all_capability_entries = (
             [
                 CapabilityCatalogEntry.from_manifest(
                     capability_registry.capability(cap_id).manifest,
@@ -2839,7 +2887,21 @@ def _build_agent_router(
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
-                available_capabilities=available_capabilities,
+                # CAPAB-02: a capability declared `execution_models=("react",)`
+                # must not even be offered for selection on a Graph template —
+                # `_build_capability_block` would refuse it loudly at save/run
+                # time regardless, but a picker that lists it first invites the
+                # exact "select it, save it, discover the incompatibility at
+                # first launch" flow the loud refusal exists to prevent.
+                available_capabilities=(
+                    all_capability_entries
+                    if not isinstance(definition, GraphAgentDefinition)
+                    else [
+                        entry
+                        for entry in all_capability_entries
+                        if "graph" in entry.execution_models
+                    ]
+                ),
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],

@@ -193,7 +193,16 @@ def _document_tool_failure(
     target = f" (document_uid={document_uid})" if document_uid else ""
     detail = f": {raw}" if raw else ""
     message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
-    return message, ToolInvocationResult(tool_ref=tool_ref, is_error=True)
+    # `blocks` carries the same diagnostic as `content` (CAPAB-02, same reason
+    # as the success-path artifacts above): a Graph agent's plain-dict
+    # invocation keeps only the artifact half of a `content_and_artifact`
+    # return — an artifact with `is_error=True` but no message tells a Graph
+    # node THAT the call failed but not WHY.
+    return message, ToolInvocationResult(
+        tool_ref=tool_ref,
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
 
 
 def narrow_scope_ids(
@@ -756,7 +765,17 @@ class DocumentAccessCapability(
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            artifact = ToolInvocationResult(tool_ref="list_document_tree")
+            # `blocks` carries the same tree text as `content` (CAPAB-02): a
+            # Graph agent's plain-dict invocation keeps only the artifact half
+            # of a `content_and_artifact` return (`_adapt_capability_tool_for_graph`,
+            # `graph_runtime.py`) — an artifact with no payload silently loses
+            # the tree for a Graph node, exactly the "never silently degrade"
+            # failure RFC §3.9 forbids. ReAct is unaffected: `content` is
+            # still what the model reads.
+            artifact = ToolInvocationResult(
+                tool_ref="list_document_tree",
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=result.tree),),
+            )
             return result.tree, artifact
 
         @tool("summarize_document", response_format="content_and_artifact")
@@ -830,8 +849,30 @@ class DocumentAccessCapability(
                         "summarize_document again with that uid. Do not "
                         "repeat the uid to the user."
                     )
+                    # CAPAB-02: `_document_tool_failure` already baked the
+                    # (shorter) pre-hint message into `artifact.blocks`; the
+                    # recovery hint appended above must reach `blocks` too, or
+                    # a Graph agent — which keeps only the artifact half of
+                    # this return — loses exactly the guidance a model needs
+                    # to self-correct and retry.
+                    artifact = artifact.model_copy(
+                        update={
+                            "blocks": (
+                                ToolContentBlock(
+                                    kind=ToolContentKind.TEXT, text=message
+                                ),
+                            )
+                        }
+                    )
                 return message, artifact
-            artifact = ToolInvocationResult(tool_ref="summarize_document")
+            # `blocks` carries the same summary text as `content` — same
+            # reason as `list_document_tree` above (CAPAB-02).
+            artifact = ToolInvocationResult(
+                tool_ref="summarize_document",
+                blocks=(
+                    ToolContentBlock(kind=ToolContentKind.TEXT, text=result.summary),
+                ),
+            )
             return result.summary, artifact
 
         tools: list[BaseTool] = [search_documents_using_vectorization]
