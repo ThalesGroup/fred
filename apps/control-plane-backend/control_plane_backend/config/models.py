@@ -70,10 +70,36 @@ class FrontendFeatureFlags(BaseModel):
     enableElecWarfare: bool = False
 
 
+class UploadWarning(BaseModel):
+    """Deployer-configured banner shown on upload surfaces (MIGR-01.01).
+
+    Ported from the main-branch `Properties.uploadWarning` (agentic-backend):
+    lets a deployment display a localized notice (e.g. legal/classification
+    reminder) wherever users upload files — document upload drawer and chat
+    attachments. Omit the whole block to show nothing.
+    """
+
+    severity: Literal["info", "warning", "error", "success"] = Field(
+        default="info",
+        description="Visual severity variant of the banner.",
+    )
+    messages: dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → message map (e.g. {"en": "...", "fr": "..."}).',
+    )
+
+
 class FrontendBootstrapConfig(BaseModel):
     """Static frontend bootstrap configuration served by control-plane."""
 
     feature_flags: FrontendFeatureFlags = Field(default_factory=FrontendFeatureFlags)
+    upload_warning: UploadWarning | None = Field(
+        default=None,
+        description=(
+            "Optional banner shown on upload surfaces (document upload drawer, "
+            "chat attachments). Omit to show nothing."
+        ),
+    )
 
 
 class RuntimeCatalogSourceConfig(BaseModel):

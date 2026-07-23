@@ -12472,6 +12472,43 @@
                           "title": "FrontendFeatureFlags",
                           "type": "object",
                           "additionalProperties": false
+                        },
+                        "upload_warning": {
+                          "anyOf": [
+                            {
+                              "description": "Deployer-configured banner shown on upload surfaces (MIGR-01.01).\n\nPorted from the main-branch `Properties.uploadWarning` (agentic-backend):\nlets a deployment display a localized notice (e.g. legal/classification\nreminder) wherever users upload files \u2014 document upload drawer and chat\nattachments. Omit the whole block to show nothing.",
+                              "properties": {
+                                "severity": {
+                                  "default": "info",
+                                  "description": "Visual severity variant of the banner.",
+                                  "enum": [
+                                    "info",
+                                    "warning",
+                                    "error",
+                                    "success"
+                                  ],
+                                  "title": "Severity",
+                                  "type": "string"
+                                },
+                                "messages": {
+                                  "additionalProperties": {
+                                    "type": "string"
+                                  },
+                                  "description": "Locale \u2192 message map (e.g. {\"en\": \"...\", \"fr\": \"...\"}).",
+                                  "title": "Messages",
+                                  "type": "object"
+                                }
+                              },
+                              "title": "UploadWarning",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Optional banner shown on upload surfaces (document upload drawer, chat attachments). Omit to show nothing."
                         }
                       },
                       "title": "FrontendBootstrapConfig",
@@ -14390,6 +14427,43 @@
                           "title": "FrontendFeatureFlags",
                           "type": "object",
                           "additionalProperties": false
+                        },
+                        "upload_warning": {
+                          "anyOf": [
+                            {
+                              "description": "Deployer-configured banner shown on upload surfaces (MIGR-01.01).\n\nPorted from the main-branch `Properties.uploadWarning` (agentic-backend):\nlets a deployment display a localized notice (e.g. legal/classification\nreminder) wherever users upload files \u2014 document upload drawer and chat\nattachments. Omit the whole block to show nothing.",
+                              "properties": {
+                                "severity": {
+                                  "default": "info",
+                                  "description": "Visual severity variant of the banner.",
+                                  "enum": [
+                                    "info",
+                                    "warning",
+                                    "error",
+                                    "success"
+                                  ],
+                                  "title": "Severity",
+                                  "type": "string"
+                                },
+                                "messages": {
+                                  "additionalProperties": {
+                                    "type": "string"
+                                  },
+                                  "description": "Locale \u2192 message map (e.g. {\"en\": \"...\", \"fr\": \"...\"}).",
+                                  "title": "Messages",
+                                  "type": "object"
+                                }
+                              },
+                              "title": "UploadWarning",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Optional banner shown on upload surfaces (document upload drawer, chat attachments). Omit to show nothing."
                         }
                       },
                       "title": "FrontendBootstrapConfig",

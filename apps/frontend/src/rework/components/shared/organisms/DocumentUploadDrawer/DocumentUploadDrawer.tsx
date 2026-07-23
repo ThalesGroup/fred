@@ -22,6 +22,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Select from "@shared/molecules/Select/Select";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
 import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -259,6 +260,7 @@ export function DocumentUploadDrawer({
             />
           </div>
           <div className={styles.body}>
+            <UploadWarningBanner />
             <div className={styles.field}>
               <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
               <Select<"upload" | "process">

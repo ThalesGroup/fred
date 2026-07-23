@@ -13,6 +13,7 @@ from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
+    UploadWarning,
 )
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
@@ -62,6 +63,17 @@ class FrontendBootstrap(BaseModel):
     gcu_version: str | None = None
     feature_flags: FrontendFeatureFlags
     permissions: PermissionSummary
+    upload_warning: UploadWarning | None = Field(
+        default=None,
+        description=(
+            "Deployer-configured banner for upload surfaces (document upload "
+            "drawer, chat attachments), from `platform.frontend.upload_warning` "
+            "(MIGR-01.01). `None` when the deployment configures none — the "
+            "frontend then renders nothing. Deliberately on the authenticated "
+            "bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only "
+            "render post-auth, and `FrontendConfig` stays minimal."
+        ),
+    )
 
 
 class FrontendUserAuthConfig(BaseModel):

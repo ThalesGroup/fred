@@ -316,6 +316,7 @@ async def build_frontend_bootstrap(
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
+        upload_warning=deps.configuration.platform.frontend.upload_warning,
     )
 
 
