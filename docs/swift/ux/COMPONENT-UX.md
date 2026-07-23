@@ -711,6 +711,61 @@ Displays one managed agent instance. Enabled cards are wrapped by `TeamAgentsPag
 
 ---
 
+### `TeamCard`
+
+**Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
+**Status:** `Functional`
+
+Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
+affordance (TEAM-09) is driven entirely by the team's `joining_mode`, gated
+on `!team.is_member`:
+
+| `joining_mode` | Footer content |
+| --- | --- |
+| `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `request_only` | "Request to join" button, permanently `disabled` — the notification system to route requests to team admins doesn't exist yet |
+| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `closed` | No button; muted label (`on-surface-muted`) |
+| already a member | Nothing renders in the footer's join slot |
+
+The former lock icon next to the team name (driven by the retired
+`is_private` bool) was removed rather than remapped to `joining_mode` — the
+footer label already communicates restricted-join state more specifically,
+so keeping both would duplicate the signal.
+
+#### Open UX issues
+
+- **`request_only` disabled button has no explanatory affordance** — a
+  permanently-disabled button with no tooltip/hint may read as broken to
+  users rather than "not yet supported." Consider a tooltip or helper text
+  once the underlying notification system is scoped.
+
+---
+
+### `TeamSettingsParameters` — joining-mode control
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
+**Status:** `Functional`
+
+Replaced the `is_private` `Switch` row with a 4-way `ButtonGroup`
+(`variant="radio"`), label left / control right in the same
+`form-section` container. Each option carries its own selected-state color
+via the `ButtonGroupItem` color-per-item extension (see below): `open` →
+`success`, `request_only`/`invite_only` → `secondary`, `closed` → `error`.
+Selecting an option PATCHes `joining_mode` immediately (no separate save
+step), mirroring the retired Switch's auto-save behavior.
+
+#### `ButtonGroup` / `ButtonGroupItem` — per-item color override (TEAM-09)
+
+`ButtonGroupItemProps` gained an optional `color?: ColorTheme` that overrides
+the group-level `color` for that single item only (falls back to the
+group's `color` when omitted) — needed because this control's four options
+each use a different semantic color when selected, not one color for the
+whole group like every prior `ButtonGroup` consumer. Backward compatible:
+existing call sites that never set `item.color` are unaffected.
+
+---
+
 ### `Toast` / `ToastProvider`
 
 **Location:** `src/rework/components/shared/molecules/Toast/Toast.tsx`

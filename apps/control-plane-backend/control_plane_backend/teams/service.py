@@ -11,6 +11,7 @@ from fastapi import UploadFile
 from fred_core import (
     ORGANIZATION_ID,
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
+    JoiningMode,
     KeycloackDisabled,
     KeycloakUser,
     OrganizationPermission,
@@ -58,6 +59,7 @@ from control_plane_backend.teams.schemas import (
     TeamMemberLastRoleError,
     TeamMemberRoleNotHeldError,
     TeamNotFoundError,
+    TeamNotOpenForJoiningError,
     TeamRescueNotOrphanedError,
     TeamRetentionView,
     TeamWithPermissions,
@@ -340,9 +342,12 @@ async def _list_teams(
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): the registry lives in
     # `team_metadata_store`, not Keycloak root groups.
     all_teams = await deps.get_team_metadata_store().list_all()
-    consistency_token = await rebac.ensure_team_organization_relations(
-        [metadata.id for metadata in all_teams]
-    )
+    team_ids = [metadata.id for metadata in all_teams]
+    consistency_token = await rebac.ensure_team_organization_relations(team_ids)
+    # TEAM-09: every team is unconditionally marketplace-discoverable —
+    # `joining_mode` gates only the ability to become a member, never
+    # visibility. Idempotent, so this also backfills pre-existing teams.
+    await rebac.ensure_team_public_relations(team_ids)
 
     if filter_by_can_read:
         authorized_teams_refs = await rebac.lookup_user_resources(
@@ -447,6 +452,9 @@ async def create_team(
     # team_member of the team they just created (by design, RFC §24.2/§24.7),
     # so a CAN_READ-gated lookup would deny their own creation response.
     consistency_token = await rebac.ensure_team_organization_relations([team_id])
+    # TEAM-09: grant marketplace discoverability immediately — don't wait for
+    # the lazy backfill in `_list_teams` to reach this brand-new team.
+    await rebac.ensure_team_public_relations([team_id])
     teams = await _enrich_teams_with_membership(rebac, user, [metadata], deps)
     permissions = await _get_team_permissions_for_user(
         rebac, user, team_id, consistency_token
@@ -519,6 +527,50 @@ async def get_team_by_id(
     )
 
 
+async def join_team(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> TeamWithPermissions:
+    """Self-service join for a team open for joining (TEAM-09).
+
+    Why this function exists:
+    - `OPEN` marketplace teams need one membership-write path that does not
+      require the caller to already hold an administer-permission over the
+      target team — every other membership route (`add_team_member` and
+      friends) is intentionally team-admin-gated, which is exactly wrong for
+      "anyone may join"
+
+    Safety property (do not relax): this is the only membership-write path
+    that trusts the caller's own identity as the target. It grants
+    `team_member` and nothing else, only to `user.uid`, and only after
+    re-checking `joining_mode == OPEN` against the stored value — never the
+    client's belief about it.
+
+    How to use it:
+    - call from the `POST /teams/{team_id}/join` route
+
+    Example:
+    - `team = await join_team(user, TeamId("swiftpost"), deps)`
+    """
+    store = deps.get_team_metadata_store()
+    metadata = await store.get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+    if metadata.joining_mode != JoiningMode.OPEN:
+        raise TeamNotOpenForJoiningError(team_id, metadata.joining_mode)
+
+    await _add_team_member_relation(
+        deps.rebac, team_id, user.uid, UserTeamRelation.TEAM_MEMBER
+    )
+
+    logger.info(
+        "User %s self-joined OPEN team %s (%s)", user.uid, team_id, metadata.name
+    )
+
+    return await get_team_by_id(user, team_id, deps)
+
+
 async def update_team(
     user: KeycloakUser,
     team_id: TeamId,
@@ -529,8 +581,9 @@ async def update_team(
     Update one team metadata document and visibility settings.
 
     Why this function exists:
-    - collaborative teams need a single business path for editable metadata and
-      public/private visibility toggles
+    - collaborative teams need a single business path for editable metadata,
+      including `joining_mode` (TEAM-09) — marketplace visibility itself is no
+      longer conditional on any team field (see `ensure_team_public_relations`)
 
     How to use it:
     - call it from the team PATCH route after authenticating the current user
@@ -562,17 +615,6 @@ async def update_team(
         updated = await deps.get_team_metadata_store().upsert(team_id, patch)
         if updated is not None:
             metadata = updated
-
-        if "is_private" in request.model_fields_set:
-            public_relation = Relation(
-                subject=RebacReference(Resource.USER, "*"),
-                relation=RelationType.PUBLIC,
-                resource=RebacReference(Resource.TEAM, team_id),
-            )
-            if request.is_private:
-                await rebac.delete_relations([public_relation])
-            else:
-                await rebac.add_relation(public_relation)
 
     teams = await _enrich_teams_with_membership(
         rebac,
@@ -1155,7 +1197,7 @@ async def _enrich_teams_with_membership(
                 admins=admins,
                 is_member=user.uid in member_ids,
                 description=metadata.description,
-                is_private=metadata.is_private,
+                joining_mode=metadata.joining_mode,
                 banner_image_url=banner_image_url,
                 max_resources_storage_size=max_storage,
                 current_resources_storage_size=metadata.current_resources_storage_size,

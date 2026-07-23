@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String
+from sqlalchemy import BigInteger, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -42,7 +42,13 @@ class TeamMetadataRow(Base):
     # migration a8b9c0d1e2f3's docstring for the full rationale).
     name: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(String(180), nullable=True)
-    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # TEAM-09: replaces the former `is_private` bool. Values are `JoiningMode`
+    # (fred_core.teams.metadata_store) `.value` strings — plain `String`
+    # column, not a DB-level enum, matching every other enum-backed column in
+    # this table (e.g. `RelationType`-derived columns elsewhere in the app).
+    joining_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="request_only"
+    )
     banner_object_storage_key: Mapped[str | None] = mapped_column(
         String(300), nullable=True
     )

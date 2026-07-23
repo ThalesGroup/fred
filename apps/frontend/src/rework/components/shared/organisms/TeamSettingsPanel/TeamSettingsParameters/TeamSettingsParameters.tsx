@@ -15,11 +15,11 @@
 import styles from "./TeamSettingsParameters.module.scss";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useTranslation } from "react-i18next";
-import Switch from "@shared/atoms/Switch/Switch.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
-import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { JoiningMode, TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
@@ -33,11 +33,14 @@ interface TeamSettingsParametersProps {
 
 interface TeamSettingsParametersForm {
   description: string;
-  isPrivate: boolean;
 }
 
 const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// TEAM-09: order drives the button group's left-to-right layout and index
+// mapping — keep in sync with the labels/colors below.
+const JOINING_MODES: JoiningMode[] = ["open", "request_only", "invite_only", "closed"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
   const { defaultTeamBannerFile } = useFrontendProperties();
@@ -49,15 +52,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const { register, getValues, watch, reset } = useForm<TeamSettingsParametersForm>({
     defaultValues: {
       description: team.description || "",
-      isPrivate: team.is_private || false,
     },
   });
 
   useEffect(() => {
-    reset({
-      description: team.description || "",
-      isPrivate: team.is_private || false,
-    });
+    reset({ description: team.description || "" });
   }, [team.description, reset]);
 
   const handleSaveDescription = () => {
@@ -74,16 +73,15 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const defaultBannerUrl = defaultTeamBannerFile ? `/images/${defaultTeamBannerFile}` : undefined;
   const bannerImageUrl = team.banner_image_url ?? defaultBannerUrl;
 
-  const handleSaveIsPrivate = () => {
-    const newPrivate = getValues().isPrivate;
-    if (newPrivate === team.is_private) {
+  const joiningMode = team.joining_mode ?? "request_only";
+  const handleSelectJoiningMode = (index: number) => {
+    const newMode = JOINING_MODES[index];
+    if (newMode === joiningMode) {
       return;
     }
     updateTeam({
       teamId: team.id,
-      updateTeamRequest: {
-        is_private: newPrivate,
-      },
+      updateTeamRequest: { joining_mode: newMode },
     });
   };
 
@@ -146,9 +144,22 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           {...register("description", { onBlur: handleSaveDescription })}
         />
       </div>
-      <div className={`${styles["form-section"]} ${styles["private-state"]}`}>
-        {t("rework.teamSettings.parameters.privateTeam")}
-        <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
+      <div className={`${styles["form-section"]} ${styles["joining-mode-state"]}`}>
+        {t("rework.teamSettings.parameters.joiningMode.label")}
+        <ButtonGroup
+          variant="radio"
+          size="small"
+          color="secondary"
+          aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
+          selectedIndex={JOINING_MODES.indexOf(joiningMode)}
+          onSelectedIndexChange={handleSelectJoiningMode}
+          items={[
+            { label: t("rework.teamSettings.parameters.joiningMode.open"), color: "success" },
+            { label: t("rework.teamSettings.parameters.joiningMode.requestOnly"), color: "secondary" },
+            { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly"), color: "secondary" },
+            { label: t("rework.teamSettings.parameters.joiningMode.closed"), color: "error" },
+          ]}
+        />
       </div>
       {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
       <TeamSettingsRetention team={team} />

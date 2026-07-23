@@ -1402,7 +1402,10 @@
       }
     },
     "teamCard": {
-      "join": "Apply to join",
+      "join": "Join",
+      "requestToJoin": "Request to join",
+      "closedTeam": "Closed team",
+      "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
@@ -1447,7 +1450,13 @@
           "label": "Team description",
           "placeholder": "Help other users understand your team's role."
         },
-        "privateTeam": "Private team",
+        "joiningMode": {
+          "label": "Joining mode",
+          "open": "Open",
+          "requestOnly": "Request only",
+          "inviteOnly": "Invite only",
+          "closed": "Closed"
+        },
         "teamBannerTitle": "Team banner",
         "teamPrompt": {
           "label": "Team context (prompt)",

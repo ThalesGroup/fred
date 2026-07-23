@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from fred_core import RelationType, TeamPermission
+from fred_core import JoiningMode, RelationType, TeamPermission
 from fred_core.common import TeamId
 from pydantic import BaseModel, Field, field_validator
 
@@ -91,6 +91,25 @@ class RetentionUpdateError(Exception):
         super().__init__(detail)
 
 
+class TeamNotOpenForJoiningError(Exception):
+    """Raised by `POST /teams/{team_id}/join` (TEAM-09) when the team's
+    `joining_mode` is not `OPEN`. Self-service join is the only membership
+    write path that does not require the caller to already hold an
+    administer-permission over the team, so this check happens server-side
+    against the stored value — the client's belief about the mode is never
+    trusted."""
+
+    http_status = 403
+
+    def __init__(self, team_id: TeamId, joining_mode: JoiningMode):
+        self.team_id = team_id
+        self.joining_mode = joining_mode
+        super().__init__(
+            f"Team '{team_id}' is not open for self-service joining "
+            f"(joining_mode={joining_mode.value})."
+        )
+
+
 class TeamRescueNotOrphanedError(Exception):
     """Raised when rescue-admin is attempted on a team that still has a team_admin.
 
@@ -118,7 +137,7 @@ class Team(BaseModel):
     admins: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
     description: str | None = None
-    is_private: bool = True
+    joining_mode: JoiningMode = JoiningMode.REQUEST_ONLY
     banner_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -219,7 +238,7 @@ class GrantTeamMemberRoleRequest(BaseModel):
 
 class UpdateTeamRequest(BaseModel):
     description: str | None = Field(default=None, max_length=180)
-    is_private: bool | None = None
+    joining_mode: JoiningMode | None = None
     banner_image_url: str | None = Field(default=None, max_length=300)
     # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
     # Partial semantics (exclude_unset): an omitted field keeps its current

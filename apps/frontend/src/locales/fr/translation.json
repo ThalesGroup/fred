@@ -1403,6 +1403,9 @@
     },
     "teamCard": {
       "join": "Rejoindre",
+      "requestToJoin": "Demander",
+      "closedTeam": "Équipe fermée",
+      "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
@@ -1447,7 +1450,13 @@
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
-        "privateTeam": "Équipe privée",
+        "joiningMode": {
+          "label": "Mode d'adhésion",
+          "open": "Ouverte",
+          "requestOnly": "Sur demande",
+          "inviteOnly": "Sur invitation",
+          "closed": "Fermée"
+        },
         "teamBannerTitle": "Bannière de l'équipe",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",

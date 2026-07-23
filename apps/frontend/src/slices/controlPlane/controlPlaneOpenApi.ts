@@ -119,6 +119,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
     }),
+    joinTeamControlPlaneV1TeamsTeamIdJoinPost: build.mutation<
+      JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse,
+      JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join`, method: "POST" }),
+    }),
     rescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPost: build.mutation<
       RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse,
       RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg
@@ -851,6 +857,11 @@ export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
 export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
   teamId: string;
 };
+export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg = {
+  teamId: string;
+};
 export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse = unknown;
 export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
@@ -1372,6 +1383,7 @@ export type CreateUserRequest = {
   enabled?: boolean;
 };
 export type GcuVersionsType = "v1";
+export type JoiningMode = "open" | "request_only" | "invite_only" | "closed";
 export type TeamPermission =
   | "can_read"
   | "can_update_info"
@@ -1405,7 +1417,7 @@ export type TeamWithPermissions = {
   admins?: UserSummary[];
   is_member?: boolean;
   description?: string | null;
-  is_private?: boolean;
+  joining_mode?: JoiningMode;
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
@@ -1424,7 +1436,7 @@ export type Team = {
   admins?: UserSummary[];
   is_member?: boolean;
   description?: string | null;
-  is_private?: boolean;
+  joining_mode?: JoiningMode;
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
@@ -1435,7 +1447,7 @@ export type CreateTeamRequest = {
 };
 export type UpdateTeamRequest = {
   description?: string | null;
-  is_private?: boolean | null;
+  joining_mode?: JoiningMode | null;
   banner_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;
@@ -2377,6 +2389,7 @@ export const {
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
+  useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

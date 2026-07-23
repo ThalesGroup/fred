@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fred_core import KeycloakUser, TeamPermission
+from fred_core import JoiningMode, KeycloakUser, TeamPermission
 from fred_core.common import TeamId, personal_team_id
 
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
@@ -51,7 +51,7 @@ async def build_personal_team(
         id=personal_team_id(user.uid),
         name="Equipe personnelle",
         member_count=1,
-        is_private=True,
+        joining_mode=JoiningMode.CLOSED,
         is_member=True,
         admins=[],
         permissions=[

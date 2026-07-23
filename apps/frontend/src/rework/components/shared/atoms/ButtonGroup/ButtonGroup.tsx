@@ -135,7 +135,7 @@ export default function ButtonGroup({
             itemRefs.current[index] = el;
           }}
           size={size}
-          color={color}
+          color={item.color ?? color}
           variant={variant}
           selected={index === resolvedIndex}
           tabIndex={index === resolvedIndex ? 0 : -1}

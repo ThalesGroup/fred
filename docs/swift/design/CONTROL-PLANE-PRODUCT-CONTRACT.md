@@ -1358,3 +1358,36 @@ It follows the `gcu_version` precedent: deployment-config-owned policy
 exposed on the authenticated bootstrap. Deliberately not on the pre-auth
 `FrontendConfig`, which stays minimal — upload surfaces only render
 post-auth.
+
+## 24. Contract Notes — TEAM-09, joining_mode replaces is_private (2026-07-23)
+
+**`Team.is_private: bool` is removed; `Team.joining_mode: JoiningMode` is
+added** (`Team`, `TeamWithPermissions`, `UpdateTeamRequest`). `JoiningMode` is
+a 4-value enum: `open`, `request_only`, `invite_only`, `closed`. Full design:
+`rfc/FRED-TEAM-CONFIG-RFC.md` §5.1.1.
+
+Why a boolean was replaced rather than extended: `is_private` was being asked
+to answer two different questions — is this team even discoverable, and how
+does someone become a member — and could only answer one. Marketplace
+discovery is now unconditional for every team regardless of `joining_mode`
+(every team gets the ReBAC `public` relation, granting only the existing
+profile/discovery `can_read` — never conversation access); `joining_mode`
+governs solely whether/how a user can become a member. Existing teams migrate
+to `request_only` on upgrade (Alembic `a4b5c6d7e8f9`) regardless of their
+prior `is_private` value — that field never actually gated the marketplace's
+former mailto-based join, so `request_only` changes no team's real-world
+joinability on migration day.
+
+**New endpoint — `POST /teams/{team_id}/join`.** Self-service: the caller
+grants themselves `team_member` and only `team_member`, only when the
+team's stored `joining_mode` is `open` (checked server-side, 403
+`TeamNotOpenForJoiningError` otherwise — the client's belief about the mode
+is never trusted). This is the only membership-write route on `/teams` that
+does not require the caller to already hold an administer-permission over
+the target team; every other membership route (`add_team_member` and
+siblings) is unchanged and remains team-admin-gated.
+
+`request_only` and `invite_only` currently have identical server-side
+enforcement (both simply reject self-join) — they differ only in marketplace
+presentation (a disabled "Request" affordance vs. no affordance at all) until
+a notification system exists to route `request_only` asks to team admins.

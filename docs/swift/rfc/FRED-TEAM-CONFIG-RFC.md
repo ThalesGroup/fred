@@ -199,10 +199,52 @@ These objects must stay separate.
 This remains intentionally small:
 
 - description
-- privacy
+- joining mode (see §5.1.1 — replaces the former standalone `privacy` boolean)
 - banner
 
 It must not absorb routing policy, prompt curation, or upload quotas.
+
+#### 5.1.1 Joining mode (TEAM-09, 2026-07-23)
+
+**Amendment.** The former `is_private: bool` field is replaced by a single
+`joining_mode` enum on `TeamMetadata`. A boolean could not express the
+marketplace's actual join semantics (whether a team is even visible as
+joinable, and whether joining is instant, request-gated, or admin-only) —
+"private" was being used as a stand-in for that whole spectrum. One field,
+one owner (`team_admin`), no derived/redundant privacy flag to drift out of
+sync with it.
+
+```
+enum JoiningMode:
+  OPEN          # marketplace shows "Join"; joining is instant, self-service
+  REQUEST_ONLY  # marketplace shows "Request" (disabled until the
+                # notification system exists to route the request to team_admins)
+  INVITE_ONLY   # marketplace shows no button, label "Invite only"; only an
+                # existing team_admin/editor/analyst can add a member
+  CLOSED        # marketplace shows no button, label "Team closed"; identical
+                # write-path gating to INVITE_ONLY today (no separate backend
+                # rule yet — the two differ only in marketplace presentation
+                # until a distinct CLOSED enforcement need appears)
+```
+
+**New write surface.** `OPEN` requires a self-service join path that does not
+exist today — every existing `/teams/{id}/members*` route requires the caller
+to already hold an administer-permission over the target team (TEAM-02
+authorization-hardening track). This RFC adds exactly one narrow addition:
+`POST /teams/{team_id}/join`, gated only by `joining_mode == OPEN` (checked
+server-side against the stored value, never trusted from the client), which
+lets the calling user grant themselves — and only themselves — the
+`team_member` relation. It must never accept a target `user_id` other than
+the caller and must never grant any relation other than `team_member`.
+
+**Migration.** Every existing team is migrated to `REQUEST_ONLY` regardless
+of its former `is_private` value. `is_private` never actually gated the
+marketplace's mailto-based join before this RFC — joining a team was always
+"send an email and ask," for private and non-private teams alike — so
+`REQUEST_ONLY` is the only mapping that changes no team's real-world
+joinability on migration day. Moving a team to `OPEN`, `INVITE_ONLY`, or
+`CLOSED` is a deliberate `team_admin` action taken after migration, not an
+inferred one.
 
 ### 5.2 TeamPlatformPolicy
 
