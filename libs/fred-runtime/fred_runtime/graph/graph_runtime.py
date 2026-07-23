@@ -642,6 +642,7 @@ class _GraphNodeExecutionContext:
                 "call_id": call_id,
             },
         )
+        started_at = _time.monotonic()
         try:
             with _graph_phase_timer(
                 metrics=self.services.metrics,
@@ -683,6 +684,7 @@ class _GraphNodeExecutionContext:
                 is_error=result.is_error,
                 sources=result.sources,
                 ui_parts=result.ui_parts,
+                latency_ms=_elapsed_ms_since(started_at),
             )
         )
         return result
@@ -725,6 +727,7 @@ class _GraphNodeExecutionContext:
                 "tool_name": tool_name,
             },
         ) as kpi_dims:
+            started_at = _time.monotonic()
             try:
                 raw_result = await tool.ainvoke(arguments)
                 normalized = _normalize_runtime_tool_output(raw_result)
@@ -733,14 +736,18 @@ class _GraphNodeExecutionContext:
                 # §3.9 — a failing tool must never crash the turn). Read
                 # is_error/sources/ui_parts off the TYPED result — before
                 # normalization erases its identity — rather than off the
-                # normalized dict's `is_error` key, which any plain MCP tool
+                # normalized dict's `is_error` key, which any plain tool
                 # could coincidentally also carry for an unrelated reason.
-                # `raw_result` is the actual `ToolInvocationResult` instance
-                # for a capability tool (default "content" response_format
-                # survives a plain-dict `.ainvoke()` unchanged, per Phase 1);
-                # never true for an MCP-resolved tool, so this never
-                # misclassifies a business payload as this platform's own
-                # error contract.
+                # The safety is in the isinstance check itself, not in an
+                # assumption about which source produced `raw_result`: a
+                # bare `ToolInvocationResult` return (no `response_format`
+                # override) survives a plain-dict `.ainvoke()` unchanged
+                # (Phase 1) for ANY tool built that way — a capability tool
+                # or an in-process toolkit tool like `KfVectorSearchToolkit`
+                # (also `runtime_tools`-reachable) alike. Either is a
+                # legitimate, intentional hit, not a misclassification; a
+                # tool returning some other shape (a plain dict/string) just
+                # fails the isinstance check and falls through untouched.
                 typed_result = (
                     raw_result if isinstance(raw_result, ToolInvocationResult) else None
                 )
@@ -760,6 +767,7 @@ class _GraphNodeExecutionContext:
                         ui_parts=typed_result.ui_parts
                         if typed_result is not None
                         else (),
+                        latency_ms=_elapsed_ms_since(started_at),
                     )
                 )
                 if reported_error:
@@ -775,6 +783,7 @@ class _GraphNodeExecutionContext:
                         tool_name=tool_name,
                         content=str(exc),
                         is_error=True,
+                        latency_ms=_elapsed_ms_since(started_at),
                     )
                 )
                 if span is not None:
@@ -2072,6 +2081,14 @@ def _validated_handlers(
             )
         validated[node.node_id] = cast(GraphNodeHandler, handler)
     return validated
+
+
+def _elapsed_ms_since(started_at: float) -> int:
+    """Milliseconds elapsed since a `time.monotonic()` reading (react_runtime.py's
+    same helper — mirrored here so `ToolResultRuntimeEvent.latency_ms` is populated
+    on the Graph tool paths too, not just the ReAct one)."""
+
+    return int((_time.monotonic() - started_at) * 1000)
 
 
 def _graph_phase_timer(

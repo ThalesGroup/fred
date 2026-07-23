@@ -392,6 +392,50 @@ def test_invoke_runtime_tool_marks_kpi_status_error_for_reported_failure() -> No
     assert metrics.timers[0].dims["status"] == "error"
 
 
+def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None:
+    """
+    PR #2067 review (Copilot): `ToolResultRuntimeEvent.latency_ms` exists in
+    the SDK contract (react_runtime.py already populates it), but
+    `invoke_runtime_tool` never measured elapsed time — every Graph tool
+    result had `latency_ms=None`, so the trace UI/persistence couldn't show
+    latency for Graph agents at all. Covers both the success and the
+    exception path.
+    """
+
+    @lc_tool("slow_probe")
+    async def _slow_probe(x: str) -> str:
+        """A tool that takes a small, measurable amount of time."""
+        await asyncio.sleep(0.01)
+        return x
+
+    @lc_tool("raising_probe")
+    async def _raising_probe(x: str) -> str:
+        """A tool that raises instead of returning."""
+        del x
+        raise RuntimeError("boom")
+
+    ctx = _node_context({"slow_probe": _slow_probe, "raising_probe": _raising_probe})
+
+    asyncio.run(ctx.invoke_runtime_tool("slow_probe", {"x": "y"}))
+    (success_event,) = [
+        e
+        for e in ctx.events
+        if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "slow_probe"
+    ]
+    assert success_event.latency_ms is not None
+    assert success_event.latency_ms >= 0
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(ctx.invoke_runtime_tool("raising_probe", {"x": "y"}))
+    (error_event,) = [
+        e
+        for e in ctx.events
+        if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "raising_probe"
+    ]
+    assert error_event.latency_ms is not None
+    assert error_event.is_error is True
+
+
 def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> None:
     """CAPAB-02: the event's `sources`/`ui_parts` must come from the real
     `ToolInvocationResult`, not silently stay empty on the Graph path while
