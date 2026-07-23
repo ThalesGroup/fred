@@ -58,12 +58,38 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
     pdfjs.GlobalWorkerOptions.workerPort = worker;
   }, [reloadKey]);
 
+  // Tracks whether this component instance is currently mounted, independent of
+  // reloadKey churn. StrictMode double-invokes effects (mount, cleanup, remount)
+  // synchronously in dev, so a cleanup can't tell "final unmount" from a StrictMode
+  // drill by itself — the drill flips this back to true before the deferred check
+  // below ever runs.
+  const isAliveRef = useRef(true);
+  useEffect(() => {
+    isAliveRef.current = true;
+    return () => {
+      isAliveRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     const worker = workerRef.current;
     return () => {
-      if (worker && pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+      if (!worker) return;
+      if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+        // A newer key's worker already took over the active port — this one is
+        // orphaned, safe to terminate now.
         worker.terminate();
+        return;
       }
+      // Still the active port at cleanup time: either a StrictMode dev drill (about
+      // to remount) or the real final unmount (no next key coming). Defer one tick
+      // so a genuine remount's isAliveRef flip, or another consumer's port swap,
+      // can win first; terminate only if neither happened by then.
+      setTimeout(() => {
+        if (!isAliveRef.current && pdfjs.GlobalWorkerOptions.workerPort === worker) {
+          worker.terminate();
+        }
+      }, 0);
     };
   }, [reloadKey]);
 
