@@ -34,6 +34,42 @@
       }
     },
     {
+      "label": "All Services + Eval",
+      "dependsOn": [
+        "fred-agents",
+        "knowledge-flow-backend",
+        "frontend",
+        "kf-worker",
+        "control-plane",
+        "fred-evaluation-backend",
+        "fred-evaluation-worker"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "rocket",
+        "color": "terminal.ansiYellow"
+      }
+    },
+    {
+      "label": "All Services + Eval PROD",
+      "dependsOn": [
+        "fred-agents-prod",
+        "knowledge-flow-backend-prod",
+        "frontend",
+        "kf-worker",
+        "control-plane-prod",
+        "fred-evaluation-backend-prod",
+        "fred-evaluation-worker-prod"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "flame",
+        "color": "terminal.ansiYellow"
+      }
+    },
+    {
       "label": "fred-agents",
       "type": "shell",
       "command": "bash",
@@ -178,6 +214,90 @@
       "icon": {
         "id": "filter",
         "color": "terminal.ansiBlue"
+      }
+    },
+    {
+      "label": "fred-evaluation-backend",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8336 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../fred-agent-evaluator/apps/fred-evaluation-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "checklist",
+        "color": "terminal.ansiYellow"
+      }
+    },
+    {
+      "label": "fred-evaluation-worker",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../fred-agent-evaluator/apps/fred-evaluation-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "gear",
+        "color": "terminal.ansiYellow"
+      }
+    },
+    {
+      "label": "fred-evaluation-backend-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8336 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../fred-agent-evaluator/apps/fred-evaluation-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "checklist",
+        "color": "terminal.ansiRed"
+      }
+    },
+    {
+      "label": "fred-evaluation-worker-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker-prod"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../fred-agent-evaluator/apps/fred-evaluation-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "gear",
+        "color": "terminal.ansiRed"
       }
     },
     {

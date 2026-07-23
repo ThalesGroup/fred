@@ -89,6 +89,29 @@ run-knowledge-flow: ## Run knowledge-flow backend API only
 run-control-plane: ## Run control-plane backend API only
 	$(MAKE) -C apps/control-plane-backend run
 
+EVAL_REPO := ../fred-agent-evaluator
+
+.PHONY: install-evaluation
+install-evaluation: ## Install fred-agent-evaluator deps (sibling repo)
+	@[ -d $(EVAL_REPO) ] || { echo "Clone fred-agent-evaluator as a sibling of fred first"; exit 1; }
+	$(MAKE) -C $(EVAL_REPO)/apps/fred-evaluation-backend dev-scoring
+
+.PHONY: run-evaluation
+run-evaluation: ## Run the evaluation API (sibling repo)
+	$(MAKE) -C $(EVAL_REPO)/apps/fred-evaluation-backend run
+
+.PHONY: run-evaluation-worker
+run-evaluation-worker: ## Run the evaluation worker (sibling repo)
+	$(MAKE) -C $(EVAL_REPO)/apps/fred-evaluation-backend run-worker
+
+.PHONY: run-evaluation-prod
+run-evaluation-prod: ## Run the evaluation API with prod-like configuration (sibling repo)
+	$(MAKE) -C $(EVAL_REPO)/apps/fred-evaluation-backend rrun-prod
+
+.PHONY: run-evaluation-worker-prod
+run-evaluation-worker-prod: ## Run the evaluation worker with prod-like configuration, M2M enabled (sibling repo)
+	$(MAKE) -C $(EVAL_REPO)/apps/fred-evaluation-backend run-worker-prod
+
 .PHONY: dev
 dev:  ## Start development environment in all submodules
 	@set -e; \
