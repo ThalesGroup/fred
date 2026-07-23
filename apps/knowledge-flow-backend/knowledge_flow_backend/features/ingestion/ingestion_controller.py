@@ -151,6 +151,18 @@ def _dynamic_import_processor(class_path: str):
     return getattr(module, class_name)
 
 
+def upload_basename(raw_filename: str | None) -> str:
+    """Leaf name of a client-supplied upload filename.
+
+    Browsers upload a file picked out of a folder (a `webkitdirectory` input or
+    a dropped directory) under its RELATIVE path as the multipart filename, and
+    a hostile client can send `../` segments outright — the raw value must never
+    reach a filesystem path.
+    """
+    leaf = (raw_filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return leaf if leaf not in ("", ".", "..") else "uploaded_file"
+
+
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     """
     Persist one uploaded file into a single temporary work directory.
@@ -167,8 +179,7 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     """
     tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    filename = file.filename or "uploaded_file"
-    tmp_path = tmp_dir / filename
+    tmp_path = tmp_dir / upload_basename(file.filename)
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
     return tmp_path
@@ -260,7 +271,7 @@ class IngestionController:
     def _preload_uploaded_files(self, files: List[UploadFile]) -> list[tuple[str, pathlib.Path]]:
         preloaded_files: list[tuple[str, pathlib.Path]] = []
         for file in files:
-            filename = file.filename or "uploaded_file"
+            filename = upload_basename(file.filename)
             input_temp_file = uploadfile_to_path(file)
             logger.info(f"File {filename} saved to temp storage at {input_temp_file}")
             preloaded_files.append((filename, input_temp_file))
