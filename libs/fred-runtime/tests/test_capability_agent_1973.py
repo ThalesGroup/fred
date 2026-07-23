@@ -36,6 +36,7 @@ from typing import Any, cast
 
 import pytest
 from fred_runtime.capabilities import (
+    CapabilityAssemblyError,
     CapabilityRegistry,
     build_capability_agent_block,
     build_capability_context,
@@ -83,20 +84,6 @@ class _GadgetConfig(BaseModel):
     workspace_root: str = "/workspace"
 
 
-class _GadgetMiddleware(AgentMiddleware):
-    def __init__(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> None:
-        super().__init__()
-
-        @tool
-        def demo_gadget(path: str) -> str:
-            """Operate the demo gadget on a path."""
-
-            GADGET_RUNS.append({"path": path})
-            return f"gadget ran on {path}"
-
-        self.tools = [demo_gadget]
-
-
 class _GadgetCapability(AgentCapability[_GadgetConfig, _GadgetConfig, EmptyModel]):
     """HITL tracer: one gated tool whose gate reads the typed config."""
 
@@ -123,10 +110,17 @@ class _GadgetCapability(AgentCapability[_GadgetConfig, _GadgetConfig, EmptyModel
     def hitl_specs(self) -> list[HitlSpec]:
         return [self._spec]
 
-    def middleware(
-        self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]
-    ) -> list[AgentMiddleware]:
-        return [_GadgetMiddleware(ctx)]
+    def tools(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> list[Any]:
+        del ctx
+
+        @tool
+        def demo_gadget(path: str) -> str:
+            """Operate the demo gadget on a path."""
+
+            GADGET_RUNS.append({"path": path})
+            return f"gadget ran on {path}"
+
+        return [demo_gadget]
 
 
 class _NamedMiddleware(AgentMiddleware):
@@ -239,6 +233,206 @@ def test_capability_block_is_sorted_by_id_with_authored_order_within() -> None:
         "zeta_cap-first",
         "zeta_cap-second",
     ]
+
+
+# ---------------------------------------------------------------------------
+# block.tools — capability.tools(ctx) is the one source for HITL binding and
+# for Graph agents (bridge, Phase 4); collisions across capabilities never
+# silently shadow (#1973 doctrine: a broken capability suspends, it never
+# silently degrades)
+# ---------------------------------------------------------------------------
+
+
+def _tool_capability(cap_id: str, tool_name: str) -> AgentCapability[Any, Any, Any]:
+    class _Cap(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id=cap_id,
+            version="1.0.0",
+            name=f"cap.{cap_id}.name",
+            description=f"cap.{cap_id}.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool(tool_name)
+            def _probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [_probe]
+
+    return _Cap()
+
+
+def test_block_tools_collects_capability_tools_deduped_by_name() -> None:
+    registry = CapabilityRegistry()
+    registry.register(_tool_capability("cap_a", "tool_a"))
+    registry.register(_tool_capability("cap_b", "tool_b"))
+
+    contexts = _contexts(registry, {"cap_a": {}, "cap_b": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"tool_a", "tool_b"}
+
+
+def test_hitl_binding_tool_comes_from_block_tools() -> None:
+    registry = _gadget_registry(require=True)
+    contexts = _contexts(registry, {"demo_gadget": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"demo_gadget"}
+    binding = block.hitl["demo_gadget"]
+    assert binding.tool is not None
+    assert binding.tool is next(t for t in block.tools if t.name == "demo_gadget")
+
+
+def test_default_middleware_tools_are_the_same_objects_as_block_tools() -> None:
+    """
+    CAPAB-02: for a capability relying on the default `middleware()` (i.e. it
+    implements only `tools()`), the ReAct middleware's `.tools` and
+    `block.tools`/HITL binding must be the SAME tool instances, not two
+    independently-built closures. `tools(ctx)` is called exactly once per
+    capability per assembly.
+    """
+    calls: list[int] = []
+
+    class _CountingCapability(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="counting_cap",
+            version="1.0.0",
+            name="cap.counting_cap.name",
+            description="cap.counting_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+            calls.append(1)
+
+            @tool
+            def counting_probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [counting_probe]
+
+    registry = CapabilityRegistry()
+    registry.register(_CountingCapability())
+    contexts = _contexts(registry, {"counting_cap": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert len(calls) == 1
+    (middleware,) = block.middleware
+    assert list(middleware.tools) == list(block.tools)  # type: ignore[attr-defined]
+    assert middleware.tools[0] is block.tools[0]  # type: ignore[attr-defined]
+
+
+def test_tools_and_overridden_middleware_compose_not_either_or() -> None:
+    """
+    CAPAB-02 regression: a capability implementing BOTH `tools()` (plain
+    tools) AND overriding `middleware()` (a genuine ReAct-only hook) must get
+    BOTH contributions in `block.middleware` — an earlier version of the
+    assembly loop treated them as either/or, so a capability following the
+    documented "implement tools() too; don't fold tools into the middleware
+    override" pattern silently lost its plain tools under ReAct (they still
+    reached `block.tools`/Graph, but never `create_agent()`'s tool binding).
+    """
+
+    class _ComposingCapability(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="composing_cap",
+            version="1.0.0",
+            name="cap.composing_cap.name",
+            description="cap.composing_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool
+            def composing_probe(x: str) -> str:
+                """A probe tool."""
+                return x
+
+            return [composing_probe]
+
+        def middleware(
+            self, ctx: CapabilityContext[_StackConfig, EmptyModel]
+        ) -> list[AgentMiddleware]:
+            del ctx
+            return [_NamedMiddleware("composing_cap-hook")]
+
+    registry = CapabilityRegistry()
+    registry.register(_ComposingCapability())
+    contexts = _contexts(registry, {"composing_cap": {}})
+    block = build_capability_agent_block(registry, contexts)
+
+    assert {t.name for t in block.tools} == {"composing_probe"}
+    tool_carriers = [mw for mw in block.middleware if hasattr(mw, "tools")]
+    assert len(tool_carriers) == 1
+    assert [t.name for t in tool_carriers[0].tools] == ["composing_probe"]
+    named = [mw for mw in block.middleware if isinstance(mw, _NamedMiddleware)]
+    assert [mw.label for mw in named] == ["composing_cap-hook"]
+
+
+def test_two_capabilities_exposing_same_tool_name_raises() -> None:
+    registry = CapabilityRegistry()
+    registry.register(_tool_capability("cap_a", "shared_tool"))
+    registry.register(_tool_capability("cap_b", "shared_tool"))
+
+    contexts = _contexts(registry, {"cap_a": {}, "cap_b": {}})
+
+    with pytest.raises(CapabilityAssemblyError, match="shared_tool"):
+        build_capability_agent_block(registry, contexts)
+
+
+def test_one_capability_returning_two_same_named_tools_raises() -> None:
+    """
+    PR #2067 review: the collision guard used to check `owner != cap_id`
+    only, so a SINGLE capability's own `tools()` returning two DIFFERENT
+    tool objects with the same `.name` silently kept whichever won in
+    `tools_by_name` — and a `HitlSpec` naming that tool could then bind to
+    the wrong object. "Tools must be uniquely named" now holds within one
+    capability's own list too, not just across capabilities.
+    """
+
+    class _DupeCap(AgentCapability[_StackConfig, _StackConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="dupe_cap",
+            version="1.0.0",
+            name="cap.dupe_cap.name",
+            description="cap.dupe_cap.description",
+            icon="Extension",
+        )
+        ConfigModel = _StackConfig
+
+        def tools(self, ctx: CapabilityContext[_StackConfig, EmptyModel]) -> list[Any]:
+            del ctx
+
+            @tool("dupe_tool")
+            def _first(x: str) -> str:
+                """First."""
+                return x
+
+            @tool("dupe_tool")
+            def _second(x: str) -> str:
+                """Second — same name as _first, a capability-authoring bug."""
+                return x
+
+            return [_first, _second]
+
+    registry = CapabilityRegistry()
+    registry.register(_DupeCap())
+    contexts = _contexts(registry, {"dupe_cap": {}})
+
+    with pytest.raises(CapabilityAssemblyError, match="dupe_tool"):
+        build_capability_agent_block(registry, contexts)
 
 
 # ---------------------------------------------------------------------------

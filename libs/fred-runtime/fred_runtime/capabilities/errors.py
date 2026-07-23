@@ -56,6 +56,22 @@ class DefaultOnRequiredSettingsError(CapabilityRegistrationError):
     """
 
 
+class InvalidExecutionModelError(CapabilityRegistrationError):
+    """
+    A capability overrides `middleware()` without implementing `tools()` —
+    it has zero Graph-visible runtime contribution — yet its manifest's
+    `execution_models` contains `"graph"` (CAPAB-02, RFC §3.2, §3.9). This
+    fires in BOTH shapes of the mistake, not just one: the field was never
+    explicitly set and kept the class default (`("react", "graph")`), OR it
+    was explicitly written out that way on purpose. Either way, such a
+    capability would silently contribute zero tools to any Graph agent that
+    selects it — the exact trap `execution_models` exists to make
+    impossible. Declare `execution_models=("react",)` explicitly, or
+    implement `tools()` for the plain-tool portion so the capability is
+    genuinely Graph-visible.
+    """
+
+
 class CapabilityTableHygieneError(CapabilityRegistrationError):
     """
     A capability's owned `tables` break the RFC §7.1 hygiene rules — a table

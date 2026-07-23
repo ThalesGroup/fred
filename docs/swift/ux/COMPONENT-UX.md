@@ -205,6 +205,14 @@ shared molecule.
   tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
   opens in the overlay drawer with markdown rendering instead of raw JSON.
 
+- **Repeated content-free "Done" rows (2026-07-22)** — every tool call previously produced
+  two trace rows: a "Tool use" phase thought (title "Calling `<tool>`", secondary text always
+  the hardcoded literal "Done"/"Error") and the paired `tool_call`/`tool_result` combo row.
+  The thought row is now filtered out entirely (`traceUtils.groupTraceEntries()`) — it was
+  pure bookkeeping duplication, not agent reasoning. The combo row alone now carries the
+  humanized tool label, the status dot, and (new) the real execution latency. See
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21 and `AGENT-THINKING-API-RFC.md` Amendment B.
+
 ---
 
 ### `TraceEntryRow`
@@ -249,12 +257,18 @@ shared molecule.
 
 #### Open UX issues
 
-- **Theme** — Monaco is always `vs-dark` (now only used for tool call/result entries). The
-  spec says theme-aware (`vs` / `vs-dark`). Not yet wired to the app theme context.
+- **Per-call source curation** — the RAG tool view reads `hits` straight out of the tool's
+  raw `content` JSON (the same list the LLM sees), not the narrower, curated
+  `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
+  dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
+  `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
+  + SSE consumption) — a reasonable fast-follow, not required for the current fix since
+  `content` already carries enough to render useful citations.
 
-- **Tool entry rendering** — tool call/result entries still render as raw Monaco JSON.
-  A prettier structured view (args table, result preview) is a follow-up; only reasoning /
-  note entries got the markdown treatment in the 2026-06-18 pass.
+- **Unrecognized-tool fallback still raw JSON** — only two content shapes are recognized
+  (SQL `{sql_query, rows, error}`, RAG `{query, hits}`); any other tool still falls back to
+  the redacted `{action, status, latency}` JSON view. Intentional (see Resolved below) but
+  the list of recognized shapes may need to grow as more tools are added.
 
 #### Resolved
 
@@ -270,6 +284,28 @@ shared molecule.
   render header + conclusion only — no "no reasoning text" placeholder.
 
 - **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
+
+- **Curated tool-result views for SQL and RAG (2026-07-22)** — tool call/result entries no
+  longer always render the blanket-redacted `{action, status, latency}` JSON (from
+  #1774/CHAT-13). Two common, specifically useful content shapes are now recognized and
+  rendered richly: a tabular/SQL result (`{sql_query, rows, error}`) shows the executed SQL
+  plus a row-count and preview; a RAG/vector-search result (`{query, hits}`) shows the
+  search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
+  tool shape still falls back to the original redacted view — see
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
+  testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
+  heights — the theme open issue above) heavy for what's often a 3-line payload, and each
+  view had its own scattered copy button. `MonacoPane` is no longer used anywhere in this
+  drawer (nor anywhere else in the frontend — the atom, `@monaco-editor/react`, and
+  `monaco-editor` were removed from the codebase entirely). `InlineDrawer` gained a
+  `headerActions` slot (next to the close button) that now hosts a single copy action:
+  the SQL query text for the SQL view, the curated JSON for the generic fallback, nothing
+  for the RAG view (sources are browsed via `SourcesPanel`, not copied as text). The
+  generic fallback and the SQL row preview render through the same lightweight `CodeBlock`
+  used for the SQL query itself (Prism syntax highlighting, no editor chrome, no imposed
+  height — the drawer body scrolls naturally instead).
 
 ---
 
@@ -616,6 +652,12 @@ _(none yet)_
 - **`readonly` prop added (2026-04-27)** — `HitlPrompt` now accepts `readonly?: boolean`.
   When set, choice buttons are disabled and the free-text section is hidden. Used by
   `ManagedChatPage` when rendering `hitl_request` history rows.
+
+- **Dropped its own `max-width: 72%` / `align-self: flex-start` (2026-07-22)** — `HitlPrompt`
+  was missed by the 720px centered lane refactor (2026-05-18): it kept a scattered per-component
+  width constraint instead of filling `.lane` like its siblings, which cramped content-heavy
+  cards (e.g. a multi-finding classification table) into a narrow column with excess whitespace
+  beside it.
 
 ---
 

@@ -11,7 +11,12 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* Fixed track width + auto-fit + justify-content: center, same pattern as
+     TeamAgentsPage's .agentList — with auto-fill's flexible minmax(…,1fr),
+     unfilled tracks still claim their share of the row (they just render
+     empty), so a single card stays pinned to the left instead of centering. */
+  grid-template-columns: repeat(auto-fit, 240px);
+  justify-content: center;
   gap: var(--spacing-m);
 }
 

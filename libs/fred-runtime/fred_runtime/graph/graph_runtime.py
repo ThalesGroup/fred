@@ -47,6 +47,8 @@ from fred_sdk.contracts.context import (
     FsEntry,
     InvocationScope,
     PublishedArtifact,
+    ToolContentBlock,
+    ToolContentKind,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -86,10 +88,12 @@ from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
@@ -638,6 +642,7 @@ class _GraphNodeExecutionContext:
                 "call_id": call_id,
             },
         )
+        started_at = _time.monotonic()
         try:
             with _graph_phase_timer(
                 metrics=self.services.metrics,
@@ -679,6 +684,7 @@ class _GraphNodeExecutionContext:
                 is_error=result.is_error,
                 sources=result.sources,
                 ui_parts=result.ui_parts,
+                latency_ms=_elapsed_ms_since(started_at),
             )
         )
         return result
@@ -720,21 +726,54 @@ class _GraphNodeExecutionContext:
                 "node_id": self.node_id,
                 "tool_name": tool_name,
             },
-        ):
+        ) as kpi_dims:
+            started_at = _time.monotonic()
             try:
                 raw_result = await tool.ainvoke(arguments)
                 normalized = _normalize_runtime_tool_output(raw_result)
+                # CAPAB-02: a capability tool reports failure by returning an
+                # `is_error=True` ToolInvocationResult, not by raising (RFC
+                # §3.9 — a failing tool must never crash the turn). Read
+                # is_error/sources/ui_parts off the TYPED result — before
+                # normalization erases its identity — rather than off the
+                # normalized dict's `is_error` key, which any plain tool
+                # could coincidentally also carry for an unrelated reason.
+                # The safety is in the isinstance check itself, not in an
+                # assumption about which source produced `raw_result`: a
+                # bare `ToolInvocationResult` return (no `response_format`
+                # override) survives a plain-dict `.ainvoke()` unchanged
+                # (Phase 1) for ANY tool built that way — a capability tool
+                # or an in-process toolkit tool like `KfVectorSearchToolkit`
+                # (also `runtime_tools`-reachable) alike. Either is a
+                # legitimate, intentional hit, not a misclassification; a
+                # tool returning some other shape (a plain dict/string) just
+                # fails the isinstance check and falls through untouched.
+                typed_result = (
+                    raw_result if isinstance(raw_result, ToolInvocationResult) else None
+                )
+                reported_error = (
+                    typed_result.is_error if typed_result is not None else False
+                )
                 self._events.append(
                     ToolResultRuntimeEvent(
                         sequence=0,
                         call_id=call_id,
                         tool_name=tool_name,
                         content=_stringify_content(normalized),
-                        is_error=False,
+                        is_error=reported_error,
+                        sources=typed_result.sources
+                        if typed_result is not None
+                        else (),
+                        ui_parts=typed_result.ui_parts
+                        if typed_result is not None
+                        else (),
+                        latency_ms=_elapsed_ms_since(started_at),
                     )
                 )
+                if reported_error:
+                    kpi_dims["status"] = "error"
                 if span is not None:
-                    span.set_attribute("status", "ok")
+                    span.set_attribute("status", "error" if reported_error else "ok")
                 return normalized
             except Exception as exc:
                 self._events.append(
@@ -744,6 +783,7 @@ class _GraphNodeExecutionContext:
                         tool_name=tool_name,
                         content=str(exc),
                         is_error=True,
+                        latency_ms=_elapsed_ms_since(started_at),
                     )
                 )
                 if span is not None:
@@ -1824,11 +1864,20 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
     - pending HITL lifecycle: `_pending_checkpoints`
     """
 
-    def __init__(self, *, definition: GraphAgentDefinition, services: RuntimeServices):
+    def __init__(
+        self,
+        *,
+        definition: GraphAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+    ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
         # Session-scoped pending checkpoints must survive executor rebuilds on bind().
         self._pending_checkpoints: dict[str, _PendingGraphCheckpoint] = {}
+        # Selected capabilities' tools (Graph bridge, NOTES-GRAPH-CAPABILITY-
+        # BRIDGE.md Phase 4). None when the agent selects no capabilities.
+        self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -1848,17 +1897,21 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
     async def build_executor(
         self, binding: BoundRuntimeContext
     ) -> Executor[BaseModel, BaseModel]:
-        runtime_tools = (
+        mcp_tools = (
             cast(tuple[BaseTool, ...], self.services.tool_provider.get_tools())
             if self.services.tool_provider is not None
             else ()
+        )
+        capability_tools = _adapted_capability_tools(
+            self._capability_block,
+            mcp_tool_names={tool.name for tool in mcp_tools},
         )
         return _DeterministicGraphExecutor(
             definition=self.definition,
             binding=binding,
             services=self.services,
             model=self._model,
-            runtime_tools=runtime_tools,
+            runtime_tools=mcp_tools + capability_tools,
             pending_checkpoints=self._pending_checkpoints,
         )
 
@@ -1867,6 +1920,152 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             await self.services.tool_provider.aclose()
         self._model = None
         self._pending_checkpoints.clear()
+
+
+def _adapted_capability_tools(
+    capability_block: CapabilityAgentBlock | None,
+    *,
+    mcp_tool_names: set[str],
+) -> tuple[BaseTool, ...]:
+    """
+    Bridge a Graph agent's selected-capability tools into `runtime_tools`
+    (NOTES-GRAPH-CAPABILITY-BRIDGE.md Phase 4).
+
+    Each tool is re-wrapped by `_adapt_capability_tool_for_graph` (see there
+    for why a plain merge would silently drop `ToolInvocationResult` sources).
+
+    Also raises the capability-vs-MCP tool name collision deferred from
+    Phase 2 (`assembly.build_capability_agent_block` cannot see MCP-resolved
+    names; this is the first place both sources are in scope together): a
+    capability tool must never silently shadow, or be shadowed by, an
+    MCP-resolved runtime tool of the same name.
+    """
+    if capability_block is None or not capability_block.tools:
+        return ()
+    adapted: list[BaseTool] = []
+    for source_tool in capability_block.tools:
+        if source_tool.name in mcp_tool_names:
+            raise CapabilityAssemblyError(
+                f"Tool '{source_tool.name}' is exposed by both a capability and "
+                "an MCP server selected on this agent. Capability and MCP tool "
+                "names must be unique."
+            )
+        adapted.append(_adapt_capability_tool_for_graph(source_tool))
+    return tuple(adapted)
+
+
+def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
+    """
+    Wrap one ReAct-shaped capability tool so it survives a Graph node's
+    plain-dict `invoke_runtime_tool` call intact.
+
+    Why this exists (NOTES-GRAPH-CAPABILITY-BRIDGE.md Phase 1/4,
+    `test_capability_tool_return_convention.py`): a capability tool built
+    with `@tool(..., response_format="content_and_artifact")` (the
+    `document_access` convention) silently loses its `ToolInvocationResult`
+    artifact when invoked through `BaseTool.ainvoke()` with a plain args dict
+    — the shape `invoke_runtime_tool` uses, as opposed to the `ToolCall` dict
+    `create_agent()`'s real ReAct loop uses. `.ainvoke()`'s response-shape
+    handling is what drops it; calling the tool's own underlying `.coroutine`
+    directly sidesteps `.ainvoke()` entirely and returns the function's real
+    Python return value, with no ambiguity.
+
+    The wrapper then re-shapes that return value into the one convention
+    Phase 1 proved survives a plain-dict `.ainvoke()` unchanged: a bare
+    `ToolInvocationResult`, no `response_format` override (LangChain's
+    "content" default already does the right thing here).
+    - `(content, artifact)` 2-tuple AND `source_tool.response_format ==
+      "content_and_artifact"`: keep the artifact. Gated on the tool's own
+      declared response_format (CAPAB-02), not "any 2-tuple" — a plain tool
+      whose normal return value happens to be some unrelated 2-tuple must
+      round-trip unchanged, not have its second element silently
+      reinterpreted as an artifact. **If the artifact's own `blocks` are
+      empty, `content` is folded in as one `ToolContentBlock` before the
+      artifact is returned** (PR #2067 review): `document_access`'s tools
+      duplicate their answer into `blocks` themselves, but a tool like
+      `demo_echo` puts its actual answer only in `content`, with an artifact
+      carrying nothing but `ui_parts` — discarding `content` outright would
+      silently drop the answer for any such tool. This is a safety net, not
+      a substitute for a capability author populating `blocks` directly
+      (`document_access` is still the reference pattern to copy).
+    - anything else (already a bare `ToolInvocationResult`, or any other
+      capability tool return): pass through unchanged.
+
+    A SYNC tool (`.func`, no `.coroutine`) with `content_and_artifact` cannot
+    be adapted this way at all — there's no coroutine for this wrapper to
+    call — so it's refused loudly instead (CAPAB-02): every capability tool
+    in this codebase is `async def` today specifically so that never fires.
+
+    `document_access`'s tool definition itself is untouched by this — the
+    adaptation lives entirely at this bridge/merge seam, not in capability
+    authoring (RFC invariant B).
+    """
+    coroutine = getattr(source_tool, "coroutine", None)
+    if coroutine is None:
+        # A sync-only tool (`.func`, no `.coroutine`) whose response_format
+        # is "content_and_artifact" would silently lose its artifact under a
+        # plain-dict `.ainvoke()`, exactly like the async case above — but
+        # there is no `.coroutine` for this function to call, so it cannot be
+        # adapted the same way. Refuse loudly rather than pass it through
+        # broken (RFC §3.9 "never silently degrade"); every capability tool
+        # in this codebase is `async def` today (CAPAB-02) specifically so
+        # this branch never fires in practice.
+        if getattr(source_tool, "response_format", "content") == "content_and_artifact":
+            raise CapabilityAssemblyError(
+                f"Capability tool '{source_tool.name}' is synchronous "
+                "(no .coroutine) with response_format='content_and_artifact', "
+                "which loses its artifact under a Graph agent's plain-dict "
+                "invocation. Make the tool `async def`, or return a bare "
+                "ToolInvocationResult (no response_format override)."
+            )
+        # Any other sync tool (a plain string/JSON return, no artifact to
+        # lose) passes through unchanged — nothing for this adapter to do.
+        return source_tool
+
+    # Gate the tuple-unwrap on the tool's OWN declared response_format,
+    # rather than "any 2-tuple" — a plain tool returning some unrelated
+    # 2-tuple (not the content_and_artifact convention) must round-trip
+    # through this adapter unchanged, not have its second element silently
+    # reinterpreted as an artifact.
+    is_content_and_artifact = (
+        getattr(source_tool, "response_format", "content") == "content_and_artifact"
+    )
+
+    async def _invoke(**kwargs: object) -> object:
+        raw = await coroutine(**kwargs)
+        if is_content_and_artifact and isinstance(raw, tuple) and len(raw) == 2:
+            content, artifact = raw
+            # PR #2067 review (Codex): keeping ONLY the artifact is correct
+            # for a tool like `document_access`'s, whose artifact duplicates
+            # its answer into `blocks` — but a tool like `demo_echo`'s puts
+            # the actual answer in `content` and an artifact carrying only
+            # `ui_parts` (a UI card), never `blocks`. Unwrapping to the
+            # artifact alone would silently drop the answer for any such
+            # tool. If the artifact has no `blocks` of its own, fold the
+            # discarded `content` in as one — never lose the answer just
+            # because a capability author didn't think to duplicate it.
+            if (
+                isinstance(artifact, ToolInvocationResult)
+                and not artifact.blocks
+                and isinstance(content, str)
+                and content
+            ):
+                artifact = artifact.model_copy(
+                    update={
+                        "blocks": (
+                            ToolContentBlock(kind=ToolContentKind.TEXT, text=content),
+                        )
+                    }
+                )
+            return artifact
+        return raw
+
+    return StructuredTool.from_function(
+        name=source_tool.name,
+        description=source_tool.description,
+        args_schema=source_tool.args_schema,
+        coroutine=_invoke,
+    )
 
 
 def _validated_handlers(
@@ -1882,6 +2081,14 @@ def _validated_handlers(
             )
         validated[node.node_id] = cast(GraphNodeHandler, handler)
     return validated
+
+
+def _elapsed_ms_since(started_at: float) -> int:
+    """Milliseconds elapsed since a `time.monotonic()` reading (react_runtime.py's
+    same helper — mirrored here so `ToolResultRuntimeEvent.latency_ms` is populated
+    on the Graph tool paths too, not just the ReAct one)."""
+
+    return int((_time.monotonic() - started_at) * 1000)
 
 
 def _graph_phase_timer(

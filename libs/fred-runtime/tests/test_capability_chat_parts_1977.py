@@ -164,7 +164,8 @@ def test_openapi_includes_demo_capability_part_with_no_hand_edits() -> None:
 # -- demo tool emission ----------------------------------------------------------
 
 
-def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
+@pytest.mark.asyncio
+async def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
     capability = DemoEchoCapability()
     # Boot always validates the registry (extending the union) before any
     # tool can run; mirror that here so the artifact's ui_parts validate.
@@ -180,7 +181,9 @@ def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
     (middleware,) = capability.middleware(ctx)
     (demo_tool,) = middleware.tools
 
-    message = demo_tool.invoke(
+    # CAPAB-02: demo_echo is now `async def` (it was the one capability tool
+    # still on the sync-only path) — `.ainvoke()`, not `.invoke()`.
+    message = await demo_tool.ainvoke(
         {
             "name": "demo_echo",
             "args": {"text": "hello"},

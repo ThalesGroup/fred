@@ -122,6 +122,9 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # Size this to (CPU cores available to the pod/host) / ingestion_max_concurrent_activities,
+        # or concurrent extractions will oversubscribe the CPU and appear to stall.
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -198,6 +201,9 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # Size this to (CPU cores available to the pod/host) / ingestion_max_concurrent_activities,
+        # or concurrent extractions will oversubscribe the CPU and appear to stall.
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor

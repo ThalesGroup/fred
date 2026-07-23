@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 
 export const TRACE_CHANNELS: Channel[] = [
@@ -237,11 +238,65 @@ export function formatLatencyMs(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function summarizeToolResultCompact(result: ChatMessage, maxLen = 120): string {
-  const content = toolResultContent(result);
-  if (!content) return "";
-  const single = content.replace(/\s+/g, " ").trim();
-  return single.length > maxLen ? single.slice(0, maxLen) + "…" : single;
+// Recognized, curated tool-result content shapes. A tool result whose content
+// doesn't match one of these stays redacted in the drawer (raw content from an
+// unrecognized tool must not be shown to end users) — these two are common and
+// specifically useful enough to justify a dedicated, richer view.
+export type SqlQueryResult = {
+  sql_query: string;
+  rows: Record<string, unknown>[];
+  error?: string | null;
+};
+
+export type RagSearchResult = {
+  query: string;
+  hits: VectorSearchHit[];
+};
+
+/** Parses a tool result's content string as a JSON object, or null if it isn't one. */
+export function parseToolResultContent(result: ChatMessage): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(toolResultContent(result));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function asSqlQueryResult(data: Record<string, unknown> | null): SqlQueryResult | null {
+  if (data && typeof data.sql_query === "string" && Array.isArray(data.rows)) {
+    return data as unknown as SqlQueryResult;
+  }
+  return null;
+}
+
+export function asRagSearchResult(data: Record<string, unknown> | null): RagSearchResult | null {
+  if (data && typeof data.query === "string" && Array.isArray(data.hits)) {
+    return data as unknown as RagSearchResult;
+  }
+  return null;
+}
+
+/** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
+export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
+  const action = humanizeToolName(toolName(entry.call));
+  if (!entry.result) return { action, status: "running" };
+  return {
+    action,
+    status: toolResultOk(entry.result) ? "completed" : "failed",
+    latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
+  };
+}
+
+/** Text for the drawer header's single copy action, or null when there's nothing to copy. */
+export function toolCopyText(entry: TraceEntry): string | null {
+  if (entry.kind !== "combo") return null;
+  const data = entry.result ? parseToolResultContent(entry.result) : null;
+  const sqlResult = asSqlQueryResult(data);
+  if (sqlResult) return sqlResult.sql_query;
+  const ragResult = asRagSearchResult(data);
+  if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
+  return JSON.stringify(genericToolPayload(entry), null, 2);
 }
 
 export type ThoughtExtras = {
@@ -371,11 +426,22 @@ export function statusForEntry(entry: TraceEntry): TraceStatus {
   return toolResultOk(entry.result) ? "ok" : "error";
 }
 
+// A "tool_use" thought is a synthetic bookkeeping block the runtime opens/closes
+// around every tool call purely to bracket it in time (see react_runtime.py).
+// Its conclusion is always the hardcoded literal "Done"/"Error" and its title is
+// just "Calling <tool>" — both fully redundant with the paired combo entry, which
+// already shows the humanized tool label, the status dot, and (now) the real
+// latency. Rendering it as a second row produced duplicate, information-free
+// entries (the repeated "Done" rows). Filter it out entirely.
+function isRedundantToolUseThought(m: ChatMessage): boolean {
+  return m.channel === "thought" && thoughtExtras(m).phase === "tool_use";
+}
+
 // Groups trace-channel messages from one exchange into TraceEntry[]
 // Pairs tool_call + tool_result by call_id; everything else is solo.
 // Deduplicates tool_call messages sharing the same call_id (keeps first occurrence).
 export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
-  const trace = messages.filter((m) => isTraceChannel(m.channel));
+  const trace = messages.filter((m) => isTraceChannel(m.channel) && !isRedundantToolUseThought(m));
 
   // Remove duplicate tool_call messages for the same call_id (e.g. from stream replay)
   const seenCallIds = new Set<string>();

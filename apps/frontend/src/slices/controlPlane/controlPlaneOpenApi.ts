@@ -1625,6 +1625,7 @@ export type CapabilityCatalogEntry = {
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
   kind?: "tool" | "agent";
+  execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
 };

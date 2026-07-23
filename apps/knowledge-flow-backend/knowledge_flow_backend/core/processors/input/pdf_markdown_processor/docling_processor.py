@@ -39,6 +39,14 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.i
 class DoclingPdfExtractor(BasePdfExtractor):
     MODELS_SUBDIR = "models"
 
+    def __init__(self, num_threads: int = 4) -> None:
+        """`num_threads` sizes docling's internal OMP/accelerator pool for this extraction.
+
+        Passed in explicitly (not read from ApplicationContext here) so this extractor stays
+        usable standalone, e.g. from the procbench benchmark harness with no live ApplicationContext.
+        """
+        self._num_threads = num_threads
+
     def extract(self, file_path: Path, work_dir: str) -> tuple[str, List[ImageTranscription]]:
         """Convert a PDF file to Markdown and extract its embedded images.
 
@@ -76,7 +84,7 @@ class DoclingPdfExtractor(BasePdfExtractor):
         opts.table_structure_options = TableStructureOptions(mode=TableFormerMode.FAST)
         opts.table_structure_options.do_cell_matching = False
         opts.layout_batch_size = 16
-        opts.accelerator_options = AcceleratorOptions(num_threads=8)
+        opts.accelerator_options = AcceleratorOptions(num_threads=self._num_threads)
 
         opts.artifacts_path = models_dir
         opts.layout_options = LayoutObjectDetectionOptions.from_preset(

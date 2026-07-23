@@ -66,6 +66,27 @@ export function isPdfFile(fileName: string | null | undefined): boolean {
   return !!fileName && fileName.toLowerCase().endsWith(".pdf");
 }
 
+/**
+ * Whether a file name denotes tabular data, for widening its markdown-table preview.
+ *
+ * Why this function exists:
+ * - CSV/TSV previews render as a markdown table with no dedicated tabular component
+ *   (see MarkdownRenderer.module.css); the default 65ch prose column is too narrow
+ *   for a wide dataset, unlike genuine prose documents which want that reading width
+ *
+ * How to use it:
+ * - pass the document's real file name (with extension) to decide whether
+ *   `MarkdownRenderer`'s `fullWidth` variant should be used instead of the prose cap
+ *
+ * Example:
+ * - `isTabularFile("ship_tracks_enriched.csv") // true`
+ */
+export function isTabularFile(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".csv") || lower.endsWith(".tsv");
+}
+
 function normalizeBasename(basename: string): string {
   if (basename === "/") return "";
   return basename.endsWith("/") ? basename.slice(0, -1) : basename;

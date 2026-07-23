@@ -26,16 +26,8 @@ function LinkPartRenderer({ part }: UiPartRendererProps) {
   return <ArtifactLinkChip link={part as unknown as LinkPart} />;
 }
 
-/**
- * Minimal geo summary chip: no map library ships with the frontend today, so
- * the base `geo` kind renders a typed placeholder (feature count) instead of
- * being silently dropped, as it was before the registry existed.
- */
-function GeoPartRenderer({ part }: UiPartRendererProps) {
+function GeoSummaryChip({ features }: { features: number }) {
   const { t } = useTranslation();
-  const geo = part as unknown as GeoPart;
-  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
-
   return (
     <span className={styles.geoChip} role="note" aria-label={t("chatbot.uiParts.geoAria")}>
       <span className={styles.geoIcon} aria-hidden>
@@ -44,6 +36,13 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
       {t("chatbot.uiParts.geoSummary", { count: features })}
     </span>
   );
+}
+
+/** Renders a `geo` part as a static feature-count chip. */
+function GeoPartRenderer({ part }: UiPartRendererProps) {
+  const geo = part as unknown as GeoPart;
+  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
+  return <GeoSummaryChip features={features} />;
 }
 
 /** Registry seed for the frozen base kinds; plugin kinds must not collide. */

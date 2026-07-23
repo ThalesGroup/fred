@@ -132,7 +132,7 @@ def test_pdf_processor_transcribes_images_with_ocr(monkeypatch: pytest.MonkeyPat
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
         lambda: "rich",
     )
-    monkeypatch.setattr(processor, "_build_extractor", lambda _: FakeExtractor())
+    monkeypatch.setattr(processor, "_build_extractor", lambda *_: FakeExtractor())
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PaddleOCRmodel",
         lambda: None,
@@ -179,7 +179,7 @@ def test_pdf_processor_describes_images_with_vision_model(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
         lambda: "rich",
     )
-    monkeypatch.setattr(processor, "_build_extractor", lambda _: FakeExtractor())
+    monkeypatch.setattr(processor, "_build_extractor", lambda *_: FakeExtractor())
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PaddleOCRmodel",
         lambda: None,

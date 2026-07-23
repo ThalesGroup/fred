@@ -27,8 +27,8 @@ observability:
       port: 9112
 
 processing:
-  # path_base_model: "."
-  path_base_model: "/app" # Use for docker
+  path_base_model: "." # Use "/app" for docker
+  # path_base_model: "/app" # Use for docker
   default_profile: fast
   profiles:
     fast:
@@ -109,6 +109,8 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -170,6 +172,8 @@ processing:
       pdf:
         extractor: docling
         do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor

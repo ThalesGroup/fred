@@ -14,18 +14,32 @@ tier is not misled by machinery that does not exist yet (RFC §6). Unmarked = li
 
 ---
 
-## Mental model — a capability is manifest + middleware
+## Mental model — a capability is manifest + tools
 
 A capability is **one modular agent feature carried end to end by one object**, not a
 feature scattered across the codebase (RFC §1, §2). It has two halves:
 
 - **Declaration** — a `CapabilityManifest`: agent-creation fields, upload slots, chat
   parts, side panels, an optional router, owned tables, required env, team scope.
-- **Runtime** — a stack of LangChain `AgentMiddleware` carrying the capability's tools
-  and hooks, bound per turn to a typed `CapabilityContext`.
+- **Runtime** — plain LangChain tools bound per turn to a typed `CapabilityContext`,
+  returned from `tools()`. This runs unchanged under a ReAct agent (`create_agent`) and a
+  Graph agent (`context.invoke_runtime_tool(...)`) — implement `tools()` and both work.
 
 Both live on one `AgentCapability` subclass. **Installing the package that declares it
 IS the registration** — no central list to edit (RFC §4).
+
+`middleware()` exists as a ReAct-only escape hatch for the rare hook `tools()` cannot
+express (a tool schema built dynamically per turn, a conversation-state edit, a
+prompt-fragment injection) — see the hook table below. **Most capabilities never touch
+it.** A capability that overrides `middleware()` without also implementing `tools()`
+**must** declare `manifest.execution_models = ("react",)` exactly — it has zero
+Graph-visible runtime contribution, so `"graph"` is always wrong for this shape, whether
+left at the default (`("react", "graph")`) or written out explicitly. `ppt_filler`/
+`writable_document` below are the worked example. **You cannot get this wrong and ship
+it anyway**: pod boot itself refuses ANY `middleware()`-only capability whose
+`execution_models` contains `"graph"` — never declared (kept the default) or explicitly
+written that way, either fails startup (`InvalidExecutionModelError`). This is a
+mechanical guarantee, not a rule that depends on the author reading this page.
 
 Contract surface (import from here, never re-declare):
 `libs/fred-sdk/fred_sdk/contracts/capability/` — `base.py` (`AgentCapability`),
@@ -41,10 +55,10 @@ Contract surface (import from here, never re-declare):
 
 | File | What it shows |
 | --- | --- |
-| `libs/fred-runtime/fred_runtime/capabilities/demo.py` (`DemoEchoCapability`) | **Minimal tracer**: one static tool, one scalar config field, plus one router + one owned table + one chat part + one side panel — the full vertical, smallest possible. |
-| `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: three live tools (vector search, `list_document_tree`, `summarize_document`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree` / `document_summarize`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial. |
-| `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. |
-| `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. |
+| `libs/fred-runtime/fred_runtime/capabilities/demo.py` (`DemoEchoCapability`) | **Minimal tracer**: one static tool, one scalar config field, plus one router + one owned table + one chat part + one side panel — the full vertical, smallest possible. Implements `tools()` — works on ReAct and Graph agents. |
+| `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: three live tools (vector search, `list_document_tree`, `summarize_document`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree` / `document_summarize`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial. Implements `tools()` — works on ReAct and Graph agents. |
+| `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. Its own tool loading is a separate, pre-existing path (`FredMcpToolProvider`) already common to ReAct and Graph — it legitimately overrides `middleware()` only for its prompt fragment. |
+| `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
 
 ---
 
@@ -78,14 +92,15 @@ only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is t
 
 ---
 
-## Requirement → middleware hook (RFC §5.1)
+## Requirement → hook (RFC §5.1)
 
-Map a runtime need to a LangChain primitive; do not invent a new hook.
+Map a runtime need to a primitive; do not invent a new hook. The first row runs on
+ReAct **and** Graph agents; every other row is `middleware()`-only — ReAct agents alone.
 
 | Need | Hook |
 | --- | --- |
-| Add tools | `middleware.tools` (static) |
-| Tool built at chat time | `wrap_model_call` editing `request.tools` `[T2]` |
+| Add tools | `tools(ctx)` — works on ReAct and Graph agents |
+| Tool built at chat time | `middleware()` override, `wrap_model_call` editing `request.tools` — ReAct only |
 | Runtime context split from LLM args | `CapabilityContext` via the middleware closure |
 | Edit conversation state (edit notice, attachment note) | `before_model` returning a state-update dict `[T2]` |
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
@@ -96,6 +111,11 @@ Chat-time controls: return `ChatControlSpec`s from `chat_controls(config)` (comp
 session-prep, never persisted — RFC §3.3, §3.7). Chat parts: extend the `UiPart` union
 by declaring a part with a `Literal` `type` discriminator in `manifest.chat_parts`
 (RFC §3.6). Both are shown in `document_access` / `demo.py`.
+
+**Used a `middleware()`-only row above?** Declare `manifest.execution_models =
+("react",)` — the default is `("react", "graph")`. Skipping this is not a safe default:
+a Graph agent selecting a `middleware()`-only capability that left the default fails
+loudly at assembly (`CapabilityError`) rather than silently getting no tools.
 
 ---
 

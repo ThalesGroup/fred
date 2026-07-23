@@ -244,6 +244,40 @@ class CapabilityManifest(BaseModel):
     # ever authored; this discriminator exists on `CapabilityCatalogEntry` for
     # that projection and is carried here only so the two models stay aligned.
     kind: Literal["tool", "agent"] = "tool"
+    # Which execution models this capability's runtime actually works under
+    # (CAPAB-02, RFC §3.2/§3.9). Default = both, correct for any capability
+    # whose only runtime need is `tools()` (execution-model-agnostic by
+    # construction). A capability that overrides `middleware()` for a
+    # ReAct-specific hook (dynamic per-turn tools, `before_model` state edits,
+    # prompt injection) WITHOUT also implementing `tools()` MUST declare
+    # `("react",)` explicitly — selecting it on a Graph agent then fails
+    # loudly at assembly instead of silently contributing no tools.
+    execution_models: tuple[Literal["react", "graph"], ...] = ("react", "graph")
+
+    @model_validator(mode="after")
+    def _check_execution_models(self) -> "CapabilityManifest":
+        if not self.execution_models:
+            raise ValueError(
+                f"CapabilityManifest '{self.id}': execution_models must not be empty."
+            )
+        if "react" not in self.execution_models:
+            # No capability runtime need is Graph-only: `tools()` is the only
+            # Graph-visible surface, and it feeds the ReAct binding
+            # identically (via the default middleware() wrap) — there is no
+            # equivalent "ReAct-only escape hatch" mechanism in reverse. A
+            # declaration missing "react" cannot correspond to anything the
+            # runtime can actually build, so it fails at declaration time
+            # rather than silently being ignored (nothing today even reads
+            # this field on the ReAct assembly path, which would otherwise
+            # make ("graph",) a lie the runtime never catches).
+            raise ValueError(
+                f"CapabilityManifest '{self.id}': execution_models must "
+                'include "react" — there is no Graph-only capability shape '
+                "(every Graph-visible tool is also ReAct-visible, since "
+                'tools() feeds both). Use ("react",) or the default '
+                '("react", "graph").'
+            )
+        return self
 
 
 class CapabilityCatalogEntry(BaseModel):
@@ -283,6 +317,10 @@ class CapabilityCatalogEntry(BaseModel):
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6) —
     # see `CapabilityManifest.kind`.
     kind: Literal["tool", "agent"] = "tool"
+    # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
+    # future catalog/UI filter can hide a ReAct-only capability from a Graph
+    # template's picker instead of only failing loud at selection time.
+    execution_models: tuple[Literal["react", "graph"], ...] = ("react", "graph")
     # Ingress-relative base URL of this capability's auto-mounted router
     # (`{pod_base_url}/capabilities/{id}`), or None when the capability ships
     # no `router` (#1979, RFC §9.1). The template-bound (pre-save) surface
@@ -327,5 +365,6 @@ class CapabilityCatalogEntry(BaseModel):
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
             team_scope=manifest.team_scope,
             kind=manifest.kind,
+            execution_models=manifest.execution_models,
             route_base_url=route_base_url if manifest.router is not None else None,
         )

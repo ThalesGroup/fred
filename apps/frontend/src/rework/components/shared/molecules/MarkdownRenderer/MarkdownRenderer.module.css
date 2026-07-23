@@ -140,13 +140,13 @@
   width: max-content;
   max-width: 100%;
   overflow-x: auto;
-  font: var(--font-body-medium);
+  font: var(--font-body-small);
 }
 
 .root :global(th),
 .root :global(td) {
   border: 0.5px solid var(--outline-muted);
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
   text-align: left;
   word-break: normal;
   /* Tables opt out of the root's aggressive break rules: without this, cells in

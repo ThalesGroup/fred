@@ -314,6 +314,12 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
         side_panels=[SidePanelSpec(widget="writable_document_pane")],
         router=build_router(),
         tables=[WritableDocumentDoc],
+        # CAPAB-02: needs a `before_model` state edit (user-edit detection ->
+        # hidden system note) and a `wrap_model_call` prompt overlay for open
+        # documents — both ReAct-only hooks `tools()` cannot express.
+        # Explicitly ReAct-only rather than silently contributing zero tools
+        # to a Graph agent that selects this capability.
+        execution_models=("react",),
     )
     ConfigModel = EmptyModel
 
