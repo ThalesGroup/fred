@@ -245,7 +245,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 "message": "Conversion to markdown succeeded.",
             }
         except Exception as e:
-            logger.warning(f"PDF extraction failed, trying markitdown: {e}", exc_info=e)
+            logger.warning(f"PDF extraction failed, trying markitdown: {e}", exc_info=True)
         finally:
             self._remove_all_files(work_dir)
 

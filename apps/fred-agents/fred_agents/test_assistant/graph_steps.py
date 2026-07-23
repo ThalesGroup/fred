@@ -1396,8 +1396,10 @@ async def geo_step(
     Emit a sample GeoJSON `FeatureCollection` as a `GeoPart` ui_part.
 
     Exercises the typed `GeoPart`/`ui_parts` rendering path (#1977's
-    `GeoPartRenderer`, backed by Leaflet) end to end, deterministically and
-    without a real agent needing to call the `geo.render_points` builtin tool.
+    `GeoPartRenderer`, a static feature-count summary chip — the interactive
+    Leaflet map was removed from the frontend, PR #2067, over a non-OSI
+    dependency license) end to end, deterministically and without a real
+    agent needing to call the `geo.render_points` builtin tool.
 
     SSE events exercised: status (x2), assistant_delta, final (with ui_parts).
     """
