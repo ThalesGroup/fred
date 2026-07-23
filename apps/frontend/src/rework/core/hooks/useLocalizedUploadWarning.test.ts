@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import type { UploadWarning } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveUploadWarningMessage } from "./useLocalizedUploadWarning";
+import { uploadWarningSignature } from "./useUploadWarningAcknowledgement";
 
 const warning: UploadWarning = {
   severity: "warning",
@@ -46,5 +47,23 @@ describe("resolveUploadWarningMessage", () => {
   it("returns null when no warning is configured", () => {
     expect(resolveUploadWarningMessage(null, "fr")).toBeNull();
     expect(resolveUploadWarningMessage({ severity: "info" }, "fr")).toBeNull();
+  });
+});
+
+// The chat-attachments acknowledgement is stored against this signature: it
+// must be stable for an unchanged config (ack survives reloads) and change
+// whenever the deployer edits the notice (everyone is re-prompted).
+describe("uploadWarningSignature", () => {
+  it("is stable for an identical warning", () => {
+    expect(uploadWarningSignature(warning)).toBe(uploadWarningSignature({ ...warning }));
+  });
+
+  it("changes when the message content changes", () => {
+    const edited: UploadWarning = { ...warning, messages: { ...warning.messages, en: "New rules apply." } };
+    expect(uploadWarningSignature(edited)).not.toBe(uploadWarningSignature(warning));
+  });
+
+  it("changes when the severity changes", () => {
+    expect(uploadWarningSignature({ ...warning, severity: "error" })).not.toBe(uploadWarningSignature(warning));
   });
 });

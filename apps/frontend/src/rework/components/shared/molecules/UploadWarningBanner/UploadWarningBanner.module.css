@@ -22,7 +22,7 @@
   background: var(--surface-container);
   padding: var(--spacing-xs) var(--spacing-s);
   color: var(--on-surface);
-  font: var(--font-body-small);
+  font: var(--font-body-medium);
 }
 
 /* Same severity → accent mapping as Toast, for cross-surface consistency. */

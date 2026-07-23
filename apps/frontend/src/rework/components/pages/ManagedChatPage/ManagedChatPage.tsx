@@ -27,11 +27,13 @@ import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDra
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import { useManagedChat } from "./useManagedChat";
+import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
@@ -157,10 +159,26 @@ export default function ManagedChatPage() {
     );
   };
 
+  // First-file gate: while the deployer-configured upload warning is
+  // unacknowledged, adds from both entry points (picker and drop) are parked
+  // here and only forwarded once the user accepts the dialog. Cancel drops them.
+  const { requiresAcknowledgement, acknowledge } = useUploadWarningAcknowledgement();
+  const [pendingAttachments, setPendingAttachments] = useState<{ files: File[]; source: "picker" | "drop" } | null>(
+    null,
+  );
+
+  const addAttachments = (files: File[], source: "picker" | "drop") => {
+    if (requiresAcknowledgement) {
+      setPendingAttachments({ files, source });
+      return;
+    }
+    chat.handleAddAttachments(files, source);
+  };
+
   const handleFilesSelected = (files: FileList | null) => {
     if (!allowChatAttachments) return;
     const selected = Array.from(files ?? []);
-    if (selected.length > 0) chat.handleAddAttachments(selected, "picker");
+    if (selected.length > 0) addAttachments(selected, "picker");
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -176,7 +194,7 @@ export default function ManagedChatPage() {
     event.preventDefault();
     setDragActive(false);
     const files = Array.from(event.dataTransfer.files);
-    if (files.length > 0) chat.handleAddAttachments(files, "drop");
+    if (files.length > 0) addAttachments(files, "drop");
   };
 
   const composer = (
@@ -345,6 +363,15 @@ export default function ManagedChatPage() {
         />
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
         {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
+        <UploadWarningAckDialog
+          open={pendingAttachments !== null}
+          onConfirm={() => {
+            acknowledge();
+            if (pendingAttachments) chat.handleAddAttachments(pendingAttachments.files, pendingAttachments.source);
+            setPendingAttachments(null);
+          }}
+          onCancel={() => setPendingAttachments(null)}
+        />
       </div>
     </TraceDrawerProvider>
   );
