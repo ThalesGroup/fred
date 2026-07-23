@@ -171,17 +171,5 @@ Beware the decoy: the branch push also fires "Build and Push Docker Images" with
 that is **not** the release build. Tag runs can lag the push by ~30–60 s; re-check before
 concluding they are missing.
 
-**Recovery — tag workflows never fired.** Neither workflow has `workflow_dispatch`, so the only
-re-trigger is to delete the two tags on the remote and re-push them (the local tag objects and
-the commit are untouched — this only re-fires the push events):
-
-```bash
-git push origin :refs/tags/"code/v$V" :refs/tags/"chart/v$V"
-git push origin "code/v$V"
-git push origin "chart/v$V"
-```
-
-Then re-run `gh run list` and confirm both tag runs appear.
-
 Do **not** touch `deploy/charts/fred/Chart.yaml` — the chart workflow injects `version`/`appVersion`
 at build time; the value committed in the file is not used.
