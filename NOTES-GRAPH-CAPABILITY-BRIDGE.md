@@ -72,11 +72,11 @@ in full to check the plan against reality. None use package capabilities; all ru
 lane, both already execution-model-agnostic and untouched by this work. Zero regression
 risk confirmed; the bridge is strictly additive.
 
-## Three corrections (2026-07-23, CAPAB-02)
+## Four corrections (2026-07-23, CAPAB-02)
 
-Three rounds of independent review, each verified against the code before fixing, found
+Four rounds of independent review, each verified against the code before fixing, found
 real gaps in the landing above. See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
-§8.23–§8.25 and `id-legend.yaml`'s `CAPAB-02` entry for the full record. This file is
+§8.23–§8.26 and `id-legend.yaml`'s `CAPAB-02` entry for the full record. This file is
 not updated further — those and the RFC are now the canonical source.
 
 **Round 1 (§8.23):** nothing stopped a Graph agent from *selecting*
@@ -98,7 +98,7 @@ documented, not fixed (no Graph-side prompt-injection mechanism exists).
 **Round 3 (§8.25):** round 1's `execution_models` fix only caught a capability that
 EXPLICITLY declared itself ReAct-only — an author who just forgot to mention the field
 kept the class default (both models) and still shipped a silent Graph no-op. Fixed with
-a BOOT invariant (`UndeclaredExecutionModelError`, via `model_fields_set`), not another
+a BOOT invariant (`InvalidExecutionModelError`, via `model_fields_set`), not another
 runtime check — a `middleware()`-only capability that never declared `execution_models`
 now fails pod startup, not just Graph assembly. `CapabilityManifest` also now requires
 `"react"` always be present. Also fixed: `document_access`'s 403/404 recovery hint was
@@ -106,6 +106,16 @@ appended to the message after the artifact was already built (so it never reache
 artifact); `invoke_runtime_tool` read `is_error` off the normalized dict, not the typed
 `ToolInvocationResult` (risked misclassifying an unrelated tool's own field), and never
 populated `sources`/`ui_parts` on its event at all.
+
+**Round 4 (§8.26):** round 3's boot check only caught a capability that never MENTIONED
+`execution_models` — one that explicitly wrote `execution_models=("react", "graph")` on
+a `middleware()`-only shape still passed every check while still having zero `tools()`
+output, reproducing the exact silent no-op. Fixed: the check is now on the VALUE (any
+`middleware()`-only capability whose `execution_models` contains `"graph"` fails boot,
+declared or defaulted), `model_fields_set` only sharpens the message.
+`UndeclaredExecutionModelError` renamed `InvalidExecutionModelError` to match. Also
+fixed: `invoke_runtime_tool`'s KPI timer never captured `kpi_dims`, so a reported
+`is_error=True` still recorded `status=ok` in the metric.
 
 ## Still open (not fixed here, not a regression)
 

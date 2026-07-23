@@ -55,7 +55,7 @@ from .errors import (
     DuplicateChatPartKindError,
     MissingRequiredEnvError,
     TurnOptionsInvalidError,
-    UndeclaredExecutionModelError,
+    InvalidExecutionModelError,
     UnknownCapabilityError,
 )
 from .mcp import (
@@ -91,7 +91,7 @@ __all__ = [
     "DuplicateChatPartKindError",
     "MissingRequiredEnvError",
     "TurnOptionsInvalidError",
-    "UndeclaredExecutionModelError",
+    "InvalidExecutionModelError",
     "UnknownCapabilityError",
     "boot_capability_registry",
     "build_capability_agent_block",

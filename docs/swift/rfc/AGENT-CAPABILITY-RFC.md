@@ -225,16 +225,19 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
   directly only for a hook `tools()` cannot express: a tool schema built dynamically per
   turn, a `before_model` state edit, or a prompt-fragment injection (`McpCapability`'s
   case — §5.1). **A capability that overrides `middleware()` without also implementing
-  `tools()` MUST declare `manifest.execution_models = ("react",)`** — the default is
-  `("react", "graph")`, correct for the common `tools()`-only case, but wrong for a
-  `middleware()`-only capability: left at the default, selecting it on a Graph agent
-  would silently contribute no tools. Declared explicitly, selecting it on a Graph agent
-  instead fails loudly at assembly (`CapabilityError`, named, before any turn runs) — the
-  RFC §3.9 "never silently degrade" rule, enforced at the seam this gap was found at
-  (CAPAB-02). A capability needing both a ReAct-specific hook and Graph-visible tools
-  implements `tools()` too, declares both execution models (the default), and does not
-  fold the tools into the middleware override. When `middleware()` IS overridden it
-  returns the LangChain
+  `tools()` MUST declare `manifest.execution_models = ("react",)` exactly** — it has zero
+  Graph-visible runtime contribution (`tools()` is the only thing a Graph agent ever
+  reads), so `"graph"` is always wrong for this shape, whether left at the class default
+  (`("react", "graph")`) or written out explicitly. Both fail the same way, on the same
+  check — not just "undeclared": `CapabilityRegistry` refuses to boot a pod carrying such
+  a capability at all (`InvalidExecutionModelError`, checked on the VALUE, not on whether
+  the field was mentioned), and `_build_capability_block` separately refuses, at
+  assembly, a Graph agent's selection of one (`CapabilityError`, named, before any turn
+  runs) — the RFC §3.9 "never silently degrade" rule, enforced at both the seam this gap
+  was found at and the earliest possible point, pod startup (CAPAB-02). A capability
+  needing both a ReAct-specific hook and Graph-visible tools implements `tools()` too,
+  declares both execution models (the default), and does not fold the tools into the
+  middleware override. When `middleware()` IS overridden it returns the LangChain
   middleware **stack** carrying the capability's tools and hooks — a list, deliberately:
   it lets a capability compose its custom hook with **prebuilt LangChain middleware**
   (e.g. `ToolCallLimitMiddleware` scoped to its own tools) instead of hand-wrapping them,
@@ -730,9 +733,10 @@ longer valid — reset them and re-save the agent"). The convention keeping this
 >   colliding with an MCP-resolved tool name still fails loudly rather than shadowing (the
 >   same "never silently degrade" rule this section opened with). A capability that cannot
 >   express its runtime need as `tools()` at all declares itself
->   `execution_models = ("react",)` (§3.1, §3.2) — selecting it on a Graph agent fails
->   loudly at assembly instead of silently contributing nothing. Validated with zero
->   regressions
+>   `execution_models = ("react",)` exactly (§3.1, §3.2) — any other value containing
+>   `"graph"` for such a capability fails pod boot outright, and selecting one on a Graph
+>   agent separately fails loudly at assembly, instead of either silently contributing
+>   nothing. Validated with zero regressions
 >   against three real external Graph/ReAct agents that predate this change
 >   (`dt-agents/aegis`, `dt-agents/dva_risk_validator_team`,
 >   `fred-samples/cvem_watch`) — none use package capabilities yet, all run unmodified

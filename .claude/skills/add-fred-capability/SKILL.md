@@ -55,11 +55,13 @@ Do not skip this. Open and skim:
   as `validate_config` content logic, not slot cardinality — otherwise every ordinary
   edit would demand a re-upload. It implements only `middleware()` (a dynamically-built
   tool schema, a genuine ReAct-only hook per Step 3) and declares
-  `manifest.execution_models = ("react",)` — do not copy the `middleware()`-only part
-  unless your capability has the same need; if it also needs plain tools, implement
-  `tools()` too and leave `execution_models` at its default (both). **Forgetting to
-  declare `execution_models=("react",)` on a `middleware()`-only capability is not a
-  silent no-op** — a Graph agent selecting it fails loudly at assembly instead.
+  `manifest.execution_models = ("react",)` exactly — do not copy the `middleware()`-only
+  part unless your capability has the same need; if it also needs plain tools, implement
+  `tools()` too and leave `execution_models` at its default (both). **A `middleware()`-only
+  capability whose `execution_models` contains `"graph"` is never a silent no-op** —
+  whether the field was never mentioned (kept the default) or written out explicitly as
+  `("react", "graph")`, pod boot refuses it outright, before a Graph agent could ever
+  select it.
 - **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).
@@ -127,13 +129,13 @@ discriminator in `manifest.chat_parts` (the registry extends the `UiPart` union 
 you do **not** edit the union).
 
 **Used any ReAct-only row above (and not `tools()`)?** Declare
-`manifest.execution_models = ("react",)`. This is not optional — the default is
-`("react", "graph")`, and a Graph agent selecting a capability that left the default
-while only implementing `middleware()` fails loudly at assembly with a `CapabilityError`
-naming the capability, rather than silently getting no tools. You don't even have to
-remember this rule to be safe: pod boot itself refuses registration
-(`UndeclaredExecutionModelError`) for any `middleware()`-only capability that never
-explicitly set `execution_models`.
+`manifest.execution_models = ("react",)` — exactly that value, not just "something". A
+Graph agent selecting a `middleware()`-only capability whose `execution_models` contains
+`"graph"` fails loudly at assembly with a `CapabilityError`, rather than silently getting
+no tools. You don't even have to remember this rule to be safe: pod boot itself refuses
+registration (`InvalidExecutionModelError`) for ANY `middleware()`-only capability whose
+`execution_models` contains `"graph"` — never mentioned (kept the default) or written
+out explicitly, both fail the same way.
 
 ---
 

@@ -1501,7 +1501,7 @@ refusal only covered a capability that EXPLICITLY declared itself ReAct-only
 which still silently passed the Graph assembly check and still contributed
 zero tools. Fixed with a new boot invariant, not a runtime one:
 `CapabilityRegistry._validate_execution_models` (new
-`UndeclaredExecutionModelError`) fails pod startup for any capability that
+`InvalidExecutionModelError`) fails pod startup for any capability that
 overrides `middleware()` without implementing `tools()` and never explicitly
 set `execution_models` — detected via pydantic's `model_fields_set`, which
 distinguishes "the author wrote `execution_models=(...)`" from "the field
@@ -1544,6 +1544,42 @@ more spots where a real diagnostic still silently evaporated on the one path
 ### RFC reference
 
 `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
+
+---
+
+### 8.26 ✅ `execution_models` boot check closed on the VALUE, not the declaration; graph KPI status fixed (2026-07-23)
+
+**What changed.** §8.25's boot invariant only caught a `middleware()`-only
+capability that never MENTIONED `execution_models` — one that explicitly
+wrote `execution_models=("react", "graph")` still passed every check
+(boot, manifest validator, Graph assembly) while still having zero
+`tools()` output, reproducing the exact silent no-op the whole chain of
+fixes exists to prevent. `CapabilityRegistry._validate_execution_models`
+(`InvalidExecutionModelError`, renamed from `UndeclaredExecutionModelError`)
+now checks the VALUE: any `middleware()`-only capability whose
+`execution_models` contains `"graph"` fails pod boot, whether that value
+came from the class default or an explicit declaration.
+`model_fields_set` is now used only to make the error message precise
+("never declared" vs. "declared, but to the wrong value"), not to decide
+whether to raise.
+
+Also fixed: `invoke_runtime_tool`'s KPI timer (`_graph_phase_timer`) never
+captured its `kpi_dims`, so a capability tool reporting failure via
+`ToolInvocationResult(is_error=True)` (never raising) recorded
+`status=ok` in the metric — the timer's own default when no exception
+propagates. Mirrors the canonical `invoke_tool` pattern now:
+`kpi_dims["status"] = "error"` when the typed result reports failure.
+
+**Why.** Same rule as §8.22–§8.25: a capability's incompatibility with
+Graph must be impossible to miss, at every layer — including when an
+author writes the wrong value on purpose, not just when they forget to
+write anything. And a failing tool call must look like a failure
+everywhere it's recorded — the trace event (§8.24), the span (§8.25), and
+now the KPI metric a dashboard or alert would actually query.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9.
 
 ---
 

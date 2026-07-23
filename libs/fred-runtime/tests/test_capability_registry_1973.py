@@ -34,7 +34,7 @@ from fred_runtime.capabilities import (
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
     MissingRequiredEnvError,
-    UndeclaredExecutionModelError,
+    InvalidExecutionModelError,
     boot_capability_registry,
 )
 from fred_runtime.capabilities.demo import DemoEchoCapability
@@ -212,7 +212,7 @@ def test_middleware_only_capability_forgetting_execution_models_fails_boot() -> 
 
     registry = CapabilityRegistry()
     registry.register(_ForgotCap())
-    with pytest.raises(UndeclaredExecutionModelError, match="cap_forgot"):
+    with pytest.raises(InvalidExecutionModelError, match="cap_forgot"):
         registry.validate(env={})
 
 
@@ -220,6 +220,24 @@ def test_middleware_only_capability_declaring_execution_models_passes_boot() -> 
     registry = CapabilityRegistry()
     registry.register(_capability("cap_declared", execution_models=("react",)))
     registry.validate(env={})
+
+
+def test_middleware_only_capability_explicitly_claiming_graph_fails_boot() -> None:
+    """
+    The gap the fourth independent review found: the boot check only caught
+    a capability that never MENTIONED `execution_models`. Writing
+    `execution_models=("react", "graph")` out explicitly on a
+    `middleware()`-only capability is exactly as wrong — it still has zero
+    `tools()` output, so it is still a Graph no-op — but it used to pass,
+    since the field was technically "declared". The check must be on the
+    VALUE, not on whether the author bothered to type it.
+    """
+    registry = CapabilityRegistry()
+    registry.register(
+        _capability("cap_wrongly_graph", execution_models=("react", "graph"))
+    )
+    with pytest.raises(InvalidExecutionModelError, match="cap_wrongly_graph"):
+        registry.validate(env={})
 
 
 def test_tools_based_capability_needs_no_execution_models_declaration() -> None:

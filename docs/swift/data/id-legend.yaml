@@ -768,7 +768,7 @@ items:
       capability kept the class default (both models), which still silently passed
       every check and still shipped a Graph no-op. Fixed with a BOOT invariant, not a
       runtime one: `CapabilityRegistry._validate_execution_models`
-      (`UndeclaredExecutionModelError`) uses pydantic `model_fields_set` to detect
+      (`InvalidExecutionModelError`) uses pydantic `model_fields_set` to detect
       "never declared" vs "explicitly declared the default" and fails pod startup for
       the former (McpCapability exempt). `CapabilityManifest` also now requires
       `"react"` always be present (no capability shape is Graph-only). Two pre-existing
@@ -779,6 +779,19 @@ items:
       false positive on an unrelated tool's own `is_error`-named field) and never
       populated `sources`/`ui_parts` on its event — now reads the typed
       `ToolInvocationResult` directly, only when genuinely one.
+      Fourth correction (2026-07-23, independent review #4 — see §8.26): round 3's boot
+      check only caught a capability that never MENTIONED `execution_models` — one that
+      explicitly wrote `execution_models=("react", "graph")` on a `middleware()`-only
+      shape still passed every check (boot, manifest validator, Graph assembly) while
+      still having zero `tools()` output, reproducing the exact silent no-op. Fixed:
+      `_validate_execution_models` (renamed `InvalidExecutionModelError`, was
+      `UndeclaredExecutionModelError`) now checks the VALUE — any `middleware()`-only
+      capability whose `execution_models` contains `"graph"` fails boot regardless of
+      whether that came from the default or an explicit declaration; `model_fields_set`
+      is now used only to make the error message precise. Also fixed:
+      `invoke_runtime_tool`'s KPI timer never captured `kpi_dims`, so a reported
+      `is_error=True` (no exception raised) still recorded `status=ok` in the metric —
+      now mirrors `invoke_tool`'s `kpi_dims["status"] = "error"` pattern.
       Still open, explicitly not fixed: full HITL enforcement on the Graph path (a
       real design task reconciling Graph's node-level pause/resume with the per-tool
       gate); whether a capability's ReAct-only middleware contributions (prompt
@@ -787,7 +800,7 @@ items:
       has pre-existing duplicate §8.x numbers (§8.13, §8.16, §8.21 each appear twice)
       predating this work — a doc-hygiene issue across many past contributors, flagged
       rather than silently renumbered in a change this large already.
-      See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22–§8.25 for the full
+      See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22–§8.26 for the full
       implementation record. Phase-by-phase design log of the original landing
       (superseded by the RFC amendment as the canonical source):
       `NOTES-GRAPH-CAPABILITY-BRIDGE.md` at the branch root.

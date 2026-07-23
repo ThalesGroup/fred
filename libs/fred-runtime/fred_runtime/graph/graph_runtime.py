@@ -722,7 +722,7 @@ class _GraphNodeExecutionContext:
                 "node_id": self.node_id,
                 "tool_name": tool_name,
             },
-        ):
+        ) as kpi_dims:
             try:
                 raw_result = await tool.ainvoke(arguments)
                 normalized = _normalize_runtime_tool_output(raw_result)
@@ -760,6 +760,8 @@ class _GraphNodeExecutionContext:
                         else (),
                     )
                 )
+                if reported_error:
+                    kpi_dims["status"] = "error"
                 if span is not None:
                     span.set_attribute("status", "error" if reported_error else "ok")
                 return normalized

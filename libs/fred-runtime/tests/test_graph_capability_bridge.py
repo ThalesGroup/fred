@@ -118,10 +118,12 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
-def _node_context(runtime_tools) -> _GraphNodeExecutionContext:
+def _node_context(
+    runtime_tools, *, services: RuntimeServices | None = None
+) -> _GraphNodeExecutionContext:
     return _GraphNodeExecutionContext(
         binding=_binding(),
-        services=RuntimeServices(),
+        services=services if services is not None else RuntimeServices(),
         model=None,
         model_resolver=None,
         graph_agent_id="graph-agent",
@@ -274,6 +276,37 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
     (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.tool_name == "failing_probe"
     assert event.is_error is True
+
+
+def test_invoke_runtime_tool_marks_kpi_status_error_for_reported_failure() -> None:
+    """
+    CAPAB-02: the span status was fixed to reflect `is_error` (prior round),
+    but the KPI timer's `status` dim was not — `_graph_phase_timer` defaults
+    it to "ok" whenever no exception propagates (`InMemoryMetricsProvider`'s
+    `setdefault("status", "ok")`), so a capability tool reporting failure via
+    `ToolInvocationResult(is_error=True)` (never raising, per RFC §3.9) was
+    recorded as a successful call. Mirrors the canonical `invoke_tool`
+    pattern (`kpi_dims["status"] = "error"`).
+    """
+
+    from fred_core.portable import InMemoryMetricsProvider
+
+    @lc_tool("kpi_failing_probe", response_format="content_and_artifact")
+    async def _kpi_failing_probe(x: str) -> tuple[str, ToolInvocationResult]:
+        """A tool that reports failure via is_error, never raises."""
+        del x
+        return "boom", ToolInvocationResult(tool_ref="kpi_failing_probe", is_error=True)
+
+    metrics = InMemoryMetricsProvider()
+    adapted = _adapt_capability_tool_for_graph(_kpi_failing_probe)
+    ctx = _node_context(
+        {adapted.name: adapted}, services=RuntimeServices(metrics=metrics)
+    )
+
+    asyncio.run(ctx.invoke_runtime_tool("kpi_failing_probe", {"x": "y"}))
+
+    assert len(metrics.timers) == 1
+    assert metrics.timers[0].dims["status"] == "error"
 
 
 def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> None:

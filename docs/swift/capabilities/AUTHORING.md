@@ -32,12 +32,14 @@ IS the registration** — no central list to edit (RFC §4).
 express (a tool schema built dynamically per turn, a conversation-state edit, a
 prompt-fragment injection) — see the hook table below. **Most capabilities never touch
 it.** A capability that overrides `middleware()` without also implementing `tools()`
-**must** declare `manifest.execution_models = ("react",)` (default: both) — selecting it
-on a Graph agent then fails loudly at assembly instead of silently contributing no
-tools. `ppt_filler`/`writable_document` below are the worked example. **You cannot
-forget this and ship it anyway**: pod boot itself refuses a `middleware()`-only
-capability that never set `execution_models` (`UndeclaredExecutionModelError`) — this is
-a mechanical guarantee, not a rule that depends on the author reading this page.
+**must** declare `manifest.execution_models = ("react",)` exactly — it has zero
+Graph-visible runtime contribution, so `"graph"` is always wrong for this shape, whether
+left at the default (`("react", "graph")`) or written out explicitly. `ppt_filler`/
+`writable_document` below are the worked example. **You cannot get this wrong and ship
+it anyway**: pod boot itself refuses ANY `middleware()`-only capability whose
+`execution_models` contains `"graph"` — never declared (kept the default) or explicitly
+written that way, either fails startup (`InvalidExecutionModelError`). This is a
+mechanical guarantee, not a rule that depends on the author reading this page.
 
 Contract surface (import from here, never re-declare):
 `libs/fred-sdk/fred_sdk/contracts/capability/` — `base.py` (`AgentCapability`),

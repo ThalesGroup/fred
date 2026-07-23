@@ -56,7 +56,7 @@ class DefaultOnRequiredSettingsError(CapabilityRegistrationError):
     """
 
 
-class UndeclaredExecutionModelError(CapabilityRegistrationError):
+class InvalidExecutionModelError(CapabilityRegistrationError):
     """
     A capability overrides `middleware()` without implementing `tools()`, and
     its manifest never explicitly set `execution_models` (CAPAB-02, RFC §3.2,
