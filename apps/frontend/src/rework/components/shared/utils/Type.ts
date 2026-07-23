@@ -111,6 +111,14 @@ export const materialIcons = [
   "graphic_eq",
   "extension",
   "smart_toy",
+  "gavel",
+  "shield",
+  "support_agent",
+  "translate",
+  "payments",
+  "code",
+  "campaign",
+  "travel_explore",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];
