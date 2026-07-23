@@ -35,18 +35,6 @@
   overflow: auto;
 }
 
-/* Enabled cards are wrapped in <Link> — remove link decoration and fill the cell height */
-.chatLink {
-  display: block;
-  height: 100%;
-  text-decoration: none;
-}
-
-/* Disabled card wrapper — same cell sizing, no link */
-.disabledCard {
-  height: 100%;
-}
-
 .podFilter {
   display: flex;
   justify-content: center;

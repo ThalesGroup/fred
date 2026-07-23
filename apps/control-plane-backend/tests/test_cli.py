@@ -339,6 +339,7 @@ def test_completion_candidates_suggest_team_and_instance_ids() -> None:
             team_id=TeamId("af27a03a-48d4-451c-aaf4-6d5aa44733f1"),
             template_id="fred-agents:fred.github.sentinel",
             display_name="Sentinel",
+            role="Sentinel",
             status="enabled",
         )
     ]
@@ -433,6 +434,7 @@ def test_run_command_enroll_uses_template_default_display_name(capsys) -> None:
                     "template_id": "fred-agents:fred.github.sentinel",
                     "display_name": body["display_name"],
                     "description": body.get("description"),
+                    "role": body.get("role") or body["display_name"],
                     "status": "enabled",
                     "created_at": None,
                     "updated_at": None,
@@ -635,6 +637,7 @@ def test_run_command_unbind_deletes_instance_and_refreshes_cache(capsys) -> None
                 team_id=TeamId("fredlab"),
                 template_id="fred-agents:fred.github.sentinel",
                 display_name="Sentinel",
+                role="Sentinel",
                 status="enabled",
             )
         ],

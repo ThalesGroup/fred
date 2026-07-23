@@ -83,6 +83,7 @@ type AgentFormBodyProps = {
   templates: AgentTemplateSummary[];
   templateId: string;
   displayName: string;
+  role: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
@@ -99,6 +100,7 @@ type AgentFormBodyProps = {
   editInstance?: ManagedAgentInstanceSummary;
   teamId?: string;
   onDisplayNameChange: (v: string) => void;
+  onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
@@ -112,6 +114,7 @@ export function AgentFormBody({
   templates,
   templateId,
   displayName,
+  role,
   description,
   tuningFieldValues,
   selectedCapabilityIds,
@@ -125,6 +128,7 @@ export function AgentFormBody({
   editInstance,
   teamId,
   onDisplayNameChange,
+  onRoleChange,
   onDescriptionChange,
   onTuningChange,
   onCapabilitySelectionChange,
@@ -271,6 +275,14 @@ export function AgentFormBody({
             required
             disabled={isSubmitting}
             error={nameError}
+          />
+          <TextInput
+            label={t("rework.teams.formAgent.fields.role.label")}
+            placeholder={displayName}
+            value={role}
+            onChange={(e) => onRoleChange(e.target.value)}
+            maxLength={255}
+            disabled={isSubmitting}
           />
           <TextArea
             label={t("rework.teams.formAgent.fields.description.label")}

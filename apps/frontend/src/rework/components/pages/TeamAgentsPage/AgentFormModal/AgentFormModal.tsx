@@ -31,6 +31,7 @@ import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 export type AgentFormPayload = {
   templateId: string;
   displayName: string;
+  role: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
@@ -69,6 +70,7 @@ type AgentFormModalProps = {
 type FormState = {
   templateId: string;
   displayName: string;
+  role: string;
   description: string;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
@@ -118,6 +120,7 @@ export function buildAgentFormSubmitPayload(
   return {
     templateId: form.templateId,
     displayName: form.displayName.trim(),
+    role: form.role.trim(),
     description: form.description.trim(),
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
@@ -164,6 +167,7 @@ export default function AgentFormModal({
   const [form, setForm] = useState<FormState>({
     templateId: "",
     displayName: "",
+    role: "",
     description: "",
     tuningValues: {},
     selectedCapabilityIds: [],
@@ -184,6 +188,7 @@ export default function AgentFormModal({
       setForm({
         templateId: editInstance.template_id,
         displayName: editInstance.display_name,
+        role: editInstance.role,
         description: editInstance.description ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
@@ -198,6 +203,7 @@ export default function AgentFormModal({
       setForm({
         templateId: "",
         displayName: "",
+        role: "",
         description: "",
         tuningValues: {},
         selectedCapabilityIds: [],
@@ -220,6 +226,7 @@ export default function AgentFormModal({
     setForm({
       templateId: id,
       displayName: tpl?.display_name ?? "",
+      role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: [],
@@ -350,6 +357,7 @@ export default function AgentFormModal({
               templates={templates}
               templateId={form.templateId}
               displayName={form.displayName}
+              role={form.role}
               description={form.description}
               tuningFieldValues={form.tuningValues}
               selectedCapabilityIds={form.selectedCapabilityIds}
@@ -363,6 +371,7 @@ export default function AgentFormModal({
               editInstance={editInstance}
               teamId={teamId}
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
+              onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}

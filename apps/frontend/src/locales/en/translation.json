@@ -920,8 +920,8 @@
     },
     "agentCard": {
       "catalogWarning": "MCP configuration drift — recreate to resolve",
+      "chat": "Chat",
       "noDescription": "No description yet.",
-      "startChat": "New chat",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it."
     },
