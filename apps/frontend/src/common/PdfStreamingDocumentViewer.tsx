@@ -23,14 +23,9 @@ type Props = {
   documentUid: string;
 };
 
-// React-PDF requires workerSrc to be configured in the same module that renders
-// <Document>/<Page>; otherwise its default bare specifier can win at runtime.
+// Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
+// `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
-if (typeof Worker !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
-} else {
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-}
 
 const PDF_SCALE = 0.8;
 
@@ -43,6 +38,34 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // pdf.js worker rule (see PptPreviewPane.tsx for the full rationale): each
+  // <Document> mount MUST get its OWN module worker. A single shared
+  // GlobalWorkerOptions.workerPort reused across remounts throws "PDFWorker.fromPort
+  // - the worker is being destroyed" when this viewer's Document remounts (on
+  // documentUid change) while another react-pdf consumer's unmount destroy() is
+  // still racing the same port. Provision a fresh worker per remount key, and only
+  // terminate it once it is no longer the active port.
+  const workerRef = useRef<Worker | null>(null);
+  useMemo(() => {
+    if (typeof Worker === "undefined") {
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
+      workerRef.current = null;
+      return;
+    }
+    const worker = new Worker(pdfWorkerUrl, { type: "module" });
+    workerRef.current = worker;
+    pdfjs.GlobalWorkerOptions.workerPort = worker;
+  }, [reloadKey]);
+
+  useEffect(() => {
+    const worker = workerRef.current;
+    return () => {
+      if (worker && pdfjs.GlobalWorkerOptions.workerPort !== worker) {
+        worker.terminate();
+      }
+    };
+  }, [reloadKey]);
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [pageWidth, setPageWidth] = useState<number>(800);
