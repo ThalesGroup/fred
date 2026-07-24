@@ -847,11 +847,13 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "teams": "{{count}} équipe(s)",
+          "teams_one": "{{count}} équipe",
+          "teams_other": "{{count}} équipes",
           "inheritedHint": "Activée par défaut pour toutes les équipes. Les équipes qui s'en sont exclues sont déjà déduites.",
           "unknown": "Inconnu",
           "unknownHint": "Activée par défaut pour toutes les équipes, mais l'annuaire des équipes est indisponible : le nombre exact ne peut pas être déterminé.",
-          "personal": "{{count}} espace(s) personnel(s)",
+          "personal_one": "{{count}} espace personnel",
+          "personal_other": "{{count}} espaces personnels",
           "personalUnknown": "espaces personnels"
         },
         "health": {

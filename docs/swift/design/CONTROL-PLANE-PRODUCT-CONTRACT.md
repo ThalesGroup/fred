@@ -465,6 +465,13 @@ Will contain: session title (user-editable or auto-generated), creation timestam
 
 Session metadata is created by control-plane at `prepare-execution` time or on first turn. It is never stored in `fred-runtime`.
 
+`session_metadata` also carries an internal-only `source_runtime_id` (captured from the
+agent instance at `create_session` time, immutable, never returned by any API model). It
+lets `ConversationErasureService` resolve the owning runtime for checkpoint/history erasure
+even after the session's `agent_instance_id` row is later deleted — resolving solely through
+the live instance row let an agent-instance deletion permanently block erasure of any session
+that had used it (issue #2089, `FRED-2.0.2-RGPD-READY-RFC.md` §7).
+
 Until control-plane session metadata is implemented, the sidebar omits session listing. The intentional placeholder (no session list in sidebar) is acceptable. Adding a session list before the backend is ready is not.
 
 **Checkpoint State — owned by `fred-runtime` checkpointer**

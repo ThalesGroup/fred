@@ -847,11 +847,13 @@
           "actions": "Actions"
         },
         "enabledTeams": {
-          "teams": "{{count}} team(s)",
+          "teams_one": "{{count}} team",
+          "teams_other": "{{count}} teams",
           "inheritedHint": "Enabled for all teams by default. Teams that opted out are already subtracted.",
           "unknown": "Unknown",
           "unknownHint": "Enabled for all teams by default, but the team directory is unavailable so the exact count cannot be resolved.",
-          "personal": "{{count}} personal space(s)",
+          "personal_one": "{{count}} personal space",
+          "personal_other": "{{count}} personal spaces",
           "personalUnknown": "personal spaces"
         },
         "health": {

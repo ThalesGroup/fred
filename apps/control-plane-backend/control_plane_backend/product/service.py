@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import contextvars
 import hashlib
 import json
 import logging
@@ -371,7 +373,60 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
     )
 
 
+# Request-scoped memoization for `_fetch_runtime_templates` (#2089). Several
+# independent read paths inside one `GET /admin/capabilities` call
+# (`aggregate_capability_catalog`'s two fetches + `compute_capability_impact`'s
+# `_available_capability_ids_by_source`) each fetch the SAME pod's
+# `/agents/templates` with the SAME `include_non_public` flag — a real,
+# uncached HTTP round-trip every time. A `ContextVar` (not a parameter
+# threaded through every function in the chain — that would ripple the
+# signature into `aggregate_capability_catalog`, `compute_capability_impact`,
+# `_available_capabilities_for_source`, `_agent_capabilities_for_source`, and
+# `_available_capability_ids_by_source`, breaking every test double that
+# monkeypatches one of those with a fixed signature) lets a caller opt one
+# request into de-duplication via `_template_fetch_scope()` without changing
+# any signature in the chain; callers that never enter the scope (every other
+# caller, and any test that mocks `_fetch_runtime_templates` wholesale) are
+# unaffected — `.get()` returns the default `None` and every fetch behaves
+# exactly as before.
+_template_fetch_cache_var: contextvars.ContextVar[
+    "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
+] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
+
+
+@contextlib.contextmanager
+def _template_fetch_scope():
+    """De-duplicate `_fetch_runtime_templates` calls made inside this scope (#2089).
+
+    Storing the in-flight `Future` (not the eventual result) closes the race
+    where two concurrent callers both miss the cache and both fetch — the
+    second awaits the first's future instead of starting its own request.
+    """
+
+    token = _template_fetch_cache_var.set({})
+    try:
+        yield
+    finally:
+        _template_fetch_cache_var.reset(token)
+
+
 async def _fetch_runtime_templates(
+    base_url: str, include_non_public: bool = False
+) -> list[_RuntimeTemplatePayload]:
+    cache = _template_fetch_cache_var.get()
+    if cache is not None:
+        key = (base_url, include_non_public)
+        future = cache.get(key)
+        if future is None:
+            future = asyncio.ensure_future(
+                _fetch_runtime_templates_uncached(base_url, include_non_public)
+            )
+            cache[key] = future
+        return await future
+    return await _fetch_runtime_templates_uncached(base_url, include_non_public)
+
+
+async def _fetch_runtime_templates_uncached(
     base_url: str, include_non_public: bool = False
 ) -> list[_RuntimeTemplatePayload]:
     url = f"{base_url.rstrip('/')}/agents/templates"
@@ -3284,10 +3339,21 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
+    source_runtime_id: str | None = None
+    if request.agent_instance_id is not None:
+        # Capture the instance's source_runtime_id now, while it is certainly
+        # live, so a later agent-instance deletion can never strand erasure's
+        # runtime resolution for this session (issue #2089, RFC §7).
+        instance = await deps.get_agent_instance_store().get_for_team(
+            request.agent_instance_id, team_id
+        )
+        if instance is not None:
+            source_runtime_id = instance.source_runtime_id
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
+        source_runtime_id=source_runtime_id,
         user_id=user.uid,
         title=request.title,
     )

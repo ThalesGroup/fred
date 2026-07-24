@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useEffect, useId, useRef } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useInlineDrawerResize } from "./useInlineDrawerResize";
 import styles from "./InlineDrawer.module.css";
@@ -87,19 +87,34 @@ export function InlineDrawer({
       ? `min(${width}, 45vw)`
       : width;
 
+  // Blur before telling the host to close: closing sets aria-hidden={true} on
+  // `aside` (below), and if the currently focused element is still inside it
+  // at that point, the browser blocks the aria-hidden change and logs
+  // "Blocked aria-hidden on an element because its descendant retained
+  // focus." Blurring synchronously, before `onClose` triggers the state
+  // update, guarantees focus has already left the subtree by the time React
+  // commits `aria-hidden="true"`.
+  const handleClose = useCallback(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && drawerRef.current?.contains(active)) {
+      active.blur();
+    }
+    onClose();
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open, handleClose]);
 
   return (
     <>
       {layout === "overlay" && (
-        <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={onClose} />
+        <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={handleClose} />
       )}
       <aside
         ref={drawerRef}
@@ -133,7 +148,7 @@ export function InlineDrawer({
                 size="small"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label="Close panel"
-                onClick={onClose}
+                onClick={handleClose}
               />
             </div>
           </div>

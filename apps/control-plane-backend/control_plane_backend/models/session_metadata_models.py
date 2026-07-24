@@ -23,6 +23,12 @@ class SessionMetadataRow(Base):
     agent_instance_id: Mapped[str | None] = mapped_column(
         String, nullable=True, index=True
     )
+    # Captured once at create_session from the (then-live) agent instance's
+    # source_runtime_id — immutable, config-level runtime catalog key. Lets
+    # erasure resolve the owning runtime even after agent_instance_id's row is
+    # later deleted (issue #2089, FRED-2.0.2-RGPD-READY-RFC §7). NULL for rows
+    # created before this column existed.
+    source_runtime_id: Mapped[str | None] = mapped_column(String, nullable=True)
     user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

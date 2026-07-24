@@ -239,7 +239,13 @@ security:
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://app-keycloak:8080/realms/app"
+    # Must be browser-reachable: tokens validated here are issued client-side
+    # by keycloak-js against this same URL, so it must match the browser's
+    # issuer exactly (soft "JWT issuer mismatch" warning otherwise, oidc.py).
+    # "app-keycloak" only resolves inside the docker-compose network.
+    # security.m2m.realm_url above stays docker-internal (backend-to-Keycloak only).
+    # Mirrors control-plane-backend/config/configuration_prod.yaml's split.
+    realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
   rebac:

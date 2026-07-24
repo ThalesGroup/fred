@@ -93,10 +93,23 @@ export function RichInputField({
   const resize = () => {
     const el = textareaRef.current;
     if (!el) return;
+    const preCollapseScrollTop = el.scrollTop;
     el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, maxHeight);
-    el.style.height = `${next}px`;
-    el.style.overflowY = next >= maxHeight ? "auto" : "hidden";
+    const overflowing = el.scrollHeight > maxHeight;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = overflowing ? "auto" : "hidden";
+    // Collapsing to "auto" above shrinks the box for one tick; while it's
+    // shrunk, the browser's native caret-follow can assign scrollTop a
+    // nonzero value to keep the caret in view against that tiny transient
+    // height. Restoring the real height never resets it, so a paste or long
+    // line leaves the box permanently scrolled a few pixels down — with
+    // overflow hidden that reads as the top of the text being clipped, not
+    // scrollable. When everything fits there's nothing to scroll, so 0 is
+    // always correct. When it overflows, forcing scrollHeight (the bottom)
+    // on every keystroke fights the user editing earlier in the draft — restore
+    // the scrollTop captured before the collapse instead, so the view only
+    // moves when the browser's own caret-follow would have moved it anyway.
+    el.scrollTop = overflowing ? preCollapseScrollTop : 0;
   };
 
   // Reset height when value is cleared externally.
@@ -106,6 +119,7 @@ export function RichInputField({
       if (el) {
         el.style.height = "auto";
         el.style.overflowY = "hidden";
+        el.scrollTop = 0;
       }
     }
   }, [value]);

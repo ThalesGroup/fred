@@ -22,6 +22,7 @@ enforces the `capability#can_manage` gate, and delegates the writes. Kept out of
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Mapping
 
@@ -46,6 +47,7 @@ from control_plane_backend.capabilities.enablement import (
     set_capability_personal_scope,
 )
 from control_plane_backend.capabilities.impact import (
+    CapabilityImpact,
     compute_capability_impact,
     preview_revoke_impact,
     resolve_availability_for_team,
@@ -146,6 +148,66 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     return "default"
 
 
+async def _build_enablement_item(
+    entry: CapabilityCatalogEntry,
+    *,
+    rebac: RebacEngine,
+    total_team_count: int,
+    total_personal_space_count: int,
+    impact: Mapping[str, CapabilityImpact],
+) -> CapabilityEnablementItem:
+    """Build one row's ReBAC-derived fields (#2089).
+
+    The 4 lookups below are independent `lookup_subjects` reads on different
+    relations of the same capability — gathering them turns 4 sequential
+    OpenFGA round-trips per row into 1.
+    """
+
+    (
+        default_on,
+        enabled_team_ids,
+        disabled_team_ids,
+        personal_scope,
+    ) = await asyncio.gather(
+        _is_default_on(rebac, entry.id),
+        _teams_with_relation(rebac, entry.id, RelationType.ENABLED),
+        _teams_with_relation(rebac, entry.id, RelationType.DISABLED),
+        _read_personal_scope(rebac, entry.id),
+    )
+    entry_impact = impact.get(entry.id)
+    return CapabilityEnablementItem(
+        id=entry.id,
+        name=entry.name,
+        version=entry.version,
+        icon=entry.icon,
+        team_scope=entry.team_scope,
+        default_on=default_on,
+        enabled_team_ids=enabled_team_ids,
+        disabled_team_ids=disabled_team_ids,
+        total_team_count=total_team_count,
+        total_personal_space_count=total_personal_space_count,
+        personal_scope=personal_scope,
+        team_settings_fields=list(entry.team_settings_fields),
+        kind=entry.kind,
+        suspended_instances=entry_impact.suspended_instances if entry_impact else 0,
+        health_unknown_instances=(
+            entry_impact.skipped_unreachable if entry_impact else 0
+        ),
+        suspended_instance_details=(
+            [
+                ImpactedInstanceSummary(
+                    agent_instance_id=item.agent_instance_id,
+                    team_id=item.team_id,
+                    display_name=item.display_name,
+                )
+                for item in entry_impact.instances
+            ]
+            if entry_impact
+            else []
+        ),
+    )
+
+
 async def list_capability_enablement(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> CapabilityEnablementList:
@@ -153,64 +215,53 @@ async def list_capability_enablement(
 
     rebac = _rebac(deps)
     # Aggregate-list read gate: `can_manage` is org-admin, so probe it on the
-    # organization singleton via the same admin relation.
+    # organization singleton via the same admin relation. Kept before every
+    # other step below — authorization must resolve before any of this
+    # request's work runs.
     await _require_manage_any(rebac, user)
 
-    catalog = await aggregate_capability_catalog(deps)
-    # Platform-wide denominators, fetched once for the whole list — they are the
-    # same for every capability: collaborative teams for default-on inheritance
-    # (§8.5), personal spaces (= users) for personal-class access (§8.4).
-    total_team_count = await count_all_collaborative_teams(deps.team_dependencies)
-    total_personal_space_count = await count_all_personal_spaces(deps.team_dependencies)
-    # Resting health for the WHOLE catalog in one pass (#1975): one ReBAC
-    # `ListObjects` per team holding instances plus one template fetch per pod,
-    # rather than a lookup per row. Admin-only screen, so the extra round-trips
-    # buy the most accurate answer available. `collect_instances` names the
-    # broken agents inline so the health-column drill-down (which agents, in
-    # which team) needs no second endpoint — the derivation already walked every
-    # instance, so naming them is a list append, not another pass.
-    impact = await compute_capability_impact(deps, collect_instances=True)
-    items: list[CapabilityEnablementItem] = []
-    for entry in catalog.values():
-        items.append(
-            CapabilityEnablementItem(
-                id=entry.id,
-                name=entry.name,
-                version=entry.version,
-                icon=entry.icon,
-                team_scope=entry.team_scope,
-                default_on=await _is_default_on(rebac, entry.id),
-                enabled_team_ids=await _teams_with_relation(
-                    rebac, entry.id, RelationType.ENABLED
-                ),
-                disabled_team_ids=await _teams_with_relation(
-                    rebac, entry.id, RelationType.DISABLED
-                ),
-                total_team_count=total_team_count,
-                total_personal_space_count=total_personal_space_count,
-                personal_scope=await _read_personal_scope(rebac, entry.id),
-                team_settings_fields=list(entry.team_settings_fields),
-                kind=entry.kind,
-                suspended_instances=(
-                    impact[entry.id].suspended_instances if entry.id in impact else 0
-                ),
-                health_unknown_instances=(
-                    impact[entry.id].skipped_unreachable if entry.id in impact else 0
-                ),
-                suspended_instance_details=(
-                    [
-                        ImpactedInstanceSummary(
-                            agent_instance_id=item.agent_instance_id,
-                            team_id=item.team_id,
-                            display_name=item.display_name,
-                        )
-                        for item in impact[entry.id].instances
-                    ]
-                    if entry.id in impact
-                    else []
-                ),
+    # Lazy import breaks the product.service ↔ capabilities import cycle, same
+    # reason `catalog.py`/`impact.py` defer their own product.service imports.
+    from control_plane_backend.product.service import _template_fetch_scope
+
+    # These 4 steps are mutually independent (none consumes another's result),
+    # so run them concurrently instead of one after another (#2089). Platform-
+    # wide denominators (collaborative teams for default-on inheritance §8.5,
+    # personal spaces for personal-class access §8.4) and resting health
+    # (#1975: one ReBAC `ListObjects` per team holding instances, `collect_instances`
+    # names the broken agents inline so the health-column drill-down needs no
+    # second endpoint) all fold into the same gather as the catalog fetch.
+    # `_template_fetch_scope()` de-dupes the pod `/agents/templates` fetch that
+    # `aggregate_capability_catalog` and `compute_capability_impact` would
+    # otherwise each make independently (#2089).
+    with _template_fetch_scope():
+        (
+            catalog,
+            total_team_count,
+            total_personal_space_count,
+            impact,
+        ) = await asyncio.gather(
+            aggregate_capability_catalog(deps),
+            count_all_collaborative_teams(deps.team_dependencies),
+            count_all_personal_spaces(deps.team_dependencies),
+            compute_capability_impact(deps, collect_instances=True),
+        )
+    # Per-row ReBAC reads are independent across rows too (#2089) — gather
+    # every row's build instead of awaiting them one at a time.
+    items = list(
+        await asyncio.gather(
+            *(
+                _build_enablement_item(
+                    entry,
+                    rebac=rebac,
+                    total_team_count=total_team_count,
+                    total_personal_space_count=total_personal_space_count,
+                    impact=impact,
+                )
+                for entry in catalog.values()
             )
         )
+    )
     items.sort(key=lambda item: item.id)
     return CapabilityEnablementList(items=items)
 
