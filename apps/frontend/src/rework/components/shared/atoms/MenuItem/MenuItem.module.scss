@@ -7,7 +7,7 @@
   --padding-left: var(--spacing-m);
 
   &:has(.icon-wrapper) {
-    --padding-left: var(--spacing-xs);
+    --padding-left: var(--spacing-s);
   }
 
   &[data-focused="true"]:not([data-disabled="true"]),
