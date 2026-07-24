@@ -1903,12 +1903,11 @@ dependencies = [
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "pymupdf", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "pymupdf4llm", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pymysql", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pypandoc", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pypandoc-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pypdf", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pypdfium2", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-docx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-keycloak", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-magic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1941,6 +1940,10 @@ dev = [
     { name = "reportlab", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+pymupdf = [
+    { name = "pymupdf", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pymupdf4llm", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
@@ -1994,12 +1997,13 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2,<3.0.0" },
-    { name = "pymupdf", specifier = ">=1.27.2.3" },
-    { name = "pymupdf4llm", specifier = ">=1.27.2.3" },
+    { name = "pymupdf", marker = "extra == 'pymupdf'", specifier = ">=1.27.2.3" },
+    { name = "pymupdf4llm", marker = "extra == 'pymupdf'", specifier = ">=1.27.2.3" },
     { name = "pymysql", specifier = ">=1.1.1" },
     { name = "pypandoc", specifier = "==1.15" },
     { name = "pypandoc-binary", specifier = "==1.15" },
     { name = "pypdf", specifier = "==6.13.3" },
+    { name = "pypdfium2", specifier = ">=5.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "==0.26.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==6.1.1" },
@@ -2027,7 +2031,7 @@ requires-dist = [
     { name = "uv" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "pymupdf"]
 
 [package.metadata.requires-dev]
 dev = [

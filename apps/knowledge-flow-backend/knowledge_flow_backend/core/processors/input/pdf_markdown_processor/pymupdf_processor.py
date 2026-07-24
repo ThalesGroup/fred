@@ -16,7 +16,10 @@ import re
 from pathlib import Path
 from typing import List
 
-import pymupdf4llm
+# AGPL-3.0/Artifex-dual-licensed, optional (LICENSE-01). This module is only ever
+# imported lazily, once `pdf_markdown_processor._build_extractor` has confirmed the
+# 'pymupdf' extra is installed — see docs/swift/COPYLEFT-DEPENDENCIES.md.
+import pymupdf4llm  # pyright: ignore[reportMissingImports]
 
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     collapse_whitespace,

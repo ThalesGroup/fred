@@ -312,8 +312,10 @@ class ProcessingConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
         extractor: Literal["docling", "pymupdf"] = Field(
-            default="pymupdf",
-            description="PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
+            default="docling",
+            description="PDF text extractor engine: 'docling' (default, MIT-licensed) for layout-aware "
+            "extraction, or 'pymupdf' for fast page-oriented extraction — AGPL-3.0/Artifex-dual-licensed "
+            "(LICENSE-01) and only usable once the optional 'pymupdf' extra is installed.",
         )
         do_ocr: bool = Field(
             default=False,
