@@ -3,9 +3,9 @@
   flex-direction: column;
   gap: var(--spacing-2xs);
   cursor: pointer;
-  border: 1px solid var(--outline-muted);
+  border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m);
-  background: var(--surface-container);
+  background: transparent;
   padding: var(--spacing-m);
   width: 100%;
   min-height: 8rem;
@@ -13,13 +13,11 @@
 }
 
 .card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
-  border-color: var(--outline-retreat);
-  background: var(--surface-container);
+  border-color: var(--outline);
 }
 
 .card[data-selected="true"] {
   border-color: var(--primary);
-  background: var(--surface-container);
 }
 
 .card[data-unavailable="true"] {
