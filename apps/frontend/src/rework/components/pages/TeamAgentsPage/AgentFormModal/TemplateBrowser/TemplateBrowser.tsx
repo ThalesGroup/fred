@@ -43,6 +43,11 @@ export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBro
 
   return (
     <div className={styles.browser}>
+      <div className={styles.header}>
+        <div className={styles.title}>{t("rework.teams.formAgent.templateBrowser.title")}</div>
+        <div className={styles.subtitle}>{t("rework.teams.formAgent.templateBrowser.subtitle")}</div>
+      </div>
+
       {podIds.length > 1 && (
         <div className={styles.filter}>
           <ButtonGroup

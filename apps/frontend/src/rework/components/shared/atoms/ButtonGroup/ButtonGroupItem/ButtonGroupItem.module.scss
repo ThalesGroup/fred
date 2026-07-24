@@ -74,6 +74,14 @@
     }
   }
 
+  &[data-full-width="true"] {
+    flex: 1;
+
+    .stateLayer {
+      width: 100%;
+    }
+  }
+
   @each $name, $scheme in $color-schemes {
     &[data-color="#{$name}"] {
       &:active .stateLayer:not([data-selected="true"]) {

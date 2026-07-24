@@ -286,6 +286,7 @@ async def test_enroll_persists_pod_validated_envelopes_verbatim(
             "/control-plane/v1/teams/personal/agent-instances",
             headers={"Authorization": "Bearer user-token"},
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Echo with capabilities",
                 "capability_ids": ["demo_echo"],
@@ -331,6 +332,7 @@ async def test_enroll_unknown_capability_id_is_typed_422(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Bad selection",
                 "capability_ids": ["ghost"],
@@ -355,6 +357,7 @@ async def test_enroll_config_for_unselected_capability_is_ignored(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Selective",
                 "capability_ids": ["demo_echo"],
@@ -392,6 +395,7 @@ async def test_enroll_propagates_pod_422_wording(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Missing asset",
                 "capability_ids": ["demo_echo"],
@@ -429,6 +433,7 @@ async def test_enroll_no_selection_materializes_only_granted_defaults(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Default selection",
             },
@@ -460,6 +465,7 @@ async def test_enroll_hidden_template_is_404_not_500(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Should not exist for this team",
             },
@@ -481,6 +487,7 @@ async def test_enroll_no_selection_with_rebac_disabled_takes_all_defaults(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "ReBAC disabled",
             },
@@ -513,6 +520,7 @@ async def test_enroll_no_selection_rejected_when_no_default_capability_is_usable
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Toolless agent",
             },
@@ -536,6 +544,7 @@ async def test_enroll_explicit_selection_denied_by_rebac_is_403(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "Deliberate but denied",
                 "capability_ids": ["demo_echo"],

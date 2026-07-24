@@ -282,6 +282,19 @@ The control plane is a **pure proxy** for these values — it does not interpret
   `UpdateAgentInstanceRequest.role` (both optional); server-defaults to
   `display_name` when omitted at creation, and is left unchanged on update
   when omitted.
+- `usage_statement: str` — **added 2026-07-24 (#2105).** User-authored
+  statement of the agent's intended use (purpose, target/impacted users,
+  data handled, outputs, error impact), captured by the agent form's
+  Engagement tab and used to screen for platform/organization risk. Stored
+  inside the `ManagedAgentTuning` JSON blob (`tuning_json` column) like
+  `role`/`description` — no dedicated DB column, no migration.
+  Hard-required (`min_length=1`) on `CreateAgentInstanceRequest`. Optional
+  on `UpdateAgentInstanceRequest` (omit = leave unchanged, same convention
+  as `role`) so partial updates that don't touch content — e.g. the
+  enable/disable toggle, which PATCHes only `status` — are unaffected.
+  Requiredness for pre-#2105 agents (whose stored value defaults to `""`)
+  is enforced by the agent edit form blocking Save when empty, the same
+  pattern already used for `display_name`, not by the API contract itself.
 - ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open. See RFC AGENT-CAPABILITY-RFC §3.3/§3.7.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set

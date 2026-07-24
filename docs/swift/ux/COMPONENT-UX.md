@@ -904,31 +904,42 @@ _(none — design approved at implementation)_
 **Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/`
 **Status:** `Functional`
 
-Complete create / edit modal for managed agent instances. Refactored per `docs/rfc/AGENT-INSTANCE-FORM-RFC.md` into a clean sub-component tree:
+Complete create / edit modal for managed agent instances, organized as a clean sub-component tree:
 
 - `AgentFormModal.tsx` — modal shell + `FormState` ownership; no field rendering
-- `AgentFormBody.tsx` — controlled form body; create or edit layout
+- `AgentFormBody.tsx` — controlled form body; 4-tab layout, create or edit
 - `TemplateBrowser/` — responsive card grid for template selection
-- `TemplateCard/` — single selectable card with category pill, name, clamped description
+- `TemplateCard/` — single selectable card with category label, name, clamped description
 - `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (design-system `Select` molecule), secret (password+reveal), url, array (`TagInput` molecule), prompt/multiline (`TextArea`)
 
-Create mode: template browser → display name → description → tuning fields (grouped by `ui.group`) → MCP tools (read-only list). Edit mode: context bar (template name + category) → same editable fields → metadata footer (created_by · relative date).
+Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant="radio"`, `size="medium"` — same pattern as the theme/language pickers in `UserSettingsPage.tsx`) with 4 top-level tabs (#2105, 2026-07-24):
+
+- **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
+- **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
+- **Outils** — capability cards, unchanged content. Hidden when the template has none.
+- **Engagement** — new required "Cas d'usage" field (large `TextArea`, label + explanation + placeholder), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk).
+
+Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
+
+Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop `--surface-container`, form card `--surface-main`, no drop shadow — scoped to this modal only via `FullPageModal`'s new `background` prop (other `FullPageModal` consumers unchanged).
 
 #### Open UX issues
 
-- **Tuning field groups** — flat scroll within modal; no accordion. Decide if needed for agents with many fields.
+- **Tuning field groups** — flat scroll within the Général tab; no accordion. Decide if needed for agents with many fields.
 - **Template browser on mobile** — grid collapses to single column below ~480px; confirm whether list layout is preferable.
-- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse to a context bar immediately.
+- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse directly to step 2 immediately.
 
 #### Resolved
 
 - **Template browser** — replaced raw `<select>` with responsive card grid; selected state uses `--primary` border.
 - **All field types** — secret, url, prompt, number/integer, enum, boolean (`SwitchRow`), multiline all implemented.
-- **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields appear first.
+- **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields land in Général.
 - **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
-- **Edit mode context bar** — template name + category pill; no interaction.
+- **Header reorg** (#2102) — avatar, back button, and context bar (template name + category pill) removed; team + template now shown as one subtitle line under the title.
+- **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-retreat` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
+- **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
-- **Inline validation** — `submitAttempted` gates required-field errors; no toast for validation.
+- **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab) and usage_statement (Engagement tab); no toast for validation.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
 
 ---

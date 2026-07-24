@@ -195,6 +195,19 @@ class ManagedAgentInstanceSummary(BaseModel):
             "until independently edited (#2076)."
         ),
     )
+    usage_statement: str = Field(
+        default="",
+        description=(
+            "User-authored intended-use statement (purpose, target/impacted "
+            "users, data handled, outputs, error impact) captured in the "
+            "agent form's Engagement tab, used to screen for platform/"
+            "organization risk (#2105). Empty for agents enrolled before "
+            "#2105 until independently edited — required at creation and "
+            "enforced by the agent edit form on save, but omittable on "
+            "`UpdateAgentInstanceRequest` (like `role`) so partial updates "
+            "such as the enable/disable toggle are unaffected."
+        ),
+    )
     status: Literal["enabled", "disabled"]
     suspension_reason: SuspensionReason | None = Field(
         default=None,
@@ -535,6 +548,16 @@ class CreateAgentInstanceRequest(BaseModel):
             "Defaults to `display_name` when omitted (#2076)."
         ),
     )
+    usage_statement: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Required intended-use statement (purpose, target/impacted users, "
+            "data handled, outputs, error impact) — used to screen for "
+            "platform/organization risk (#2105). Hard-required at creation, "
+            "unlike the optional `role`."
+        ),
+    )
     tuning_field_values: dict[str, TuningValue] | None = Field(
         default=None,
         description=(
@@ -578,6 +601,19 @@ class UpdateAgentInstanceRequest(BaseModel):
         description=(
             "Short one-line summary of what this agent does. Omit to leave "
             "the current role unchanged (#2076)."
+        ),
+    )
+    usage_statement: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Intended-use statement (#2105). Omit to leave the current value "
+            "unchanged — same convention as `role`, so partial updates like "
+            "the enable/disable toggle (which PATCHes only `status`) are not "
+            "forced to resupply it. The agent edit form always submits it "
+            "(enforced client-side, same as `display_name`), so in practice "
+            "every full-form save keeps this current, including for agents "
+            "enrolled before #2105 whose stored value starts out empty."
         ),
     )
     status: Literal["enabled", "disabled"] | None = Field(

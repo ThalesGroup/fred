@@ -1416,6 +1416,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "display_name": "Echo Team Agent",
             "description": "Managed echo agent",
             "role": "Echo Team Agent",
+            "usage_statement": "",
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},
@@ -1604,7 +1605,11 @@ async def test_agent_instance_mutations_require_can_update_agents(
         # enroll
         await client.post(
             "/control-plane/v1/teams/fredlab/agent-instances",
-            json={"template_id": "runtime-a:foo", "display_name": "x"},
+            json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
+                "template_id": "runtime-a:foo",
+                "display_name": "x",
+            },
         )
         assert captured["perms"] == [TeamPermission.CAN_UPDATE_AGENTS]
         # delete
@@ -2077,6 +2082,7 @@ async def test_enroll_agent_instance_creates_db_record(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "My Echo Agent",
                 "description": "A test echo agent",
@@ -2136,6 +2142,7 @@ async def test_enroll_agent_instance_unreachable_runtime_returns_503(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "My Echo Agent",
                 "description": "A test echo agent",
@@ -4498,6 +4505,7 @@ async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "unknown-runtime:some-agent",
                 "display_name": "Agent",
             },
@@ -4523,7 +4531,11 @@ async def test_enroll_agent_instance_returns_400_for_malformed_template_id(
     ) as client:
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
-            json={"template_id": "no-colon-here", "display_name": "Agent"},
+            json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
+                "template_id": "no-colon-here",
+                "display_name": "Agent",
+            },
         )
 
     assert resp.status_code == 400
@@ -5477,6 +5489,7 @@ async def test_enroll_agent_instance_stores_provided_field_values(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "My Echo",
                 "tuning_field_values": {"persona": "You are a helpful assistant."},
@@ -5528,6 +5541,7 @@ async def test_enroll_agent_instance_silently_drops_unknown_field_keys(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.echo",
                 "display_name": "My Echo",
                 "tuning_field_values": {
@@ -5578,6 +5592,7 @@ async def test_enroll_agent_instance_rejects_invalid_tuning_value_type_and_range
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.validated",
                 "display_name": "Validated Echo",
                 "tuning_field_values": {
@@ -6013,6 +6028,7 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
                 "capability_ids": [_MCP_SEARCH_ID],
@@ -6085,7 +6101,11 @@ async def test_enrolling_internal_template_is_admin_only(
             enabled=True,
         )
     ]
-    body = {"template_id": "runtime-a:rags.sample.mcp", "display_name": "x"}
+    body = {
+        "template_id": "runtime-a:rags.sample.mcp",
+        "display_name": "x",
+        "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
+    }
 
     # Keycloak `admin` role but no OpenFGA `platform_admin` relation: the hidden
     # template resolves to nothing -> 404 (as if it did not exist).
@@ -6251,6 +6271,7 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
                 "capability_ids": [_MCP_SEARCH_ID],
@@ -6321,6 +6342,7 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.mcp",
                 "display_name": "MCP Instance",
                 "capability_ids": ["mcp-unknown"],
@@ -7000,6 +7022,7 @@ async def test_enroll_agent_instance_rejects_unknown_prompt_token(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.validated",
                 "display_name": "Bad Prompt Agent",
                 "tuning_field_values": {
@@ -7051,6 +7074,7 @@ async def test_enroll_agent_instance_accepts_valid_prompt_tokens(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.validated",
                 "display_name": "Good Prompt Agent",
                 "tuning_field_values": {
@@ -7103,6 +7127,7 @@ async def test_enroll_agent_instance_accepts_prompt_with_code_braces(
         resp = await client.post(
             "/control-plane/v1/teams/personal/agent-instances",
             json={
+                "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.validated",
                 "display_name": "Code Prompt Agent",
                 "tuning_field_values": {

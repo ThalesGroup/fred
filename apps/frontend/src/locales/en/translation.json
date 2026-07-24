@@ -1552,9 +1552,18 @@
           "role": {
             "label": "Role",
             "placeholder": "Describe the {{agentsNicknameSingular}}'s role"
+          },
+          "usageStatement": {
+            "label": "Use case",
+            "explanation": "Clearly describe the use cases you plan to address with this agent.",
+            "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },
         "noTemplates": "No agent templates available — start a runtime pod.",
+        "templateBrowser": {
+          "title": "Select an agent template",
+          "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
+        },
         "promptField": {
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
@@ -1563,10 +1572,10 @@
         },
         "sections": {
           "aria": "Form sections",
-          "chat": "Chat",
+          "general": "General",
           "prompts": "Prompts",
-          "settings": "Settings",
-          "tools": "Tools"
+          "tools": "Tools",
+          "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",
         "suspended": {
@@ -1575,6 +1584,8 @@
           "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
           "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
         },
+        "subtitle": "Team: {{team}}",
+        "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
         "titleEdit": "Edit {{agent}}",
