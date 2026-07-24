@@ -34,15 +34,8 @@ import {
 import { useState } from "react";
 
 import { useAuth } from "../security/AuthContext";
-import { KeyCloakService } from "../security/KeycloakService";
-import { downloadFile } from "../utils/downloadUtils";
-import { useImportMigrationSnapshotMutation } from "./migrationApi";
+import { useCreateMigrationSnapshotMutation, useImportMigrationSnapshotMutation } from "./migrationApi";
 import type { ImportReport, SnapshotManifest } from "./migrationTypes";
-
-// Direct-stream export: pull the zip through the kea API (same-origin) so the
-// browser never needs to reach object storage — required for cross-infra
-// migrations. Kept as a plain fetch to avoid putting a Blob in the Redux store.
-const SNAPSHOT_DOWNLOAD_URL = "/control-plane/v1/admin/migration/snapshot/download";
 
 // Mirrors control_plane_backend EXPORT_TABLES — shown so the admin knows what
 // the bundle contains before exporting.
@@ -55,8 +48,7 @@ export default function MigrationPage() {
   const [label, setLabel] = useState("");
   const [exportManifest, setExportManifest] = useState<SnapshotManifest | null>(null);
   const [savedFilename, setSavedFilename] = useState("");
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [createSnapshot, { isLoading: isExporting, error: exportError }] = useCreateMigrationSnapshotMutation();
 
   const [file, setFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
@@ -71,34 +63,19 @@ export default function MigrationPage() {
   }
 
   const handleExport = async () => {
-    setExportError(null);
     setExportManifest(null);
-    setIsExporting(true);
-    try {
-      const token = KeyCloakService.GetToken();
-      const res = await fetch(SNAPSHOT_DOWNLOAD_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ label: label.trim() || undefined }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const header = res.headers.get("X-Migration-Manifest");
-      const manifest: SnapshotManifest | null = header ? JSON.parse(atob(header)) : null;
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const filename = disposition.match(/filename="?([^"]+)"?/)?.[1] ?? "kea-snapshot.zip";
-
-      downloadFile(await res.blob(), filename);
-      setExportManifest(manifest);
-      setSavedFilename(filename);
-    } catch (e) {
-      setExportError(e instanceof Error ? e.message : "export failed");
-    } finally {
-      setIsExporting(false);
-    }
+    // Fetch a presigned object-storage URL and hand off the download to the
+    // browser, instead of streaming the zip through control-plane-backend:
+    // a streamed response (chunked, no Content-Length) was getting killed by
+    // an intermediary in front of the ingress well before any timeout kicked in.
+    const response = await createSnapshot({ label: label.trim() || undefined }).unwrap();
+    const link = document.createElement("a");
+    link.href = response.download_url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setExportManifest(response.manifest);
+    setSavedFilename(response.object_key.split("/").pop() ?? "kea-snapshot.zip");
   };
 
   const handleImport = async () => {
@@ -114,8 +91,8 @@ export default function MigrationPage() {
         Platform Migration · Export
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Source: <strong>kea</strong> · Bundles durable platform state into one timestamped <code>.zip</code> streamed
-        directly through the API to your machine.
+        Source: <strong>kea</strong> · Bundles durable platform state into one timestamped <code>.zip</code>, uploaded
+        to object storage and downloaded via a presigned link.
       </Typography>
 
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
@@ -157,8 +134,7 @@ export default function MigrationPage() {
 
       {exportError ? (
         <Alert severity="error" sx={{ mb: 2 }}>
-          Export failed ({exportError}). Check that you have the admin role and that the control-plane backend is
-          reachable.
+          Export failed. Check that you have the admin role and that the control-plane backend is reachable.
         </Alert>
       ) : null}
 
