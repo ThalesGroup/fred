@@ -83,22 +83,24 @@ export default function DataTable<T>({
         { "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties
       }
     >
-      {columns.map((column) => (
-        <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
-          <span className={styles["header-content"]}>{column.label}</span>
-        </div>
-      ))}
-      {pageData.map((line, lineIndex) => (
-        <div className={styles["datatable-row"]} key={`row-${lineIndex}`}>
-          {columns.map((column) => {
-            return (
-              <div className={styles["datatable-cell"]} key={column.label}>
-                {column.cellRenderer(line)}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      <div className={styles["datatable-body"]}>
+        {columns.map((column) => (
+          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
+            <span className={styles["header-content"]}>{column.label}</span>
+          </div>
+        ))}
+        {pageData.map((line, lineIndex) => (
+          <div className={styles["datatable-row"]} key={`row-${lineIndex}`}>
+            {columns.map((column) => {
+              return (
+                <div className={styles["datatable-cell"]} key={column.label}>
+                  {column.cellRenderer(line)}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
       {paginationEnabled && (
         <div className={styles["datatable-footer"]}>
           <div className={styles["datatable-footer-left"]}>

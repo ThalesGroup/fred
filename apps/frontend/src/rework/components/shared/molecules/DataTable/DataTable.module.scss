@@ -1,11 +1,21 @@
+/* Flex column so the footer (when present) always sits at the very bottom —
+ * `.datatable-body` is the one that grows/scrolls; the footer never moves. */
 .datatable-container {
-  display: grid;
-  grid-template-columns: var(--grid-layout);
-  grid-auto-rows: minmax(min-content, auto);
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--spacing-xs);
   background-color: var(--datatable-background-color);
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.datatable-body {
+  display: grid;
+  grid-template-columns: var(--grid-layout);
+  grid-auto-rows: minmax(min-content, auto);
+  flex: 1;
+  align-content: start;
   min-height: 0;
   overflow: auto;
 }
@@ -55,12 +65,9 @@
 
 .datatable-footer {
   display: flex;
-  position: sticky;
-  bottom: 0;
-  grid-column: 1 / -1;
+  flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
-  z-index: 1;
   border-top: 1px solid var(--surface-container-highest);
   background-color: var(--datatable-background-color);
   height: 3.75rem;
