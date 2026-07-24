@@ -34,7 +34,7 @@
 
 .name {
   color: var(--on-surface);
-  font: var(--font-label-medium);
+  font: var(--font-body-large);
 }
 
 /* Emphasis only — same font metrics as .name so toggling never shifts the list */
@@ -45,7 +45,7 @@
 
 .description {
   color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+  font: var(--font-body-medium);
 }
 
 /* Sub-form revealed when the capability is active and declares config_fields */
