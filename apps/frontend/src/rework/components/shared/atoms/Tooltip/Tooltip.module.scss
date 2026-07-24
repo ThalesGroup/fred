@@ -29,3 +29,12 @@
   visibility: visible;
   opacity: 1;
 }
+
+/* Rich content (e.g. a multi-row info panel) sizes to its own content instead
+ * of hugging a single nowrap line, and drops the small text-hint padding —
+ * the content itself owns its internal spacing. */
+.tooltip-content-rich {
+  padding: 0;
+  overflow: hidden;
+  white-space: normal;
+}

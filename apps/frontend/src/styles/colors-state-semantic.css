@@ -50,6 +50,14 @@
   --state-on-success-container-focused: color-mix(in srgb, var(--on-success-container), transparent 84%);
   --state-on-success-container-selected: color-mix(in srgb, var(--on-success-container), transparent 84%);
 
+  /* Tint of --error itself (not --on-error) — for a destructive element whose
+     own text/icon color IS --error on a transparent/neutral surface (e.g. a
+     "Delete" menu item), not one sitting on a solid --error fill. */
+  --state-error-hover: color-mix(in srgb, var(--error), transparent 92%);
+  --state-error-pressed: color-mix(in srgb, var(--error), transparent 88%);
+  --state-error-focused: color-mix(in srgb, var(--error), transparent 84%);
+  --state-error-selected: color-mix(in srgb, var(--error), transparent 84%);
+
   --state-on-error-hover: color-mix(in srgb, var(--on-error), transparent 92%);
   --state-on-error-pressed: color-mix(in srgb, var(--on-error), transparent 88%);
   --state-on-error-focused: color-mix(in srgb, var(--on-error), transparent 84%);

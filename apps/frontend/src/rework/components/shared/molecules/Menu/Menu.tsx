@@ -82,6 +82,7 @@ const MenuInternal = <T,>({
             description={option.description}
             icon={option.icon}
             disabled={option.disabled}
+            destructive={option.destructive}
             selected={isSelected}
             focused={isFocused}
             onClick={() => {

@@ -60,6 +60,14 @@
   gap: var(--spacing-m);
 }
 
+/* Pushed flush to the card's top-right corner (#2096); does not stretch to
+ * the row's full height like its siblings (the icon / name+role block). */
+.moreMenu {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: auto;
+}
+
 .agentIcon {
   display: flex;
   flex-shrink: 0;
@@ -81,16 +89,6 @@
   justify-content: center;
   gap: var(--spacing-3xs);
   min-width: 0;
-}
-
-/* Origin · template, e.g. "fred-agents · Generalist" — raw source_runtime_id,
-   not a prettified label (#2076). */
-.agentOrigin {
-  overflow: hidden;
-  color: var(--on-surface-muted);
-  font: var(--font-label-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .agentName {
@@ -141,20 +139,69 @@
   font: var(--font-body-medium);
 }
 
-/* ── Actions row — edit/toggle grouped left, Chat flush right (#2076) ───────── */
+/* ── Actions row — info icon flush left, Chat flush right (#2096) ──────────── */
 
 .actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
   padding: 0 var(--spacing-s) var(--spacing-s);
 }
 
-.actionsLeft {
+/* ── Info tooltip content (#2096) — Origin/Template/Created/Updated ─────────
+ * Each label hugs its own text (no shared column width across rows — the
+ * mockup's per-row label boxes are visibly different widths); the value
+ * pushes to the tooltip's right edge and the tooltip itself widens to fit
+ * (Tooltip.module.scss's `.tooltip-content-rich` drops the nowrap/fixed
+ * sizing), so a long author name is never clipped. */
+.infoTooltip {
   display: flex;
-  gap: var(--spacing-3xs);
-  margin-right: auto;
+  flex-direction: column;
+  min-width: 12rem;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  min-height: 2rem;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.infoLabel {
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.infoValue {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.infoValueStacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: right;
+}
+
+.infoValueDate {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
 }
 
 .chatLink {

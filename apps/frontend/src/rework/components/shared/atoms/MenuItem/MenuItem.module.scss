@@ -23,6 +23,15 @@
     --item-color: var(--on-surface-disabled);
     --item-bg: var(--state-surface-main-disabled);
   }
+
+  &[data-destructive="true"]:not([data-disabled="true"]) {
+    --item-color: var(--error);
+
+    &[data-focused="true"],
+    &:hover {
+      --item-bg: var(--state-error-hover);
+    }
+  }
 }
 
 .state-layer {

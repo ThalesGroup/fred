@@ -27,6 +27,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
+import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
@@ -50,16 +51,6 @@ type FormState = {
   text: string;
 };
 const emptyForm: FormState = { name: "", description: "", category: "other", tags: [], text: "" };
-
-/** Human display for a resolved user: full name, else username, else the raw uid (#1952 pattern). */
-function userDisplayName(
-  uid: string,
-  summary: { first_name?: string | null; last_name?: string | null; username?: string } | undefined,
-): string {
-  if (!summary) return uid;
-  const fullName = [summary.first_name, summary.last_name].filter(Boolean).join(" ");
-  return fullName || summary.username || uid;
-}
 
 export default function PromptsPage() {
   const { teamId } = useParams<{ teamId: string }>();

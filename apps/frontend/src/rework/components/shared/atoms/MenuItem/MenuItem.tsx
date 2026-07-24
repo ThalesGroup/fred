@@ -25,6 +25,8 @@ export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
   selected?: boolean;
   focused?: boolean;
   disabled?: boolean;
+  /** Renders the label/icon in the error color (e.g. a "Delete" action). */
+  destructive?: boolean;
 }
 
 function MenuItem({
@@ -36,6 +38,7 @@ function MenuItem({
   selected = false,
   focused = false,
   disabled = false,
+  destructive = false,
   onClick,
   id: providedId,
   ref, // La ref arrive ici
@@ -56,6 +59,7 @@ function MenuItem({
       data-selected={selected}
       data-focused={focused}
       data-disabled={disabled}
+      data-destructive={destructive}
       tabIndex={focused ? 0 : -1}
       onClick={disabled ? undefined : onClick}
     >
