@@ -1552,6 +1552,11 @@
           "role": {
             "label": "Rôle",
             "placeholder": "Décrivez le rôle de {{agentsNicknameSingular}}"
+          },
+          "usageStatement": {
+            "label": "Cas d'usage",
+            "explanation": "Décrivez clairement les cas d'usage que vous envisagez de traiter grâce à cet agent.",
+            "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
@@ -1567,10 +1572,10 @@
         },
         "sections": {
           "aria": "Sections du formulaire",
-          "chat": "Discussion",
+          "general": "Général",
           "prompts": "Prompts",
-          "settings": "Paramètres",
-          "tools": "Outils"
+          "tools": "Outils",
+          "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",
         "suspended": {

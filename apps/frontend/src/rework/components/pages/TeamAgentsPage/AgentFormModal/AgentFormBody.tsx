@@ -31,29 +31,34 @@ import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import styles from "./AgentFormBody.module.css";
 
-export type SectionKey = "prompts" | "settings" | "chat" | "tools";
+export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
-const SECTION_ORDER: SectionKey[] = ["prompts", "settings", "chat", "tools"];
+const SECTION_ORDER: SectionKey[] = ["general", "prompts", "tools", "commitments"];
 
 const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
+  general: "rework.teams.formAgent.sections.general",
   prompts: "rework.teams.formAgent.sections.prompts",
-  settings: "rework.teams.formAgent.sections.settings",
-  chat: "rework.teams.formAgent.sections.chat",
   tools: "rework.teams.formAgent.sections.tools",
+  commitments: "rework.teams.formAgent.sections.commitments",
 };
 
 const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }> = {
+  general: { category: "outlined", type: "tune" },
   prompts: { category: "outlined", type: "edit_note" },
-  settings: { category: "outlined", type: "tune" },
-  chat: { category: "outlined", type: "forum" },
   tools: { category: "outlined", type: "build" },
+  commitments: { category: "outlined", type: "shield" },
 };
 
-function routeField(field: ManagedAgentFieldSpec): "prompts" | "settings" | "chat" {
+/**
+ * Only `ui.group === "Prompts"` gets its own tab; every other declared group
+ * (Settings, Credentials, Document reading, Mindmap, Grounding, Comparison,
+ * Fallback, ...) folds into "General" alongside name/role/description. This
+ * keeps the 4-tab layout compatible with the existing template `ui.group`
+ * taxonomy without requiring any template-side changes.
+ */
+function routeField(field: ManagedAgentFieldSpec): "prompts" | "general" {
   const g = (field.ui?.group ?? "").toLowerCase().trim();
-  if (g === "prompts") return "prompts";
-  if (g === "chat") return "chat";
-  return "settings";
+  return g === "prompts" ? "prompts" : "general";
 }
 
 function formatRelativeDate(dateStr: string | null | undefined): string {
@@ -78,6 +83,7 @@ type AgentFormBodyProps = {
   displayName: string;
   role: string;
   description: string;
+  usageStatement: string;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -95,6 +101,7 @@ type AgentFormBodyProps = {
   onDisplayNameChange: (v: string) => void;
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
+  onUsageStatementChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
@@ -109,6 +116,7 @@ export function AgentFormBody({
   displayName,
   role,
   description,
+  usageStatement,
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
@@ -123,6 +131,7 @@ export function AgentFormBody({
   onDisplayNameChange,
   onRoleChange,
   onDescriptionChange,
+  onUsageStatementChange,
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilityConfigChange,
@@ -182,24 +191,20 @@ export function AgentFormBody({
 
   const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
   const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
-  const settingsFields = visibleFields.filter((f) => routeField(f) === "settings");
-  const chatFields = visibleFields.filter((f) => routeField(f) === "chat");
-
-  const fieldsBySection: Record<"prompts" | "settings" | "chat", ManagedAgentFieldSpec[]> = {
-    prompts: promptFields,
-    settings: settingsFields,
-    chat: chatFields,
-  };
+  const generalFields = visibleFields.filter((f) => routeField(f) === "general");
 
   const visibleSections = SECTION_ORDER.filter((s) => {
     if (s === "tools") return capabilities.length > 0;
-    return fieldsBySection[s].length > 0;
+    if (s === "prompts") return promptFields.length > 0;
+    return true; // general and commitments always have content
   });
 
-  const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "settings");
+  const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
   const activeSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
+  const usageStatementError =
+    submitAttempted && !usageStatement.trim() ? t("rework.teams.formAgent.fields.usageStatement.label") : undefined;
 
   // Effective value (current input or declared default) of every tuning field,
   // across sections — drives `ui.visible_when` even when the gating field lives
@@ -255,95 +260,105 @@ export function AgentFormBody({
 
       {!templateMissing && (
         <>
-          <TextInput
-            label={t("rework.teams.formAgent.fields.name.label")}
-            value={displayName}
-            onChange={(e) => onDisplayNameChange(e.target.value)}
-            maxLength={255}
-            required
-            disabled={isSubmitting}
-            error={nameError}
-          />
-          <TextInput
-            label={t("rework.teams.formAgent.fields.role.label")}
-            placeholder={displayName}
-            value={role}
-            onChange={(e) => onRoleChange(e.target.value)}
-            maxLength={255}
-            disabled={isSubmitting}
-          />
-          <TextArea
-            label={t("rework.teams.formAgent.fields.description.label")}
-            value={description}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            rows={3}
-            maxLength={500}
-            disabled={isSubmitting}
-          />
+          <div className={styles.tabStrip}>
+            <ButtonGroup
+              key={visibleSections.join(",")}
+              size="medium"
+              color="secondary"
+              variant="radio"
+              fullWidth
+              aria-label={t("rework.teams.formAgent.sections.aria")}
+              selectedIndex={activeSectionIndex}
+              onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
+              items={visibleSections.map((s) => ({
+                label: t(SECTION_LABEL_KEYS[s]),
+                icon: SECTION_ICONS[s],
+                hasError: errorSections.has(s),
+                onClick: () => onSectionChange(s),
+              }))}
+            />
+          </div>
 
-          {visibleSections.length > 0 && (
-            <>
-              <div className={styles.tabStrip}>
-                <ButtonGroup
-                  key={visibleSections.join(",")}
-                  size="small"
-                  color="secondary"
-                  variant="tabs"
-                  aria-label={t("rework.teams.formAgent.sections.aria")}
-                  selectedIndex={activeSectionIndex}
-                  onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
-                  items={visibleSections.map((s) => ({
-                    label: t(SECTION_LABEL_KEYS[s]),
-                    icon: SECTION_ICONS[s],
-                    hasError: errorSections.has(s),
-                    onClick: () => onSectionChange(s),
-                  }))}
-                />
-              </div>
-
-              {errorSections.size > 0 && (
-                <div className={styles.validationBanner} role="alert">
-                  {t("rework.teams.formAgent.validation.requiredFields")}
-                </div>
-              )}
-
-              <div className={styles.sectionContent}>
-                {effectiveSection === "prompts" && renderFieldList(promptFields)}
-                {effectiveSection === "settings" && renderFieldList(settingsFields)}
-                {effectiveSection === "chat" && renderFieldList(chatFields)}
-                {effectiveSection === "tools" && capabilities.length > 0 && (
-                  <ul className={styles.toolsList}>
-                    {capabilities.map((capability) => {
-                      const checked = selectedCapabilityIds.includes(capability.id);
-                      const toggle = () => {
-                        const next = checked
-                          ? selectedCapabilityIds.filter((id) => id !== capability.id)
-                          : [...selectedCapabilityIds, capability.id];
-                        onCapabilitySelectionChange(next);
-                      };
-                      return (
-                        <CapabilityCard
-                          key={capability.id}
-                          capability={capability}
-                          teamId={teamId}
-                          checked={checked}
-                          disabled={isSubmitting}
-                          configValues={capabilityConfigValues[capability.id] ?? {}}
-                          assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                          onToggle={toggle}
-                          onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                          onAssetFileChange={(slotKey, file) =>
-                            onCapabilityAssetFileChange(capability.id, slotKey, file)
-                          }
-                          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
-                        />
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </>
+          {errorSections.size > 0 && (
+            <div className={styles.validationBanner} role="alert">
+              {t("rework.teams.formAgent.validation.requiredFields")}
+            </div>
           )}
+
+          <div className={styles.sectionContent}>
+            {effectiveSection === "general" && (
+              <>
+                <TextInput
+                  label={t("rework.teams.formAgent.fields.name.label")}
+                  value={displayName}
+                  onChange={(e) => onDisplayNameChange(e.target.value)}
+                  maxLength={255}
+                  required
+                  disabled={isSubmitting}
+                  error={nameError}
+                />
+                <TextInput
+                  label={t("rework.teams.formAgent.fields.role.label")}
+                  placeholder={displayName}
+                  value={role}
+                  onChange={(e) => onRoleChange(e.target.value)}
+                  maxLength={255}
+                  disabled={isSubmitting}
+                />
+                <TextArea
+                  label={t("rework.teams.formAgent.fields.description.label")}
+                  value={description}
+                  onChange={(e) => onDescriptionChange(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  disabled={isSubmitting}
+                />
+                {renderFieldList(generalFields)}
+              </>
+            )}
+            {effectiveSection === "prompts" && renderFieldList(promptFields)}
+            {effectiveSection === "tools" && capabilities.length > 0 && (
+              <ul className={styles.toolsList}>
+                {capabilities.map((capability) => {
+                  const checked = selectedCapabilityIds.includes(capability.id);
+                  const toggle = () => {
+                    const next = checked
+                      ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                      : [...selectedCapabilityIds, capability.id];
+                    onCapabilitySelectionChange(next);
+                  };
+                  return (
+                    <CapabilityCard
+                      key={capability.id}
+                      capability={capability}
+                      teamId={teamId}
+                      checked={checked}
+                      disabled={isSubmitting}
+                      configValues={capabilityConfigValues[capability.id] ?? {}}
+                      assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+                      onToggle={toggle}
+                      onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                      onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(capability.id, slotKey, file)}
+                      onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
+                    />
+                  );
+                })}
+              </ul>
+            )}
+            {effectiveSection === "commitments" && (
+              <TextArea
+                label={t("rework.teams.formAgent.fields.usageStatement.label")}
+                explanation={t("rework.teams.formAgent.fields.usageStatement.explanation")}
+                placeholder={t("rework.teams.formAgent.fields.usageStatement.placeholder")}
+                value={usageStatement}
+                onChange={(e) => onUsageStatementChange(e.target.value)}
+                rows={8}
+                required
+                disabled={isSubmitting}
+                error={usageStatementError}
+              />
+            )}
+          </div>
         </>
       )}
 

@@ -31,6 +31,7 @@ export type AgentFormPayload = {
   displayName: string;
   role: string;
   description: string;
+  usageStatement: string;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -70,6 +71,7 @@ type FormState = {
   displayName: string;
   role: string;
   description: string;
+  usageStatement: string;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -79,11 +81,10 @@ type FormState = {
   capabilityBlockingErrors: Record<string, string | null>;
 };
 
+/** Mirrors AgentFormBody's routeField — only "Prompts" gets its own tab, everything else lands in "general". */
 function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
   const g = (field.ui?.group ?? "").toLowerCase().trim();
-  if (g === "prompts") return "prompts";
-  if (g === "chat") return "chat";
-  return "settings";
+  return g === "prompts" ? "prompts" : "general";
 }
 
 /**
@@ -120,6 +121,7 @@ export function buildAgentFormSubmitPayload(
     displayName: form.displayName.trim(),
     role: form.role.trim(),
     description: form.description.trim(),
+    usageStatement: form.usageStatement.trim(),
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
@@ -167,6 +169,7 @@ export default function AgentFormModal({
     displayName: "",
     role: "",
     description: "",
+    usageStatement: "",
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -174,12 +177,12 @@ export default function AgentFormModal({
     capabilityBlockingErrors: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [activeSection, setActiveSection] = useState<SectionKey>("settings");
+  const [activeSection, setActiveSection] = useState<SectionKey>("general");
 
   useEffect(() => {
     if (!isOpen) {
       setSubmitAttempted(false);
-      setActiveSection("settings");
+      setActiveSection("general");
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -188,6 +191,7 @@ export default function AgentFormModal({
         displayName: editInstance.display_name,
         role: editInstance.role,
         description: editInstance.description ?? "",
+        usageStatement: editInstance.usage_statement ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -203,6 +207,7 @@ export default function AgentFormModal({
         displayName: "",
         role: "",
         description: "",
+        usageStatement: "",
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -226,13 +231,14 @@ export default function AgentFormModal({
       displayName: tpl?.display_name ?? "",
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
+      usageStatement: "",
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: [],
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
       capabilityBlockingErrors: {},
     });
-    setActiveSection("settings");
+    setActiveSection("general");
     setSubmitAttempted(false);
     setStep(2);
   };
@@ -278,17 +284,35 @@ export default function AgentFormModal({
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
-  const isFormValid = !!form.templateId && !!form.displayName.trim() && !missingRequired && !capabilityBlocked;
+  const isFormValid =
+    !!form.templateId &&
+    !!form.displayName.trim() &&
+    !!form.usageStatement.trim() &&
+    !missingRequired &&
+    !capabilityBlocked;
   const canSave = isFormValid && !isSubmitting;
 
   const errorSections = new Set<SectionKey>(
-    submitAttempted ? requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)) : [],
+    submitAttempted
+      ? [
+          ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
+          ...(!form.displayName.trim() ? (["general"] as const) : []),
+          ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
+        ]
+      : [],
   );
 
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (!canSave) {
-      const firstErrorSection = (["prompts", "settings", "chat"] as const).find((s) => {
+      const firstErrorSection = (["general", "prompts", "commitments"] as const).find((s) => {
+        if (s === "general") {
+          return (
+            !form.displayName.trim() ||
+            requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === "general")
+          );
+        }
+        if (s === "commitments") return !form.usageStatement.trim();
         return requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === s);
       });
       if (firstErrorSection) setActiveSection(firstErrorSection);
@@ -346,6 +370,7 @@ export default function AgentFormModal({
               displayName={form.displayName}
               role={form.role}
               description={form.description}
+              usageStatement={form.usageStatement}
               tuningFieldValues={form.tuningValues}
               selectedCapabilityIds={form.selectedCapabilityIds}
               capabilityConfigValues={form.capabilityConfigValues}
@@ -360,6 +385,7 @@ export default function AgentFormModal({
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
               onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+              onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
               onCapabilityConfigChange={handleCapabilityConfigChange}

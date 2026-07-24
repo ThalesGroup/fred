@@ -28,13 +28,14 @@ const EMPTY_CAPABILITY_STATE = {
 };
 
 describe("buildAgentFormSubmitPayload", () => {
-  it("trims display name, role, and description on create submit", () => {
+  it("trims display name, role, description, and usage statement on create submit", () => {
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",
         displayName: "  DT Aegis  ",
         role: "  Guardian  ",
         description: "  Guardrails  ",
+        usageStatement: "  Screens inbound requests for policy violations.  ",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
       },
@@ -45,6 +46,7 @@ describe("buildAgentFormSubmitPayload", () => {
       displayName: "DT Aegis",
       role: "Guardian",
       description: "Guardrails",
+      usageStatement: "Screens inbound requests for policy violations.",
     });
   });
 
@@ -55,6 +57,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         role: "",
         description: "",
+        usageStatement: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["ghost-cap"],
@@ -75,6 +78,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         role: "",
         description: "",
+        usageStatement: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         // "gone" is not advertised; "unselected" is advertised but not ticked.
@@ -100,6 +104,7 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         role: "",
         description: "",
+        usageStatement: "",
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["knowledge-flow-mcp-text"],

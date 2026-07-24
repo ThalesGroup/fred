@@ -1979,6 +1979,7 @@ def _record_to_summary(
         display_name=record.display_name,
         description=record.description,
         role=record.tuning.role,
+        usage_statement=record.tuning.usage_statement,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2258,6 +2259,7 @@ async def enroll_agent_instance(
         update={
             "role": request.role or request.display_name,
             "description": request.description or request.display_name,
+            "usage_statement": request.usage_statement,
         }
     )
     if request.tuning_field_values:
@@ -2494,6 +2496,14 @@ async def update_agent_instance(
         # branch above already ran for the same request.
         new_tuning = (new_tuning or record.tuning).model_copy(
             update={"role": request.role}
+        )
+
+    if request.usage_statement is not None:
+        # Same "None means unchanged" convention as role above (#2105) — the
+        # agent edit form always submits it, so this only stays None for
+        # partial-update callers like the enable/disable toggle.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"usage_statement": request.usage_statement}
         )
 
     updated = await store.update(

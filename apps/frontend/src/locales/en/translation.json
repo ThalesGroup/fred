@@ -1552,6 +1552,11 @@
           "role": {
             "label": "Role",
             "placeholder": "Describe the {{agentsNicknameSingular}}'s role"
+          },
+          "usageStatement": {
+            "label": "Use case",
+            "explanation": "Clearly describe the use cases you plan to address with this agent.",
+            "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },
         "noTemplates": "No agent templates available — start a runtime pod.",
@@ -1567,10 +1572,10 @@
         },
         "sections": {
           "aria": "Form sections",
-          "chat": "Chat",
+          "general": "General",
           "prompts": "Prompts",
-          "settings": "Settings",
-          "tools": "Tools"
+          "tools": "Tools",
+          "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",
         "suspended": {
