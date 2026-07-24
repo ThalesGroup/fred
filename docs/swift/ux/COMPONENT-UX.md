@@ -826,14 +826,25 @@ deliberate risk-reduction pattern, not the default hierarchy.
 `DataTable` gained an optional `pageSize` prop. Omitted (the default), it
 renders exactly as before — every consumer that doesn't pass it
 (`AdminTeamsPage`, `MigrationPage`, `CapabilitiesPage`) is unaffected. When
-set, the table slices `data` to one page, adds a sticky pagination footer
-(prev/next `IconButton`s + "page x / y" label — same "chevron + label"
-pattern as `ResourcePagination` in the resource browser), and hides the
-footer entirely when everything fits on a single page (`data.length <=
-pageSize`), matching `ResourcePagination`'s `total > PAGE_SIZE` convention.
-New i18n keys: top-level `dataTable.pagination.{prev,next,page}`.
+set, the table slices `data` to one page and renders a persistent pagination
+footer, height `3.75rem` — same height as a table row — with two flex
+containers:
 
-`TeamSettingsMembersTable` is the first consumer, at `pageSize={20}`.
+- **Left:** total item count (`{{count}} items/éléments`, `body-medium`,
+  `on-surface-retreat`).
+- **Right**, left to right: a rows-per-page `Select` (20/50/100, our own
+  molecule, not MUI), then `IconButton` (`medium`, `icon` variant,
+  `on-surface`) first-page / previous-page, the current page number
+  (`body-medium`, `on-surface-retreat`), then next-page / last-page. All four
+  nav buttons disable at their respective bound (first/prev at page 1,
+  next/last at the last page) — the footer itself never hides, even when
+  every row fits on one page, so the count and page-size control stay
+  reachable. New icons `first_page`/`last_page` added to the app's Material
+  Symbols allow-list (`shared/utils/Type.ts`). New i18n keys: top-level
+  `dataTable.pagination.{first,prev,next,last,totalItems}`.
+
+`TeamSettingsMembersTable` is the first consumer, at an initial `pageSize={20}`
+(the rows-per-page `Select` lets the user switch to 50/100 from there).
 
 The Members section (`TeamSettingsMembers.module.scss`) is now a full-height
 flex column (`height: 100%` from the already-24px-padded `.teamSettingsPage`

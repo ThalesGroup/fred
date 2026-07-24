@@ -69,6 +69,8 @@ export const materialIcons = [
   "image",
   "chevron_right",
   "chevron_left",
+  "first_page",
+  "last_page",
   "close",
   "cloud_off",
   "edit_note",

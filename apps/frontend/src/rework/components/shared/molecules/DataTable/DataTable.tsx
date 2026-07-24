@@ -16,6 +16,10 @@ import styles from "./DataTable.module.scss";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
+import { OptionModel } from "@models/Option.model.ts";
+
+const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
 
 interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
@@ -24,7 +28,9 @@ interface DataTableProps<T> {
   /** Extra left inset on the first column (header + every row), for tables
    *  whose content otherwise sits flush against the table's left edge. */
   firstColumnInset?: boolean;
-  /** Rows per page. Omit to render every row with no pagination (default). */
+  /** Enables pagination and sets the initial rows-per-page (should be one of
+   *  `ROWS_PER_PAGE_OPTIONS`). Omit to render every row with no pagination
+   *  bar (default) — existing call sites are unaffected. */
   pageSize?: number;
 }
 
@@ -34,6 +40,12 @@ export interface DataTableColumn<T> {
   cellRenderer?: (element: T) => React.ReactNode;
 }
 
+const rowsPerPageOptions: OptionModel<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
+  value: n,
+  label: String(n),
+  key: String(n),
+}));
+
 export default function DataTable<T>({
   columns,
   data,
@@ -42,14 +54,18 @@ export default function DataTable<T>({
   pageSize,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
+  const paginationEnabled = pageSize !== undefined;
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
 
-  const pageCount = pageSize ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+  const pageCount = paginationEnabled ? Math.max(1, Math.ceil(data.length / rowsPerPage)) : 1;
   // Clamped rather than reset-on-change: if a row is removed and the current
   // page no longer exists, fall back to the new last page instead of jumping
   // the user back to page 1.
   const currentPage = Math.min(page, pageCount - 1);
-  const pageData = pageSize ? data.slice(currentPage * pageSize, currentPage * pageSize + pageSize) : data;
+  const pageData = paginationEnabled
+    ? data.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
+    : data;
 
   const tableGridLayout = columns
     .map((column) => {
@@ -83,29 +99,61 @@ export default function DataTable<T>({
           })}
         </div>
       ))}
-      {pageSize && pageCount > 1 && (
+      {paginationEnabled && (
         <div className={styles["datatable-footer"]}>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="xs"
-            icon={{ category: "outlined", type: "chevron_left" }}
-            aria-label={t("dataTable.pagination.prev")}
-            disabled={currentPage <= 0}
-            onClick={() => setPage(currentPage - 1)}
-          />
-          <span className={styles["footer-label"]}>
-            {t("dataTable.pagination.page", { page: currentPage + 1, pageCount })}
-          </span>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="xs"
-            icon={{ category: "outlined", type: "chevron_right" }}
-            aria-label={t("dataTable.pagination.next")}
-            disabled={currentPage >= pageCount - 1}
-            onClick={() => setPage(currentPage + 1)}
-          />
+          <div className={styles["datatable-footer-left"]}>
+            <span className={styles["footer-label"]}>
+              {t("dataTable.pagination.totalItems", { count: data.length })}
+            </span>
+          </div>
+          <div className={styles["datatable-footer-right"]}>
+            <Select<number>
+              size="medium"
+              value={rowsPerPage}
+              options={rowsPerPageOptions}
+              onChange={(value) => {
+                setRowsPerPage(value);
+                setPage(0);
+              }}
+            />
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: "first_page" }}
+              aria-label={t("dataTable.pagination.first")}
+              disabled={currentPage <= 0}
+              onClick={() => setPage(0)}
+            />
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: "chevron_left" }}
+              aria-label={t("dataTable.pagination.prev")}
+              disabled={currentPage <= 0}
+              onClick={() => setPage(currentPage - 1)}
+            />
+            <span className={styles["footer-label"]}>{currentPage + 1}</span>
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: "chevron_right" }}
+              aria-label={t("dataTable.pagination.next")}
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage(currentPage + 1)}
+            />
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: "last_page" }}
+              aria-label={t("dataTable.pagination.last")}
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage(pageCount - 1)}
+            />
+          </div>
         </div>
       )}
     </div>

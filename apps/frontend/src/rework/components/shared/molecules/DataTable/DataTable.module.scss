@@ -58,17 +58,24 @@
   position: sticky;
   bottom: 0;
   grid-column: 1 / -1;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-xs);
   z-index: 1;
   border-top: 1px solid var(--surface-container-highest);
   background-color: var(--datatable-background-color);
-  padding: var(--spacing-2xs) var(--spacing-xs);
+  padding: 0 var(--spacing-s);
+  height: 3.75rem;
+}
+
+.datatable-footer-left,
+.datatable-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
 }
 
 .footer-label {
   color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
+  font: var(--font-body-medium);
   white-space: nowrap;
 }

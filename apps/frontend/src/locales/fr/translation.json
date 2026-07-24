@@ -389,9 +389,11 @@
   },
   "dataTable": {
     "pagination": {
+      "first": "Première page",
+      "last": "Dernière page",
       "next": "Page suivante",
-      "page": "page {{page}} / {{pageCount}}",
-      "prev": "Page précédente"
+      "prev": "Page précédente",
+      "totalItems": "{{count}} éléments"
     }
   },
   "dialogs": {

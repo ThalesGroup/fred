@@ -69,63 +69,61 @@ function rowValues(): string[] {
   return Array.from(container.querySelectorAll('[class*="datatable-row"] span')).map((el) => el.textContent ?? "");
 }
 
+function footer(): Element | null {
+  return container.querySelector('[class*="datatable-footer"]');
+}
+
+/** [rowsPerPageSelect, firstPage, prevPage, nextPage, lastPage] */
+function footerButtons(): HTMLButtonElement[] {
+  return Array.from(footer()?.querySelectorAll("button") ?? []);
+}
+
 describe("DataTable", () => {
   it("renders every row with no footer when pageSize is omitted", () => {
     render(<DataTable columns={columns} data={makeRows(45)} />);
     expect(rowValues()).toHaveLength(45);
-    expect(container.querySelector('[class*="datatable-footer"]')).toBeNull();
+    expect(footer()).toBeNull();
   });
 
-  it("hides the pagination footer when every row fits on one page", () => {
+  it("shows a persistent footer with the total item count even when every row fits on one page", () => {
     render(<DataTable columns={columns} data={makeRows(10)} pageSize={20} />);
     expect(rowValues()).toHaveLength(10);
-    expect(container.querySelector('[class*="datatable-footer"]')).toBeNull();
+    const [, first, prev, next, last] = footerButtons();
+    expect(footer()?.textContent).toContain("10");
+    expect(first.hasAttribute("disabled")).toBe(true);
+    expect(prev.hasAttribute("disabled")).toBe(true);
+    expect(next.hasAttribute("disabled")).toBe(true);
+    expect(last.hasAttribute("disabled")).toBe(true);
   });
 
-  it("shows only the first page's rows and a footer when data exceeds pageSize", () => {
+  it("shows only the first page's rows, the current page number, and the total count", () => {
     render(<DataTable columns={columns} data={makeRows(45)} pageSize={20} />);
     expect(rowValues()).toEqual(makeRows(20).map((r) => String(r.id)));
-    const footer = container.querySelector('[class*="datatable-footer"]');
-    expect(footer).not.toBeNull();
+    expect(footer()?.textContent).toContain("45");
+    expect(footer()?.textContent).toContain("1");
   });
 
-  it("navigates to the next/previous page and disables buttons at the ends", () => {
+  it("navigates next/prev/first/last, disabling the relevant buttons at each end", () => {
     render(<DataTable columns={columns} data={makeRows(45)} pageSize={20} />);
-    const [prev, next] = Array.from(container.querySelectorAll("button"));
+    const [, first, prev, next, last] = footerButtons();
+    expect(first.hasAttribute("disabled")).toBe(true);
     expect(prev.hasAttribute("disabled")).toBe(true);
     expect(next.hasAttribute("disabled")).toBe(false);
+    expect(last.hasAttribute("disabled")).toBe(false);
 
     click(next);
-    expect(rowValues()).toEqual([
-      "21",
-      "22",
-      "23",
-      "24",
-      "25",
-      "26",
-      "27",
-      "28",
-      "29",
-      "30",
-      "31",
-      "32",
-      "33",
-      "34",
-      "35",
-      "36",
-      "37",
-      "38",
-      "39",
-      "40",
-    ]);
+    expect(rowValues()[0]).toBe("21");
+    expect(rowValues()).toHaveLength(20);
+    expect(first.hasAttribute("disabled")).toBe(false);
     expect(prev.hasAttribute("disabled")).toBe(false);
 
-    click(next);
+    click(last);
     expect(rowValues()).toEqual(["41", "42", "43", "44", "45"]);
     expect(next.hasAttribute("disabled")).toBe(true);
+    expect(last.hasAttribute("disabled")).toBe(true);
 
-    click(prev);
-    click(prev);
+    click(first);
     expect(rowValues()[0]).toBe("1");
+    expect(prev.hasAttribute("disabled")).toBe(true);
   });
 });
