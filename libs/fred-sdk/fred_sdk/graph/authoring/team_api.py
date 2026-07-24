@@ -480,17 +480,22 @@ def _make_route_coordinator_step(
                 f"Current request: {state.user_message}"
             )
         user_prompt += "\n\nWhich specialist should handle this?"
-        decision = await structured_model_step(
-            context,
-            operation="team_route_coordinator",
-            output_model=_CoordinatorDecision,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            fallback_output=fallback,
-        )
-        route = decision.next_member
-        if route not in member_names:
-            route = member_names[0]
+        async with context.thinking(
+            "planning", title="Choosing a specialist"
+        ) as thought:
+            decision = await structured_model_step(
+                context,
+                operation="team_route_coordinator",
+                output_model=_CoordinatorDecision,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                fallback_output=fallback,
+            )
+            route = decision.next_member
+            if route not in member_names:
+                route = member_names[0]
+            await thought.write(decision.reasoning)
+            await thought.conclude(f"Routing to {route}.")
         return StepResult(route_key=_node_id(route))
 
     return _coordinator
@@ -658,19 +663,27 @@ def _make_coordinator_step(
             reasoning="fallback: sequential order",
         )
 
-        decision = await structured_model_step(
-            context,
-            operation="team_coordinator",
-            output_model=_CoordinatorDecision,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            fallback_output=fallback,
-        )
+        async with context.thinking(
+            "planning", title="Choosing the next specialist"
+        ) as thought:
+            decision = await structured_model_step(
+                context,
+                operation="team_coordinator",
+                output_model=_CoordinatorDecision,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                fallback_output=fallback,
+            )
 
-        # Guard: only accept known member names or "done".
-        route = decision.next_member
-        if route not in member_names and route != "done":
-            route = fallback_next
+            # Guard: only accept known member names or "done".
+            route = decision.next_member
+            if route not in member_names and route != "done":
+                route = fallback_next
+
+            await thought.write(decision.reasoning)
+            await thought.conclude(
+                "Task complete." if route == "done" else f"Next: {route}."
+            )
 
         return StepResult(route_key=_node_id(route) if route != "done" else "done")
 

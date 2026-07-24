@@ -2257,6 +2257,14 @@ items:
       passthrough for Anthropic extended thinking and Mistral reasoning chunks
       when the provider emits them; deployments without native thinking still
       rely on authored thoughts.
+      Amendment C (2026-07-24): TeamAgent route/dynamic coordinator steps
+      (fred_sdk.graph.authoring.team_api) now wrap their structured routing
+      decision in context.thinking("planning", ...) instead of silently
+      discarding decision.reasoning — every TeamAgent gets a visible routing
+      trace for free, no author code change. fred-sdk bumped to 3.4.0. Found
+      via fred-samples' team_of_3_agents_sample [ROUTED:...] text-marker hack,
+      which was then updated to rely on the thought instead of the marker.
+      No GitHub issue opened yet — committed locally, not pushed.
 
   - id: RUNTIME-05
     title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"

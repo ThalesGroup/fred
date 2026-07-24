@@ -4,7 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Status:** Draft  
 **Date:** 2026-05-23  
-**Last amended:** 2026-07-22 — chat trace UI stops rendering the synthetic `tool_use` thought row (Amendment B)
+**Last amended:** 2026-07-24 — `TeamAgent` coordinator routing decisions surface as `planning` thoughts (Amendment C)
 **Track:** fred-sdk / fred-runtime execution contract
 
 ---
@@ -770,3 +770,68 @@ shape is tool-specific and Layer 2 already exists for exactly this purpose.
 Non-`tool_use` thought phases (`planning`, `observation`, `reflection`,
 `synthesis`) are unaffected — their `conclusion` is real agent-authored or
 model-native text, not this synthetic placeholder, and continues to render.
+
+---
+
+## Amendment C — `TeamAgent` coordinator routing decisions surface as `planning` thoughts (2026-07-24)
+
+**Author:** Dimitri Tombroff
+**Date:** 2026-07-24
+**Amends:** RUNTIME-04 (base authoring API), `fred_sdk.graph.authoring.team_api`
+
+### C.1 Problem
+
+`TeamAgent` (both `mode="route"` and `mode="dynamic"`) already asks its
+coordinator LLM for a `_CoordinatorDecision{next_member, reasoning}` via
+`structured_model_step(...)`, but `_make_route_coordinator_step` and
+`_make_coordinator_step` only ever read `decision.next_member` to compute the
+graph's `route_key`. `decision.reasoning` was computed by the model on every
+turn and silently discarded — the routing decision was invisible to the chat
+UI, to eval trace/replay tooling, and to any developer testing the agent.
+
+Discovered via `fred-samples`' `team_of_3_agents_sample`: each child agent's
+`system_prompt_template` hardcoded a `[ROUTED:REACT_1]`-style literal marker
+the model had to prepend to its answer, purely so a human tester could tell
+which specialist responded. That marker leaks into the user-facing answer
+text (`"[ROUTED:REACT_1] 6"` instead of `"6"`) and only exists because there
+was no other way to observe the routing decision — the same class of problem
+`emit_status` vs. `context.thinking()` already solved for single-agent graph
+nodes (§1), just not yet applied to the framework-level `TeamAgent` coordinator.
+
+### C.2 Decision
+
+Wrap both coordinator steps' `structured_model_step(...)` call in
+`context.thinking("planning", title=...)`, matching the authored pattern any
+graph node already uses:
+
+- `_make_route_coordinator_step` (`mode="route"`): title `"Choosing a
+  specialist"`; writes `decision.reasoning`; concludes `"Routing to
+  {member}."`.
+- `_make_coordinator_step` (`mode="dynamic"`): title `"Choosing the next
+  specialist"`; writes `decision.reasoning`; concludes `"Next: {member}."` or
+  `"Task complete."` on the `"done"` terminal route.
+
+This is additive and automatic: every existing and future `TeamAgent`
+subclass gets a visible routing trace in the chat UI's Thought panel with no
+author code change, the same way `RUNTIME-05` gave every `ReActAgent` a free
+tool-call trace. `route_key` resolution, the unknown-member clamp, and the
+`done` guard are unchanged — only observability was added around them.
+
+**Non-goal:** this does not touch `ReActAgent`'s own thinking surface
+(covered by RUNTIME-05) or give `_make_agent_invoke_step`/`_make_member_step`
+(the member-invocation nodes, which already call `emit_status`) a thought
+block — a member's own execution should surface its reasoning through its own
+agent definition, not through the team's coordinator.
+
+### C.3 Follow-up
+
+`fred-samples`' `team_of_3_agents_sample` should drop the `[ROUTED:...]`
+text-marker convention from its three child system prompts now that the
+coordinator's choice is visible on its own — tracked as sample cleanup, not
+part of this SDK change.
+
+**Landed:** `fred_sdk.graph.authoring.team_api` (`_make_route_coordinator_step`,
+`_make_coordinator_step`), `fred-sdk` version `3.4.0`. Tests:
+`libs/fred-sdk/tests/test_team_coordinator_thinking.py` (6 cases — thought
+opened, reasoning/conclusion text, `route_key` unchanged, unknown-member
+clamp, `done` terminal case).

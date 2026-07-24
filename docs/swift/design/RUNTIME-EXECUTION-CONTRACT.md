@@ -696,7 +696,11 @@ ThoughtKind = Literal[
 agent reasoning. ReAct agents use RUNTIME-05: the runtime auto-synthesizes
 tool-call thoughts and promotes provider-native thinking chunks such as Claude
 `thinking` blocks or Mistral `ThinkChunk` payloads to the same `THOUGHT_*`
-stream.
+stream. `TeamAgent` coordinators (`fred_sdk.graph.authoring.team_api`, both
+`mode="route"` and `mode="dynamic"`) use Amendment C: the coordinator's
+structured routing decision is wrapped in a `planning` thought instead of
+being silently discarded — no SSE contract change, `THOUGHT_*` shapes stay
+frozen, only the emission site is new.
 
 `ThoughtKind` is exported from `fred_sdk.__init__` so agent authors can import it
 directly. The `think` scenario in `fred.github.test_assistant` exercises all five
