@@ -54,10 +54,15 @@ class KBundle:
         self.manifest = manifest
 
     def iter_table(self, table: str) -> Iterator[dict[str, Any]]:
-        """Yield one dict per row from a postgres/<table>.jsonl entry."""
-        path = f"postgres/{table}.jsonl"
+        """Yield one dict per row from a postgres/<table>.jsonl entry.
+
+        `table` must be the file name the producer actually wrote: kea bundles
+        use main's `migration/snapshot.py::EXPORT_TABLES` names verbatim
+        (`teammetadata`, `mcp-server`, …); swift-native bundles use the names
+        `exporter.py` writes (`team_metadata`, `agent_instance`, …).
+        """
         try:
-            data = self._zf.read(path).decode("utf-8")
+            data = self._zf.read(f"postgres/{table}.jsonl").decode("utf-8")
         except KeyError:
             return
         for line in data.splitlines():
@@ -78,6 +83,19 @@ class KBundle:
             return json.loads(self._zf.read("openfga/tuples.json"))
         except KeyError:
             return []
+
+    def keycloak_realm(self) -> dict[str, Any] | None:
+        """Return the bundled Keycloak realm export, None if absent.
+
+        Kea bundles carry it best-effort (`keycloak/realm.json`, main's
+        `_dump_realm`). A partial-export contains the realm's groups (the kea
+        team names) but never its users; a full `kc export --users` also
+        carries `users[]` with their `realmRoles`.
+        """
+        try:
+            return json.loads(self._zf.read("keycloak/realm.json"))
+        except KeyError:
+            return None
 
     def demo_users(self) -> list[BundleUserEntry]:
         """Return the typed users.json provisioning list, empty list if absent.
@@ -109,6 +127,13 @@ def open_bundle(data: bytes) -> KBundle:
     """
     zf = zipfile.ZipFile(io.BytesIO(data))
     raw = json.loads(zf.read("manifest.json"))
+    # Kea's exporter (main branch, `migration/snapshot.py`) predates the
+    # `users_schema_version` field and will never emit it — kea bundles also
+    # never carry a `users.json`, so the field is meaningless for them. Default
+    # it for non-swift bundles only; swift producers must keep declaring both
+    # versions explicitly (no silent default), per PLATFORM-IMPORT-RFC.md §4.
+    if raw.get("source_platform", "kea") != "swift":
+        raw.setdefault("users_schema_version", 1)
     manifest = SnapshotManifest.model_validate(raw)
     if manifest.format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise UnsupportedBundleFormatError(

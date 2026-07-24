@@ -71,11 +71,11 @@ actionable.
 
 | Area | Current state |
 | --- | --- |
-| Identity | Runbook exists in `KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`; platform-owned and not implemented by Swift code. |
+| Identity | Runbook exists in `KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`; platform-owned and not implemented by Swift code. Note: swift ignores Keycloak realm roles — kea platform admins must be re-granted `platform_admin` explicitly (bundle `users.json` or bootstrap). |
 | Data mirror | Procedure tracked in MIGR-06; no Swift service is expected for the `mc mirror` itself. |
-| Metadata import backend | Not implemented. `POST /control-plane/v1/migration/import`, workflow, activities, OpenFGA restore, and control-plane task events remain MIGR-05 work. |
-| Metadata import UI | `/admin/migration` shell exists and posts to the planned backend endpoint. It will show an error until the backend lands. |
-| Agent mapping | `control_plane_backend/migration/agent_map.py` and tests exist. Gaps must block real cutover. |
+| Metadata import backend | Implemented (2026-07-24): `POST /control-plane/v1/import-export/import` (`control_plane_backend/import_export/`), atomic transaction + task events. Kea path covers agents (incl. prompt/tuning transfer), chat-contexts → personal prompts, tags/metadata, teammetadata, and OpenFGA tuple restore with role transformation (`owner→team_admin+team_editor`, `manager→team_editor`, `member→team_member`). Validated against a real kea dump (2026-07-22). |
+| Metadata import UI | **Platform data** admin page, wired to the live backend (MIGR-05.06). |
+| Agent mapping | `control_plane_backend/import_export/agent_map.py` and tests exist. Gaps must block real cutover — run a prod template inventory before cutover. |
 | Task events | Shared task UI and SSE routing can route `migration` tasks to control-plane. |
 | Product revectorization | `/corpus/revectorize` exists, but the service is still a mock task. The Temporal workflow is MIGR-07 work. |
 

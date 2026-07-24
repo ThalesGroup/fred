@@ -2475,9 +2475,15 @@ items:
       team-metadata (single SQLAlchemy transaction in a FastAPI BackgroundTask, idempotent by PK),
       swift-native export/reset, Platform-data stats dashboard, declarative users.json team/platform
       role provisioning (fail-closed), validated+versioned manifest, honest content_keys + stage
-      reconciliation (05.13). DEFERRED (kea-import path only): OpenFGA tuple restore (05.04 — ops
-      bulk-copy Option A), agent prompt transfer (05.11). Document binaries move via MIGR-06;
-      embeddings rebuilt by MIGR-07 (re-vectorize trigger after import not yet wired).
+      reconciliation (05.13). Kea-import path SHIPPED 2026-07-24 (#1954, validated on a real kea
+      dump): OpenFGA tuple restore with role transformation (05.04 — owner→team_admin+team_editor,
+      manager→team_editor, member→team_member; replaces the ops bulk-copy plan), agent
+      prompt/tuning transfer via tuning.values["prompts.system"] (05.11), kea bundle compat
+      (05.14), chat-contexts → personal prompts (05.15), teams + platform roles from the bundled
+      Keycloak realm export (05.16). OPEN: user-state migration (05.17 — GCU rows, platform-role
+      verification; NOT MIGR-04's identity scope) and the kea-side partial-export 403
+      (view-clients). Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07
+      (re-vectorize trigger after import not yet wired).
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"
