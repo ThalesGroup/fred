@@ -122,6 +122,7 @@ from fred_core.security.structure import (
 from fred_core.session import SessionSchema
 from fred_core.session.stores import BaseSessionStore, PostgresSessionStore
 from fred_core.teams.metadata_store import (
+    JoiningMode,
     TeamMetadata,
     TeamMetadataPatch,
     TeamMetadataRow,
@@ -217,6 +218,7 @@ __all__ = [
     "DEFAULT_PPTX_PDF_TIMEOUT_SECONDS",
     "convert_pptx_bytes_to_pdf",
     "convert_pptx_file_to_pdf",
+    "JoiningMode",
     "TeamMetadata",
     "TeamMetadataPatch",
     "TeamMetadataStore",

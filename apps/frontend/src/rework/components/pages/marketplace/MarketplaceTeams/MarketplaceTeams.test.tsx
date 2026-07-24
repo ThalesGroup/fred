@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
     availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
     bootstrap: undefined,
     isLoading: false,
+    refetch: vi.fn(),
   },
 }));
 
@@ -61,6 +62,7 @@ describe("MarketplaceTeams personal-space exclusion", () => {
       availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
       bootstrap: undefined,
       isLoading: false,
+      refetch: vi.fn(),
     };
   });
 

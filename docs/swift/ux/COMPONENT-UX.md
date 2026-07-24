@@ -711,6 +711,107 @@ Displays one managed agent instance. Enabled cards are wrapped by `TeamAgentsPag
 
 ---
 
+### `TeamCard`
+
+**Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
+**Status:** `Functional`
+
+Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
+affordance (TEAM-09) is driven entirely by the team's `joining_mode`, gated
+on `!team.is_member`:
+
+| `joining_mode` | Footer content |
+| --- | --- |
+| `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `request_only` | "Request to join" button, permanently `disabled` — the notification system to route requests to team admins doesn't exist yet |
+| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `closed` | No button; muted label (`on-surface-muted`) |
+| already a member | Nothing renders in the footer's join slot |
+
+The former lock icon next to the team name (driven by the retired
+`is_private` bool) was removed rather than remapped to `joining_mode` — the
+footer label already communicates restricted-join state more specifically,
+so keeping both would duplicate the signal.
+
+#### Open UX issues
+
+- **`request_only` disabled button has no explanatory affordance** — a
+  permanently-disabled button with no tooltip/hint may read as broken to
+  users rather than "not yet supported." Consider a tooltip or helper text
+  once the underlying notification system is scoped.
+
+---
+
+### `TeamSettingsParameters` — joining-mode control
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
+**Status:** `Functional`
+
+Replaced the `is_private` `Switch` row with a 4-way `ButtonGroup`
+(`variant="radio"`), label left / control right in the same
+`form-section` container. Each option carries its own selected-state color
+via the `ButtonGroupItem` color-per-item extension (see below): `open` →
+`success`, `request_only`/`invite_only` → `secondary`, `closed` → `error`.
+Selecting an option PATCHes `joining_mode` immediately (no separate save
+step), mirroring the retired Switch's auto-save behavior.
+
+#### `ButtonGroup` / `ButtonGroupItem` — per-item color override (TEAM-09)
+
+`ButtonGroupItemProps` gained an optional `color?: ColorTheme` that overrides
+the group-level `color` for that single item only (falls back to the
+group's `color` when omitted) — needed because this control's four options
+each use a different semantic color when selected, not one color for the
+whole group like every prior `ButtonGroup` consumer. Backward compatible:
+existing call sites that never set `item.color` are unaffected.
+
+---
+
+### `TeamContentNavbar` / `TeamSettingsPage` — self-service team leave (AUTHZ-09)
+
+**Location:** `src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
+`src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`
+**Status:** `Functional`
+
+The team-settings gear icon (previously `canAdministerAdmins`-gated, admin
+only) is now visible to every team member (`canReadMembers`). What a member
+sees inside scales with their role:
+
+- a plain member: a read-only "Members" list (no invite field, no actions
+  column; the role column stays visible with the same chips as the editable
+  view, just non-interactive, so a plain member can still see who holds
+  elevated roles) and nothing else in the sidebar;
+- editors/analysts/admins: the same sections as before (Members with edit
+  controls, Parameters gated on `can_update_info`, Activity/Evaluations per
+  their existing gates) — Activity's gate moved from `canReadMembers` (now
+  true for everyone) to a new `hasElevatedTeamRole` helper
+  (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
+
+**New: "Leave team" button.** Full-width, `16px` side gutter, anchored to
+the bottom of the settings sidebar (`margin-top: auto` inside the existing
+full-height flex column) below the section list — `filled` / `error`
+`Button`. Disabled with an explanatory `title` tooltip only for a team's
+sole remaining `team_admin` (computed client-side from the members list
+already fetched for the table; the backend's last-admin invariant is the
+actual source of truth and still applies server-side regardless). Confirms
+via `ConfirmationDialog`, then redirects to `/team/personal/agents`.
+
+#### `ConfirmationDialog` — per-call button emphasis override
+
+Added optional `cancelVariant`/`cancelColor`/`confirmVariant` props
+(threaded through `ConfirmationDialogProvider`'s `showConfirmationDialog`),
+defaulting to the existing fixed styling (`Cancel` = outlined/on-surface,
+`Confirm` = filled) so every other call site is unaffected. The leave-team
+dialog is the first consumer to invert the usual emphasis — `Annuler` =
+filled (the safe, reversible choice stays visually dominant), `Quitter` =
+text + error (the destructive choice is low-emphasis, M3 "Text" tier) — a
+deliberate risk-reduction pattern, not the default hierarchy.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
 ### `Toast` / `ToastProvider`
 
 **Location:** `src/rework/components/shared/molecules/Toast/Toast.tsx`

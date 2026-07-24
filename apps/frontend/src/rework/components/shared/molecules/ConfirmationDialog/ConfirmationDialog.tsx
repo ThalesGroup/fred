@@ -15,6 +15,7 @@
 import { useEffect, type ReactNode } from "react";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
+import { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import styles from "./ConfirmationDialog.module.css";
 
 interface ConfirmationDialogProps {
@@ -26,6 +27,13 @@ interface ConfirmationDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   criticalAction?: boolean;
+  /** Override the cancel/dismiss button's emphasis — default "outlined". */
+  cancelVariant?: ButtonVariant;
+  /** Override the cancel/dismiss button's color — default "on-surface". */
+  cancelColor?: ColorTheme;
+  /** Override the confirm button's emphasis — default "filled". Color still
+   *  follows `criticalAction` (error vs. primary), independent of variant. */
+  confirmVariant?: ButtonVariant;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -38,6 +46,9 @@ export function ConfirmationDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   criticalAction = false,
+  cancelVariant = "outlined",
+  cancelColor = "on-surface",
+  confirmVariant = "filled",
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps) {
@@ -70,10 +81,15 @@ export function ConfirmationDialog({
             {details}
           </div>
           <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onCancel}>
+            <Button color={cancelColor} variant={cancelVariant} size="medium" onClick={onCancel}>
               {cancelLabel}
             </Button>
-            <Button color={criticalAction ? "error" : "primary"} variant="filled" size="medium" onClick={onConfirm}>
+            <Button
+              color={criticalAction ? "error" : "primary"}
+              variant={confirmVariant}
+              size="medium"
+              onClick={onConfirm}
+            >
               {confirmLabel}
             </Button>
           </div>

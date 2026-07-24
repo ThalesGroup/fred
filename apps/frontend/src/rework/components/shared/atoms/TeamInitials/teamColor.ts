@@ -28,12 +28,12 @@ export interface TeamColor {
   banner: string;
 }
 
-const WHITE = "var(--cold-grey-100)";
+const WHITE = "var(--core-cold-grey-100)";
 
 const hue = (name: string): TeamColor => ({
-  solid: `var(--${name}-40)`,
+  solid: `var(--core-${name}-40)`,
   onSolid: WHITE,
-  banner: `linear-gradient(135deg, var(--${name}-50), var(--${name}-30))`,
+  banner: `linear-gradient(135deg, var(--core-${name}-50), var(--core-${name}-30))`,
 });
 
 /** Team identity hues. `light-purple` is intentionally excluded — it is the

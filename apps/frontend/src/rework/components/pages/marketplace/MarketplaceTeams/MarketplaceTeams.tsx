@@ -37,7 +37,7 @@ import { isPersonalTeamId } from "@shared/utils/teamId";
  */
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
-  const { activeTeam, availableTeams, bootstrap, isLoading } = useFrontendBootstrap();
+  const { activeTeam, availableTeams, bootstrap, isLoading, refetch } = useFrontendBootstrap();
   // AUTHZ-05 review item 4: platform-admin gating is OpenFGA-derived
   // (`PermissionSummary.is_platform_admin`), not a raw Keycloak role check.
   const isAdmin = bootstrap?.permissions?.is_platform_admin ?? false;
@@ -63,14 +63,19 @@ export default function MarketplaceTeams() {
     return <Navigate to={`/team/${personalTeamId}/agents`} replace />;
   }
 
-  const renderCard = (team: Team, withDescription: boolean, canJoin: boolean) => {
+  const renderCard = (team: Team, withDescription: boolean) => {
+    // TEAM-09: a successful self-service join changes team.is_member, which
+    // moves the card between the yourTeams/otherTeams buckets via the
+    // ControlPlaneTeam:LIST tag invalidation baked into useJoinTeamMutation —
+    // bootstrap's own team list (the navbar/team switcher) is a separate
+    // cache, so it needs its own refetch.
     if (isAdmin)
       return (
         <Link to={`/team/${team.id}/agents`}>
-          <TeamCard key={team.id} team={team} withDescription={withDescription} canJoin={canJoin} />
+          <TeamCard key={team.id} team={team} withDescription={withDescription} onJoined={refetch} />
         </Link>
       );
-    return <TeamCard key={team.id} team={team} withDescription={withDescription} canJoin={canJoin} />;
+    return <TeamCard key={team.id} team={team} withDescription={withDescription} onJoined={refetch} />;
   };
 
   return (
@@ -81,11 +86,11 @@ export default function MarketplaceTeams() {
       <div className={styles.marketplaceTeamsContent}>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
         <div className={styles.marketplaceTeamsList}>
-          {yourTeams && yourTeams.map((team) => renderCard(team, false, false))}
+          {yourTeams && yourTeams.map((team) => renderCard(team, false))}
         </div>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
         <div className={styles.marketplaceTeamsList}>
-          {otherTeams && otherTeams.map((team) => renderCard(team, true, true))}
+          {otherTeams && otherTeams.map((team) => renderCard(team, true))}
         </div>
       </div>
     </div>

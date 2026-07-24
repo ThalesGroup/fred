@@ -1465,6 +1465,84 @@ arbitrary-third-party-promotion gap and the reactivation-after-admin-loss gap fo
 
 ---
 
+# Part 9 - Self-Service Team Leave (2026-07-23)
+
+## 43. Target
+
+Team membership removal (`DELETE /teams/{team_id}/members/{user_id}`,
+`remove_team_member` in `teams/service.py`) is admin-gated today: the caller
+must hold the "administer" permission for every role the target holds
+(`_get_administer_permission_for_team_role_relation`). There is no
+self-service path for a user to remove themselves — a plain `team_member`
+cannot call this endpoint on their own id, since `can_administer_members`
+is a `team_admin`-only relation.
+
+Decision: a caller removing **themselves** (`user.uid == user_id`) bypasses
+the administer-permission check entirely. Every other property of
+`remove_team_member` is unchanged and reused as-is:
+
+- the last-admin invariant (`_ensure_team_keeps_at_least_one_admin`, also
+  the subject of issue #1985) still fires unconditionally whenever
+  `team_admin` is among the caller's roles — the sole remaining
+  `team_admin` cannot remove themselves, self-removal or not;
+- the same session/conversation retention-policy purge that runs for an
+  admin-initiated removal runs identically for a self-removal — leaving a
+  team has the same conversation-lifecycle consequence as being removed
+  from it, by design (consistency over inventing a second, lighter-weight
+  removal path);
+- no new route, no OpenAPI/contract shape change — `DELETE
+  /teams/{team_id}/members/{user_id}` already accepts any `user_id`,
+  including the caller's own.
+
+## 44. Why a permission bypass, not a new capability
+
+Adding a `can_leave_team` `TeamPermission`/OpenFGA relation was considered
+and rejected: "may I remove myself" is not a delegable administer-style
+permission that varies by role or team configuration — it is a structural
+property of being *any* member, constrained only by the pre-existing
+last-admin invariant. Modeling it as a relation would mean granting
+`team_member` (the union base every role already includes,
+`schema.fga:118`) a computed `can_leave_team` that is always true except
+for the sole admin case — a relation that can never diverge from "am I a
+member, and not the last admin", i.e. exactly the guard the code already
+has to run regardless. A same-identity bypass in `remove_team_member`
+expresses that directly, with one guard clause, instead of a new relation
+whose only variable input duplicates a check the function already performs.
+
+## 45. Frontend surface change
+
+The team-settings entry point (the gear icon next to the team name) was
+gated on `canAdministerAdmins` (admin-only), which also gated the entire
+settings page. This part opens the entry point to `canReadMembers` (true
+for any `team_member`, `schema.fga:118`) so every team member can reach a
+settings surface — scoped per role:
+
+- a plain member sees a read-only "Members" list (no invite field, no
+  actions column; the role column stays visible and read-only, so members
+  can see who holds elevated roles) and the new "Leave team" action;
+- editors/analysts/admins keep today's full panel (Members with edit
+  controls per their existing `can_administer_*` gates, Parameters gated on
+  `can_update_info`, Activity and Evaluations per their existing gates) plus
+  the same "Leave team" action, disabled only for the sole remaining
+  `team_admin`.
+
+No new `TeamPermission` was needed for this either: every section gate
+already maps to an existing capability (`canUpdateInfo` for Parameters,
+which was previously reachable by anyone who got past the outer
+admin-only gate — now made explicit since the outer gate no longer implies
+it).
+
+## 46. Non-goals
+
+No bulk "remove all my memberships" action, no email/notification on
+leave, no cooling-off/undo window — a self-removal is the same
+irreversible-until-re-invited action a member removal already is. Personal
+teams are unaffected: they are never rows in `team_metadata_store`, so
+`DELETE /teams/{personal-<uid>}/members/{uid}` 404s before reaching the
+permission check, exactly as today.
+
+---
+
 ## Summary
 
 The target is intentionally simple:

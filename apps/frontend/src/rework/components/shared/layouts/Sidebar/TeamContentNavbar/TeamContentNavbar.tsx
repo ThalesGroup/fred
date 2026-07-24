@@ -21,10 +21,19 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider.tsx";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import { KeyCloakService } from "../../../../../../security/KeycloakService";
+import {
+  useListTeamMembersQuery,
+  useRemoveTeamMemberMutation,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -44,10 +53,24 @@ export default function TeamContentNavbar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
-  const { canUpdateAgents, canReadMembers } = useTeamCapabilities(selectedTeam);
+  const capabilities = useTeamCapabilities(selectedTeam);
+  const { canUpdateAgents, canUpdateInfo, canAdministerAdmins } = capabilities;
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const { notifyApiError } = useApiErrorToast();
+  const { runMutationAction } = useMutationAction();
+  const [removeTeamMember] = useRemoveTeamMemberMutation();
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
+
+  // Only an admin can ever be blocked from leaving (the "at least one
+  // team_admin" invariant, AUTHZ-09) — skip the lookup for everyone else.
+  const { data: teamMembers } = useListTeamMembersQuery(
+    { teamId: teamId ?? "" },
+    { skip: !inSettings || !teamId || !canAdministerAdmins },
+  );
+  const adminCount = teamMembers?.filter((member) => member.relations.includes("team_admin")).length ?? 0;
+  const isLastAdmin = canAdministerAdmins && adminCount <= 1;
 
   // The personal space has no team-admin permission to gate a settings icon on
   // (`canOpenTeamSettings` is always false there — OBSERV-02 / BACKLOG.md §7b),
@@ -83,9 +106,12 @@ export default function TeamContentNavbar() {
   // section is gated separately from the settings entry point itself.
   const canManageEvaluations = canUpdateAgents;
 
-  // The team Activity view calls the team-scoped GET /tasks, which the backend
-  // gates on CAN_READ_MEMBERS — mirror that here rather than surface a load error.
-  const canSeeActivity = canReadMembers;
+  // AUTHZ-09: the settings entry point is now open to every team member
+  // (`canOpenTeamSettings` = `canReadMembers`), so Activity — meant only for
+  // elevated roles, not the baseline member surface — needs its own gate
+  // instead of reusing the membership-level check the backend's GET /tasks
+  // happens to accept.
+  const canSeeActivity = hasElevatedTeamRole(capabilities);
 
   const settingsItems: NavigationMenuItemProps[] = [
     {
@@ -94,13 +120,15 @@ export default function TeamContentNavbar() {
       icon: { category: "outlined", type: "people", filled: true },
       linkProps: { to: `${settingsBase}/members` },
     },
-    {
+  ];
+  if (canUpdateInfo) {
+    settingsItems.push({
       type: "link",
       label: t("rework.teamSettings.navigation.settings"),
       icon: { category: "outlined", type: "settings", filled: true },
       linkProps: { to: `${settingsBase}/parameters` },
-    },
-  ];
+    });
+  }
   if (canSeeActivity) {
     // Same "build" icon as the platform admin Tasks entry — one shared surface,
     // identical ergonomy at both levels (OPS-04 §3.4).
@@ -119,6 +147,34 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/evaluations` },
     });
   }
+
+  const handleLeaveTeam = () => {
+    if (!teamId || isLastAdmin) return;
+    showConfirmationDialog({
+      title: t("rework.teamSettings.leaveTeam.title"),
+      message: t("rework.teamSettings.leaveTeam.message", { teamName: selectedTeam?.name ?? "" }),
+      confirmButtonLabel: t("rework.teamSettings.leaveTeam.confirmLabel"),
+      criticalAction: true,
+      cancelVariant: "filled",
+      cancelColor: "primary",
+      confirmVariant: "text",
+      onConfirm: async () => {
+        const userId = KeyCloakService.GetUserId();
+        if (!userId) return;
+        await runMutationAction({
+          action: () => removeTeamMember({ teamId, userId }).unwrap(),
+          onError: (error) =>
+            notifyApiError(error, {
+              summary: t("rework.teamSettings.leaveTeam.errors.summary"),
+              fallbackDetail: t("rework.teamSettings.leaveTeam.errors.fallbackDetail"),
+              forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail"),
+              conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail"),
+            }),
+          onSuccess: () => navigate("/team/personal/agents"),
+        });
+      },
+    });
+  };
 
   return (
     <div className={styles.teamContentNavbarContainer}>
@@ -170,6 +226,19 @@ export default function TeamContentNavbar() {
               </Button>
             </span>
             <NavigationMenu items={settingsItems} />
+            <span className={styles["leave-team-container"]}>
+              <Button
+                color={"error"}
+                variant={"filled"}
+                size={"medium"}
+                disabled={isLastAdmin}
+                title={isLastAdmin ? t("rework.teamSettings.leaveTeam.lastAdminTooltip") : undefined}
+                onClick={handleLeaveTeam}
+                className={styles["leave-team-button"]}
+              >
+                {t("rework.teamSettings.navigation.leaveTeam")}
+              </Button>
+            </span>
           </>
         ) : inUsage ? (
           // Same focused-view treatment as settings: the usage dashboard

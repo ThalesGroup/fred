@@ -38,3 +38,15 @@
   display: flex;
   padding: var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-xs);
 }
+
+/* Anchored to the bottom of the settings menu column (`.navigationContainer`
+ * is a full-height flex column), full width minus a 16px gutter each side. */
+.leave-team-container {
+  display: flex;
+  margin-top: auto;
+  padding: 0 var(--spacing-m) var(--spacing-m);
+}
+
+.leave-team-button {
+  width: 100%;
+}

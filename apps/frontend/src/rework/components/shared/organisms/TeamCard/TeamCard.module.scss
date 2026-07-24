@@ -71,11 +71,6 @@
   font-size: 1.125rem;
 }
 
-.teamPrivateState {
-  display: inline-flex;
-  font-size: 1.5rem;
-}
-
 .teamCardDescription {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -90,5 +85,23 @@
 .teamCardFooter {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-top: auto;
+}
+
+.teamJoiningLabel {
+  /* Escape-hatch margin (see design system guidance): this offset applies
+   * only to the two label-only states (closed/invite-only) — the sibling
+   * join/request buttons in the same footer slot must stay flush with the
+   * card's padding edge, so it can't be solved with footer padding/gap. */
+  margin-right: var(--spacing-xs);
+  font: var(--font-body-medium);
+
+  &[data-tone="muted"] {
+    color: var(--on-surface-muted);
+  }
+
+  &[data-tone="retreat"] {
+    color: var(--on-surface-retreat);
+  }
 }

@@ -19,6 +19,9 @@ interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
   data: T[];
   backgroundColor?: string;
+  /** Extra left inset on the first column (header + every row), for tables
+   *  whose content otherwise sits flush against the table's left edge. */
+  firstColumnInset?: boolean;
 }
 
 export interface DataTableColumn<T> {
@@ -31,6 +34,7 @@ export default function DataTable<T>({
   columns,
   data,
   backgroundColor = "var(--surface-container)",
+  firstColumnInset = false,
 }: DataTableProps<T>) {
   const tableGridLayout = columns
     .map((column) => {
@@ -38,9 +42,12 @@ export default function DataTable<T>({
     })
     .join(" ");
 
+  const containerClasses = [styles["datatable-container"]];
+  if (firstColumnInset) containerClasses.push(styles["first-column-inset"]);
+
   return (
     <div
-      className={styles["datatable-container"]}
+      className={containerClasses.join(" ")}
       style={
         { "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties
       }

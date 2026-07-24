@@ -530,6 +530,121 @@ async def test_remove_team_member_checks_permission_for_every_held_role(
     assert rebac.roles["bob"] == set()
 
 
+# --------------------------- self-service leave (AUTHZ-09) ---------------
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_self_removal_skips_permission_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plain member ("caller", no elevated role) removing themselves must
+    succeed even though they hold none of the `can_administer_*` permissions
+    a normal removal would require — the same-identity bypass (RFC Part 9
+    §43-44), not a change to the underlying permission model."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        PolicyEvaluationResult,
+        PurgeMode,
+    )
+
+    rebac = _FakeRebac(roles={"caller": {UserTeamRelation.TEAM_MEMBER}})
+
+    class _FakeSessionStore:
+        async def get_for_user(self, _user_id, _team_id, db_session=None):
+            return []
+
+    class _FakePurgeQueueStore:
+        async def enqueue(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.evaluate_policy_for_request",
+        lambda *_a, **_k: PolicyEvaluationResult(
+            mode=PurgeMode.IMMEDIATE_DELETE,
+            retention="PT0S",
+            retention_seconds=0,
+            cancel_on_rejoin=True,
+            matched_rule_id=None,
+            matched_rule_specificity=0,
+        ),
+    )
+    deps = _deps(
+        rebac,
+        "fredlab",
+        get_session_store=lambda: _FakeSessionStore(),
+        get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+    )
+
+    await remove_team_member(_user(), TeamId("fredlab"), "caller", deps)
+
+    assert rebac.team_permission_checks == []
+    assert rebac.roles["caller"] == set()
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_self_removal_blocked_as_sole_admin() -> None:
+    """The last-admin invariant applies regardless of who initiates the
+    removal — a sole `team_admin` cannot leave their own team."""
+    rebac = _FakeRebac(roles={"caller": {UserTeamRelation.TEAM_ADMIN}})
+
+    with pytest.raises(TeamAdminConstraintError):
+        await remove_team_member(
+            _user(), TeamId("fredlab"), "caller", _deps(rebac, "fredlab")
+        )
+
+    assert rebac.roles["caller"] == {UserTeamRelation.TEAM_ADMIN}
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_self_removal_allowed_with_another_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `team_admin` who is not the last one can leave via the same
+    same-identity bypass as any other role."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        PolicyEvaluationResult,
+        PurgeMode,
+    )
+
+    rebac = _FakeRebac(
+        roles={
+            "caller": {UserTeamRelation.TEAM_ADMIN},
+            "alice": {UserTeamRelation.TEAM_ADMIN},
+        }
+    )
+
+    class _FakeSessionStore:
+        async def get_for_user(self, _user_id, _team_id, db_session=None):
+            return []
+
+    class _FakePurgeQueueStore:
+        async def enqueue(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.evaluate_policy_for_request",
+        lambda *_a, **_k: PolicyEvaluationResult(
+            mode=PurgeMode.IMMEDIATE_DELETE,
+            retention="PT0S",
+            retention_seconds=0,
+            cancel_on_rejoin=True,
+            matched_rule_id=None,
+            matched_rule_specificity=0,
+        ),
+    )
+    deps = _deps(
+        rebac,
+        "fredlab",
+        get_session_store=lambda: _FakeSessionStore(),
+        get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+    )
+
+    await remove_team_member(_user(), TeamId("fredlab"), "caller", deps)
+
+    assert rebac.team_permission_checks == []
+    assert rebac.roles["caller"] == set()
+    assert rebac.roles["alice"] == {UserTeamRelation.TEAM_ADMIN}
+
+
 # --------------------------- search_candidate_team_members ---------------
 
 

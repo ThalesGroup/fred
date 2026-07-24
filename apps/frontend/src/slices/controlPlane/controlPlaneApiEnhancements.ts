@@ -97,6 +97,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
     },
+    // TEAM-09: self-service join — same tags as updateTeam so the marketplace
+    // list (yourTeams/otherTeams split) and this team's own cache entry both
+    // refresh with the caller now a member.
+    joinTeamControlPlaneV1TeamsTeamIdJoinPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
     uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: {
       query: (queryArg: UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg) => {
         const formData = new FormData();
@@ -164,6 +173,7 @@ export const {
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
+  useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,

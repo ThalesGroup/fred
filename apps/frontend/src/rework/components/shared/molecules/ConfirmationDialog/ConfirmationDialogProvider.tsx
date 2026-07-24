@@ -15,6 +15,7 @@
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { createContext, PropsWithChildren, useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 
 // Define the structure for the confirmation dialog
 interface ConfirmationDialogOptions {
@@ -23,6 +24,10 @@ interface ConfirmationDialogOptions {
   confirmButtonLabel?: string;
   cancelButtonLabel?: string;
   criticalAction?: boolean;
+  /** See `ConfirmationDialog`'s matching props — defaults unchanged unless set. */
+  cancelVariant?: ButtonVariant;
+  cancelColor?: ColorTheme;
+  confirmVariant?: ButtonVariant;
   onConfirm: () => void;
   onCancel?: () => void;
 }
@@ -62,6 +67,9 @@ export const ConfirmationDialogProvider = ({ children }: PropsWithChildren) => {
         confirmLabel={dialogOptions?.confirmButtonLabel || t("confirmationDialog.defaultConfirmButtonLabel")}
         cancelLabel={dialogOptions?.cancelButtonLabel || t("confirmationDialog.defaultCancelButtonLabel")}
         criticalAction={criticalAction}
+        cancelVariant={dialogOptions?.cancelVariant}
+        cancelColor={dialogOptions?.cancelColor}
+        confirmVariant={dialogOptions?.confirmVariant}
         onConfirm={() => {
           dialogOptions?.onConfirm();
           closeConfirmationDialog();

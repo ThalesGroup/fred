@@ -14,6 +14,7 @@
 
 import styles from "./TeamCard.module.scss";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useJoinTeamMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
@@ -28,22 +29,19 @@ import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 export interface TeamCardProps {
   team: Team;
   withDescription: boolean;
-  canJoin: boolean;
+  /** Called after a successful self-service join (JoiningMode.OPEN) — lets the
+   * page refresh anything derived outside this card's own team-list cache
+   * (e.g. the bootstrap-driven team navbar). */
+  onJoined?: () => void;
 }
 
-export default function TeamCard({ team, withDescription, canJoin }: TeamCardProps) {
-  const {
-    siteTitle,
-    siteSubtitle,
-    defaultTeamBannerFile,
-    defaultTeamAvatarFile,
-    defaultPersonalBannerFile,
-    defaultPersonalAvatarFile,
-  } = useFrontendProperties();
+export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
+  const { defaultTeamBannerFile, defaultTeamAvatarFile, defaultPersonalBannerFile, defaultPersonalAvatarFile } =
+    useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
+  const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const userFullName = KeyCloakService.GetUserFullName();
-  const username = KeyCloakService.GetUserName();
 
   // Configured assets replace initials/solid colour. Without configured assets,
   // the card keeps the name-derived solid colour treatment.
@@ -53,18 +51,14 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
   const color = isPersonal ? PERSONAL_TEAM_COLOR : teamColor(team.name);
   const avatarName = isPersonal ? userFullName : team.name;
 
-  const handleJoinTeam = (e: React.MouseEvent<HTMLButtonElement>, team: Team): void => {
+  const handleJoinTeam = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
-    if (!team.admins || team.admins.length === 0) return;
-    const recipients = team.admins.map((o) => o.email).join(";");
-    const subject = `[${siteTitle} ${siteSubtitle}] Demande pour rejoindre l'équipe ${team.name}`;
-    const teamUrl = `${window.location.origin}/team/${team.id}/agents`;
-    const body = `Bonjour,\n\nJe souhaite rejoindre l'équipe ${team.name} sur ${siteTitle} ${siteSubtitle}.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;
-    const params = new URLSearchParams({
-      subject: subject,
-      body: body,
-    });
-    window.location.href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;
+    try {
+      await joinTeam({ teamId: team.id }).unwrap();
+      onJoined?.();
+    } catch (error) {
+      console.error("Join team error:", error);
+    }
   };
 
   return (
@@ -102,11 +96,6 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
         <div className={styles.teamCardDetailName}>
           <div className={styles.teamInformation}>
             <div className={styles.teamName}>{team.name}</div>
-            {team.is_private && (
-              <div className={styles.teamPrivateState}>
-                <Icon category={"outlined"} type={"lock"} />
-              </div>
-            )}
           </div>
           <div className={styles.teamMemberCount}>
             <span className={styles.teamMemberCountIcon}>
@@ -118,16 +107,32 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
         {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
         <div className={styles.teamCardFooter}>
           <AvatarGroup avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))} />
-          {canJoin && (
+          {!team.is_member && team.joining_mode === "open" && (
             <Button
               color={"primary"}
-              variant={"text"}
+              variant={"outlined"}
               size={"medium"}
-              icon={{ category: "outlined", type: "mail" }}
-              onClick={(e) => handleJoinTeam(e, team)}
+              icon={{ category: "outlined", type: "person_add" }}
+              disabled={isJoining}
+              onClick={handleJoinTeam}
             >
               {t("rework.teamCard.join")}
             </Button>
+          )}
+          {!team.is_member && team.joining_mode === "request_only" && (
+            <Button color={"primary"} variant={"outlined"} size={"medium"} disabled onClick={(e) => e.preventDefault()}>
+              {t("rework.teamCard.requestToJoin")}
+            </Button>
+          )}
+          {!team.is_member && team.joining_mode === "closed" && (
+            <span className={styles.teamJoiningLabel} data-tone="muted">
+              {t("rework.teamCard.closedTeam")}
+            </span>
+          )}
+          {!team.is_member && team.joining_mode === "invite_only" && (
+            <span className={styles.teamJoiningLabel} data-tone="retreat">
+              {t("rework.teamCard.inviteOnly")}
+            </span>
           )}
         </div>
       </div>

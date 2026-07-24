@@ -145,6 +145,10 @@ class _FakeTeamRebac:
     async def ensure_team_organization_relations(self, team_ids: list[Any]) -> None:
         return None
 
+    # TEAM-09: create_team also grants immediate marketplace visibility.
+    async def ensure_team_public_relations(self, team_ids: list[Any]) -> None:
+        return None
+
     async def add_relations(self, relations: list[Relation], **kwargs: object) -> None:
         for relation in relations:
             await self.add_relation(relation)

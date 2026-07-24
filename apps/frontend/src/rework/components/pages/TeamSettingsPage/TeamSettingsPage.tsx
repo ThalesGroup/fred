@@ -18,6 +18,8 @@ import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSetting
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import styles from "./TeamSettingsPage.module.scss";
 
 /**
@@ -30,6 +32,8 @@ import styles from "./TeamSettingsPage.module.scss";
 export default function TeamSettingsPage() {
   const { section } = useParams<{ section: string }>();
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+  const capabilities = useTeamCapabilities(selectedTeam);
+  const { canUpdateInfo, canUpdateAgents } = capabilities;
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —
@@ -38,9 +42,20 @@ export default function TeamSettingsPage() {
   const permissionsLoaded = !!selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions);
   if (!selectedTeam || !permissionsLoaded) return null;
 
-  // Permissions are loaded and the user cannot administer this team: settings is
+  // Permissions are loaded and the user isn't even a team member: settings is
   // not for them. Guards direct navigation / refresh on a settings URL.
   if (!canOpenTeamSettings) return <Navigate to={`/team/${teamId}/agents`} replace />;
+
+  // AUTHZ-09: the outer gate above only proves membership — every non-"members"
+  // section still needs its own capability check, since a plain member reaching
+  // this page (by design, for "Members" + "Leave team") must not also reach
+  // sections the sidebar hides for them via a direct/refreshed URL.
+  const sectionAllowed =
+    section === "members" ||
+    ((section === "parameters" || section === "retention") && canUpdateInfo) ||
+    (section === "evaluations" && canUpdateAgents) ||
+    (section === "activity" && hasElevatedTeamRole(capabilities));
+  if (section && !sectionAllowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
 
   const renderSection = () => {
     switch (section) {

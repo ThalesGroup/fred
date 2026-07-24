@@ -29,7 +29,9 @@ export interface SelectedTeamState {
   /** Full team once loaded; a permission-less bootstrap summary while the
    *  per-team fetch is in flight; `undefined` before either resolves. */
   selectedTeam: TeamWithPermissions | undefined;
-  /** True only once permissions are loaded AND include team administration. */
+  /** True only once permissions are loaded AND include team membership
+   *  (AUTHZ-09: the settings entry point is open to every member, not just
+   *  admins — sections within it are gated individually per role). */
   canOpenTeamSettings: boolean;
   /** Derived identity hue for the banner, or `null` until a name is known. */
   bannerColor: TeamColor | null;
@@ -59,7 +61,7 @@ export function useSelectedTeam(): SelectedTeamState {
   const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
   const selectedTeam = isPersonalTeam ? activeTeam : (team ?? bootstrapTeam);
 
-  const { canAdministerAdmins: canOpenTeamSettings } = useTeamCapabilities(selectedTeam);
+  const { canReadMembers: canOpenTeamSettings } = useTeamCapabilities(selectedTeam);
 
   // Banner hue is derived from the team name. Prefer the bootstrap-cached name
   // (present app-wide on the first paint) over the slower per-team fetch, and

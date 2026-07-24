@@ -1030,7 +1030,13 @@ async def run_import(
                         # instead of violating the NOT NULL constraint.
                         name=row.get("name") or team_id,
                         description=row.get("description"),
-                        is_private=bool(row.get("is_private", True)),
+                        # TEAM-09: pre-migration bundles only ever carry
+                        # `is_private`, never `joining_mode` — like the `name`
+                        # fallback above, default to the same value every
+                        # existing team was migrated to (REQUEST_ONLY)
+                        # regardless of the legacy bool, rather than deriving
+                        # one from it (see FRED-TEAM-CONFIG-RFC.md §5.1.1).
+                        joining_mode=row.get("joining_mode", "request_only"),
                         banner_object_storage_key=row.get("banner_object_storage_key"),
                         max_resources_storage_size=row.get(
                             "max_resources_storage_size"
