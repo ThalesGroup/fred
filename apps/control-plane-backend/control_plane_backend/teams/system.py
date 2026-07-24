@@ -3,7 +3,11 @@ from __future__ import annotations
 from fred_core import JoiningMode, KeycloakUser, TeamPermission
 from fred_core.common import TeamId, personal_team_id
 
-from control_plane_backend.teams.schemas import Team, TeamWithPermissions
+from control_plane_backend.teams.schemas import (
+    Team,
+    TeamWithPermissions,
+    UserTeamRelation,
+)
 
 
 async def build_personal_team(
@@ -59,6 +63,12 @@ async def build_personal_team(
             TeamPermission("can_update_resources"),
             TeamPermission("can_update_agents"),
         ],
+        # Matches the hardcoded `permissions` above rather than a live
+        # `_get_user_roles_in_team` lookup: the owner's `team_editor` tuple
+        # only self-heals on read (REBAC.md "Personal teams"), so a fresh
+        # personal team with zero prior activity may not have it persisted
+        # yet — the literal is what this DTO already unconditionally promises.
+        my_relations=[UserTeamRelation.TEAM_EDITOR],
         max_resources_storage_size=personal_max_resources_storage_size,
         current_resources_storage_size=current_size,
     )

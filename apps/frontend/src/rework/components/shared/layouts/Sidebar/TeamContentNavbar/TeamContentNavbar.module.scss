@@ -9,15 +9,18 @@
 /* Background and text colour are set inline from the configured team asset.
  * The team banner is intentionally taller than the marketplace/admin headers
  * (88px vs 56px) to give the team identity more presence — matching the
- * original design. */
+ * original design. Column layout (#2100): the name/gear row sits at the top,
+ * the role label at the bottom — `justify-content: space-between` spaces the
+ * two rows across the fixed height without needing to size either by hand. */
 .bannerContainer {
   display: flex;
   position: relative;
-  align-items: flex-end;
+  flex-direction: column;
+  justify-content: space-between;
   border-radius: 0 0 var(--radius-s) var(--radius-s);
   background-position: center;
   background-size: cover;
-  padding: 0 var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
   height: 88px;
 }
 
@@ -35,19 +38,35 @@
   content: "";
 }
 
+/* Fixed to the gear IconButton's own height ("small" = 2rem) so the row's
+ * height — and therefore the top-aligned team name's vertical position —
+ * never changes depending on whether the gear icon is actually rendered
+ * (it's hidden while `inSettings`). Without this, the name shifted up when
+ * settings opened, because the row shrank to the text's own shorter height. */
 .teamNameContainer {
   display: flex;
   position: relative;
   justify-content: space-between;
-  align-items: end;
+  align-items: start;
   z-index: 1;
   width: 100%;
+  min-height: 2rem;
   font: var(--font-title-medium);
 }
 
 /* Small drop shadow on the team name, on top of the scrim, so the white text
  * stays crisp even against a light patch of a custom banner image. */
 .teamName {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Roles the current user holds on this team, e.g. "Admin · Analyst" or
+ * "Member" (#2100) — bottom-left of the banner, below the name/gear row. */
+.teamRoleLabel {
+  position: relative;
+  z-index: 1;
+  color: inherit;
+  font: var(--font-label-medium);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 

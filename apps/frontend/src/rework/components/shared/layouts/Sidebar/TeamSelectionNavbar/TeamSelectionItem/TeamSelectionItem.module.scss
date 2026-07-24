@@ -114,3 +114,19 @@
   height: 8px;
   pointer-events: none;
 }
+
+.adminBadge {
+  display: flex;
+  position: absolute;
+  right: 8px;
+  bottom: 2px;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background-color: var(--surface-container-lowest);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  color: var(--secondary);
+  font-size: 12px;
+}

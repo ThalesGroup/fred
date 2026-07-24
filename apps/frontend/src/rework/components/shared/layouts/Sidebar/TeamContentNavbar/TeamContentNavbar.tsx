@@ -80,6 +80,33 @@ export default function TeamContentNavbar() {
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
 
+  // #2100: which roles the current user holds on this team, "Admin · Analyst"
+  // style — `permissions` alone cannot answer this (can_run_evaluations/
+  // can_manage_evaluation_corpus are granted to team_analyst AND team_admin,
+  // so it can't tell a plain admin from an admin who is also analyst), hence
+  // the dedicated `my_relations` field. Not shown for the personal space (not
+  // a team with "roles" in this sense) or for a non-member merely browsing a
+  // public/marketplace team pre-join.
+  //
+  // `selectedTeam` can transiently be the bootstrap-cached summary (plain
+  // `Team`, no `my_relations` key at all) before the dedicated per-team fetch
+  // resolves — same gap `TeamSettingsPage` already guards against for
+  // `permissions`. Without this check the banner renders with the incomplete
+  // summary (it mounts earlier than the settings page) and shows the "no
+  // elevated role" fallback for every user until the real fetch lands.
+  const relationsLoaded = !!selectedTeam && "my_relations" in selectedTeam;
+  const roleLabel = (() => {
+    const priority: Record<string, number> = { team_admin: 0, team_editor: 1, team_analyst: 2 };
+    const heldRoles = (selectedTeam?.my_relations ?? []).filter((relation) => relation in priority);
+    if (heldRoles.length === 0) return t("rework.teamRoles.team_member");
+    return heldRoles
+      .slice()
+      .sort((a, b) => priority[a] - priority[b])
+      .map((relation) => t(`rework.teamRoles.${relation}`))
+      .join(" · ");
+  })();
+  const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
+
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
@@ -210,6 +237,7 @@ export default function TeamContentNavbar() {
             </span>
           )}
         </div>
+        {showRoleLabel && <span className={styles.teamRoleLabel}>{roleLabel}</span>}
       </div>
       <div className={styles.navigationContainer}>
         {inSettings ? (

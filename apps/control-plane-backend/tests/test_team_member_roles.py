@@ -33,6 +33,9 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from control_plane_backend.scheduler.policies.policy_models import (
+    ConversationPolicyCatalog,
+)
 from control_plane_backend.teams.schemas import (
     GrantTeamMemberRoleRequest,
     TeamAdminConstraintError,
@@ -41,6 +44,7 @@ from control_plane_backend.teams.schemas import (
     UserTeamRelation,
 )
 from control_plane_backend.teams.service import (
+    get_team_by_id,
     grant_team_member_role,
     list_team_members_unfiltered,
     remove_team_member,
@@ -112,6 +116,40 @@ class _FakeRebac:
         held = self.roles.get(uid, set())
         return any(role.value == relation.value for role in held)
 
+    async def has_permission(
+        self, subject, permission: TeamPermission, resource, **kwargs
+    ) -> bool:
+        # Mirrors schema.fga's team-type permission unions closely enough for
+        # `get_team_by_id`'s `_get_team_permissions_for_user` call — real
+        # `public` grants (unauthenticated can_read) are not modeled since no
+        # test here exercises a non-member caller.
+        held = self.roles.get(subject.id, set())
+        elevated = {
+            UserTeamRelation.TEAM_ADMIN,
+            UserTeamRelation.TEAM_EDITOR,
+            UserTeamRelation.TEAM_ANALYST,
+        }
+        is_member = bool(held & elevated) or UserTeamRelation.TEAM_MEMBER in held
+        is_admin = UserTeamRelation.TEAM_ADMIN in held
+        is_editor = UserTeamRelation.TEAM_EDITOR in held
+        is_analyst = UserTeamRelation.TEAM_ANALYST in held
+        return {
+            TeamPermission.CAN_READ: is_member,
+            TeamPermission.CAN_UPDATE_INFO: is_admin,
+            TeamPermission.CAN_UPDATE_RESOURCES: is_editor,
+            TeamPermission.CAN_UPDATE_AGENTS: is_editor,
+            TeamPermission.CAN_READ_MEMEBERS: is_member,
+            TeamPermission.CAN_ADMINISTER_MEMBERS: is_admin,
+            TeamPermission.CAN_ADMINISTER_EDITORS: is_admin,
+            TeamPermission.CAN_ADMINISTER_ANALYSTS: is_admin,
+            TeamPermission.CAN_ADMINISTER_ADMINS: is_admin,
+            TeamPermission.CAN_READ_CONVERSATIONS: is_member,
+            TeamPermission.CAN_USE_TEAM_AGENTS: is_member,
+            TeamPermission.CAN_RUN_EVALUATIONS: is_analyst or is_admin,
+            TeamPermission.CAN_MANAGE_EVALUATION_CORPUS: is_analyst or is_admin,
+            TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION: is_analyst,
+        }.get(permission, False)
+
     async def add_relation(self, relation: Relation, **kwargs: object) -> None:
         uid = relation.subject.id
         self.roles.setdefault(uid, set()).add(UserTeamRelation(relation.relation.value))
@@ -151,6 +189,7 @@ def _deps(
     get_session_store: Any = cast(Any, object),
     get_purge_queue_store: Any = cast(Any, object),
     search_users: Any = cast(Any, _no_search_users),
+    get_policy_catalog: Any = cast(Any, object),
 ):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -165,7 +204,7 @@ def _deps(
         get_content_store=cast(Any, object),
         get_session_store=get_session_store,
         get_purge_queue_store=get_purge_queue_store,
-        get_policy_catalog=cast(Any, object),
+        get_policy_catalog=get_policy_catalog,
         get_users_by_ids=cast(Any, _no_users_by_ids),
         search_users=search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
@@ -467,6 +506,29 @@ async def test_list_team_members_reports_every_held_role() -> None:
         UserTeamRelation.TEAM_ANALYST,
     ]
     assert by_id["phil"] == [UserTeamRelation.TEAM_EDITOR]
+
+
+@pytest.mark.asyncio
+async def test_get_team_by_id_reports_callers_own_relations() -> None:
+    """#2100: `TeamWithPermissions.my_relations` must report the caller's own
+    raw roles, unambiguously distinguishing e.g. a plain team_admin from an
+    admin who is ALSO team_analyst — something `permissions` alone cannot do,
+    since can_run_evaluations/can_manage_evaluation_corpus are granted to
+    both team_analyst and team_admin (schema.fga union)."""
+    rebac = _FakeRebac(
+        roles={"caller": {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.TEAM_ANALYST}}
+    )
+
+    team = await get_team_by_id(
+        _user(),
+        TeamId("fredlab"),
+        _deps(rebac, "fredlab", get_policy_catalog=ConversationPolicyCatalog),
+    )
+
+    assert set(team.my_relations) == {
+        UserTeamRelation.TEAM_ADMIN,
+        UserTeamRelation.TEAM_ANALYST,
+    }
 
 
 @pytest.mark.asyncio

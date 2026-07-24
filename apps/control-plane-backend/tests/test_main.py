@@ -1297,6 +1297,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
             "can_update_resources",
             "can_update_agents",
         ],
+        "my_relations": ["team_editor"],
         "max_resources_storage_size": 5368709120,
         "current_resources_storage_size": 0,
     }
