@@ -185,6 +185,37 @@ without a concrete diff to back it.
   fine to hand it to a fresh background agent with a precise, self-contained prompt rather than
   cram it into this session.
 
+## Reporting discipline — silence is the default
+
+A live session generates a Monitor notification for every stdout line and every KPI poll tick —
+most of it is expected noise (routine audit grants, known warnings already tracked in an issue,
+routine request/response pairs). Do not send a chat message for each one. Acknowledging every
+notification with something like "rien de nouveau" or "RAS" defeats the purpose of a live session
+just as much as missing a real finding does — it buries the signal the developer actually needs
+under a wall of empty turns.
+
+Default to **no reply at all** for a notification that matches something already known:
+- A pattern already reported and tracked in an issue (e.g. an audit line already logged as a
+  known-noisy call site) — stays silent on every recurrence, not just after the first mention.
+- A KPI diff that's just the expected counter/histogram increment for an action the developer is
+  visibly repeating (e.g. polling, page navigation).
+- Routine startup/shutdown lines (SQL engine creation, MCP route registration, health checks).
+
+Only produce a message when at least one of these is true:
+- **A genuinely new signal**: an error, traceback, or warning that has not appeared before in
+  this session, or a KPI diff on a route/label combination not yet seen.
+- **A qualitative change** in an already-known pattern (e.g. a known-permanent failure starts
+  succeeding, a retry count crosses a threshold that changes its classification, a warning that
+  was cosmetic starts appearing alongside an actual error).
+- **The developer asks a direct question** or reports something to diagnose.
+- **A finding is ready to report** per the four-part format above — reproduction, extract,
+  channel, classification — not a partial or "maybe" observation.
+
+If the harness nudges for "no visible output" after several silent turns, that's a framework
+concern, not a signal to start narrating routine noise again — keep tool-only or fully silent
+turns whenever nothing new happened, and say so explicitly to the developer once (not every
+time) if asked to explain why a turn produced no text.
+
 ## Ending the session
 
 Stop whichever background processes this session started (5 without evaluation in scope, 7 with
