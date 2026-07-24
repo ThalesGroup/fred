@@ -387,6 +387,17 @@
     "vectorTableTitle": "Documents with vectors",
     "vectorsColumn": "Vectors"
   },
+  "dataTable": {
+    "pagination": {
+      "first": "First page",
+      "itemsPerPage": "Items per page",
+      "last": "Last page",
+      "next": "Next page",
+      "pageNumber": "Page {{page}}",
+      "prev": "Previous page",
+      "totalItems": "{{count}} items"
+    }
+  },
   "dialogs": {
     "cancel": "Cancel"
   },

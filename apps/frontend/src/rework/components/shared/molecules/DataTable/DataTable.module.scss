@@ -1,11 +1,21 @@
+/* Flex column so the footer (when present) always sits at the very bottom —
+ * `.datatable-body` is the one that grows/scrolls; the footer never moves. */
 .datatable-container {
-  display: grid;
-  grid-template-columns: var(--grid-layout);
-  grid-auto-rows: minmax(min-content, auto);
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--spacing-xs);
   background-color: var(--datatable-background-color);
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.datatable-body {
+  display: grid;
+  grid-template-columns: var(--grid-layout);
+  grid-auto-rows: minmax(min-content, auto);
+  flex: 1;
+  align-content: start;
   min-height: 0;
   overflow: auto;
 }
@@ -51,4 +61,46 @@
 
 .first-column-inset .datatable-cell:first-child {
   padding-left: var(--spacing-l);
+}
+
+.datatable-footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--surface-container-highest);
+  background-color: var(--datatable-background-color);
+  height: 3.75rem;
+}
+
+.datatable-footer-left {
+  display: flex;
+  align-items: center;
+  padding-left: var(--spacing-m);
+}
+
+.datatable-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding-right: var(--spacing-m);
+}
+
+.footer-label {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  white-space: nowrap;
+}
+
+/* Fixed width (not just min-width) so the neighbouring nav buttons don't
+ * shift horizontally as the page number's digit count changes. */
+.footer-page-label {
+  width: 3.5rem;
+  text-align: center;
+}
+
+/* Extra breathing room on top of the footer's own gap, so the rows-per-page
+ * picker doesn't read as glued to the "Items per page" label/nav buttons. */
+.footer-rows-per-page-select {
+  margin-right: var(--spacing-xs);
 }

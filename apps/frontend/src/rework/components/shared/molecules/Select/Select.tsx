@@ -272,9 +272,11 @@ export default function Select<T>({
           document.body,
         )}
 
-      <span className={styles["error-message"]} id={`${baseId}-error`}>
-        {error && <>{error}</>}
-      </span>
+      {(!compact || error) && (
+        <span className={styles["error-message"]} id={`${baseId}-error`}>
+          {error && <>{error}</>}
+        </span>
+      )}
     </div>
   );
 }

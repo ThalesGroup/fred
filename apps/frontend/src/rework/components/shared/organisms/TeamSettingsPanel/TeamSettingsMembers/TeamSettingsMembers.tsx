@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
+import LeaveTeamButton from "./LeaveTeamButton/LeaveTeamButton.tsx";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,7 +55,10 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
   return (
     <div className={styles["team-settings-members-container"]}>
       <div className={styles["team-settings-members-header"]}>
-        <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
+        <div className={styles["team-settings-members-header-left"]}>
+          <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
+          <LeaveTeamButton team={team} />
+        </div>
         {can_administer_members && (
           <Autocomplete<UserSummary>
             textInput={{
@@ -71,7 +75,9 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
           ></Autocomplete>
         )}
       </div>
-      <TeamSettingsMembersTable team={team} />
+      <div className={styles["team-settings-members-table-wrapper"]}>
+        <TeamSettingsMembersTable team={team} />
+      </div>
     </div>
   );
 }

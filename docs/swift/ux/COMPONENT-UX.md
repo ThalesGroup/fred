@@ -771,7 +771,8 @@ existing call sites that never set `item.color` are unaffected.
 ### `TeamContentNavbar` / `TeamSettingsPage` — self-service team leave (AUTHZ-09)
 
 **Location:** `src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
-`src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`
+`src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/LeaveTeamButton/LeaveTeamButton.tsx`
 **Status:** `Functional`
 
 The team-settings gear icon (previously `canAdministerAdmins`-gated, admin
@@ -788,14 +789,16 @@ sees inside scales with their role:
   true for everyone) to a new `hasElevatedTeamRole` helper
   (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
 
-**New: "Leave team" button.** Full-width, `16px` side gutter, anchored to
-the bottom of the settings sidebar (`margin-top: auto` inside the existing
-full-height flex column) below the section list — `filled` / `error`
-`Button`. Disabled with an explanatory `title` tooltip only for a team's
-sole remaining `team_admin` (computed client-side from the members list
-already fetched for the table; the backend's last-admin invariant is the
-actual source of truth and still applies server-side regardless). Confirms
-via `ConfirmationDialog`, then redirects to `/team/personal/agents`.
+**"Leave team" button (relocated 2026-07-24, #2108).** No longer in the
+settings sidebar — now a `filled` / `error` `Button` (`LeaveTeamButton.tsx`)
+rendered inline in the Members section header, `24px` to the right of the
+"Membres" page title (`.team-settings-members-header-left`, `gap:
+var(--spacing-l)`), so it only appears on the Members section, not on
+Parameters/Activity/Evaluations. Disabled with an explanatory `title`
+tooltip only for a team's sole remaining `team_admin` (computed client-side
+from the members list; the backend's last-admin invariant is the actual
+source of truth and still applies server-side regardless). Confirms via
+`ConfirmationDialog`, then redirects to `/team/personal/agents`.
 
 #### `ConfirmationDialog` — per-call button emphasis override
 
@@ -807,6 +810,48 @@ dialog is the first consumer to invert the usual emphasis — `Annuler` =
 filled (the safe, reversible choice stays visually dominant), `Quitter` =
 text + error (the destructive choice is low-emphasis, M3 "Text" tier) — a
 deliberate risk-reduction pattern, not the default hierarchy.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `DataTable` — opt-in pagination, `TeamSettingsMembers` full-height layout (#2108)
+
+**Location:** `src/rework/components/shared/molecules/DataTable/DataTable.tsx`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx`
+**Status:** `Functional`
+
+`DataTable` gained an optional `pageSize` prop. Omitted (the default), it
+renders exactly as before — every consumer that doesn't pass it
+(`AdminTeamsPage`, `MigrationPage`, `CapabilitiesPage`) is unaffected. When
+set, the table slices `data` to one page and renders a persistent pagination
+footer, height `3.75rem` — same height as a table row — with two flex
+containers:
+
+- **Left:** total item count (`{{count}} items/éléments`, `body-medium`,
+  `on-surface-retreat`).
+- **Right**, left to right: a rows-per-page `Select` (20/50/100, our own
+  molecule, not MUI), then `IconButton` (`medium`, `icon` variant,
+  `on-surface`) first-page / previous-page, the current page number
+  (`body-medium`, `on-surface-retreat`), then next-page / last-page. All four
+  nav buttons disable at their respective bound (first/prev at page 1,
+  next/last at the last page) — the footer itself never hides, even when
+  every row fits on one page, so the count and page-size control stay
+  reachable. New icons `first_page`/`last_page` added to the app's Material
+  Symbols allow-list (`shared/utils/Type.ts`). New i18n keys: top-level
+  `dataTable.pagination.{first,prev,next,last,totalItems}`.
+
+`TeamSettingsMembersTable` is the first consumer, at an initial `pageSize={20}`
+(the rows-per-page `Select` lets the user switch to 50/100 from there).
+
+The Members section (`TeamSettingsMembers.module.scss`) is now a full-height
+flex column (`height: 100%` from the already-24px-padded `.teamSettingsPage`
+shell): the header row is fixed height, and the table wrapper takes
+`flex: 1; min-height: 0` so the table's bottom edge sits exactly `24px`
+above the viewport bottom, scrolling internally past `pageSize` rows on very
+short viewports rather than growing the page.
 
 #### Open UX issues
 
