@@ -84,3 +84,10 @@
   font: var(--font-body-medium);
   white-space: nowrap;
 }
+
+/* Fixed width (not just min-width) so the neighbouring nav buttons don't
+ * shift horizontally as the page number's digit count changes. */
+.footer-page-label {
+  width: 4.5rem;
+  text-align: center;
+}

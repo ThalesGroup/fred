@@ -109,6 +109,7 @@ export default function DataTable<T>({
           <div className={styles["datatable-footer-right"]}>
             <Select<number>
               size="medium"
+              compact
               value={rowsPerPage}
               options={rowsPerPageOptions}
               onChange={(value) => {
@@ -134,7 +135,9 @@ export default function DataTable<T>({
               disabled={currentPage <= 0}
               onClick={() => setPage(currentPage - 1)}
             />
-            <span className={styles["footer-label"]}>{currentPage + 1}</span>
+            <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
+              {t("dataTable.pagination.pageNumber", { page: currentPage + 1 })}
+            </span>
             <IconButton
               color="on-surface"
               variant="icon"

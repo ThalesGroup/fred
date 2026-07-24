@@ -392,6 +392,7 @@
       "first": "First page",
       "last": "Last page",
       "next": "Next page",
+      "pageNumber": "Page {{page}}",
       "prev": "Previous page",
       "totalItems": "{{count}} items"
     }
