@@ -33,15 +33,15 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from control_plane_backend.scheduler.policies.policy_models import (
+    ConversationPolicyCatalog,
+)
 from control_plane_backend.teams.schemas import (
     GrantTeamMemberRoleRequest,
     TeamAdminConstraintError,
     TeamMemberLastRoleError,
     TeamMemberRoleNotHeldError,
     UserTeamRelation,
-)
-from control_plane_backend.scheduler.policies.policy_models import (
-    ConversationPolicyCatalog,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id,
