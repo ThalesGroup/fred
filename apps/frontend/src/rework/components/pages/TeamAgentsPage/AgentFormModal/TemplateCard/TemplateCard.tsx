@@ -36,12 +36,12 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
       onClick={onSelect}
       disabled={unavailable}
     >
-      <div className={styles.cardHeader}>
+      <span className={styles.name}>{template.display_name}</span>
+      {description && <span className={styles.description}>{description}</span>}
+      <div className={styles.cardFooter}>
         {template.category && <span className={styles.category}>{template.category}</span>}
         <span className={styles.podLabel}>{template.source_runtime_id}</span>
       </div>
-      <span className={styles.name}>{template.display_name}</span>
-      {description && <span className={styles.description}>{description}</span>}
     </button>
   );
 }

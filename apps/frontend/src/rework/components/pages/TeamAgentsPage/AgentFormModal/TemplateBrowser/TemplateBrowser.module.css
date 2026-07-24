@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: var(--spacing-m);
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-container-low);
   padding: var(--spacing-s) var(--spacing-m) var(--spacing-m);
 }
 

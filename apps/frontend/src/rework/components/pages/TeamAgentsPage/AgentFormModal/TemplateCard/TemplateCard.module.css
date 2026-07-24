@@ -2,11 +2,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  transition:
-    border-color 0.15s,
-    background-color 0.15s;
   cursor: pointer;
-  border: 2px solid var(--outline-muted);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
@@ -16,7 +13,7 @@
 }
 
 .card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
-  border-color: var(--outline);
+  border-color: var(--outline-retreat);
   background: var(--surface-container-high);
 }
 
@@ -30,10 +27,12 @@
   cursor: not-allowed;
 }
 
-.cardHeader {
+.cardFooter {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: auto;
+  padding-top: var(--spacing-2xs);
 }
 
 .category {
