@@ -373,6 +373,112 @@ def _strip_front_matter(content: str) -> str:
     return body.strip() if sep else content.strip()
 
 
+# ── Kea teams & platform roles from the Keycloak realm export ─────────────────
+
+
+def _realm_group_names(realm: dict[str, Any] | None) -> dict[str, str]:
+    """Return group_id → group name from a Keycloak realm export.
+
+    On kea a team's id IS its Keycloak group id, and the group name is the
+    only place the team's name exists (kea `teammetadata` has no name column).
+    Walks sub-groups too, defensively — kea teams are top-level groups.
+    """
+    names: dict[str, str] = {}
+
+    def _walk(groups: list[dict[str, Any]]) -> None:
+        for group in groups:
+            group_id = group.get("id")
+            name = group.get("name")
+            if isinstance(group_id, str) and isinstance(name, str) and name:
+                names[group_id] = name
+            _walk(group.get("subGroups") or [])
+
+    _walk((realm or {}).get("groups") or [])
+    return names
+
+
+def _merge_kea_team_rows(
+    raw_team_metadata: list[dict[str, Any]],
+    tuples: list[dict[str, Any]],
+    group_names: dict[str, str],
+    report: MigrationReport,
+) -> list[dict[str, Any]]:
+    """Build the full kea team list: every team referenced by tuples, named.
+
+    Kea materialises a `teammetadata` row only when a team was customized
+    (description / privacy / banner) — an untouched team exists solely as a
+    Keycloak group plus OpenFGA tuples. Swift requires a `teammetadata` row
+    (NOT NULL unique `name`) for every team, so this merges:
+    - team ids ← every `team:<id>` reference in the tuple dump (excluding the
+      kea shared personal team and swift-style personal ids),
+    - customization ← the kea `teammetadata` row when present,
+    - name ← the realm export's group name; falls back to the id (warned)
+      when the bundle has no realm export or the group is gone.
+    """
+    teams: dict[str, dict[str, Any]] = {}
+    for t in tuples:
+        for ref in (t.get("object", ""), t.get("user", "")):
+            if not ref.startswith("team:"):
+                continue
+            team_id = ref.removeprefix("team:")
+            if team_id == _KEA_SHARED_PERSONAL_TEAM_ID or team_id.startswith(
+                "personal-"
+            ):
+                continue
+            teams.setdefault(team_id, {"id": team_id})
+    for row in raw_team_metadata:
+        team_id = row.get("id")
+        if not team_id:
+            continue
+        merged = teams.setdefault(team_id, {})
+        merged.update(row)
+        merged["id"] = team_id
+
+    unnamed: list[str] = []
+    for team_id, row in teams.items():
+        realm_name = group_names.get(team_id)
+        if realm_name:
+            row["name"] = realm_name
+        elif not row.get("name"):
+            # `_import_team_metadata` falls back to name=id; surface it.
+            unnamed.append(team_id)
+    if unnamed:
+        report.warnings.append(
+            f"{len(unnamed)} team(s) have no name in the bundle (keycloak "
+            "realm export missing or group deleted) — they are named by "
+            f"their id: {', '.join(sorted(unnamed))}"
+        )
+    return [teams[team_id] for team_id in sorted(teams)]
+
+
+def _realm_platform_role_grants(
+    realm: dict[str, Any] | None,
+) -> tuple[list[tuple[str, RelationType]], list[str]]:
+    """Derive swift platform-role grants from a realm export's users, if any.
+
+    Kea platform roles are Keycloak realm roles (`admin`/`editor`/`viewer`)
+    carried per-user — present only in a FULL realm export (`kc export
+    --users`); a partial-export has no `users[]` and yields nothing here.
+    Mapping (AUTHZ target model): `admin` → platform_admin, `viewer` →
+    platform_observer, `editor` → dropped (no swift equivalent — returned
+    separately for a warning).
+    """
+    grants: list[tuple[str, RelationType]] = []
+    dropped_editors: list[str] = []
+    for user in (realm or {}).get("users") or []:
+        sub = user.get("id")
+        if not isinstance(sub, str) or not sub:
+            continue
+        roles = set(user.get("realmRoles") or [])
+        if "admin" in roles:
+            grants.append((sub, RelationType.PLATFORM_ADMIN))
+        if "viewer" in roles:
+            grants.append((sub, RelationType.PLATFORM_OBSERVER))
+        if "editor" in roles:
+            dropped_editors.append(user.get("username") or sub)
+    return grants, dropped_editors
+
+
 # ── Kea → swift OpenFGA tuple transformation (MIGR-05.04) ─────────────────────
 
 _UUID_RE = re.compile(
@@ -1198,6 +1304,18 @@ async def run_import(
     # `is_private` instead of `joining_mode` and may lack `name` — both handled
     # by `_import_team_metadata`'s fallbacks below.
     raw_team_metadata = list(bundle.iter_table(team_table))
+    keycloak_realm = None if is_swift_native else bundle.keycloak_realm()
+    if not is_swift_native:
+        # Kea only materialises a teammetadata row for customized teams; an
+        # untouched team exists solely as a Keycloak group + tuples. Build the
+        # complete team list (every tuple-referenced team), named from the
+        # realm export's groups — the only place kea stores team names.
+        raw_team_metadata = _merge_kea_team_rows(
+            raw_team_metadata,
+            tuples,
+            _realm_group_names(keycloak_realm),
+            report,
+        )
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
     session_factory = make_session_factory(engine)
@@ -1486,6 +1604,32 @@ async def run_import(
                 await _emit(
                     task_service, task_id, TaskState.running, "tuples", i, total, 0
                 )
+
+    # ── Phase 4ter: platform roles from the realm export, kea path only ───────
+    # Kea platform roles are Keycloak realm roles per user — never tuples, so
+    # the tuple phase above cannot restore them. They only travel in a FULL
+    # realm export (`kc export --users`); a partial-export yields nothing here
+    # and the grants then come from `users.json` (or manual bootstrap).
+    if not is_swift_native:
+        realm_grants, dropped_editors = _realm_platform_role_grants(keycloak_realm)
+        if dropped_editors:
+            report.warnings.append(
+                f"kea platform role 'editor' dropped for {len(dropped_editors)} "
+                f"user(s) (no swift equivalent): {', '.join(sorted(dropped_editors))}"
+            )
+        if realm_grants:
+            if rebac is None or not rebac.enabled:
+                report.warnings.append(
+                    f"{len(realm_grants)} platform role(s) from the realm "
+                    "export NOT granted: ReBAC engine unavailable or disabled"
+                )
+            else:
+                actor_uid = platform_admin.uid if platform_admin else None
+                for sub, relation in realm_grants:
+                    await _grant_platform_role(
+                        rebac, sub, relation, actor_uid=actor_uid
+                    )
+                    report.platform_roles_granted += 1
 
     # ── Phase 5: users.json declarative provisioning (AUTHZ-07 §40.2) ─────────
     # Outside the atomic transaction above: this phase calls full team/ReBAC

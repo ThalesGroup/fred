@@ -84,6 +84,19 @@ class KBundle:
         except KeyError:
             return []
 
+    def keycloak_realm(self) -> dict[str, Any] | None:
+        """Return the bundled Keycloak realm export, None if absent.
+
+        Kea bundles carry it best-effort (`keycloak/realm.json`, main's
+        `_dump_realm`). A partial-export contains the realm's groups (the kea
+        team names) but never its users; a full `kc export --users` also
+        carries `users[]` with their `realmRoles`.
+        """
+        try:
+            return json.loads(self._zf.read("keycloak/realm.json"))
+        except KeyError:
+            return None
+
     def demo_users(self) -> list[BundleUserEntry]:
         """Return the typed users.json provisioning list, empty list if absent.
 

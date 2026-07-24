@@ -146,17 +146,22 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   warning; kea library tags (`chat-context`/`prompt`/`template`) filtered from the tag phase.
   — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
 
-**Open (user-level cutover items, not yet coded — see RFC §8 follow-ups):**
-- Platform-role re-provisioning: kea `admin`/`editor`/`viewer` were Keycloak realm roles (never
-  tuples, absent from the dump); swift ignores realm roles (bridge removed, AUTHZ-05). A kea admin
-  is NOT a swift `platform_admin` after import — generate a `users.json` (`platform_roles`) from
-  the kea realm, or grant manually at cutover.
+- [x] **MIGR-05.16** — Teams & platform roles from the bundled Keycloak realm export
+  (2026-07-24, #1954). Every tuple-referenced team now gets a swift `teammetadata` row: name ←
+  `keycloak/realm.json` groups (kea's only team-name store), customization merged from the kea
+  row when present; no realm in the bundle → named by id + warning. When the realm export is a
+  FULL one (`kc export --users`), per-user `realmRoles` re-provision platform roles
+  (`admin→platform_admin`, `viewer→platform_observer`, `editor` dropped + warned); a
+  partial-export carries no users → `users.json`/bootstrap remains the channel. Ops fallback for
+  both: SQL on the Keycloak DB (`keycloak_group`, `user_role_mapping`×`keycloak_role`).
+
+**Open (cutover items — see RFC §8 follow-ups):**
+- Kea-side realm-export 403: `manage-realm` alone does not satisfy `partial-export?exportClients=true`
+  (needs `view-clients`, or export without clients). Must be fixed on the kea source before the
+  prod dump, else teams arrive unnamed and platform roles must be provisioned via `users.json`.
 - `users` table rows (GCU acceptance) exported but not imported — decide: re-prompt everyone on
   swift (current behaviour) or add a users-row import phase. Per-user/team storage counters are
   covered separately by `knowledge-flow/alembic/backfill/backfill_storage_usage.py` (add to runbook).
-- Team names when kea `teammetadata` is empty and `realm_exported=false` (the validated dump had
-  teams only as tuple UUIDs) — fix the kea-side realm export (M2M `manage-realm`) or provide an
-  id→name mapping at import.
 
 ---
 
@@ -321,7 +326,7 @@ with a written rationale.
 | ---------- | ----- | ---- | --------- |
 | MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
-| MIGR-05 Metadata — platform import service | 15 | 15 | 0 (user-level cutover decisions open, see §0bis) |
+| MIGR-05 Metadata — platform import service | 16 | 16 | 0 (cutover decisions open, see §0bis) |
 | MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |

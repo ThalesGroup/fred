@@ -55,6 +55,7 @@ def _kea_bundle(
     tags: list[dict[str, Any]] | None = None,
     teammetadata: list[dict[str, Any]] | None = None,
     tuples: list[dict[str, Any]] | None = None,
+    realm: dict[str, Any] | None = None,
 ) -> bytes:
     """Build a kea snapshot zip byte-identical in shape to main's exporter.
 
@@ -94,6 +95,8 @@ def _kea_bundle(
         zf.writestr("postgres/teammetadata.jsonl", _jsonl(teammetadata))
         zf.writestr("postgres/users.jsonl", "")
         zf.writestr("openfga/tuples.json", json.dumps(tuples))
+        if realm is not None:
+            zf.writestr("keycloak/realm.json", json.dumps(realm))
     return buffer.getvalue()
 
 
@@ -192,17 +195,31 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
 async def _import(
     bundle_bytes: bytes, engine: AsyncEngine, rebac: FakeRebac | None = None
 ) -> MigrationReport:
-    task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
-    start = await task_service.start(StartMigrationRequest(), created_by="tester")
-    return await run_import(
-        bundle=open_bundle(bundle_bytes),
-        import_id="imp-kea",
-        task_id=start.task_id,
-        task_service=task_service,
-        engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
-        rebac=rebac,  # type: ignore[arg-type]
+    # Task events go to a separate SQLite file: with a single shared file, the
+    # import's open write transaction blocks the event INSERTs (one writer at
+    # a time in SQLite) — a test-harness artifact, not a product concern
+    # (production runs on Postgres).
+    tasks_engine = create_async_engine(
+        f"sqlite+aiosqlite:///{engine.url.database}.tasks"
     )
+    try:
+        async with tasks_engine.begin() as conn:
+            await conn.run_sync(CoreBase.metadata.create_all)
+        task_service = TaskService.build(
+            engine=tasks_engine, backend=SchedulerBackend.MEMORY
+        )
+        start = await task_service.start(StartMigrationRequest(), created_by="tester")
+        return await run_import(
+            bundle=open_bundle(bundle_bytes),
+            import_id="imp-kea",
+            task_id=start.task_id,
+            task_service=task_service,
+            engine=engine,
+            agent_instance_store=AgentInstanceStore(engine),
+            rebac=rebac,  # type: ignore[arg-type]
+        )
+    finally:
+        await tasks_engine.dispose()
 
 
 # ── manifest / bundle-format compatibility ────────────────────────────────────
@@ -432,6 +449,139 @@ async def test_kea_library_tags_are_not_migrated(tmp_path: Path) -> None:
                 for row in (await session.execute(select(TagRow))).scalars().all()
             }
             assert ids == {"tag-doc"}
+    finally:
+        await engine.dispose()
+
+
+# ── teams & platform roles from the Keycloak realm export ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_teams_created_from_realm_groups(tmp_path: Path) -> None:
+    """Every tuple-referenced team gets a teammetadata row, named from the
+    realm export's groups; a customized team keeps its kea row's fields."""
+    engine = await _make_engine(tmp_path, "realm-teams.sqlite3")
+    try:
+        report = await _import(
+            _kea_bundle(
+                teammetadata=[
+                    # Only the customized team has a kea row — and no name.
+                    {
+                        "id": "team-custom",
+                        "description": "Custom team",
+                        "is_private": True,
+                    }
+                ],
+                tuples=[
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "owner",
+                        "object": "team:team-custom",
+                    },
+                    {
+                        "user": f"user:{UID_LIAM}",
+                        "relation": "member",
+                        "object": "team:team-untouched",
+                    },
+                    # personal refs must never become teams
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "member",
+                        "object": "team:personal",
+                    },
+                ],
+                realm={
+                    "groups": [
+                        {"id": "team-custom", "name": "fredlab"},
+                        {"id": "team-untouched", "name": "northbridge"},
+                    ]
+                },
+            ),
+            engine,
+        )
+        assert report.teams_imported == 2
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(engine)() as session:
+            rows = {
+                row.id: row
+                for row in (await session.execute(select(TeamMetadataRow)))
+                .scalars()
+                .all()
+            }
+            assert set(rows) == {"team-custom", "team-untouched"}
+            assert rows["team-custom"].name == "fredlab"
+            assert rows["team-custom"].description == "Custom team"
+            assert rows["team-untouched"].name == "northbridge"
+            assert rows["team-untouched"].joining_mode == "request_only"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_teams_without_realm_are_named_by_id(tmp_path: Path) -> None:
+    engine = await _make_engine(tmp_path, "noreal.sqlite3")
+    try:
+        report = await _import(
+            _kea_bundle(
+                tuples=[
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "owner",
+                        "object": "team:team-x",
+                    }
+                ]
+            ),
+            engine,
+        )
+        assert report.teams_imported == 1
+        assert any("no name in the bundle" in w for w in report.warnings)
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(engine)() as session:
+            row = (
+                await session.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.id == "team-x")
+                )
+            ).scalar_one()
+            assert row.name == "team-x"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_platform_roles_from_realm_users(tmp_path: Path) -> None:
+    """A full realm export (users[] with realmRoles) re-provisions platform
+    roles: admin → platform_admin, viewer → platform_observer, editor dropped."""
+    engine = await _make_engine(tmp_path, "realm-roles.sqlite3")
+    try:
+        rebac = FakeRebac()
+        report = await _import(
+            _kea_bundle(
+                realm={
+                    "groups": [],
+                    "users": [
+                        {"id": UID_BOB, "username": "bob", "realmRoles": ["admin"]},
+                        {"id": UID_LIAM, "username": "liam", "realmRoles": ["viewer"]},
+                        {
+                            "id": "e5786097-6bdb-4e65-8084-a0470b20a71b",
+                            "username": "marc",
+                            "realmRoles": ["editor"],
+                        },
+                    ],
+                }
+            ),
+            engine,
+            rebac=rebac,
+        )
+        written = {_rel_key(r) for r in rebac.relations}
+        assert (f"user:{UID_BOB}", "platform_admin", "organization:fred") in written
+        assert (f"user:{UID_LIAM}", "platform_observer", "organization:fred") in written
+        assert not any("marc" in k[0] for k in written)
+        assert report.platform_roles_granted == 2
+        assert any("'editor' dropped" in w and "marc" in w for w in report.warnings)
     finally:
         await engine.dispose()
 

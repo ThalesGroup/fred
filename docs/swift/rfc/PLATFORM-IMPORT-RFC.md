@@ -198,17 +198,29 @@ Reads main's `postgres/*.jsonl` set (table file names = main's
   rows, no OpenFGA object), non-UUID user subjects (pre-MIGR-04 username tuples), unknown shapes.
   `agent`/`tag`/`document` ownership and `team#organization`/`team#public` replay 1:1. Writes go
   through `RebacEngine.add_relation` (idempotent, audited), outside the DB transaction.
+- **Teams from the realm export:** kea materialises a `teammetadata` row only for customized
+  teams, and the row has no `name` (kea team names live in Keycloak groups). The importer now
+  creates a swift `teammetadata` row for **every** tuple-referenced team: name ← the bundled
+  `keycloak/realm.json` groups (`_realm_group_names`), customization merged from the kea row when
+  present, `joining_mode` defaulted. Bundle without a realm export → teams are named by their id,
+  with a warning naming them. Ops fallback when the kea realm export is unavailable: extract
+  `keycloak_group(id, name)` straight from the Keycloak DB.
+- **Platform roles from the realm export:** kea platform roles are per-user Keycloak realm roles
+  (`admin`/`editor`/`viewer`), never tuples. When the bundle carries a FULL realm export
+  (`kc export --users`, i.e. `users[]` with `realmRoles`), the importer grants
+  `admin → platform_admin` and `viewer → platform_observer` (`editor` dropped with a warning).
+  A partial-export has no `users[]` → grants must then come from `users.json` (§6) or bootstrap.
 - **Manifest:** kea bundles get `users_schema_version` defaulted (§4).
 - **Still skipped:** `mcp-server` rows (re-seeded by deployment; per-agent MCP activation via
   capabilities is a follow-up), `users` rows (GCU acceptance state — product decision pending),
   `keycloak/realm.json` (identity = MIGR-04, ops), `content/` banners (kea teammetadata carried
   none in the validated dump — revisit if a prod bundle ships banners).
 
-Open follow-ups: team **names** when kea `teammetadata` is empty and `realm_exported=false`
-(the validated dump had teams only as tuple UUIDs — needs a kea-side realm-export fix or an
-operator-supplied id→name mapping); tuple/prompt counters surfaced only via the summary line and
-`warnings`, not yet promoted to `MigrationResult` (OpenAPI + generated-client regen);
-`react_profile_id`-aware template mapping refinement in `agent_map.py`.
+Open follow-ups: kea-side realm-export 403 (`manage-realm` alone is not enough for
+`exportClients=true` — grant `view-clients` or export without clients) so prod bundles actually
+carry `realm.json`; tuple/prompt counters surfaced only via the summary line and `warnings`, not
+yet promoted to `MigrationResult` (OpenAPI + generated-client regen); `react_profile_id`-aware
+template mapping refinement in `agent_map.py`; GCU `users` rows import (product decision).
 
 ## 9. Deferred — tracked separately, not part of this contract
 
