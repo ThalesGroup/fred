@@ -13,7 +13,9 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React from "react";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 
 interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
@@ -22,6 +24,8 @@ interface DataTableProps<T> {
   /** Extra left inset on the first column (header + every row), for tables
    *  whose content otherwise sits flush against the table's left edge. */
   firstColumnInset?: boolean;
+  /** Rows per page. Omit to render every row with no pagination (default). */
+  pageSize?: number;
 }
 
 export interface DataTableColumn<T> {
@@ -35,7 +39,18 @@ export default function DataTable<T>({
   data,
   backgroundColor = "var(--surface-container)",
   firstColumnInset = false,
+  pageSize,
 }: DataTableProps<T>) {
+  const { t } = useTranslation();
+  const [page, setPage] = useState(0);
+
+  const pageCount = pageSize ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+  // Clamped rather than reset-on-change: if a row is removed and the current
+  // page no longer exists, fall back to the new last page instead of jumping
+  // the user back to page 1.
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageData = pageSize ? data.slice(currentPage * pageSize, currentPage * pageSize + pageSize) : data;
+
   const tableGridLayout = columns
     .map((column) => {
       return column.size ? `${column.size}` : "1fr";
@@ -57,7 +72,7 @@ export default function DataTable<T>({
           <span className={styles["header-content"]}>{column.label}</span>
         </div>
       ))}
-      {data.map((line, lineIndex) => (
+      {pageData.map((line, lineIndex) => (
         <div className={styles["datatable-row"]} key={`row-${lineIndex}`}>
           {columns.map((column) => {
             return (
@@ -68,6 +83,31 @@ export default function DataTable<T>({
           })}
         </div>
       ))}
+      {pageSize && pageCount > 1 && (
+        <div className={styles["datatable-footer"]}>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="xs"
+            icon={{ category: "outlined", type: "chevron_left" }}
+            aria-label={t("dataTable.pagination.prev")}
+            disabled={currentPage <= 0}
+            onClick={() => setPage(currentPage - 1)}
+          />
+          <span className={styles["footer-label"]}>
+            {t("dataTable.pagination.page", { page: currentPage + 1, pageCount })}
+          </span>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="xs"
+            icon={{ category: "outlined", type: "chevron_right" }}
+            aria-label={t("dataTable.pagination.next")}
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage(currentPage + 1)}
+          />
+        </div>
+      )}
     </div>
   );
 }

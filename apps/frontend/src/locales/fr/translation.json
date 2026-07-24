@@ -387,6 +387,13 @@
     "vectorTableTitle": "Documents avec vecteurs",
     "vectorsColumn": "Vecteurs"
   },
+  "dataTable": {
+    "pagination": {
+      "next": "Page suivante",
+      "page": "page {{page}} / {{pageCount}}",
+      "prev": "Page précédente"
+    }
+  },
   "dialogs": {
     "cancel": "Annuler"
   },

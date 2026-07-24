@@ -52,3 +52,23 @@
 .first-column-inset .datatable-cell:first-child {
   padding-left: var(--spacing-l);
 }
+
+.datatable-footer {
+  display: flex;
+  position: sticky;
+  bottom: 0;
+  grid-column: 1 / -1;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
+  z-index: 1;
+  border-top: 1px solid var(--surface-container-highest);
+  background-color: var(--datatable-background-color);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+}
+
+.footer-label {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
