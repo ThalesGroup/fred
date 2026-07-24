@@ -110,7 +110,7 @@ export default function DataTable<T>({
           </div>
           <div className={styles["datatable-footer-right"]}>
             <Select<number>
-              size="medium"
+              size="small"
               compact
               value={rowsPerPage}
               options={rowsPerPageOptions}
