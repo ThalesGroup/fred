@@ -14,12 +14,12 @@
 
 .card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
   border-color: var(--outline-retreat);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
 }
 
 .card[data-selected="true"] {
   border-color: var(--primary);
-  background: var(--surface-container-low);
+  background: var(--surface-container);
 }
 
 .card[data-unavailable="true"] {
