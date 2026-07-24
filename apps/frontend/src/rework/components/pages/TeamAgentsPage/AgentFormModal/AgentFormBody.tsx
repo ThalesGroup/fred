@@ -243,14 +243,9 @@ export function AgentFormBody({
         tabIndex={-1}
         readOnly
       />
-      {selectedTemplate ? (
-        <div className={styles.contextBar}>
-          <span className={styles.contextName}>{selectedTemplate.display_name}</span>
-          {selectedTemplate.category && <span className={styles.contextCategory}>{selectedTemplate.category}</span>}
-        </div>
-      ) : templateMissing ? (
+      {templateMissing && (
         <p className={styles.templateUnavailableNotice}>{t("rework.teams.formAgent.templateUnavailable")}</p>
-      ) : null}
+      )}
 
       {suspensionMessage && (
         <div className={styles.suspensionBanner} role="alert">

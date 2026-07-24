@@ -1575,6 +1575,8 @@
           "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
           "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
         },
+        "subtitle": "Team: {{team}}",
+        "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
         "titleEdit": "Edit {{agent}}",

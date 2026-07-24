@@ -1575,6 +1575,8 @@
           "accessRevoked": "L'accès de votre équipe à une capacité qu'il utilise a été révoqué ({{capabilities}}). Décochez-la et réenregistrez l'agent, ou contactez un administrateur de la plateforme.",
           "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme."
         },
+        "subtitle": "Équipe : {{team}}",
+        "subtitleWithTemplate": "Équipe : {{team}} · Template : {{template}}",
         "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",

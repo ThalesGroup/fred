@@ -13,9 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
@@ -159,7 +157,7 @@ export default function AgentFormModal({
   onDelete,
 }: AgentFormModalProps) {
   const { t, i18n } = useTranslation();
-  const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
+  const { agentsNicknameSingular } = useFrontendProperties();
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
   const [step, setStep] = useState<1 | 2>(1);
@@ -304,34 +302,23 @@ export default function AgentFormModal({
       ? t("rework.teams.formAgent.titleEdit", { agent: editInstance?.display_name ?? "" })
       : t("rework.teams.formAgent.titleCreate", { agentsNicknameSingular });
 
+  const teamLabel = teamName || t("rework.sidebar.team.userTeam");
+  const subtitle = selectedTemplate
+    ? t("rework.teams.formAgent.subtitleWithTemplate", { team: teamLabel, template: selectedTemplate.display_name })
+    : t("rework.teams.formAgent.subtitle", { team: teamLabel });
+
   return (
-    <FullPageModal isOpen={isOpen} onClose={onClose} id="agent-form-modal">
+    <FullPageModal isOpen={isOpen} onClose={onClose} id="agent-form-modal" background="container">
       <div className={styles.modalCard}>
         <div className={styles.modalHeader}>
           <div className={styles.modalPresentation}>
-            <span className={styles.modalIcon}>
-              <Icon category="outlined" type={agentIconName as IconType} filled={true} />
-            </span>
             <div className={styles.modalTitleBlock}>
               <div className={styles.modalTitle}>{title}</div>
-              <div className={styles.modalSubtitle}>{teamName || t("rework.sidebar.team.userTeam")}</div>
+              <div className={styles.modalSubtitle}>{subtitle}</div>
             </div>
           </div>
 
           <div className={styles.modalActions}>
-            {mode === "create" && step === 2 && (
-              <div className={styles.modalActionsBack}>
-                <Button
-                  color="on-surface"
-                  variant="text"
-                  size="medium"
-                  icon={{ category: "outlined", type: "arrow_back" }}
-                  onClick={() => setStep(1)}
-                >
-                  {t("rework.back")}
-                </Button>
-              </div>
-            )}
             <Button color="primary" variant="text" size="medium" onClick={onClose}>
               {t("rework.cancel")}
             </Button>

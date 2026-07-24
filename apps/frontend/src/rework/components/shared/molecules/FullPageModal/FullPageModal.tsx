@@ -21,13 +21,15 @@ interface FullPageModalProps {
   onClose: () => void;
   children: ReactNode;
   id: string;
+  /** Backdrop background token. Defaults to "main" (--surface-main). */
+  background?: "main" | "container";
 }
 
 export interface ModalInteractionProps {
   close: () => void;
 }
 
-export const FullPageModal = ({ isOpen, onClose, children, id }: FullPageModalProps) => {
+export const FullPageModal = ({ isOpen, onClose, children, id, background = "main" }: FullPageModalProps) => {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -49,7 +51,14 @@ export const FullPageModal = ({ isOpen, onClose, children, id }: FullPageModalPr
 
   return (
     <Portal id="modal-portal">
-      <div role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} className={styles.modal} data-state="open">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${id}-title`}
+        className={styles.modal}
+        data-state="open"
+        data-background={background}
+      >
         {children}
       </div>
     </Portal>

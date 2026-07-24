@@ -912,13 +912,15 @@ Complete create / edit modal for managed agent instances. Refactored per `docs/r
 - `TemplateCard/` — single selectable card with category pill, name, clamped description
 - `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (design-system `Select` molecule), secret (password+reveal), url, array (`TagInput` molecule), prompt/multiline (`TextArea`)
 
-Create mode: template browser → display name → description → tuning fields (grouped by `ui.group`) → MCP tools (read-only list). Edit mode: context bar (template name + category) → same editable fields → metadata footer (created_by · relative date).
+Create mode: template browser → display name → description → tuning fields (grouped by `ui.group`) → MCP tools (read-only list). Edit mode: same editable fields → metadata footer (created_by · relative date).
+
+Header reorg (#2102, 2026-07-24, first pass of a broader rework — more changes to this page tracked in follow-up issues): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop now `--surface-container`, form card `--surface-main`, no drop shadow — scoped to this modal only via `FullPageModal`'s new `background` prop (other `FullPageModal` consumers unchanged).
 
 #### Open UX issues
 
 - **Tuning field groups** — flat scroll within modal; no accordion. Decide if needed for agents with many fields.
 - **Template browser on mobile** — grid collapses to single column below ~480px; confirm whether list layout is preferable.
-- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse to a context bar immediately.
+- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse directly to step 2 immediately.
 
 #### Resolved
 
@@ -926,7 +928,7 @@ Create mode: template browser → display name → description → tuning fields
 - **All field types** — secret, url, prompt, number/integer, enum, boolean (`SwitchRow`), multiline all implemented.
 - **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields appear first.
 - **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
-- **Edit mode context bar** — template name + category pill; no interaction.
+- **Header reorg** (#2102) — avatar, back button, and context bar (template name + category pill) removed; team + template now shown as one subtitle line under the title.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors; no toast for validation.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
