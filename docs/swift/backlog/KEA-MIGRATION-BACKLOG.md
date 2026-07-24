@@ -97,7 +97,13 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
 - [x] **MIGR-05.01** — Bundle reader + manifest parse (`format_version 1`, kea + swift formats) — `import_export/bundle.py`
 - [x] **MIGR-05.02** — Atomic import service (FastAPI `BackgroundTask` + single SQLAlchemy transaction; **not** Temporal): validate manifest → import agents → tags → metadata, all-or-nothing rollback, idempotent by PK — `import_export/importer.py` + `api.py`. *(Temporal design preserved in RFC §5 for future scale; fresh-target preflight + verify superseded by idempotent-by-PK + reset.)*
 - [x] **MIGR-05.03** — Agent transform: kea `payload_json`/`class_path` → swift `agent_instance` (+ `KEA_TO_SWIFT_TEMPLATE` catalog; IGNORED skipped, GAP warned) — `import_export/agent_map.py` (+tests)
-- [ ] **MIGR-05.04** — OpenFGA tuple restore with identity/team validation + personal-team reconciliation. *Deferred: handled by ops bulk-copy at cutover (Option A); `reset` leaves tuples intact so ownership survives re-test.*
+- [x] **MIGR-05.04** — OpenFGA tuple restore (2026-07-24, #1954) — `importer.py::transform_kea_tuples`,
+  replacing the abandoned ops bulk-copy plan (Option A would have written kea relation names the
+  swift model rejects — 63% of the tuples in the validated 2026-07-22 kea dump). Role mapping
+  (approved): `owner→team_admin+team_editor`, `manager→team_editor`, `member→team_member`;
+  `team_analyst` never synthesized. Dropped + counted: kea shared `team:personal` tuples (swift
+  self-heals `personal-{uid}`), `resource#parent` (resources become prompt rows), non-UUID user
+  subjects. Residual: no per-identity Keycloak existence check (tuples for unknown subs are inert).
 - [x] **MIGR-05.05** — `MigrationTaskEvent` populated (`step`/`progress`/`MigrationDetail`) + control-plane wired into frontend task rehydration & SSE sources (tasks survive reload)
 - [x] **MIGR-05.06** — Admin UI import page (upload zip → launch → task-atom progress, admin-only) — *fully wired to the live backend; page renamed **Platform data***
 - [x] **MIGR-05.07** — Stage reconciliation: reset each restored document's `VECTORIZED`/
@@ -109,13 +115,14 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
 - [x] **MIGR-05.08** — Tags + document-metadata import phases (atomic, shared generic loop) — `import_export/importer.py`; new `fred_core/documents/tag_models.py` `TagRow`
 - [x] **MIGR-05.09** — Swift-native **export** (`GET /import-export/export`) + re-import branch (`source_platform=swift`, bypasses `agent_map`) — `import_export/exporter.py`
 - [x] **MIGR-05.10** — Atomic **reset** (`POST /import-export/reset`) — wipes agents+tags+metadata in one transaction; enables export → reset → import test cycles (object store / Keycloak / OpenFGA untouched)
-- [ ] **MIGR-05.11** — **Agent prompt transfer (kea → swift) — NEXT GAP.** Imported agents land with
-  default tuning only and **no prompt content**. Kea agents carry their prompt(s) in
-  `agent.payload_json`; swift agent instances reference prompts via `prompt_refs_json` → team-scoped
-  `prompt` rows (`PromptRow`, unique on `(team_id, name)`). Per mapped agent: create/locate a `prompt`
-  row owned by the agent's `team_id` holding the kea prompt text, then wire the new
-  `agent_instance.prompt_refs_json` to it. Until done, the Platform-data **Prompts** count stays 0 for
-  imported agents. — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
+- [x] **MIGR-05.11** — Agent prompt transfer (2026-07-24, #1954). Implemented differently from the
+  original sketch: the kea prompt (`system_prompt_template` v2 / `prompts.system` v1, from
+  `payload_json.tuning.fields[].default`) is written to `tuning.values["prompts.system"]` — the
+  key the runtime actually overlays onto the template's system prompt
+  (`fred_runtime/app/agent_app.py`). `prompt_refs_json` is left unset: it has no consumer in the
+  codebase, and kea agent prompts were never library entries. `role`/`description`/`tags`/
+  `created_by` also transfer; v1 secondary per-node prompts are warned (no swift field).
+  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
 - [x] **MIGR-05.12** — Platform-data stats dashboard (`GET /import-export/stats`): teams, members by
   role, agents, prompts; personal spaces (`personal-*`) aggregated into one row — `import_export/stats.py`
 - [x] **MIGR-05.13** — Manifest contract hardening: `SnapshotManifest` → Pydantic + enforced
@@ -126,6 +133,30 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   reconciliation) as a side effect, since it touched the same shared metadata-import phase. Tests:
   `tests/test_import_export_manifest.py` (5 new). — RFC:
   [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §4–§5
+- [x] **MIGR-05.14** — Kea bundle compatibility fixes (2026-07-24, #1954), found by running a real
+  kea dump (2026-07-22) through the importer: (a) kea manifests predate `users_schema_version` →
+  defaulted to 1 for `source_platform != "swift"` only (RFC §4 amended); (b) the team table file is
+  `teammetadata.jsonl` on the kea path (main's `EXPORT_TABLES` name) vs `team_metadata.jsonl`
+  (swift-native) — the importer now asks for the right file per producer; (c) legacy
+  `payload_json.type == "leader"` agent rows skipped. Tests: `tests/test_import_export_kea_bundle.py`.
+- [x] **MIGR-05.15** — Chat contexts → personal prompts (2026-07-24, #1954, decision: personal
+  space only). Kea `resource` rows (`resource_type="chat-context"`) become `prompt` rows in
+  `personal-{author}`; YAML front-matter stripped (body only); `prompt_id` = kea `resource_id`
+  (idempotent); `(team_id, name)` collisions suffixed; kinds `prompt`/`template` skipped with a
+  warning; kea library tags (`chat-context`/`prompt`/`template`) filtered from the tag phase.
+  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
+
+**Open (user-level cutover items, not yet coded — see RFC §8 follow-ups):**
+- Platform-role re-provisioning: kea `admin`/`editor`/`viewer` were Keycloak realm roles (never
+  tuples, absent from the dump); swift ignores realm roles (bridge removed, AUTHZ-05). A kea admin
+  is NOT a swift `platform_admin` after import — generate a `users.json` (`platform_roles`) from
+  the kea realm, or grant manually at cutover.
+- `users` table rows (GCU acceptance) exported but not imported — decide: re-prompt everyone on
+  swift (current behaviour) or add a users-row import phase. Per-user/team storage counters are
+  covered separately by `knowledge-flow/alembic/backfill/backfill_storage_usage.py` (add to runbook).
+- Team names when kea `teammetadata` is empty and `realm_exported=false` (the validated dump had
+  teams only as tuple UUIDs) — fix the kea-side realm export (M2M `manage-realm`) or provide an
+  id→name mapping at import.
 
 ---
 
@@ -290,7 +321,7 @@ with a written rationale.
 | ---------- | ----- | ---- | --------- |
 | MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
-| MIGR-05 Metadata — platform import service | 12 | 9 | 3 |
+| MIGR-05 Metadata — platform import service | 15 | 15 | 0 (user-level cutover decisions open, see §0bis) |
 | MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |

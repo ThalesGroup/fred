@@ -1,7 +1,8 @@
 # RFC — Platform Import/Export (swift-native contract)
 
 **ID:** MIGR-05 · **Status:** in progress — swift-native path shipped + hardened (baseline 2026-07-16);
-kea-import path deferred, see §8.
+kea-import path implemented 2026-07-24 (agent prompt/tuning transfer, chat-context→prompt
+migration, OpenFGA tuple restore with role transformation), see §8.
 **Owner:** Dimitri · **Surface:** control-plane-backend (`import_export/`)
 **Extends:** [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (task/event infra).
 **Backlog:** [`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md) §0bis — migration
@@ -84,8 +85,12 @@ Two version numbers, tracked independently because they evolve at different rate
 Fields: `format_version: int` (required) · `users_schema_version: int` (required) ·
 `source_platform: str = "kea"` · `created_at: str` · `tables: dict[str, int]` ·
 `tuple_count: int` · `realm_exported: bool` · `content_keys: list[str]`. Both version fields are
-required on **every** bundle, whether or not it carries a `users.json` — a bundle producer that
-omits either fails loudly at `open_bundle()`, never silently assumed to be `v1`.
+required on **every swift-produced** bundle, whether or not it carries a `users.json` — a swift
+bundle producer that omits either fails loudly at `open_bundle()`, never silently assumed to be
+`v1`. **Kea exception (2026-07-24):** kea's exporter (main branch, `migration/snapshot.py`)
+predates `users_schema_version` and never emits it — and kea bundles never carry a `users.json` —
+so `open_bundle()` defaults the field to `1` when `source_platform != "swift"` only. Verified
+against a real kea dump (2026-07-22), which was rejected before this exception existed.
 
 `source_platform` is the live discriminator: `"swift"` takes the swift-native branch (this
 document); anything else takes the kea-import branch (§8).
@@ -161,13 +166,54 @@ The terminal task event carries a structured `MigrationResult`
 partial reconciliation, distinguishable from a clean success — durable across reload
 (`GET /tasks` returns the same structured `detail`), not just visible on the terminal event.
 
-## 8. Deferred — tracked separately, not part of this contract
+## 8. Kea-import path (`source_platform=kea`) — implemented 2026-07-24 (#1954)
 
-- **Kea-import path** (`source_platform=kea`) — reads a wider `postgres/*.jsonl` set plus
-  `openfga/tuples.json`, transforms kea agents via `agent_map.py`. OpenFGA tuple restore
-  (**MIGR-05.04**) and agent prompt transfer (**MIGR-05.11**) remain open. Tracked in
-  [`KEA-MIGRATION-BACKLOG.md` §0bis](../backlog/KEA-MIGRATION-BACKLOG.md).
+Reads main's `postgres/*.jsonl` set (table file names = main's
+`migration/snapshot.py::EXPORT_TABLES`, e.g. `teammetadata`, not `team_metadata`) plus
+`openfga/tuples.json`. Validated end-to-end against a real kea dump (2026-07-22). Behaviour:
+
+- **Agents** (`agent_map.py` + MIGR-05.11): classified MAPPED/IGNORED/GAP as before; legacy
+  `type=leader` rows skipped. A MAPPED agent now carries its real kea tuning — `role`,
+  `description`, `tags`, and the customized system prompt (`system_prompt_template` (v2) or
+  `prompts.system` (v1) from `payload_json.tuning.fields[].default`) written to
+  `tuning.values["prompts.system"]`, the key the runtime overlays onto the template's system
+  prompt (`fred_runtime/app/agent_app.py`). `prompt_refs_json` is deliberately left unset — it has
+  no consumer today, and kea agent prompts were never library entries. v1 secondary per-node
+  prompts (`prompts.grade_*`, …) have no swift field → warned, not silently dropped.
+  `created_by` comes from the agent's `user:… owner` tuple (personal agents).
+- **Chat contexts → prompts:** kea `resource` rows with `resource_type="chat-context"` become
+  `prompt` rows in the author's personal space (`personal-{author}`), decision 2026-07-24:
+  personal space only, kea library sharing dropped. YAML front-matter is stripped from
+  `doc.content` (only the body is the prompt text); `prompt_id` = kea `resource_id` (idempotent);
+  `(team_id, name)` collisions get a short id suffix. Other kea resource kinds
+  (`prompt`, `template`) are skipped with a warning. Kea library **tags**
+  (`type ∈ {chat-context, prompt, template}`) are filtered out of the tag phase.
+- **OpenFGA tuple restore (MIGR-05.04)** — `importer.py::transform_kea_tuples` replaces the
+  former "ops bulk-copy" plan, which would have pushed relation names the swift model rejects.
+  Role mapping (approved 2026-07-24): `owner → team_admin + team_editor` (kea owner was
+  hierarchical; swift roles are orthogonal), `manager → team_editor`, `member → team_member`
+  (only when the user holds no elevated role — `team_member` is union-derived). `team_analyst`
+  is never synthesized. Dropped (counted + warned): tuples touching kea's shared `team:personal`
+  (swift self-heals per-user `personal-{uid}` spaces), `resource#parent` (resources became prompt
+  rows, no OpenFGA object), non-UUID user subjects (pre-MIGR-04 username tuples), unknown shapes.
+  `agent`/`tag`/`document` ownership and `team#organization`/`team#public` replay 1:1. Writes go
+  through `RebacEngine.add_relation` (idempotent, audited), outside the DB transaction.
+- **Manifest:** kea bundles get `users_schema_version` defaulted (§4).
+- **Still skipped:** `mcp-server` rows (re-seeded by deployment; per-agent MCP activation via
+  capabilities is a follow-up), `users` rows (GCU acceptance state — product decision pending),
+  `keycloak/realm.json` (identity = MIGR-04, ops), `content/` banners (kea teammetadata carried
+  none in the validated dump — revisit if a prod bundle ships banners).
+
+Open follow-ups: team **names** when kea `teammetadata` is empty and `realm_exported=false`
+(the validated dump had teams only as tuple UUIDs — needs a kea-side realm-export fix or an
+operator-supplied id→name mapping); tuple/prompt counters surfaced only via the summary line and
+`warnings`, not yet promoted to `MigrationResult` (OpenAPI + generated-client regen);
+`react_profile_id`-aware template mapping refinement in `agent_map.py`.
+
+## 9. Deferred — tracked separately, not part of this contract
+
 - **Re-vectorize auto-trigger after import** (MIGR-07) — the stage reset in §5 is inert until
   something consumes it.
 - **Per-document content-store presence verification** (§5) — currently a count-only reminder,
   not a real check.
+- **Full-team export zip for the platform team** — #1954 task 2, untouched by the kea path work.
