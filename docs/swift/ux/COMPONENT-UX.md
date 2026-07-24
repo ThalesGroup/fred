@@ -688,26 +688,28 @@ _(none yet)_
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
 **Status:** `Functional`
 
-Displays one managed agent instance. Enabled cards are wrapped by `TeamAgentsPage` in a `<Link>` to the managed-chat route. On hover: descriptive content blurs, a "Start Chat" overlay appears, and the border plays a rotating conic-gradient animation. Footer action buttons (Settings, Delete) stay unblurred so they remain accessible during the hover state. Disabled cards render with muted colours and no hover effects, driven by a `data-enabled` CSS custom-property cascade.
+Displays one managed agent instance. Current layout (#2096, superseding the #2076 toolbar-restructure pass):
+
+- Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
+- Description (3-line clamp).
+- Suspension/catalog warning banner, when applicable.
+- Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
+- The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
+- **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
+- **Delete** reuses `TeamAgentsPage`'s existing `handleDelete` (previously only reachable from inside the edit modal) via the same `ConfirmationDialog`, with the same inverted emphasis as the "Leave team" dialog: Cancel is `filled`/primary (visually dominant, the safe choice), Delete is `text`/error (low emphasis).
+- The `Tooltip` atom gained an optional `content: ReactNode` prop (alongside the existing `text: string`) for this rich variant — sizes to content instead of forcing a single nowrap line, same hover/`:focus-within`/above-anchor positioning as every other tooltip in the app.
+- Disabled cards render with muted colours, driven by the existing `data-enabled` CSS custom-property cascade (unchanged by #2096).
+- The Chat button's hover treatment (rotating conic-gradient border) is unchanged from #2076.
 
 #### Open UX issues
 
-- **Gradient animation colours** — the conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). These are intentional branding colours not in the design token system. Confirm with designer whether they should be tokenised or kept as-is.
-
-- **Status badge — `color-mix`** — uses `color-mix(in srgb, var(--success) 12%, transparent)` for the badge background. Verify browser support aligns with deployment targets (Chrome 111+, Firefox 113+).
-
-- **Disabled card affordance** — renders with `cursor: default` and dimmed icon. Confirm whether a `not-allowed` cursor or a muted overlay label (e.g. "Disabled") would better communicate non-interactivity to end users.
-
-- **Card height** — no `min-height` set; height is driven by content. Validate grid row alignment when instances have very short vs. very long descriptions.
-
-- **"Start Chat" label** — uses i18n key `rework.agentCard.startChat`. Confirm translation exists in all supported locales.
+- Not yet design-reviewed against a live stack. First functional pass only.
+- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is.
 
 #### Resolved
 
-- **Gradient animation + "Start Chat" overlay restored** — the rotating conic-gradient border and blur/overlay hover interaction from the develop branch were lost in the agentic-pod migration. Both are restored in `AgentCard.module.scss`.
-- **`data-enabled` CSS cascade restored** — enabled/disabled state drives name colour, icon opacity, and background via CSS custom properties, matching develop branch behaviour.
+- **Toolbar restructure (#2076)** — edit/toggle icon buttons moved from a persistent bottom-left pair into the top-right more-menu (#2096); the whole-card click-to-chat interaction was already removed in #2076 in favour of the explicit Chat button.
 - **Extracted to reusable organism** — card logic was previously inlined (575 lines) in `TeamAgentsPage.tsx`. Now in `shared/organisms/AgentCard/` with a clean prop interface against `ManagedAgentInstanceSummary`.
-- **Whole-card click** — enabled cards are wrapped in `<Link>`; action buttons call `e.stopPropagation()` so they don't trigger navigation.
 
 ---
 

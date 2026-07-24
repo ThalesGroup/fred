@@ -16,11 +16,15 @@ import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode 
 import styles from "./Tooltip.module.scss";
 
 interface TooltipProps {
-  text: string;
+  text?: string;
+  /** Rich content instead of a plain text hint (e.g. a multi-row info panel).
+   *  Unlike `text`, the tooltip widens to fit and wraps instead of forcing a
+   *  single nowrap line. Takes precedence over `text` when both are set. */
+  content?: ReactNode;
   children: ReactNode;
 }
 
-export const Tooltip = ({ text, children }: TooltipProps) => {
+export const Tooltip = ({ text, content, children }: TooltipProps) => {
   const tooltipId = useId();
   // Single-element children get aria-describedby wired to the tooltip text so
   // screen readers announce it for both hover and keyboard focus (the CSS
@@ -29,12 +33,14 @@ export const Tooltip = ({ text, children }: TooltipProps) => {
   const child = isValidElement(children)
     ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })
     : children;
+  const contentClasses = [styles["tooltip-content"]];
+  if (content) contentClasses.push(styles["tooltip-content-rich"]);
 
   return (
     <span className={styles["tooltip-wrapper"]}>
       {child}
-      <span id={tooltipId} className={styles["tooltip-content"]} role="tooltip">
-        {text}
+      <span id={tooltipId} className={contentClasses.join(" ")} role="tooltip">
+        {content ?? text}
       </span>
     </span>
   );

@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-
-export interface OptionModel<T = string> {
-  value: T;
-  label: string;
-  key: string;
-  icon?: IconProps;
-  disabled?: boolean;
-  description?: string;
-  /** Renders the item's label/icon in the error color (e.g. a "Delete" action). */
-  destructive?: boolean;
+/** Human display for a resolved user: full name, else username, else the raw uid (#1952 pattern). */
+export function userDisplayName(
+  uid: string,
+  summary: { first_name?: string | null; last_name?: string | null; username?: string } | undefined,
+): string {
+  if (!summary) return uid;
+  const fullName = [summary.first_name, summary.last_name].filter(Boolean).join(" ");
+  return fullName || summary.username || uid;
 }

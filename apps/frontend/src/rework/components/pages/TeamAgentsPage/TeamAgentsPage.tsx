@@ -23,9 +23,16 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts"
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
+import {
+  type AgentFormPayload,
+  buildAgentFormSubmitPayload,
+  extractCapabilityConfigValues,
+  default as AgentFormModal,
+} from "./AgentFormModal/AgentFormModal.tsx";
+import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   type CreateAgentInstanceRequest,
   type ManagedAgentInstanceSummary,
@@ -69,7 +76,9 @@ function buildAgentSaveFormData(
 const hasAssetFiles = (assetFiles: Record<string, Record<string, File>>): boolean =>
   Object.values(assetFiles).some((slots) => Object.keys(slots).length > 0);
 
-function extractApiErrorDetail(error: unknown): string {
+/** Returns undefined (rather than a hardcoded fallback string) when no usable
+ *  detail is found — callers supply their own translated fallback. */
+function extractApiErrorDetail(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return String(error);
   const data = (error as Record<string, unknown>).data;
   if (typeof data === "object" && data !== null) {
@@ -86,7 +95,7 @@ function extractApiErrorDetail(error: unknown): string {
     }
   }
   const msg = (error as Record<string, unknown>).message;
-  return typeof msg === "string" ? msg : "An unexpected error occurred.";
+  return typeof msg === "string" ? msg : undefined;
 }
 
 /**
@@ -107,6 +116,7 @@ export default function TeamAgentsPage() {
   const isPersonalTeam = teamId === activeTeam?.id;
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
 
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
@@ -130,6 +140,18 @@ export default function TeamAgentsPage() {
     { teamId: teamId || "" },
     { skip: !teamId || !canManageAgents },
   );
+
+  // Batched once for the whole list (not one query per card, #2096) — the
+  // agent card's info tooltip shows created_by/updated_by display names.
+  const auditUids = Array.from(
+    new Set(
+      managedInstances
+        .flatMap((instance) => [instance.created_by, instance.updated_by])
+        .filter((uid): uid is string => Boolean(uid)),
+    ),
+  );
+  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
+  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
 
   const [createManagedInstance, { isLoading: isCreatingInstance }] =
     usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
@@ -173,13 +195,13 @@ export default function TeamAgentsPage() {
       } else {
         await createManagedInstance({ teamId, createAgentInstanceRequest: request }).unwrap();
       }
-      showSuccess({ summary: `${agentsNicknameSingular} created` });
+      showSuccess({ summary: t("rework.agentCard.createSuccess", { agent: agentsNicknameSingular }) });
       setIsEnrollOpen(false);
       await refetchInstances();
     } catch (error: unknown) {
       showError({
-        summary: `Failed to create ${agentsNicknameSingular.toLowerCase()}`,
-        detail: extractApiErrorDetail(error),
+        summary: t("rework.agentCard.createError", { agent: agentsNicknameSingular.toLowerCase() }),
+        detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
       });
     }
   };
@@ -217,13 +239,13 @@ export default function TeamAgentsPage() {
           updateAgentInstanceRequest: request,
         }).unwrap();
       }
-      showSuccess({ summary: `${agentsNicknameSingular} updated` });
+      showSuccess({ summary: t("rework.agentCard.updateSuccess", { agent: agentsNicknameSingular }) });
       setEditingInstance(null);
       await refetchInstances();
     } catch (error: unknown) {
       showError({
-        summary: `Failed to update ${agentsNicknameSingular.toLowerCase()}`,
-        detail: extractApiErrorDetail(error),
+        summary: t("rework.agentCard.updateError", { agent: agentsNicknameSingular.toLowerCase() }),
+        detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
       });
     }
   };
@@ -237,13 +259,69 @@ export default function TeamAgentsPage() {
         agentInstanceId: instance.agent_instance_id,
         updateAgentInstanceRequest: { status: newStatus },
       }).unwrap();
-      showSuccess({ summary: `${agentsNicknameSingular} ${newStatus}` });
+      const statusLabel = t(
+        newStatus === "enabled" ? "rework.agentCard.statusEnabled" : "rework.agentCard.statusDisabled",
+      );
+      showSuccess({
+        summary: t("rework.agentCard.toggleSuccess", { agent: agentsNicknameSingular, status: statusLabel }),
+      });
       await refetchInstances();
     } catch (error: unknown) {
       const err = error as { data?: { detail?: string }; message?: string };
       showError({
-        summary: `Failed to update ${agentsNicknameSingular.toLowerCase()}`,
+        summary: t("rework.agentCard.updateError", { agent: agentsNicknameSingular.toLowerCase() }),
         detail: err?.data?.detail || err?.message || String(error),
+      });
+    }
+  };
+
+  const handleDuplicate = async (source: ManagedAgentInstanceSummary, newName: string) => {
+    if (!teamId) return;
+    const template = availableTemplates.find((tpl) => tpl.template_id === source.template_id);
+    // Reuse the same payload-building as the normal enroll form (#2096) —
+    // correct capability filtering against the current template state —
+    // rather than hand-rebuilding a parallel, easier-to-get-subtly-wrong
+    // CreateAgentInstanceRequest straight from the source instance's stored
+    // fields. Not reusing `handleEnroll` itself: it always closes/resets the
+    // *enroll* modal's own state, which is wrong for the duplicate dialog.
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: source.template_id,
+        displayName: newName,
+        role: source.role,
+        description: source.description ?? "",
+        tuningValues: (source.tuning_field_values as Record<string, unknown>) ?? {},
+        selectedCapabilityIds: source.selected_capability_ids ?? [],
+        capabilityConfigValues: extractCapabilityConfigValues(source.capability_config),
+        capabilityAssetFiles: {},
+        capabilityBlockingErrors: {},
+      },
+      template,
+    );
+    const request: CreateAgentInstanceRequest = {
+      template_id: payload.templateId,
+      display_name: payload.displayName,
+      role: payload.role || undefined,
+      description: payload.description || undefined,
+      tuning_field_values:
+        Object.keys(payload.tuningFieldValues).length > 0
+          ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
+          : undefined,
+      capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+      capability_config_values:
+        payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+          ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+          : undefined,
+    };
+    try {
+      await createManagedInstance({ teamId, createAgentInstanceRequest: request }).unwrap();
+      showSuccess({ summary: t("rework.agentCard.duplicateSuccess", { agent: agentsNicknameSingular }) });
+      setDuplicatingInstance(null);
+      await refetchInstances();
+    } catch (error: unknown) {
+      showError({
+        summary: t("rework.agentCard.duplicateError", { agent: agentsNicknameSingular.toLowerCase() }),
+        detail: extractApiErrorDetail(error) ?? t("rework.agentCard.unexpectedError"),
       });
     }
   };
@@ -252,21 +330,28 @@ export default function TeamAgentsPage() {
     if (!teamId) return;
     showConfirmationDialog({
       criticalAction: true,
-      title: `Delete ${agentsNicknameSingular.toLowerCase()}?`,
-      message: `Remove "${instance.display_name}" from this team?`,
+      title: t("rework.agentCard.deleteDialog.title"),
+      message: t("rework.agentCard.deleteDialog.message", { name: instance.display_name }),
+      confirmButtonLabel: t("rework.agentCard.deleteDialog.confirm"),
+      cancelButtonLabel: t("rework.agentCard.deleteDialog.cancel"),
+      // Same inverted emphasis as "Leave team" — Cancel stays the visually
+      // dominant filled button, Delete drops to a low-emphasis text button.
+      cancelVariant: "filled",
+      cancelColor: "primary",
+      confirmVariant: "text",
       onConfirm: async () => {
         try {
           await deleteManagedInstance({
             teamId,
             agentInstanceId: instance.agent_instance_id,
           }).unwrap();
-          showSuccess({ summary: `${agentsNicknameSingular} deleted` });
+          showSuccess({ summary: t("rework.agentCard.deleteSuccess", { agent: agentsNicknameSingular }) });
           setEditingInstance(null);
           await refetchInstances();
         } catch (error: unknown) {
           const err = error as { data?: { detail?: string }; message?: string };
           showError({
-            summary: `Failed to delete ${agentsNicknameSingular.toLowerCase()}`,
+            summary: t("rework.agentCard.deleteError", { agent: agentsNicknameSingular.toLowerCase() }),
             detail: err?.data?.detail || err?.message || String(error),
           });
         }
@@ -275,7 +360,7 @@ export default function TeamAgentsPage() {
   };
 
   if (!teamId) {
-    return <div className={styles.pageError}>Missing team id in route.</div>;
+    return <div className={styles.pageError}>{t("rework.agentCard.missingTeamId")}</div>;
   }
 
   const isControlPlaneUnavailable =
@@ -352,8 +437,11 @@ export default function TeamAgentsPage() {
                   teamId={teamId}
                   canManageAgents={canManageAgents}
                   offline={templatesUnavailable}
+                  auditUserById={auditUserById}
                   onEdit={() => setEditingInstance(instance)}
                   onToggleEnabled={() => handleToggleEnabled(instance)}
+                  onDuplicate={() => setDuplicatingInstance(instance)}
+                  onDelete={() => handleDelete(instance)}
                 />
               );
             })}
@@ -379,6 +467,16 @@ export default function TeamAgentsPage() {
         }}
         onSubmit={editingInstance ? handleEdit : handleEnroll}
         onDelete={editingInstance ? () => handleDelete(editingInstance) : undefined}
+      />
+
+      <DuplicateAgentDialog
+        open={duplicatingInstance !== null}
+        initialName={duplicatingInstance?.display_name ?? ""}
+        isSubmitting={isCreatingInstance}
+        onCancel={() => setDuplicatingInstance(null)}
+        onConfirm={(newName) => {
+          if (duplicatingInstance) void handleDuplicate(duplicatingInstance, newName);
+        }}
       />
     </div>
   );

@@ -930,7 +930,41 @@
       "edit": "Edit",
       "noDescription": "No description yet.",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
-      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it."
+      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it.",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "tooltip": {
+        "label": "Agent details",
+        "origin": "Origin",
+        "template": "Template",
+        "created": "Created",
+        "updated": "Last update"
+      },
+      "duplicateDialog": {
+        "title": "Duplicate this agent",
+        "nameLabel": "New agent name",
+        "cancel": "Cancel",
+        "confirm": "Duplicate"
+      },
+      "deleteDialog": {
+        "title": "Delete this agent?",
+        "message": "\"{{name}}\" will be permanently removed from this team. This action is irreversible.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "duplicateSuccess": "{{agent}} duplicated",
+      "duplicateError": "Failed to duplicate the {{agent}}",
+      "deleteSuccess": "{{agent}} deleted",
+      "deleteError": "Failed to delete the {{agent}}",
+      "createSuccess": "{{agent}} created",
+      "createError": "Failed to create the {{agent}}",
+      "updateSuccess": "{{agent}} updated",
+      "updateError": "Failed to update the {{agent}}",
+      "statusEnabled": "enabled",
+      "statusDisabled": "disabled",
+      "toggleSuccess": "{{agent}} {{status}}",
+      "unexpectedError": "An unexpected error occurred.",
+      "missingTeamId": "Missing team id in route."
     },
     "analytics": {
       "activeUsers": {

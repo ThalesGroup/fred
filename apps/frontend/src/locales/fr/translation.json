@@ -930,7 +930,41 @@
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
-      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver."
+      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver.",
+      "duplicate": "Dupliquer",
+      "delete": "Supprimer",
+      "tooltip": {
+        "label": "Détails de l'agent",
+        "origin": "Origine",
+        "template": "Template",
+        "created": "Création",
+        "updated": "Dernière MAJ"
+      },
+      "duplicateDialog": {
+        "title": "Dupliquer cet agent",
+        "nameLabel": "Nom du nouvel agent",
+        "cancel": "Annuler",
+        "confirm": "Dupliquer"
+      },
+      "deleteDialog": {
+        "title": "Supprimer cet agent ?",
+        "message": "« {{name}} » sera définitivement supprimé de cette équipe. Cette action est irréversible.",
+        "confirm": "Supprimer",
+        "cancel": "Annuler"
+      },
+      "duplicateSuccess": "{{agent}} dupliqué",
+      "duplicateError": "Échec de la duplication : {{agent}}",
+      "deleteSuccess": "{{agent}} supprimé",
+      "deleteError": "Échec de la suppression : {{agent}}",
+      "createSuccess": "{{agent}} créé",
+      "createError": "Échec de la création : {{agent}}",
+      "updateSuccess": "{{agent}} mis à jour",
+      "updateError": "Échec de la mise à jour : {{agent}}",
+      "statusEnabled": "activé",
+      "statusDisabled": "désactivé",
+      "toggleSuccess": "{{agent}} {{status}}",
+      "unexpectedError": "Une erreur inattendue s'est produite.",
+      "missingTeamId": "Identifiant d'équipe manquant dans la route."
     },
     "analytics": {
       "activeUsers": {

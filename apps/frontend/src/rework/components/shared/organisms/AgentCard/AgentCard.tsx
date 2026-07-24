@@ -15,14 +15,18 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { materialIcons, type MaterialIconType } from "@shared/utils/Type.ts";
 import { guessAgentIcon } from "@shared/utils/agentIcon.ts";
+import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
+
+type MoreMenuAction = "edit" | "toggle" | "duplicate" | "delete";
 
 export interface AgentCardProps {
   instance: ManagedAgentInstanceSummary;
@@ -32,8 +36,25 @@ export interface AgentCardProps {
   teamId?: string;
   canManageAgents: boolean;
   offline?: boolean;
+  /** Resolved audit users for `created_by`/`updated_by`, batched once for the
+   *  whole list by the caller rather than one query per card. */
+  auditUserById?: Map<string, UserSummary>;
   onEdit: () => void;
   onToggleEnabled: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}
+
+function formatShortDate(dateStr: string | null | undefined): string | undefined {
+  if (!dateStr) return undefined;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const datePart = date.toLocaleDateString();
+  // Fixed 24h "HH:MM" (zero-padded), independent of locale — toLocaleTimeString's
+  // padding/12h-vs-24h choice varies by browser and locale.
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${datePart} - ${hours}:${minutes}`;
 }
 
 export default function AgentCard({
@@ -43,8 +64,11 @@ export default function AgentCard({
   teamId,
   canManageAgents,
   offline = false,
+  auditUserById,
   onEdit,
   onToggleEnabled,
+  onDuplicate,
+  onDelete,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
@@ -53,7 +77,7 @@ export default function AgentCard({
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
-  const toggleTooltip = isSuspended
+  const toggleLabel = isSuspended
     ? t("rework.agentCard.suspendedToggleLocked")
     : isEnabled
       ? t("rework.agentCard.deactivate")
@@ -67,9 +91,50 @@ export default function AgentCard({
     ? (agentIconName as MaterialIconType)
     : "smart_toy";
   const iconName = guessAgentIcon(instance.display_name, instance.role, instance.description ?? "", defaultIcon);
-  // Raw source_runtime_id, not a prettified label (e.g. "fred-agents"), per
-  // the agent card redesign (#2076).
-  const origin = [runtimeId, templateDisplayName].filter(Boolean).join(" · ");
+
+  const createdByName = instance.created_by
+    ? userDisplayName(instance.created_by, auditUserById?.get(instance.created_by))
+    : undefined;
+  const updatedByName = instance.updated_by
+    ? userDisplayName(instance.updated_by, auditUserById?.get(instance.updated_by))
+    : undefined;
+  const createdAt = formatShortDate(instance.created_at);
+  const updatedAt = formatShortDate(instance.updated_at);
+
+  const infoTooltipContent = (
+    <div className={styles.infoTooltip}>
+      {runtimeId && (
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>{t("rework.agentCard.tooltip.origin")}</span>
+          <span className={styles.infoValue}>{runtimeId}</span>
+        </div>
+      )}
+      {templateDisplayName && (
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>{t("rework.agentCard.tooltip.template")}</span>
+          <span className={styles.infoValue}>{templateDisplayName}</span>
+        </div>
+      )}
+      {createdByName && (
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>{t("rework.agentCard.tooltip.created")}</span>
+          <span className={styles.infoValueStacked}>
+            <span>{createdByName}</span>
+            {createdAt && <span className={styles.infoValueDate}>{createdAt}</span>}
+          </span>
+        </div>
+      )}
+      {updatedByName && (
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>{t("rework.agentCard.tooltip.updated")}</span>
+          <span className={styles.infoValueStacked}>
+            <span>{updatedByName}</span>
+            {updatedAt && <span className={styles.infoValueDate}>{updatedAt}</span>}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 
   const chatButton = (
     <Button
@@ -84,6 +149,15 @@ export default function AgentCard({
     </Button>
   );
 
+  const handleMoreMenuSelect = (action: MoreMenuAction) => {
+    if (action === "edit") onEdit();
+    else if (action === "toggle") {
+      if (isSuspended) return;
+      onToggleEnabled();
+    } else if (action === "duplicate") onDuplicate();
+    else if (action === "delete") onDelete();
+  };
+
   return (
     <div className={styles.agentCard} data-enabled={isEnabled}>
       <div className={styles.agentInfo}>
@@ -92,10 +166,50 @@ export default function AgentCard({
             <Icon category={"outlined"} type={iconName} />
           </div>
           <div className={styles.agentIdentity}>
-            {origin && <div className={styles.agentOrigin}>{origin}</div>}
             <div className={styles.agentName}>{instance.display_name}</div>
             <div className={styles.agentRole}>{instance.role}</div>
           </div>
+          {canManageAgents && (
+            <div className={styles.moreMenu}>
+              <IconButtonMenu<MoreMenuAction>
+                iconButton={{
+                  color: "on-surface",
+                  variant: "icon",
+                  size: "medium",
+                  icon: { category: "outlined", type: "more_vert" },
+                }}
+                options={[
+                  {
+                    key: "edit",
+                    value: "edit",
+                    label: t("rework.agentCard.edit"),
+                    icon: { category: "outlined", type: "edit" },
+                  },
+                  {
+                    key: "toggle",
+                    value: "toggle",
+                    label: toggleLabel,
+                    icon: { category: "outlined", type: isEnabled ? "visibility_off" : "visibility" },
+                    disabled: isSuspended,
+                  },
+                  {
+                    key: "duplicate",
+                    value: "duplicate",
+                    label: t("rework.agentCard.duplicate"),
+                    icon: { category: "outlined", type: "content_copy" },
+                  },
+                  {
+                    key: "delete",
+                    value: "delete",
+                    label: t("rework.agentCard.delete"),
+                    icon: { category: "outlined", type: "delete" },
+                    destructive: true,
+                  },
+                ]}
+                onSelect={handleMoreMenuSelect}
+              />
+            </div>
+          )}
         </div>
         <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
       </div>
@@ -110,35 +224,15 @@ export default function AgentCard({
       )}
 
       <div className={styles.actions}>
-        {canManageAgents && (
-          <div className={styles.actionsLeft}>
-            <Tooltip text={toggleTooltip}>
-              <IconButton
-                color="on-surface"
-                variant="icon"
-                size="medium"
-                // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
-                // the fix is in the edit form, not a re-enable. Disable it so an
-                // editor cannot toggle a broken agent back into the catalog.
-                disabled={isSuspended}
-                icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
-                onClick={() => {
-                  if (isSuspended) return;
-                  onToggleEnabled();
-                }}
-              />
-            </Tooltip>
-            <Tooltip text={t("rework.agentCard.edit")}>
-              <IconButton
-                color="on-surface"
-                variant="icon"
-                size="medium"
-                icon={{ category: "outlined", type: "edit" }}
-                onClick={onEdit}
-              />
-            </Tooltip>
-          </div>
-        )}
+        <Tooltip content={infoTooltipContent}>
+          <IconButton
+            color="on-surface-retreat"
+            variant="icon"
+            size="medium"
+            icon={{ category: "outlined", type: "info" }}
+            aria-label={t("rework.agentCard.tooltip.label")}
+          />
+        </Tooltip>
         {isEnabled && teamId ? (
           <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
             {chatButton}
