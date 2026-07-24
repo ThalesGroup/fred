@@ -929,6 +929,7 @@ Header reorg (#2102, 2026-07-24, first pass of a broader rework — more changes
 - **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields appear first.
 - **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
 - **Header reorg** (#2102) — avatar, back button, and context bar (template name + category pill) removed; team + template now shown as one subtitle line under the title.
+- **Template browser container** (#2103) — pod filter + card grid now sit inside a titled `--surface-container-high` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card name now `--primary`-colored; category label (e.g. "REACT") is plain muted text, no longer a colored pill.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors; no toast for validation.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.

@@ -1555,6 +1555,10 @@
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
+        "templateBrowser": {
+          "title": "Sélectionner un template d'agent",
+          "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
+        },
         "promptField": {
           "pickFromLibrary": "Choisir depuis la bibliothèque",
           "removeTagAria": "Retirer {{tag}}",

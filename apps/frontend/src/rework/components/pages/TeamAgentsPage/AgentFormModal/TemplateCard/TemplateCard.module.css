@@ -36,12 +36,8 @@
   align-items: center;
 }
 
-.categoryPill {
-  align-self: flex-start;
-  border-radius: 999px;
-  background: var(--secondary-container);
-  padding: 2px 10px;
-  color: var(--on-secondary-container);
+.category {
+  color: var(--on-surface-muted);
   font: var(--font-label-small);
   font-size: 11px;
   letter-spacing: 0.04em;
@@ -49,7 +45,7 @@
 }
 
 .name {
-  color: var(--on-surface);
+  color: var(--primary);
   font: var(--font-title-small);
 }
 

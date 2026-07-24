@@ -1555,6 +1555,10 @@
           }
         },
         "noTemplates": "No agent templates available — start a runtime pod.",
+        "templateBrowser": {
+          "title": "Select an agent template",
+          "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
+        },
         "promptField": {
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",

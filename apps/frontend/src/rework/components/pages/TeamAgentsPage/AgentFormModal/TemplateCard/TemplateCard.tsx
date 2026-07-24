@@ -37,7 +37,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
       disabled={unavailable}
     >
       <div className={styles.cardHeader}>
-        {template.category && <span className={styles.categoryPill}>{template.category}</span>}
+        {template.category && <span className={styles.category}>{template.category}</span>}
         <span className={styles.podLabel}>{template.source_runtime_id}</span>
       </div>
       <span className={styles.name}>{template.display_name}</span>
