@@ -20,6 +20,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+import pytest_asyncio
 
 from fred_core.common import PostgresStoreConfig
 from fred_core.models.base import Base
@@ -129,17 +130,31 @@ class _StubControl:
         return None
 
 
-async def _build_service(tmp_path, status_by_eid) -> tuple[TaskService, _StubControl]:
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    control = _StubControl(status_by_eid)
-    service = TaskService(
-        store=TaskStore(engine), bus=MemoryEventBus(), control=control
-    )
-    return service, control
+@pytest_asyncio.fixture
+async def build_service():
+    """Builds a TaskService backed by a fresh aiosqlite engine, disposing every
+    engine it creates on teardown. Undisposed aiosqlite engines leave a
+    connection worker thread alive past the end of the test's event loop,
+    which then raises 'Event loop is closed' from that thread."""
+    engines: list[Any] = []
+
+    async def _build(tmp_path, status_by_eid) -> tuple[TaskService, _StubControl]:
+        engine = create_async_engine_from_config(
+            PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
+        )
+        engines.append(engine)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        control = _StubControl(status_by_eid)
+        service = TaskService(
+            store=TaskStore(engine), bus=MemoryEventBus(), control=control
+        )
+        return service, control
+
+    yield _build
+
+    for engine in engines:
+        await engine.dispose()
 
 
 async def _new_task(service: TaskService, *, execution_id: str | None) -> str:
@@ -153,8 +168,8 @@ async def _new_task(service: TaskService, *, execution_id: str | None) -> str:
 
 
 @pytest.mark.asyncio
-async def test_bind_execution_persists(tmp_path):
-    service, _ = await _build_service(tmp_path, {})
+async def test_bind_execution_persists(tmp_path, build_service):
+    service, _ = await build_service(tmp_path, {})
     task_id = await _new_task(service, execution_id="wf-1")
     run = await service.get_run(task_id)
     assert run is not None
@@ -162,8 +177,8 @@ async def test_bind_execution_persists(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_fails_task_when_workflow_failed(tmp_path):
-    service, control = await _build_service(
+async def test_reconcile_fails_task_when_workflow_failed(tmp_path, build_service):
+    service, control = await build_service(
         tmp_path, {"wf-1": ExecutionStatus.timed_out}
     )
     task_id = await _new_task(service, execution_id="wf-1")
@@ -179,12 +194,10 @@ async def test_reconcile_fails_task_when_workflow_failed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_cancels_task_when_workflow_canceled(tmp_path):
+async def test_reconcile_cancels_task_when_workflow_canceled(tmp_path, build_service):
     # A user-requested cancellation must land as `cancelled`, never `failed`, so it
     # does not pollute failure counts / error history.
-    service, control = await _build_service(
-        tmp_path, {"wf-1": ExecutionStatus.canceled}
-    )
+    service, control = await build_service(tmp_path, {"wf-1": ExecutionStatus.canceled})
     task_id = await _new_task(service, execution_id="wf-1")
 
     reconciled = await service.reconcile_task(task_id)
@@ -199,8 +212,8 @@ async def test_reconcile_cancels_task_when_workflow_canceled(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [ExecutionStatus.running, None])
-async def test_reconcile_leaves_running_or_unreachable(tmp_path, status):
-    service, _ = await _build_service(tmp_path, {"wf-1": status})
+async def test_reconcile_leaves_running_or_unreachable(tmp_path, status, build_service):
+    service, _ = await build_service(tmp_path, {"wf-1": status})
     task_id = await _new_task(service, execution_id="wf-1")
 
     failed = await service.reconcile_task(task_id)
@@ -212,8 +225,8 @@ async def test_reconcile_leaves_running_or_unreachable(tmp_path, status):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_skips_linkless_and_terminal(tmp_path):
-    service, control = await _build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
+async def test_reconcile_skips_linkless_and_terminal(tmp_path, build_service):
+    service, control = await build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
 
     # linkless: no execution binding → never queried
     linkless = await _new_task(service, execution_id=None)
@@ -230,8 +243,8 @@ async def test_reconcile_skips_linkless_and_terminal(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_stale_respects_grace_and_dedupes(tmp_path):
-    service, control = await _build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
+async def test_reconcile_stale_respects_grace_and_dedupes(tmp_path, build_service):
+    service, control = await build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
     # Two tasks share one parent workflow id.
     t1 = await _new_task(service, execution_id="wf-1")
     t2 = await _new_task(service, execution_id="wf-1")
@@ -251,8 +264,8 @@ async def test_reconcile_stale_respects_grace_and_dedupes(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fail_task_marks_pending_failed_then_noops(tmp_path):
-    service, _ = await _build_service(tmp_path, {})
+async def test_fail_task_marks_pending_failed_then_noops(tmp_path, build_service):
+    service, _ = await build_service(tmp_path, {})
     task_id = await _new_task(service, execution_id=None)
 
     assert await service.fail_task(task_id, "Scheduling failed: boom") is True
@@ -269,8 +282,10 @@ async def test_fail_task_marks_pending_failed_then_noops(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_task_event_stream_reconciles_then_closes_on_dead_workflow(tmp_path):
-    service, _ = await _build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
+async def test_task_event_stream_reconciles_then_closes_on_dead_workflow(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {"wf-1": ExecutionStatus.failed})
     task_id = await _new_task(service, execution_id="wf-1")
 
     async def _connected() -> bool:
