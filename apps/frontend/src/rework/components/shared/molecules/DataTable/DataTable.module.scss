@@ -95,6 +95,12 @@
 /* Fixed width (not just min-width) so the neighbouring nav buttons don't
  * shift horizontally as the page number's digit count changes. */
 .footer-page-label {
-  width: 4.5rem;
+  width: 3.5rem;
   text-align: center;
+}
+
+/* Extra breathing room on top of the footer's own gap, so the rows-per-page
+ * picker doesn't read as glued to the "Items per page" label/nav buttons. */
+.footer-rows-per-page-select {
+  margin-right: var(--spacing-xs);
 }

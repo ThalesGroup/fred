@@ -390,6 +390,7 @@
   "dataTable": {
     "pagination": {
       "first": "First page",
+      "itemsPerPage": "Items per page",
       "last": "Last page",
       "next": "Next page",
       "pageNumber": "Page {{page}}",

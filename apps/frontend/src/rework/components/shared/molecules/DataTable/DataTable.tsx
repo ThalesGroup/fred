@@ -109,16 +109,19 @@ export default function DataTable<T>({
             </span>
           </div>
           <div className={styles["datatable-footer-right"]}>
-            <Select<number>
-              size="small"
-              compact
-              value={rowsPerPage}
-              options={rowsPerPageOptions}
-              onChange={(value) => {
-                setRowsPerPage(value);
-                setPage(0);
-              }}
-            />
+            <div className={styles["footer-rows-per-page-select"]}>
+              <Select<number>
+                size="small"
+                compact
+                value={rowsPerPage}
+                options={rowsPerPageOptions}
+                onChange={(value) => {
+                  setRowsPerPage(value);
+                  setPage(0);
+                }}
+              />
+            </div>
+            <span className={styles["footer-label"]}>{t("dataTable.pagination.itemsPerPage")}</span>
             <IconButton
               color="on-surface"
               variant="icon"
