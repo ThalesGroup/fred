@@ -1,3 +1,29 @@
+**v2.1.14** — 2026-07-24
+
+- **Summary**
+
+  The admin Capabilities page loads about twice as fast and shows team reach as clear
+  badges instead of stacked text. A data-erasure request could get stuck forever if the
+  agent behind one of its conversations had since been deleted — it now completes
+  reliably. The message composer no longer clips your text after pasting, and no longer
+  jumps you to the bottom while you edit earlier in a long draft. Closing side panels like
+  "Manage teams" no longer strands keyboard focus.
+
+- **Improvements**
+
+  - The admin Capabilities page loads roughly twice as fast (#2089)
+  - "Enabled teams" reach on the admin Capabilities page now shows as clear badges instead of stacked "3 team(s)" text (#2010)
+
+- **Bug Fixes**
+
+  - A data-erasure request could stay stuck forever if the agent behind one of its conversations had since been deleted — erasure now completes reliably (#2089)
+  - The message composer no longer clips the top of your text after pasting, and no longer jumps you to the bottom while editing earlier in a long draft (#2010)
+  - Closing a side panel (e.g. "Manage teams") no longer strands keyboard focus in a hidden area (#2089)
+
+- **Deployment note**
+
+  Adds a new nullable database column that tracks a session's originating runtime, applied via the standard migration step on upgrade — no manual action needed. Sessions created before the upgrade keep working via the previous lookup, unless the session's agent instance has already been deleted.
+
 **v2.1.13** — 2026-07-24
 
 - **Summary**
