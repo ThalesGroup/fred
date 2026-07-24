@@ -41,6 +41,7 @@ export default function TeamSelectionNavbar() {
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId && team.is_member);
+  const currentUserId = KeyCloakService.GetUserId();
   // Shape-based check, not a comparison against personalTeamId: activeTeam.id
   // resolves from "personal" to "personal-<uid>" once bootstrap loads, but the
   // pathname only follows if something re-navigates. A prefix match against a
@@ -84,6 +85,7 @@ export default function TeamSelectionNavbar() {
               selected={pathname.startsWith(`/team/${team.id}`)}
               imgUrl={team.banner_image_url ?? (defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined)}
               avatarName={team.name}
+              adminBadge={!!currentUserId && (team.admins ?? []).some((admin) => admin.id === currentUserId)}
             />
           );
         })}

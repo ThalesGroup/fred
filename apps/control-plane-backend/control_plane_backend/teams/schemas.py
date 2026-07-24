@@ -176,6 +176,14 @@ class TeamRetentionView(BaseModel):
 
 class TeamWithPermissions(Team):
     permissions: list[TeamPermission] = Field(default_factory=list)
+    # The caller's own raw role relations on this team (team_admin/_editor/
+    # _analyst/_member — the same set `TeamMember.relations` exposes for other
+    # members). `permissions` alone cannot answer "does this user hold
+    # team_analyst" reliably: can_run_evaluations/can_manage_evaluation_corpus
+    # are also granted to team_admin via the FGA union, so a plain admin would
+    # look like an analyst too. Frontend team-role badges (#2100) need this
+    # unambiguous.
+    my_relations: list[UserTeamRelation] = Field(default_factory=list)
     # CTRLP-12 (RFC §3.B): resolved per-team retention (platform cap vs team
     # value). None for system/personal teams, which have no team-editable
     # retention (personal deletes use the platform `personal_delete_grace`).

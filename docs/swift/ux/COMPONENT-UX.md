@@ -812,6 +812,40 @@ deliberate risk-reduction pattern, not the default hierarchy.
 
 ---
 
+### `TeamContentNavbar` banner / `TeamSelectionItem` — team role badges (#2100)
+
+**Location:** `src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
+`src/rework/components/shared/layouts/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx`
+**Status:** `Functional`
+
+Helps a user recognize their role in each team they belong to.
+
+- **Left team rail (`TeamSelectionItem`, `teamAvatarContainer`):** a 14×14
+  Shield icon badge (`color: secondary`, 2px `surface-container-lowest`
+  outline forming a clean cutout against the avatar underneath — same
+  technique as the existing `activityDot`) appears bottom-right of a team's
+  avatar (`right: 8px; bottom: 2px`) when the current user is admin of that
+  team. Derived client-side from `Team.admins` (`admin.id === currentUserId`)
+  — no `my_relations` needed here, just a boolean.
+- **Team banner (`TeamContentNavbar`):** `.bannerContainer` is now a column
+  (`justify-content: space-between`) instead of a single bottom-aligned row —
+  the team name + settings gear move to the top, and a new bottom-left label
+  lists every role the user holds, joined by " · " (e.g.
+  "Administrateur · Analyste"), reusing the existing `rework.teamRoles.*`
+  labels (already shown as chips in the Members table). Falls back to
+  "Membre" when no elevated role is held. Not shown for the personal space,
+  or for a non-member merely browsing a public/marketplace team pre-join
+  (`selectedTeam.is_member`).
+- Backend: new `TeamWithPermissions.my_relations` field — see
+  `CONTROL-PLANE-PRODUCT-CONTRACT.md` §26 for why `permissions` alone
+  couldn't reliably answer "is this user actually team_analyst".
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
 ### `Toast` / `ToastProvider`
 
 **Location:** `src/rework/components/shared/molecules/Toast/Toast.tsx`

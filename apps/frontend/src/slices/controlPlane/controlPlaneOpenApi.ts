@@ -1399,6 +1399,7 @@ export type TeamPermission =
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
   | "can_read_conversations_for_evaluation";
+export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type RetentionFieldView = {
   platform_max?: string | null;
   team_value?: string | null;
@@ -1422,6 +1423,7 @@ export type TeamWithPermissions = {
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
+  my_relations?: UserTeamRelation[];
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
@@ -1459,7 +1461,6 @@ export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
   /** Banner image file (max 5MB, JPEG/PNG/WebP) */
   file: string;
 };
-export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type TeamMember = {
   type?: "user";
   relations: UserTeamRelation[];

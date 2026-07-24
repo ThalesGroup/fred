@@ -34,6 +34,9 @@ interface TeamSelectionItemProps {
   avatarColor?: TeamColor;
   icon?: IconProps;
   activityDot?: boolean;
+  /** Shown bottom-right of the avatar when the current user is team_admin
+   *  of this team (#2100). */
+  adminBadge?: boolean;
 }
 
 export default function TeamSelectionItem({
@@ -45,6 +48,7 @@ export default function TeamSelectionItem({
   avatarColor,
   icon = { category: "outlined", type: "groups", filled: true },
   activityDot = false,
+  adminBadge = false,
 }: TeamSelectionItemProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
@@ -113,6 +117,11 @@ export default function TeamSelectionItem({
         </div>
       </Link>
       {activityDot && <span className={styles.activityDot} aria-hidden="true" />}
+      {adminBadge && (
+        <span className={styles.adminBadge} aria-hidden="true">
+          <Icon category="outlined" type="shield" filled />
+        </span>
+      )}
       {isVisible &&
         createPortal(
           <span id={tooltipId} role="tooltip" className={styles.teamTooltip} style={tooltipStyle}>

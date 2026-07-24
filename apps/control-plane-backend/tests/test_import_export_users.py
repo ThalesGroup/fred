@@ -209,6 +209,24 @@ class _FakeTeamRebac:
             }
         return set()
 
+    # `_get_user_roles_in_team` (now also called from `TeamWithPermissions`
+    # builders, #2100) reads the literal persisted tuple rather than the
+    # computed TEAM_MEMBER relation — mirror that against this fake's own
+    # relation log instead of `team_admins`.
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        **_kw: Any,
+    ) -> bool:
+        return any(
+            r.subject.id == subject.id
+            and r.relation == relation
+            and str(r.resource.id) == str(resource.id)
+            for r in self.team_relations
+        )
+
 
 class _SpyNoopRebac(NoopRebacEngine):
     """The real production no-op engine (`NoopRebacEngine`), spied on rather

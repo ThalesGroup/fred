@@ -1427,3 +1427,41 @@ reaches a settings surface, scoped by their existing per-section capability
 gates (a plain member sees a read-only Members list plus a new "Leave team"
 action; elevated roles keep today's full panel plus the same action). No new
 `TeamPermission` was added — see RFC Part 9 §45 for why.
+
+## 26. Contract Notes — #2100, `TeamWithPermissions.my_relations`
+
+**New field, additive only.** `TeamWithPermissions` (`GET /teams/{team_id}`,
+`create_team`, `update_team`, and the bootstrap's `active_team`) gains
+`my_relations: list[UserTeamRelation]` — the caller's own raw role relations
+on that team (`team_admin`/`team_editor`/`team_analyst`/`team_member`), the
+same set already exposed for other members via `TeamMember.relations`.
+
+**Why `permissions` alone was not enough:** `can_run_evaluations` and
+`can_manage_evaluation_corpus` are granted to both `team_analyst` and
+`team_admin` (schema.fga union), so a plain `team_admin` with no explicit
+`team_analyst` grant would already show those permissions — deriving an
+"Analyst" role badge from `permissions` would mislabel every admin as an
+analyst too. `team_admin` (`can_administer_admins`) and `team_editor`
+(`can_update_agents`) remain independently and reliably derivable from
+`permissions`, but `my_relations` is now the single unambiguous source for
+all three, used by the frontend's team-role display (§ below).
+
+Personal teams report the fixed literal `["team_editor"]` (matching their
+already-hardcoded `permissions`) rather than a live ReBAC lookup — see
+`teams/system.py::build_personal_team`.
+
+**Frontend:**
+
+- `TeamSelectionItem` (left team rail): a 14×14 Shield badge (bottom-right of
+  the avatar) appears when the current user is listed in that team's
+  `admins` (`Team.admins`, already present — no new data needed for this
+  part; `my_relations` is not involved here since the rail only needs a
+  boolean, not the full role set).
+- `TeamContentNavbar` (team banner): the name/gear row moves to the top of
+  the banner; a new bottom-left label lists every role the user holds,
+  joined by " · " (e.g. "Administrateur · Analyste"), reusing the existing
+  `rework.teamRoles.*` i18n labels, falling back to "Membre" when no
+  elevated role is held. Hidden for the personal space and for a non-member
+  merely browsing a public/marketplace team pre-join (`is_member`).
+
+`controlPlaneOpenApi.ts` regenerated (`make update-control-plane-api`).

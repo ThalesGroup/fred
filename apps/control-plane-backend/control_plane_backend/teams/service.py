@@ -459,9 +459,13 @@ async def create_team(
     permissions = await _get_team_permissions_for_user(
         rebac, user, team_id, consistency_token
     )
+    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
     retention = await _resolve_team_retention_view(team_id, deps)
     return TeamWithPermissions(
-        **teams[0].model_dump(), permissions=permissions, retention=retention
+        **teams[0].model_dump(),
+        permissions=permissions,
+        my_relations=my_relations,
+        retention=retention,
     )
 
 
@@ -521,9 +525,13 @@ async def get_team_by_id(
         team_id,
         consistency_token,
     )
+    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
     retention = await _resolve_team_retention_view(team_id, deps)
     return TeamWithPermissions(
-        **teams[0].model_dump(), permissions=permissions, retention=retention
+        **teams[0].model_dump(),
+        permissions=permissions,
+        my_relations=my_relations,
+        retention=retention,
     )
 
 
@@ -631,9 +639,13 @@ async def update_team(
         team_id,
         consistency_token,
     )
+    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
     retention = await _resolve_team_retention_view(team_id, deps)
     return TeamWithPermissions(
-        **teams[0].model_dump(), permissions=permissions, retention=retention
+        **teams[0].model_dump(),
+        permissions=permissions,
+        my_relations=my_relations,
+        retention=retention,
     )
 
 
