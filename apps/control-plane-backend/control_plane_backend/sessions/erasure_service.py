@@ -164,6 +164,7 @@ class ConversationErasureService:
         base_url, resolve_error = await self._resolve_runtime_base_url(
             team_id=team_id,
             agent_instance_id=session.agent_instance_id,
+            source_runtime_id=session.source_runtime_id,
         )
         if base_url is None:
             for store in (STORE_CHECKPOINT, STORE_HISTORY):
@@ -248,37 +249,50 @@ class ConversationErasureService:
         *,
         team_id: TeamId,
         agent_instance_id: str | None,
+        source_runtime_id: str | None,
     ) -> tuple[str | None, str | None]:
         """Resolve the server-side runtime `base_url` for a session's runtime.
+
+        `source_runtime_id` names a platform-config-level runtime catalog entry
+        (`runtime_catalog_sources`), not agent-instance-row data — it is
+        immutable once an instance is created. Prefer the copy captured on the
+        session at `create_session` time, so a *later* agent-instance deletion
+        can never strand this resolution (issue #2089, RFC §7: the instance row
+        used to be the *only* path here, and it does not survive the instance
+        being unenrolled). Fall back to a live instance lookup only for rows
+        that predate this column.
 
         Returns `(base_url, None)` on success, or `(None, error)` when the
         runtime cannot be resolved — no `agent_instance_id`, an unknown
         instance, or a disabled/missing runtime source. Callers record the
         error rather than guessing a runtime (A0).
         """
-        if agent_instance_id is None:
-            return None, "unresolved runtime: session has no agent_instance_id"
+        resolved_source_id = source_runtime_id
+        if resolved_source_id is None:
+            if agent_instance_id is None:
+                return None, "unresolved runtime: session has no agent_instance_id"
 
-        instance = await self._deps.get_agent_instance_store().get_for_team(
-            agent_instance_id, team_id
-        )
-        if instance is None:
-            return None, (
-                f"unresolved runtime: agent instance {agent_instance_id!r} "
-                "not found for team"
+            instance = await self._deps.get_agent_instance_store().get_for_team(
+                agent_instance_id, team_id
             )
+            if instance is None:
+                return None, (
+                    f"unresolved runtime: agent instance {agent_instance_id!r} "
+                    "not found for team"
+                )
+            resolved_source_id = instance.source_runtime_id
 
         source = next(
             (
                 s
                 for s in self._deps.configuration.platform.runtime_catalog_sources
-                if s.runtime_id == instance.source_runtime_id and s.enabled
+                if s.runtime_id == resolved_source_id and s.enabled
             ),
             None,
         )
         if source is None:
             return None, (
-                f"unresolved runtime: source {instance.source_runtime_id!r} "
+                f"unresolved runtime: source {resolved_source_id!r} "
                 "is disabled or missing"
             )
         return source.base_url, None

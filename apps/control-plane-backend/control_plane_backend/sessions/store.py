@@ -39,6 +39,7 @@ class SessionMetadataRecord:
         agent_instance_id: str | None,
         user_id: str | None,
         title: str | None,
+        source_runtime_id: str | None = None,
         context_prompt_ids: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -46,6 +47,7 @@ class SessionMetadataRecord:
         self.session_id = session_id
         self.team_id = team_id
         self.agent_instance_id = agent_instance_id
+        self.source_runtime_id = source_runtime_id
         self.user_id = user_id
         self.title = title
         self.context_prompt_ids = context_prompt_ids or []
@@ -60,6 +62,7 @@ def _row_to_record(
         session_id=row.session_id,
         team_id=TeamId(row.team_id),
         agent_instance_id=row.agent_instance_id,
+        source_runtime_id=row.source_runtime_id,
         user_id=row.user_id,
         title=row.title,
         context_prompt_ids=context_prompt_ids or [],
@@ -136,6 +139,7 @@ class SessionMetadataStore:
             session_id=record.session_id,
             team_id=str(record.team_id),
             agent_instance_id=record.agent_instance_id,
+            source_runtime_id=record.source_runtime_id,
             user_id=record.user_id,
             title=record.title,
             created_at=record.created_at or now,

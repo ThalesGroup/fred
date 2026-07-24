@@ -1249,6 +1249,12 @@ items:
       additive DOC-RENAME and DOC-TAGS document features.
       Deferred follow-ups (not in 2.0.2): member-removal task emission; real-conversation
       evaluation execution + cancel; evaluation authz gap (EVAL-01).
+      2026-07-24 bug fix (RFC §7, issue #2089): deleting an agent instance permanently
+      blocked erasure of any session that had used it — runtime resolution depended solely
+      on the (now-deleted) agent_instance row, so the checkpoint/history erase failed forever
+      and the purge queue retried without ever converging (visibly flagged `stalled` after 5
+      attempts, but never actually erased). Fixed by capturing source_runtime_id on
+      session_metadata at create_session time so resolution survives instance deletion.
 
   - id: CTRLP-13
     title: "RGPD lifecycle completion — observable erasure for member removal + idle expiry"

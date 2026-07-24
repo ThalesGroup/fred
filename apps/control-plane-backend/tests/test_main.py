@@ -38,6 +38,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     build_product_service_dependencies,
 )
+from control_plane_backend.product.schemas import CreateSessionRequest
 from control_plane_backend.product.service import (
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
@@ -242,6 +243,16 @@ class _FakeSessionMetadataStore:
 
     def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
         self._records: list[SessionMetadataRecord] = list(records or [])
+
+    async def create(self, record: SessionMetadataRecord) -> SessionMetadataRecord:
+        from control_plane_backend.sessions.store import (
+            SessionMetadataAlreadyExistsError,
+        )
+
+        if any(r.session_id == record.session_id for r in self._records):
+            raise SessionMetadataAlreadyExistsError(record.session_id)
+        self._records.append(record)
+        return record
 
     async def update_last_activity(
         self,
@@ -2463,6 +2474,61 @@ async def test_delete_team_session_returns_404_for_other_user_session(
     assert store._records[0].title == "Owned by Alice"
 
 
+@pytest.mark.asyncio
+async def test_create_session_persists_source_runtime_id_from_live_instance() -> None:
+    """`create_session` must capture `source_runtime_id` from the (currently
+    live) agent instance, so erasure can later resolve the runtime even if the
+    instance is deleted before the session is (issue #2089, RFC §7)."""
+    session_store = _FakeSessionMetadataStore([])
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+    )
+
+    await product_service.create_session(
+        KeycloakUser(uid="admin", username="admin", roles=[]),
+        TeamId("personal"),
+        CreateSessionRequest(
+            session_id="session-1", agent_instance_id="instance-1", title="New chat"
+        ),
+        deps,
+    )
+
+    assert len(session_store._records) == 1
+    assert session_store._records[0].source_runtime_id == "runtime-a"
+
+
+@pytest.mark.asyncio
+async def test_create_session_leaves_source_runtime_id_none_without_agent_instance() -> (
+    None
+):
+    """No `agent_instance_id` on the request → no instance lookup, no
+    `source_runtime_id` — matches a personal-space session with no managed
+    agent bound yet."""
+    session_store = _FakeSessionMetadataStore([])
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore([]),
+    )
+
+    await product_service.create_session(
+        KeycloakUser(uid="admin", username="admin", roles=[]),
+        TeamId("personal"),
+        CreateSessionRequest(session_id="session-1", title="New chat"),
+        deps,
+    )
+
+    assert session_store._records[0].source_runtime_id is None
+
+
 def _patch_runtime_erase_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make erase_session's runtime step succeed for HTTP delete tests.
 
@@ -2474,7 +2540,11 @@ def _patch_runtime_erase_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """
 
     async def _resolve(
-        self: Any, *, team_id: Any, agent_instance_id: Any
+        self: Any,
+        *,
+        team_id: Any,
+        agent_instance_id: Any,
+        source_runtime_id: Any = None,
     ) -> tuple[str, None]:
         return "http://runtime-a.internal", None
 
@@ -3274,6 +3344,72 @@ async def test_erase_session_runtime_instance_not_found_records_ok_false_no_http
     # Retry-safety: metadata retained (deleted last, only on full success).
     assert by_store["session_metadata"].ok is False
     assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_survives_agent_instance_deletion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #2089 / RFC §7 regression: deleting an agent instance must not
+    permanently block erasure of sessions that used it.
+
+    Reproduces the live bug exactly: an agent instance is deleted (its
+    `agent_instance_store` row is gone, unlike
+    `test_erase_session_runtime_instance_not_found_records_ok_false_no_http`
+    above, which covers the still-permanent case of a pre-migration session
+    with no stored `source_runtime_id`). Here the session carries the
+    `source_runtime_id` captured at `create_session` time, so
+    `_resolve_runtime_base_url` must resolve the runtime from that stored
+    value instead of re-deriving it from the now-deleted instance row —
+    erasure converges instead of leaving the session permanently un-erasable.
+    """
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                source_runtime_id="runtime-a",
+                user_id="admin",
+                title="Session on a since-deleted agent instance",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        # The agent instance is gone (unenrolled) — empty store, exactly like
+        # a real deleted instance: `get_for_team` returns None.
+        agent_instance_store=_FakeAgentInstanceStore([]),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # The runtime WAS resolved (from the session's stored source_runtime_id)
+    # and its checkpoint/history WERE actually purged — not just skipped.
+    assert len(runtime_calls) == 2
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    assert by_store["session_metadata"].ok is True
+    assert receipt.ok is True
+    # Convergence: the erase actually completes and the row is gone — this is
+    # the part that never happened before the fix (it retried forever).
+    assert session_store._records == []
 
 
 @pytest.mark.asyncio

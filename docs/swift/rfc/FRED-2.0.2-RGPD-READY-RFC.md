@@ -232,3 +232,70 @@ No schema change is required: `ErasureReason` already enumerates
 Team-wide deletion and bulk conversation deletion remain out of scope (no such flow exists).
 Evaluation-side deferrals (real-conversation execution + cancel, evaluation authz) remain
 tracked under EVAL-01/EVAL-03, not here.
+
+---
+
+## 7. Amendment — runtime resolution survives agent-instance deletion (bug fix)
+
+**Status:** shipped 2026-07-24. Found live via the `live-observability-session` skill
+(issue #2089), not a regression on this branch — present since 2.0.2 shipped.
+
+### 7.1 Problem
+
+DoD-1 promises erasure is retry-safe and converges: "no store is left orphaned and no queue
+entry is stuck." That promise silently broke for one path: `DELETE
+/teams/{team_id}/agent-instances/{id}` is an unconditional local metadata delete (§3 "unbinding
+is a local metadata deletion rather than a runtime call") — it does not check for sessions still
+referencing the instance, and never touches the runtime's checkpoint/history stores.
+`ConversationErasureService._resolve_runtime_base_url` resolved a session's runtime **only** by
+re-reading the agent instance row live (`get_for_team(agent_instance_id, team_id)`) to recover
+its `source_runtime_id`. Once the instance is deleted, that lookup returns `None` forever — a
+*permanent* condition — but the erasure fan-out treated it like any other (potentially
+transient) resolution error: `runtime_checkpoint`/`runtime_history` erasure fails,
+`receipt.ok` never becomes `True`, and per §2.1 the `session_metadata` row (and every other
+already-erased store's guarantee) is retained so the erase stays "retryable." The retry is real
+(`LifecycleManagerWorkflow` reschedules every 10 minutes, §3) and visibly escalates to a
+`stalled` task after `ERASURE_STALL_AFTER_ATTEMPTS` (5) attempts — so an admin does eventually
+see it flagged — but nothing in the retry path can ever re-resolve the runtime, so the erasure
+never actually converges and the flagged item never clears. Reproduced live twice: delete an
+agent instance, delete a conversation that used it, erase always comes back incomplete.
+
+Confirmed the runtime-side checkpoint/history data is not torn down by instance deletion either
+— `unenroll_agent_instance` never calls the runtime — so this is a genuine, permanent data leak
+against the RGPD guarantee, not a cosmetic retry-count issue.
+
+### 7.2 Fix
+
+The failure was never really "the runtime is unresolvable" — `source_runtime_id` names a
+platform-config-level runtime catalog entry (`runtime_catalog_sources`), not a property of the
+instance row itself, and it is immutable after instance creation (`update_agent_instance` never
+changes it). The only thing that made resolution fail permanently was routing it exclusively
+through a row that a later, unrelated action (instance deletion) is allowed to delete.
+
+**`session_metadata` gains a nullable `source_runtime_id` column**, captured once at
+`create_session` time by resolving the (then-certainly-live) agent instance, alongside the
+existing `agent_instance_id`. `_resolve_runtime_base_url` now resolves the runtime source **from
+the session's own stored `source_runtime_id` when present**, falling back to the live
+agent-instance lookup only for pre-migration rows that predate the column. Runtime resolution no
+longer depends on the agent-instance row surviving the conversation's own lifetime — deleting an
+instance can no longer orphan erasure for sessions that used it. "Unresolved runtime" now means
+what §2.1/A0 always intended it to mean: the runtime *source itself* (the config entry) is gone
+or disabled — a real, rare, still-permanent-and-still-reported condition — never "some unrelated
+row got deleted."
+
+This is additive and backward compatible: existing rows get `source_runtime_id = NULL` and keep
+today's (already-broken, pre-existing) behavior for instances deleted *before* this migration
+ships — those are unrecoverable regardless of fix shape, since the instance→source mapping is
+already gone. The migration backfills `source_runtime_id` for every row whose `agent_instance_id`
+still resolves to a live instance at migration time, closing the gap retroactively wherever
+possible.
+
+Deliberately not pursued: relocating the runtime delete into `unenroll_agent_instance` (cascade
+at delete time, candidate (b) considered) — it would add synchronous multi-session fan-out to a
+delete endpoint and a race against concurrent session erasure, for no benefit once resolution no
+longer depends on the instance row. Also not pursued: treating an unresolved runtime as
+already-erased (candidate (a)) — verified live that the runtime-side rows are not torn down by
+instance deletion, so that path would have silently converted a visible, retryable leak into an
+invisible, permanent one. The existing `ERASURE_STALL_AFTER_ATTEMPTS` visibility escalation
+(§6-adjacent, `erasure_tasks.py`) stays as-is — it already does its one job (surface a wedged
+fan-out to an admin); this fix is what lets the retry it flags actually succeed.

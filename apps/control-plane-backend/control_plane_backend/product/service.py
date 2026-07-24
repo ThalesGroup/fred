@@ -3339,10 +3339,21 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
+    source_runtime_id: str | None = None
+    if request.agent_instance_id is not None:
+        # Capture the instance's source_runtime_id now, while it is certainly
+        # live, so a later agent-instance deletion can never strand erasure's
+        # runtime resolution for this session (issue #2089, RFC §7).
+        instance = await deps.get_agent_instance_store().get_for_team(
+            request.agent_instance_id, team_id
+        )
+        if instance is not None:
+            source_runtime_id = instance.source_runtime_id
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
+        source_runtime_id=source_runtime_id,
         user_id=user.uid,
         title=request.title,
     )
