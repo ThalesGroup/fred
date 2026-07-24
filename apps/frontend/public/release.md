@@ -1,3 +1,22 @@
+**v2.1.15** — 2026-07-24
+
+- **Summary**
+
+  Agent cards get a redesigned "more" menu with a new Duplicate action and a hover
+  tooltip showing who created or last updated the agent. Team avatars now show an admin
+  shield badge, and the team banner lists every role you hold on that team. The team
+  banner also stays legible over any custom background image and is back to its full
+  original size.
+
+- **Features**
+
+  - Agent cards: a top-right "more" menu now holds Edit and Deactivate, plus a new Duplicate action that clones an existing agent's setup into a new one, and Delete reachable directly from the card; a hover tooltip shows the agent's origin and who created or last updated it, and when (#2096, #2099)
+  - Team avatars in the left rail show an admin shield badge when you're an admin of that team, and the team banner now lists every role you hold there (#2100, #2101)
+
+- **Bug Fixes**
+
+  - The team banner stays readable over any custom banner image, and is restored to its original taller size (#2097, #2098)
+
 **v2.1.14** — 2026-07-24
 
 - **Summary**
