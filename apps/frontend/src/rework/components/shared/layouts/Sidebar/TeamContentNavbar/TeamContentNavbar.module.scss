@@ -7,7 +7,9 @@
 }
 
 /* Background and text colour are set inline from the configured team asset.
- * Height matches MarketplaceNavbar (56px) so switching contexts doesn't jump. */
+ * The team banner is intentionally taller than the marketplace/admin headers
+ * (88px vs 56px) to give the team identity more presence — matching the
+ * original design. */
 .bannerContainer {
   display: flex;
   position: relative;
@@ -16,7 +18,7 @@
   background-position: center;
   background-size: cover;
   padding: 0 var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
-  height: 56px;
+  height: 88px;
 }
 
 /* Legibility scrim: a subtle dark gradient rising from the bottom edge keeps
