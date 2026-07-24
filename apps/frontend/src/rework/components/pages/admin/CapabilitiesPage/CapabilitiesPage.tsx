@@ -209,7 +209,9 @@ export default function CapabilitiesPage() {
     },
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
-      size: "1fr",
+      // Wider than the other 1fr columns: the two reach badges (teams,
+      // personal spaces) need to sit side by side on one line, not wrap.
+      size: "1.6fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
         const personal = personalSpaceCount(cap);

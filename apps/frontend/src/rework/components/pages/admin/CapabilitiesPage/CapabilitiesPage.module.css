@@ -88,23 +88,40 @@
   font: var(--font-label-small);
 }
 
+/* Pill badge — same visual language as the team-role chips
+ * (TeamSettingsMembersTable's .roleChip): outlined pill, label-small type.
+ * Static here (no hover/active state) since these are counts, not controls. */
 .count {
-  color: var(--on-surface);
-  font: var(--font-body-medium);
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface-container-highest);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  white-space: nowrap;
 }
 
 /* Team reach and personal-space reach are different denominators, so they get
- * one line each rather than an inline "A + B" that reads as a single count. */
+ * their own badge each rather than an inline "A + B" that reads as a single
+ * count. Row, not a column stack, so the two short badges sit side by side.
+ * `nowrap` + the column's widened `1.6fr` (CapabilitiesPage.tsx) keep them on
+ * one line instead of falling back to a two-line stack. */
 .countStack {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: var(--spacing-3xs);
 }
 
 /* Muted like the neutral health cell: this is an absent value, not a number. */
 .countUnknown {
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface-container-highest);
+  padding: var(--spacing-3xs) var(--spacing-xs);
   color: var(--on-surface-muted);
-  font: var(--font-body-medium);
+  font: var(--font-label-small);
+  white-space: nowrap;
 }
 
 /* The DataTable cell is a left-aligning flex row, so cell content sits hard
