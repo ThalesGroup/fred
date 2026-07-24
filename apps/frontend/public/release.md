@@ -1,3 +1,40 @@
+**v2.1.13** — 2026-07-24
+
+- **Summary**
+
+  Teams get flexible join rules (open, request-to-join, invite-only, or closed) with
+  self-service join and leave; agent cards are redesigned with a dedicated Chat button and
+  role display; you can now drag and drop whole folders onto the document library; and
+  agents no longer surface a tool's raw internal error text as their final answer when a
+  tool call fails.
+
+- **Features**
+
+  - Teams: choose how people join — open, request-to-join, invite-only, or closed — with instant self-service join for open teams, and any member can now leave a team on their own (#2084, #2086)
+  - Redesigned agent cards: see an agent's origin and role at a glance, a dedicated Chat button, and an icon automatically guessed from its role (#2076, #2079)
+  - Drag and drop files or whole folders straight onto a library folder to start uploading (#2078, #2080)
+  - Admins can configure a custom warning banner on upload surfaces, with a one-time acknowledgment for chat attachments (#2077, #2081)
+
+- **Improvements**
+
+  - Asking an agent to "generate a PPT" or "write me a document" now reliably triggers the right capability in any phrasing, and PowerPoint generation grounds itself by searching your documents first (#2071, #2072)
+  - "PPT Filler" is now called "PowerPoint generator" in the interface (#2072)
+  - The chat's reasoning trace shows real SQL queries and document-search results with timing again, instead of a content-free "Done" (#2067)
+
+- **Bug Fixes**
+
+  - Agents no longer show a tool's raw internal error message as their final answer when a tool call fails — they retry or answer from what they already know instead (#2073)
+  - Personal team spaces no longer appear in the team marketplace (#2069)
+  - Fixed nested-folder drag-and-drop uploads failing outright (#2078)
+  - Fixed a color conflict that could corrupt error-state colors across the app after opening the document editor
+  - Fixed a crash that could occur closing a PDF viewer while a PowerPoint deck was regenerating
+  - Fixed the new-agent template picker appearing off-center with only a few templates
+  - Map locations in chat now show as a count summary instead of an interactive map, pending a replacement, due to a licensing issue with the previous map library
+
+- **Deployment note**
+
+  Additive only. The new team join-mode field is added via the standard migration step on upgrade — existing teams migrate automatically to request-only, preserving current behavior. The upload-warning banner is optional and stays off unless configured. No other operator action needed.
+
 **v2.1.11** — 2026-07-22
 
 - **Summary**

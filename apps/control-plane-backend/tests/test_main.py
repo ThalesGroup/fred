@@ -51,6 +51,7 @@ from control_plane_backend.teams.schemas import (
 )
 from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
+    JoiningMode,
     KeycloakUser,
     OrganizationPermission,
     RelationType,
@@ -570,7 +571,7 @@ async def _fake_get_team_by_id(
         id=TeamId(_team_id),
         name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
         member_count=1,
-        is_private=True,
+        joining_mode=JoiningMode.CLOSED,
         admins=[],
         permissions=[],
     )
@@ -748,7 +749,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "member_count": 1,
             "admins": [],
             "is_member": True,
-            "is_private": True,
+            "joining_mode": "closed",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -801,8 +802,12 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
             return permission == OrganizationPermission.CAN_MANAGE_PLATFORM
 
         # AUTHZ-05 review item 9: `_list_teams` (called from bootstrap's team
-        # listing) now also touches these two collaborators.
+        # listing) now also touches these collaborators.
         async def ensure_team_organization_relations(self, _team_ids) -> str | None:
+            return None
+
+        # TEAM-09: `_list_teams` also lazily backfills marketplace visibility.
+        async def ensure_team_public_relations(self, _team_ids) -> str | None:
             return None
 
         async def lookup_user_resources(
@@ -1275,7 +1280,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "member_count": 1,
         "admins": [],
         "is_member": True,
-        "is_private": True,
+        "joining_mode": "closed",
         "permissions": [
             "can_read",
             "can_update_resources",
@@ -1570,7 +1575,7 @@ async def test_agent_instance_mutations_require_can_update_agents(
             id=TeamId(str(team_id)),
             name=str(team_id),
             member_count=1,
-            is_private=False,
+            joining_mode=JoiningMode.OPEN,
             admins=[],
             permissions=[],
         )
@@ -4577,7 +4582,7 @@ async def test_update_team_checks_can_update_info_permission(
             "/control-plane/v1/teams/thales",
             json={
                 "description": "Updated description",
-                "is_private": False,
+                "joining_mode": "open",
                 "banner_image_url": "https://example.test/banner.webp",
             },
         )
@@ -4589,7 +4594,7 @@ async def test_update_team_checks_can_update_info_permission(
             "thales",
             {
                 "description": "Updated description",
-                "is_private": False,
+                "joining_mode": "open",
                 "banner_image_url": "https://example.test/banner.webp",
             },
         )
@@ -4601,7 +4606,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """AUTHZ-05 review item 9: `_enrich_teams_with_membership` renders directly off
-    the `TeamMetadata` rows it's handed (description/is_private/banner) — there is
+    the `TeamMetadata` rows it's handed (description/joining_mode/banner) — there is
     no separate Keycloak-group-summary type or admin fetch anymore."""
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_teams_with_membership
@@ -4656,7 +4661,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
                 id=TeamId("team-1"),
                 name="Team 1",
                 description="desc",
-                is_private=False,
+                joining_mode=JoiningMode.OPEN,
                 banner_object_storage_key="teams/team-1/banner-1.png",
             )
         ],
@@ -4665,7 +4670,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
 
     assert len(teams) == 1
     assert teams[0].description == "desc"
-    assert teams[0].is_private is False
+    assert teams[0].joining_mode == JoiningMode.OPEN
     assert teams[0].banner_image_url == "https://example.test/banner.png"
 
 
@@ -7812,7 +7817,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
             name="Thales",
             member_count=1,
             is_member=False,
-            is_private=True,
+            joining_mode=JoiningMode.CLOSED,
             max_resources_storage_size=5368709120,
             current_resources_storage_size=0,
         ),
@@ -7821,7 +7826,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
             name="Fredlab",
             member_count=1,
             is_member=False,
-            is_private=False,
+            joining_mode=JoiningMode.OPEN,
             max_resources_storage_size=5368709120,
             current_resources_storage_size=0,
         ),

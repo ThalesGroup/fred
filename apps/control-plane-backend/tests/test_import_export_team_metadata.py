@@ -72,7 +72,7 @@ async def _import(bundle_bytes: bytes, engine: AsyncEngine) -> MigrationReport:
 
 @pytest.mark.asyncio
 async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -> None:
-    """description, privacy, banner, storage sizes, retention + audit all survive."""
+    """description, joining_mode, banner, storage sizes, retention + audit all survive."""
     created = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
     updated = datetime(2026, 2, 3, 4, 5, 6, tzinfo=timezone.utc)
     source = await _make_engine(tmp_path, "source.sqlite3")
@@ -84,7 +84,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
                 id="team-alpha",
                 name="Alpha",
                 description="Alpha team space",
-                is_private=False,
+                joining_mode="open",
                 banner_object_storage_key="teams/team-alpha/banner.png",
                 max_resources_storage_size=5_000_000,
                 current_resources_storage_size=1_234,
@@ -113,7 +113,7 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
 
         assert imported.name == "Alpha"
         assert imported.description == "Alpha team space"
-        assert imported.is_private is False
+        assert imported.joining_mode == "open"
         assert imported.banner_object_storage_key == "teams/team-alpha/banner.png"
         assert imported.max_resources_storage_size == 5_000_000
         assert imported.current_resources_storage_size == 1_234
@@ -143,7 +143,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
                 id="team-beta",
                 name="Beta",
                 description="Exported description",
-                is_private=True,
+                joining_mode="closed",
                 team_delete_grace="P7D",
             ),
         )
@@ -154,7 +154,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
                 id="team-beta",
                 name="Beta",
                 description="Live description",
-                is_private=False,
+                joining_mode="open",
                 team_delete_grace="P365D",
             ),
         )
@@ -176,7 +176,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
 
         # Unchanged — the existing row won, no clobber.
         assert row.description == "Live description"
-        assert row.is_private is False
+        assert row.joining_mode == "open"
         assert row.team_delete_grace == "P365D"
     finally:
         await source.dispose()

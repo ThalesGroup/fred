@@ -18,6 +18,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from enum import Enum
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -36,9 +37,21 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class JoiningMode(str, Enum):
+    """TEAM-09 (RFC FRED-TEAM-CONFIG-RFC.md §5.1.1): replaces the former
+    standalone `is_private` bool. Gates only whether/how a user can become a
+    member — never marketplace visibility, which is now unconditional for
+    every team (see `RebacEngine.ensure_team_public_relations`)."""
+
+    OPEN = "open"
+    REQUEST_ONLY = "request_only"
+    INVITE_ONLY = "invite_only"
+    CLOSED = "closed"
+
+
 class TeamMetadataPatch(BaseModel):
     description: str | None = Field(default=None, max_length=180)
-    is_private: bool | None = None
+    joining_mode: JoiningMode | None = None
     banner_object_storage_key: str | None = Field(default=None, max_length=300)
     banner_image_url: str | None = Field(default=None, max_length=300)
     # CTRLP-12 (RFC §3.B): per-team retention fields, patched through the same
@@ -50,11 +63,11 @@ class TeamMetadataPatch(BaseModel):
 
     def to_store_values(self) -> dict[str, str | bool | None]:
         values: dict[str, str | bool | None] = {}
-        payload = self.model_dump(exclude_unset=True)
+        payload = self.model_dump(exclude_unset=True, mode="json")
         if "description" in payload:
             values["description"] = payload["description"]
-        if "is_private" in payload:
-            values["is_private"] = payload["is_private"]
+        if "joining_mode" in payload:
+            values["joining_mode"] = payload["joining_mode"]
         if "banner_object_storage_key" in payload:
             values["banner_object_storage_key"] = payload["banner_object_storage_key"]
         elif "banner_image_url" in payload:
@@ -73,7 +86,7 @@ class TeamMetadata(BaseModel):
     # group backs it anymore.
     name: str
     description: str | None = None
-    is_private: bool = True
+    joining_mode: JoiningMode = JoiningMode.REQUEST_ONLY
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -136,7 +149,7 @@ class TeamMetadataStore:
                 id=TeamId(row.id),
                 name=row.name,
                 description=row.description,
-                is_private=row.is_private,
+                joining_mode=JoiningMode(row.joining_mode),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,
@@ -190,7 +203,7 @@ class TeamMetadataStore:
                 id=TeamId(row.id),
                 name=row.name,
                 description=row.description,
-                is_private=row.is_private,
+                joining_mode=JoiningMode(row.joining_mode),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,
@@ -221,7 +234,7 @@ class TeamMetadataStore:
                 id=TeamId(row.id),
                 name=row.name,
                 description=row.description,
-                is_private=row.is_private,
+                joining_mode=JoiningMode(row.joining_mode),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,

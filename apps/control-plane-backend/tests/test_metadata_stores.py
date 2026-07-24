@@ -27,6 +27,7 @@ from control_plane_backend.sessions.store import (
 from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
 from fred_core.teams.metadata_store import (
+    JoiningMode,
     TeamMetadataPatch,
     TeamMetadataStore,
 )
@@ -198,8 +199,8 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
     Verify team metadata persists and later updates merge on the same record.
 
     Why this test exists:
-    - team settings such as description, privacy, and banner key are mutated
-      incrementally and must round-trip through the DB store
+    - team settings such as description, joining_mode, and banner key are
+      mutated incrementally and must round-trip through the DB store
 
     How to use it:
     - run with the offline `control-plane-backend` test suite
@@ -217,7 +218,7 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
             TeamId("fredlab"),
             TeamMetadataPatch(
                 description="Operations team",
-                is_private=False,
+                joining_mode=JoiningMode.OPEN,
                 banner_object_storage_key="teams/fredlab/banner-v1.png",
             ),
         )
@@ -229,11 +230,11 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
 
         assert created is not None
         assert created.description == "Operations team"
-        assert created.is_private is False
+        assert created.joining_mode == JoiningMode.OPEN
         assert created.banner_object_storage_key == "teams/fredlab/banner-v1.png"
         assert updated is not None
         assert updated.description == "Operations team"
-        assert updated.is_private is False
+        assert updated.joining_mode == JoiningMode.OPEN
         assert updated.banner_object_storage_key == "teams/fredlab/banner-v2.png"
         assert fetched == {
             TeamId("fredlab"): updated,

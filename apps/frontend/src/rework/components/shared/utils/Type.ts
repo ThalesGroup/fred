@@ -46,6 +46,7 @@ export const materialIcons = [
   "delete",
   "infos",
   "person",
+  "person_add",
   "arrow_drop_down",
   "arrow_back",
   "logout",

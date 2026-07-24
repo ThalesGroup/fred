@@ -383,7 +383,7 @@ def test_control_plane_api_client_injects_bearer_token_and_lists_teams() -> None
                         "owners": [],
                         "is_member": True,
                         "description": None,
-                        "is_private": True,
+                        "joining_mode": "closed",
                         "banner_image_url": None,
                     }
                 ],
@@ -508,7 +508,7 @@ def test_run_command_team_accepts_visible_team_name_selector(capsys) -> None:
                         "owners": [],
                         "is_member": True,
                         "description": None,
-                        "is_private": True,
+                        "joining_mode": "closed",
                         "banner_image_url": None,
                     }
                 ],
@@ -523,7 +523,7 @@ def test_run_command_team_accepts_visible_team_name_selector(capsys) -> None:
                     "owners": [],
                     "is_member": True,
                     "description": None,
-                    "is_private": True,
+                    "joining_mode": "closed",
                     "banner_image_url": None,
                     "permissions": ["can_read"],
                 },

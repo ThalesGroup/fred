@@ -505,6 +505,46 @@ class RebacEngine(ABC):
         ]
         return await self.add_relations(relations)
 
+    async def ensure_team_public_relations(
+        self,
+        team_ids: Iterable[str],
+    ) -> str | None:
+        """Ensure each team grants `public` (profile/discovery `can_read`) to
+        every user (TEAM-09, RFC FRED-TEAM-CONFIG-RFC.md §5.1.1).
+
+        Marketplace discovery is unconditional for every team regardless of
+        `joining_mode` — only the ability to become a member is gated (see
+        `JoiningMode`). This mirrors `ensure_team_organization_relations`
+        exactly: idempotent (`on_duplicate_writes=IGNORE` at the OpenFGA
+        write layer), called both at team creation and lazily on every team
+        listing, so it backfills every pre-existing team without a separate
+        one-off migration.
+
+        Example:
+        - Before returning `GET /teams`, ensure `user:* -> public -> team:<id>`
+          exists for every team about to be listed.
+        """
+        unique_team_ids: list[str] = []
+        seen: set[str] = set()
+        for team_id in team_ids:
+            if not team_id or team_id in seen:
+                continue
+            seen.add(team_id)
+            unique_team_ids.append(team_id)
+
+        if not unique_team_ids:
+            return None
+
+        relations = [
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            for team_id in unique_team_ids
+        ]
+        return await self.add_relations(relations)
+
     async def add_user_relation(
         self,
         user: KeycloakUser,

@@ -1403,6 +1403,9 @@
     },
     "teamCard": {
       "join": "Rejoindre",
+      "requestToJoin": "Demander",
+      "closedTeam": "Équipe fermée",
+      "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
@@ -1447,7 +1450,13 @@
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
-        "privateTeam": "Équipe privée",
+        "joiningMode": {
+          "label": "Mode d'adhésion",
+          "open": "Ouverte",
+          "requestOnly": "Sur demande",
+          "inviteOnly": "Sur invitation",
+          "closed": "Fermée"
+        },
         "teamBannerTitle": "Bannière de l'équipe",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
@@ -1466,6 +1475,16 @@
           "teamDeleteGraceDesc": "Une conversation supprimée est conservée pendant ce délai, puis effacée définitivement.",
           "maxIdle": "Durée d'inactivité maximale",
           "maxIdleDesc": "Une conversation sans activité pendant cette durée est effacée automatiquement."
+        }
+      },
+      "leaveTeam": {
+        "title": "Quitter cette équipe ?",
+        "message": "Vous perdrez l'accès à « {{teamName}} » et ses conversations seront traitées selon la politique de rétention de l'équipe, exactement comme si un administrateur vous avait retiré.",
+        "confirmLabel": "Quitter",
+        "lastAdminTooltip": "Vous êtes le seul administrateur de cette équipe — désignez un autre administrateur avant de la quitter.",
+        "errors": {
+          "summary": "Échec pour quitter l'équipe",
+          "fallbackDetail": "Impossible de quitter l'équipe."
         }
       }
     },

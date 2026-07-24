@@ -218,6 +218,11 @@ operations:
     required_permission: can_delete_team
   - service: control-plane
     method: POST
+    path: /control-plane/v1/teams/{team_id}/join
+    review_status: approved
+    required_permission: authenticated_user # TEAM-09 — not a TeamPermission gate; server-side checks the team's stored joining_mode == OPEN and grants team_member to the caller only, never another user or role (see TeamNotOpenForJoiningError)
+  - service: control-plane
+    method: POST
     path: /control-plane/v1/teams/{team_id}/rescue-admin
     review_status: approved
     required_permission: can_rescue_team_admin

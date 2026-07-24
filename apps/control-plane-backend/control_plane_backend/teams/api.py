@@ -24,6 +24,7 @@ from control_plane_backend.teams.schemas import (
     TeamMemberLastRoleError,
     TeamMemberRoleNotHeldError,
     TeamNotFoundError,
+    TeamNotOpenForJoiningError,
     TeamRescueNotOrphanedError,
     TeamWithPermissions,
     UpdateTeamRequest,
@@ -40,6 +41,7 @@ from control_plane_backend.teams.service import (
 from control_plane_backend.teams.service import (
     grant_team_member_role as grant_team_member_role_from_service,
 )
+from control_plane_backend.teams.service import join_team as join_team_from_service
 from control_plane_backend.teams.service import (
     list_all_teams_for_registry as list_all_teams_from_service,
 )
@@ -133,6 +135,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(TeamNotOpenForJoiningError)
+    async def team_not_open_for_joining_handler(
+        _request,
+        exc: TeamNotOpenForJoiningError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=exc.http_status, content={"detail": str(exc)})
+
 
 @router.get(
     "/teams",
@@ -204,6 +213,24 @@ async def update_team(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
     return await update_team_from_service(user, team_id, request, deps)
+
+
+@router.post(
+    "/teams/{team_id}/join",
+    response_model=TeamWithPermissions,
+    response_model_exclude_none=True,
+    summary="Self-service join a team open for joining (TEAM-09)",
+)
+async def join_team(
+    team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamWithPermissions:
+    """Only succeeds when the team's `joining_mode` is `OPEN` — see
+    `TeamNotOpenForJoiningError`. The caller can only ever grant themselves
+    `team_member`; this is the sole membership-write route that does not
+    require an existing administer-permission over the target team."""
+    return await join_team_from_service(user, team_id, deps)
 
 
 @router.delete(

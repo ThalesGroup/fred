@@ -86,3 +86,19 @@ export function mapTeamPermissions(permissions: TeamPermission[] | null | undefi
   }
   return flags;
 }
+
+/**
+ * True for any role above the `team_member` baseline (admin, editor, or
+ * analyst) — AUTHZ-09: since every team member can now reach the settings
+ * page (`canReadMembers`), sections meant only for elevated roles (Activity)
+ * need this narrower check instead of the membership-level one.
+ */
+export function hasElevatedTeamRole(capabilities: TeamCapabilities): boolean {
+  return (
+    capabilities.canUpdateInfo ||
+    capabilities.canUpdateResources ||
+    capabilities.canUpdateAgents ||
+    capabilities.canRunEvaluations ||
+    capabilities.canManageEvaluationCorpus
+  );
+}

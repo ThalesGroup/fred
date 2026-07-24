@@ -145,10 +145,17 @@ Can:
 - use team-managed agents
 - use prompts visible in their team context
 - manage their own personal prompts
+- leave the team (AUTHZ-09) — self-remove via
+  `DELETE /teams/{team_id}/members/{user_id}` targeting their own id, no
+  administer permission required; every other role above can leave the same
+  way
 
 Cannot:
 
 - configure any team-wide setting, policy, or shared resource
+- leave the team while they are its sole `team_admin` — the "at least one
+  `team_admin`" invariant (`### Team admin` above) is evaluated on every
+  removal, self-directed or not, and blocks this one case regardless of role
 
 ### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
 

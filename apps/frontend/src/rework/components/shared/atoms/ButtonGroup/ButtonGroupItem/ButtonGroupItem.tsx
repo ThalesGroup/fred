@@ -21,6 +21,11 @@ export interface ButtonGroupItemProps extends ComponentPropsWithRef<"button"> {
   label: string;
   icon?: IconProps;
   hasError?: boolean;
+  /** Overrides the group's `color` for this item only — e.g. a joining-mode
+   * picker where each option's selected state uses a different semantic
+   * color (success/secondary/error) rather than one color for the whole
+   * group. Falls back to the group-level `color` when omitted. */
+  color?: ColorTheme;
 }
 
 export interface ButtonGroupItemPrivateProps {

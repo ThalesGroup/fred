@@ -503,6 +503,27 @@ items:
       lint/render clean; remaining Step 6 chart gate (migration disabled by
       default) still open.
 
+  - id: AUTHZ-09
+    title: "Self-service team leave: same-identity bypass on remove_team_member"
+    status: in_progress
+    owner: Maxime
+    parent: AUTHZ-05
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md Part 9 §43-46"
+      design: "docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md, docs/swift/platform/REBAC.md"
+      issue: "https://github.com/ThalesGroup/fred/issues/2085"
+    notes: >
+      Any team member may now remove themselves from a team via the
+      existing `DELETE /teams/{team_id}/members/{user_id}` endpoint — the
+      admin-only "administer" permission check is bypassed when
+      `user.uid == user_id`, everything else (last-admin invariant,
+      session-purge retention policy, no route/contract change) is
+      unchanged. Frontend: the team-settings entry point (gear icon) opens
+      from admin-only (`canAdministerAdmins`) to any member
+      (`canReadMembers`); plain members see a read-only Members list plus a
+      new "Leave team" action, disabled only for the sole remaining
+      `team_admin`.
+
   - id: AUTHZ-08
     title: "Personal-team ReBAC gap: real self-provisioned tuple, write-guarded"
     status: done
@@ -2114,6 +2135,24 @@ items:
 
   # TEAM-08 (team governance console) folded into CTRLP-12 — the single 2.0.2
   # RGPD-ready increment. See docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md §3.B.
+
+  - id: TEAM-09
+    title: "Joining mode: replace is_private with a 4-state marketplace join model"
+    status: in_progress
+    owner: Maxime
+    parent: TEAM-01
+    refs:
+      rfc: "docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md §5.1.1"
+      issue: "https://github.com/ThalesGroup/fred/issues/2084"
+    notes: >
+      Replaces TeamMetadata's is_private bool with a JoiningMode enum (OPEN,
+      REQUEST_ONLY, INVITE_ONLY, CLOSED). Adds the first self-service
+      membership write path, POST /teams/{team_id}/join, gated on
+      joining_mode == OPEN and restricted to self-granting team_member only.
+      Existing teams migrate to REQUEST_ONLY regardless of prior is_private
+      (matches current mailto-based behavior exactly). REQUEST_ONLY's
+      marketplace "Request" button ships disabled pending a notification
+      system to route requests to team_admins.
 
   # ── QUALITY ───────────────────────────────────────────────────────────
 
