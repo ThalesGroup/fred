@@ -38,22 +38,21 @@
 .category {
   color: var(--on-surface-muted);
   font: var(--font-label-small);
-  font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .name {
   color: var(--primary);
-  font: var(--font-title-small);
+  font: var(--font-body-large);
 }
 
 .description {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
   -webkit-box-orient: vertical;
 }
 
