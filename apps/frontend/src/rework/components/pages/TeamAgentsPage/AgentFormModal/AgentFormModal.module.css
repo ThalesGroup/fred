@@ -3,9 +3,8 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 1rem auto;
-  box-shadow: var(--shadow-l);
   border-radius: var(--radius-l);
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   padding: var(--spacing-l);
   width: min(52rem, calc(100vw - 2rem));
 }
@@ -21,19 +20,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-}
-
-.modalIcon {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--primary-container);
-  width: 3.25rem;
-  height: 3.25rem;
-  color: var(--primary);
-  font-size: 1.75rem;
 }
 
 .modalTitleBlock {
@@ -58,10 +44,6 @@
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
-}
-
-.modalActionsBack {
-  margin-right: auto;
 }
 
 .modalContent {

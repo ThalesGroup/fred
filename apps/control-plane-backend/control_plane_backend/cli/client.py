@@ -326,6 +326,7 @@ class ControlPlaneApiClient:
         *,
         template_id: str,
         display_name: str,
+        usage_statement: str,
         description: str | None = None,
     ) -> ManagedAgentInstanceSummary:
         """Enroll one discovered template as a managed agent instance."""
@@ -334,6 +335,7 @@ class ControlPlaneApiClient:
             template_id=template_id,
             display_name=display_name,
             description=description,
+            usage_statement=usage_statement,
         )
         payload = self._get_json_payload(
             "POST",

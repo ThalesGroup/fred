@@ -1312,7 +1312,9 @@ def run_command(
 
     if command == "/enroll":
         if not args:
-            raise ValueError("Usage: /enroll <template_id> [display_name]")
+            raise ValueError(
+                "Usage: /enroll <template_id> [display_name] [usage_statement]"
+            )
         team_id = _resolve_team_id(ctx, None)
         template_id = args[0]
         templates = ctx.state.known_templates or ctx.client.list_agent_templates(
@@ -1327,11 +1329,13 @@ def run_command(
                 f"Unknown template_id {template_id!r}. Run /templates first for the current team."
             )
         display_name = args[1] if len(args) > 1 else template.display_name
+        usage_statement = args[2] if len(args) > 2 else template.description
         created = ctx.client.enroll_agent_instance(
             team_id,
             template_id=template.template_id,
             display_name=display_name,
             description=template.description,
+            usage_statement=usage_statement,
         )
         ctx.state.known_instances = ctx.client.list_agent_instances(team_id)
         _print_model_json(

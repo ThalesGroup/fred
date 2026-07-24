@@ -34,6 +34,8 @@ export interface ButtonGroupItemPrivateProps {
   selected: boolean;
   /** Drives ARIA role/state: a mutually-exclusive "radio" pick or a "tabs" strip. */
   variant: "radio" | "tabs";
+  /** Stretches this item to share the group's full width equally with its siblings. */
+  fullWidth?: boolean;
 }
 
 export default function ButtonGroupItem({
@@ -44,6 +46,7 @@ export default function ButtonGroupItem({
   size,
   hasError,
   variant,
+  fullWidth,
   ref,
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
@@ -53,6 +56,7 @@ export default function ButtonGroupItem({
       className={styles.buttonGroupItem}
       data-color={color}
       data-size={size}
+      data-full-width={fullWidth}
       role={variant === "radio" ? "radio" : "tab"}
       aria-checked={variant === "radio" ? selected : undefined}
       aria-selected={variant === "tabs" ? selected : undefined}

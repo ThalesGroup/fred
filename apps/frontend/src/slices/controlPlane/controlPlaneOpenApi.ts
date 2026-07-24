@@ -1680,6 +1680,8 @@ export type ManagedAgentInstanceSummary = {
   description?: string | null;
   /** Short one-line summary of what this agent does, distinct from the longer `description` — shown on the agent card so a teammate can recall the agent's purpose without reading the full description. Server-set to `display_name` at enrollment until independently edited (#2076). */
   role: string;
+  /** User-authored intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) captured in the agent form's Engagement tab, used to screen for platform/organization risk (#2105). Empty for agents enrolled before #2105 until independently edited — required at creation and enforced by the agent edit form on save, but omittable on `UpdateAgentInstanceRequest` (like `role`) so partial updates such as the enable/disable toggle are unaffected. */
+  usage_statement?: string;
   status: "enabled" | "disabled";
   /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
   suspension_reason?: SuspensionReason | null;
@@ -1720,6 +1722,8 @@ export type CreateAgentInstanceRequest = {
   description?: string | null;
   /** Optional short one-line summary of what this agent does. Defaults to `display_name` when omitted (#2076). */
   role?: string | null;
+  /** Required intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Hard-required at creation, unlike the optional `role`. */
+  usage_statement: string;
   /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are ignored. Known values are validated against the declared field type and constraints. */
   tuning_field_values?: {
     [key: string]:
@@ -1746,6 +1750,8 @@ export type UpdateAgentInstanceRequest = {
   description?: string | null;
   /** Short one-line summary of what this agent does. Omit to leave the current role unchanged (#2076). */
   role?: string | null;
+  /** Intended-use statement (#2105). Omit to leave the current value unchanged — same convention as `role`, so partial updates like the enable/disable toggle (which PATCHes only `status`) are not forced to resupply it. The agent edit form always submits it (enforced client-side, same as `display_name`), so in practice every full-form save keeps this current, including for agents enrolled before #2105 whose stored value starts out empty. */
+  usage_statement?: string | null;
   /** Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged. */
   status?: ("enabled" | "disabled") | null;
   /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Omit the field to leave existing values unchanged; pass null to clear the stored agent tuning values. */
@@ -1871,6 +1877,8 @@ export type PromptPromoteRequest = {
 export type ManagedAgentTuning = {
   role: string;
   description: string;
+  /** User-authored statement of the intended use case for this agent instance (purpose, target users/impacted parties, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Defaults to '' so pre-#2105 rows without this key in their stored tuning_json still deserialize; the product-facing requiredness is enforced by the API layer (CreateAgentInstanceRequest and the agent form), not by this default. */
+  usage_statement?: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
   /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */

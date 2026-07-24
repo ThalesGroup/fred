@@ -61,10 +61,16 @@
 }
 
 /* Pushed flush to the card's top-right corner (#2096); does not stretch to
- * the row's full height like its siblings (the icon / name+role block). */
+ * the row's full height like its siblings (the icon / name+role block).
+ * .agentInfo's own padding (--spacing-m) would sit it further from the
+ * corner than the .actions row's info button (--spacing-s) sits from its
+ * own corner — the negative top/right margin below closes that gap so both
+ * corner buttons read at the same distance from the card edge. */
 .moreMenu {
   flex-shrink: 0;
   align-self: flex-start;
+  margin-top: calc(var(--spacing-s) - var(--spacing-m));
+  margin-right: calc(var(--spacing-s) - var(--spacing-m));
   margin-left: auto;
 }
 

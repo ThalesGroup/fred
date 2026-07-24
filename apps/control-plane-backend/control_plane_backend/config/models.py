@@ -164,6 +164,18 @@ class ManagedAgentTuning(BaseModel):
 
     role: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
+    usage_statement: str = Field(
+        default="",
+        description=(
+            "User-authored statement of the intended use case for this agent "
+            "instance (purpose, target users/impacted parties, data handled, "
+            "outputs, error impact) — used to screen for platform/organization "
+            "risk (#2105). Defaults to '' so pre-#2105 rows without this key in "
+            "their stored tuning_json still deserialize; the product-facing "
+            "requiredness is enforced by the API layer (CreateAgentInstanceRequest "
+            "and the agent form), not by this default."
+        ),
+    )
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
     # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /

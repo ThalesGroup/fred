@@ -31,6 +31,8 @@ interface ButtonGroupProps {
   variant: "radio" | "tabs";
   /** Accessible name for the group (radiogroup/tablist both need one). */
   "aria-label": string;
+  /** Stretches the group and its items to fill the parent's width instead of the default fit-content pill. */
+  fullWidth?: boolean;
   defaultSelectedIndex?: number;
   /** When provided, turns the component into a controlled tab strip. */
   selectedIndex?: number;
@@ -43,6 +45,7 @@ export default function ButtonGroup({
   color,
   variant,
   "aria-label": ariaLabel,
+  fullWidth = false,
   defaultSelectedIndex = 0,
   selectedIndex,
   onSelectedIndexChange,
@@ -124,6 +127,7 @@ export default function ButtonGroup({
   return (
     <div
       className={styles["button-group"]}
+      data-full-width={fullWidth}
       role={variant === "radio" ? "radiogroup" : "tablist"}
       aria-label={ariaLabel}
     >
@@ -137,6 +141,7 @@ export default function ButtonGroup({
           size={size}
           color={item.color ?? color}
           variant={variant}
+          fullWidth={fullWidth}
           selected={index === resolvedIndex}
           tabIndex={index === resolvedIndex ? 0 : -1}
           onClick={(e) => selectIndex(index, e)}

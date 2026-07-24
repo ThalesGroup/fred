@@ -123,6 +123,7 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
           createAgentInstanceRequest: {
             template_id: template.template_id,
             display_name: "Self-test (auto)",
+            usage_statement: "Automated internal self-test pipeline run — not a production agent.",
             ...(tuningFieldValues ? { tuning_field_values: tuningFieldValues } : {}),
           },
         }).unwrap();

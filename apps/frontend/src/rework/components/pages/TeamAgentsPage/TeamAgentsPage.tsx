@@ -171,6 +171,7 @@ export default function TeamAgentsPage() {
       display_name: payload.displayName,
       role: payload.role || undefined,
       description: payload.description || undefined,
+      usage_statement: payload.usageStatement,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
@@ -212,6 +213,7 @@ export default function TeamAgentsPage() {
       display_name: payload.displayName,
       role: payload.role || undefined,
       description: payload.description || undefined,
+      usage_statement: payload.usageStatement,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
@@ -290,6 +292,7 @@ export default function TeamAgentsPage() {
         displayName: newName,
         role: source.role,
         description: source.description ?? "",
+        usageStatement: source.usage_statement ?? "",
         tuningValues: (source.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: source.selected_capability_ids ?? [],
         capabilityConfigValues: extractCapabilityConfigValues(source.capability_config),
@@ -303,6 +306,7 @@ export default function TeamAgentsPage() {
       display_name: payload.displayName,
       role: payload.role || undefined,
       description: payload.description || undefined,
+      usage_statement: payload.usageStatement,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)

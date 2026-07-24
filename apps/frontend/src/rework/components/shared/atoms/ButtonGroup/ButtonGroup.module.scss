@@ -5,4 +5,8 @@
   background-color: var(--surface-container);
   padding: var(--spacing-2xs);
   width: fit-content;
+
+  &[data-full-width="true"] {
+    width: 100%;
+  }
 }

@@ -13,9 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
@@ -33,6 +31,7 @@ export type AgentFormPayload = {
   displayName: string;
   role: string;
   description: string;
+  usageStatement: string;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -72,6 +71,7 @@ type FormState = {
   displayName: string;
   role: string;
   description: string;
+  usageStatement: string;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -81,11 +81,10 @@ type FormState = {
   capabilityBlockingErrors: Record<string, string | null>;
 };
 
+/** Mirrors AgentFormBody's routeField — only "Prompts" gets its own tab, everything else lands in "general". */
 function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
   const g = (field.ui?.group ?? "").toLowerCase().trim();
-  if (g === "prompts") return "prompts";
-  if (g === "chat") return "chat";
-  return "settings";
+  return g === "prompts" ? "prompts" : "general";
 }
 
 /**
@@ -122,6 +121,7 @@ export function buildAgentFormSubmitPayload(
     displayName: form.displayName.trim(),
     role: form.role.trim(),
     description: form.description.trim(),
+    usageStatement: form.usageStatement.trim(),
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
@@ -159,7 +159,7 @@ export default function AgentFormModal({
   onDelete,
 }: AgentFormModalProps) {
   const { t, i18n } = useTranslation();
-  const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
+  const { agentsNicknameSingular } = useFrontendProperties();
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
   const [step, setStep] = useState<1 | 2>(1);
@@ -169,6 +169,7 @@ export default function AgentFormModal({
     displayName: "",
     role: "",
     description: "",
+    usageStatement: "",
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -176,12 +177,12 @@ export default function AgentFormModal({
     capabilityBlockingErrors: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [activeSection, setActiveSection] = useState<SectionKey>("settings");
+  const [activeSection, setActiveSection] = useState<SectionKey>("general");
 
   useEffect(() => {
     if (!isOpen) {
       setSubmitAttempted(false);
-      setActiveSection("settings");
+      setActiveSection("general");
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -190,6 +191,7 @@ export default function AgentFormModal({
         displayName: editInstance.display_name,
         role: editInstance.role,
         description: editInstance.description ?? "",
+        usageStatement: editInstance.usage_statement ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -205,6 +207,7 @@ export default function AgentFormModal({
         displayName: "",
         role: "",
         description: "",
+        usageStatement: "",
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -228,13 +231,14 @@ export default function AgentFormModal({
       displayName: tpl?.display_name ?? "",
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
+      usageStatement: "",
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: [],
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
       capabilityBlockingErrors: {},
     });
-    setActiveSection("settings");
+    setActiveSection("general");
     setSubmitAttempted(false);
     setStep(2);
   };
@@ -280,17 +284,35 @@ export default function AgentFormModal({
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
-  const isFormValid = !!form.templateId && !!form.displayName.trim() && !missingRequired && !capabilityBlocked;
+  const isFormValid =
+    !!form.templateId &&
+    !!form.displayName.trim() &&
+    !!form.usageStatement.trim() &&
+    !missingRequired &&
+    !capabilityBlocked;
   const canSave = isFormValid && !isSubmitting;
 
   const errorSections = new Set<SectionKey>(
-    submitAttempted ? requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)) : [],
+    submitAttempted
+      ? [
+          ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
+          ...(!form.displayName.trim() ? (["general"] as const) : []),
+          ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
+        ]
+      : [],
   );
 
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (!canSave) {
-      const firstErrorSection = (["prompts", "settings", "chat"] as const).find((s) => {
+      const firstErrorSection = (["general", "prompts", "commitments"] as const).find((s) => {
+        if (s === "general") {
+          return (
+            !form.displayName.trim() ||
+            requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === "general")
+          );
+        }
+        if (s === "commitments") return !form.usageStatement.trim();
         return requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === s);
       });
       if (firstErrorSection) setActiveSection(firstErrorSection);
@@ -304,34 +326,23 @@ export default function AgentFormModal({
       ? t("rework.teams.formAgent.titleEdit", { agent: editInstance?.display_name ?? "" })
       : t("rework.teams.formAgent.titleCreate", { agentsNicknameSingular });
 
+  const teamLabel = teamName || t("rework.sidebar.team.userTeam");
+  const subtitle = selectedTemplate
+    ? t("rework.teams.formAgent.subtitleWithTemplate", { team: teamLabel, template: selectedTemplate.display_name })
+    : t("rework.teams.formAgent.subtitle", { team: teamLabel });
+
   return (
-    <FullPageModal isOpen={isOpen} onClose={onClose} id="agent-form-modal">
+    <FullPageModal isOpen={isOpen} onClose={onClose} id="agent-form-modal" background="container">
       <div className={styles.modalCard}>
         <div className={styles.modalHeader}>
           <div className={styles.modalPresentation}>
-            <span className={styles.modalIcon}>
-              <Icon category="outlined" type={agentIconName as IconType} filled={true} />
-            </span>
             <div className={styles.modalTitleBlock}>
               <div className={styles.modalTitle}>{title}</div>
-              <div className={styles.modalSubtitle}>{teamName || t("rework.sidebar.team.userTeam")}</div>
+              <div className={styles.modalSubtitle}>{subtitle}</div>
             </div>
           </div>
 
           <div className={styles.modalActions}>
-            {mode === "create" && step === 2 && (
-              <div className={styles.modalActionsBack}>
-                <Button
-                  color="on-surface"
-                  variant="text"
-                  size="medium"
-                  icon={{ category: "outlined", type: "arrow_back" }}
-                  onClick={() => setStep(1)}
-                >
-                  {t("rework.back")}
-                </Button>
-              </div>
-            )}
             <Button color="primary" variant="text" size="medium" onClick={onClose}>
               {t("rework.cancel")}
             </Button>
@@ -359,6 +370,7 @@ export default function AgentFormModal({
               displayName={form.displayName}
               role={form.role}
               description={form.description}
+              usageStatement={form.usageStatement}
               tuningFieldValues={form.tuningValues}
               selectedCapabilityIds={form.selectedCapabilityIds}
               capabilityConfigValues={form.capabilityConfigValues}
@@ -373,6 +385,7 @@ export default function AgentFormModal({
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
               onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+              onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
               onCapabilityConfigChange={handleCapabilityConfigChange}
