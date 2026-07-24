@@ -94,9 +94,18 @@ export function RichInputField({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, maxHeight);
-    el.style.height = `${next}px`;
-    el.style.overflowY = next >= maxHeight ? "auto" : "hidden";
+    const overflowing = el.scrollHeight >= maxHeight;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = overflowing ? "auto" : "hidden";
+    // Collapsing to "auto" above shrinks the box for one tick; while it's
+    // shrunk, the browser's native caret-follow can assign scrollTop a
+    // nonzero value to keep the caret in view against that tiny transient
+    // height. Restoring the real height never resets it, so a paste or long
+    // line leaves the box permanently scrolled a few pixels down — with
+    // overflow hidden that reads as the top of the text being clipped, not
+    // scrollable. Force it back: 0 when everything fits, scrolled to the
+    // caret's end when the content exceeds maxHeight.
+    el.scrollTop = overflowing ? el.scrollHeight : 0;
   };
 
   // Reset height when value is cleared externally.
@@ -106,6 +115,7 @@ export function RichInputField({
       if (el) {
         el.style.height = "auto";
         el.style.overflowY = "hidden";
+        el.scrollTop = 0;
       }
     }
   }, [value]);
