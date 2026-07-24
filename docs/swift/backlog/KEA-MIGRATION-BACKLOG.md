@@ -155,13 +155,21 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   partial-export carries no users → `users.json`/bootstrap remains the channel. Ops fallback for
   both: SQL on the Keycloak DB (`keycloak_group`, `user_role_mapping`×`keycloak_role`).
 
+- [ ] **MIGR-05.17** — **User-state migration — future task, deliberately out of #1954 (which
+  focuses on teams). NOT MIGR-04's scope**: MIGR-04 only moves identities (Keycloak users, subs
+  preserved, ops-owned). Still unowned on the application side:
+  (a) `users.jsonl` (GCU-acceptance rows) is exported but never imported — decide re-prompt
+  everyone on swift (current behaviour) vs adding a users-row import phase;
+  (b) verify at cutover that platform-role re-provisioning actually happened — it is automatic
+  only when the bundle's `realm.json` carries `users[]` (full export); a partial-export does not,
+  and the fallback is `users.json` `platform_roles` or manual grants;
+  (c) per-user/team storage counters — run knowledge-flow's
+  `alembic/backfill/backfill_storage_usage.py` post-import (add to runbook).
+
 **Open (cutover items — see RFC §8 follow-ups):**
 - Kea-side realm-export 403: `manage-realm` alone does not satisfy `partial-export?exportClients=true`
   (needs `view-clients`, or export without clients). Must be fixed on the kea source before the
   prod dump, else teams arrive unnamed and platform roles must be provisioned via `users.json`.
-- `users` table rows (GCU acceptance) exported but not imported — decide: re-prompt everyone on
-  swift (current behaviour) or add a users-row import phase. Per-user/team storage counters are
-  covered separately by `knowledge-flow/alembic/backfill/backfill_storage_usage.py` (add to runbook).
 
 ---
 
@@ -284,8 +292,11 @@ Each row represents one backfill script or migration step.
   — *Prerequisite for KPI queries on production data*
   — depends on: MIGR-01.04 (same commit, must land first)
 
-- [ ] **MIGR-02.02** — Backfill script: migrate data from `agent` → `agent_instance`, then drop `agent`
-  — *`agent` table is the Kea model; Swift uses `agent_instance` — production data must be migrated before cutover*
+- [x] **MIGR-02.02** — Superseded (2026-07-24, #1954): the adopted cutover strategy is
+  fresh-target export-zip → import, so the kea `agent` table never exists on the swift DB and
+  there is nothing to backfill in place. The `agent` → `agent_instance` transform ships in the
+  import service (MIGR-05.03 template mapping + MIGR-05.11 prompt/tuning transfer). Only relevant
+  again if an in-place upgrade path is ever chosen.
 
 ### Optional
 
@@ -326,8 +337,8 @@ with a written rationale.
 | ---------- | ----- | ---- | --------- |
 | MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
-| MIGR-05 Metadata — platform import service | 16 | 16 | 0 (cutover decisions open, see §0bis) |
+| MIGR-05 Metadata — platform import service | 17 | 16 | 1 (MIGR-05.17 users, see §0bis) |
 | MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
-| MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |
+| MIGR-02 DB migration | 4 (2 required + 2 optional) | 1 (02.02 superseded by MIGR-05) | 3 |
 | MIGR-03 Feature parity | 3 | 1 | 2 |
