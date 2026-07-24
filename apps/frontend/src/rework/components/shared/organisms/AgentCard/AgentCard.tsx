@@ -173,7 +173,7 @@ export default function AgentCard({
             <div className={styles.moreMenu}>
               <IconButtonMenu<MoreMenuAction>
                 iconButton={{
-                  color: "on-surface",
+                  color: "on-surface-retreat",
                   variant: "icon",
                   size: "medium",
                   icon: { category: "outlined", type: "more_vert" },
