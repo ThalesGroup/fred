@@ -1,12 +1,12 @@
-**v2.1.12** — 2026-07-24
+**v2.1.13** — 2026-07-24
 
 - **Summary**
 
   Teams get flexible join rules (open, request-to-join, invite-only, or closed) with
   self-service join and leave; agent cards are redesigned with a dedicated Chat button and
-  role display; the document library now accepts Excel spreadsheets and drag-and-drop
-  folder uploads; and agents no longer surface a tool's raw internal error text as their
-  final answer when a tool call fails.
+  role display; you can now drag and drop whole folders onto the document library; and
+  agents no longer surface a tool's raw internal error text as their final answer when a
+  tool call fails.
 
 - **Features**
 
@@ -14,7 +14,6 @@
   - Redesigned agent cards: see an agent's origin and role at a glance, a dedicated Chat button, and an icon automatically guessed from its role (#2076, #2079)
   - Drag and drop files or whole folders straight onto a library folder to start uploading (#2078, #2080)
   - Admins can configure a custom warning banner on upload surfaces, with a one-time acknowledgment for chat attachments (#2077, #2081)
-  - The document library now ingests Excel spreadsheets for tabular querying, alongside existing CSV support (#2064)
 
 - **Improvements**
 
@@ -30,7 +29,6 @@
   - Fixed a color conflict that could corrupt error-state colors across the app after opening the document editor
   - Fixed a crash that could occur closing a PDF viewer while a PowerPoint deck was regenerating
   - Fixed the new-agent template picker appearing off-center with only a few templates
-  - Fixed long spreadsheet column headers collapsing to one letter per line
   - Map locations in chat now show as a count summary instead of an interactive map, pending a replacement, due to a licensing issue with the previous map library
 
 - **Deployment note**
