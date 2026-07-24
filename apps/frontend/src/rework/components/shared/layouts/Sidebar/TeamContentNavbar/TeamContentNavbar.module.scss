@@ -10,6 +10,7 @@
  * Height matches MarketplaceNavbar (56px) so switching contexts doesn't jump. */
 .bannerContainer {
   display: flex;
+  position: relative;
   align-items: flex-end;
   border-radius: 0 0 var(--radius-s) var(--radius-s);
   background-position: center;
@@ -18,12 +19,34 @@
   height: 56px;
 }
 
+/* Legibility scrim: a subtle dark gradient rising from the bottom edge keeps
+ * the white banner text and icons readable over light or busy custom banner
+ * images (`banner_image_url`), while barely dimming the darker brand-gradient
+ * fallback. Anchored to the bottom so it only touches the strip where the
+ * team name sits, leaving the top of the image clean. */
+.bannerContainer::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 45%, transparent 75%);
+  pointer-events: none;
+  content: "";
+}
+
 .teamNameContainer {
   display: flex;
+  position: relative;
   justify-content: space-between;
   align-items: end;
+  z-index: 1;
   width: 100%;
   font: var(--font-title-medium);
+}
+
+/* Small drop shadow on the team name, on top of the scrim, so the white text
+ * stays crisp even against a light patch of a custom banner image. */
+.teamName {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .navigationContainer {
