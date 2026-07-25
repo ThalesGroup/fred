@@ -1536,6 +1536,13 @@ items:
       rework code, and backend browse contracts that remain fast for users with
       hundreds of files.
 
+      Amended 2026-07-25 (RFC §13): resources dashboard v2 — tab switcher +
+      breadcrumb replacing the always-expanded tree (§13.2), DataTable-based rich
+      rows with size/created/modified/author/status columns (§13.3), search/sort
+      (§13.4), and usage cards (files-by-type histogram, size-by-type +
+      quota pie chart; ingestion token tracking explicitly carved out as a
+      separate future item, §13.6). New phases G/H/I added to the workplan.
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress
