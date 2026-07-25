@@ -16,8 +16,9 @@
 // store audit (knowledge-flow-backend `MetadataService.audit_stores`), which
 // compares each document's Postgres processing-stage claims against what is
 // actually present in the content store and the vector store, and lets an
-// admin fix the anomalies found (`fix_store_anomalies` — deletes orphan
-// vector/content data, so it is gated behind a confirmation). Consumes only
+// admin fix the anomalies found (`fix_store_anomalies` — repair-only, never
+// deletes anything; it resets a lying processing-stage flag so the document
+// becomes re-processable, still gated behind a confirmation). Consumes only
 // the generated knowledge-flow hooks — no hand-written fetch or response
 // types (there is no knowledge-flow "enhancements" file to alias through,
 // unlike control-plane, so the generated hook names are used directly).

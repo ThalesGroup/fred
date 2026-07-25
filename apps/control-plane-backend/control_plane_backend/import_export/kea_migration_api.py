@@ -60,6 +60,7 @@ from control_plane_backend.import_export.kea_reconciliation import (
     KeaReconciliationReport,
     KeaUserResolver,
     derive_team_member_relations,
+    drop_orphan_team_relations,
     drop_orphan_teams,
     find_admin_less_teams,
     kea_known_group_ids,
@@ -214,6 +215,12 @@ def build_kea_migration_router(prefix: str = "") -> APIRouter:
 
         # Identity + team-membership reconciliation — the heart of the preview.
         transform = transform_kea_tuples(tuples)
+        # Mirror `drop_orphan_team_relations` on the real import path (importer.py):
+        # a team `drop_orphan_teams` already excluded above must not still count
+        # toward this preview's relation-resolution stats.
+        transform.relations = drop_orphan_team_relations(
+            transform.relations, kea_report.orphan_teams_dropped
+        )
         resolved_relations = await resolve_relation_subjects(
             transform.relations, kea_username_index, resolver, kea_report
         )

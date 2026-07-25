@@ -626,24 +626,24 @@ class RevectorizeDocument:
         mode = _wf_get(options, "mode", "incremental")
         force = bool(_wf_get(options, "force", False))
 
-        count = await workflow.execute_activity(
-            "get_chunk_count",
-            args=[document_uid],
-            schedule_to_close_timeout=timedelta(minutes=5),
-            retry_policy=RetryPolicy(maximum_attempts=3),
-        )
-
-        if _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=count):
-            if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "running", "skip", None, None, 1, 1, 0, document_uid, document_uid],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
-            return {"document_uid": document_uid, "skipped": True, "failed": False}
-
         try:
+            count = await workflow.execute_activity(
+                "get_chunk_count",
+                args=[document_uid],
+                schedule_to_close_timeout=timedelta(minutes=5),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+
+            if _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=count):
+                if task_id:
+                    await workflow.execute_activity(
+                        "emit_ingestion_task_event",
+                        args=[task_id, "running", "skip", None, None, 1, 1, 0, document_uid, document_uid],
+                        schedule_to_close_timeout=timedelta(hours=1),
+                        retry_policy=RetryPolicy(maximum_attempts=1),
+                    )
+                return {"document_uid": document_uid, "skipped": True, "failed": False}
+
             if force or count > 0:
                 await workflow.execute_activity(
                     "delete_vectors",

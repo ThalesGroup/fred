@@ -2462,7 +2462,7 @@ items:
 
   - id: MIGR-05
     title: "Platform import service — kea→swift configuration restore (atomic import + export/reset/stats, admin UI)"
-    status: in_progress
+    status: done
     parent: MIGR-00
     owner: Dimitri
     refs:
@@ -2470,20 +2470,17 @@ items:
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
       The 'metadata' topic — swift-side import counterpart to kea's throwaway export. Full current
-      contract: PLATFORM-IMPORT-RFC.md (rewritten 2026-07-16 to state the current contract only —
-      history is in git log, not inline). SHIPPED: atomic import of agents+tags+document-metadata+
-      team-metadata (single SQLAlchemy transaction in a FastAPI BackgroundTask, idempotent by PK),
-      swift-native export/reset, Platform-data stats dashboard, declarative users.json team/platform
-      role provisioning (fail-closed), validated+versioned manifest, honest content_keys + stage
-      reconciliation (05.13). Kea-import path SHIPPED 2026-07-24 (#1954, validated on a real kea
-      dump): OpenFGA tuple restore with role transformation (05.04 — owner→team_admin+team_editor,
-      manager→team_editor, member→team_member; replaces the ops bulk-copy plan), agent
-      prompt/tuning transfer via tuning.values["prompts.system"] (05.11), kea bundle compat
-      (05.14), chat-contexts → personal prompts (05.15), teams + platform roles from the bundled
-      Keycloak realm export (05.16). OPEN: user-state migration (05.17 — GCU rows, platform-role
-      verification; NOT MIGR-04's identity scope) and the kea-side partial-export 403
-      (view-clients). Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07
-      (re-vectorize trigger after import not yet wired).
+      contract: CONTROL-PLANE-PRODUCT-CONTRACT.md (import/export/reset/reset-full/stats
+      endpoints, bundle format, kea transform rules) — PLATFORM-IMPORT-RFC.md is now a compacted
+      closed-out pointer, history is in git log. SHIPPED (05.01-05.16, 05.18, #1954, validated on
+      a real kea dump 2026-07-22): atomic import/export/reset, kea agent+tag+metadata+team
+      transform, OpenFGA tuple restore with role transformation, agent prompt/tuning transfer,
+      chat-contexts → personal prompts, teams/platform roles from the bundled Keycloak realm
+      export, standalone realm_file upload + full-teardown reset-full (05.18, 2026-07-24) — the
+      kea-side partial-export 403 is no longer a blocker (realm_file upload works around it).
+      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07. Only remaining item:
+      05.17 (user-state/GCU rows migration), deliberately deferred — out of #1954 scope, see
+      KEA-MIGRATION-BACKLOG.md §0bis.
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"
