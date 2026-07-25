@@ -130,6 +130,55 @@ arbitrary choice.
 
 ---
 
-## Runtime / capabilities (expected to grow once B6/B7 start)
+## Runtime / capabilities (B6)
 
-*(nothing yet — will fill in as B6/B7 progress)*
+### 11. RFC §8.7's original "control-plane reads models_catalog.yaml directly" was wrong
+Found while implementing, before any code was written on that assumption
+(caught at design time, not as a bug fix). Control-plane has no filesystem
+access to a runtime pod's mounted config in a real multi-pod deployment, and
+— relevant given this platform runs multiple fred-agents replicas — nothing
+guarantees every runtime source shares one catalog file even if it could.
+Corrected design: fred-runtime exposes `GET /agents/models-catalog`
+(mirrors the existing `GET /agents/mcp-catalog` pattern exactly), and
+control-plane fetches it per runtime source, the same as it already does
+for `kind="tool"`/`kind="agent"`. RFC corrected in place (§8.7).
+
+### 12. `ModelProfile.model.provider`/`.name` are never actually optional
+The RFC's field-mapping table (and my first draft of the projection
+function) assumed a "local mock/test profile" could have no
+provider/name and should be silently skipped. `ModelProfile.validate_model`
+(`fred_runtime/model_routing/contracts.py`) already rejects any profile
+missing either at construction time — the skip-branch was genuinely dead
+code. Removed in favor of an `assert` that documents the invariant instead
+of hiding it; caught by trying to write a test for the "skip" case, which
+turned out to be impossible to construct.
+
+### 13. `RuntimeContext.config` (`RuntimeConfig`) is not `AgentPodConfig`
+Basedpyright caught this, not a runtime bug: `get_runtime_context().config`
+is a distinct, generic dataclass (`RuntimeConfig`) built once at boot from
+the richer `AgentPodConfig` — it does not inherit or expose
+`AgentPodConfig`'s methods (`get_models_catalog_path()`). Fixed by adding a
+`models_catalog_path` field to `RuntimeConfig` itself, threaded through at
+the exact point `chat_model_factory` already is (same boot-time
+construction call, `agent_app.py` — the established pattern for getting
+pod-boot-resolved data into the generic runtime context). Worth remembering
+for anyone adding a new `/agents/*` admin-catalog-style endpoint later: the
+config object available at request time is `RuntimeConfig`, not
+`AgentPodConfig`, and needs its own field for anything new.
+
+### 14. `kind="model"` enforcement bootstrapping (default_on) has no code yet
+The RFC's migration guidance (default-on for all currently-routable models
+at cutover) is written but not implemented — deliberately: it only matters
+once B7's enforcement chokepoint exists, so there is nothing to bootstrap
+while `kind="model"` entries are enablement-visible-but-unenforced. Revisit
+together with B7.
+
+---
+
+## Frontend F5 (deferred, mechanical)
+
+`CapabilitiesPage.tsx`'s `KIND_FILTERS: Array<"tool" | "agent">` (+ matching
+`useState`) needs `"model"` added, plus one i18n key. Confirmed one-line
+change (`kind` is a pure filter there, no branching) during the original
+research pass — not done yet, batched with the rest of this delivery's
+frontend work (F1-F6).
