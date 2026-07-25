@@ -4,9 +4,12 @@ import logging
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fred_core import DocumentPermission, KeycloakUser, TagPermission, TeamPermission, get_current_user
+from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, TagPermission, TeamPermission, get_current_user
+from fred_core.tasks.models import StartTaskResponse
 
-from knowledge_flow_backend.application_context import get_rebac_engine
+from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
+from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 
 from .corpus_manager_service import (
     BuildCorpusTocRequestV1,
@@ -30,7 +33,19 @@ class CorpusManagerController:
     """
 
     def __init__(self, router: APIRouter):
-        self.service = CorpusManagerService()
+        app_context = ApplicationContext.get_instance()
+        app_config = app_context.get_config()
+        ingestion_task_service: IngestionTaskService | None = None
+        if app_config.scheduler.enabled:
+            # MIGR-07: backs revectorize_corpus only — build_corpus_toc/purge_vectors
+            # stay on the mock task store, unaffected by this.
+            ingestion_task_service = IngestionTaskService(
+                scheduler_config=app_config.scheduler,
+                processing_config=app_config.processing,
+                metadata_service=MetadataService(),
+                max_parallelism=app_config.scheduler.temporal.ingestion_workflow_parallelism,
+            )
+        self.service = CorpusManagerService(ingestion_task_service=ingestion_task_service)
         self._register_http_routes(router)
 
     # ----------- Helpers -----------
@@ -54,6 +69,16 @@ class CorpusManagerController:
         # silently allowed — default deny (RFC §2.5) over a false sense of
         # scoping.
         rebac = get_rebac_engine()
+
+        # MIGR-07: a source_tag-only scope spans arbitrary teams (it's the
+        # migration's default revectorize scope — CORPUS-REVECTORIZE-RFC.md §4), so
+        # it has no single team to check membership against. Require platform-admin
+        # instead, same gate as /documents/audit and the kea-migration/import-export
+        # reset endpoints for the same reason.
+        if scope.source_tag and not scope.tag_ids and not scope.document_uids:
+            await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+            return
+
         if not scope.tag_ids and not scope.document_uids:
             raise HTTPException(
                 400,
@@ -115,6 +140,7 @@ class CorpusManagerController:
             tags=["CorpusManager"],
             summary="Start a revectorize task",
             operation_id="corpus_revectorize",
+            response_model=StartTaskResponse,
         )
         async def revectorize(
             payload: RevectorizeCorpusRequestV1,
@@ -124,7 +150,7 @@ class CorpusManagerController:
             await self._authorize_team(user, payload.team_id)
             await self._authorize_scope(user, payload.scope)
             try:
-                return self.service.revectorize_corpus(payload).model_dump()
+                return await self.service.revectorize_corpus(payload, user)
             except Exception as e:
                 return self._handle_exception(e, "revectorize")
 

@@ -209,9 +209,9 @@ not transported. Because `input/` **and** `output/` are mirrored together, only 
 `/corpus/revectorize` endpoint onto a Temporal workflow over the existing `output_process` activity,
 streaming progress via the fred-core task/event API (reuses `IngestionDetail`).
 
-- [ ] **MIGR-07.01** — `list_documents_in_scope` activity (metadata query by tag_ids/library/document_uids/source_tag)
-- [ ] **MIGR-07.02** — `RevectorizeCorpusWorkflow` + `RevectorizeDocument` workflows (batch fan-out, reuse `output_process`); register in scheduler worker
-- [ ] **MIGR-07.03** — Wire the `/corpus/revectorize` stub to start the workflow + `task_service.start`; incremental/full/force semantics
+- [x] **MIGR-07.01** — `list_documents_in_scope` activity (metadata query by tag_ids/library/document_uids/source_tag)
+- [x] **MIGR-07.02** — `RevectorizeCorpusWorkflow` + `RevectorizeDocument` workflows (batch fan-out, reuse `output_process`); register in scheduler worker
+- [x] **MIGR-07.03** — Wire the `/corpus/revectorize` stub to start the workflow + `task_service.start`; incremental/full/force semantics
 - [ ] **MIGR-07.04** — Migration UI "Rebuild embeddings" final step (reuse task atoms); reconcile vector `_count` vs metadata row count
   — kea→swift delta: same embedding model → vectors compatible; index name maps
   — RFC: [`CORPUS-REVECTORIZE-RFC`](../rfc/CORPUS-REVECTORIZE-RFC.md)
@@ -352,7 +352,7 @@ with a written rationale.
 | MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
 | MIGR-05 Metadata — platform import service | 17 | 16 | 1 (MIGR-05.17 users, see §0bis) |
-| MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
+| MIGR-07 Products (re-vectorization) | 4 | 3 | 1 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 1 (02.02 superseded by MIGR-05) | 3 |
 | MIGR-03 Feature parity | 3 | 1 | 2 |

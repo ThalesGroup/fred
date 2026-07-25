@@ -1,6 +1,7 @@
 # RFC — Corpus re-vectorization (products rebuild, post-migration embeddings)
 
-**ID:** MIGR-07 · **Status:** draft (awaiting developer confirmation)
+**ID:** MIGR-07 · **Status:** confirmed 2026-07-25 — implementation starts, tracked as
+[#2111](https://github.com/ThalesGroup/fred/issues/2111).
 **Owner:** Dimitri · **Surface:** knowledge-flow-backend (+ migration UI trigger)
 **Extends:** the existing ingestion pipeline (`features/scheduler/`) and the stubbed
 `/corpus/revectorize` endpoint. **Sibling of:** [`PLATFORM-IMPORT-RFC.md`](PLATFORM-IMPORT-RFC.md) (the
@@ -92,3 +93,37 @@ Default scope for the migration run is therefore "all documents with `VECTORIZED
 ## 7. Decision requested
 Approve redesigning the stubbed `/corpus/revectorize` into the workflow above (reusing `output_process`
 + the task/event infra), tracked as MIGR-07, runnable standalone and as the migration's final phase.
+
+## 8. Implementation note (2026-07-25)
+
+Built as designed in §3-4; the open items in §6 resolved as follows, none of which change
+the shape above:
+
+- **Task queue (§6):** reused `ingestion` (simplicity — a dedicated `reindex` queue can be
+  split out later if throughput isolation becomes a real problem).
+- **Task `kind`:** the created `task_run` uses `kind="ingestion"` (`StartIngestionRequest`),
+  not a new `kind="revectorize"` — the pseudocode's `task_service.start(kind="revectorize", …)`
+  in §3 was illustrative. `emit_ingestion_task_event` is reused **verbatim** (per §2) and always
+  emits `IngestionTaskEvent`; a task kind that didn't match would make `TaskService`'s terminal-
+  event reconciliation (`_build_terminal_event`) emit the wrong event type. Adding a real
+  `"revectorize"` kind would mean extending `TaskEvent`/`StartTaskRequest`/`TaskSummary.detail`
+  in fred-core — out of proportion for what §3 calls "small" new code.
+- **`max_parallelism`:** not a new request field on `RevectorizeOptionsV1` — reused the existing
+  `scheduler.temporal.ingestion_workflow_parallelism` config already used to size the regular
+  ingestion pipeline's `IngestionTaskService`.
+- **Per-document failure handling:** `RevectorizeDocument` catches its own exceptions and returns
+  `failed: true` rather than raising, so one bad document cannot abort the whole corpus batch —
+  `RevectorizeCorpusWorkflow` always reaches a terminal `succeeded` event, with `failed` in
+  `IngestionDetail` carrying the partial-failure count (same "succeeded with warnings" shape as
+  `MigrationResult`, not a new terminal state).
+- **`embedding_model` option:** stays advisory only (§6 risk, not a requirement) — not wired into
+  `prepare_revectorize_file`; the original ingestion `profile` isn't recorded on `DocumentMetadata`
+  either, so re-vectorize always uses `IngestionProcessingProfile.medium`.
+- **Authorization gap fixed alongside:** `source_tag` was a real `CorpusScopeV1` field (needed for
+  §4's migration-default scope) but wasn't accepted by the non-empty validator nor authorized in
+  `corpus_manager_controller._authorize_scope`. Fixed: `source_tag`-only scopes now require
+  `OrganizationPermission.CAN_MANAGE_PLATFORM` (same gate as `/documents/audit` and the
+  import-export reset endpoints), since such a scope spans arbitrary teams.
+
+`build_corpus_toc`, `purge_vectors`, and `/corpus/tasks/get|result|list` are untouched (still
+mocked) — out of scope for MIGR-07.

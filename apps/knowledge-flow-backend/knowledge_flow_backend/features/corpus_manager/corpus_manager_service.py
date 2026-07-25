@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
+from fred_core import KeycloakUser
+from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, StartTaskResponse, TaskTarget
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from knowledge_flow_backend.application_context import ApplicationContext
+
+if TYPE_CHECKING:
+    from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
+
+logger = logging.getLogger(__name__)
 
 TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
 
@@ -79,8 +89,8 @@ class CorpusScopeV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_non_empty(self) -> "CorpusScopeV1":
-        if not (self.library_id or self.project_id or self.tag_ids or self.document_uids):
-            raise ValueError("CorpusScopeV1 requires library_id, project_id, tag_ids or document_uids.")
+        if not (self.library_id or self.project_id or self.tag_ids or self.document_uids or self.source_tag):
+            raise ValueError("CorpusScopeV1 requires library_id, project_id, tag_ids, document_uids or source_tag.")
         return self
 
 
@@ -211,9 +221,12 @@ class CorpusManagerService:
     Replace in future with Temporal / real persistence.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ingestion_task_service: "IngestionTaskService | None" = None) -> None:
         self._tasks: Dict[str, TaskRefV1] = {}
         self._results: Dict[str, TaskResultV1] = {}
+        # MIGR-07: real backing for revectorize_corpus (build_corpus_toc/purge_vectors
+        # stay on the mock _tasks/_results store above — out of scope for this ticket).
+        self._ingestion_task_service = ingestion_task_service
 
     def capabilities(self) -> CorpusCapabilitiesV1:
         return CorpusCapabilitiesV1(
@@ -310,8 +323,51 @@ class CorpusManagerService:
     def build_corpus_toc(self, req: BuildCorpusTocRequestV1) -> TaskRefV1:
         return self._create_task("build_corpus_toc", req.thread_id, req.exchange_id, req.team_id)
 
-    def revectorize_corpus(self, req: RevectorizeCorpusRequestV1) -> TaskRefV1:
-        return self._create_task("revectorize_corpus", req.thread_id, req.exchange_id, req.team_id)
+    async def revectorize_corpus(self, req: RevectorizeCorpusRequestV1, user: KeycloakUser) -> StartTaskResponse:
+        """
+        Start a real corpus re-vectorization job (MIGR-07).
+
+        Unlike the other CorpusManager tools (still mocked), this creates a real
+        `task_run` row and starts `RevectorizeCorpusWorkflow` on Temporal. Scope
+        resolution (`tag_ids`/`document_uids`/`source_tag` → document_uids) happens
+        inside the workflow itself (`list_documents_in_scope` activity), not here.
+        """
+        if self._ingestion_task_service is None:
+            raise RuntimeError("Corpus revectorization requires the ingestion scheduler to be enabled.")
+
+        scope_label = self._describe_scope(req.scope)
+        task_svc = ApplicationContext.get_instance().get_task_service()
+        target = TaskTarget(type="corpus", id=scope_label, label=f"Revectorize: {scope_label}")
+        start_req = StartIngestionRequest(params=StartIngestionParams(resource_ids=list(req.scope.document_uids)))
+        resp = await task_svc.start(start_req, created_by=user.uid, team_id=req.team_id, target=target)
+
+        handle = await self._ingestion_task_service.start_revectorize(
+            user=user,
+            scope=req.scope.model_dump(),
+            options=req.options.model_dump(),
+            task_id=resp.task_id,
+        )
+
+        # OPS-04 reconciliation: bind the task to its backing workflow so a task
+        # stuck non-terminal (e.g. worker down) can be reconciled against
+        # Temporal's verdict instead of hanging forever (see ingestion_controller.py
+        # for the same pattern on the upload path).
+        try:
+            await task_svc.bind_execution(resp.task_id, execution_id=handle.workflow_id)
+        except Exception:
+            logger.warning("Could not bind revectorize task %s to workflow %s", resp.task_id, handle.workflow_id, exc_info=True)
+
+        return StartTaskResponse(task_id=resp.task_id)
+
+    @staticmethod
+    def _describe_scope(scope: CorpusScopeV1) -> str:
+        if scope.document_uids:
+            return f"{len(scope.document_uids)} document(s)"
+        if scope.tag_ids:
+            return f"tags: {', '.join(scope.tag_ids)}"
+        if scope.source_tag:
+            return f"source_tag: {scope.source_tag}"
+        return "corpus"
 
     def purge_vectors(self, req: PurgeVectorsRequestV1) -> TaskRefV1:
         return self._create_task("purge_vectors", req.thread_id, req.exchange_id, req.team_id)

@@ -28,7 +28,7 @@ from knowledge_flow_backend.common.structures import SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
-from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush, RevectorizeCorpusWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,24 @@ class TemporalScheduler(BaseScheduler):
             id=f"fast-delete-{uuid4().hex}",
             task_queue=self._scheduler_config.temporal.task_queue,
         )
+
+    async def start_revectorize(self, *, payload: dict, task_id: str) -> WorkflowHandle:
+        """
+        Start a `RevectorizeCorpusWorkflow` (MIGR-07). Unlike `start_document_processing`,
+        this doesn't go through the file/pipeline abstraction — scope resolution happens
+        inside the workflow itself (`list_documents_in_scope` activity), so `payload` is
+        just `{scope, options, user, task_id, max_parallelism}` plain data.
+        """
+        client: Client = await self._client_provider.get_client()
+        workflow_handle = await client.start_workflow(
+            RevectorizeCorpusWorkflow.run,
+            payload,
+            id=f"revectorize-{task_id}",
+            task_queue=self._scheduler_config.temporal.task_queue,
+            rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
+        )
+        logger.info("🛠️ started temporal revectorize workflow=%s", workflow_handle.id)
+        return WorkflowHandle(workflow_id=workflow_handle.id, run_id=workflow_handle.first_execution_run_id)
 
     async def get_workflow_execution_status(self, workflow_id: str) -> Optional[WorkflowExecutionStatus]:
         """

@@ -2498,17 +2498,22 @@ items:
 
   - id: MIGR-07
     title: "Products — re-vectorization on the target"
-    status: open
+    status: in_progress
     parent: MIGR-00
     refs:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0quater"
       rfc: "docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md"
+      issue: 2111
     notes: >
       The 'products' topic. Embeddings (OpenSearch *-vector-index-mistral) are rebuilt on the
       target, not transported. Redesign the existing stubbed /corpus/revectorize endpoint onto a
       Temporal workflow over the existing output_process activity, streaming progress via the
       fred-core task/event API. input/ and output/ are mirrored together so only embeddings need
       regeneration. kea→swift delta: same embedding model → vectors compatible; index name maps.
+      2026-07-25: backend built (list_documents_in_scope activity, RevectorizeCorpusWorkflow +
+      RevectorizeDocument workflows, /corpus/revectorize wired to a real task_run + Temporal
+      workflow, source_tag scope authz gap fixed — see CORPUS-REVECTORIZE-RFC.md §8). Remaining:
+      MIGR-07.04 (migration UI "Rebuild embeddings" trigger) — separate future step.
 
   - id: MIGR-04
     title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"

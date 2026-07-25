@@ -25,14 +25,16 @@ these tests pin the exact permission and resource id checked, mirroring
 from __future__ import annotations
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from fred_core import DocumentPermission, KeycloakUser, TagPermission, TeamPermission, get_current_user
+from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, TagPermission, TeamPermission, get_current_user
+from fred_core.tasks.models import StartTaskResponse
 
 from knowledge_flow_backend.features.corpus_manager import corpus_manager_controller as corpus_module
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import (
     CorpusManagerController,
 )
+from knowledge_flow_backend.features.corpus_manager.corpus_manager_service import CorpusManagerService
 
 
 class _FakeRebac:
@@ -46,10 +48,19 @@ class _FakeRebac:
         self.calls.append((permission, team_id))
 
 
+async def _fake_revectorize_corpus(self, req, user) -> StartTaskResponse:
+    """Stub for CorpusManagerService.revectorize_corpus (MIGR-07): the tests in this
+    module exercise `_authorize_scope`/`_authorize_team`, not the real Temporal
+    wiring (the `app_context` autouse fixture runs with `scheduler.enabled=False`,
+    so there is no `IngestionTaskService` behind the real method in this suite)."""
+    return StartTaskResponse(task_id="fake-task-id")
+
+
 @pytest.fixture
 def corpus_client(monkeypatch):
     fake_rebac = _FakeRebac()
     monkeypatch.setattr(corpus_module, "get_rebac_engine", lambda: fake_rebac)
+    monkeypatch.setattr(CorpusManagerService, "revectorize_corpus", _fake_revectorize_corpus)
 
     app = FastAPI()
     router = APIRouter(prefix="/knowledge-flow/v1")
@@ -200,3 +211,129 @@ def test_tasks_list_only_returns_the_requested_team_own_tasks(corpus_client) -> 
     payload = response.json()
     assert payload["count"] == 1
     assert all(item["team_id"] == "team-a" for item in payload["items"])
+
+
+# ── MIGR-07: revectorize scope authorization ──────────────────────────────────
+# `source_tag` is a real CorpusScopeV1 field (the migration's default revectorize
+# scope — CORPUS-REVECTORIZE-RFC.md §4) but was previously neither accepted by
+# CorpusScopeV1._validate_non_empty nor authorized at all in _authorize_scope. A
+# source_tag-only scope spans arbitrary teams, so it must gate on
+# OrganizationPermission.CAN_MANAGE_PLATFORM, not team membership; tag_ids and
+# document_uids scopes keep the existing per-tag/per-document checks.
+
+
+def test_revectorize_tag_ids_scope_checks_team_and_tag_permission(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/revectorize",
+        json={"team_id": "team-a", "scope": {"tag_ids": ["tag-1"]}},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"task_id": "fake-task-id"}
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (TagPermission.UPDATE, "tag-1"),
+    ]
+
+
+def test_revectorize_document_uids_scope_checks_team_and_document_permission(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/revectorize",
+        json={"team_id": "team-a", "scope": {"document_uids": ["doc-1"]}},
+    )
+
+    assert response.status_code == 200
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (DocumentPermission.PROCESS, "doc-1"),
+    ]
+
+
+def test_revectorize_source_tag_only_scope_is_accepted_and_requires_platform_admin(corpus_client) -> None:
+    """A source_tag-only scope previously 422'd at the pydantic layer
+    (CorpusScopeV1._validate_non_empty didn't count source_tag) and, before that
+    fix, had no authorization path at all. It must now pass validation and gate on
+    CAN_MANAGE_PLATFORM instead of a team/tag/document check it has no object for."""
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/revectorize",
+        json={"team_id": "team-a", "scope": {"source_tag": "kea-import"}},
+    )
+
+    assert response.status_code == 200
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
+
+
+def test_revectorize_source_tag_combined_with_tag_ids_uses_the_narrower_tag_check(corpus_client) -> None:
+    """CAN_MANAGE_PLATFORM is only required for a source_tag-ONLY scope; a request
+    that also names tag_ids/document_uids keeps the existing narrower check."""
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/revectorize",
+        json={"team_id": "team-a", "scope": {"source_tag": "kea-import", "tag_ids": ["tag-1"]}},
+    )
+
+    assert response.status_code == 200
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (TagPermission.UPDATE, "tag-1"),
+    ]
+
+
+def test_revectorize_source_tag_only_scope_rejects_non_platform_admin(monkeypatch) -> None:
+    """A team member without CAN_MANAGE_PLATFORM must be denied a source_tag-wide
+    revectorize — this scope spans arbitrary teams, so team membership alone isn't
+    enough (mirrors /documents/audit and import-export reset(-full)'s gate)."""
+
+    class _DenyingPlatformAdminRebac(_FakeRebac):
+        async def check_user_permission_or_raise(self, user, permission, resource_id, **_kw) -> None:
+            self.calls.append((permission, resource_id))
+            if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+                raise HTTPException(403, "not a platform admin")
+
+    fake_rebac = _DenyingPlatformAdminRebac()
+    monkeypatch.setattr(corpus_module, "get_rebac_engine", lambda: fake_rebac)
+    monkeypatch.setattr(CorpusManagerService, "revectorize_corpus", _fake_revectorize_corpus)
+
+    app = FastAPI()
+    router = APIRouter(prefix="/knowledge-flow/v1")
+    CorpusManagerController(router)
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[])
+    with TestClient(app) as client:
+        response = client.post(
+            "/knowledge-flow/v1/corpus/revectorize",
+            json={"team_id": "team-a", "scope": {"source_tag": "kea-import"}},
+        )
+
+    assert response.status_code == 403
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
+
+
+def test_build_toc_source_tag_only_scope_also_requires_platform_admin(corpus_client) -> None:
+    """_authorize_scope is shared across build_toc/revectorize/purge_vectors — the
+    source_tag fix applies uniformly, not just to the revectorize route."""
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/build-toc",
+        json={"team_id": "team-a", "scope": {"source_tag": "kea-import"}},
+    )
+
+    assert response.status_code == 200
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
