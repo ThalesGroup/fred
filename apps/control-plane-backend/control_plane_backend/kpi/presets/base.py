@@ -26,3 +26,11 @@ class PresetDef:
     response_model: type[BaseModel]
     handler: Callable[..., Coroutine[Any, Any, BaseModel]]
     summary: str
+    # True only when the underlying KPI event carries a `dims.team_id` (or an
+    # equivalent team-scoped store lookup exists) — set case by case, never
+    # assumed. A preset whose source event has no team_id (e.g. the generic
+    # HTTP middleware's `api.request_latency_ms`, by design — see
+    # `KPI-ANALYTICS-RFC.md` §2.2) or that is inherently cross-team (e.g.
+    # `top_teams_by_sessions`) stays False; the router (`api.py`) rejects a
+    # `team_id` query param for it with 400 rather than silently ignoring it.
+    team_scopable: bool = False

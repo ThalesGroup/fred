@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Request
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser
 from fred_core.documents import PostgresDocumentMetadataStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
@@ -96,13 +96,14 @@ async def query_documents_total(
     until: datetime,
     request: Request,
 ) -> ScalarWithDeltaResponse:
-    await (
-        get_application_container(request)
-        .get_rebac_engine()
-        .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
-        )
-    )
+    # Authorization already resolved by the router (kpi/api.py, KpiScope).
+    # Not team_scopable yet: document.created_total/document.deleted_total do
+    # carry dims.team_id (knowledge-flow resolves it from the document's first
+    # tag owner), but PostgresDocumentMetadataStore has no team-scoped count
+    # and a document's team is indirect (via tag ownership, not a column) —
+    # needs real store-layer work, not just parameter threading. Tracked as a
+    # follow-up (KPI-ANALYTICS-RFC.md v3 §2.3), not done in this pass.
+    del user
 
     now = datetime.now(tz=timezone.utc)
 

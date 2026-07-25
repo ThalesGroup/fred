@@ -6,10 +6,11 @@ structured data. Presets are auto-registered as GET endpoints under `/kpi/preset
 ## How it works
 
 ```
-api.py          — iterates PRESETS, mounts one route per preset
+api.py          — iterates PRESETS, mounts one route per preset, resolves KpiScope
+scope.py        — resolve_kpi_scope(): the ONE authorization chokepoint (see below)
 presets/
   __init__.py   — PRESETS list (add your preset here)
-  base.py       — PresetDef dataclass
+  base.py       — PresetDef dataclass (team_scopable flag)
   common.py     — shared response types (TimeSeriesResponse, …)
   <name>.py     — one file per preset
 utils.py        — resolve_interval(): picks OpenSearch bucket size from time range
@@ -21,15 +22,44 @@ Every preset is a `PresetDef`:
 PresetDef(
     name="my_preset",          # becomes GET /kpi/presets/my_preset
     response_model=MyResponse, # Pydantic model — drives OpenAPI schema
-    handler=query_my_preset,   # called with (store, user=…, since=…, until=…)
+    handler=query_my_preset,   # called with (store, user=…, since=…, until=…, request=…[, team_id=…])
     summary="One-line description for OpenAPI docs",
+    team_scopable=False,       # True only if the underlying KPI event carries dims.team_id
 )
 ```
 
 The handler receives:
 - `store: OpenSearchKPIStore` — call `store.client.search(index=store.index, body=…)`
-- `user: KeycloakUser` — call `require_admin(user)` if admin-only
+- `user: KeycloakUser`, `request: Request` — authorization is already resolved by the
+  router before the handler runs (see below); handlers keep these params (the router
+  always passes them) but never call `check_user_permission_or_raise` themselves —
+  `del user, request` if unused, matching the existing repo convention for
+  intentionally-unused params.
 - `since / until: datetime` — the requested time range (UTC, always set)
+- `team_id: TeamId | None` — **only** passed when `team_scopable=True`. `None` means
+  platform-wide; otherwise filter the query on `{"term": {"dims.team_id": str(team_id)}}`.
+
+## Authorization — one chokepoint, not one per preset
+
+`resolve_kpi_scope(request, user, team_id)` (`scope.py`) is called once by the router
+for every preset, before the handler runs:
+- `team_id=None` → requires `can_observe_platform` on the org.
+- `team_id` given → requires `can_read_members` on that team (same permission the task
+  bus's `scope=team` Activités view already requires).
+
+The router rejects a `team_id` query param with 400 for any preset whose
+`team_scopable` is `False` — it never silently ignores it. **Never re-implement this
+check inside a preset handler** — that is exactly the duplicated-authorization pattern
+this module replaced (10 copies of the same three lines, pre-OBSERV-02-v3).
+
+**Setting `team_scopable=True` is not just a signature change.** Verify the underlying
+KPI event actually carries `dims.team_id` (grep its emission call site) before flipping
+the flag — several presets in this package are deliberately `team_scopable=False`
+because their source event has no team dimension (e.g. the generic HTTP middleware's
+`api.request_latency_ms`, by design — see `KPI-ANALYTICS-RFC.md` §2.2) or because
+team-scoping them needs new store-layer work, not just a query filter (see
+`documents_total.py`'s comment). A preset silently returning unfiltered/wrong data for
+a team_id it doesn't actually honor is worse than not supporting team scoping at all.
 
 ## Adding a preset
 

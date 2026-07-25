@@ -19,10 +19,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser
+from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
-from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import (
     MultiSeriesPoint,
@@ -34,13 +34,25 @@ logger = logging.getLogger(__name__)
 
 TOP_N = 10
 
-# Shared filter applied to both queries: only managed-instance turns that have
+# Base filter applied to both queries: only managed-instance turns that have
 # an agent_instance_id. Direct-template-mode turns are excluded — they carry no
 # meaningful instance identity and would pollute the chart.
 _BASE_FILTERS: list[dict[str, Any]] = [
     {"term": {"metric.name": "agent.turn_completed"}},
     {"exists": {"field": "dims.agent_instance_id"}},
 ]
+
+
+def _filters(team_id: TeamId | None) -> list[dict[str, Any]]:
+    """A fresh copy of `_BASE_FILTERS`, optionally narrowed to one team.
+
+    Never mutate `_BASE_FILTERS` in place — it is a module-level constant
+    shared across every request.
+    """
+    filters = list(_BASE_FILTERS)
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
+    return filters
 
 
 async def query_top_agents_by_conversations(
@@ -50,14 +62,10 @@ async def query_top_agents_by_conversations(
     since: datetime,
     until: datetime,
     request: Request,
+    team_id: TeamId | None = None,
 ) -> MultiSeriesTimeSeriesResponse:
-    await (
-        get_application_container(request)
-        .get_rebac_engine()
-        .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
-        )
-    )
+    # Authorization already resolved by the router (kpi/api.py, KpiScope).
+    del user, request
 
     interval, date_fmt = resolve_interval(since, until)
 
@@ -70,7 +78,7 @@ async def query_top_agents_by_conversations(
     # this is the deleted-instance safety net: the name was persisted at emit time.
     top_body: dict[str, Any] = {
         "size": 0,
-        "query": {"bool": {"filter": [time_filter, *_BASE_FILTERS]}},
+        "query": {"bool": {"filter": [time_filter, *_filters(team_id)]}},
         "aggs": {
             "by_agent": {
                 "terms": {
@@ -116,7 +124,7 @@ async def query_top_agents_by_conversations(
     # Phase 2: time-series breakdown per instance.
     series_body: dict[str, Any] = {
         "size": 0,
-        "query": {"bool": {"filter": [time_filter, *_BASE_FILTERS]}},
+        "query": {"bool": {"filter": [time_filter, *_filters(team_id)]}},
         "aggs": {
             "by_time": {
                 "date_histogram": {
@@ -172,4 +180,5 @@ TOP_AGENTS_BY_CONVERSATIONS_PRESET = PresetDef(
     response_model=MultiSeriesTimeSeriesResponse,
     handler=query_top_agents_by_conversations,
     summary=f"Top {TOP_N} agents by conversation turn count, with per-bucket time series",
+    team_scopable=True,  # agent.turn_completed carries dims.team_id
 )
