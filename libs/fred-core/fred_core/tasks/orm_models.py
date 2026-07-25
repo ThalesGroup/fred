@@ -79,6 +79,16 @@ class TaskRunRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )
+    # Persisted acknowledgement (OBSERV-02 v3 / TASK-EVENT-STREAM-RFC.md rev. 3
+    # §2.10) — both NULL means "not acknowledged", the only state for every
+    # task recorded before this column existed. Never cleared once set except
+    # by a later terminal event superseding it (see TaskService.acknowledge's
+    # "needs attention" predicate, re-evaluated against the CURRENT run, not
+    # this column, on every read).
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class TaskEventLogRow(Base):
