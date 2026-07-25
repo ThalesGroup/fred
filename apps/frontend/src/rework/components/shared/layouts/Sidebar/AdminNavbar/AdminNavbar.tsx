@@ -68,6 +68,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.corpusAudit"),
+      icon: { category: "outlined", type: "find_in_page", filled: false },
+      linkProps: { to: "/admin/corpus-audit" },
+      visible: canAdmin,
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.selftest"),
       icon: { category: "outlined", type: "check_circle", filled: false },
       linkProps: { to: "/admin/self-test" },

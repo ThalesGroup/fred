@@ -15,9 +15,7 @@
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
-// KEA CUTOVER 2026 — temporary, delete this import and its route below a few
-// weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
-import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
+import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
@@ -194,22 +192,21 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "admin/migration",
+        // Corpus audit (#2112): platform-admin-only surface over the document
+        // store audit/fix endpoints (`CAN_MANAGE_PLATFORM`) — same gate as the
+        // other admin-only pages above.
+        path: "admin/corpus-audit",
         element: (
           <Protected requires="admin">
-            <MigrationPage />
+            <CorpusAuditPage />
           </Protected>
         ),
       },
       {
-        // KEA CUTOVER 2026 — temporary, deliberately NOT linked from any nav
-        // menu (reached by direct URL only, mirroring kea's own
-        // /admin/kea-migration) so it never gets mistaken for the permanent
-        // export/import tool above. Delete with KeaMigrationPage/.
-        path: "admin/kea-migration",
+        path: "admin/migration",
         element: (
           <Protected requires="admin">
-            <KeaMigrationPage />
+            <MigrationPage />
           </Protected>
         ),
       },

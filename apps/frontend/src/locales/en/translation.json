@@ -387,6 +387,17 @@
     "vectorTableTitle": "Documents with vectors",
     "vectorsColumn": "Vectors"
   },
+  "dataTable": {
+    "pagination": {
+      "first": "First page",
+      "itemsPerPage": "Items per page",
+      "last": "Last page",
+      "next": "Next page",
+      "pageNumber": "Page {{page}}",
+      "prev": "Previous page",
+      "totalItems": "{{count}} items"
+    }
+  },
   "dialogs": {
     "cancel": "Cancel"
   },
@@ -831,12 +842,14 @@
         "subtitle": "Platform capability catalog: per-team enablement, platform defaults, and health.",
         "loading": "Loading capabilities…",
         "loadError": "Could not load the capability catalog.",
+        "empty": "No capabilities are advertised by any runtime pod yet.",
         "manageTeams": "Manage teams",
         "kindFilter": {
           "tool": "Tools",
           "agent": "Agents",
           "aria": "Filter by capability kind"
         },
+        "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
@@ -858,7 +871,7 @@
           "suspended": "{{count}} suspended",
           "suspendedAction": "Show the {{count}} suspended agent(s), grouped by team",
           "unknown": "{{count}} unknown",
-          "unknownHint": "The agentic pod was unreachable, so this capability's health can't be determined right now.",
+          "unknownHint": "The runtime pod was unreachable, so this capability's health can't be determined right now.",
           "healthy": "OK"
         },
         "suspendedDrawer": {
@@ -917,6 +930,42 @@
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
             "defaultError": "Could not reset the personal-space default."
           }
+        }
+      },
+      "corpusAudit": {
+        "title": "Corpus audit",
+        "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
+        "loading": "Loading the corpus audit…",
+        "loadError": "Could not load the corpus audit.",
+        "refresh": "Refresh",
+        "fix": "Fix anomalies",
+        "fixing": "Fixing…",
+        "empty": "No anomalies to show.",
+        "noAnomalies": "No anomalies found — the content store, vector store, and metadata are in sync.",
+        "anomaliesFound_one": "{{count}} anomaly found.",
+        "anomaliesFound_other": "{{count}} anomalies found.",
+        "fixSuccess_one": "Fix complete — {{count}} orphan record removed.",
+        "fixSuccess_other": "Fix complete — {{count}} orphan records removed.",
+        "fixError": "Could not fix the anomalies.",
+        "stats": {
+          "metadata": "Metadata records",
+          "vectors": "Vector-store documents",
+          "content": "Content-store documents"
+        },
+        "col": {
+          "document": "Document",
+          "sourceTag": "Source",
+          "metadata": "Metadata",
+          "vectorStore": "Vector store",
+          "contentStore": "Content store",
+          "vectorChunks": "Chunks",
+          "issues": "Issues"
+        },
+        "fixConfirm": {
+          "title": "Fix corpus anomalies?",
+          "message": "Deletes orphan vector and content-store data left behind by documents that no longer have a matching metadata record. This cannot be undone.",
+          "confirm": "Fix anomalies",
+          "cancel": "Cancel"
         }
       }
     },
@@ -1230,8 +1279,8 @@
     "save": "Save",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Start an agentic pod to enroll managed agents.",
-        "title": "No agentic pod available"
+        "description": "Start a runtime pod to enroll managed agents.",
+        "title": "No agent runtime available"
       },
       "controlPlane": {
         "description": "Check that the control-plane service is running.",
@@ -1254,6 +1303,7 @@
         "menu": {
           "analytics": "Analytics",
           "capabilities": "Capabilities",
+          "corpusAudit": "Corpus audit",
           "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Activity",
@@ -1312,10 +1362,6 @@
       }
     },
     "tasks": {
-      "card": {
-        "copyWarnings": "Copy warnings",
-        "copied": "Copied!"
-      },
       "indicator": {
         "details": "{{label}} — click for details"
       },
@@ -1370,17 +1416,6 @@
             "agents": "Agents",
             "prompts": "Prompts"
           }
-        },
-        "keaLink": "Kea → Swift cutover tools (temporary) →",
-        "resetFull": {
-          "launch": "Full teardown",
-          "running": "Wiping…",
-          "taskLabel": "Platform full teardown",
-          "confirmTitle": "Full teardown — wipe everything except the root admin?",
-          "confirmMessage": "Permanently deletes every agent, tag, document, team, and prompt, every OpenFGA permission, and every Keycloak user. Only the identity that completed root bootstrap and your own account (if different) survive. This is different from \"Reset platform\" above — use it only to recover from a failed cutover import.",
-          "confirmLabel": "Wipe everything",
-          "cancelLabel": "Cancel",
-          "error": "Full teardown failed"
         }
       },
       "page": {
@@ -1572,7 +1607,7 @@
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },
-        "noTemplates": "No agent templates available — start an agentic pod.",
+        "noTemplates": "No agent templates available — start a runtime pod.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
