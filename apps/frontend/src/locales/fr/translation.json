@@ -1379,6 +1379,7 @@
         "labelPlaceholder": "ex. castle-prod",
         "launch": "Lancer la migration",
         "launching": "Lancement...",
+        "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
         "title": "Migration de plateforme",
         "import": {
           "title": "Importer"
@@ -1398,6 +1399,16 @@
           "confirmLabel": "Réinitialiser",
           "cancelLabel": "Annuler",
           "error": "Échec de la réinitialisation"
+        },
+        "resetFull": {
+          "launch": "Effacement complet",
+          "running": "Effacement…",
+          "taskLabel": "Effacement complet de la plateforme",
+          "confirmTitle": "Effacement complet — tout supprimer sauf l'admin root ?",
+          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, toutes les permissions OpenFGA, et tous les utilisateurs Keycloak. Seules survivent l'identité ayant effectué le bootstrap root et votre propre compte (s'il est différent). Différent de « Réinitialiser la plateforme » ci-dessus — à utiliser uniquement pour récupérer d'un import de bascule qui a échoué.",
+          "confirmLabel": "Tout effacer",
+          "cancelLabel": "Annuler",
+          "error": "Échec de l'effacement complet"
         },
         "stats": {
           "title": "Vue d'ensemble",
@@ -1457,6 +1468,10 @@
         "inMinutes": "dans {{count}} min",
         "inHours": "dans {{count}} h",
         "inDays": "dans {{count}} j"
+      },
+      "card": {
+        "copyWarnings": "Copier les avertissements",
+        "copied": "Copié !"
       }
     },
     "adminTeams": {
