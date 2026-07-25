@@ -65,11 +65,11 @@ export default function CorpusAuditPage() {
     setShowFixConfirm(false);
     try {
       const result = await fixAnomalies().unwrap();
-      const deletedCount =
-        (result.deleted_metadata?.length ?? 0) +
-        (result.deleted_vectors?.length ?? 0) +
-        (result.deleted_content?.length ?? 0);
-      showSuccess({ summary: t("rework.admin.corpusAudit.fixSuccess", { count: deletedCount }) });
+      const deletedCount = (result.deleted_vectors?.length ?? 0) + (result.deleted_content?.length ?? 0);
+      const resetCount = result.reset_metadata?.length ?? 0;
+      showSuccess({
+        summary: t("rework.admin.corpusAudit.fixSuccess", { deletedCount, resetCount }),
+      });
       // The fix mutation isn't tagged against the audit query (no shared RTK
       // Query tag between the two endpoints), so the table won't refresh on
       // its own — refetch explicitly, same pattern as MigrationPage's

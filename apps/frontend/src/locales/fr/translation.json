@@ -944,8 +944,7 @@
         "noAnomalies": "Aucune anomalie détectée — le magasin de contenu, le magasin vectoriel et les métadonnées sont synchronisés.",
         "anomaliesFound_one": "{{count}} anomalie détectée.",
         "anomaliesFound_other": "{{count}} anomalies détectées.",
-        "fixSuccess_one": "Correction terminée — {{count}} enregistrement orphelin supprimé.",
-        "fixSuccess_other": "Correction terminée — {{count}} enregistrements orphelins supprimés.",
+        "fixSuccess": "Correction terminée — {{resetCount}} document(s) réparé(s) (statut réinitialisé, rien supprimé), {{deletedCount}} enregistrement(s) orphelin(s) supprimé(s).",
         "fixError": "Impossible de corriger les anomalies.",
         "stats": {
           "metadata": "Enregistrements de métadonnées",
@@ -963,7 +962,7 @@
         },
         "fixConfirm": {
           "title": "Corriger les anomalies du corpus ?",
-          "message": "Supprime les données orphelines du magasin vectoriel et du magasin de contenu laissées par des documents qui n'ont plus d'enregistrement de métadonnées correspondant. Cette action est irréversible.",
+          "message": "Supprime les données orphelines du magasin vectoriel/contenu sans document correspondant, et répare les documents dont le statut de traitement est erroné (l'enregistrement est conservé — seul le statut est réinitialisé, rien n'est supprimé côté document). Cette action est irréversible.",
           "confirm": "Corriger les anomalies",
           "cancel": "Annuler"
         }

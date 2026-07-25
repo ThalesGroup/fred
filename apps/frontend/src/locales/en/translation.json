@@ -944,8 +944,7 @@
         "noAnomalies": "No anomalies found — the content store, vector store, and metadata are in sync.",
         "anomaliesFound_one": "{{count}} anomaly found.",
         "anomaliesFound_other": "{{count}} anomalies found.",
-        "fixSuccess_one": "Fix complete — {{count}} orphan record removed.",
-        "fixSuccess_other": "Fix complete — {{count}} orphan records removed.",
+        "fixSuccess": "Fix complete — {{resetCount}} document(s) repaired (stage reset, nothing deleted), {{deletedCount}} orphan record(s) removed.",
         "fixError": "Could not fix the anomalies.",
         "stats": {
           "metadata": "Metadata records",
@@ -963,7 +962,7 @@
         },
         "fixConfirm": {
           "title": "Fix corpus anomalies?",
-          "message": "Deletes orphan vector and content-store data left behind by documents that no longer have a matching metadata record. This cannot be undone.",
+          "message": "Deletes orphan vector/content-store data with no matching document, and repairs documents with a stale processing status (their record is kept — only the stage is reset to pending, nothing about the document is deleted). This cannot be undone.",
           "confirm": "Fix anomalies",
           "cancel": "Cancel"
         }

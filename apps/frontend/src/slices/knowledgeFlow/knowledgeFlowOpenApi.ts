@@ -1278,7 +1278,7 @@ export type CorpusBuildTocApiResponse = /** status 200 Successful Response */ an
 export type CorpusBuildTocApiArg = {
   buildCorpusTocRequestV1: BuildCorpusTocRequestV1;
 };
-export type CorpusRevectorizeApiResponse = /** status 200 Successful Response */ any;
+export type CorpusRevectorizeApiResponse = /** status 200 Successful Response */ StartTaskResponse;
 export type CorpusRevectorizeApiArg = {
   revectorizeCorpusRequestV1: RevectorizeCorpusRequestV1;
 };
@@ -1849,9 +1849,10 @@ export type StoreAuditReport = {
 export type StoreAuditFixResponse = {
   before: StoreAuditReport;
   after: StoreAuditReport;
-  deleted_metadata?: string[];
   deleted_vectors?: string[];
   deleted_content?: string[];
+  /** Documents whose lying processing stage (missing_content/missing_vectors) was reset to NOT_STARTED. Never deleted — see fix_store_anomalies. */
+  reset_metadata?: string[];
 };
 export type MarkdownContentResponse = {
   content: string;
@@ -2251,6 +2252,9 @@ export type BuildCorpusTocRequestV1 = {
   team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
+};
+export type StartTaskResponse = {
+  task_id: string;
 };
 export type RevectorizeOptionsV1 = {
   mode?: "full" | "incremental";
