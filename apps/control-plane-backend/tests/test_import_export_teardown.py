@@ -68,8 +68,8 @@ def _user_deps() -> UserServiceDependencies:
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.prompt_models  # noqa: F401
+    # agent_instance_models (AgentInstanceRow) and prompt_models (PromptRow) are
+    # already imported above — only orm_models still needs a registration-only import.
     import fred_core.tasks.orm_models  # noqa: F401
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / name}")

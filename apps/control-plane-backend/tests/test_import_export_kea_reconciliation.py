@@ -19,7 +19,6 @@ from control_plane_backend.import_export.kea_reconciliation import (
     kea_username_by_sub,
 )
 from fred_core import RebacReference, Relation, RelationType, Resource
-
 from tests.test_import_export_kea_bundle import (
     UID_BOB,
     UID_LIAM,
