@@ -500,3 +500,67 @@ def test_mcp_server_configuration_team_scope_parses_from_raw_value() -> None:
     }
     server = MCPServerConfiguration.model_validate(raw)
     assert server.team_scope is TeamScopePolicy.DEFAULT_ON
+
+
+# ---------------------------------------------------------------------------
+# kind="model" (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7)
+# ---------------------------------------------------------------------------
+
+
+def test_kind_accepts_model() -> None:
+    entry = CapabilityCatalogEntry(
+        id="model__openai__gpt-5.1",
+        version="1",
+        name="gpt-5.1",
+        description="gpt-5.1",
+        icon="neurology",
+        kind="model",
+    )
+    assert entry.kind == "model"
+
+
+def test_model_capability_id_is_namespaced_and_stable() -> None:
+    from fred_sdk.contracts.capability.manifest import (
+        MODEL_CAPABILITY_NAMESPACE_PREFIX,
+        model_capability_id,
+    )
+
+    cap_id = model_capability_id("openai", "gpt-5.1")
+    assert cap_id.startswith(MODEL_CAPABILITY_NAMESPACE_PREFIX)
+    # Same input -> same id (routing decisions depend on this being stable
+    # across every aggregation call, not regenerated differently each time).
+    assert model_capability_id("openai", "gpt-5.1") == cap_id
+    # Matches CAPABILITY_ID_PATTERN — the id this function produces must
+    # always be admissible to the same OpenFGA-safe check every other
+    # catalog entry id goes through.
+    import re
+
+    from fred_sdk.contracts.capability.manifest import CAPABILITY_ID_PATTERN
+
+    assert re.fullmatch(CAPABILITY_ID_PATTERN, cap_id)
+
+
+def test_model_capability_id_normalizes_unsafe_characters() -> None:
+    from fred_sdk.contracts.capability.manifest import (
+        CAPABILITY_ID_PATTERN,
+        model_capability_id,
+    )
+    import re
+
+    # A provider/model name containing characters OpenFGA forbids in object
+    # ids (`:`, `/`) must still produce an admissible id, not propagate them.
+    cap_id = model_capability_id("azure:apim", "gpt-4o/vision")
+    assert re.fullmatch(CAPABILITY_ID_PATTERN, cap_id)
+
+
+def test_model_capability_id_distinguishes_provider_and_name() -> None:
+    from fred_sdk.contracts.capability.manifest import model_capability_id
+
+    # Two different (provider, name) pairs must never collapse to the same
+    # id — each is a distinct admin enablement decision.
+    assert model_capability_id("openai", "gpt-5.1") != model_capability_id(
+        "azure", "gpt-5.1"
+    )
+    assert model_capability_id("ollama", "mistral") != model_capability_id(
+        "ollama", "mixtral"
+    )

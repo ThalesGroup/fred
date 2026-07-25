@@ -967,6 +967,54 @@ class _McpCatalogResponse(BaseModel):
     servers: list[_McpCatalogEntry]
 
 
+class _ModelCatalogEntry(BaseModel):
+    id: str
+    provider: str
+    name: str
+    description: str | None = None
+
+
+class _ModelCatalogResponse(BaseModel):
+    models: list[_ModelCatalogEntry]
+
+
+def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
+    """One `_ModelCatalogEntry` per distinct (provider, name) pair in a
+    loaded `ModelCatalog` (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+
+    Pulled out of `get_models_catalog` as a pure function so it is directly
+    unit-testable without a running app (`agent_app.py` has no existing
+    FastAPI TestClient harness — building one just for this route would be
+    disproportionate; this function is where the actual logic worth testing
+    lives). `catalog` is typed `Any` here to avoid a module-level
+    `..model_routing` import (see the route's own lazy import for why);
+    callers pass a real `ModelCatalog`.
+    """
+    from fred_sdk.contracts.capability.manifest import model_capability_id
+
+    seen: dict[tuple[str, str], _ModelCatalogEntry] = {}
+    for profile in catalog.profiles:
+        provider = profile.model.provider
+        name = profile.model.name
+        # ModelProfile.validate_model (contracts.py) already guarantees both
+        # are non-empty strings for every profile that exists — asserted
+        # (not a skip/continue) so this narrows the type instead of hiding
+        # an invariant violation the validator itself is supposed to prevent.
+        assert provider and name, (
+            f"ModelProfile {profile.profile_id!r} passed validation without provider/name"
+        )
+        key = (provider, name)
+        if key in seen:
+            continue
+        seen[key] = _ModelCatalogEntry(
+            id=model_capability_id(provider, name),
+            provider=provider,
+            name=name,
+            description=profile.description,
+        )
+    return list(seen.values())
+
+
 class _ResolvedAgentInstance(BaseModel):
     agent_instance_id: str
     template_agent_id: str
@@ -2944,6 +2992,42 @@ def _build_agent_router(
             ]
         )
 
+    @router.get("/models-catalog")
+    async def get_models_catalog() -> _ModelCatalogResponse:
+        """
+        Return this pod's routable models, one entry per distinct
+        (provider, name) pair (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+
+        Why this endpoint exists:
+        - control-plane's capability catalog aggregation
+          (`aggregate_capability_catalog`) has no other way to learn what
+          models this pod can route to — `models_catalog.yaml` is loaded
+          only here, for routing, with no prior control-plane consumer.
+        - one entry per (provider, name), not per catalog profile: a model
+          used for both the `chat` and `language` routing capability is one
+          admin enablement decision, not two.
+
+        Re-reads `models_catalog.yaml` fresh on every call (same file
+        `_build_chat_model_factory` loaded once at boot) rather than
+        caching the parsed catalog — this route is polled rarely (admin
+        catalog refresh), never per-turn, so the extra local file read is
+        immaterial and keeps this always consistent with whatever the pod
+        would actually resolve, with no separate cache to go stale.
+
+        How to use it:
+        - call from control-plane's `_model_capabilities_for_source`
+
+        Example:
+        - `GET /fred/agents/v2/agents/models-catalog`
+        """
+        from ..model_routing import load_model_catalog
+
+        catalog_path = get_runtime_context().config.models_catalog_path
+        if not catalog_path:
+            return _ModelCatalogResponse(models=[])
+        catalog = load_model_catalog(catalog_path)
+        return _ModelCatalogResponse(models=_project_model_catalog_entries(catalog))
+
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(
         capability_id: str,
@@ -3939,6 +4023,7 @@ def create_agent_app(
                     checkpointer=checkpointer,
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
+                    models_catalog_path=config.get_models_catalog_path(),
                     inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,

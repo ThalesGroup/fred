@@ -1844,24 +1844,56 @@ system." Every mechanism this RFC built for `kind="tool"`/`kind="agent"` —
 schema, `can_use`, the enablement write path (§8.2–§8.3), the admin dashboard
 (§8.5) — now governs all three kinds uniformly.
 
-**Catalog projection, not authorship.** Like `kind="agent"` entries
-(§8.6: "no `CapabilityManifest` of kind `'agent'` is ever authored"), no one
-hand-writes a `kind="model"` manifest either. `models_catalog.yaml`
-(`apps/fred-agents/config/models_catalog.yaml`, loaded by
-`fred_runtime.model_routing.catalog.load_model_catalog`) remains the sole
-source of truth for routing (profiles, provider settings, routing rules) —
-untouched by this change. A new projector, alongside
-`aggregate_capability_catalog` (`capabilities/catalog.py`), reads the
-catalog's `profiles` and emits one `CapabilityCatalogEntry(kind="model")` per
-distinct `(provider, name)` pair — **not** one per `profile_id`. Today's 26
-profiles collapse to ~13 catalog entries; a model used for both `chat` and
-`language` capability is one enablement decision, not two, because that is
-the unit an admin actually reasons about ("can this team use GPT-4o" — not
-"can this team use GPT-4o-as-chat-profile vs GPT-4o-as-language-profile").
-The entry's `id` is a stable slug derived from `(provider, name)` (e.g.
-`model__openai__gpt-5.1`); it internally lists the `profile_id`s it backs —
-an implementation detail, never exposed to the enablement layer, which only
-ever sees the entry `id`.
+**Catalog projection, not authorship — and NOT a direct file read.**
+Like `kind="agent"` entries (§8.6: "no `CapabilityManifest` of kind
+`'agent'` is ever authored"), no one hand-writes a `kind="model"` manifest
+either. `models_catalog.yaml` (`apps/fred-agents/config/models_catalog.yaml`,
+loaded by `fred_runtime.model_routing.catalog.load_model_catalog`) remains
+the sole source of truth for routing (profiles, provider settings, routing
+rules) — untouched by this change.
+
+**Corrected during implementation (2026-07-25):** this section originally
+proposed a projector living alongside `aggregate_capability_catalog`
+(control-plane-backend) that reads `models_catalog.yaml` directly. That is
+architecturally wrong for a real multi-pod deployment: control-plane has no
+filesystem access to a runtime pod's mounted config, and — critically for a
+platform running **multiple fred-agents replicas/deployments** — different
+runtime sources can in principle carry different catalogs, so there is no
+single file for control-plane to read even if it could. The actual shape
+mirrors `kind="agent"` more closely than first assumed, but with one
+difference: `kind="agent"` entries are synthesized control-plane-side purely
+from data already fetched (`/agents/templates`), while `models_catalog.yaml`
+has no existing control-plane consumer at all — a new pod-side fetch was
+unavoidable, following the exact pattern `_fetch_mcp_catalog`/`GET
+/agents/mcp-catalog` already established for cross-service catalog exposure:
+
+1. **fred-runtime** (`agent_app.py`) exposes `GET /agents/models-catalog`,
+   loading `models_catalog.yaml` fresh on every call (rare polling, never
+   per-turn — no caching needed) and projecting `catalog.profiles` into one
+   entry per distinct `(provider, name)` pair — **not** one per `profile_id`.
+   Today's 26 profiles collapse to ~13 catalog entries; a model used for
+   both `chat` and `language` capability is one enablement decision, not
+   two, because that is the unit an admin actually reasons about ("can this
+   team use GPT-4o" — not "can this team use GPT-4o-as-chat-profile vs
+   GPT-4o-as-language-profile"). The runtime derives the id itself
+   (`model_capability_id(provider, name)`, fred-sdk — a shared helper, not
+   duplicated logic, since both the runtime that generates ids and
+   control-plane's collision guard need the exact same namespace contract)
+   and returns it directly; control-plane trusts it as-is, the same trust
+   boundary `kind="tool"` ids already cross.
+2. **control-plane-backend** (`product/service.py::_model_capabilities_for_source`)
+   fetches that endpoint per runtime source — a THIRD fetch in
+   `aggregate_capability_catalog`, alongside the existing tool and agent
+   fetches, same best-effort contract (`None` on an unreachable pod).
+   `MODEL_CAPABILITY_NAMESPACE_PREFIX` (`model__`, fred-sdk) gets the exact
+   same reserved-prefix collision guard `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+   already has.
+
+The entry's `id` (e.g. `model__openai__gpt-5.1`) internally corresponds to
+every `profile_id` sharing that `(provider, name)` — an implementation
+detail resolved at read time from `catalog.profiles`, never persisted
+separately or exposed to the enablement layer, which only ever sees the
+entry `id`.
 
 **Field mapping onto the existing shape** (`CapabilityCatalogEntry`,
 `libs/fred-sdk/fred_sdk/contracts/capability/manifest.py`):
@@ -1927,7 +1959,18 @@ unchanged) and deciding the initial `default_on` position for each of the
 ~13 entries — recommend **default-on for all currently-routable models** at
 cutover (nothing is disabled on day one; platform_admin opts specific models
 out afterward), so the migration is a pure visibility addition, not a
-behavior change.
+behavior change. This anchoring/default_on step only matters once the
+enforcement chokepoint below exists — until then, `kind="model"` entries are
+purely visible/toggleable in the admin catalog with zero effect on actual
+routing, so there is nothing to migrate yet.
+
+**Status (2026-07-25):** the catalog-projection half above (fred-sdk `kind`
+literal + `model_capability_id`, the runtime endpoint, control-plane's
+fetch/aggregate/collision-guard) is implemented and tested — offline suites
+green: fred-sdk, fred-runtime, control-plane-backend. `CapabilitiesPage.tsx`'s
+`KIND_FILTERS` widen (frontend) is deferred to the same batch as the rest of
+this delivery's frontend work. The enforcement chokepoint below remains the
+one open, unimplemented piece.
 
 ---
 
