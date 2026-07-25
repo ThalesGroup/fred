@@ -175,7 +175,11 @@ async def test_missing_content_cascades_reset_never_deletes_metadata():
 
 
 @pytest.mark.asyncio
-async def test_orphan_vectors_and_content_are_deleted_no_metadata_involved():
+async def test_orphan_vectors_and_content_are_reported_never_deleted():
+    """fix_store_anomalies must leave orphans alone — a platform admin decides
+    by hand whether to delete or investigate first. This is a deliberate
+    product decision (2026-07-25): the audit only ever reports or repairs a
+    lying stage flag, it never deletes data on its own."""
     service = _build_service(
         docs={},
         content_uids={"orphan-content-doc"},
@@ -189,23 +193,26 @@ async def test_orphan_vectors_and_content_are_deleted_no_metadata_involved():
 
     fixed = await service.fix_store_anomalies(user=object())
 
-    assert fixed.deleted_content == ["orphan-content-doc"]
-    assert fixed.deleted_vectors == ["orphan-vector-doc"]
     assert fixed.reset_metadata == []
-    assert service.content_store.uids == set()
-    assert service.vector_store.uids == set()
+    # Nothing was touched — the orphans are exactly as before.
+    assert service.content_store.uids == {"orphan-content-doc"}
+    assert service.vector_store.uids == {"orphan-vector-doc"}
+    assert service.content_store.deleted == []
+    assert service.vector_store.deleted == []
 
     after = await service.audit_stores(user=object())
-    assert not after.has_anomalies
+    assert after.has_anomalies
+    assert len(after.anomalies) == 2
 
 
 @pytest.mark.asyncio
-async def test_fix_response_has_no_deleted_metadata_field():
-    """Regression guard: deleted_metadata was removed, not merely left empty —
-    fix_store_anomalies must never be able to report a metadata deletion again."""
-    fixed_fields = MetadataService.__module__  # sanity import check only
-    del fixed_fields
+async def test_fix_response_has_no_deletion_fields():
+    """Regression guard: deleted_metadata/deleted_vectors/deleted_content were
+    removed, not merely left empty — fix_store_anomalies must never be able
+    to report deleting anything again."""
     from knowledge_flow_backend.features.metadata.service import StoreAuditFixResponse
 
     assert "deleted_metadata" not in StoreAuditFixResponse.model_fields
+    assert "deleted_vectors" not in StoreAuditFixResponse.model_fields
+    assert "deleted_content" not in StoreAuditFixResponse.model_fields
     assert "reset_metadata" in StoreAuditFixResponse.model_fields

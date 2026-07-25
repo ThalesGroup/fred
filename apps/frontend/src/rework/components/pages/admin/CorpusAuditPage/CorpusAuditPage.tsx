@@ -60,15 +60,22 @@ export default function CorpusAuditPage() {
 
   const anomalies = data?.anomalies ?? [];
   const hasAnomalies = data?.has_anomalies ?? false;
+  // "Fix" only ever repairs missing_content/missing_vectors (resets a lying
+  // stage flag) — it never touches orphan_vectors/orphan_content, which stay
+  // reported for a human to delete by hand or investigate. Disable the
+  // button when there's nothing it would actually do, so it's never a no-op
+  // click on an orphan-only anomaly set.
+  const hasRepairableAnomalies = anomalies.some((finding) =>
+    (finding.issues ?? []).some((issue) => issue === "missing_content" || issue === "missing_vectors"),
+  );
 
   const handleFixConfirmed = async () => {
     setShowFixConfirm(false);
     try {
       const result = await fixAnomalies().unwrap();
-      const deletedCount = (result.deleted_vectors?.length ?? 0) + (result.deleted_content?.length ?? 0);
       const resetCount = result.reset_metadata?.length ?? 0;
       showSuccess({
-        summary: t("rework.admin.corpusAudit.fixSuccess", { deletedCount, resetCount }),
+        summary: t("rework.admin.corpusAudit.fixSuccess", { count: resetCount }),
       });
       // The fix mutation isn't tagged against the audit query (no shared RTK
       // Query tag between the two endpoints), so the table won't refresh on
@@ -144,7 +151,7 @@ export default function CorpusAuditPage() {
             size="medium"
             icon={{ category: "outlined", type: "build" }}
             onClick={() => setShowFixConfirm(true)}
-            disabled={isLoading || isFetching || isFixing || !hasAnomalies}
+            disabled={isLoading || isFetching || isFixing || !hasRepairableAnomalies}
           >
             {isFixing ? t("rework.admin.corpusAudit.fixing") : t("rework.admin.corpusAudit.fix")}
           </Button>

@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The fix action is destructive (deletes orphan vector/content data), so the
+// The fix action mutates many documents at once (resets a stale processing
+// stage — never deletes anything, see CorpusAuditPage.tsx), so the
 // confirm → mutation wiring needs real DOM interaction, not just static
 // markup — rendered with react-dom/client + act, same convention as
 // TeamCard.test.tsx (this repo's vitest default environment is "node", with
@@ -185,7 +186,7 @@ describe("CorpusAuditPage fix-confirmation flow", () => {
     h.audit = {
       data: report({
         has_anomalies: true,
-        anomalies: [finding({ document_uid: "doc-1", present_in_vector_store: false })],
+        anomalies: [finding({ document_uid: "doc-1", present_in_vector_store: false, issues: ["missing_vectors"] })],
       }),
       isLoading: false,
       isFetching: false,

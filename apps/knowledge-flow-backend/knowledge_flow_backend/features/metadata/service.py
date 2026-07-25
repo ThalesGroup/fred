@@ -84,8 +84,6 @@ class StoreAuditReport(BaseModel):
 class StoreAuditFixResponse(BaseModel):
     before: StoreAuditReport
     after: StoreAuditReport
-    deleted_vectors: list[str] = Field(default_factory=list)
-    deleted_content: list[str] = Field(default_factory=list)
     reset_metadata: list[str] = Field(
         default_factory=list,
         description="Documents whose lying processing stage (missing_content/missing_vectors) was reset to NOT_STARTED. Never deleted — see fix_store_anomalies.",
@@ -1207,51 +1205,29 @@ class MetadataService:
 
     async def fix_store_anomalies(self, user: KeycloakUser) -> StoreAuditFixResponse:
         """
-        Run the audit and repair what it found.
+        Run the audit and repair what it found. Never deletes anything.
 
-        Two genuinely different situations, two different remedies — never
-        conflated:
         - `orphan_vectors`/`orphan_content`: data with no metadata row to
-          attach to. Nothing to recover; delete the dangling artifact.
+          attach to. Left alone — a platform admin decides by hand whether to
+          delete or investigate first (was the metadata row lost by mistake?
+          is the write half-finished?). This service reports them; it does
+          not act on them.
         - `missing_vectors`/`missing_content`: a metadata row whose own
-          processing stage lies (claims DONE when the store disagrees). The
-          metadata is the one thing that's NOT wrong here — deleting it would
-          destroy a document (title, tags, ownership) over a recoverable or
-          not-yet-arrived artifact. Repair means resetting the stage(s) back
-          to NOT_STARTED so the platform stops lying and the document becomes
-          honestly re-processable (re-vectorize for missing_vectors, MIGR-07;
-          re-ingest for missing_content) — never delete the row.
+          processing stage lies (claims DONE when the store disagrees).
+          Repair means resetting the stage(s) back to NOT_STARTED so the
+          platform stops lying and the document becomes honestly
+          re-processable (re-vectorize for missing_vectors, MIGR-07;
+          re-ingest for missing_content) — the metadata row itself is never
+          touched beyond its stage flags.
         """
         await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         before = await self.audit_stores(user)
         reset_metadata: list[str] = []
-        deleted_vectors: list[str] = []
-        deleted_content: list[str] = []
-
-        vector_store = self._ensure_vector_store()
-        content_store = self.content_store
 
         for finding in before.anomalies:
             issues = set(finding.issues)
             doc_uid = finding.document_uid
-
-            remove_vectors = "orphan_vectors" in issues
-            remove_content = "orphan_content" in issues
             needs_stage_reset = finding.present_in_metadata and ("missing_content" in issues or "missing_vectors" in issues)
-
-            if remove_vectors and vector_store is not None and finding.present_in_vector_store:
-                try:
-                    vector_store.delete_vectors_for_document(document_uid=doc_uid)
-                    deleted_vectors.append(doc_uid)
-                except Exception as e:
-                    logger.warning("[AUDIT] Failed to delete vectors for %s: %s", doc_uid, e)
-
-            if remove_content and content_store is not None and finding.present_in_content_store:
-                try:
-                    content_store.delete_content(doc_uid)
-                    deleted_content.append(doc_uid)
-                except Exception as e:
-                    logger.warning("[AUDIT] Failed to delete content for %s: %s", doc_uid, e)
 
             if needs_stage_reset:
                 try:
@@ -1279,7 +1255,5 @@ class MetadataService:
         return StoreAuditFixResponse(
             before=before,
             after=after,
-            deleted_vectors=deleted_vectors,
-            deleted_content=deleted_content,
             reset_metadata=reset_metadata,
         )

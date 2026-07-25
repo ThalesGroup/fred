@@ -1849,8 +1849,6 @@ export type StoreAuditReport = {
 export type StoreAuditFixResponse = {
   before: StoreAuditReport;
   after: StoreAuditReport;
-  deleted_vectors?: string[];
-  deleted_content?: string[];
   /** Documents whose lying processing stage (missing_content/missing_vectors) was reset to NOT_STARTED. Never deleted — see fix_store_anomalies. */
   reset_metadata?: string[];
 };

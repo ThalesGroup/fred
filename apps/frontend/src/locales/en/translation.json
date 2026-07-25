@@ -938,14 +938,15 @@
         "loading": "Loading the corpus audit…",
         "loadError": "Could not load the corpus audit.",
         "refresh": "Refresh",
-        "fix": "Fix anomalies",
-        "fixing": "Fixing…",
+        "fix": "Repair documents",
+        "fixing": "Repairing…",
         "empty": "No anomalies to show.",
         "noAnomalies": "No anomalies found — the content store, vector store, and metadata are in sync.",
         "anomaliesFound_one": "{{count}} anomaly found.",
         "anomaliesFound_other": "{{count}} anomalies found.",
-        "fixSuccess": "Fix complete — {{resetCount}} document(s) repaired (stage reset, nothing deleted), {{deletedCount}} orphan record(s) removed.",
-        "fixError": "Could not fix the anomalies.",
+        "fixSuccess_one": "Repair complete — {{count}} document's processing status was reset. Nothing was deleted.",
+        "fixSuccess_other": "Repair complete — {{count}} documents' processing status was reset. Nothing was deleted.",
+        "fixError": "Could not repair the documents.",
         "stats": {
           "metadata": "Metadata records",
           "vectors": "Vector-store documents",
@@ -961,9 +962,9 @@
           "issues": "Issues"
         },
         "fixConfirm": {
-          "title": "Fix corpus anomalies?",
-          "message": "Deletes orphan vector/content-store data with no matching document, and repairs documents with a stale processing status (their record is kept — only the stage is reset to pending, nothing about the document is deleted). This cannot be undone.",
-          "confirm": "Fix anomalies",
+          "title": "Repair documents with a stale processing status?",
+          "message": "Resets the processing stage of documents whose status claims done when the content or vector store disagrees, so they become honestly re-processable. Nothing is deleted — orphan vector/content-store records with no matching document are left as-is for you to review or remove by hand.",
+          "confirm": "Repair documents",
           "cancel": "Cancel"
         }
       }
