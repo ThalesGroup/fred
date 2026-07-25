@@ -2,8 +2,11 @@
 
 **Status:** Team-approved (2026-07-09) — all tiers. Implementation starts with the
 Tier 2 `create_agent` migration. Amended 2026-07-09 with design-review resolutions
-(§3.9, §5.3, §5.4, §7.1, §7.2, §9.1, §12).
-**Author:** Florian Muller
+(§3.9, §5.3, §5.4, §7.1, §7.2, §9.1, §12). Amended 2026-07-25 (Dimitri Tombroff,
+draft pending sign-off) — §8.7 adds `kind="model"`, folding LLM model
+enable/disable into the existing capability admission and admin-dashboard
+mechanism, as part of the OBSERV-02 role-based dashboard finalization.
+**Author:** Florian Muller (§8.7: Dimitri Tombroff)
 **Scope:** `fred-sdk` (contracts, capability manifest, middleware base), `fred-runtime`
 (agent assembly, `create_agent` migration, capability registry), `control-plane-backend`
 (capability catalog proxy, ReBAC team-scoping), `apps/frontend` (widget + part-renderer +
@@ -1826,6 +1829,105 @@ capability of `kind="agent"` in this exact same object space:
 > reopen the "same object space, no new type" decision this section already
 > made (§7.5's rejection of a parallel admission model), for a problem a
 > reserved id prefix fully solves within the existing model.
+
+### 8.7 `kind="model"`: LLM models as capabilities (2026-07-25 amendment)
+
+**Motivation.** The OBSERV-02 dashboard finalization (`KPI-ANALYTICS-RFC.md` v3)
+gives `platform_admin` a quotas/governance surface. Model choice belongs next
+to it: today a platform_admin has no way to turn a model on/off platform-wide
+or per team — model routing (`models_catalog.yaml`, §below) is entirely a
+runtime-internal concern, invisible to the product surface. Rather than invent
+a bespoke model-enablement mechanism, this section makes `kind="model"` a
+third projection of the existing capability object space — the same move
+§8.6 already made once for `kind="agent"`: "no new FGA type, no parallel
+system." Every mechanism this RFC built for `kind="tool"`/`kind="agent"` —
+schema, `can_use`, the enablement write path (§8.2–§8.3), the admin dashboard
+(§8.5) — now governs all three kinds uniformly.
+
+**Catalog projection, not authorship.** Like `kind="agent"` entries
+(§8.6: "no `CapabilityManifest` of kind `'agent'` is ever authored"), no one
+hand-writes a `kind="model"` manifest either. `models_catalog.yaml`
+(`apps/fred-agents/config/models_catalog.yaml`, loaded by
+`fred_runtime.model_routing.catalog.load_model_catalog`) remains the sole
+source of truth for routing (profiles, provider settings, routing rules) —
+untouched by this change. A new projector, alongside
+`aggregate_capability_catalog` (`capabilities/catalog.py`), reads the
+catalog's `profiles` and emits one `CapabilityCatalogEntry(kind="model")` per
+distinct `(provider, name)` pair — **not** one per `profile_id`. Today's 26
+profiles collapse to ~13 catalog entries; a model used for both `chat` and
+`language` capability is one enablement decision, not two, because that is
+the unit an admin actually reasons about ("can this team use GPT-4o" — not
+"can this team use GPT-4o-as-chat-profile vs GPT-4o-as-language-profile").
+The entry's `id` is a stable slug derived from `(provider, name)` (e.g.
+`model__openai__gpt-5.1`); it internally lists the `profile_id`s it backs —
+an implementation detail, never exposed to the enablement layer, which only
+ever sees the entry `id`.
+
+**Field mapping onto the existing shape** (`CapabilityCatalogEntry`,
+`libs/fred-sdk/fred_sdk/contracts/capability/manifest.py`):
+
+| Field | Value for `kind="model"` |
+|---|---|
+| `id` | `model__<provider>__<name>` (normalized) |
+| `name`, `description` | Derived from the profile's `model.name` / `description` |
+| `icon` | A fixed "model" icon (no per-provider icon set in v1) |
+| `team_scope` | `ADMIN_GATED` (same default as tool/agent) |
+| `config_fields` | Empty — no agent-creation-time config for a model |
+| `team_settings_fields` | Empty in v1 — no per-team model parameters |
+| `assets` | Empty |
+| `execution_models` | Default `("react", "graph")`, ignored for this kind (same no-op as `kind="agent"` already accepts, §8.6) |
+| `default_capability_ids` | Empty (agent-only field, unused here) |
+| `route_base_url` | `None` — a model entry advertises no router |
+
+No field is incompatible; every unused field already has a defined
+zero-value from the `kind="agent"` precedent.
+
+**Admin dashboard: zero new UI.** `CapabilitiesPage.tsx` treats `kind` as a
+pure filter/grouping value in exactly one place
+(`KIND_FILTERS: Array<"tool" | "agent">`, line 50, and the matching
+`useState`) — the tri-state team matrix (`CapabilityTeamMatrixDrawer.tsx`),
+health column, and default-on toggle never branch on `kind`. Adding the
+third kind is: widen `KIND_FILTERS`/its `useState` type to include `"model"`
+(hand-written, not a registry hotspot — safe to edit directly) plus one i18n
+key. The three generated `kind: "tool" | "agent"` unions
+(`controlPlaneOpenApi.ts:1659,2048`, `runtimeOpenApi.ts:863`) widen
+automatically once the backend `Literal` changes and the clients are
+regenerated (`make update-control-plane-api`, `make update-runtime-api`) —
+never hand-edited, per the standing contract rule.
+
+**The one genuinely new piece: runtime enforcement.** Every existing kind has
+a live enforcement chokepoint — `kind="tool"` gates tool selection via
+`can_use_capability` at agent-save time, `kind="agent"` gates template
+enrollment the same way, and both suspend/revive dependent agent instances
+on revocation/grant (§8.2, `enablement.py`). **No equivalent chokepoint
+exists for models today**: model selection is a per-turn runtime decision
+(`ModelRoutingResolver`, `libs/fred-runtime/fred_runtime/app/agent_app.py`)
+with no authorization check in the path at all — confirmed by grep, there is
+no `allowed_models`/`model_allowlist` concept anywhere in the codebase to
+reconcile with. This RFC does not yet specify that chokepoint; it is the
+one non-mechanical piece of new work this amendment introduces, and per the
+capability-boundary rule ("never put capability runtime code in
+control-plane") it must live in `fred-runtime`'s model-routing layer, not
+control-plane. Recommended shape for the follow-up design pass: extend
+`ModelRoutingResolver` to consult a `usable_model_ids`-style set (mirroring
+`usable_capability_ids`, §8.1) sourced from control-plane before resolving a
+profile; **fail closed** (reject the turn with an explicit
+"model disabled for this team" error) rather than silently substituting a
+different model when the resolved profile's capability entry is disabled —
+silent substitution would violate the "consistent experience" goal this
+whole dashboard effort is built around, and could route a turn to a model
+the team never agreed to use. This fallback rule is a recommendation, not
+yet confirmed — flag for explicit developer sign-off before implementation
+(Step 3).
+
+**Migration:** none for `models_catalog.yaml` itself (it stays exactly as
+is, routing-only). The one-time step is anchoring each projected `kind="model"`
+entry to the singleton organization (`ensure_capability_anchor`, reused
+unchanged) and deciding the initial `default_on` position for each of the
+~13 entries — recommend **default-on for all currently-routable models** at
+cutover (nothing is disabled on day one; platform_admin opts specific models
+out afterward), so the migration is a pure visibility addition, not a
+behavior change.
 
 ---
 

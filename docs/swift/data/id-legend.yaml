@@ -855,6 +855,14 @@ items:
       `depends_on` (a capability declaring it needs others) and the
       refuse-and-signal admin UX when enabling an agent without its tool
       dependencies granted — deferred fast-follow, not implemented.
+      2026-07-25 (Dimitri Tombroff, draft pending sign-off): RFC §8.7 adds a
+      third `kind="model"`, projecting `models_catalog.yaml` profiles
+      (deduplicated by (provider, name)) into this same catalog/enablement
+      model — driven by OBSERV-02 v3's platform_admin model-governance need.
+      Admin dashboard reuse is mechanical (`kind` is already a pure filter);
+      the one new piece is a runtime enforcement chokepoint in fred-runtime's
+      model routing, which doesn't exist for any kind today and needs its own
+      design confirmation before implementation.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -1750,11 +1758,30 @@ items:
 
   - id: OBSERV-02
     title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
-    status: draft
+    status: draft (awaiting developer confirmation)
     owner: fmuller
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §7b"
+      execution: "GitHub issue #2110"
+    notes: >
+      2026-07-25 (Dimitri Tombroff): v3 finalizes the target vision for all six
+      product roles (platform_admin, platform_observer, team_admin, team_editor,
+      team_analyst, team_member) — Page 2 "team dashboard" (v1/v2 left it
+      unbuilt) is now fully specified, plus green/carbon+electricity metrics
+      (essential, shown everywhere token usage is shown) and an optional $ cost
+      estimate. Deliberately built as a thin layer over three existing systems
+      rather than new parallel ones: KPI presets (parameterized with an optional
+      team_id, not forked per scope), the capability enablement system (models
+      become a third `kind="model"`, amended directly into CAPAB-01 /
+      `AGENT-CAPABILITY-RFC.md` §8.7 — not duplicated here), and the task bus
+      (Activités panels embed the existing `TaskActivity` organism; persisted
+      acknowledgement amended directly into OPS-04 / `TASK-EVENT-STREAM-RFC.md`
+      §2.10 — not duplicated here). New platform settings (storage quota
+      default, erasure retention duration) is the one genuinely new small
+      surface. Open items pending Step 3 sign-off: team conversation-breakdown
+      dimension, model-routing fail-closed fallback (CAPAB-01), single-global-
+      quota scope cut for v1 — see KPI-ANALYTICS-RFC.md §6.
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
@@ -1881,6 +1908,12 @@ items:
       (tag→team resolution existed for quota checks but was never reused to tag the task).
       Pending: the central-table/RemoteTaskClient backend consolidation (deferred to after
       finalization).
+      2026-07-25 (Dimitri Tombroff, draft pending sign-off): rev. 3 (§2.10) adds persisted
+      acknowledgement — `acknowledged_at`/`acknowledged_by` on `task_run`, `POST
+      /tasks/{id}/ack` — replacing the client-only, tray-bulk-only `failuresAcknowledged`
+      Redux flag. Driven by OBSERV-02 v3's platform/team "Activités" dashboard panels, which
+      embed the existing `TaskActivity` organism unchanged and needed dismissal to be a real,
+      shared server state rather than a per-browser gesture.
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"

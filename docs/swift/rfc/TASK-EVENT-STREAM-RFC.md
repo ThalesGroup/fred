@@ -1,7 +1,7 @@
 # RFC OPS-04 — Unified Task Event Stream & Worker-Action Audit
 
 **ID:** OPS-04  
-**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · **rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed**  
+**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · **rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed** · **rev. 3 (2026-07-25): persisted acknowledgement — proposed, driven by OBSERV-02's role-based dashboard finalization (§2.10)**  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-04  
 
@@ -330,6 +330,9 @@ GET  /api/v1/tasks/{id}/events   → text/event-stream (each data: is a serialis
                                  Replays task_event_log WHERE seq > Last-Event-ID, then live. Terminal closes.
 
 POST /api/v1/tasks/{id}/cancel   → 202 (idempotent) | 404 not found | 409 if kind unsupported
+
+POST /api/v1/tasks/{id}/ack      → 200 { task_id, acknowledged_at, acknowledged_by }  (rev. 3, §2.10)
+                                 404 not found | 409 if the task does not need attention
 ```
 
 The cancel endpoint is generic; a kind that doesn't support cancellation returns `409`, and consumers hide the cancel affordance for it rather than surfacing a failing button.
@@ -402,6 +405,67 @@ control-plane itself sets `tasks.persistence: local` and needs none of the remot
 3. **Runtime failure degrades, never crashes.** If control-plane (or Keycloak) is unreachable when an event is pushed, the client retries with backoff; the ingestion/erasure job itself still runs to completion. Events lost during an outage are backfilled to a terminal state by the reconciliation sweeper (§2.8) — the exact mechanism that already covers "the worker emitted nothing". Live progress may stall during the outage; the durable record still converges.
 4. **No deployment ordering, no init-containers.** Pods may start in any order; liveness/readiness probes are independent. Only control-plane runs the task-table migrations, so there is no cross-backend migration ordering either.
 5. **Keycloak** is the one shared dependency (both backends already require it for normal auth); the service token is minted lazily on first use and cached, so even Keycloak is not a boot gate for tasks.
+
+### 2.10 Persisted acknowledgement (rev. 3, 2026-07-25)
+
+**Gap.** §4 describes opening `TaskDetailPopover` on a `failed`/`cancelled` task as
+"acknowledgement." As-implemented this is aspirational, not wired: the popover and
+`TaskIndicator` dispatch nothing, and the only acknowledgement action that exists
+(`failuresAcknowledged`, fired when the task *tray* opens) is a client-only Redux
+flag that resets on reload and is never shared between viewers. OBSERV-02's
+role-based dashboards give `platform_admin`/`team_admin`/`team_editor` an
+"Activités" panel — reusing `TaskActivity` (§3.4) as-is — whose central use case
+*is* dismissing a handled failure (a recurring ingestion error, a stalled erasure).
+That needs one admin's dismissal to be visible to every other admin looking at the
+same scope, which requires a real server-side state, not a per-browser flag.
+
+**Needs-attention predicate.** Not every terminal task is acknowledgeable —
+`succeeded` tasks are already self-explanatory history (§3.4's "completed" group).
+A task needs attention, and therefore exposes an acknowledge affordance, when:
+`state IN (failed, cancelled)` OR (`kind = erasure AND step = "stalled"`, §2 —
+erasure deliberately never reaches `failed`, so its attention signal is the
+`step` convention already in place). This predicate is computed, not stored.
+
+**Persistence.** Two nullable columns added to `task_run` (not a new table — a
+task's acknowledgement is a fact about that task, and it must never survive
+independently of the row it qualifies): `acknowledged_at: timestamptz | None`,
+`acknowledged_by: str | None` (uid). Both `NULL` = not acknowledged (the default
+and the only state for every task recorded before this migration). Acknowledging
+a currently-non-terminal task is a no-op reserved for later — the column only
+ever gets set once the needs-attention predicate is already true.
+
+**Endpoint** (added to §2.7's table):
+
+```
+POST /api/v1/tasks/{id}/ack     → 200 { task_id, acknowledged_at, acknowledged_by }
+                                   404 not found | 409 if the needs-attention predicate is false
+                                   (nothing to acknowledge — mirrors the existing /cancel 409 pattern)
+```
+
+No `DELETE`/unacknowledge in v1 — an admin who acknowledged in error re-opens the
+same underlying problem by acting on it directly (re-running ingestion, etc.),
+which is out-of-band from this endpoint; a task that fails *again* is a new event
+sequence past the ack timestamp, so the needs-attention predicate can re-trigger
+naturally without needing an unacknowledge affordance — **provided the panel
+reads live `state`, not a cached "was once acked" bit**: an acknowledged row with
+`state=failed` from a later, distinct failure is still "needs attention" because
+its *current* terminal event's `seq`/`timestamp` is newer than `acknowledged_at`.
+The panel query is therefore: needs-attention AND (`acknowledged_at IS NULL` OR
+`acknowledged_at < ` the task's last-event timestamp) — never a bare
+`acknowledged_at IS NULL` check, or a second failure on the same task id would
+stay silently hidden.
+
+**Authorization.** Reuses `authorize_task_access` unchanged (§3.2) — whoever can
+view a task (creator, platform admin, or a `CAN_READ_MEMBERS` reader of its team)
+can acknowledge it. No new permission, no new check.
+
+**Frontend.** `TaskDetailPopover` gains an "Acknowledge" action, shown only when
+the needs-attention predicate holds and `acknowledged_at` is unset; `TaskCard`
+(the tray/list row) shows a muted state once acknowledged rather than disappearing
+outright, so the dismissal is visible, not silent. This replaces
+`failuresAcknowledged`/the tray-bulk-open gesture as the acknowledgement path —
+that Redux action and its dispatch site are removed once the persisted path
+lands, rather than kept as a second, inconsistent mechanism.
 
 ---
 
@@ -501,7 +565,7 @@ function useTaskStream(taskId: string | null): {
 
 **Task-tray re-hydration.** The Redux task slice is in-memory; on reload it is empty. A `useTaskRehydration` hook, called once from `MainLayout`, calls `GET /tasks?scope=user`, dispatches `taskRegistered({ taskId, kind, target, owner })` for each non-terminal task, and `useTaskSseManager` opens SSE per task (replaying `task_event_log` from `seq=0`). The reducer dedups on `seq > lastSeq`, so replay is always safe. `GET /tasks?scope=user` must include `target` so the tray and affected rows wire up before the first SSE event.
 
-**Inline `TaskIndicator`.** Any object row (document, team member, …) with an active task shows it inline via the single `TaskIndicator` component — never a separate list element, never per-page duplicated logic. The selector `selectActiveTaskForTarget(type, id)` returns the first non-terminal task whose `target` matches; e.g. document rows call `selectActiveTaskForTarget("document", doc.identity.document_uid)`. While running the row adopts a processing tint; on `succeeded` the indicator disappears; on `failed`/`cancelled` it remains until the user opens `TaskDetailPopover` (acknowledgement). The popover (same component everywhere) shows target label, state, progress, step, elapsed, error, and "View all tasks".
+**Inline `TaskIndicator`.** Any object row (document, team member, …) with an active task shows it inline via the single `TaskIndicator` component — never a separate list element, never per-page duplicated logic. The selector `selectActiveTaskForTarget(type, id)` returns the first non-terminal task whose `target` matches; e.g. document rows call `selectActiveTaskForTarget("document", doc.identity.document_uid)`. While running the row adopts a processing tint; on `succeeded` the indicator disappears; on `failed`/`cancelled` it remains until acknowledged (§2.10) — the user opens `TaskDetailPopover` and acts on its "Acknowledge" affordance, which calls `POST /tasks/{id}/ack` and is then visible to every viewer of that task's scope, not just the one browser. The popover (same component everywhere) shows target label, state, progress, step, elapsed, error, and "View all tasks".
 
 **`target` is set at registration**, not deferred. The NDJSON upload stream co-emits `task_id` and `document_uid` on the same line (§5) so the frontend dispatches `taskRegistered` with `target: { type: "document", id: document_uid, label: file.name }`. If absent, the first SSE event's `target` is the fallback.
 
