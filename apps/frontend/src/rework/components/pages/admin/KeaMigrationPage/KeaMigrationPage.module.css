@@ -1,0 +1,160 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* KEA CUTOVER 2026 — delete with KeaMigrationPage.tsx after the S3NS cutover. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 900px;
+}
+
+.intro {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-l);
+}
+
+.fileField {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font: var(--font-label-medium);
+}
+
+.fileName {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
+.success {
+  color: var(--success);
+  font: var(--font-body-medium);
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  border-radius: var(--radius-m, 8px);
+  background: var(--surface-container);
+  padding: var(--spacing-l);
+}
+
+.reportHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.reportTitle {
+  font: var(--font-label-large, 16px / 1.4 inherit);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-m);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-m, 8px);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+}
+
+.statValue {
+  font: var(--font-headline-medium, 28px / 1.2 inherit);
+}
+
+.statLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-align: center;
+}
+
+.statWarn {
+  background: color-mix(in srgb, var(--warning) 18%, var(--surface-container-low));
+}
+
+.statWarn .statValue {
+  color: var(--warning);
+}
+
+.statDanger {
+  background: color-mix(in srgb, var(--error) 18%, var(--surface-container-low));
+}
+
+.statDanger .statValue {
+  color: var(--error);
+}
+
+.warnLine {
+  color: var(--warning);
+  font: var(--font-body-small);
+}
+
+.dangerLine {
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
+.userList {
+  font: var(--font-body-small);
+}
+
+.userList summary {
+  cursor: pointer;
+  font: var(--font-label-medium);
+}
+
+.userList ul {
+  margin: var(--spacing-xs) 0 0;
+  padding-left: var(--spacing-l);
+}
+
+.mismatch {
+  color: var(--warning);
+}
+
+.summaryHint {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

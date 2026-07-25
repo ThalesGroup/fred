@@ -831,14 +831,12 @@
         "subtitle": "Catalogue des capacités de la plateforme : activation par équipe, valeurs par défaut et état.",
         "loading": "Chargement des capacités…",
         "loadError": "Impossible de charger le catalogue des capacités.",
-        "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
         "manageTeams": "Gérer les équipes",
         "kindFilter": {
           "tool": "Outils",
           "agent": "Agents",
           "aria": "Filtrer par type de capacité"
         },
-        "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "col": {
           "capability": "Capacité",
           "enabledTeams": "Équipes activées",
@@ -860,7 +858,7 @@
           "suspended": "{{count}} suspendue(s)",
           "suspendedAction": "Afficher les {{count}} agent(s) suspendu(s), groupés par équipe",
           "unknown": "{{count}} inconnu(s)",
-          "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
+          "unknownHint": "Le pod agentique était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
           "healthy": "OK"
         },
         "suspendedDrawer": {
@@ -1232,8 +1230,8 @@
     "save": "Sauvegarder",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Démarrez un pod runtime pour inscrire des agents.",
-        "title": "Aucun runtime d'agents disponible"
+        "description": "Démarrez un pod agentique pour inscrire des agents.",
+        "title": "Aucun pod agentique disponible"
       },
       "controlPlane": {
         "description": "Vérifiez que le service de contrôle est en cours d'exécution.",
@@ -1314,6 +1312,10 @@
       }
     },
     "tasks": {
+      "card": {
+        "copyWarnings": "Copier les avertissements",
+        "copied": "Copié !"
+      },
       "indicator": {
         "details": "{{label}} — cliquer pour les détails"
       },
@@ -1368,6 +1370,17 @@
             "agents": "Agents",
             "prompts": "Prompts"
           }
+        },
+        "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
+        "resetFull": {
+          "launch": "Effacement complet",
+          "running": "Effacement…",
+          "taskLabel": "Effacement complet de la plateforme",
+          "confirmTitle": "Effacement complet — tout supprimer sauf l'admin root ?",
+          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, toutes les permissions OpenFGA, et tous les utilisateurs Keycloak. Seules survivent l'identité ayant effectué le bootstrap root et votre propre compte (s'il est différent). Différent de « Réinitialiser la plateforme » ci-dessus — à utiliser uniquement pour récupérer d'un import de bascule qui a échoué.",
+          "confirmLabel": "Tout effacer",
+          "cancelLabel": "Annuler",
+          "error": "Échec de l'effacement complet"
         }
       },
       "page": {
@@ -1559,7 +1572,7 @@
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           }
         },
-        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
+        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod agentique.",
         "templateBrowser": {
           "title": "Sélectionner un template d'agent",
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."

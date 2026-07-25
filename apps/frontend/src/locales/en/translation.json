@@ -831,14 +831,12 @@
         "subtitle": "Platform capability catalog: per-team enablement, platform defaults, and health.",
         "loading": "Loading capabilities…",
         "loadError": "Could not load the capability catalog.",
-        "empty": "No capabilities are advertised by any runtime pod yet.",
         "manageTeams": "Manage teams",
         "kindFilter": {
           "tool": "Tools",
           "agent": "Agents",
           "aria": "Filter by capability kind"
         },
-        "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
@@ -860,7 +858,7 @@
           "suspended": "{{count}} suspended",
           "suspendedAction": "Show the {{count}} suspended agent(s), grouped by team",
           "unknown": "{{count}} unknown",
-          "unknownHint": "The runtime pod was unreachable, so this capability's health can't be determined right now.",
+          "unknownHint": "The agentic pod was unreachable, so this capability's health can't be determined right now.",
           "healthy": "OK"
         },
         "suspendedDrawer": {
@@ -1232,8 +1230,8 @@
     "save": "Save",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Start a runtime pod to enroll managed agents.",
-        "title": "No agent runtime available"
+        "description": "Start an agentic pod to enroll managed agents.",
+        "title": "No agentic pod available"
       },
       "controlPlane": {
         "description": "Check that the control-plane service is running.",
@@ -1314,6 +1312,10 @@
       }
     },
     "tasks": {
+      "card": {
+        "copyWarnings": "Copy warnings",
+        "copied": "Copied!"
+      },
       "indicator": {
         "details": "{{label}} — click for details"
       },
@@ -1368,6 +1370,17 @@
             "agents": "Agents",
             "prompts": "Prompts"
           }
+        },
+        "keaLink": "Kea → Swift cutover tools (temporary) →",
+        "resetFull": {
+          "launch": "Full teardown",
+          "running": "Wiping…",
+          "taskLabel": "Platform full teardown",
+          "confirmTitle": "Full teardown — wipe everything except the root admin?",
+          "confirmMessage": "Permanently deletes every agent, tag, document, team, and prompt, every OpenFGA permission, and every Keycloak user. Only the identity that completed root bootstrap and your own account (if different) survive. This is different from \"Reset platform\" above — use it only to recover from a failed cutover import.",
+          "confirmLabel": "Wipe everything",
+          "cancelLabel": "Cancel",
+          "error": "Full teardown failed"
         }
       },
       "page": {
@@ -1559,7 +1572,7 @@
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },
-        "noTemplates": "No agent templates available — start a runtime pod.",
+        "noTemplates": "No agent templates available — start an agentic pod.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."

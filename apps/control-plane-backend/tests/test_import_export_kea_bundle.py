@@ -38,7 +38,36 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 UID_BOB = "8d343657-8f63-4a7b-9d7f-83a2e3459f94"
 UID_LIAM = "1e28af93-e676-4596-8087-c550ec7adc38"
+UID_ALICE = "75730f40-9e81-49c6-a95a-ec903262a76c"
 TEAM_FREDLAB = "05186d87-139d-4adb-8d6a-95d61d7afdb4"
+
+# KEA CUTOVER 2026 (see kea_reconciliation.py) — "Plan A" simulation for tests:
+# these usernames resolve to the SAME sub on swift as on kea, exactly as they
+# would if a native Keycloak realm import preserved subs end to end. Individual
+# tests exercising PENDING/RELINKED override `_stub_username_resolution` (see
+# `test_kea_reconciliation.py`) instead of using this default.
+_PLAN_A_USERNAME_TO_SUB = {"bob": UID_BOB, "liam": UID_LIAM, "alice": UID_ALICE}
+# Non-None sentinel: `KeaUserResolver` only ever checks `is not None` before
+# calling `find_user_sub_by_username`, which is monkeypatched below — the real
+# `UserServiceDependencies`/Keycloak Admin client is never exercised in this file.
+_FAKE_USER_DEPS = object()
+
+
+@pytest.fixture(autouse=True)
+def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """KEA CUTOVER 2026 — simulate Keycloak S3NS username lookups without a
+    live Keycloak. Default: `_PLAN_A_USERNAME_TO_SUB` (kea sub == swift sub for
+    known test users); anyone else resolves to PENDING (not found)."""
+
+    async def _fake_find_user_sub_by_username(
+        username: str, _deps: object
+    ) -> str | None:
+        return _PLAN_A_USERNAME_TO_SUB.get(username)
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
+        _fake_find_user_sub_by_username,
+    )
 
 
 # ── bundle builder (mirrors main's export format) ─────────────────────────────
@@ -193,7 +222,10 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
 
 
 async def _import(
-    bundle_bytes: bytes, engine: AsyncEngine, rebac: FakeRebac | None = None
+    bundle_bytes: bytes,
+    engine: AsyncEngine,
+    rebac: FakeRebac | None = None,
+    external_realm_data: bytes | None = None,
 ) -> MigrationReport:
     # Task events go to a separate SQLite file: with a single shared file, the
     # import's open write transaction blocks the event INSERTs (one writer at
@@ -210,13 +242,14 @@ async def _import(
         )
         start = await task_service.start(StartMigrationRequest(), created_by="tester")
         return await run_import(
-            bundle=open_bundle(bundle_bytes),
+            bundle=open_bundle(bundle_bytes, external_realm_data=external_realm_data),
             import_id="imp-kea",
             task_id=start.task_id,
             task_service=task_service,
             engine=engine,
             agent_instance_store=AgentInstanceStore(engine),
             rebac=rebac,  # type: ignore[arg-type]
+            user_deps=_FAKE_USER_DEPS,  # type: ignore[arg-type]
         )
     finally:
         await tasks_engine.dispose()
@@ -298,6 +331,7 @@ async def test_kea_agent_keeps_prompt_and_tuning(tmp_path: Path) -> None:
                     "object": "agent:agent-bob",
                 }
             ],
+            realm={"groups": [], "users": [{"id": UID_BOB, "username": "bob"}]},
         )
         report = await _import(bundle, engine)
         assert report.agents_imported == 1
@@ -345,6 +379,7 @@ async def test_kea_v1_secondary_prompts_warn(tmp_path: Path) -> None:
                     "object": "agent:agent-v1",
                 }
             ],
+            realm={"groups": [], "users": [{"id": UID_LIAM, "username": "liam"}]},
         )
         report = await _import(bundle, engine)
         assert report.agents_imported == 1
@@ -395,7 +430,8 @@ async def test_chat_context_becomes_personal_prompt(tmp_path: Path) -> None:
                     "author": UID_BOB,
                     "doc": {"content": "irrelevant"},
                 },
-            ]
+            ],
+            realm={"groups": [], "users": [{"id": UID_BOB, "username": "bob"}]},
         )
         report = await _import(bundle, engine)
         assert report.prompts_imported == 1
@@ -494,7 +530,11 @@ async def test_teams_created_from_realm_groups(tmp_path: Path) -> None:
                     "groups": [
                         {"id": "team-custom", "name": "fredlab"},
                         {"id": "team-untouched", "name": "northbridge"},
-                    ]
+                    ],
+                    "users": [
+                        {"id": UID_BOB, "username": "bob"},
+                        {"id": UID_LIAM, "username": "liam"},
+                    ],
                 },
             ),
             engine,
@@ -520,9 +560,18 @@ async def test_teams_created_from_realm_groups(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_teams_without_realm_are_named_by_id(tmp_path: Path) -> None:
+async def test_orphan_team_reference_is_dropped_not_named_by_id(
+    tmp_path: Path,
+) -> None:
+    """KEA CUTOVER 2026 (kea_reconciliation.py::drop_orphan_teams): a team
+    referenced only by a stray/stale OpenFGA tuple, with no matching Keycloak
+    group in the realm export, is dropped outright — not created as a real,
+    garbage-named team. Superseded behaviour (create with `name=id`) is now
+    reserved for a team that IS a known group but happens to lack a `name`
+    (see `test_known_group_without_name_still_falls_back_to_id` below)."""
     engine = await _make_engine(tmp_path, "noreal.sqlite3")
     try:
+        rebac = FakeRebac()
         report = await _import(
             _kea_bundle(
                 tuples=[
@@ -531,12 +580,23 @@ async def test_teams_without_realm_are_named_by_id(tmp_path: Path) -> None:
                         "relation": "owner",
                         "object": "team:team-x",
                     }
-                ]
+                ],
+                realm={"groups": [], "users": [{"id": UID_BOB, "username": "bob"}]},
             ),
             engine,
+            rebac=rebac,
         )
-        assert report.teams_imported == 1
-        assert any("no name in the bundle" in w for w in report.warnings)
+        assert report.teams_imported == 0
+        assert any(
+            "orphan team reference(s) dropped" in w and "team-x" in w
+            for w in report.warnings
+        )
+        # The team-x tuple itself must not land in OpenFGA either — a dropped
+        # team's DB row with a still-dangling OpenFGA object would be a phantom
+        # team, reachable by reverse lookup, invisible to teammetadata (found in
+        # the 2026-07-25 real-backend rehearsal; see kea_reconciliation.py's
+        # drop_orphan_team_relations).
+        assert rebac.relations == []
 
         from fred_core.sql.async_session import make_session_factory
 
@@ -545,8 +605,137 @@ async def test_teams_without_realm_are_named_by_id(tmp_path: Path) -> None:
                 await session.execute(
                     select(TeamMetadataRow).where(TeamMetadataRow.id == "team-x")
                 )
+            ).scalar_one_or_none()
+            assert row is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_known_group_without_name_still_falls_back_to_id(
+    tmp_path: Path,
+) -> None:
+    """A team that IS a real Keycloak group (present in the realm export) but
+    whose group entry happens to carry no `name` still falls back to `name=id`
+    (AUTHZ-05 review item 9) — only a team absent from the realm's groups
+    entirely gets dropped by `drop_orphan_teams`."""
+    engine = await _make_engine(tmp_path, "knowngroup-noname.sqlite3")
+    try:
+        report = await _import(
+            _kea_bundle(
+                tuples=[
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "owner",
+                        "object": "team:team-y",
+                    }
+                ],
+                realm={
+                    "groups": [{"id": "team-y"}],  # a real group, but no "name"
+                    "users": [{"id": UID_BOB, "username": "bob"}],
+                },
+            ),
+            engine,
+        )
+        assert report.teams_imported == 1
+        assert not any("orphan team reference(s) dropped" in w for w in report.warnings)
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(engine)() as session:
+            row = (
+                await session.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.id == "team-y")
+                )
             ).scalar_one()
-            assert row.name == "team-x"
+            assert row.name == "team-y"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_realm_file_supplied_externally_is_used_when_zip_has_none(
+    tmp_path: Path,
+) -> None:
+    """RFC §9.1: a standalone realm_file (never inside the zip) is enough to
+    resolve team names — the practical workaround for kea's exportClients 403."""
+    engine = await _make_engine(tmp_path, "external-realm.sqlite3")
+    try:
+        report = await _import(
+            _kea_bundle(
+                tuples=[
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "owner",
+                        "object": "team:team-custom",
+                    }
+                ],
+                # No `realm=` here — the zip carries no keycloak/realm.json.
+            ),
+            engine,
+            external_realm_data=json.dumps(
+                {
+                    "groups": [{"id": "team-custom", "name": "fredlab"}],
+                    "users": [{"id": UID_BOB, "username": "bob"}],
+                }
+            ).encode("utf-8"),
+        )
+        assert report.teams_imported == 1
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(engine)() as session:
+            row = (
+                await session.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.id == "team-custom")
+                )
+            ).scalar_one()
+            assert row.name == "fredlab"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_realm_file_supplied_externally_overrides_zip_realm(
+    tmp_path: Path,
+) -> None:
+    """RFC §9.1: precedence is absolute — the external realm wins even when
+    the zip already carries its own keycloak/realm.json, never merged."""
+    engine = await _make_engine(tmp_path, "external-realm-override.sqlite3")
+    try:
+        report = await _import(
+            _kea_bundle(
+                tuples=[
+                    {
+                        "user": f"user:{UID_BOB}",
+                        "relation": "owner",
+                        "object": "team:team-custom",
+                    }
+                ],
+                realm={
+                    "groups": [{"id": "team-custom", "name": "from-the-zip"}],
+                    "users": [{"id": UID_BOB, "username": "bob"}],
+                },
+            ),
+            engine,
+            external_realm_data=json.dumps(
+                {
+                    "groups": [{"id": "team-custom", "name": "from-upload"}],
+                    "users": [{"id": UID_BOB, "username": "bob"}],
+                }
+            ).encode("utf-8"),
+        )
+        assert report.teams_imported == 1
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(engine)() as session:
+            row = (
+                await session.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.id == "team-custom")
+                )
+            ).scalar_one()
+            assert row.name == "from-upload"
     finally:
         await engine.dispose()
 
@@ -674,7 +863,14 @@ async def test_tuple_phase_writes_transformed_relations(tmp_path: Path) -> None:
                         "object": "team:T1",
                     },
                     {"user": "user:alice", "relation": "member", "object": "team:T1"},
-                ]
+                ],
+                realm={
+                    "groups": [{"id": "T1", "name": "team1"}],
+                    "users": [
+                        {"id": UID_BOB, "username": "bob"},
+                        {"id": UID_LIAM, "username": "liam"},
+                    ],
+                },
             ),
             engine,
             rebac=rebac,
@@ -704,7 +900,11 @@ async def test_tuple_phase_warns_when_rebac_disabled(tmp_path: Path) -> None:
                         "relation": "owner",
                         "object": "team:T1",
                     }
-                ]
+                ],
+                realm={
+                    "groups": [{"id": "T1", "name": "team1"}],
+                    "users": [{"id": UID_BOB, "username": "bob"}],
+                },
             ),
             engine,
             rebac=None,

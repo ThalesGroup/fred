@@ -1159,6 +1159,26 @@ activity surface, OPS-04 §3.4) narrows `detail` on `task.kind === "migration"`
 to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
 `ImportLaunchResponse.target` directly (no hand-built duplicate).
 
+**`POST /import-export/import` + new `POST /import-export/reset-full`
+(2026-07-24, MIGR-05.18, `PLATFORM-IMPORT-RFC.md` §9):** `POST
+/import-export/import`'s multipart body gains an optional second field,
+`realm_file` (a standalone Keycloak realm export JSON), which — when present
+— the importer uses in place of the zip's own `keycloak/realm.json`. New
+`POST /import-export/reset-full` (`ResetLaunchResponse`, same shape as
+`/reset`) wipes the full platform configuration graph — Postgres, every
+OpenFGA tuple, every Keycloak user — back to bootstrap-only state, preserving
+only `platformbootstrap.completed_by` and the calling operator. Distinct
+endpoint from `/reset`, which keeps its narrow data-only scope unchanged.
+Both `/import` and `/reset-full` (and `/reset`) now reject (`409`) with an
+active migration task already running/pending. `controlPlaneOpenApi.ts`
+regenerated: `BodyImportSnapshotControlPlaneV1ImportExportImportPost.realm_file`,
+`useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation` (aliased
+`useResetPlatformFullMutation` in `controlPlaneApiEnhancements.ts`). Frontend:
+`MigrationPage.tsx` gains a second optional dropzone (realm.json) and a
+distinct "Full teardown" button/confirmation, never sharing a click target
+with "Reset platform". New authz-endpoint-matrix.yaml row for `POST
+/import-export/reset-full` (`pending_review`, matching its sibling rows).
+
 ## 17. Contract Notes — CAPAB-01 (July 2026)
 
 ### Admin capability-enablement routes

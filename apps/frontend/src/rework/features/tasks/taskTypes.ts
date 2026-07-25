@@ -140,4 +140,10 @@ export interface TaskViewModel {
   registeredAt: number;
   terminalAt: number | null;
   acknowledgedAt: number | null;
+  // Populated from `MigrationTaskEvent.detail.result.warnings` only (see
+  // taskSlice's taskEventReceived) — every other task kind leaves this null.
+  // KEA CUTOVER 2026: this is the one place a real (non-dry-run) kea import's
+  // reconciliation summary (admin-less teams, pending users, orphan teams
+  // dropped) is surfaced anywhere in the UI — see kea_reconciliation.py.
+  warnings: string[] | null;
 }

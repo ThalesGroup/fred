@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
 import { relativeTime } from "../../../../features/tasks/taskLabels";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import styles from "./TaskCard.module.css";
@@ -30,9 +33,17 @@ export function truncate(name: string, max = 32): string {
 
 export function TaskCard({ task }: TaskCardProps) {
   const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
   const isTerminal = TERMINAL_STATES.has(task.state);
   const timeMs = task.terminalAt ?? task.registeredAt;
   const displayName = task.target?.label ?? task.taskId;
+
+  const handleCopyWarnings = async () => {
+    if (!task.warnings || task.warnings.length === 0) return;
+    await navigator.clipboard.writeText(task.warnings.join("\n"));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <div className={styles.card} data-state={task.state}>
@@ -51,12 +62,45 @@ export function TaskCard({ task }: TaskCardProps) {
 
       <div className={styles.footer}>
         {task.state === "failed" && task.error ? (
-          <span className={styles.errorText} title={task.error}>
-            {task.error}
+          // Tooltip's own wrapper is inline-flex with no flex-grow of its own — nesting it
+          // *inside* .errorText (rather than putting .errorText on the wrapper itself) keeps
+          // the existing flex:1/min-width:0/ellipsis truncation on the real flex item, so the
+          // Tooltip's internal markup never has to know about TaskCard's row layout.
+          <span className={styles.errorText}>
+            <Tooltip content={<span className={styles.errorTooltip}>{task.error}</span>}>
+              <span>{task.error}</span>
+            </Tooltip>
           </span>
         ) : task.step ? (
           <span className={styles.stepText}>{task.step}</span>
         ) : null}
+        {task.warnings && task.warnings.length > 0 && (
+          <div className={styles.warningGroup}>
+            <Tooltip
+              content={
+                <ul className={styles.warningTooltip}>
+                  {task.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              }
+            >
+              <span className={styles.warningBadge}>⚠ {task.warnings.length}</span>
+            </Tooltip>
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="small"
+              icon={{
+                category: "outlined",
+                type: copied ? "check_circle" : "content_copy",
+                filled: false,
+              }}
+              onClick={handleCopyWarnings}
+              title={copied ? t("rework.tasks.card.copied") : t("rework.tasks.card.copyWarnings")}
+            />
+          </div>
+        )}
         <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>
       </div>
     </div>

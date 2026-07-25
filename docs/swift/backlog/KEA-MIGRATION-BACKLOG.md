@@ -155,6 +155,20 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   partial-export carries no users → `users.json`/bootstrap remains the channel. Ops fallback for
   both: SQL on the Keycloak DB (`keycloak_group`, `user_role_mapping`×`keycloak_role`).
 
+- [x] **MIGR-05.18** — Standalone `realm_file` upload + full teardown (2026-07-24, cutover
+  hardening). `POST /import` gains an optional second multipart field `realm_file` — a Keycloak
+  realm export supplied independently of the zip, taking precedence over the zip's own
+  `keycloak/realm.json` when present. Unblocks cutover regardless of the kea-side `exportClients`
+  403 (§0bis "Open" item below is now a nice-to-have, not a blocker). New `POST /reset-full`
+  (distinct endpoint/button from `/reset`, which keeps its narrow dev/test-cycle scope
+  unchanged): full platform teardown back to bootstrap-only state — OpenFGA
+  (`delete_user_relations` per non-preserved user, `delete_all_relations_of_reference` per team),
+  Keycloak (`delete_user` per non-preserved user), Postgres (`agent_instance`, `tag`,
+  `document_metadata`, `team_metadata`, `prompt` in one transaction). Preserves
+  `platformbootstrap.completed_by` ∪ the calling operator's identity. Migration-task concurrency
+  guard (`/import` and `/reset-full` refuse to start while another migration task is active).
+  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §9
+
 - [ ] **MIGR-05.17** — **User-state migration — future task, deliberately out of #1954 (which
   focuses on teams). NOT MIGR-04's scope**: MIGR-04 only moves identities (Keycloak users, subs
   preserved, ops-owned). Still unowned on the application side:

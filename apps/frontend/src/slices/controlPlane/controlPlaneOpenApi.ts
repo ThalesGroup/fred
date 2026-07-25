@@ -796,6 +796,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
     }),
+    resetPlatformFullControlPlaneV1ImportExportResetFullPost: build.mutation<
+      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse,
+      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/reset-full`, method: "POST" }),
+    }),
+    keaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost: build.mutation<
+      KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse,
+      KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kea-migration/dry-run`,
+        method: "POST",
+        body: queryArg.bodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -1301,6 +1317,14 @@ export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
+export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse =
+  /** status 202 Successful Response */ ResetLaunchResponse;
+export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg = void;
+export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse =
+  /** status 200 Successful Response */ KeaDryRunResponse;
+export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiArg = {
+  bodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost: BodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost;
+};
 export type HealthResponse = {
   status?: "ok";
   service?: "control-plane";
@@ -2349,6 +2373,7 @@ export type ImportLaunchResponse = {
 export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
   file: string;
   label?: string | null;
+  realm_file?: string | null;
 };
 export type TeamStats = {
   team_id: string;
@@ -2370,6 +2395,33 @@ export type PlatformStats = {
 };
 export type ResetLaunchResponse = {
   task_id: string;
+};
+export type KeaUserResolutionView = {
+  kea_sub: string;
+  kea_username: string;
+  outcome: string;
+  swift_sub: string | null;
+};
+export type KeaDryRunResponse = {
+  source_platform: string;
+  agents_mapped: number;
+  agents_ignored: number;
+  agents_gap: number;
+  agents_gap_templates: string[];
+  teams_total: number;
+  teams_orphan_dropped: string[];
+  teams_admin_less: string[];
+  users_matched: KeaUserResolutionView[];
+  users_relinked: KeaUserResolutionView[];
+  users_pending: KeaUserResolutionView[];
+  team_member_grants_ready: number;
+  team_member_grants_pending: number;
+  platform_role_grants_ready: number;
+  summary_lines: string[];
+};
+export type BodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost = {
+  file: string;
+  realm_file?: string | null;
 };
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
@@ -2505,4 +2557,6 @@ export const {
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
+  useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation,
+  useKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostMutation,
 } = injectedRtkApi;

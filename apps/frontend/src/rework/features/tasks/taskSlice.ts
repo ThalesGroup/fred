@@ -63,6 +63,7 @@ export const taskSlice = createSlice({
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
+        warnings: null,
       };
     },
 
@@ -82,6 +83,11 @@ export const taskSlice = createSlice({
       vm.lastSeq = event.seq;
       if (event.target) vm.target = event.target;
       if (event.owner) vm.owner = event.owner;
+      // `warnings` only ever arrives on the migration kind's final `result` — an
+      // earlier `running` event with no result must not clobber it back to null.
+      if (event.kind === "migration" && event.detail?.result?.warnings) {
+        vm.warnings = event.detail.result.warnings;
+      }
       if (TERMINAL_STATES.has(event.state) && vm.terminalAt === null) {
         vm.terminalAt = Date.now();
       }

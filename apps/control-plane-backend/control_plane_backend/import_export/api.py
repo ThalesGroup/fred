@@ -60,6 +60,7 @@ from control_plane_backend.import_export.stats import (
     PlatformStats,
     compute_platform_stats,
 )
+from control_plane_backend.import_export.teardown import run_teardown
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -130,6 +131,23 @@ def _get_rebac_engine(request: Request) -> RebacEngine:
     return get_application_container(request).get_rebac_engine()
 
 
+async def _reject_if_migration_task_active(task_service: TaskService) -> None:
+    """Refuse to start a migration op (import / reset / reset-full) while another one
+    is still running or pending (PLATFORM-IMPORT-RFC.md §9.2) — an import racing a
+    reset-full (or two teardowns) on the same instance is exactly the scenario a
+    cutover-day operator cannot safely reason about.
+    """
+    active = await task_service.list_tasks(kind="migration", exclude_terminal=True)
+    if active.tasks:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Another migration task is already running or pending "
+                f"(task_id={active.tasks[0].task_id}) — wait for it to finish first"
+            ),
+        )
+
+
 def build_import_export_router(prefix: str = "") -> APIRouter:
     router = APIRouter(prefix=prefix, tags=["import-export"])
 
@@ -152,6 +170,10 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             "- Document metadata (content/vectors not in the zip — mirror separately)\n"
             "- Tags (knowledge-flow import path not yet implemented)\n"
             "- MCP servers (re-seeded by deployment)\n\n"
+            "**Optional `realm_file`:** a standalone Keycloak realm export (`.json`), supplied "
+            "independently of the zip. Takes precedence over the zip's own "
+            "`keycloak/realm.json` when both are present — the practical workaround for kea's "
+            "`exportClients` export permission gap (PLATFORM-IMPORT-RFC.md §9.1).\n\n"
             "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
             "**Platform admin only.**"
         ),
@@ -176,10 +198,12 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             ProductServiceDependencies, Depends(get_product_service_dependencies)
         ],
         label: Annotated[str | None, Form()] = None,
+        realm_file: UploadFile | None = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
             user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
         )
+        await _reject_if_migration_task_active(task_service)
 
         if not (file.filename or "").endswith(".zip"):
             raise HTTPException(
@@ -192,6 +216,20 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 status_code=413,
                 detail=f"Snapshot exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
             )
+
+        external_realm_data: bytes | None = None
+        if realm_file is not None:
+            if not (realm_file.filename or "").endswith(".json"):
+                raise HTTPException(
+                    status_code=400, detail="realm_file must be a .json export"
+                )
+            external_realm_data = await realm_file.read(MAX_UPLOAD_BYTES + 1)
+            if len(external_realm_data) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"realm_file exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+                )
+
         import_id = str(uuid.uuid4())
         target = _import_target(import_id, label, file.filename)
 
@@ -204,7 +242,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
 
         async def _run() -> None:
             try:
-                bundle = open_bundle(data)
+                bundle = open_bundle(data, external_realm_data=external_realm_data)
                 report = await run_import(
                     bundle=bundle,
                     import_id=import_id,
@@ -327,6 +365,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         await rebac.check_user_permission_or_raise(
             user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
         )
+        await _reject_if_migration_task_active(task_service)
 
         start_response = await task_service.start(
             StartMigrationRequest(),
@@ -387,6 +426,100 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 )
             except Exception as exc:
                 logger.exception("[import-export] reset failed: %s", exc)
+                await task_service.fail_task(task_id, str(exc))
+
+        background_tasks.add_task(_run)
+        return ResetLaunchResponse(task_id=task_id)
+
+    @router.post(
+        "/import-export/reset-full",
+        status_code=202,
+        response_model=ResetLaunchResponse,
+        summary="Full platform teardown — back to bootstrap-only state",
+        description=(
+            "Wipe the entire platform configuration graph — Postgres (agent instances, "
+            "tags, document metadata, team metadata, prompts), every OpenFGA tuple, and "
+            "every Keycloak user — back to the state right after root bootstrap.\n\n"
+            "**Preserved, never touched:** the identity that completed root bootstrap "
+            "(`platformbootstrap.completed_by`) and the identity calling this endpoint. "
+            "Everything else — including the preserved identities' own non-identity data "
+            "— is deleted.\n\n"
+            "Distinct from `POST /reset`, which stays the narrow data-only reset for "
+            "day-to-day export/reset/import test cycles. Use this endpoint only for a "
+            "cutover-day recovery: an import failed partway through and left Keycloak "
+            "users, OpenFGA tuples, or teams behind that `POST /reset` cannot remove.\n\n"
+            "Every step is safe to re-run — if this task itself fails partway through, "
+            "call it again; already-deleted users/tuples/rows are silently skipped.\n\n"
+            "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
+            "**This action is irreversible. Platform admin only.**"
+        ),
+    )
+    async def reset_platform_full(
+        background_tasks: BackgroundTasks,
+        user: Annotated[KeycloakUser, Depends(get_current_user)],
+        task_service: Annotated[TaskService, Depends(_get_task_service)],
+        engine: Annotated[AsyncEngine, Depends(_get_engine)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+        user_deps: Annotated[
+            UserServiceDependencies, Depends(get_user_service_dependencies)
+        ],
+    ) -> ResetLaunchResponse:
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+        await _reject_if_migration_task_active(task_service)
+
+        start_response = await task_service.start(
+            StartMigrationRequest(),
+            created_by=user.uid,
+        )
+        task_id = start_response.task_id
+
+        async def _run() -> None:
+            try:
+                await task_service.record(
+                    MigrationTaskEvent(
+                        task_id=task_id,
+                        state=TaskState.running,
+                        seq=0,
+                        timestamp=datetime.now(timezone.utc),
+                        step="Full teardown en cours…",
+                    )
+                )
+                report = await run_teardown(
+                    caller=user,
+                    engine=engine,
+                    rebac=rebac,
+                    user_deps=user_deps,
+                )
+                summary = (
+                    f"préservés: {', '.join(report.preserved_uids)} — "
+                    f"{report.users_deleted} comptes Keycloak supprimés, "
+                    f"{report.team_ids_wiped} équipes désenchevêtrées (OpenFGA), "
+                    f"{report.agents_deleted} agents, {report.tags_deleted} tags, "
+                    f"{report.documents_deleted} documents, {report.teams_deleted} équipes, "
+                    f"{report.prompts_deleted} prompts supprimés"
+                )
+                if report.users_delete_failed:
+                    summary += (
+                        f" — ÉCHEC suppression Keycloak pour: "
+                        f"{', '.join(report.users_delete_failed)} (relancer reset-full)"
+                    )
+                await task_service.record(
+                    MigrationTaskEvent(
+                        task_id=task_id,
+                        state=TaskState.succeeded,
+                        seq=0,
+                        timestamp=datetime.now(timezone.utc),
+                        step=summary,
+                        progress=1.0,
+                    )
+                )
+                logger.warning(
+                    "[import-export] reset-full by %s: %s", user.uid, summary
+                )
+            except Exception as exc:
+                logger.exception("[import-export] reset-full failed: %s", exc)
                 await task_service.fail_task(task_id, str(exc))
 
         background_tasks.add_task(_run)

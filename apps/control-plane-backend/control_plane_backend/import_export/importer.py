@@ -115,6 +115,23 @@ from control_plane_backend.import_export.agent_map import (
     classify_agent,
 )
 from control_plane_backend.import_export.bundle import KBundle
+from control_plane_backend.import_export.kea_reconciliation import (  # KEA CUTOVER 2026 — delete with kea_reconciliation.py
+    KeaReconciliationReport,
+    KeaUserResolver,
+    derive_team_member_relations,
+    drop_orphan_team_relations,
+    drop_orphan_teams,
+    find_admin_less_teams,
+    format_usernames_for_warning,
+    kea_known_group_ids,
+    kea_username_by_sub,
+    resolve_agent_team_index,
+    resolve_creator_index,
+    resolve_platform_grants,
+    resolve_relation_subjects,
+    resolve_resource_authors,
+    resolve_tag_owner_ids,
+)
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.prompt_models import PromptRow
@@ -1194,6 +1211,27 @@ async def run_import(
     agent_team_index = _build_agent_team_index(tuples)
     agent_creator_index = _build_agent_creator_index(tuples)
 
+    # ── KEA CUTOVER 2026 — identity reconciliation setup (kea_reconciliation.py) ──
+    # See that module's docstring for why: real users authenticate via a Thales SSO
+    # broker (OneAccess), bridged into both kea's and swift's Keycloak independently —
+    # the `sub` is not assumed stable across the two, only the username is. Every
+    # `kea_*` variable below is a no-op ({}) for a swift-native snapshot, which never
+    # needs any of this.
+    kea_realm_for_reconciliation = None if is_swift_native else bundle.keycloak_realm()
+    kea_username_index = (
+        {} if is_swift_native else kea_username_by_sub(kea_realm_for_reconciliation)
+    )
+    kea_resolver = KeaUserResolver(user_deps)
+    kea_report = KeaReconciliationReport()
+    if not is_swift_native:
+        agent_team_index = await resolve_agent_team_index(
+            agent_team_index, kea_username_index, kea_resolver, kea_report
+        )
+        agent_creator_index = await resolve_creator_index(
+            agent_creator_index, kea_username_index, kea_resolver, kea_report
+        )
+    # ── END KEA CUTOVER 2026 (setup) ───────────────────────────────────────────
+
     # ── Phase 1: classify agents (no DB writes) — kea snapshots only ──────────
     raw_agents = [] if is_swift_native else list(bundle.iter_table("agent"))
     await _emit(
@@ -1296,9 +1334,19 @@ async def run_import(
             raw_tags = [
                 t for t in raw_tags if t.get("type") not in _KEA_LIBRARY_TAG_TYPES
             ]
+        # KEA CUTOVER 2026 — resolve personal tag ownership (see setup block above).
+        raw_tags = await resolve_tag_owner_ids(
+            raw_tags, kea_username_index, kea_resolver, kea_report
+        )
     # Kea chat-context resources become personal prompt-library rows; swift
     # bundles never carry a resource table.
     raw_resources = [] if is_swift_native else list(bundle.iter_table("resource"))
+    if not is_swift_native:
+        # KEA CUTOVER 2026 — resolve personal chat-context authorship (see setup
+        # block above).
+        raw_resources = await resolve_resource_authors(
+            raw_resources, kea_username_index, kea_resolver, kea_report
+        )
     raw_metadata = list(bundle.iter_table("metadata"))
     # Per-team branding + retention (CTRLP-12). Kea's `teammetadata` rows carry
     # `is_private` instead of `joining_mode` and may lack `name` — both handled
@@ -1315,6 +1363,13 @@ async def run_import(
             tuples,
             _realm_group_names(keycloak_realm),
             report,
+        )
+        # KEA CUTOVER 2026 — drop teams referenced only by a stray/stale OpenFGA
+        # tuple with no matching Keycloak group (see kea_reconciliation.py). Without
+        # this, `_merge_kea_team_rows`'s own id-as-name fallback above would create a
+        # real, garbage-named team for a leftover tuple from an unrelated old export.
+        raw_team_metadata = drop_orphan_teams(
+            raw_team_metadata, kea_known_group_ids(keycloak_realm), kea_report
         )
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
@@ -1576,6 +1631,12 @@ async def run_import(
     if not is_swift_native and tuples:
         transform = transform_kea_tuples(tuples)
         report.tuples_dropped = transform.dropped_total
+        # KEA CUTOVER 2026 — mirror `drop_orphan_teams` on the tuple-restore path: a
+        # team excluded from `teammetadata` above must not still get its OpenFGA
+        # tuples written (see drop_orphan_team_relations' docstring).
+        transform.relations = drop_orphan_team_relations(
+            transform.relations, kea_report.orphan_teams_dropped
+        )
         if transform.dropped_non_uuid:
             report.warnings.append(
                 f"{transform.dropped_non_uuid} OpenFGA tuple(s) with a "
@@ -1586,19 +1647,55 @@ async def run_import(
                 f"{transform.dropped_unknown} OpenFGA tuple(s) dropped — no "
                 "swift equivalent for: " + ", ".join(sorted(transform.unknown_shapes))
             )
-        if not transform.relations:
+
+        # ── KEA CUTOVER 2026 — identity + plain-membership reconciliation ──────
+        # 1) rewrite every USER-typed subject to its resolved swift sub (dropping
+        #    ones that can't be resolved yet — see kea_reconciliation.py);
+        # 2) derive `team_member` grants from kea's Keycloak group membership, the
+        #    one Fred relation with no OpenFGA-tuple source on kea.
+        resolved_relations = await resolve_relation_subjects(
+            transform.relations, kea_username_index, kea_resolver, kea_report
+        )
+        already_elevated = {
+            (str(r.subject.id), str(r.resource.id))
+            for r in resolved_relations
+            if r.relation
+            in (
+                RelationType.TEAM_ADMIN,
+                RelationType.TEAM_EDITOR,
+                RelationType.TEAM_ANALYST,
+            )
+        }
+        group_name_to_team_id = {
+            row["name"]: row["id"] for row in raw_team_metadata if row.get("name")
+        }
+        member_relations = await derive_team_member_relations(
+            kea_realm_for_reconciliation,
+            group_name_to_team_id,
+            already_elevated,
+            kea_username_index,
+            kea_resolver,
+            kea_report,
+        )
+        resolved_relations = resolved_relations + member_relations
+        kea_report.admin_less_teams = find_admin_less_teams(
+            {row["id"] for row in raw_team_metadata}, resolved_relations
+        )
+        # ── END KEA CUTOVER 2026 (relation resolution) ─────────────────────────
+
+        if not resolved_relations:
             pass
         elif rebac is None or not rebac.enabled:
             report.warnings.append(
-                f"{len(transform.relations)} OpenFGA relation(s) NOT restored: "
+                f"{len(resolved_relations)} OpenFGA relation(s) NOT restored: "
                 "ReBAC engine unavailable or disabled — re-run the import "
                 "with ReBAC enabled before cutover"
             )
         else:
-            total = len(transform.relations)
+            total = len(resolved_relations)
             await _emit(task_service, task_id, TaskState.running, "tuples", 0, total, 0)
             actor_uid = platform_admin.uid if platform_admin else None
-            for i, relation in enumerate(transform.relations, start=1):
+            for i, relation in enumerate(resolved_relations, start=1):
                 await rebac.add_relation(relation, actor_uid=actor_uid)
                 report.tuples_written += 1
                 await _emit(
@@ -1615,8 +1712,13 @@ async def run_import(
         if dropped_editors:
             report.warnings.append(
                 f"kea platform role 'editor' dropped for {len(dropped_editors)} "
-                f"user(s) (no swift equivalent): {', '.join(sorted(dropped_editors))}"
+                f"user(s) (no swift equivalent): "
+                f"{format_usernames_for_warning(dropped_editors)}"
             )
+        # KEA CUTOVER 2026 — resolve kea subs to swift subs before granting.
+        realm_grants = await resolve_platform_grants(
+            realm_grants, kea_username_index, kea_resolver, kea_report
+        )
         if realm_grants:
             if rebac is None or not rebac.enabled:
                 report.warnings.append(
@@ -1682,6 +1784,19 @@ async def run_import(
             materialize_summary.materialized,
             len(imported_team_ids),
         )
+
+    # KEA CUTOVER 2026 — fold the reconciliation report's human-readable summary into
+    # the ordinary warnings list, so it shows up wherever MigrationReport already does
+    # (task events, the existing migration UI) with no OpenAPI/contract change. The
+    # dedicated /admin/kea-migration dry-run endpoint returns the structured
+    # `KeaReconciliationReport` directly instead — see kea_migration_api.py. Swift-
+    # native snapshots never touch any of this — nothing to summarize. Must run before
+    # the "Non-DB warnings" log below (not after) — every kea_report-populating phase
+    # (identity resolution, team_member derivation, admin-less check, platform grants)
+    # has already completed by this point, and the log line is otherwise the one place
+    # an operator watching stdout would see these lines at all.
+    if not is_swift_native:
+        report.warnings.extend(kea_report.summary_lines())
 
     # ── Non-DB warnings ───────────────────────────────────────────────────────
     if report.warnings:

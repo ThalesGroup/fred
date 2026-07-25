@@ -2,7 +2,8 @@
 
 **ID:** MIGR-05 · **Status:** in progress — swift-native path shipped + hardened (baseline 2026-07-16);
 kea-import path implemented 2026-07-24 (agent prompt/tuning transfer, chat-context→prompt
-migration, OpenFGA tuple restore with role transformation), see §8.
+migration, OpenFGA tuple restore with role transformation), see §8; standalone realm.json upload
++ full teardown (MIGR-05.18) implemented 2026-07-24 for the production cutover, see §10.
 **Owner:** Dimitri · **Surface:** control-plane-backend (`import_export/`)
 **Extends:** [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (task/event infra).
 **Backlog:** [`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md) §0bis — migration
@@ -22,11 +23,15 @@ team/platform role provisioning. Used to clone/restore an instance's configurati
 swift side of the Kea→Swift migration's metadata step.
 
 **Endpoints** (`/control-plane/v1/import-export/`, all `require_admin` + `CAN_MANAGE_PLATFORM`):
-- `POST /import` — multipart zip → async task; atomic import.
+- `POST /import` — multipart zip (+ optional standalone `realm_file`, §10.1) → async task;
+  atomic import.
 - `GET /export` — download a swift-native snapshot (`source_platform=swift`), re-importable
   through the same endpoint.
 - `POST /reset` — atomic wipe of agents+tags+metadata (enables export → reset → import test
-  cycles; Keycloak / OpenFGA / object store untouched).
+  cycles; Keycloak / OpenFGA / team_metadata / prompts / object store untouched). Unchanged by
+  §10 — stays the narrow, repeatable dev/test-cycle reset.
+- `POST /reset-full` — full platform teardown back to bootstrap-only state, for the production
+  cutover day. See §10.2. Distinct endpoint and button from `/reset` — never the same action.
 - `GET /stats` — platform overview (teams, members by role, agents, prompts) — powers the
   **Platform data** admin page.
 
@@ -217,12 +222,82 @@ Reads main's `postgres/*.jsonl` set (table file names = main's
   none in the validated dump — revisit if a prod bundle ships banners).
 
 Open follow-ups: kea-side realm-export 403 (`manage-realm` alone is not enough for
-`exportClients=true` — grant `view-clients` or export without clients) so prod bundles actually
-carry `realm.json`; tuple/prompt counters surfaced only via the summary line and `warnings`, not
-yet promoted to `MigrationResult` (OpenAPI + generated-client regen); `react_profile_id`-aware
-template mapping refinement in `agent_map.py`; GCU `users` rows import (product decision).
+`exportClients=true` — grant `view-clients` or export without clients) is no longer a blocker for
+cutover — §10.1's standalone `realm_file` upload supplies `keycloak/realm.json` independently of
+the zip, from any Keycloak export (`kc.sh export`, admin console, or a direct DB read), so a fixed
+kea-side exporter is a nice-to-have, not a prerequisite; tuple/prompt counters surfaced only via
+the summary line and `warnings`, not yet promoted to `MigrationResult` (OpenAPI +
+generated-client regen); `react_profile_id`-aware template mapping refinement in `agent_map.py`;
+GCU `users` rows import (product decision, MIGR-05.17).
 
-## 9. Deferred — tracked separately, not part of this contract
+## 9. Standalone realm.json upload & full teardown (MIGR-05.18, 2026-07-24)
+
+Cutover-day hardening: the kea zip alone is not always enough to fully rebuild a swift instance
+(§9.1), and until now `POST /reset` could not actually undo everything a kea import writes
+(§9.2). Both close as of this section — no further phase planned for this specific gap; any
+scenario this section doesn't cover is a bug, not a deferred item.
+
+### 9.1 Standalone `realm_file` upload
+
+`POST /import` accepts a second, optional multipart field, `realm_file` — a Keycloak realm
+export JSON, independent of whatever `keycloak/realm.json` the zip itself may or may not carry.
+Same size ceiling as the zip (`MAX_UPLOAD_BYTES`), `.json` extension required.
+
+**Precedence:** when `realm_file` is present, it is used in place of the zip's own
+`keycloak/realm.json` entry — never merged, never compared. This is what actually unblocks
+cutover today: kea's own exporter still 403s on `exportClients=true` (§8), and re-exporting from
+Keycloak directly (`kc.sh export --users`, run against the source realm) is the practical
+workaround. It also works for a partial export (groups only, no `users[]`) — the importer's
+existing realm-consumption logic (§8, unchanged) already tolerates that: team names still
+resolve, platform-role grants are simply skipped with the existing warning.
+
+No new consumption logic — `_realm_group_names` / `_realm_platform_role_grants` (§8) are exactly
+as they were; only the realm's *source* changed, from "inside the zip" to "either inside the zip
+or supplied alongside it."
+
+### 9.2 `POST /reset-full` — full platform teardown
+
+A second, distinct reset endpoint from `POST /reset` (§1) — not a mode flag on the existing one.
+`/reset` keeps its current narrow scope permanently, because it is also the day-to-day
+export→reset→import dev/test cycle, which must keep working without forcing every developer to
+re-provision Keycloak identities after every test run. `/reset-full` is the cutover-day
+"something went wrong mid-import, wipe it all and start clean" button — a separate, more starkly
+worded confirmation in the UI, never reachable via the same click as `/reset`.
+
+**Preserved identities — never touched by any step below:** the union of
+`platformbootstrap.completed_by` (the durable root-bootstrap marker, `bootstrap/store.py`, never
+deleted by any product code path) and the Keycloak `sub` of whoever calls `/reset-full`. Both
+survive with their Keycloak account and their `platform_admin` OpenFGA tuple intact. If the two
+are the same identity, this is just one preserved account.
+
+**Everything else is wiped**, including the preserved identities' own non-identity data (their
+personal prompts, any non-`platform_admin` team roles they held) — a full teardown means the
+config graph, not just "other people's stuff." Ordered so a crash mid-run and a retry always
+converge to the same end state (every step below is delete-if-exists / idempotent — no
+transactional dependency between steps, unlike `run_import`'s Postgres phase):
+
+1. **OpenFGA** — for every Keycloak user not in the preserved set: `RebacEngine.delete_user_relations(user)`
+   (wipes every tuple where that user is the subject — team roles, agent/tag/document ownership,
+   `platform_admin`/`platform_observer` if any). For every `team_metadata` row:
+   `RebacEngine.delete_all_relations_of_reference(...)` on the team resource (wipes tuples
+   referencing that team as object — `team#organization`, any residual role tuple not already
+   caught by the per-user sweep above).
+2. **Keycloak** — for every user from `users/service.py::list_users` not in the preserved set:
+   `users/service.py::delete_user`.
+3. **Postgres, one atomic transaction** — `DELETE` on `agent_instance`, `tag`,
+   `document_metadata`, `team_metadata`, `prompt` (the first three as `/reset` already does, plus
+   the two `/reset` never touched).
+
+**Never touched, by design:** the `platformbootstrap` row itself (so `/bootstrap/platform-admin`
+stays permanently inert, per its own contract), object-store binaries, vector embeddings — same
+permanent exclusions as the rest of this RFC (§2).
+
+**Concurrency guard:** both `/reset-full` and `/import` refuse to start (`409`) if
+`TaskService.list_tasks(kind="migration", exclude_terminal=True)` returns any running/pending
+task. A migration op (import, reset, or reset-full) is exclusive with every other migration op —
+prevents an import and a teardown (or two teardowns) racing on the same instance.
+
+## 10. Deferred — tracked separately, not part of this contract
 
 - **Re-vectorize auto-trigger after import** (MIGR-07) — the stage reset in §5 is inert until
   something consumes it.

@@ -15,6 +15,9 @@
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
+// KEA CUTOVER 2026 — temporary, delete this import and its route below a few
+// weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
+import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
@@ -195,6 +198,18 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <MigrationPage />
+          </Protected>
+        ),
+      },
+      {
+        // KEA CUTOVER 2026 — temporary, deliberately NOT linked from any nav
+        // menu (reached by direct URL only, mirroring kea's own
+        // /admin/kea-migration) so it never gets mistaken for the permanent
+        // export/import tool above. Delete with KeaMigrationPage/.
+        path: "admin/kea-migration",
+        element: (
+          <Protected requires="admin">
+            <KeaMigrationPage />
           </Protected>
         ),
       },
