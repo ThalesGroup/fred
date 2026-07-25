@@ -238,5 +238,5 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     handleRemoveMember,
   ]);
 
-  return <DataTable columns={columns} data={sortedMembers} firstColumnInset />;
+  return <DataTable columns={columns} data={sortedMembers} firstColumnInset pageSize={20} />;
 }
