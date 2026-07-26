@@ -96,6 +96,24 @@ class GeoPart(BaseModel):
     # e.g. {"weight":2,"opacity":0.8,"fillOpacity":0.1}
 
 
+class TeamOperationRouteRule(BaseModel):
+    """
+    One team-authored model-routing override for a specific runtime operation
+    (`TEAM-ROUTING-POLICY-RFC.md` §3/§8). Lives in `fred-sdk` — not
+    `fred-runtime` or `control-plane-backend` — because both of those already
+    depend on `fred_sdk.contracts` and this type is shared verbatim by both:
+    control-plane stores/validates it (`TeamRoutingPolicy`), fred-runtime
+    consumes it off `RuntimeContext.operation_route_rules` (§8.3).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    rule_id: str = Field(..., min_length=1)
+    operation: str = Field(..., min_length=1)
+    purpose: str | None = None
+    target_profile_id: str = Field(..., min_length=1)
+
+
 class RuntimeContext(BaseModel):
     """
     Runtime-scoped context passed with a request.
@@ -116,7 +134,8 @@ class RuntimeContext(BaseModel):
       These fields are mutable (refreshed in place by the token refresh logic).
     - Group C (per-turn retrieval selections): selected_document_libraries_ids,
       selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
-      include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids.
+      include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids,
+      chat_default_profile_id, operation_route_rules.
       These are the core fields — set by the frontend per turn, read by retrieval logic.
     - Group D (content/preferences): language, attachments_markdown. Will
       migrate to session preferences / identity over time.
@@ -149,6 +168,28 @@ class RuntimeContext(BaseModel):
     include_corpus_scope: Optional[bool] = None
     deep_search: Optional[bool] = None
     selected_chat_context_ids: list[str] | None = None
+    chat_default_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "Team-chosen default chat model profile id (TEAM-ROUTING-POLICY-RFC.md "
+            "§3/§8), resolved by control-plane from the team's TeamRoutingPolicy at "
+            "prepare-execution and forwarded unchanged for the rest of the session — "
+            "same channel as context_prompt_text, not re-fetched per turn. Applied by "
+            "RoutedChatModelFactory only when no static models_catalog.yaml rule "
+            "matches (§8.3) — the static YAML rules remain an ops-level override this "
+            "can never beat."
+        ),
+    )
+    operation_route_rules: list[TeamOperationRouteRule] | None = Field(
+        default=None,
+        description=(
+            "Team-authored per-operation model-routing overrides "
+            "(TEAM-ROUTING-POLICY-RFC.md §3/§8), same resolution/precedence notes as "
+            "chat_default_profile_id above. `None`, not `[]`, when unset — matches "
+            "every other Group C list field so `model_dump(exclude_none=True)` "
+            "(`to_legacy_context`) omits it for the common case of no team policy."
+        ),
+    )
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None

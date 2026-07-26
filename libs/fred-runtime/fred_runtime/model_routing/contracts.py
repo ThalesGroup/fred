@@ -76,6 +76,22 @@ class ModelNotUsableError(RuntimeError):
         )
 
 
+class TeamRoutingProfileDriftError(RuntimeError):
+    """Raised when a team's routing policy (`RuntimeContext.chat_default_profile_id`
+    / `.operation_route_rules`, `TEAM-ROUTING-POLICY-RFC.md` §8.3-8.4) references a
+    `target_profile_id` absent from this runtime deployment's catalog. Deliberately
+    never falls back to another profile — control-plane and this pod's
+    `models_catalog.yaml` have drifted, and silently picking a different model
+    would hide that rather than surface it."""
+
+    def __init__(self, *, profile_id: str) -> None:
+        self.profile_id = profile_id
+        super().__init__(
+            f"Team routing policy references profile {profile_id!r}, which is not "
+            "in this runtime deployment's model catalog."
+        )
+
+
 # One criterion can be a single exact value or a tuple of allowed values.
 MatchValue: TypeAlias = str | tuple[str, ...]
 
@@ -373,6 +389,7 @@ class ModelSelectionSource(str, Enum):
 
     DEFAULT = "default"
     RULE = "rule"
+    TEAM_POLICY = "team_policy"
 
 
 class ModelSelection(FrozenModel):

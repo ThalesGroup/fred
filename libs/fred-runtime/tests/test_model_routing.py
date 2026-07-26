@@ -40,7 +40,11 @@ from fred_runtime.model_routing.contracts import (
     ModelSelectionRequest,
     ModelSelectionSource,
 )
-from fred_runtime.model_routing.resolver import ModelRoutingResolver
+from fred_runtime.model_routing.resolver import (
+    ModelRoutingResolver,
+    resolve_team_override,
+)
+from fred_sdk.contracts.context import TeamOperationRouteRule
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -443,6 +447,114 @@ class TestModelRoutingResolver:
         policy = _minimal_policy()
         resolver = ModelRoutingResolver(policy)
         assert resolver.policy is policy
+
+    def test_profile_or_none_returns_known_profile(self) -> None:
+        resolver = ModelRoutingResolver(_minimal_policy())
+        profile = resolver.profile_or_none("default.chat")
+        assert profile is not None
+        assert profile.profile_id == "default.chat"
+
+    def test_profile_or_none_returns_none_for_unknown_id(self) -> None:
+        resolver = ModelRoutingResolver(_minimal_policy())
+        assert resolver.profile_or_none("ghost") is None
+
+
+# ---------------------------------------------------------------------------
+# resolver — resolve_team_override (TEAM-ROUTING-POLICY-RFC.md §7-§8)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveTeamOverride:
+    def test_no_rules_no_default_returns_none(self) -> None:
+        result = resolve_team_override(
+            operation_route_rules=[],
+            chat_default_profile_id=None,
+            operation="planning",
+            purpose="chat",
+        )
+        assert result is None
+
+    def test_falls_back_to_chat_default(self) -> None:
+        result = resolve_team_override(
+            operation_route_rules=[],
+            chat_default_profile_id="team.default",
+            operation="planning",
+            purpose="chat",
+        )
+        assert result == "team.default"
+
+    def test_operation_and_purpose_match_wins(self) -> None:
+        rule = TeamOperationRouteRule(
+            rule_id="r1", operation="planning", purpose="chat", target_profile_id="p1"
+        )
+        result = resolve_team_override(
+            operation_route_rules=[rule],
+            chat_default_profile_id="team.default",
+            operation="planning",
+            purpose="chat",
+        )
+        assert result == "p1"
+
+    def test_wildcard_purpose_matches_when_no_exact_purpose_rule(self) -> None:
+        rule = TeamOperationRouteRule(
+            rule_id="r1", operation="planning", purpose=None, target_profile_id="p1"
+        )
+        result = resolve_team_override(
+            operation_route_rules=[rule],
+            chat_default_profile_id="team.default",
+            operation="planning",
+            purpose="anything",
+        )
+        assert result == "p1"
+
+    def test_exact_purpose_match_wins_over_wildcard(self) -> None:
+        wildcard = TeamOperationRouteRule(
+            rule_id="r-wild",
+            operation="planning",
+            purpose=None,
+            target_profile_id="wild",
+        )
+        specific = TeamOperationRouteRule(
+            rule_id="r-specific",
+            operation="planning",
+            purpose="gap_analysis",
+            target_profile_id="specific",
+        )
+        result = resolve_team_override(
+            operation_route_rules=[wildcard, specific],
+            chat_default_profile_id=None,
+            operation="planning",
+            purpose="gap_analysis",
+        )
+        assert result == "specific"
+
+    def test_non_matching_operation_falls_back_to_chat_default(self) -> None:
+        rule = TeamOperationRouteRule(
+            rule_id="r1", operation="planning", target_profile_id="p1"
+        )
+        result = resolve_team_override(
+            operation_route_rules=[rule],
+            chat_default_profile_id="team.default",
+            operation="routing",
+            purpose="chat",
+        )
+        assert result == "team.default"
+
+    def test_none_operation_only_matches_rules_with_none_operation(self) -> None:
+        # A rule always names a concrete operation (min_length=1 on
+        # TeamOperationRouteRule.operation) — a request with operation=None
+        # (e.g. the plain `build()` entrypoint) can never match one, and
+        # falls straight through to chat_default_profile_id.
+        rule = TeamOperationRouteRule(
+            rule_id="r1", operation="planning", target_profile_id="p1"
+        )
+        result = resolve_team_override(
+            operation_route_rules=[rule],
+            chat_default_profile_id="team.default",
+            operation=None,
+            purpose="chat",
+        )
+        assert result == "team.default"
 
 
 # ---------------------------------------------------------------------------
