@@ -130,6 +130,46 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_value", ["request_only", "closed"])
+async def test_team_metadata_import_normalizes_legacy_joining_mode(
+    tmp_path: Path, legacy_value: str
+) -> None:
+    """A bundle exported before the 2026-07-26 `JoiningMode` narrowing may still
+    carry `request_only`/`closed` literally — importing it must not write a
+    value the current 2-state enum rejects on the next read."""
+    source = await _make_engine(tmp_path, f"legacy-src-{legacy_value}.sqlite3")
+    dest = await _make_engine(tmp_path, f"legacy-dst-{legacy_value}.sqlite3")
+    try:
+        await _seed_team(
+            source,
+            TeamMetadataRow(
+                id="team-legacy",
+                name="Legacy",
+                joining_mode=legacy_value,
+            ),
+        )
+
+        snapshot = await run_export(source)
+        report = await _import(snapshot, dest)
+
+        assert report.teams_imported == 1
+
+        from fred_core.sql.async_session import make_session_factory
+
+        async with make_session_factory(dest)() as session:
+            imported = (
+                await session.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.id == "team-legacy")
+                )
+            ).scalar_one()
+
+        assert imported.joining_mode == "invite_only"
+    finally:
+        await source.dispose()
+        await dest.dispose()
+
+
+@pytest.mark.asyncio
 async def test_team_metadata_import_is_idempotent_and_skips_existing(
     tmp_path: Path,
 ) -> None:
@@ -143,7 +183,7 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
                 id="team-beta",
                 name="Beta",
                 description="Exported description",
-                joining_mode="closed",
+                joining_mode="invite_only",
                 team_delete_grace="P7D",
             ),
         )

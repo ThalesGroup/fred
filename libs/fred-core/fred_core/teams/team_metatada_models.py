@@ -47,7 +47,7 @@ class TeamMetadataRow(Base):
     # column, not a DB-level enum, matching every other enum-backed column in
     # this table (e.g. `RelationType`-derived columns elsewhere in the app).
     joining_mode: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="request_only"
+        String(20), nullable=False, default="invite_only"
     )
     banner_object_storage_key: Mapped[str | None] = mapped_column(
         String(300), nullable=True

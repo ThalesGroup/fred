@@ -162,6 +162,14 @@ _PLATFORM_ROLE_RELATIONS: dict[str, RelationType] = {
     "observer": RelationType.PLATFORM_OBSERVER,
 }
 
+# TEAM-09 (2026-07-26 narrowing): a bundle exported before `JoiningMode`
+# dropped `request_only`/`closed` may still carry those literal strings —
+# see `_import_team_metadata` below.
+_LEGACY_JOINING_MODES: dict[str, str] = {
+    "request_only": "invite_only",
+    "closed": "invite_only",
+}
+
 # Canonical contract — swift-native baseline (PLATFORM-IMPORT-RFC.md):
 # vectors/SQL indexes are never transported by this import (products are
 # rebuilt on the target, MIGR-07), so a restored document must not carry
@@ -1591,11 +1599,19 @@ async def run_import(
                         description=row.get("description"),
                         # TEAM-09: pre-migration bundles only ever carry
                         # `is_private`, never `joining_mode` — like the `name`
-                        # fallback above, default to the same value every
-                        # existing team was migrated to (REQUEST_ONLY)
-                        # regardless of the legacy bool, rather than deriving
-                        # one from it (see FRED-TEAM-CONFIG-RFC.md §5.1.1).
-                        joining_mode=row.get("joining_mode", "request_only"),
+                        # fallback above, default to the current fallback
+                        # (INVITE_ONLY, the conservative 2-state default)
+                        # rather than deriving one from the legacy bool (see
+                        # FRED-TEAM-CONFIG-RFC.md §5.1.1). A bundle exported
+                        # before the 2026-07-26 narrowing may carry the now-
+                        # removed `request_only`/`closed` literally — map
+                        # both to `invite_only` so importing an old bundle
+                        # doesn't write a value the `JoiningMode` enum (and
+                        # therefore any later read of this row) will reject.
+                        joining_mode=_LEGACY_JOINING_MODES.get(
+                            row.get("joining_mode", "invite_only"),
+                            row.get("joining_mode", "invite_only"),
+                        ),
                         banner_object_storage_key=row.get("banner_object_storage_key"),
                         max_resources_storage_size=row.get(
                             "max_resources_storage_size"

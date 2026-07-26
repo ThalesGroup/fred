@@ -137,7 +137,7 @@ class Team(BaseModel):
     admins: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
     description: str | None = None
-    joining_mode: JoiningMode = JoiningMode.REQUEST_ONLY
+    joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
     banner_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None

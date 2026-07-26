@@ -55,7 +55,7 @@ async def build_personal_team(
         id=personal_team_id(user.uid),
         name="Equipe personnelle",
         member_count=1,
-        joining_mode=JoiningMode.CLOSED,
+        joining_mode=JoiningMode.INVITE_ONLY,
         is_member=True,
         admins=[],
         permissions=[

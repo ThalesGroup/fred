@@ -302,7 +302,7 @@ async def test_kea_teammetadata_file_name_is_read(tmp_path: Path) -> None:
             ).scalar_one()
             assert row.name == "fredlab"
             # kea's legacy is_private bool never maps to a joining mode.
-            assert row.joining_mode == "request_only"
+            assert row.joining_mode == "invite_only"
     finally:
         await engine.dispose()
 
@@ -555,7 +555,7 @@ async def test_teams_created_from_realm_groups(tmp_path: Path) -> None:
             assert rows["team-custom"].name == "fredlab"
             assert rows["team-custom"].description == "Custom team"
             assert rows["team-untouched"].name == "northbridge"
-            assert rows["team-untouched"].joining_mode == "request_only"
+            assert rows["team-untouched"].joining_mode == "invite_only"
     finally:
         await engine.dispose()
 

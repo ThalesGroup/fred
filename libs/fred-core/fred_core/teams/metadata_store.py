@@ -41,12 +41,13 @@ class JoiningMode(str, Enum):
     """TEAM-09 (RFC FRED-TEAM-CONFIG-RFC.md §5.1.1): replaces the former
     standalone `is_private` bool. Gates only whether/how a user can become a
     member — never marketplace visibility, which is now unconditional for
-    every team (see `RebacEngine.ensure_team_public_relations`)."""
+    every team (see `RebacEngine.ensure_team_public_relations`). Narrowed to
+    2 states 2026-07-26: `REQUEST_ONLY` depended on a notification system
+    that was never built, and `CLOSED` never enforced anything `INVITE_ONLY`
+    didn't — see the RFC amendment."""
 
     OPEN = "open"
-    REQUEST_ONLY = "request_only"
     INVITE_ONLY = "invite_only"
-    CLOSED = "closed"
 
 
 class TeamMetadataPatch(BaseModel):
@@ -86,7 +87,7 @@ class TeamMetadata(BaseModel):
     # group backs it anymore.
     name: str
     description: str | None = None
-    joining_mode: JoiningMode = JoiningMode.REQUEST_ONLY
+    joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None

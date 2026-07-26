@@ -582,7 +582,7 @@ async def _fake_get_team_by_id(
         id=TeamId(_team_id),
         name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
         member_count=1,
-        joining_mode=JoiningMode.CLOSED,
+        joining_mode=JoiningMode.INVITE_ONLY,
         admins=[],
         permissions=[],
     )
@@ -760,7 +760,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "member_count": 1,
             "admins": [],
             "is_member": True,
-            "joining_mode": "closed",
+            "joining_mode": "invite_only",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -1291,7 +1291,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "member_count": 1,
         "admins": [],
         "is_member": True,
-        "joining_mode": "closed",
+        "joining_mode": "invite_only",
         "permissions": [
             "can_read",
             "can_update_resources",
@@ -7979,7 +7979,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
             name="Thales",
             member_count=1,
             is_member=False,
-            joining_mode=JoiningMode.CLOSED,
+            joining_mode=JoiningMode.INVITE_ONLY,
             max_resources_storage_size=5368709120,
             current_resources_storage_size=0,
         ),

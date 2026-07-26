@@ -204,7 +204,7 @@ This remains intentionally small:
 
 It must not absorb routing policy, prompt curation, or upload quotas.
 
-#### 5.1.1 Joining mode (TEAM-09, 2026-07-23)
+#### 5.1.1 Joining mode (TEAM-09, 2026-07-23; narrowed to 2 states 2026-07-26)
 
 **Amendment.** The former `is_private: bool` field is replaced by a single
 `joining_mode` enum on `TeamMetadata`. A boolean could not express the
@@ -217,15 +217,20 @@ sync with it.
 ```
 enum JoiningMode:
   OPEN          # marketplace shows "Join"; joining is instant, self-service
-  REQUEST_ONLY  # marketplace shows "Request" (disabled until the
-                # notification system exists to route the request to team_admins)
-  INVITE_ONLY   # marketplace shows no button, label "Invite only"; only an
+  INVITE_ONLY   # marketplace shows no button, label "Invitation only"; only an
                 # existing team_admin/editor/analyst can add a member
-  CLOSED        # marketplace shows no button, label "Team closed"; identical
-                # write-path gating to INVITE_ONLY today (no separate backend
-                # rule yet — the two differ only in marketplace presentation
-                # until a distinct CLOSED enforcement need appears)
 ```
+
+**Amendment (2026-07-26).** `REQUEST_ONLY` and `CLOSED` are dropped, leaving
+a 2-state enum. `REQUEST_ONLY` was speculative — it depended on a
+notification system (to route the request to `team_admins`) that was never
+built, and shipped with its marketplace affordance permanently disabled.
+`CLOSED` never had a meaning distinct from `INVITE_ONLY`: both gated the
+write path identically and differed only in marketplace copy ("Team closed"
+vs "Invite only"), and "closed" read as a broken/dead-end state to users
+rather than a real membership policy. Two states — self-service `OPEN` or
+admin-mediated `INVITE_ONLY` — cover every join policy Fred actually
+enforces today.
 
 **New write surface.** `OPEN` requires a self-service join path that does not
 exist today — every existing `/teams/{id}/members*` route requires the caller
@@ -237,14 +242,15 @@ lets the calling user grant themselves — and only themselves — the
 `team_member` relation. It must never accept a target `user_id` other than
 the caller and must never grant any relation other than `team_member`.
 
-**Migration.** Every existing team is migrated to `REQUEST_ONLY` regardless
-of its former `is_private` value. `is_private` never actually gated the
-marketplace's mailto-based join before this RFC — joining a team was always
-"send an email and ask," for private and non-private teams alike — so
-`REQUEST_ONLY` is the only mapping that changes no team's real-world
-joinability on migration day. Moving a team to `OPEN`, `INVITE_ONLY`, or
-`CLOSED` is a deliberate `team_admin` action taken after migration, not an
-inferred one.
+**Migration.** Every existing team was migrated to `REQUEST_ONLY` on the
+original TEAM-09 rollout (regardless of its former `is_private` value, since
+that field never actually gated the marketplace's mailto-based join). The
+2026-07-26 narrowing migrates every team currently in `REQUEST_ONLY` or
+`CLOSED` to `INVITE_ONLY` — the conservative mapping: no team becomes more
+permissive (self-service `OPEN`) as a side effect of dropping two states.
+`INVITE_ONLY` is also the new default for freshly created teams. Moving a
+team to `OPEN` is a deliberate `team_admin` action taken after creation, not
+an inferred one.
 
 ### 5.2 TeamPlatformPolicy
 

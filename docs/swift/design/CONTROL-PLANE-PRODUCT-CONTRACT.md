@@ -1698,3 +1698,32 @@ existed but wasn't authorized before).
 **Remaining open item:** MIGR-07.04, the migration UI's "Rebuild embeddings"
 final-step trigger button (reuse the same task atoms already used by import)
 — a real future item, not yet built.
+
+## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
+
+**`JoiningMode` drops `request_only` and `closed`**, leaving `open` /
+`invite_only` — see §24 for the original 4-value contract and
+`FRED-TEAM-CONFIG-RFC.md` §5.1.1 for the full amendment rationale.
+`request_only` depended on a notification system that was never built and
+shipped with its marketplace affordance permanently disabled; `closed` never
+enforced anything `invite_only` didn't (identical write-path gating, only
+marketplace copy differed).
+
+**Default changes.** `Team.joining_mode`'s default (`Team`, `TeamWithPermissions`,
+the ORM column, and the personal-space synthetic team previously hardcoded to
+`closed`) moves from `request_only` to `invite_only`. Every row currently in
+`request_only` or `closed` is backfilled to `invite_only` by migration
+`9ee7b44b0d57` — the conservative mapping, no team becomes self-service `open`
+as a side effect.
+
+**Import/export.** A platform bundle exported before this change may still
+carry `request_only`/`closed` literally in its `team_metadata.joining_mode`
+field; `importer.py`'s `_LEGACY_JOINING_MODES` normalizes both to
+`invite_only` on import so the row never lands with a value the current
+enum — and therefore any later read of it — would reject.
+
+**Marketplace (`TeamCard`).** Collapses from 4 branches to 2: `open` shows
+the self-service Join button; every other state (now only `invite_only`)
+shows a static "Invite only" label. No behavior change to the `open` branch
+or to `POST /teams/{team_id}/join`'s server-side gate (`joining_mode == open`,
+unchanged).
