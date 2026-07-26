@@ -58,6 +58,7 @@ from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
+from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
@@ -1169,6 +1170,7 @@ async def _resolve_agent_instance(
     access_token: str | None,
     control_plane_url: str | None,
     team_id: str | None = None,
+    request_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -1243,9 +1245,18 @@ async def _resolve_agent_instance(
         f"{control_plane_url.rstrip('/')}/teams/{team_id}/agent-instances/"
         f"{request.agent_instance_id}/runtime"
     )
-    headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
+    headers: dict[str, str] = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if request_id:
+        # Correlates this pod-side call with the control-plane request it
+        # triggers — both sides stamp the same id as `trace.trace_id` on their
+        # `runtime.stage_latency_ms{runtime_stage=runtime_binding*}` event
+        # (TURN-01 evidence gap: no way to join a turn to its binding call
+        # besides timestamps).
+        headers["X-Request-Id"] = request_id
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url, headers=headers)
+        response = await client.get(url, headers=headers or None)
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=404, detail=response.text or "Unknown agent instance."
@@ -1555,7 +1566,8 @@ async def _authorize_and_resolve(
         )
     await _validate_session_checkpoint_access(request)
     await _enforce_session_ownership(request, authenticated_user, container)
-    await _authorize_execution_or_raise(request, authenticated_user, container)
+    async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
+        await _authorize_execution_or_raise(request, authenticated_user, container)
     internal_req = _to_internal_request(request)
     # Stamp the trusted service-agent verdict (never the caller-supplied
     # context) so per-tool-call re-authorization can mirror the bypass
@@ -1569,13 +1581,18 @@ async def _authorize_and_resolve(
     else:
         ctx.pop("is_service_agent", None)
     internal_req.context = ctx
-    target = await _resolve_agent_instance(
-        request=internal_req,
-        registry=registry,
-        access_token=access_token,
-        control_plane_url=get_runtime_context().config.control_plane_url,
-        team_id=request.effective_team_id(),
-    )
+    binding_request_id = str(uuid4())
+    async with runtime_stage_timer(
+        container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
+    ):
+        target = await _resolve_agent_instance(
+            request=internal_req,
+            registry=registry,
+            access_token=access_token,
+            control_plane_url=get_runtime_context().config.control_plane_url,
+            team_id=request.effective_team_id(),
+            request_id=binding_request_id,
+        )
     _validate_resolved_team(request, target.team_id, container)
     return internal_req, target
 
@@ -4016,7 +4033,11 @@ def create_agent_app(
         # every execution against OpenFGA; a disabled/Noop engine (dev) means
         # identity-only. Safe in all modes — the factory returns a Noop with a
         # KeycloackDisabled admin client when user/m2m auth is off.
-        rebac_engine = rebac_factory(security) if security is not None else None
+        rebac_engine = (
+            rebac_factory(security, kpi_writer=container.get_kpi_writer())
+            if security is not None
+            else None
+        )
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
         container.start_metrics_exporter()

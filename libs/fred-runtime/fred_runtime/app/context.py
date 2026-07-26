@@ -135,8 +135,8 @@ class PodApplicationContext:
                 self.configuration.storage.postgres
             )
             init_user_store(engine)
-            checkpointer = FredSqlCheckpointer(engine)
-            history_store = PostgresHistoryStore(engine)
+            checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
+            history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
             self._sql_engine = engine
             self._checkpointer = checkpointer
             self._history_store = history_store

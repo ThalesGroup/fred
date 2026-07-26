@@ -35,6 +35,7 @@ from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -568,7 +569,9 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                 url
                 == "http://control-plane:8222/control-plane/v1/teams/fredlab/agent-instances/instance-1/runtime"
             )
-            assert headers == {"Authorization": "Bearer test-token"}
+            assert headers is not None
+            assert headers["Authorization"] == "Bearer test-token"
+            assert headers["X-Request-Id"]  # correlation id, TURN-01
             return _FakeResponse(
                 {
                     "agent_instance_id": "instance-1",
@@ -2832,6 +2835,7 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
         }
     )
     container = PodApplicationContext(minimal_config)
+    container._kpi_writer = NoOpKPIWriter()
 
     await agent_app_module._authorize_and_resolve(
         request,
@@ -2846,3 +2850,86 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     assert request.runtime_context.access_token == "header-jwt"
     assert request.runtime_context.refresh_token is None
     assert request.effective_user_id() == "alice"
+
+
+@pytest.mark.asyncio
+async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
+    monkeypatch, minimal_config
+) -> None:
+    """
+    TURN-01 instrumentation: `_authorize_and_resolve` must time pod-side
+    OpenFGA authorization and instance resolution as two distinct
+    `runtime.stage_latency_ms` stages (pod_authz, runtime_binding), both
+    before `_stream()`'s own `turn_start` — additive only,
+    `agent.turn_completed`'s total_ms is untouched. This is the dedicated,
+    Prometheus-labelled `runtime_stage` mechanism (isolated from the generic,
+    unlabelled `app.phase_latency_ms`/`phase` used by Graph/checkpoint/KF).
+
+    The runtime_binding stage must also carry a `trace.trace_id`, and that
+    same id must reach `_resolve_agent_instance` as `request_id` (the value
+    later sent as `X-Request-Id` to control-plane, TURN-01 correlation).
+    """
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    resolve_calls: list[dict] = []
+    target = SimpleNamespace(
+        team_id="fredlab", definition=None, agent_instance_name=None
+    )
+
+    async def _fake_resolve(**kwargs):
+        resolve_calls.append(kwargs)
+        return target
+
+    monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
+    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
+    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
+    monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
+    monkeypatch.setattr(
+        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+    )
+
+    request = RuntimeExecuteRequest.model_validate(
+        {
+            "input": "hi",
+            "agent_instance_id": "inst-1",
+            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+        }
+    )
+    container = PodApplicationContext(minimal_config)
+    container._kpi_writer = _RecordingKPIWriter()
+
+    await agent_app_module._authorize_and_resolve(
+        request,
+        authenticated_user=_ALICE,
+        container=container,
+        registry={},
+        access_token="header-jwt",
+    )
+
+    phases = {
+        e["dims"]["runtime_stage"]: e
+        for e in emitted
+        if e["name"] == "runtime.stage_latency_ms"
+    }
+    assert set(phases) == {"pod_authz", "runtime_binding"}
+    assert phases["pod_authz"].get("trace") is None
+
+    binding_event = phases["runtime_binding"]
+    assert binding_event["trace"] is not None
+    trace_id = binding_event["trace"]["trace_id"]
+    assert trace_id
+
+    assert len(resolve_calls) == 1
+    assert resolve_calls[0]["request_id"] == trace_id

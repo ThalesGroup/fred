@@ -31,11 +31,13 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.kpi.kpi_phase_metric import phase_timer
 from fred_core.sql.base_sql import (
     AsyncBaseSqlStore,
@@ -492,7 +494,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_id = str(checkpoint["id"])
             values = cast(dict[str, Any], c.pop("channel_values", {}))
             metadata_json = get_checkpoint_metadata(config, metadata)
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 for channel, version in new_versions.items():
                     stored_type, stored_blob = (
                         self.serde.dumps_typed(values[channel])
@@ -527,6 +532,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     },
                     pk_cols=["thread_id", "checkpoint_ns", "checkpoint_id"],
                 )
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="put",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.
@@ -559,7 +571,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             thread_id = str(configurable["thread_id"])
             checkpoint_ns = str(configurable.get("checkpoint_ns", ""))
             checkpoint_id = str(configurable["checkpoint_id"])
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 for idx, (channel, value) in enumerate(writes):
                     write_idx = WRITES_IDX_MAP.get(channel, idx)
                     value_type, value_blob = self.serde.dumps_typed(value)
@@ -585,6 +600,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                             "idx",
                         ],
                     )
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="put_writes",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
 
     def delete_thread(self, thread_id: str) -> None:  # type: ignore[override]
         raise _sync_checkpointer_error("delete_thread")
