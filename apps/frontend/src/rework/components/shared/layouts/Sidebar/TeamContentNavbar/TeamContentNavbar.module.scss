@@ -63,7 +63,9 @@
 /* Roles the current user holds on this team, e.g. "Admin · Analyst" or
  * "Member" (#2100) — bottom-left of the banner, below the name/gear row. */
 .teamRoleLabel {
+  display: flex;
   position: relative;
+  align-items: center;
   z-index: 1;
   color: inherit;
   font: var(--font-label-medium);
@@ -81,7 +83,12 @@
 
 .roleLabelAdminIcon {
   display: inline-flex;
-  height: 1.33em; /* match .teamRoleLabel's line-height so the row stays the same height with or without the icon */
+  justify-content: center;
+  align-items: center;
+  margin-right: var(--spacing-3xs);
+  height: 1em; /* match the label text's own height — 1.33em (its line-height)
+   * made the icon's box taller than the text next to it, pushing that text
+   * upward inside the row. */
   color: var(--secondary);
   font-size: 12px;
 }
