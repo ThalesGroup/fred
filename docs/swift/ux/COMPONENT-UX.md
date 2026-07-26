@@ -1017,6 +1017,29 @@ only queries past a minimum length (this dialog, `minQueryLength={2}`)
 avoid flashing an empty "no options" state below that threshold. Affects
 every `Autocomplete` consumer, not just this dialog.
 
+**`Autocomplete` keyboard navigation (2026-07-26).** The first option is
+now virtually focused (`aria-activedescendant` pattern, DOM focus stays on
+the input) as soon as the menu opens with results; `ArrowDown`/`ArrowUp`
+move it, wrapping at each end; `Enter` selects whichever option is
+currently focused (closing the menu and clearing the field, same as a
+click). The focused index resets to `0` on every fresh keystroke or
+re-focus rather than reactively whenever the `options` prop changes —
+`options` is a new array reference (`.filter()`/`.map()` result) on nearly
+every parent render, not only when the candidate list itself changes, so
+tying the reset to it would keep stomping on the user's own up/down
+navigation mid-browse. Implementation mirrors `Select`'s existing
+`activeIndex`/`moveActive` pattern verbatim (same wrap-around, same
+disabled-skip behavior). Surfaced (and fixed in the same pass) a latent bug
+in the shared `Menu`: its per-option DOM id was built from `option.value`,
+which for `Select`'s own primitive-typed options happened to stringify
+uniquely, but for `Autocomplete`'s object-typed candidates (`UserSummary`
+records) stringifies to the same `"[object Object]"` for every option —
+breaking both `activeId` matching and the `#${activeId}` scroll-into-view
+selector (unescaped `[`/`]` aren't valid there). Menu's item id (and
+`Select`'s matching `activeOptionId`) now use `option.key` instead — already
+required, already unique by contract (it's the React list key), and a
+plain string regardless of `T`.
+
 **`IconButton` default color.** `color` is now optional, defaulting to
 `on-surface-retreat` — the baseline color intended for icon buttons that
 don't need a stronger color to draw attention (e.g. this dialog's row
