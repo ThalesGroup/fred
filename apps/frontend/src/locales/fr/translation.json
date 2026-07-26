@@ -1538,6 +1538,11 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
+        "search": {
+          "ariaLabel": "Rechercher un membre",
+          "clearAriaLabel": "Effacer la recherche",
+          "placeholder": "Nom, Prénom, Identifiant"
+        },
         "table": {
           "actions": "Actions",
           "deleteAction": "Supprimer",

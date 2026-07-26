@@ -893,6 +893,69 @@ the input exactly; the popover's only remaining offset is the deliberate
 
 ---
 
+### `TeamSettingsMembers` — member search field (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx`
+**Status:** `Functional`
+
+Reuses the exact same input the header's `AddTeamMembersDialog`-launch used
+to use before #2117 replaced it with a button: `TextInput` in `compact`
+mode with a leading `search` icon, no `label` — not the `SearchField`
+molecule (`PromptsPage`/`CapabilityTeamMatrixDrawer`'s search), which was
+tried first and rejected as visually inconsistent with the rest of this
+panel. `TextInput` already accepts native input attributes (`placeholder`,
+`aria-label`, `style`, `ref`) via its prop spread, so no component change
+was needed for the placeholder text, the accessible name on an icon-only
+field, or the clear button below.
+
+Placeholder: "Nom, Prénom, Identifiant" / "Last name, First name,
+Identifiant" — matches the three searchable fields (and the `username`
+column's "Identifiant" label) rather than a full sentence, unlike
+`AddTeamMembersDialog`'s own search placeholder ("Entrer un nom, prénom ou
+ID utilisateur").
+
+Clear button: once `search` is non-empty, a `small`/`on-surface-retreat`
+`IconButton` (`close`) appears absolutely-positioned inside the field
+(`.team-settings-members-search-clear`, vertically centered, `right:
+var(--spacing-2xs)`) — composed locally around `TextInput` rather than
+built into it, so the shared atom's API/behavior for every other consumer
+stays untouched. Clearing calls `setSearch("")` and refocuses the input via
+a local `ref` (same pattern as `SearchField`'s own clear button), so focus
+never leaves the field. `TextInput` gets an inline `style={{ paddingRight:
+... }}` only while the button is showing, reserving room so typed text
+never runs under it.
+
+Sits in the header's right-hand group (`.team-settings-members-header-right`,
+`gap: var(--spacing-m)` = 16px), immediately left of the conditional
+"Ajouter des membres" `Button` — both share that flex row so the search
+field is still shown flush right even for members without
+`can_administer_members` (button hidden, search alone). Fixed
+`width: 280px` on the field's wrapper, since `TextInput`'s root is
+`width: 100%` and needs a container to stop it filling the header row.
+
+Filtering is purely client-side: `useListTeamMembersQuery({ teamId })`
+already fetches every member in one uncapped call (`DataTable`'s pagination,
+per #2108 above, only slices that already-fetched array), so there's no
+backend search endpoint to coordinate with. Below 2 characters the query is
+ignored (every member shows); at 2+, the query is split on whitespace into
+tokens and a member matches when **every** token is found in **at least
+one** of `first_name`/`last_name`/`username` (case-insensitive substring) —
+so "doe alice" and "alice doe" both match a member named Alice Doe, and a
+lone token matches on first name, last name, or the "Identifiant" column
+(`username`) alone.
+
+The row's `IconButtonMenu` ("more" action) color also moved from
+`on-surface` to `on-surface-retreat` in this pass — a deliberate de-emphasis
+of that column, unrelated to search but shipped in the same change.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
 ### `AddTeamMembersDialog` — bulk add with per-user role selection (2026-07-26)
 
 **Location:**
