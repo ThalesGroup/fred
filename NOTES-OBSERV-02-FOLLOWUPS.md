@@ -166,12 +166,68 @@ for anyone adding a new `/agents/*` admin-catalog-style endpoint later: the
 config object available at request time is `RuntimeConfig`, not
 `AgentPodConfig`, and needs its own field for anything new.
 
-### 14. `kind="model"` enforcement bootstrapping (default_on) has no code yet
-The RFC's migration guidance (default-on for all currently-routable models
-at cutover) is written but not implemented — deliberately: it only matters
-once B7's enforcement chokepoint exists, so there is nothing to bootstrap
-while `kind="model"` entries are enablement-visible-but-unenforced. Revisit
-together with B7.
+### 14. `kind="model"` enforcement bootstrapping (default_on) — STILL not implemented, now URGENT
+Updated after B7 landed: the enforcement chokepoint this item was waiting on
+now exists and is fail-closed. See item #15 — this is no longer a "someday"
+item, it is a **hard blocker on enabling ReBAC for any live deployment**.
+
+---
+
+## Runtime enforcement (B7)
+
+### 15. ⚠️ MOST IMPORTANT ITEM IN THIS FILE — deployment-sequencing hazard
+No team holds an explicit `can_use` grant on any `model__*` capability today
+(nothing seeds one — see #14). The instant ReBAC is active for a team,
+`usable_model_capability_ids` returns an EMPTY set for it, and every chat
+turn for that team fails closed with `ModelNotUsableError`. **The
+default-on seeding migration must land and run in the same deploy as B7's
+enforcement code, or strictly before it.** Deploying enforcement without
+seeding first would break all chat, platform-wide, for every team with
+ReBAC active. Documented as a hard prerequisite in
+`AGENT-CAPABILITY-RFC.md` §8.7's hazard box — repeating it here because it
+is exactly the kind of gap that's invisible in code review (both halves are
+individually correct) and only shows up as a production incident.
+
+### 16. `usable_capability_ids` is now duplicated once (control-plane + fred-runtime)
+`fred_runtime/model_routing/authz.py::usable_model_capability_ids` mirrors
+`control_plane_backend/capabilities/authz.py::usable_capability_ids`
+field-for-field (same OpenFGA relations, same personal-team contextual-edge
+handling) because control-plane's module cannot be imported into
+fred-runtime — separate deployables, no shared import path. The correct fix
+is moving this query logic into `fred-core` (both packages already depend
+on it) so there is exactly one copy. Real, separate refactor scope against
+already-shipped, tested control-plane code — deliberately not attempted
+under this branch's time budget. Whoever picks this up: the two functions
+must be kept in sync by hand until then; a schema.fga change to the
+`capability` type's `can_use` relation needs updating in both places.
+
+### 17. Hot-path design decision, for the record
+The naive placement (a live ReBAC check inside `ModelRoutingResolver`,
+which runs multiple times per turn — once per distinct `operation`: routing,
+planning, tool-call, …) would have been hotter than this platform's existing
+per-request security posture. Confirmed with the developer (mid-implementation
+discussion) that the fix is NOT a cache/TTL/push-sync mechanism — this
+platform's `EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already rejected a
+control-plane-signed/cached grant design (Appendix A) in favor of live,
+never-cached, per-request pod-side OpenFGA checks. The actual fix: compute
+`usable_model_capability_ids` ONCE per turn, at the same point the existing
+per-request check (`_authorize_execution_or_raise`) already runs, and thread
+the result through `BoundRuntimeContext` (a field explicitly documented as
+the "small non-sensitive execution metadata" extension point) so every
+per-operation resolution inside that turn does a local set-membership check,
+zero additional network calls. One ReBAC call per turn (not per resolution),
+matching the existing security model's own cost profile — not a new category
+of overhead.
+
+### 18. `ChatModelFactoryPort.build()`/`build_for_operation()` are synchronous
+A real constraint, not a design choice: both methods in the shared fred-sdk
+protocol are sync (not `async`), called from sync contexts
+(`ModelRoutingMiddleware._resolve_model`, `GraphRuntime`'s direct `.build()`
+call) — so the fail-closed check could never itself `await` a ReBAC call
+even if the hot-path cost were acceptable. This is *why* the "compute once,
+thread as inert data" design (#17) isn't just the efficient choice, it's the
+only one the existing sync interface allows without a wider async-ification
+of the model-building call chain.
 
 ---
 
