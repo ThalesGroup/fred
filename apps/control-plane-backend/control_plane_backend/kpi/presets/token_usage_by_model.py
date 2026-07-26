@@ -31,6 +31,7 @@ from typing import Any
 from fastapi import Request
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
+from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -85,17 +86,30 @@ async def query_token_usage_by_model(
     resp = store.client.search(index=store.index, body=body)
     buckets = resp.get("aggregations", {}).get("by_model", {}).get("buckets", [])
 
-    totals = [
-        (
-            str(bucket["key"]),
-            int(bucket["sum_input"]["value"] + bucket["sum_output"]["value"]),
+    totals = []
+    for bucket in buckets:
+        model_name = str(bucket["key"])
+        input_tokens = bucket["sum_input"]["value"]
+        output_tokens = bucket["sum_output"]["value"]
+        estimate = estimate_green_cost(
+            model_name, input_tokens=input_tokens, output_tokens=output_tokens
         )
-        for bucket in buckets
-    ]
+        totals.append(
+            (
+                model_name,
+                int(input_tokens + output_tokens),
+                estimate.co2e_grams,
+                estimate.kwh,
+                estimate.cost_usd,
+            )
+        )
     totals.sort(key=lambda row: row[1], reverse=True)
 
     rows = [
-        LabelValuePoint(label=label, value=value) for label, value in totals[:TOP_N]
+        LabelValuePoint(
+            label=label, value=value, co2e_grams=co2e_grams, kwh=kwh, cost_usd=cost_usd
+        )
+        for label, value, co2e_grams, kwh, cost_usd in totals[:TOP_N]
     ]
 
     return LabelValueResponse(rows=rows, since=since, until=until)

@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
+from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -27,6 +28,8 @@ from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeries
 from control_plane_backend.kpi.utils import resolve_interval
 
 logger = logging.getLogger(__name__)
+
+_UNMODELED = "__unmodeled__"  # sentinel for turns with no recorded model_name
 
 
 async def query_user_token_usage_over_time(
@@ -73,6 +76,19 @@ async def query_user_token_usage_over_time(
                 "aggs": {
                     "sum_input": {"sum": {"field": "quantities.input_tokens"}},
                     "sum_output": {"sum": {"field": "quantities.output_tokens"}},
+                    "by_model": {
+                        "terms": {
+                            "field": "dims.model_name",
+                            "size": 50,
+                            "missing": _UNMODELED,
+                        },
+                        "aggs": {
+                            "sum_input": {"sum": {"field": "quantities.input_tokens"}},
+                            "sum_output": {
+                                "sum": {"field": "quantities.output_tokens"}
+                            },
+                        },
+                    },
                 },
             }
         },
@@ -81,15 +97,31 @@ async def query_user_token_usage_over_time(
     resp = store.client.search(index=store.index, body=body)
     buckets = resp.get("aggregations", {}).get("by_time", {}).get("buckets", [])
 
-    rows = [
-        TimeSeriesPoint(
-            date=datetime.fromisoformat(
-                bucket["key_as_string"].replace("Z", "+00:00")
-            ).strftime(date_fmt),
-            value=bucket["sum_input"]["value"] + bucket["sum_output"]["value"],
+    rows = []
+    for bucket in buckets:
+        co2e_grams = kwh = cost_usd = 0.0
+        for model_bucket in bucket["by_model"]["buckets"]:
+            model_name = model_bucket["key"]
+            estimate = estimate_green_cost(
+                None if model_name == _UNMODELED else str(model_name),
+                input_tokens=model_bucket["sum_input"]["value"],
+                output_tokens=model_bucket["sum_output"]["value"],
+            )
+            co2e_grams += estimate.co2e_grams
+            kwh += estimate.kwh
+            cost_usd += estimate.cost_usd
+
+        rows.append(
+            TimeSeriesPoint(
+                date=datetime.fromisoformat(
+                    bucket["key_as_string"].replace("Z", "+00:00")
+                ).strftime(date_fmt),
+                value=bucket["sum_input"]["value"] + bucket["sum_output"]["value"],
+                co2e_grams=co2e_grams,
+                kwh=kwh,
+                cost_usd=cost_usd,
+            )
         )
-        for bucket in buckets
-    ]
 
     return TimeSeriesResponse(
         rows=rows,

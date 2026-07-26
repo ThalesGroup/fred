@@ -22,6 +22,11 @@ from pydantic import AwareDatetime, BaseModel
 class TimeSeriesPoint(BaseModel):
     date: str  # display-formatted label produced by strftime (e.g. "Jan 15")
     value: float
+    # Populated only by the token-usage presets (KPI-ANALYTICS-RFC.md §2.7) —
+    # every other preset leaves these None. Estimates, not billing-grade.
+    co2e_grams: float | None = None
+    kwh: float | None = None
+    cost_usd: float | None = None
 
 
 class TimeSeriesResponse(BaseModel):
@@ -57,6 +62,11 @@ class ScalarWithDeltaResponse(BaseModel):
 class LabelValuePoint(BaseModel):
     label: str
     value: int
+    # Populated only by the token-usage presets (KPI-ANALYTICS-RFC.md §2.7) —
+    # every other preset leaves these None. Estimates, not billing-grade.
+    co2e_grams: float | None = None
+    kwh: float | None = None
+    cost_usd: float | None = None
 
 
 class LabelValueResponse(BaseModel):

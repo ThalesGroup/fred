@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
+from fred_core.kpi import estimate_green_cost
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -28,6 +29,7 @@ from control_plane_backend.kpi.presets.common import LabelValuePoint, LabelValue
 logger = logging.getLogger(__name__)
 
 TOP_N = 10
+_UNMODELED = "__unmodeled__"  # sentinel for turns with no recorded model_name
 
 
 async def query_user_token_usage_by_agent(
@@ -71,6 +73,19 @@ async def query_user_token_usage_by_agent(
                 "aggs": {
                     "sum_input": {"sum": {"field": "quantities.input_tokens"}},
                     "sum_output": {"sum": {"field": "quantities.output_tokens"}},
+                    "by_model": {
+                        "terms": {
+                            "field": "dims.model_name",
+                            "size": 50,
+                            "missing": _UNMODELED,
+                        },
+                        "aggs": {
+                            "sum_input": {"sum": {"field": "quantities.input_tokens"}},
+                            "sum_output": {
+                                "sum": {"field": "quantities.output_tokens"}
+                            },
+                        },
+                    },
                 },
             }
         },
@@ -79,17 +94,28 @@ async def query_user_token_usage_by_agent(
     resp = store.client.search(index=store.index, body=body)
     buckets = resp.get("aggregations", {}).get("by_agent", {}).get("buckets", [])
 
-    totals = [
-        (
-            str(bucket["key"]),
-            int(bucket["sum_input"]["value"] + bucket["sum_output"]["value"]),
-        )
-        for bucket in buckets
-    ]
+    totals = []
+    for bucket in buckets:
+        value = int(bucket["sum_input"]["value"] + bucket["sum_output"]["value"])
+        co2e_grams = kwh = cost_usd = 0.0
+        for model_bucket in bucket["by_model"]["buckets"]:
+            model_name = model_bucket["key"]
+            estimate = estimate_green_cost(
+                None if model_name == _UNMODELED else str(model_name),
+                input_tokens=model_bucket["sum_input"]["value"],
+                output_tokens=model_bucket["sum_output"]["value"],
+            )
+            co2e_grams += estimate.co2e_grams
+            kwh += estimate.kwh
+            cost_usd += estimate.cost_usd
+        totals.append((str(bucket["key"]), value, co2e_grams, kwh, cost_usd))
     totals.sort(key=lambda row: row[1], reverse=True)
 
     rows = [
-        LabelValuePoint(label=label, value=value) for label, value in totals[:TOP_N]
+        LabelValuePoint(
+            label=label, value=value, co2e_grams=co2e_grams, kwh=kwh, cost_usd=cost_usd
+        )
+        for label, value, co2e_grams, kwh, cost_usd in totals[:TOP_N]
     ]
 
     return LabelValueResponse(rows=rows, since=since, until=until)

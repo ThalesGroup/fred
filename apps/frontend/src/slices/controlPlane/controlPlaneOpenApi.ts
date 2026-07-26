@@ -565,6 +565,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
+    acknowledgeTaskControlPlaneV1TasksTaskIdAckPost: build.mutation<
+      AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse,
+      AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/ack`, method: "POST" }),
+    }),
     handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
       HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
@@ -574,6 +580,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -586,6 +593,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -598,6 +606,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -610,6 +619,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -622,6 +632,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -634,6 +645,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -646,6 +658,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -658,6 +671,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -670,6 +684,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -682,6 +697,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -694,6 +710,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -706,6 +723,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -718,6 +736,72 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageByAgentGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_by_agent`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageByModelGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_by_model`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsStorageByTeamGet: build.query<
+      HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/storage_by_team`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTeamActivitySummaryGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/team_activity_summary`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -1172,6 +1256,11 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** statu
 export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
 };
+export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse =
+  /** status 200 Successful Response */ AcknowledgeTaskResponse;
+export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg = {
+  taskId: string;
+};
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
@@ -1179,6 +1268,8 @@ export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarResponse;
@@ -1187,6 +1278,8 @@ export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -1195,6 +1288,8 @@ export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -1203,6 +1298,8 @@ export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -1211,6 +1308,8 @@ export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -1219,6 +1318,8 @@ export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -1227,6 +1328,8 @@ export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -1235,6 +1338,8 @@ export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiAr
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
   /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
@@ -1243,6 +1348,8 @@ export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -1251,6 +1358,8 @@ export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -1259,6 +1368,8 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -1267,6 +1378,8 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -1275,6 +1388,58 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
+  /** status 200 Successful Response */ TeamStorageResponse;
+export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiResponse =
+  /** status 200 Successful Response */ TeamActivitySummaryResponse;
+export type HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
@@ -1671,7 +1836,7 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
-  kind?: "tool" | "agent";
+  kind?: "tool" | "agent" | "model";
   execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
@@ -2059,8 +2224,8 @@ export type CapabilityEnablementItem = {
   personal_scope?: "enabled" | "disabled" | "default";
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
-  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. */
-  kind?: "tool" | "agent";
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). */
+  kind?: "tool" | "agent" | "model";
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
   suspended_instances?: number;
   /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
@@ -2220,13 +2385,23 @@ export type TaskSummary = {
   updated_at: string;
   scheduled_for?: string | null;
   detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
 };
+export type AcknowledgeTaskResponse = {
+  task_id: string;
+  acknowledged_at: string;
+  acknowledged_by: string | null;
+};
 export type TimeSeriesPoint = {
   date: string;
   value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_usd?: number | null;
 };
 export type TimeSeriesResponse = {
   rows: TimeSeriesPoint[];
@@ -2242,6 +2417,9 @@ export type ScalarResponse = {
 export type LabelValuePoint = {
   label: string;
   value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_usd?: number | null;
 };
 export type LabelValueResponse = {
   rows: LabelValuePoint[];
@@ -2267,6 +2445,24 @@ export type MultiSeriesTimeSeriesResponse = {
   since: string;
   until: string;
   interval: string;
+};
+export type TeamStorageRow = {
+  team_id: string;
+  label: string;
+  used_bytes: number;
+  quota_bytes?: number | null;
+};
+export type TeamStorageResponse = {
+  rows: TeamStorageRow[];
+  since: string;
+  until: string;
+};
+export type TeamActivitySummaryResponse = {
+  last_active_at: string | null;
+  sessions_in_range: number;
+  trend: "active" | "quiet";
+  since: string;
+  until: string;
 };
 export type CampaignCreatedResponse = {
   campaign_id: string;
@@ -2516,6 +2712,7 @@ export const {
   useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
+  useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
@@ -2542,6 +2739,16 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
