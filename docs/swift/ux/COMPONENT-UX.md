@@ -855,7 +855,23 @@ flex column (`height: 100%` from the already-24px-padded `.teamSettingsPage`
 shell): the header row is fixed height, and the table wrapper takes
 `flex: 1; min-height: 0` so the table's bottom edge sits exactly `24px`
 above the viewport bottom, scrolling internally past `pageSize` rows on very
-short viewports rather than growing the page.
+short viewports rather than growing the page. The container's own
+`overflow: hidden` was removed — it isn't needed for the shrink-to-fit
+chain (`min-height: 0` on both the container and the table wrapper already
+does that; `DataTable` clips its own rounded corners) and it was cropping
+the "add member" `Autocomplete` input's focus ring at the top of the flex
+column.
+
+**"Add member" `Autocomplete` (fixed 2026-07-26).** Uses `TextInput`'s
+`compact` variant, which now sets `display: none` on the hint/error/counter
+container (`.information`) instead of just skipping its flex/padding rules —
+previously the empty container still reserved a row's worth of height,
+which (a) misaligned the input's visual center against the title/
+`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover` (`top:
+100%` of the input's own wrapper) below the input with a large gap. Both
+now resolve automatically since the wrapper's rendered height matches the
+input exactly; the popover's only remaining offset is the deliberate
+`margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
 
 #### Open UX issues
 
