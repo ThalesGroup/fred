@@ -45,6 +45,13 @@ logger = logging.getLogger(__name__)
 # - trace_id, correlation_id, checkpoint_id, doc_uid, scope_id: unique per
 #   call/resource, no aggregate value as a label, and a pivot vector from a
 #   wide-audience dashboard back into raw logs.
+# - phase, operation: generic dims shared by many unrelated call sites (Graph,
+#   checkpoint SQL, Knowledge Flow, LLM calls) with a wide, still-growing
+#   value set — promoting either would surface far more than intended.
+#   `runtime_stage` and `rebac_operation` below are the deliberately narrow,
+#   closed-set replacements scoped to TURN-01's three pre-LLM stages and the
+#   five OpenFGA operations (see kpi_runtime_stage_metric.py and
+#   openfga_engine._rebac_timer) — never reuse `phase`/`operation` themselves.
 PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
         "tool_name",
@@ -66,6 +73,8 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "actor_type",
         "file_type",
         "agent_step",
+        "runtime_stage",
+        "rebac_operation",
     }
 )
 

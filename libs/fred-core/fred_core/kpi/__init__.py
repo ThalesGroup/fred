@@ -24,6 +24,11 @@ from fred_core.kpi.kpi_reader_structures import (
     KPIQueryResult,
     TimeBucket,
 )
+from fred_core.kpi.kpi_runtime_stage_metric import (
+    RuntimeStage,
+    record_runtime_stage_metric,
+    runtime_stage_timer,
+)
 from fred_core.kpi.kpi_writer import KPIDefaults, KPIWriter
 from fred_core.kpi.kpi_writer_structures import (
     Cost,
@@ -76,4 +81,7 @@ __all__ = [
     "emit_sql_pool_kpis",
     "record_phase_metric",
     "phase_timer",
+    "RuntimeStage",
+    "record_runtime_stage_metric",
+    "runtime_stage_timer",
 ]
