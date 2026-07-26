@@ -683,6 +683,30 @@ _(none yet)_
 
 ---
 
+### Delete confirmation in `ChatList` (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatList.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`
+**Status:** `Functional`
+
+Clicking a session tile's `DeleteIconButton` used to call the delete
+mutation immediately, with no confirmation step (and swallowed the error
+silently). Now opens the shared `ConfirmationDialog` (via
+`useConfirmationDialog`, already wrapping the app in `App.tsx`) first —
+the mutation only fires from `onConfirm`. Same inverted-emphasis
+destructive pattern as "Delete agent" (`TeamAgentsPage`) and "Leave team"
+(`LeaveTeamButton`): `criticalAction: true`, `cancelVariant: "filled"` /
+`cancelColor: "primary"` (Cancel stays the visually dominant filled
+button), `confirmVariant: "text"` (Delete drops to a low-emphasis text
+button, colored `error` via `criticalAction`). New i18n keys under
+`rework.sidebar.chatList.deleteDialog.{title,message,confirm,cancel}`,
+message interpolates the session's own displayed label (title, or the
+UUID-prefix fallback from the open issue above) — same shape as
+`rework.agentCard.deleteDialog`.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`

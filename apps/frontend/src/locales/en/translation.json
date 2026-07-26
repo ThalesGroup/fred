@@ -1312,6 +1312,12 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "deleteDialog": {
+          "title": "Delete this conversation?",
+          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
+          "confirm": "Delete",
+          "cancel": "Cancel"
+        },
         "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
         "groupByAgent": "Group by agent",
         "loading": "Loading...",

@@ -1312,6 +1312,12 @@
         "title": "Espace administration"
       },
       "chatList": {
+        "deleteDialog": {
+          "title": "Supprimer cette conversation ?",
+          "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
+          "confirm": "Supprimer",
+          "cancel": "Annuler"
+        },
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
         "groupByAgent": "Grouper par agent",
         "loading": "Chargement...",
