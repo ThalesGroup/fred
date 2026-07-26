@@ -1530,6 +1530,8 @@
           "addDetail": "Impossible d'ajouter cet utilisateur à l'équipe.",
           "addSummary": "Échec de l'ajout du membre",
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
+          "grantDetail": "{{name}} a été ajouté(e), mais le rôle {{role}} n'a pas pu lui être attribué.",
+          "grantSummary": "Échec de l'attribution d'un rôle",
           "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "removeMemberSummary": "Échec de la suppression du membre",

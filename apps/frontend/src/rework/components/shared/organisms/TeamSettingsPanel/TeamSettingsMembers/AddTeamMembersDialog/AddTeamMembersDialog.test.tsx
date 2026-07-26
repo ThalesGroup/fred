@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   addTeamMember: vi.fn(),
   grantTeamMemberRole: vi.fn(),
   candidates: [] as UserSummary[],
+  showError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -37,7 +38,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
+  useToast: () => ({ showSuccess: vi.fn(), showError: h.showError, showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
 
 vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -68,6 +69,7 @@ afterEach(() => {
   document.getElementById("modal-portal")?.remove();
   h.addTeamMember.mockReset();
   h.grantTeamMemberRole.mockReset();
+  h.showError.mockReset();
   h.candidates = [];
 });
 
@@ -232,6 +234,37 @@ describe("AddTeamMembersDialog", () => {
       userId: "u1",
       grantTeamMemberRoleRequest: { relation: "team_analyst" },
     });
+  });
+
+  it("names the user and the missing role when a grant call fails, so a dropped role is never silent", async () => {
+    h.addTeamMember.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.reject(new Error("boom")) });
+    render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
+    selectCandidate(alice);
+
+    click(roleChip("team_editor"));
+    click(roleChip("team_analyst"));
+
+    await act(async () => {
+      click(confirmButton());
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // addTeamMember still succeeds (Alice is added as team_editor) — only
+    // the second grant fails, and it must say so by name and role rather
+    // than a generic "failed to update role" toast.
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: expect.stringContaining('"name":"Alice Doe (alice)"'),
+      }),
+    );
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: expect.stringContaining('"role":"rework.teamRoles.team_analyst"'),
+      }),
+    );
   });
 
   it("closes the dialog even when a member's add call fails", async () => {

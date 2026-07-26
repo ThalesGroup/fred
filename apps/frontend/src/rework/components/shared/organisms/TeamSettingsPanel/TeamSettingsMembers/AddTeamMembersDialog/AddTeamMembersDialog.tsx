@@ -145,10 +145,17 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
               userId: member.user.id,
               grantTeamMemberRoleRequest: { relation: role },
             }).unwrap(),
+          // Names the user and role explicitly (rather than the table's
+          // generic "failed to update role" toast) — a dropped grant here
+          // is otherwise silent: the member still gets added, just missing
+          // one of the roles picked for them.
           onError: (error) =>
             notifyApiError(error, {
-              summary: t("rework.teamSettings.members.errors.updateRoleSummary"),
-              fallbackDetail: t("rework.teamSettings.members.errors.updateRoleDetail"),
+              summary: t("rework.teamSettings.members.errors.grantSummary"),
+              fallbackDetail: t("rework.teamSettings.members.errors.grantDetail", {
+                name: candidateLabel(member.user),
+                role: t(`rework.teamRoles.${role}`),
+              }),
               forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail"),
             }),
         });
