@@ -1538,11 +1538,6 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
-        "revokeRoleDialog": {
-          "confirmLabel": "Retirer le rôle",
-          "message": "Retirer le rôle {{role}} à {{name}} ?",
-          "title": "Retirer un rôle"
-        },
         "table": {
           "actions": "Actions",
           "deleteAction": "Supprimer",

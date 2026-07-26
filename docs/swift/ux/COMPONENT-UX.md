@@ -962,22 +962,19 @@ outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 `spacing-xs`/`8px`).
 
-**Members table: confirm before revoking a role (fixed 2026-07-26).**
-`TeamRoleChips` renders identically in both places, but only the table's
-instance is *live* — a click there immediately grants/revokes via the API,
-while the dialog's is a staged selection with no effect until "Ajouter". A
-stray/second click on an already-active chip is silent and instant, unlike
-every other destructive action on this page (remove member, leave team),
-which already confirm first. `TeamSettingsMembersTable`'s revoke path now
-does too (`ConfirmationDialog`, `criticalAction`, role + member name
-interpolated into the message) — granting is unaffected (still one click,
-additive and low-risk). This was investigated as a candidate root cause for
-a report of "a member added with 2-3 roles ends up holding only the
-highest-priority one" — it wasn't (see the `addTeamMember`-on-baseline fix
-above for the actual cause), but the missing confirmation was still a real,
-independent gap worth closing on its own. Also fixed in the same pass:
-`DataTable` accepted an optional `rowKey` (default: array index, unchanged
-for other consumers); `TeamSettingsMembersTable` now passes
+**Members table: role chips are a live, single-click toggle in both
+directions.** `TeamRoleChips` renders identically here and in the
+add-members dialog, but only the table's instance is *live* — a click
+there immediately grants/revokes via the API, while the dialog's is a
+staged selection with no effect until "Ajouter". A confirmation step was
+added on the revoke path (2026-07-26) while investigating a report of "a
+member added with 2-3 roles ends up holding only the highest-priority
+one" — it turned out not to be the cause (see the `addTeamMember`-on-
+baseline fix above for the actual root cause) and was removed again at the
+developer's explicit request the same day: revoking a role is back to a
+single click, symmetric with granting. Also fixed in the same investigation
+(kept): `DataTable` accepted an optional `rowKey` (default: array index,
+unchanged for other consumers); `TeamSettingsMembersTable` now passes
 `(member) => member.user.id` — with the previous index-based key, any
 row-scoped state or in-flight handler could misattribute to the wrong
 member as soon as the list re-sorted (which `sortedMembers` does on every

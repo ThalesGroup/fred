@@ -1538,11 +1538,6 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
-        "revokeRoleDialog": {
-          "confirmLabel": "Remove role",
-          "message": "Remove the {{role}} role from {{name}}?",
-          "title": "Remove a role"
-        },
         "table": {
           "actions": "Actions",
           "deleteAction": "Delete",

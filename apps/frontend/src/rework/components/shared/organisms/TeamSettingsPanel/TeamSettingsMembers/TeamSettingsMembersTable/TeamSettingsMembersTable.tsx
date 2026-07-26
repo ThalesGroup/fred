@@ -14,7 +14,6 @@
 
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
-import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
@@ -56,7 +55,6 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
-  const { showConfirmationDialog } = useConfirmationDialog();
 
   const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
   const [grantTeamMemberRole] = useGrantTeamMemberRoleMutation();
@@ -109,27 +107,6 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
       });
     },
     [runMutationAction, revokeTeamMemberRole, team.id, notifyApiError, t],
-  );
-
-  // A revoke is a single click away from an active chip that looks
-  // identical to the add-members dialog's (inert, staged-selection) chips —
-  // an accidental click here has an immediate, silent effect on a live
-  // member, unlike there. Confirming closes that gap the same way
-  // remove-member/leave-team already do for their own destructive actions.
-  const confirmRevokeRole = useCallback(
-    (teamMember: TeamMember, role: UserTeamRelation) => {
-      showConfirmationDialog({
-        title: t("rework.teamSettings.members.revokeRoleDialog.title"),
-        message: t("rework.teamSettings.members.revokeRoleDialog.message", {
-          role: t(`rework.teamRoles.${role}`),
-          name: `${teamMember.user.first_name} ${teamMember.user.last_name}`,
-        }),
-        confirmButtonLabel: t("rework.teamSettings.members.revokeRoleDialog.confirmLabel"),
-        criticalAction: true,
-        onConfirm: () => handleRevokeRole(teamMember.user.id, role),
-      });
-    },
-    [showConfirmationDialog, t, handleRevokeRole],
   );
 
   const handleRemoveMember = useCallback(
@@ -190,7 +167,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
             heldRoles={teamMember.relations}
             canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
             onToggle={(role, held) =>
-              held ? confirmRevokeRole(teamMember, role) : handleGrantRole(teamMember.user.id, role)
+              held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
             }
           />
         ),
@@ -233,7 +210,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     can_administer_admins,
     can_administer_members,
     handleGrantRole,
-    confirmRevokeRole,
+    handleRevokeRole,
     handleRemoveMember,
   ]);
 

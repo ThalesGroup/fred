@@ -49,7 +49,6 @@ vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", 
 }));
 
 import TeamSettingsMembersTable from "./TeamSettingsMembersTable.tsx";
-import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider.tsx";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -94,27 +93,8 @@ function roleChip(role: string): HTMLButtonElement {
   return Array.from(container.querySelectorAll("button")).find((b) => b.textContent === label) as HTMLButtonElement;
 }
 
-describe("TeamSettingsMembersTable — revoke confirmation", () => {
-  it("clicking an already-active role chip does not revoke immediately — it opens a confirmation first", () => {
-    h.teamMembers = [
-      {
-        user: { id: "u1", first_name: "Alice", last_name: "Doe", username: "alice" },
-        relations: ["team_editor"],
-      } as TeamMember,
-    ];
-    render(
-      <ConfirmationDialogProvider>
-        <TeamSettingsMembersTable team={team} />
-      </ConfirmationDialogProvider>,
-    );
-
-    click(roleChip("team_editor"));
-
-    expect(h.revokeTeamMemberRole).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
-  });
-
-  it("confirming the dialog then calls revokeTeamMemberRole for that user and role", () => {
+describe("TeamSettingsMembersTable — role chip toggling", () => {
+  it("clicking an already-active role chip revokes it immediately, with no confirmation", () => {
     h.revokeTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     h.teamMembers = [
       {
@@ -122,18 +102,11 @@ describe("TeamSettingsMembersTable — revoke confirmation", () => {
         relations: ["team_editor"],
       } as TeamMember,
     ];
-    render(
-      <ConfirmationDialogProvider>
-        <TeamSettingsMembersTable team={team} />
-      </ConfirmationDialogProvider>,
-    );
+    render(<TeamSettingsMembersTable team={team} />);
 
     click(roleChip("team_editor"));
-    const confirmButton = Array.from(document.querySelectorAll('[role="alertdialog"] button')).find(
-      (b) => b.textContent === "rework.teamSettings.members.revokeRoleDialog.confirmLabel",
-    );
-    click(confirmButton ?? null);
 
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(h.revokeTeamMemberRole).toHaveBeenCalledWith({
       teamId: "team-1",
       userId: "u1",
@@ -141,30 +114,7 @@ describe("TeamSettingsMembersTable — revoke confirmation", () => {
     });
   });
 
-  it("clicking cancel leaves the role untouched", () => {
-    h.teamMembers = [
-      {
-        user: { id: "u1", first_name: "Alice", last_name: "Doe", username: "alice" },
-        relations: ["team_admin"],
-      } as TeamMember,
-    ];
-    render(
-      <ConfirmationDialogProvider>
-        <TeamSettingsMembersTable team={team} />
-      </ConfirmationDialogProvider>,
-    );
-
-    click(roleChip("team_admin"));
-    const cancelButton = Array.from(document.querySelectorAll('[role="alertdialog"] button')).find(
-      (b) => b.textContent === "confirmationDialog.defaultCancelButtonLabel",
-    );
-    click(cancelButton ?? null);
-
-    expect(h.revokeTeamMemberRole).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
-  });
-
-  it("clicking an inactive role chip still grants immediately with no confirmation", () => {
+  it("clicking an inactive role chip grants it immediately, with no confirmation", () => {
     h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     h.teamMembers = [
       {
@@ -172,11 +122,7 @@ describe("TeamSettingsMembersTable — revoke confirmation", () => {
         relations: ["team_member"],
       } as TeamMember,
     ];
-    render(
-      <ConfirmationDialogProvider>
-        <TeamSettingsMembersTable team={team} />
-      </ConfirmationDialogProvider>,
-    );
+    render(<TeamSettingsMembersTable team={team} />);
 
     click(roleChip("team_editor"));
 
