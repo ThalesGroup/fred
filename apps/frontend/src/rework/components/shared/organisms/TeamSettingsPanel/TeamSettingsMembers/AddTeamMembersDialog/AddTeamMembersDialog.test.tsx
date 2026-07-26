@@ -145,10 +145,10 @@ describe("AddTeamMembersDialog", () => {
     expect(portal().querySelector('ul[class*="pendingList"]')).toBeNull();
   });
 
-  it("does not focus the search input on open", () => {
+  it("focuses the search input on open", () => {
     render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
     const input = portal().querySelector("input");
-    expect(document.activeElement).not.toBe(input);
+    expect(document.activeElement).toBe(input);
   });
 
   it("does not open the suggestions menu below 2 characters", () => {

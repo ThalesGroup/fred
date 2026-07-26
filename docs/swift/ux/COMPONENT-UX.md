@@ -896,9 +896,9 @@ generic `Dialog` primitive exists yet):
 - **Header:** title + subtitle (`body-medium`, `on-surface-retreat`).
 - **Search:** the same `Autocomplete` the old inline field used, reused
   as-is (candidates come from the existing `candidate-members` endpoint,
-  already scoped to non-members) — not auto-focused on open, and its menu
-  only opens once the query is 2+ characters (`minQueryLength={2}`, see
-  below), matching the backend search's own minimum.
+  already scoped to non-members) — auto-focused on open, and its menu only
+  opens once the query is 2+ characters (`minQueryLength={2}`, see below),
+  matching the backend search's own minimum.
 - **Pending-list container** — always rendered, even with zero pending
   candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
   corners, `spacing-s` (`12px`) padding so content isn't flush against the

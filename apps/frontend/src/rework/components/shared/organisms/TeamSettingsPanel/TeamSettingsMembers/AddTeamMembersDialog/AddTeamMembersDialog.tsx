@@ -188,6 +188,7 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
               textInput={{
                 placeholder: t("rework.teamSettings.members.addMembersDialog.searchPlaceholder"),
                 icon: { category: "outlined", type: "search" },
+                autoFocus: true,
               }}
               minQueryLength={2}
               onFieldValueChange={setSearchQuery}
