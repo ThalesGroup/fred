@@ -192,7 +192,12 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       </div>
       <div className={`${styles["form-section"]} ${styles["team-settings-toggles"]}`}>
         <div className={styles["team-settings-toggle-row"]}>
-          {t("rework.teamSettings.parameters.visibility.label")}
+          <div className={styles["team-settings-toggle-label"]}>
+            <span>{t("rework.teamSettings.parameters.visibility.label")}</span>
+            <span className={styles["team-settings-toggle-support"]}>
+              {t("rework.teamSettings.parameters.visibility.support")}
+            </span>
+          </div>
           <ButtonGroup
             variant="radio"
             size="small"
@@ -208,7 +213,12 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           />
         </div>
         <div className={styles["team-settings-toggle-row"]}>
-          {t("rework.teamSettings.parameters.joiningMode.label")}
+          <div className={styles["team-settings-toggle-label"]}>
+            <span>{t("rework.teamSettings.parameters.joiningMode.label")}</span>
+            <span className={styles["team-settings-toggle-support"]}>
+              {t("rework.teamSettings.parameters.joiningMode.support")}
+            </span>
+          </div>
           <ButtonGroup
             variant="radio"
             size="small"

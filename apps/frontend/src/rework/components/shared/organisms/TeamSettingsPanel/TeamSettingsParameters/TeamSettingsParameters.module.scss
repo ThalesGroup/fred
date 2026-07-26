@@ -91,3 +91,14 @@
   color: var(--on-surface);
   font: var(--font-body-large);
 }
+
+.team-settings-toggle-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+.team-settings-toggle-support {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
