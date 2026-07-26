@@ -834,14 +834,18 @@ containers:
   `on-surface-retreat`).
 - **Right**, left to right: a rows-per-page `Select` (20/50/100, our own
   molecule, not MUI), then `IconButton` (`medium`, `icon` variant,
-  `on-surface`) first-page / previous-page, the current page number
-  (`body-medium`, `on-surface-retreat`), then next-page / last-page. All four
-  nav buttons disable at their respective bound (first/prev at page 1,
-  next/last at the last page) — the footer itself never hides, even when
-  every row fits on one page, so the count and page-size control stay
-  reachable. New icons `first_page`/`last_page` added to the app's Material
-  Symbols allow-list (`shared/utils/Type.ts`). New i18n keys: top-level
-  `dataTable.pagination.{first,prev,next,last,totalItems}`.
+  `on-surface`) first-page / previous-page, the current page label
+  ("Page X sur Y" / "Page X of Y", `body-medium`, `on-surface-retreat`,
+  `tabular-nums`), then next-page / last-page. All four nav buttons disable
+  at their respective bound (first/prev at page 1, next/last at the last
+  page) — the footer itself never hides, even when every row fits on one
+  page, so the count and page-size control stay reachable. New icons
+  `first_page`/`last_page` added to the app's Material Symbols allow-list
+  (`shared/utils/Type.ts`). New i18n keys: top-level
+  `dataTable.pagination.{first,prev,next,last,totalItems}`. The page label
+  (`dataTable.pagination.pageNumber`) is fixed-width (`7rem`, centered) so
+  the neighbouring nav buttons don't shift as either the current page or the
+  total page count gains a digit.
 
 `TeamSettingsMembersTable` is the first consumer, at an initial `pageSize={20}`
 (the rows-per-page `Select` lets the user switch to 50/100 from there).

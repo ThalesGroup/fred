@@ -393,7 +393,7 @@
       "itemsPerPage": "Items per page",
       "last": "Last page",
       "next": "Next page",
-      "pageNumber": "Page {{page}}",
+      "pageNumber": "Page {{page}} of {{pageCount}}",
       "prev": "Previous page",
       "totalItems": "{{count}} items"
     }

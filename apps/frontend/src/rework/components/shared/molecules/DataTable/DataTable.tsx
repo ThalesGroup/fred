@@ -141,7 +141,7 @@ export default function DataTable<T>({
               onClick={() => setPage(currentPage - 1)}
             />
             <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-              {t("dataTable.pagination.pageNumber", { page: currentPage + 1 })}
+              {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
             </span>
             <IconButton
               color="on-surface"

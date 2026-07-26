@@ -390,10 +390,10 @@
   "dataTable": {
     "pagination": {
       "first": "Première page",
-      "itemsPerPage": "Items par page",
+      "itemsPerPage": "Éléments par page",
       "last": "Dernière page",
       "next": "Page suivante",
-      "pageNumber": "Page {{page}}",
+      "pageNumber": "Page {{page}} sur {{pageCount}}",
       "prev": "Page précédente",
       "totalItems": "{{count}} éléments"
     }
