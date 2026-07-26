@@ -22,6 +22,7 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common import TeamId
+from fred_core.kpi import runtime_stage_timer
 from pydantic import ValidationError
 
 from control_plane_backend.product.dependencies import (
@@ -919,6 +920,7 @@ async def patch_team_prompt(
 async def get_team_agent_instance_runtime(
     team_id: Annotated[TeamId, Path()],
     agent_instance_id: Annotated[str, Path(min_length=1)],
+    request: Request,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentRuntimeBinding:
@@ -937,14 +939,24 @@ async def get_team_agent_instance_runtime(
 
     How to use it:
     - `GET /control-plane/v1/teams/{team_id}/agent-instances/{id}/runtime`
+
+    TURN-01 correlation: the pod sends `X-Request-Id` on this call and times its
+    own resolution as `runtime.stage_latency_ms{runtime_stage=runtime_binding}`
+    with the same id as `trace.trace_id` — this handler mirrors that id on its
+    own `runtime_binding_internal` stage so the two can be joined without
+    relying on timestamp coincidence.
     """
-    team = await get_team_by_id_from_service(
-        user,
-        team_id,
-        deps.team_dependencies,
-        required_permissions=[TeamPermission.CAN_READ],
-    )
-    binding = await get_runtime_binding_for_team(agent_instance_id, team.id, deps)
+    request_id = request.headers.get("X-Request-Id")
+    async with runtime_stage_timer(
+        deps.get_kpi_writer(), "runtime_binding_internal", trace_id=request_id
+    ):
+        team = await get_team_by_id_from_service(
+            user,
+            team_id,
+            deps.team_dependencies,
+            required_permissions=[TeamPermission.CAN_READ],
+        )
+        binding = await get_runtime_binding_for_team(agent_instance_id, team.id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:

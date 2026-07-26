@@ -156,6 +156,7 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
+        container.start_kpi_tasks()
         await _seed_capability_registration_defaults(container)
         try:
             yield

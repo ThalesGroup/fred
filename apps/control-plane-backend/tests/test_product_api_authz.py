@@ -36,6 +36,7 @@ from control_plane_backend.product.schemas import (
 )
 from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 
 
 def _user() -> KeycloakUser:
@@ -297,3 +298,98 @@ async def test_include_non_public_requires_real_openfga_platform_admin(
     )
     assert list_templates.await_args is not None
     assert list_templates.await_args.kwargs["include_non_public"] is True
+
+
+class _RecordingKPIWriter(NoOpKPIWriter):
+    def __init__(self) -> None:
+        self.emitted: list[dict] = []
+
+    def emit(self, **kwargs) -> None:
+        self.emitted.append(kwargs)
+
+
+class _FakeRequest:
+    """Duck-typed stand-in for Starlette Request — only `.headers.get` is used."""
+
+    def __init__(self, headers: dict[str, str] | None = None) -> None:
+        self._headers = headers or {}
+
+    @property
+    def headers(self):
+        return self._headers
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_correlates_via_x_request_id_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    TURN-01 correlation: when the pod sends `X-Request-Id`, this handler must
+    time its resolution as
+    `runtime.stage_latency_ms{runtime_stage=runtime_binding_internal}` carrying
+    the same id as `trace.trace_id` — the only way to join a pod's turn to the
+    control-plane request it triggers besides timestamp coincidence.
+    """
+    monkeypatch.setattr(
+        product_api, "get_team_by_id_from_service", AsyncMock(return_value=_FakeTeam())
+    )
+    fake_binding = SimpleNamespace(enabled=True)
+    monkeypatch.setattr(
+        product_api,
+        "get_runtime_binding_for_team",
+        AsyncMock(return_value=fake_binding),
+    )
+    writer = _RecordingKPIWriter()
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            team_dependencies=SimpleNamespace(), get_kpi_writer=lambda: writer
+        ),
+    )
+
+    result = await product_api.get_team_agent_instance_runtime(
+        team_id=TeamId("t"),
+        agent_instance_id="inst-1",
+        request=cast(Any, _FakeRequest({"X-Request-Id": "corr-123"})),
+        deps=deps,
+        user=_user(),
+    )
+
+    assert result is fake_binding
+    phase_events = [
+        e for e in writer.emitted if e["name"] == "runtime.stage_latency_ms"
+    ]
+    assert len(phase_events) == 1
+    assert phase_events[0]["dims"] == {"runtime_stage": "runtime_binding_internal"}
+    assert phase_events[0]["trace"] == {"trace_id": "corr-123"}
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_omits_trace_without_the_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        product_api, "get_team_by_id_from_service", AsyncMock(return_value=_FakeTeam())
+    )
+    monkeypatch.setattr(
+        product_api,
+        "get_runtime_binding_for_team",
+        AsyncMock(return_value=SimpleNamespace(enabled=True)),
+    )
+    writer = _RecordingKPIWriter()
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            team_dependencies=SimpleNamespace(), get_kpi_writer=lambda: writer
+        ),
+    )
+
+    await product_api.get_team_agent_instance_runtime(
+        team_id=TeamId("t"),
+        agent_instance_id="inst-1",
+        request=cast(Any, _FakeRequest()),
+        deps=deps,
+        user=_user(),
+    )
+
+    assert writer.emitted[0]["trace"] is None
