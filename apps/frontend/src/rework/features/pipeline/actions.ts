@@ -18,7 +18,7 @@
 
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
-import { mergeContextPromptText, parseSseFrames } from "../../core/utils/runtimeStream";
+import { mergeContextPromptText, mergeRoutingPolicy, parseSseFrames } from "../../core/utils/runtimeStream";
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
 import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { RuntimeExecuteRequest } from "../../../slices/runtime/runtimeOpenApi";
@@ -80,7 +80,11 @@ export async function streamAgentTurn(
     agent_instance_id: args.agentInstanceId,
     input: args.question,
     session_id: args.sessionId ?? null,
-    runtime_context: mergeContextPromptText({ ...runtimeContext, team_id: args.teamId }, prep.context_prompt_text),
+    runtime_context: mergeRoutingPolicy(
+      mergeContextPromptText({ ...runtimeContext, team_id: args.teamId }, prep.context_prompt_text),
+      prep.chat_default_profile_id,
+      prep.operation_route_rules,
+    ),
   };
 
   const response = await fetch(prep.execute_stream_url, {

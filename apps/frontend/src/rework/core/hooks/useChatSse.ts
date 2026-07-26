@@ -38,7 +38,7 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { upsertOne } from "./chatSseUtils";
-import { mergeContextPromptText, parseSseFrames } from "../utils/runtimeStream";
+import { mergeContextPromptText, mergeRoutingPolicy, parseSseFrames } from "../utils/runtimeStream";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 
 // The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
@@ -522,9 +522,13 @@ export function useChatSse(
 
       // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
       // team carried in runtime_context (no signed grant). Always include team_id.
-      const effectiveContext = mergeContextPromptText(
-        { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
-        prep.context_prompt_text,
+      const effectiveContext = mergeRoutingPolicy(
+        mergeContextPromptText(
+          { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
+          prep.context_prompt_text,
+        ),
+        prep.chat_default_profile_id,
+        prep.operation_route_rules,
       );
 
       const exchangeId = uuidv4();

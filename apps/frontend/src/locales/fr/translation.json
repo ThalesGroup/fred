@@ -1605,7 +1605,26 @@
         "activity": "Activité",
         "evaluations": "Évaluations",
         "usage": "Consommation",
+        "routing": "Routage des modèles",
         "retention": "Rétention"
+      },
+      "routing": {
+        "defaultProfile": {
+          "title": "Modèle de chat par défaut",
+          "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
+          "label": "Identifiant du profil par défaut",
+          "placeholder": "ex. default.chat.mistral"
+        },
+        "operationRules": {
+          "title": "Règles par opération",
+          "explanation": "Remplacer le modèle par défaut pour une opération runtime spécifique (ex. planning), éventuellement affinée par un objectif (purpose).",
+          "operation": "Opération",
+          "purpose": "Objectif (optionnel)",
+          "targetProfileId": "Identifiant du profil",
+          "addRule": "Ajouter une règle"
+        },
+        "save": "Enregistrer",
+        "saveError": "Impossible d'enregistrer la politique de routage."
       },
       "parameters": {
         "description": {

@@ -12,6 +12,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneSession",
     "ControlPlaneSessionAttachment",
     "ControlPlaneCapability",
+    "ControlPlaneRoutingPolicy",
   ],
   endpoints: {
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
@@ -161,6 +162,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
+    // Team routing policy (TEAM-05, #2118).
+    getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
+    },
   },
 });
 
@@ -184,6 +192,9 @@ export const {
   useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation:
     useRevokeTeamMemberRoleMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation: useRemoveTeamMemberMutation,
+  // Team routing policy (TEAM-05, #2118).
+  useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery: useTeamRoutingPolicyQuery,
+  useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation: useUpdateTeamRoutingPolicyMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,

@@ -18,7 +18,7 @@
 // Keycloak) so both paths share one frame reader and one context-merge rule and
 // cannot drift apart when runtime event handling changes.
 
-import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
+import type { RuntimeContext, TeamOperationRouteRule } from "../../../slices/runtime/runtimeOpenApi";
 
 /**
  * Iterate the JSON `data:` frames of a runtime/ingestion SSE response body.
@@ -78,5 +78,32 @@ export function mergeContextPromptText(
   return {
     ...base,
     ...(contextPromptText != null ? { context_prompt_text: contextPromptText } : {}),
+  };
+}
+
+/**
+ * Fold the team's routing-policy snapshot (resolved by control-plane
+ * prepare-execution from its stored `TeamRoutingPolicy`,
+ * `TEAM-ROUTING-POLICY-RFC.md` §8.2) onto a base runtime context — same
+ * "resolved once per session, forwarded unchanged per turn" contract as
+ * `mergeContextPromptText` above, same reason: a key is only set when a
+ * value is present, so an absent policy never overwrites the context with
+ * null/empty.
+ *
+ * Typed against the generated `RuntimeContext`, so a rename of either field
+ * on the runtime contract breaks both stream consumers at compile time
+ * instead of only the chat path.
+ */
+export function mergeRoutingPolicy(
+  base: Partial<RuntimeContext>,
+  chatDefaultProfileId: string | null | undefined,
+  operationRouteRules: TeamOperationRouteRule[] | null | undefined,
+): RuntimeContext {
+  return {
+    ...base,
+    ...(chatDefaultProfileId != null ? { chat_default_profile_id: chatDefaultProfileId } : {}),
+    ...(operationRouteRules != null && operationRouteRules.length > 0
+      ? { operation_route_rules: operationRouteRules }
+      : {}),
   };
 }

@@ -1605,7 +1605,26 @@
         "activity": "Activity",
         "evaluations": "Evaluations",
         "usage": "Usage",
+        "routing": "Model routing",
         "retention": "Retention"
+      },
+      "routing": {
+        "defaultProfile": {
+          "title": "Default chat model",
+          "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
+          "label": "Default profile id",
+          "placeholder": "e.g. default.chat.mistral"
+        },
+        "operationRules": {
+          "title": "Operation overrides",
+          "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
+          "operation": "Operation",
+          "purpose": "Purpose (optional)",
+          "targetProfileId": "Profile id",
+          "addRule": "Add rule"
+        },
+        "save": "Save",
+        "saveError": "Could not save the routing policy."
       },
       "parameters": {
         "description": {

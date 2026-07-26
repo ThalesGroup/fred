@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi } from "vitest";
-import { mergeContextPromptText, parseSseFrames } from "./runtimeStream";
+import { mergeContextPromptText, mergeRoutingPolicy, parseSseFrames } from "./runtimeStream";
 
 // Build a ReadableStream<Uint8Array> from string chunks, mirroring how a fetch
 // body delivers SSE bytes (chunk boundaries do not respect frame boundaries).
@@ -83,5 +83,32 @@ describe("mergeContextPromptText", () => {
 
   it("keeps an empty-string prompt (only null/undefined are dropped)", () => {
     expect(mergeContextPromptText({}, "")).toEqual({ context_prompt_text: "" });
+  });
+});
+
+describe("mergeRoutingPolicy", () => {
+  it("adds chat_default_profile_id when present", () => {
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, "chat.openai.gpt5", null)).toEqual({
+      search_policy: "hybrid",
+      chat_default_profile_id: "chat.openai.gpt5",
+    });
+  });
+
+  it("adds operation_route_rules when non-empty", () => {
+    const rules = [{ rule_id: "r1", operation: "planning", target_profile_id: "chat.openai.gpt5" }];
+    expect(mergeRoutingPolicy({}, null, rules)).toEqual({ operation_route_rules: rules });
+  });
+
+  it("omits both keys when neither is present", () => {
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, null, null)).toEqual({
+      search_policy: "hybrid",
+    });
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, undefined, undefined)).toEqual({
+      search_policy: "hybrid",
+    });
+  });
+
+  it("omits operation_route_rules when the array is empty", () => {
+    expect(mergeRoutingPolicy({}, null, [])).toEqual({});
   });
 });
