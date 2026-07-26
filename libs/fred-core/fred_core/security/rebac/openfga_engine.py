@@ -21,8 +21,10 @@ import json
 import logging
 import os
 import time
-from typing import Iterable
+from typing import Iterable, Literal
 
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_call_metric import call_metric
 from fred_core.security.models import Resource
 from fred_core.security.rebac.openfga_schema import (
     DEFAULT_SCHEMA,
@@ -60,6 +62,21 @@ from openfga_sdk.models.user_type_filter import UserTypeFilter
 logger = logging.getLogger(__name__)
 
 
+RebacOperation = Literal["check", "list_objects", "list_users", "write", "read"]
+
+
+def _rebac_timer(kpi_writer: BaseKPIWriter | None, operation: RebacOperation):
+    """One `rebac_operation` dim (check/list_objects/list_users/write/read) —
+    closed set, allow-listed in PROMETHEUS_ALLOWED_LABELS, never a
+    user/session/team id. See `call_metric` for the shape."""
+    return call_metric(
+        kpi_writer,
+        latency_metric="rebac.call_latency_ms",
+        total_metric="rebac.call_total",
+        dims={"rebac_operation": operation},
+    )
+
+
 class OpenFgaRebacEngine(RebacEngine):
     """Evaluates permissions by delegating to an OpenFGA instance."""
 
@@ -75,6 +92,7 @@ class OpenFgaRebacEngine(RebacEngine):
         *,
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
+        kpi_writer: BaseKPIWriter | None = None,
     ) -> None:
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
@@ -92,38 +110,41 @@ class OpenFgaRebacEngine(RebacEngine):
         self._schema = schema
         self._authorization_model_id = config.authorization_model_id
         self._client_lock = asyncio.Lock()
+        self._kpi = kpi_writer
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Public RebacEngine methods
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def _persist_relation(self, relation: Relation) -> str | None:
-        client = await self.get_client()
+        async with _rebac_timer(self._kpi, "write"):
+            client = await self.get_client()
 
-        body = ClientWriteRequest(
-            writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
-        )
+            body = ClientWriteRequest(
+                writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
+            )
 
-        logger.debug("Adding relation %s", relation)
+            logger.debug("Adding relation %s", relation)
 
-        options = self._build_options()
-        _ = await client.write(body, options)
+            options = self._build_options()
+            _ = await client.write(body, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
         return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def delete_relation(self, relation: Relation) -> str | None:
-        client = await self.get_client()
+        async with _rebac_timer(self._kpi, "write"):
+            client = await self.get_client()
 
-        body = ClientWriteRequest(
-            deletes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
-        )
+            body = ClientWriteRequest(
+                deletes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
+            )
 
-        logger.debug("Deleting relation %s", relation)
+            logger.debug("Deleting relation %s", relation)
 
-        options = self._build_options()
-        _ = await client.write(body, options)
+            options = self._build_options()
+            _ = await client.write(body, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
@@ -140,43 +161,46 @@ class OpenFgaRebacEngine(RebacEngine):
         # Improvement on the delete api were added in their roadmap:
         # https://github.com/openfga/roadmap/issues/34
 
-        fga_id_to_delete = OpenFgaRebacEngine._reference_to_openfga_id(reference)
-        to_delete: list[ClientTuple] = []
+        async with _rebac_timer(self._kpi, "write"):
+            fga_id_to_delete = OpenFgaRebacEngine._reference_to_openfga_id(reference)
+            to_delete: list[ClientTuple] = []
 
-        client = await self.get_client()
-        body = ReadRequestTupleKey()
-        continuation_token: str | None = None
+            client = await self.get_client()
+            body = ReadRequestTupleKey()
+            continuation_token: str | None = None
 
-        while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
-            options = self._build_options()
-            if continuation_token:
-                options["continuation_token"] = continuation_token
+            while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+                options = self._build_options()
+                if continuation_token:
+                    options["continuation_token"] = continuation_token
 
-            res = await client.read(body, options)
-            continuation_token = res.continuation_token
+                res = await client.read(body, options)
+                continuation_token = res.continuation_token
 
-            # Filter only tuples related to the given reference
-            for tup in res.tuples:
-                if (
-                    tup.key.user == fga_id_to_delete
-                    or tup.key.object == fga_id_to_delete
-                ):
-                    to_delete.append(
-                        ClientTuple(
-                            user=tup.key.user,
-                            relation=tup.key.relation,
-                            object=tup.key.object,
+                # Filter only tuples related to the given reference
+                for tup in res.tuples:
+                    if (
+                        tup.key.user == fga_id_to_delete
+                        or tup.key.object == fga_id_to_delete
+                    ):
+                        to_delete.append(
+                            ClientTuple(
+                                user=tup.key.user,
+                                relation=tup.key.relation,
+                                object=tup.key.object,
+                            )
                         )
-                    )
 
-        if not to_delete:
-            return None
+            if not to_delete:
+                return None
 
-        # Delete all found tuples
-        body_delete = ClientWriteRequest(deletes=to_delete)
-        logger.debug("Deleting %d relations of reference %s", len(to_delete), reference)
-        options = self._build_options()
-        _ = await client.write(body_delete, options)
+            # Delete all found tuples
+            body_delete = ClientWriteRequest(deletes=to_delete)
+            logger.debug(
+                "Deleting %d relations of reference %s", len(to_delete), reference
+            )
+            options = self._build_options()
+            _ = await client.write(body_delete, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
@@ -209,22 +233,24 @@ class OpenFgaRebacEngine(RebacEngine):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
-        client = await self.get_client()
+        async with _rebac_timer(self._kpi, "list_objects"):
+            client = await self.get_client()
 
-        body = ClientListObjectsRequest(
-            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
-            relation=permission.value,
-            type=resource_type.value,
-            contextual_tuples=[
-                OpenFgaRebacEngine._relation_to_tuple(rel)
-                for rel in (contextual_relations or [])
-            ],
-        )
-        options = self._build_options(consistency=consistency_token)
-        response = await client.list_objects(body, options)
-        return [
-            OpenFgaRebacEngine._openfga_id_to_reference(obj) for obj in response.objects
-        ]
+            body = ClientListObjectsRequest(
+                user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+                relation=permission.value,
+                type=resource_type.value,
+                contextual_tuples=[
+                    OpenFgaRebacEngine._relation_to_tuple(rel)
+                    for rel in (contextual_relations or [])
+                ],
+            )
+            options = self._build_options(consistency=consistency_token)
+            response = await client.list_objects(body, options)
+            return [
+                OpenFgaRebacEngine._openfga_id_to_reference(obj)
+                for obj in response.objects
+            ]
 
     async def lookup_subjects(
         self,
@@ -235,27 +261,28 @@ class OpenFgaRebacEngine(RebacEngine):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
-        client = await self.get_client()
+        async with _rebac_timer(self._kpi, "list_users"):
+            client = await self.get_client()
 
-        userFilters = [UserTypeFilter(type=subject_type.value)]
+            userFilters = [UserTypeFilter(type=subject_type.value)]
 
-        body = ClientListUsersRequest(
-            object=FgaObject(type=resource.type.value, id=resource.id),
-            relation=relation.value,
-            user_filters=userFilters,
-            contextual_tuples=[
-                OpenFgaRebacEngine._relation_to_tuple(rel)
-                for rel in (contextual_relations or [])
-            ],
-        )
+            body = ClientListUsersRequest(
+                object=FgaObject(type=resource.type.value, id=resource.id),
+                relation=relation.value,
+                user_filters=userFilters,
+                contextual_tuples=[
+                    OpenFgaRebacEngine._relation_to_tuple(rel)
+                    for rel in (contextual_relations or [])
+                ],
+            )
 
-        options = self._build_options(consistency=consistency_token)
+            options = self._build_options(consistency=consistency_token)
 
-        response = await client.list_users(body, options)
-        return [
-            OpenFgaRebacEngine._openfga_user_to_reference(user)
-            for user in response.users
-        ]
+            response = await client.list_users(body, options)
+            return [
+                OpenFgaRebacEngine._openfga_user_to_reference(user)
+                for user in response.users
+            ]
 
     async def has_direct_relation(
         self,
@@ -271,15 +298,16 @@ class OpenFgaRebacEngine(RebacEngine):
         # schema.fga's `team_member: [user] or team_admin or team_editor or
         # team_analyst`). This is the same primitive already used by
         # `delete_all_relations_of_reference` for a bulk tuple read.
-        client = await self.get_client()
-        body = ReadRequestTupleKey(
-            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
-            relation=relation.value,
-            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
-        )
-        options = self._build_options(consistency=consistency_token)
-        response = await client.read(body, options)
-        return len(response.tuples) > 0
+        async with _rebac_timer(self._kpi, "read"):
+            client = await self.get_client()
+            body = ReadRequestTupleKey(
+                user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+                relation=relation.value,
+                object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+            )
+            options = self._build_options(consistency=consistency_token)
+            response = await client.read(body, options)
+            return len(response.tuples) > 0
 
     async def has_permission(
         self,
@@ -290,29 +318,30 @@ class OpenFgaRebacEngine(RebacEngine):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
-        client = await self.get_client()
+        async with _rebac_timer(self._kpi, "check"):
+            client = await self.get_client()
 
-        logger.debug(
-            "Checking permission %s for subject %s on resource %s",
-            permission,
-            subject,
-            resource,
-        )
-        body = ClientCheckRequest(
-            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
-            relation=permission.value,
-            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
-            contextual_tuples=[
-                OpenFgaRebacEngine._relation_to_tuple(rel)
-                for rel in (contextual_relations or [])
-            ],
-        )
+            logger.debug(
+                "Checking permission %s for subject %s on resource %s",
+                permission,
+                subject,
+                resource,
+            )
+            body = ClientCheckRequest(
+                user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+                relation=permission.value,
+                object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+                contextual_tuples=[
+                    OpenFgaRebacEngine._relation_to_tuple(rel)
+                    for rel in (contextual_relations or [])
+                ],
+            )
 
-        options = self._build_options(consistency=consistency_token)
+            options = self._build_options(consistency=consistency_token)
 
-        response = await client.check(body, options)
+            response = await client.check(body, options)
 
-        return response.allowed
+            return response.allowed
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Client and initialization helpers
