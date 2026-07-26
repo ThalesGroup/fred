@@ -83,7 +83,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(3 * var(--row-height));
+  height: var(--row-height);
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
   text-align: center;
@@ -94,9 +94,9 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-m);
-  border-radius: var(--radius-xs);
-  background-color: var(--surface-container);
-  padding: 0 var(--spacing-xs);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-highest);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-m);
   height: var(--row-height);
 }
 

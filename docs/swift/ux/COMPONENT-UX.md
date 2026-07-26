@@ -906,9 +906,11 @@ generic `Dialog` primitive exists yet):
   l'équipe", `label-large`, `on-surface-retreat`) above either —
   - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
     (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
-    selector (see below), and a `close`-icon `IconButton` to drop the row.
-    Each row is `surface-container` background, `radius-xs` (`4px`)
-    corners, height `3rem` (`48px`) — a visually distinct "chip" resting
+    selector (see below, `8px` gap between its own chips), and a
+    `close`-icon `IconButton` to drop the row. Each row is
+    `surface-container-highest` background, `radius-s` (`8px`) corners,
+    `padding-left: spacing-m` (`16px`, `padding-right` stays `spacing-xs`/
+    `8px`), height `3rem` (`48px`) — a visually distinct "chip" resting
     inside the outer bordered container, not flush rules between rows.
     List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
     "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
@@ -916,8 +918,9 @@ generic `Dialog` primitive exists yet):
     scrollbar rule in `styles/index.css`, already thin by default; this
     only narrows it further for the denser list); or
   - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
-    sélectionné pour l'instant" placeholder, `min-height: 3 * var(--row-height)`
-    so it isn't a sliver.
+    sélectionné pour l'instant" placeholder, `height: var(--row-height)`
+    (`48px`) — same height as a single pending row, so the container's
+    overall height doesn't jump between the empty and one-candidate states.
 
   **No `overflow: hidden` at the dialog level** — everything is inset by
   the dialog's own padding, and clipping would also cut off the
@@ -948,7 +951,8 @@ each chip via the new `canAdministerTeamRole(capabilities, role)` helper
 closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
-control in the app.
+control in the app. Chip padding-left/right `spacing-s` (`12px`, was
+`spacing-xs`/`8px`).
 
 **`Autocomplete` open-state rework (`isOpen` now derived, plus
 `minQueryLength`).** Previously `isOpen` was an imperatively toggled

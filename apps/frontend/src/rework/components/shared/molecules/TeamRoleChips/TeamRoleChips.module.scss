@@ -4,7 +4,7 @@
 .roleChips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-xs);
 }
 
 .roleChip {
@@ -19,7 +19,7 @@
   border: 1px solid var(--outline);
   border-radius: 999px;
   background: transparent;
-  padding: 0 var(--spacing-xs);
+  padding: 0 var(--spacing-s);
   height: 2rem;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
