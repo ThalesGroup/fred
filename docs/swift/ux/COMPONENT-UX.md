@@ -904,10 +904,13 @@ generic `Dialog` primitive exists yet):
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
-  - the rows `<ul>` (no column headers) once ≥1 candidate is pending: name/
-    username, a `TeamRoleChips` role selector (see below), and a
-    `close`-icon `IconButton` to drop the row. Row height `3rem` (`48px`).
-    Capped at `8.5 * var(--row-height)` — the half-row is a deliberate
+  - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
+    (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
+    selector (see below), and a `close`-icon `IconButton` to drop the row.
+    Each row is `surface-container` background, `radius-xs` (`4px`)
+    corners, height `3rem` (`48px`) — a visually distinct "chip" resting
+    inside the outer bordered container, not flush rules between rows.
+    List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
     "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
     (thumb color inherited from the app's existing global `outline-retreat`
     scrollbar rule in `styles/index.css`, already thin by default; this
@@ -936,12 +939,16 @@ selected), then `grantTeamMemberRole` for each other selected elevated role
 role changes on existing members (§ AUTHZ-06 above).
 
 **`TeamRoleChips`** — the members table's inline role-chip toggle group
-(admin/editor/analyst, multi-select, `data-active` fills `--primary`) is
-extracted from `TeamSettingsMembersTable` into this shared molecule so the
-dialog's pending rows and the table use the identical implementation/CSS.
-Both gate each chip via the new `canAdministerTeamRole(capabilities, role)`
-helper (`core/hooks/teamCapabilities.ts`), replacing the table's former
-private closure of the same logic.
+(admin/editor/analyst, multi-select, `data-active` fills `--primary`
+background with `on-primary` text) is extracted from
+`TeamSettingsMembersTable` into this shared molecule so the dialog's
+pending rows and the table use the identical implementation/CSS. Both gate
+each chip via the new `canAdministerTeamRole(capabilities, role)` helper
+(`core/hooks/teamCapabilities.ts`), replacing the table's former private
+closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
+text, default (inactive) border `1px solid outline` — was `0.5px
+outline-variant`, a size/color pair that didn't match any other chip-style
+control in the app.
 
 **`Autocomplete` open-state rework (`isOpen` now derived, plus
 `minQueryLength`).** Previously `isOpen` was an imperatively toggled

@@ -8,17 +8,21 @@
 }
 
 .roleChip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   transition:
     background 100ms ease,
     border-color 100ms ease,
     color 100ms ease;
   cursor: pointer;
-  border: 0.5px solid var(--outline-variant);
+  border: 1px solid var(--outline);
   border-radius: 999px;
   background: transparent;
-  padding: var(--spacing-3xs) var(--spacing-xs);
+  padding: 0 var(--spacing-xs);
+  height: 2rem;
   color: var(--on-surface-retreat);
-  font: var(--font-label-small);
+  font: var(--font-label-medium);
   white-space: nowrap;
 
   &:hover:not([data-active="true"]):not(:disabled) {
