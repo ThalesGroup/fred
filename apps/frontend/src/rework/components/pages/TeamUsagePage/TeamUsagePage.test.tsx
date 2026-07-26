@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   selected: {
     teamId: "team-1",
     selectedTeam: undefined as TeamWithPermissions | undefined,
+    isPersonalTeam: false,
   },
   neutralQuery: () => ({ data: undefined, isLoading: false, isFetching: false, isError: false }),
 }));
@@ -88,7 +89,7 @@ function render(): string {
 
 describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
   it("shows only the personal section for a plain team_member (no elevated role)", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_use_team_agents"]) };
+    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_use_team_agents"]), isPersonalTeam: false };
     const html = render();
     expect(html).toContain("rework.teamUsage.personalSectionTitle");
     expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
@@ -97,14 +98,31 @@ describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
   });
 
   it("shows only the personal section on a personal team (no team context at all)", () => {
-    h.selected = { teamId: "personal-u1", selectedTeam: undefined };
+    h.selected = { teamId: "personal-u1", selectedTeam: undefined, isPersonalTeam: true };
     const html = render();
     expect(html).toContain("rework.teamUsage.personalSectionTitle");
     expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
   });
 
+  it("shows only the personal section on a personal team even though the backend grants it team_editor-shaped permissions (build_personal_team)", () => {
+    // Regression: `teams/system.py::build_personal_team` unconditionally grants
+    // can_update_resources/can_update_agents so the owner can manage their own
+    // docs/agents — that's a personal-resource permission, not an elevated
+    // *team* role, and must not unlock the collaborative-team sections.
+    h.selected = {
+      teamId: "personal-u1",
+      selectedTeam: team(["can_read", "can_update_resources", "can_update_agents"]),
+      isPersonalTeam: true,
+    };
+    const html = render();
+    expect(html).toContain("rework.teamUsage.personalSectionTitle");
+    expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
+    expect(html).not.toContain("rework.teamUsage.team.editorSectionTitle");
+    expect(html).not.toContain("rework.teamUsage.team.adminSectionTitle");
+  });
+
   it("shows the shared team section for team_analyst (can_run_evaluations), not the editor/admin sections", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_run_evaluations"]) };
+    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_run_evaluations"]), isPersonalTeam: false };
     const html = render();
     expect(html).toContain("rework.teamUsage.team.sectionTitle");
     expect(html).not.toContain("rework.teamUsage.team.editorSectionTitle");
@@ -112,7 +130,11 @@ describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
   });
 
   it("shows the shared + editor sections for team_editor (can_update_resources), not the admin section", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_resources", "can_update_agents"]) };
+    h.selected = {
+      teamId: "team-1",
+      selectedTeam: team(["can_read", "can_update_resources", "can_update_agents"]),
+      isPersonalTeam: false,
+    };
     const html = render();
     expect(html).toContain("rework.teamUsage.team.sectionTitle");
     expect(html).toContain("rework.teamUsage.team.editorSectionTitle");
@@ -121,7 +143,7 @@ describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
   });
 
   it("shows the shared + admin sections for team_admin (can_update_info), not the editor section", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_info"]) };
+    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_info"]), isPersonalTeam: false };
     const html = render();
     expect(html).toContain("rework.teamUsage.team.sectionTitle");
     expect(html).toContain("rework.teamUsage.team.adminSectionTitle");

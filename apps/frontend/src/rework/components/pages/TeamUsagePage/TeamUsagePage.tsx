@@ -59,14 +59,20 @@ export default function TeamUsagePage() {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange);
 
-  const { teamId, selectedTeam } = useSelectedTeam();
+  const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
-  const elevated = hasElevatedTeamRole(capabilities);
+  // The personal team is granted `can_update_resources`/`can_update_agents`
+  // unconditionally (`teams/system.py::build_personal_team`) so its owner can
+  // manage their own docs/agents — that's a real permission, not an elevated
+  // *team* role. Without excluding it here, every user would see the
+  // collaborative-team sections below while sitting in personal space, since
+  // those flags would read exactly as they do for a real team_editor/admin.
+  const elevated = hasElevatedTeamRole(capabilities) && !isPersonalTeam;
   // §2.4/schema.fga: can_update_info is team_admin-only; can_update_resources
   // (like can_update_agents) is team_editor-only — the two roles this page's
   // additional sections are gated on.
-  const isTeamAdmin = capabilities.canUpdateInfo;
-  const isTeamEditor = capabilities.canUpdateResources;
+  const isTeamAdmin = capabilities.canUpdateInfo && !isPersonalTeam;
+  const isTeamEditor = capabilities.canUpdateResources && !isPersonalTeam;
 
   const {
     data: overTimeData,
