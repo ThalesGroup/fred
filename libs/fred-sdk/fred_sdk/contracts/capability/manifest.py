@@ -372,6 +372,15 @@ class CapabilityCatalogEntry(BaseModel):
     # 2026-07-19 `depends_on` fast-follow, GitHub #2004 item 5). Always empty
     # for `kind="tool"` entries.
     default_capability_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Every `models_catalog.yaml` profile_id sharing this entry's (provider,
+    # name) — TEAM-ROUTING-POLICY-RFC.md §7.1: a team routing policy picks by
+    # profile_id, finer-grained than this entry's (provider, name)-keyed
+    # capability id, so control-plane needs the mapping back from profile_id
+    # to capability id (write-time enablement validation) and the
+    # team-settings picker needs the reverse (which profile_ids an enabled
+    # capability actually offers). Always empty for kind="tool"/"agent"
+    # entries — only `kind="model"` populates it.
+    model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def from_manifest(

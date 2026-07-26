@@ -973,6 +973,15 @@ class _ModelCatalogEntry(BaseModel):
     provider: str
     name: str
     description: str | None = None
+    profile_ids: list[str] = Field(default_factory=list)
+    """Every `models_catalog.yaml` profile_id sharing this entry's
+    (provider, name) — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
+    translation: a routing policy picks by profile_id (finer-grained than
+    this capability id), so control-plane needs a way back from profile_id
+    to capability id for write-time enablement validation, and the
+    team-settings picker needs the reverse (which profile_ids this enabled
+    capability actually offers). Declaration order in the source YAML,
+    first-seen first — same order `default_profile_by_capability` favors."""
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1005,14 +1014,17 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             f"ModelProfile {profile.profile_id!r} passed validation without provider/name"
         )
         key = (provider, name)
-        if key in seen:
-            continue
-        seen[key] = _ModelCatalogEntry(
-            id=model_capability_id(provider, name),
-            provider=provider,
-            name=name,
-            description=profile.description,
-        )
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = _ModelCatalogEntry(
+                id=model_capability_id(provider, name),
+                provider=provider,
+                name=name,
+                description=profile.description,
+                profile_ids=[profile.profile_id],
+            )
+        else:
+            existing.profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 

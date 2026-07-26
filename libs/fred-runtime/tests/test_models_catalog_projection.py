@@ -71,6 +71,41 @@ def test_one_entry_per_distinct_provider_and_name() -> None:
     assert entries[0].name == "gpt-5.1"
 
 
+def test_sibling_profiles_sharing_provider_and_name_are_all_listed() -> None:
+    # TEAM-ROUTING-POLICY-RFC.md §7.1: enablement is coarser (provider, name)
+    # than routing (profile_id) — profile_ids must carry every sibling so
+    # control-plane/frontend can still offer each one once the capability is
+    # enabled, and translate any of them back to this entry's capability id.
+    catalog = _catalog(
+        (
+            _profile("chat.openai.gpt51.default", provider="openai", name="gpt-5.1"),
+            _profile("chat.openai.gpt51.creative", provider="openai", name="gpt-5.1"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert len(entries) == 1
+    assert entries[0].profile_ids == [
+        "chat.openai.gpt51.default",
+        "chat.openai.gpt51.creative",
+    ]
+
+
+def test_distinct_provider_name_pairs_have_their_own_profile_ids() -> None:
+    catalog = _catalog(
+        (
+            _profile("p1", provider="openai", name="gpt-5.1"),
+            _profile("p2", provider="azure", name="gpt-5.1"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    by_provider = {e.provider: e.profile_ids for e in entries}
+    assert by_provider == {"openai": ["p1"], "azure": ["p2"]}
+
+
 def test_distinct_providers_or_names_produce_distinct_entries() -> None:
     catalog = _catalog(
         (

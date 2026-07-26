@@ -717,6 +717,7 @@ async def _model_capabilities_for_source(
             icon="neurology",
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(entry.get("profile_ids") or ()),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
