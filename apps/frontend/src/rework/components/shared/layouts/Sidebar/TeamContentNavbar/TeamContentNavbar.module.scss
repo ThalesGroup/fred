@@ -70,6 +70,22 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
+/* Shield glyph prefixing the role label when the user holds team_admin —
+ * same glyph/color/size as the TeamSelectionItem admin badge, without its
+ * circular background/outline (#2100 follow-up). */
+.roleLabelWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.roleLabelAdminIcon {
+  display: inline-flex;
+  height: 1.33em; /* match .teamRoleLabel's line-height so the row stays the same height with or without the icon */
+  color: var(--secondary);
+  font-size: 12px;
+}
+
 .navigationContainer {
   display: flex;
   flex-direction: column;

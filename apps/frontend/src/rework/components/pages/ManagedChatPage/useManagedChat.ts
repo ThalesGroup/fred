@@ -81,6 +81,19 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
   const [refreshSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
+  // Bumps the session's activity timestamp (tile date + chat-list ordering) —
+  // called both at send time (so the tile jumps to the top the moment the
+  // user hits Enter) and again when the turn completes.
+  const touchSessionActivity = useCallback(
+    (sid: string) => {
+      refreshSession({
+        teamId,
+        sessionId: sid,
+        updateSessionRequest: { updated_at: new Date().toISOString() },
+      }).catch(() => {});
+    },
+    [refreshSession, teamId],
+  );
 
   const bindSessionId = useCallback(
     (sid: string) => {
@@ -137,13 +150,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     lang,
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
-    onTurnPersisted: (sid) => {
-      refreshSession({
-        teamId,
-        sessionId: sid,
-        updateSessionRequest: { updated_at: new Date().toISOString() },
-      }).catch(() => {});
-    },
+    onTurnPersisted: touchSessionActivity,
     onAwaitingHuman: (event) => setPendingHitl(event),
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
   });
@@ -280,6 +287,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             },
           }
         : undefined;
+    touchSessionActivity(sid);
     send(
       text,
       sid,
@@ -311,6 +319,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     bindSessionId,
     registerSession,
     trackSessionWrite,
+    touchSessionActivity,
     send,
   ]);
 

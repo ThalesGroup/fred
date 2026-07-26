@@ -882,7 +882,12 @@ Helps a user recognize their role in each team they belong to.
   labels (already shown as chips in the Members table). Falls back to
   "Membre" when no elevated role is held. Not shown for the personal space,
   or for a non-member merely browsing a public/marketplace team pre-join
-  (`selectedTeam.is_member`).
+  (`selectedTeam.is_member`). When `team_admin` is held (always the first
+  token — roles are priority-sorted, admin first), the same Shield glyph as
+  the `TeamSelectionItem` badge (`color: secondary`, 12px) prefixes the
+  label, without that badge's circular background/outline — inline, `gap:
+  var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
+  label itself isn't shown there) — left for a follow-up task.
 - Backend: new `TeamWithPermissions.my_relations` field — see
   `CONTROL-PLANE-PRODUCT-CONTRACT.md` §26 for why `permissions` alone
   couldn't reliably answer "is this user actually team_analyst".

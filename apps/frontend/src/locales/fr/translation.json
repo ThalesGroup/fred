@@ -1313,8 +1313,10 @@
       },
       "chatList": {
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
+        "groupByAgent": "Grouper par agent",
         "loading": "Chargement...",
-        "title": "Conversations"
+        "title": "Conversations",
+        "unknownAgent": "Agent inconnu"
       },
       "marketplace": {
         "menu": {

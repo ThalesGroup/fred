@@ -132,6 +132,7 @@ export const materialIcons = [
   "handshake",
   "request_quote",
   "history",
+  "category",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

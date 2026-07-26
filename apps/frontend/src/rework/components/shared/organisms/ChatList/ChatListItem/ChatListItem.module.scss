@@ -5,7 +5,7 @@
   gap: var(--spacing-xs);
   cursor: pointer;
   border-radius: var(--radius-s);
-  padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-m);
+  padding: var(--spacing-xs) var(--spacing-2xs) var(--spacing-xs) var(--spacing-xs);
   min-height: 2.5rem;
   color: var(--on-surface);
   text-decoration: none;
@@ -37,8 +37,12 @@
 }
 
 .date {
-  color: var(--on-surface-retreat);
+  color: var(--on-surface-muted);
   font: var(--font-label-small);
+}
+
+.agentName {
+  color: var(--primary);
 }
 
 .chatActions {

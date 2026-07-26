@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: hidden;
 }
 
 .chatListHeader {
@@ -10,7 +9,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-xs) var(--spacing-m);
-  height: 2rem;
+  min-height: 2rem;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
@@ -20,6 +19,13 @@
   flex-direction: column;
   padding: 0 var(--spacing-xs) var(--spacing-xs);
   overflow-y: auto;
+}
+
+/* Sub-list header shown above each agent's conversations when grouping is on. */
+.groupHeader {
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-2xs);
+  color: var(--primary);
+  font: var(--font-label-small);
 }
 
 .chatListPlaceholder {
