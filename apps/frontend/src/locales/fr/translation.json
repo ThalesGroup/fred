@@ -1504,8 +1504,6 @@
     },
     "teamCard": {
       "join": "Rejoindre",
-      "requestToJoin": "Demander",
-      "closedTeam": "Équipe fermée",
       "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
     },
@@ -1566,11 +1564,13 @@
         "joiningMode": {
           "label": "Mode d'adhésion",
           "open": "Ouverte",
-          "requestOnly": "Sur demande",
-          "inviteOnly": "Sur invitation",
-          "closed": "Fermée"
+          "inviteOnly": "Sur invitation"
         },
-        "teamBannerTitle": "Bannière de l'équipe",
+        "teamBanner": {
+          "title": "Bannière de l'équipe",
+          "import": "Importer",
+          "hint": "JPEG, PNG ou WebP · 5 Mo maximum"
+        },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."

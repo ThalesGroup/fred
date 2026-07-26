@@ -1407,7 +1407,7 @@ export type CreateUserRequest = {
   enabled?: boolean;
 };
 export type GcuVersionsType = "v1";
-export type JoiningMode = "open" | "request_only" | "invite_only" | "closed";
+export type JoiningMode = "open" | "invite_only";
 export type TeamPermission =
   | "can_read"
   | "can_update_info"

@@ -719,15 +719,13 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 **Status:** `Functional`
 
 Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
-affordance (TEAM-09) is driven entirely by the team's `joining_mode`, gated
-on `!team.is_member`:
+affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
+the team's `joining_mode`, gated on `!team.is_member`:
 
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `request_only` | "Request to join" button, permanently `disabled` — the notification system to route requests to team admins doesn't exist yet |
 | `invite_only` | No button; muted label (`on-surface-retreat`) |
-| `closed` | No button; muted label (`on-surface-muted`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -735,12 +733,10 @@ The former lock icon next to the team name (driven by the retired
 footer label already communicates restricted-join state more specifically,
 so keeping both would duplicate the signal.
 
-#### Open UX issues
-
-- **`request_only` disabled button has no explanatory affordance** — a
-  permanently-disabled button with no tooltip/hint may read as broken to
-  users rather than "not yet supported." Consider a tooltip or helper text
-  once the underlying notification system is scoped.
+`request_only` (a disabled "Request to join" button — the notification
+system to route requests to team admins was never built) and `closed` (a
+second muted label, indistinguishable in practice from `invite_only`) were
+dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
@@ -749,22 +745,40 @@ so keeping both would duplicate the signal.
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
 **Status:** `Functional`
 
-Replaced the `is_private` `Switch` row with a 4-way `ButtonGroup`
-(`variant="radio"`), label left / control right in the same
-`form-section` container. Each option carries its own selected-state color
-via the `ButtonGroupItem` color-per-item extension (see below): `open` →
-`success`, `request_only`/`invite_only` → `secondary`, `closed` → `error`.
-Selecting an option PATCHes `joining_mode` immediately (no separate save
-step), mirroring the retired Switch's auto-save behavior.
+Replaced the `is_private` `Switch` row with a `ButtonGroup`
+(`variant="radio"`, `size="small"`), label left / control right in the same
+`form-section` container. Same plain `color="secondary"` group-level color
+as the theme/language pickers in `UserSettingsPage.tsx` — no per-item color
+is set. Selecting an option PATCHes `joining_mode` immediately (no separate
+save step), mirroring the retired Switch's auto-save behavior.
 
-#### `ButtonGroup` / `ButtonGroupItem` — per-item color override (TEAM-09)
+Narrowed to 2 options (`open`, `invite_only`) 2026-07-26 — `request_only`
+and `closed` were dropped from the `JoiningMode` enum entirely (see
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §29). Originally shipped as a 4-way
+group with a distinct selected-state color per option (`open`→`success`,
+`closed`→`error`) via a `ButtonGroupItem` per-item `color?: ColorTheme`
+override; both the 2 extra options and the per-item color scheme were
+dropped in the same pass. `ButtonGroupItem` still supports the `color`
+override prop, but no shipped consumer uses it — the plain group-level
+color pattern is what every `ButtonGroup` consumer follows now.
 
-`ButtonGroupItemProps` gained an optional `color?: ColorTheme` that overrides
-the group-level `color` for that single item only (falls back to the
-group's `color` when omitted) — needed because this control's four options
-each use a different semantic color when selected, not one color for the
-whole group like every prior `ButtonGroup` consumer. Backward compatible:
-existing call sites that never set `item.color` are unaffected.
+### `TeamSettingsParameters` — team banner upload
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
+**Status:** `Functional`
+
+Banner upload is a `Button` (`variant="outlined"`, `size="small"`,
+`icon={{ category: "outlined", type: "upload" }}`, label "Importer"/"Import")
+that triggers a hidden native `<input type="file">` via `fileInputRef`,
+replacing the earlier click-the-image `ImageFileInput` pattern. Below the
+button, a `body-small` / `on-surface-muted` caption states the supported
+formats and size limit (JPEG/PNG/WebP, 5 MB max — matches the
+`ALLOWED_TYPES`/`MAX_BANNER_SIZE` client-side validation already in
+`handleBannerUpload`). To the button's right, an `<img>` preview
+(`.team-banner-preview`) renders the current/staged banner at the same
+240×88 width/height ratio as `TeamContentNavbar`'s `.bannerContainer`, so
+the preview shows the same crop the image gets once applied to the nav
+banner.
 
 ---
 

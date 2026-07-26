@@ -1504,8 +1504,6 @@
     },
     "teamCard": {
       "join": "Join",
-      "requestToJoin": "Request to join",
-      "closedTeam": "Closed team",
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
     },
@@ -1566,11 +1564,13 @@
         "joiningMode": {
           "label": "Joining mode",
           "open": "Open",
-          "requestOnly": "Request only",
-          "inviteOnly": "Invite only",
-          "closed": "Closed"
+          "inviteOnly": "Invite only"
         },
-        "teamBannerTitle": "Team banner",
+        "teamBanner": {
+          "title": "Team banner",
+          "import": "Import",
+          "hint": "JPEG, PNG, or WebP · 5 MB maximum"
+        },
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."

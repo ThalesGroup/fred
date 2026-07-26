@@ -16,9 +16,9 @@ import styles from "./TeamSettingsParameters.module.scss";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import Button from "@shared/atoms/Button/Button.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
-import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
 import { JoiningMode, TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useUpdateTeamMutation,
@@ -39,8 +39,8 @@ const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 // TEAM-09: order drives the button group's left-to-right layout and index
-// mapping — keep in sync with the labels/colors below.
-const JOINING_MODES: JoiningMode[] = ["open", "request_only", "invite_only", "closed"];
+// mapping — keep in sync with the labels below.
+const JOINING_MODES: JoiningMode[] = ["open", "invite_only"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
   const { defaultTeamBannerFile } = useFrontendProperties();
@@ -73,7 +73,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const defaultBannerUrl = defaultTeamBannerFile ? `/images/${defaultTeamBannerFile}` : undefined;
   const bannerImageUrl = team.banner_image_url ?? defaultBannerUrl;
 
-  const joiningMode = team.joining_mode ?? "request_only";
+  const joiningMode = team.joining_mode ?? "invite_only";
   const handleSelectJoiningMode = (index: number) => {
     const newMode = JOINING_MODES[index];
     if (newMode === joiningMode) {
@@ -124,15 +124,29 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     <div className={styles["team-settings-parameters-container"]}>
       <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
         <div className={styles["team-banner"]}>
-          <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
-          <ImageFileInput
-            ref={fileInputRef}
-            imageUrl={bannerImageUrl}
-            alt={""}
-            height={"80px"}
-            accept={ALLOWED_TYPES.join(",")}
-            onChange={handleBannerUpload}
-          />
+          <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBanner.title")}</span>
+          <div className={styles["team-banner-content"]}>
+            <div className={styles["team-banner-upload"]}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className={styles["team-banner-file-input"]}
+                accept={ALLOWED_TYPES.join(",")}
+                onChange={handleBannerUpload}
+              />
+              <Button
+                color="secondary"
+                variant="outlined"
+                size="small"
+                icon={{ category: "outlined", type: "upload" }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {t("rework.teamSettings.parameters.teamBanner.import")}
+              </Button>
+              <span className={styles["team-banner-hint"]}>{t("rework.teamSettings.parameters.teamBanner.hint")}</span>
+            </div>
+            <img className={styles["team-banner-preview"]} src={bannerImageUrl} alt="" />
+          </div>
         </div>
       </div>
       <div className={styles["form-section"]}>
@@ -154,10 +168,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           selectedIndex={JOINING_MODES.indexOf(joiningMode)}
           onSelectedIndexChange={handleSelectJoiningMode}
           items={[
-            { label: t("rework.teamSettings.parameters.joiningMode.open"), color: "success" },
-            { label: t("rework.teamSettings.parameters.joiningMode.requestOnly"), color: "secondary" },
-            { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly"), color: "secondary" },
-            { label: t("rework.teamSettings.parameters.joiningMode.closed"), color: "error" },
+            { label: t("rework.teamSettings.parameters.joiningMode.open") },
+            { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly") },
           ]}
         />
       </div>

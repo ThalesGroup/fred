@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TEAM-09: the private/public Switch was replaced by a 4-way joining_mode
-// button group. Locks in that selecting an option PATCHes the right
-// joining_mode value and that the group reflects the team's current mode.
+// TEAM-09 (narrowed to 2 states 2026-07-26): the private/public Switch was
+// replaced by a 2-way joining_mode button group (open / invite_only).
+// Locks in that selecting an option PATCHes the right joining_mode value
+// and that the group reflects the team's current mode.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -87,14 +88,14 @@ describe("TeamSettingsParameters joining mode", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
     const radios = container.querySelectorAll('[role="radio"]');
-    expect(radios).toHaveLength(4);
-    // order: open, request_only, invite_only, closed
-    expect(radios[2].getAttribute("aria-checked")).toBe("true");
+    expect(radios).toHaveLength(2);
+    // order: open, invite_only
+    expect(radios[1].getAttribute("aria-checked")).toBe("true");
     expect(radios[0].getAttribute("aria-checked")).toBe("false");
   });
 
   it("selecting a different option PATCHes the new joining_mode", () => {
-    render(<TeamSettingsParameters team={baseTeam("request_only")} />);
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
     const radios = container.querySelectorAll('[role="radio"]');
     act(() => {
@@ -108,11 +109,11 @@ describe("TeamSettingsParameters joining mode", () => {
   });
 
   it("clicking the already-selected option does not PATCH", () => {
-    render(<TeamSettingsParameters team={baseTeam("closed")} />);
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
     const radios = container.querySelectorAll('[role="radio"]');
     act(() => {
-      radios[3].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(h.updateTeam).not.toHaveBeenCalled();
