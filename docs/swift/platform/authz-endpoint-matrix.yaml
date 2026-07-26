@@ -77,6 +77,19 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/import-export/reset-full
+    review_status: pending_review
+    required_permission: pending_review
+  # KEA CUTOVER 2026 — temporary, remove this entry together with
+  # kea_migration_api.py a few weeks after the S3NS cutover completes. Same
+  # gate as /import-export/import (CAN_MANAGE_PLATFORM), performs zero writes.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/kea-migration/dry-run
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
     method: GET
     path: /control-plane/v1/import-export/stats
     review_status: pending_review

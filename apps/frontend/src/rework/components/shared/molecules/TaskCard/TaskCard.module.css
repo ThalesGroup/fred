@@ -21,6 +21,7 @@
   border-radius: var(--radius-s);
   background: var(--surface-container);
   padding: var(--spacing-xs) var(--spacing-s);
+  min-width: 0;
 }
 
 .header {
@@ -70,6 +71,45 @@
   font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.errorTooltip {
+  display: block;
+  max-width: 420px;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--error);
+  font: var(--font-body-small);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.warningGroup {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.warningBadge {
+  flex-shrink: 0;
+  cursor: default;
+  color: var(--warning);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.warningTooltip {
+  display: block;
+  margin: 0;
+  padding-left: var(--spacing-m);
+  max-width: 420px;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--warning);
+  font: var(--font-body-small);
+  white-space: normal;
+  word-break: break-word;
 }
 
 .timestamp {

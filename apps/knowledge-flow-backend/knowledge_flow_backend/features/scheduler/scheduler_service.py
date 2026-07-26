@@ -26,6 +26,7 @@ from fred_core.scheduler import (
 
 from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
@@ -142,6 +143,33 @@ class IngestionTaskService:
             background_tasks=background_tasks,
         )
         return handle
+
+    async def start_revectorize(
+        self,
+        *,
+        user: KeycloakUser,
+        scope: dict,
+        options: dict,
+        task_id: str,
+    ) -> WorkflowHandle:
+        """
+        Start a corpus re-vectorization job (MIGR-07).
+
+        A revectorize job isn't a `FileToProcess` pipeline — scope resolution
+        happens inside the workflow itself — so this doesn't go through
+        `submit_documents`. Only the Temporal backend supports it today.
+        """
+        if not isinstance(self._scheduler, TemporalScheduler):
+            raise NotImplementedError("Corpus revectorization requires the Temporal scheduler backend.")
+
+        payload = {
+            "scope": scope,
+            "options": options,
+            "user": user.model_dump(),
+            "task_id": task_id,
+            "max_parallelism": self._max_parallelism,
+        }
+        return await self._scheduler.start_revectorize(payload=payload, task_id=task_id)
 
     async def store_fast_vectors(self, *, payload: dict) -> dict:
         """

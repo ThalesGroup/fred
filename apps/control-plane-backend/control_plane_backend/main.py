@@ -43,6 +43,9 @@ from control_plane_backend.config.loader import (
 from control_plane_backend.config.models import AppState
 from control_plane_backend.evaluations.api import build_evaluations_router
 from control_plane_backend.import_export.api import build_import_export_router
+from control_plane_backend.import_export.kea_migration_api import (  # KEA CUTOVER 2026 — delete with this import and its include_router call below
+    build_kea_migration_router,
+)
 from control_plane_backend.kpi.api import build_kpi_router
 from control_plane_backend.product.api import router as product_router
 from control_plane_backend.scheduler.dependencies import (
@@ -296,6 +299,7 @@ def create_app() -> FastAPI:
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())
     router.include_router(build_import_export_router())
+    router.include_router(build_kea_migration_router())  # KEA CUTOVER 2026 — delete
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)

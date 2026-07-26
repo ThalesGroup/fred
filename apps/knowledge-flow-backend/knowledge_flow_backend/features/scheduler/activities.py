@@ -19,8 +19,10 @@ import tempfile
 from datetime import datetime, timezone
 
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from pydantic import BaseModel
 from temporalio import activity, exceptions
 
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
@@ -232,3 +234,121 @@ async def fast_delete_vectors(payload: dict) -> dict:
     vector_store.delete_vectors_for_document(document_uid=document_uid)
     activity.logger.info("[SCHEDULER][ACTIVITY][FAST_DELETE_VECTORS] Deleted vectors for %s", document_uid)
     return {"status": "ok", "document_uid": document_uid}
+
+
+# ── MIGR-07: corpus re-vectorization ──────────────────────────────────────────
+# Thin activities over the existing ingestion/vector-store building blocks
+# (RFC docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md §2-3). No new business logic:
+# these only resolve scope, read chunk counts, delete vectors, and assemble the
+# `FileToProcess`/`DocumentMetadata` pair that `output_process` already knows how
+# to re-vectorize from stored content.
+
+
+class RevectorizePreparedFile(BaseModel):
+    """Bundle handed from `prepare_revectorize_file` to the `output_process` activity."""
+
+    file: FileToProcess
+    metadata: DocumentMetadata
+
+
+@activity.defn
+async def list_documents_in_scope(scope: dict) -> list[str]:
+    """
+    Resolve a `CorpusScopeV1`-shaped dict (as produced by `.model_dump()`) to the
+    document_uids it covers.
+
+    `document_uids` wins outright (already a concrete list). Otherwise resolves via
+    `tag_ids` / `source_tag` against the raw metadata store — intentionally NOT via
+    `MetadataService`'s per-user READ filtering: the scope was already authorized at
+    the platform/team level in `corpus_manager_controller._authorize_scope`
+    (CAN_MANAGE_PLATFORM for a `source_tag`-only scope, per-tag/per-document ReBAC
+    checks otherwise), so re-filtering by the caller's individual grants here would
+    incorrectly narrow a platform-wide scope back down to "documents I can read".
+    """
+    document_uids = list(scope.get("document_uids") or [])
+    if document_uids:
+        return list(dict.fromkeys(document_uids))
+
+    filters: dict = {}
+    tag_ids = scope.get("tag_ids") or []
+    if tag_ids:
+        filters["tag_ids"] = list(tag_ids)
+    source_tag = scope.get("source_tag")
+    if source_tag:
+        filters["source_tag"] = source_tag
+
+    if not filters:
+        raise ValueError("Revectorize scope must resolve to document_uids, tag_ids, or source_tag.")
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    metadata_store = ApplicationContext.get_instance().get_metadata_store()
+    docs = await metadata_store.get_all_metadata(filters)
+    activity.logger.info("[SCHEDULER][ACTIVITY][LIST_DOCUMENTS_IN_SCOPE] resolved %d document(s) for filters=%s", len(docs), filters)
+    return [d.document_uid for d in docs]
+
+
+@activity.defn
+async def get_chunk_count(document_uid: str) -> int:
+    """Return the vector chunk count for one document (0 if the store can't report it)."""
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+    if not hasattr(vector_store, "get_document_chunk_count"):
+        return 0
+    try:
+        return int(vector_store.get_document_chunk_count(document_uid=document_uid))  # type: ignore[attr-defined]
+    except Exception:
+        activity.logger.warning("[SCHEDULER][ACTIVITY][GET_CHUNK_COUNT] failed for %s", document_uid, exc_info=True)
+        return 0
+
+
+@activity.defn
+async def delete_vectors(document_uid: str) -> None:
+    """Delete all vector chunks for one document ahead of a full re-vectorize."""
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+    vector_store.delete_vectors_for_document(document_uid=document_uid)
+    activity.logger.info("[SCHEDULER][ACTIVITY][DELETE_VECTORS] Deleted vectors for %s", document_uid)
+
+
+@activity.defn
+async def prepare_revectorize_file(document_uid: str, user: dict) -> RevectorizePreparedFile:
+    """
+    Assemble the `(FileToProcess, DocumentMetadata)` pair `output_process` needs,
+    from a document_uid alone — pure assembly, no new business logic.
+
+    The original ingestion profile isn't recorded on `DocumentMetadata`, so this
+    defaults to `IngestionProcessingProfile.medium` (the platform default).
+    """
+    from fred_core import KeycloakUser
+
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
+
+    keycloak_user = KeycloakUser.model_validate(user)
+    ingestion_service = get_ingestion_service()
+    metadata = await ingestion_service.get_metadata(keycloak_user, document_uid)
+    if metadata is None:
+        raise exceptions.ApplicationError(
+            f"Document '{document_uid}' not found for revectorize.",
+            non_retryable=True,
+        )
+    if not metadata.source.source_tag:
+        raise exceptions.ApplicationError(
+            f"Document '{document_uid}' has no source_tag recorded; cannot re-vectorize.",
+            non_retryable=True,
+        )
+
+    file = FileToProcess(
+        source_tag=metadata.source.source_tag,
+        document_uid=document_uid,
+        display_name=metadata.document_name,
+        profile=IngestionProcessingProfile.medium,
+        processed_by=keycloak_user,
+    )
+    return RevectorizePreparedFile(file=file, metadata=metadata)

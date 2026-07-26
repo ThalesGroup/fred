@@ -84,9 +84,10 @@ class StoreAuditReport(BaseModel):
 class StoreAuditFixResponse(BaseModel):
     before: StoreAuditReport
     after: StoreAuditReport
-    deleted_metadata: list[str] = Field(default_factory=list)
-    deleted_vectors: list[str] = Field(default_factory=list)
-    deleted_content: list[str] = Field(default_factory=list)
+    reset_metadata: list[str] = Field(
+        default_factory=list,
+        description="Documents whose lying processing stage (missing_content/missing_vectors) was reset to NOT_STARTED. Never deleted — see fix_store_anomalies.",
+    )
 
 
 class MetadataService:
@@ -1204,51 +1205,55 @@ class MetadataService:
 
     async def fix_store_anomalies(self, user: KeycloakUser) -> StoreAuditFixResponse:
         """
-        Run the audit and delete orphan/partial data from all stores.
+        Run the audit and repair what it found. Never deletes anything.
+
+        - `orphan_vectors`/`orphan_content`: data with no metadata row to
+          attach to. Left alone — a platform admin decides by hand whether to
+          delete or investigate first (was the metadata row lost by mistake?
+          is the write half-finished?). This service reports them; it does
+          not act on them.
+        - `missing_vectors`/`missing_content`: a metadata row whose own
+          processing stage lies (claims DONE when the store disagrees).
+          Repair means resetting the stage(s) back to NOT_STARTED so the
+          platform stops lying and the document becomes honestly
+          re-processable (re-vectorize for missing_vectors, MIGR-07;
+          re-ingest for missing_content) — the metadata row itself is never
+          touched beyond its stage flags.
         """
         await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         before = await self.audit_stores(user)
-        deleted_metadata: list[str] = []
-        deleted_vectors: list[str] = []
-        deleted_content: list[str] = []
-
-        vector_store = self._ensure_vector_store()
-        content_store = self.content_store
+        reset_metadata: list[str] = []
 
         for finding in before.anomalies:
             issues = set(finding.issues)
             doc_uid = finding.document_uid
+            needs_stage_reset = finding.present_in_metadata and ("missing_content" in issues or "missing_vectors" in issues)
 
-            remove_vectors = "orphan_vectors" in issues or "missing_content" in issues or "missing_vectors" in issues
-            remove_content = "orphan_content" in issues or "missing_content" in issues or "missing_vectors" in issues
-            remove_metadata = finding.present_in_metadata and ("missing_content" in issues or "missing_vectors" in issues)
-
-            if remove_vectors and vector_store is not None and finding.present_in_vector_store:
+            if needs_stage_reset:
                 try:
-                    vector_store.delete_vectors_for_document(document_uid=doc_uid)
-                    deleted_vectors.append(doc_uid)
+                    md = await self.metadata_store.get_metadata_by_uid(doc_uid)
+                    if md is not None:
+                        if "missing_content" in issues:
+                            # Content is gone (or not yet mirrored): every downstream
+                            # stage's DONE claim is equally unearned.
+                            for stage in (
+                                ProcessingStage.RAW_AVAILABLE,
+                                ProcessingStage.PREVIEW_READY,
+                                ProcessingStage.VECTORIZED,
+                                ProcessingStage.SQL_INDEXED,
+                            ):
+                                if md.processing.stages.get(stage) == ProcessingStatus.DONE:
+                                    md.set_stage_status(stage, ProcessingStatus.NOT_STARTED)
+                        if "missing_vectors" in issues:
+                            md.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED)
+                        await self.metadata_store.save_metadata(md)
+                        reset_metadata.append(doc_uid)
                 except Exception as e:
-                    logger.warning("[AUDIT] Failed to delete vectors for %s: %s", doc_uid, e)
-
-            if remove_content and content_store is not None and finding.present_in_content_store:
-                try:
-                    content_store.delete_content(doc_uid)
-                    deleted_content.append(doc_uid)
-                except Exception as e:
-                    logger.warning("[AUDIT] Failed to delete content for %s: %s", doc_uid, e)
-
-            if remove_metadata:
-                try:
-                    await self.metadata_store.delete_metadata(doc_uid)
-                    deleted_metadata.append(doc_uid)
-                except Exception as e:
-                    logger.warning("[AUDIT] Failed to delete metadata for %s: %s", doc_uid, e)
+                    logger.warning("[AUDIT] Failed to reset processing stage for %s: %s", doc_uid, e)
 
         after = await self.audit_stores(user)
         return StoreAuditFixResponse(
             before=before,
             after=after,
-            deleted_metadata=deleted_metadata,
-            deleted_vectors=deleted_vectors,
-            deleted_content=deleted_content,
+            reset_metadata=reset_metadata,
         )

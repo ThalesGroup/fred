@@ -29,10 +29,14 @@ from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
 from knowledge_flow_backend.features.scheduler.activities import (
+    delete_vectors,
     emit_ingestion_task_event,
     fast_delete_vectors,
     fast_store_vectors,
+    get_chunk_count,
+    list_documents_in_scope,
     output_process,
+    prepare_revectorize_file,
 )
 from knowledge_flow_backend.features.scheduler.pull_files_activities import (
     create_pull_file_metadata,
@@ -54,6 +58,8 @@ from knowledge_flow_backend.features.scheduler.workflow import (
     ProcessPushFile,
     PullInputProcess,
     PushInputProcess,
+    RevectorizeCorpusWorkflow,
+    RevectorizeDocument,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,6 +116,8 @@ async def run_worker(
             OutputProcess,
             FastStoreVectors,
             FastDeleteVectors,
+            RevectorizeCorpusWorkflow,
+            RevectorizeDocument,
         ],
         activities=[
             create_pull_file_metadata,
@@ -120,6 +128,10 @@ async def run_worker(
             fast_store_vectors,
             fast_delete_vectors,
             emit_ingestion_task_event,
+            list_documents_in_scope,
+            get_chunk_count,
+            delete_vectors,
+            prepare_revectorize_file,
         ],
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,

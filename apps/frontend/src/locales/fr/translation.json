@@ -931,6 +931,42 @@
             "defaultError": "Impossible de remettre le défaut des espaces personnels."
           }
         }
+      },
+      "corpusAudit": {
+        "title": "Audit du corpus",
+        "subtitle": "Compare l'état de traitement de chaque document en base à ce qui est réellement présent dans le magasin de contenu et le magasin vectoriel, et permet de nettoyer les données orphelines.",
+        "loading": "Chargement de l'audit du corpus…",
+        "loadError": "Impossible de charger l'audit du corpus.",
+        "refresh": "Actualiser",
+        "fix": "Réparer les documents",
+        "fixing": "Réparation…",
+        "empty": "Aucune anomalie à afficher.",
+        "noAnomalies": "Aucune anomalie détectée — le magasin de contenu, le magasin vectoriel et les métadonnées sont synchronisés.",
+        "anomaliesFound_one": "{{count}} anomalie détectée.",
+        "anomaliesFound_other": "{{count}} anomalies détectées.",
+        "fixSuccess_one": "Réparation terminée — le statut de {{count}} document a été réinitialisé. Rien n'a été supprimé.",
+        "fixSuccess_other": "Réparation terminée — le statut de {{count}} documents a été réinitialisé. Rien n'a été supprimé.",
+        "fixError": "Impossible de réparer les documents.",
+        "stats": {
+          "metadata": "Enregistrements de métadonnées",
+          "vectors": "Documents dans le magasin vectoriel",
+          "content": "Documents dans le magasin de contenu"
+        },
+        "col": {
+          "document": "Document",
+          "sourceTag": "Source",
+          "metadata": "Métadonnées",
+          "vectorStore": "Magasin vectoriel",
+          "contentStore": "Magasin de contenu",
+          "vectorChunks": "Segments",
+          "issues": "Anomalies"
+        },
+        "fixConfirm": {
+          "title": "Réparer les documents au statut erroné ?",
+          "message": "Réinitialise le statut de traitement des documents dont l'état affiché ne correspond pas à ce qui est réellement présent dans le magasin de contenu ou vectoriel, pour qu'ils redeviennent honnêtement re-traitables. Rien n'est supprimé — les enregistrements orphelins du magasin vectoriel/contenu sans document correspondant restent en l'état, à examiner ou supprimer à la main.",
+          "confirm": "Réparer les documents",
+          "cancel": "Annuler"
+        }
       }
     },
     "agentCard": {
@@ -1267,6 +1303,7 @@
         "menu": {
           "analytics": "Analytiques",
           "capabilities": "Capacités",
+          "corpusAudit": "Audit du corpus",
           "migration": "Données plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
@@ -1343,6 +1380,7 @@
         "labelPlaceholder": "ex. castle-prod",
         "launch": "Lancer la migration",
         "launching": "Lancement...",
+        "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
         "title": "Migration de plateforme",
         "import": {
           "title": "Importer"
@@ -1362,6 +1400,16 @@
           "confirmLabel": "Réinitialiser",
           "cancelLabel": "Annuler",
           "error": "Échec de la réinitialisation"
+        },
+        "resetFull": {
+          "launch": "Effacement complet",
+          "running": "Effacement…",
+          "taskLabel": "Effacement complet de la plateforme",
+          "confirmTitle": "Effacement complet — tout supprimer sauf l'admin root ?",
+          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, toutes les permissions OpenFGA, et tous les utilisateurs Keycloak. Seules survivent l'identité ayant effectué le bootstrap root et votre propre compte (s'il est différent). Différent de « Réinitialiser la plateforme » ci-dessus — à utiliser uniquement pour récupérer d'un import de bascule qui a échoué.",
+          "confirmLabel": "Tout effacer",
+          "cancelLabel": "Annuler",
+          "error": "Échec de l'effacement complet"
         },
         "stats": {
           "title": "Vue d'ensemble",
@@ -1421,6 +1469,10 @@
         "inMinutes": "dans {{count}} min",
         "inHours": "dans {{count}} h",
         "inDays": "dans {{count}} j"
+      },
+      "card": {
+        "copyWarnings": "Copier les avertissements",
+        "copied": "Copié !"
       }
     },
     "adminTeams": {
