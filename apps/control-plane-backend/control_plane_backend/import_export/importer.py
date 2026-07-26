@@ -1612,6 +1612,11 @@ async def run_import(
                             row.get("joining_mode", "invite_only"),
                             row.get("joining_mode", "invite_only"),
                         ),
+                        # TEAM-10: pre-visibility bundles never carry this key
+                        # at all — default to `public`, matching every such
+                        # team's actual (unconditional) marketplace presence
+                        # before this feature existed.
+                        visibility=row.get("visibility", "public"),
                         banner_object_storage_key=row.get("banner_object_storage_key"),
                         max_resources_storage_size=row.get(
                             "max_resources_storage_size"

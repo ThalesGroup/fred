@@ -19,7 +19,11 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
-import { JoiningMode, TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  JoiningMode,
+  TeamVisibility,
+  TeamWithPermissions,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
@@ -41,6 +45,9 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 // TEAM-09: order drives the button group's left-to-right layout and index
 // mapping — keep in sync with the labels below.
 const JOINING_MODES: JoiningMode[] = ["open", "invite_only"];
+
+// TEAM-10: same left-to-right/index convention as JOINING_MODES above.
+const VISIBILITIES: TeamVisibility[] = ["public", "private"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
   const { defaultTeamBannerFile } = useFrontendProperties();
@@ -82,6 +89,23 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     updateTeam({
       teamId: team.id,
       updateTeamRequest: { joining_mode: newMode },
+    });
+  };
+
+  // TEAM-10: a PRIVATE team can never be OPEN — disabling the whole group
+  // while private (rather than just the "Open" option) both prevents
+  // picking it and reflects that the server silently downgraded
+  // joining_mode to INVITE_ONLY the moment visibility turned private.
+  const visibility = team.visibility ?? "public";
+  const isPrivate = visibility === "private";
+  const handleSelectVisibility = (index: number) => {
+    const newVisibility = VISIBILITIES[index];
+    if (newVisibility === visibility) {
+      return;
+    }
+    updateTeam({
+      teamId: team.id,
+      updateTeamRequest: { visibility: newVisibility },
     });
   };
 
@@ -166,21 +190,39 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           {...register("description", { onBlur: handleSaveDescription })}
         />
       </div>
-      <div className={`${styles["form-section"]} ${styles["joining-mode-state"]}`}>
-        {t("rework.teamSettings.parameters.joiningMode.label")}
-        <ButtonGroup
-          variant="radio"
-          size="small"
-          color="secondary"
-          backgroundColor="var(--surface-container-lowest)"
-          aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
-          selectedIndex={JOINING_MODES.indexOf(joiningMode)}
-          onSelectedIndexChange={handleSelectJoiningMode}
-          items={[
-            { label: t("rework.teamSettings.parameters.joiningMode.open") },
-            { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly") },
-          ]}
-        />
+      <div className={`${styles["form-section"]} ${styles["team-settings-toggles"]}`}>
+        <div className={styles["team-settings-toggle-row"]}>
+          {t("rework.teamSettings.parameters.visibility.label")}
+          <ButtonGroup
+            variant="radio"
+            size="small"
+            color="secondary"
+            backgroundColor="var(--surface-container-lowest)"
+            aria-label={t("rework.teamSettings.parameters.visibility.label")}
+            selectedIndex={VISIBILITIES.indexOf(visibility)}
+            onSelectedIndexChange={handleSelectVisibility}
+            items={[
+              { label: t("rework.teamSettings.parameters.visibility.public") },
+              { label: t("rework.teamSettings.parameters.visibility.private") },
+            ]}
+          />
+        </div>
+        <div className={styles["team-settings-toggle-row"]}>
+          {t("rework.teamSettings.parameters.joiningMode.label")}
+          <ButtonGroup
+            variant="radio"
+            size="small"
+            color="secondary"
+            backgroundColor="var(--surface-container-lowest)"
+            aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
+            selectedIndex={JOINING_MODES.indexOf(joiningMode)}
+            onSelectedIndexChange={handleSelectJoiningMode}
+            items={[
+              { label: t("rework.teamSettings.parameters.joiningMode.open"), disabled: isPrivate },
+              { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly"), disabled: isPrivate },
+            ]}
+          />
+        </div>
       </div>
       {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
       <TeamSettingsRetention team={team} />

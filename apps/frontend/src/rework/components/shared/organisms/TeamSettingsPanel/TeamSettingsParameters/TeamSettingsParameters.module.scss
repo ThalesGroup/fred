@@ -78,7 +78,13 @@
   text-align: center;
 }
 
-.joining-mode-state {
+.team-settings-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.team-settings-toggle-row {
   display: flex;
   justify-content: space-between;
   align-items: center;

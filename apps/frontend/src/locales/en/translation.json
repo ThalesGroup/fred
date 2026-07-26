@@ -1571,6 +1571,11 @@
           "open": "Open",
           "inviteOnly": "Invite only"
         },
+        "visibility": {
+          "label": "Team visibility",
+          "public": "Public",
+          "private": "Private"
+        },
         "teamBanner": {
           "title": "Team banner",
           "import": "Import",

@@ -2171,6 +2171,30 @@ items:
       the conservative mapping, no team becomes self-service OPEN as a
       side effect. See CONTROL-PLANE-PRODUCT-CONTRACT.md §29.
 
+  - id: TEAM-10
+    title: "Team visibility: public/private marketplace discoverability, independent of joining_mode"
+    status: in_progress
+    owner: Maxime
+    parent: TEAM-01
+    refs:
+      rfc: "docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md §5.1.2"
+    notes: >
+      Adds TeamMetadata.visibility (TeamVisibility: PUBLIC default, PRIVATE),
+      gating marketplace discoverability — a question joining_mode never
+      answered (INVITE_ONLY still means listed, join needs an admin, not
+      "does not appear at all"). Mechanism: ensure_team_public_relations
+      (TEAM-09, previously unconditional) now runs only for PUBLIC teams;
+      PRIVATE teams get the new symmetric revoke_team_public_relations
+      instead, so a non-member loses can_read entirely (not just the
+      marketplace listing) — team_member access is unaffected. A PRIVATE
+      team can never be joining_mode == OPEN: update_team silently
+      downgrades to INVITE_ONLY after resolving the patch's resulting
+      state (never rejects), and the settings-page joining-mode
+      ButtonGroup is entirely disabled while private. Migration 8092a626d4d0
+      backfills every existing team to PUBLIC — no team becomes newly
+      private as a side effect. See CONTROL-PLANE-PRODUCT-CONTRACT.md §30.
+      No GitHub issue yet — flag to Maxime to open one.
+
   # ── QUALITY ───────────────────────────────────────────────────────────
 
   - id: QUALITY-01

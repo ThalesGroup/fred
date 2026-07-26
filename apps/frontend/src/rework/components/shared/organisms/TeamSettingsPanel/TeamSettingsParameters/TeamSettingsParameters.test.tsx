@@ -15,8 +15,10 @@
 
 // TEAM-09 (narrowed to 2 states 2026-07-26): the private/public Switch was
 // replaced by a 2-way joining_mode button group (open / invite_only).
-// Locks in that selecting an option PATCHes the right joining_mode value
-// and that the group reflects the team's current mode.
+// TEAM-10 (2026-07-26): a sibling visibility (public/private) button group
+// was added just above it in the same form-section — a PRIVATE team can
+// never be OPEN, so the joining-mode group is entirely disabled while
+// visibility is private.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -72,7 +74,10 @@ afterEach(() => {
   h.updateTeam.mockClear();
 });
 
-function baseTeam(joining_mode: TeamWithPermissions["joining_mode"]): TeamWithPermissions {
+function baseTeam(
+  joining_mode: TeamWithPermissions["joining_mode"],
+  visibility: TeamWithPermissions["visibility"] = "public",
+): TeamWithPermissions {
   return {
     id: "team-1",
     name: "Team One",
@@ -80,14 +85,28 @@ function baseTeam(joining_mode: TeamWithPermissions["joining_mode"]): TeamWithPe
     admins: [],
     permissions: [],
     joining_mode,
+    visibility,
   } as TeamWithPermissions;
+}
+
+function radiosIn(radiogroupAriaLabel: string): HTMLElement[] {
+  const group = container.querySelector(`[role="radiogroup"][aria-label="${radiogroupAriaLabel}"]`);
+  return Array.from(group?.querySelectorAll('[role="radio"]') ?? []);
+}
+
+function joiningModeRadios(): HTMLElement[] {
+  return radiosIn("rework.teamSettings.parameters.joiningMode.label");
+}
+
+function visibilityRadios(): HTMLElement[] {
+  return radiosIn("rework.teamSettings.parameters.visibility.label");
 }
 
 describe("TeamSettingsParameters joining mode", () => {
   it("marks the team's current joining_mode as selected in the button group", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
-    const radios = container.querySelectorAll('[role="radio"]');
+    const radios = joiningModeRadios();
     expect(radios).toHaveLength(2);
     // order: open, invite_only
     expect(radios[1].getAttribute("aria-checked")).toBe("true");
@@ -97,7 +116,7 @@ describe("TeamSettingsParameters joining mode", () => {
   it("selecting a different option PATCHes the new joining_mode", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
-    const radios = container.querySelectorAll('[role="radio"]');
+    const radios = joiningModeRadios();
     act(() => {
       radios[0].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
@@ -111,12 +130,81 @@ describe("TeamSettingsParameters joining mode", () => {
   it("clicking the already-selected option does not PATCH", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
-    const radios = container.querySelectorAll('[role="radio"]');
+    const radios = joiningModeRadios();
     act(() => {
       radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("is entirely disabled while the team is private", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
+
+    const radios = joiningModeRadios();
+    expect(radios).toHaveLength(2);
+    for (const radio of radios) {
+      expect((radio as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+  it("is enabled while the team is public", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
+
+    for (const radio of joiningModeRadios()) {
+      expect((radio as HTMLButtonElement).disabled).toBe(false);
+    }
+  });
+});
+
+describe("TeamSettingsParameters visibility", () => {
+  it("marks the team's current visibility as selected in the button group", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
+
+    const radios = visibilityRadios();
+    expect(radios).toHaveLength(2);
+    // order: public, private
+    expect(radios[1].getAttribute("aria-checked")).toBe("true");
+    expect(radios[0].getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("selecting a different option PATCHes the new visibility", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
+
+    const radios = visibilityRadios();
+    act(() => {
+      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { visibility: "private" },
+    });
+  });
+
+  it("clicking the already-selected option does not PATCH", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
+
+    const radios = visibilityRadios();
+    act(() => {
+      radios[0].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("PATCHing visibility never sends joining_mode — the server owns that downgrade", () => {
+    render(<TeamSettingsParameters team={baseTeam("open", "public")} />);
+
+    const radios = visibilityRadios();
+    act(() => {
+      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { visibility: "private" },
+    });
   });
 });
 

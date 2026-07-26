@@ -200,6 +200,7 @@ This remains intentionally small:
 
 - description
 - joining mode (see §5.1.1 — replaces the former standalone `privacy` boolean)
+- visibility (see §5.1.2 — public/private, gates marketplace discoverability)
 - banner
 
 It must not absorb routing policy, prompt curation, or upload quotas.
@@ -251,6 +252,62 @@ permissive (self-service `OPEN`) as a side effect of dropping two states.
 `INVITE_ONLY` is also the new default for freshly created teams. Moving a
 team to `OPEN` is a deliberate `team_admin` action taken after creation, not
 an inferred one.
+
+#### 5.1.2 Team visibility (TEAM-10, 2026-07-26)
+
+**Amendment.** TEAM-09 deliberately made marketplace discoverability
+unconditional — every team, regardless of `joining_mode`, was granted the
+ReBAC `public` relation (profile/discovery `can_read` only, never
+conversations/agents; see `RebacEngine.ensure_team_public_relations`) —
+on the reasoning that `joining_mode` alone should own every join-related
+question. That held until the actual requirement surfaced: a team must be
+able to opt out of the marketplace entirely, not just gate how someone
+joins it. `joining_mode` cannot express "invisible" — `INVITE_ONLY` still
+means "listed, but join requires an admin," which is a different product
+than "does not appear, does not resolve for anyone outside it."
+
+```
+enum TeamVisibility:
+  PUBLIC   # default; marketplace-listed, ReBAC `public` relation granted
+  PRIVATE  # not marketplace-listed; ReBAC `public` relation withheld —
+           # a non-member has no `can_read` on the team, direct-link or not
+```
+
+**Mechanism.** `ensure_team_public_relations` (RFC §5.1.1, `_list_teams`)
+is no longer called unconditionally for every team. It now runs only for
+teams whose `visibility` is `PUBLIC`; teams whose `visibility` is `PRIVATE`
+instead get the new, symmetric `RebacEngine.revoke_team_public_relations`
+(same relation shape, `delete_relations` instead of `add_relations`) —
+idempotent either way, so this both backfills existing teams lazily on
+every list call and corrects a team the moment its `visibility` flips.
+`update_team` additionally syncs the affected team's relation immediately
+on a `visibility` change, rather than waiting for the next marketplace
+list call (mirrors `create_team`'s existing "don't wait for the lazy
+backfill" grant). No other permission changes: `team_member`-based access
+(`can_read`, `can_read_conversations`, `can_use_team_agents`, …) is
+entirely unaffected — a private team behaves identically to a public one
+for its own members, and this only removes the `public`-relation path
+that let non-members read it.
+
+**Interaction with `joining_mode`.** A `PRIVATE` team cannot have
+`joining_mode == OPEN` — self-service join onto a team nobody can discover
+or read is incoherent (and `POST /teams/{team_id}/join` would need a
+`can_read` grant it no longer has to even resolve the team for the
+caller). Enforced in two layers: the settings form disables the
+joining-mode control entirely while `visibility == PRIVATE` (so `OPEN`
+can't be picked in the first place), and `update_team` enforces the
+invariant authoritatively — after applying a patch, if the resulting
+`visibility` is `PRIVATE` and the resulting `joining_mode` is `OPEN`
+(from either field, in the same request or already stored), the service
+silently downgrades `joining_mode` to `INVITE_ONLY` rather than rejecting
+the request. This is a downgrade, never a rejection, and never trusts the
+client's belief about the current stored state.
+
+**Default and migration.** `PUBLIC` is the default for both freshly
+created and pre-existing teams (Alembic backfill) — this preserves every
+team's current (unconditional) marketplace presence exactly; nothing
+becomes newly private as a side effect of this rollout. Moving a team to
+`PRIVATE` is a deliberate `team_admin` action taken after creation.
 
 ### 5.2 TeamPlatformPolicy
 

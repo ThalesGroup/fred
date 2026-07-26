@@ -740,37 +740,53 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
-### `TeamSettingsParameters` — joining-mode control
+### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
 **Status:** `Functional`
 
-Replaced the `is_private` `Switch` row with a `ButtonGroup`
-(`variant="radio"`, `size="small"`), label left / control right in the same
-`form-section` container. Same plain `color="secondary"` group-level color
-as the theme/language pickers in `UserSettingsPage.tsx` — no per-item color
-is set. Selecting an option PATCHes `joining_mode` immediately (no separate
-save step), mirroring the retired Switch's auto-save behavior.
+Two stacked rows (`.team-settings-toggle-row`, label left / control right)
+share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
+`gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
+**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+`size="small"`, plain group-level `color="secondary"` — no per-item color,
+same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
+Selecting an option PATCHes immediately (no separate save step), mirroring
+the retired `is_private` `Switch`'s auto-save behavior this control replaced.
 
-Narrowed to 2 options (`open`, `invite_only`) 2026-07-26 — `request_only`
-and `closed` were dropped from the `JoiningMode` enum entirely (see
-`CONTROL-PLANE-PRODUCT-CONTRACT.md` §29). Originally shipped as a 4-way
-group with a distinct selected-state color per option (`open`→`success`,
-`closed`→`error`) via a `ButtonGroupItem` per-item `color?: ColorTheme`
-override; both the 2 extra options and the per-item color scheme were
-dropped in the same pass. `ButtonGroupItem` still supports the `color`
-override prop, but no shipped consumer uses it — the plain group-level
-color pattern is what every `ButtonGroup` consumer follows now.
+Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
+`request_only` and `closed` were dropped from the `JoiningMode` enum
+entirely (see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29). Originally shipped
+as a 4-way group with a distinct selected-state color per option
+(`open`→`success`, `closed`→`error`) via a `ButtonGroupItem` per-item
+`color?: ColorTheme` override; both the 2 extra options and the per-item
+color scheme were dropped in the same pass. `ButtonGroupItem` still
+supports the `color` override prop, but no shipped consumer uses it — the
+plain group-level color pattern is what every `ButtonGroup` consumer
+follows now.
+
+**Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
+(`public`/`private`, default `public`) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+mechanism. A `private` team can never be `open`: while
+`visibility === "private"`, every item in the joining-mode `ButtonGroup`
+below carries `disabled` (the whole group reads as inert, not just the
+`open` option) — enforced this way rather than only disabling `open`
+because the server may have just silently downgraded a stored `open` to
+`invite_only` the moment visibility flipped, and a half-disabled group
+would misrepresent that as still a live choice. No client-side write of
+`joining_mode` ever accompanies a visibility PATCH — the resulting
+`joining_mode`, if it changes, comes back from the server on refetch.
 
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
 matching every existing consumer's look exactly), applied via a
 `--button-group-background-color` CSS custom property rather than a
 hardcoded class — same escape-hatch pattern as `DataTable`'s own
-`backgroundColor` prop. This joining-mode control is the first (and so
-far only) consumer to override it, to `var(--surface-container-lowest)`,
-since it already sits inside a `surface-container` `form-section` and the
-default pill color would otherwise blend into it.
+`backgroundColor` prop. Both rows in this panel override it to
+`var(--surface-container-lowest)`, since they already sit inside a
+`surface-container` `form-section` and the default pill color would
+otherwise blend into it.
 
 ### `TeamSettingsParameters` — team banner upload
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from fred_core import JoiningMode, RelationType, TeamPermission
+from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
 from pydantic import BaseModel, Field, field_validator
 
@@ -138,6 +138,7 @@ class Team(BaseModel):
     is_member: bool = False
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
+    visibility: TeamVisibility = TeamVisibility.PUBLIC
     banner_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -247,6 +248,7 @@ class GrantTeamMemberRoleRequest(BaseModel):
 class UpdateTeamRequest(BaseModel):
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
+    visibility: TeamVisibility | None = None
     banner_image_url: str | None = Field(default=None, max_length=300)
     # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
     # Partial semantics (exclude_unset): an omitted field keeps its current

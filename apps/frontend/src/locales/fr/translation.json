@@ -1571,6 +1571,11 @@
           "open": "Ouverte",
           "inviteOnly": "Sur invitation"
         },
+        "visibility": {
+          "label": "Visibilité de l'équipe",
+          "public": "Publique",
+          "private": "Privée"
+        },
         "teamBanner": {
           "title": "Bannière de l'équipe",
           "import": "Importer",
