@@ -762,6 +762,16 @@ dropped in the same pass. `ButtonGroupItem` still supports the `color`
 override prop, but no shipped consumer uses it — the plain group-level
 color pattern is what every `ButtonGroup` consumer follows now.
 
+**`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
+optional `backgroundColor` prop (default `var(--surface-container)`,
+matching every existing consumer's look exactly), applied via a
+`--button-group-background-color` CSS custom property rather than a
+hardcoded class — same escape-hatch pattern as `DataTable`'s own
+`backgroundColor` prop. This joining-mode control is the first (and so
+far only) consumer to override it, to `var(--surface-container-lowest)`,
+since it already sits inside a `surface-container` `form-section` and the
+default pill color would otherwise blend into it.
+
 ### `TeamSettingsParameters` — team banner upload
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
