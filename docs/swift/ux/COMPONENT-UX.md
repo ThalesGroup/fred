@@ -834,14 +834,18 @@ containers:
   `on-surface-retreat`).
 - **Right**, left to right: a rows-per-page `Select` (20/50/100, our own
   molecule, not MUI), then `IconButton` (`medium`, `icon` variant,
-  `on-surface`) first-page / previous-page, the current page number
-  (`body-medium`, `on-surface-retreat`), then next-page / last-page. All four
-  nav buttons disable at their respective bound (first/prev at page 1,
-  next/last at the last page) — the footer itself never hides, even when
-  every row fits on one page, so the count and page-size control stay
-  reachable. New icons `first_page`/`last_page` added to the app's Material
-  Symbols allow-list (`shared/utils/Type.ts`). New i18n keys: top-level
-  `dataTable.pagination.{first,prev,next,last,totalItems}`.
+  `on-surface`) first-page / previous-page, the current page label
+  ("Page X sur Y" / "Page X of Y", `body-medium`, `on-surface-retreat`,
+  `tabular-nums`), then next-page / last-page. All four nav buttons disable
+  at their respective bound (first/prev at page 1, next/last at the last
+  page) — the footer itself never hides, even when every row fits on one
+  page, so the count and page-size control stay reachable. New icons
+  `first_page`/`last_page` added to the app's Material Symbols allow-list
+  (`shared/utils/Type.ts`). New i18n keys: top-level
+  `dataTable.pagination.{first,prev,next,last,totalItems}`. The page label
+  (`dataTable.pagination.pageNumber`) is fixed-width (`7rem`, centered) so
+  the neighbouring nav buttons don't shift as either the current page or the
+  total page count gains a digit.
 
 `TeamSettingsMembersTable` is the first consumer, at an initial `pageSize={20}`
 (the rows-per-page `Select` lets the user switch to 50/100 from there).
@@ -851,7 +855,209 @@ flex column (`height: 100%` from the already-24px-padded `.teamSettingsPage`
 shell): the header row is fixed height, and the table wrapper takes
 `flex: 1; min-height: 0` so the table's bottom edge sits exactly `24px`
 above the viewport bottom, scrolling internally past `pageSize` rows on very
-short viewports rather than growing the page.
+short viewports rather than growing the page. The container's own
+`overflow: hidden` was removed — it isn't needed for the shrink-to-fit
+chain (`min-height: 0` on both the container and the table wrapper already
+does that; `DataTable` clips its own rounded corners) and it was cropping
+the "add member" `Autocomplete` input's focus ring at the top of the flex
+column.
+
+**`Autocomplete` compact-field alignment (fixed 2026-07-26).** Uses
+`TextInput`'s `compact` variant, which now sets `display: none` on the
+hint/error/counter container (`.information`) instead of just skipping its
+flex/padding rules — previously the empty container still reserved a row's
+worth of height, which (a) misaligned the input's visual center against the
+title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
+(`top: 100%` of the input's own wrapper) below the input with a large gap.
+Both now resolve automatically since the wrapper's rendered height matches
+the input exactly; the popover's only remaining offset is the deliberate
+`margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `AddTeamMembersDialog` — bulk add with per-user role selection (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/AddTeamMembersDialog/AddTeamMembersDialog.tsx`,
+`src/rework/components/shared/molecules/TeamRoleChips/TeamRoleChips.tsx`
+**Status:** `Functional`, first pass from a supplied mockup — not yet
+design-reviewed.
+
+The Members header's inline Autocomplete text input is replaced by a
+`filled`/`primary` `Button` ("Ajouter des membres", same header slot). It
+opens `AddTeamMembersDialog` — a `Portal`-based modal following the
+`ConfirmationDialog`/`DuplicateAgentDialog` shell (overlay + card, no
+generic `Dialog` primitive exists yet):
+
+- **Header:** title + subtitle (`body-medium`, `on-surface-retreat`).
+- **Search:** the same `Autocomplete` the old inline field used, reused
+  as-is (candidates come from the existing `candidate-members` endpoint,
+  already scoped to non-members) — auto-focused on open, and its menu only
+  opens once the query is 2+ characters (`minQueryLength={2}`, see below),
+  matching the backend search's own minimum.
+- **Pending-list container** — always rendered, even with zero pending
+  candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
+  corners, `spacing-s` (`12px`) padding so content isn't flush against the
+  border): a fixed `pendingListHeader` label ("Membres à ajouter à
+  l'équipe", `label-large`, `on-surface-retreat`) above either —
+  - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
+    (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
+    selector (see below, `8px` gap between its own chips), and a
+    `close`-icon `IconButton` to drop the row. Each row is
+    `surface-container-highest` background, `radius-s` (`8px`) corners,
+    `padding-left: spacing-m` (`16px`, `padding-right` stays `spacing-xs`/
+    `8px`), height `3rem` (`48px`) — a visually distinct "chip" resting
+    inside the outer bordered container, not flush rules between rows.
+    List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
+    "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
+    (thumb color inherited from the app's existing global `outline-retreat`
+    scrollbar rule in `styles/index.css`, already thin by default; this
+    only narrows it further for the denser list); or
+  - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
+    sélectionné pour l'instant" placeholder, `height: var(--row-height)`
+    (`48px`) — same height as a single pending row, so the container's
+    overall height doesn't jump between the empty and one-candidate states.
+
+  **No `overflow: hidden` at the dialog level** — everything is inset by
+  the dialog's own padding, and clipping would also cut off the
+  `Autocomplete` menu popover in the search row above the list (same class
+  of bug just fixed on the old inline field, see above).
+- **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
+  (`filled`/`primary`, disabled while the list is empty or a submit is in
+  flight). Clicking `Ajouter` always closes the dialog once the batch
+  finishes, whether every add succeeded or not — per-user failures still
+  surface as an error toast (`notifyApiError`), they just don't block the
+  rest of the batch or keep the dialog open for a retry.
+
+**No new backend endpoint** — confirming always calls `addTeamMember` on
+the `team_member` baseline first, then `grantTeamMemberRole` for every
+selected elevated role, one call per role (same pattern the members table
+already uses for role changes on existing members, § AUTHZ-06 above).
+**Never add directly onto an elevated relation** — a member added straight
+onto e.g. `team_editor` with no separate `team_member` tuple has no floor
+to fall back to: revoking their only elevated role later leaves them with
+zero relations at all, and the backend correctly 409s ("would silently
+remove them from the team, use remove_team_member instead") rather than
+allow that. Fixed 2026-07-26 — the first version picked the
+highest-priority selected role as the `addTeamMember` relation directly
+(skipping the grant call for that one role, saving an API round trip), which
+silently produced exactly this trap for every member added through the
+dialog with at least one elevated role: they'd display correctly, but their
+only/highest role could never be revoked back down to plain membership.
+
+**`useMutationAction`: `T | null` can't tell "failed" from "succeeded with
+a falsy result" (fixed 2026-07-26).** After the fix above shipped, every
+grant call in the batch was still silently skipped — `handleConfirm`
+checked `addResult === null` to detect a failed `addTeamMember` call before
+proceeding to the grant loop. `add_team_member`/`grant_team_member_role`
+both respond `204 No Content`; `fetchBaseQuery` resolves an empty body to
+`null` **on success**. Every add in this dialog therefore always looked
+like a failure to that check, and the grant loop below it never ran — with
+no thrown error, no console error, and no toast, since nothing had actually
+failed. This reproduced 100% of the time against the real backend but
+**never** against any mocked backend used to investigate the two prior
+reports in this session, because every mock's fetch stub serialized a
+JSON body (`"{}"`, 2 characters) for every response regardless of status
+code — never a truly empty one — so `added` was never `null` in any of
+that testing. `useMutationAction.ts` (`core/hooks/useMutationAction.ts`)
+now returns a discriminated `{ ok: true; data: T } | { ok: false }`
+instead of `T | null`; `handleConfirm` branches on `.ok`. No other call
+site branched on the return value (every other consumer just awaits the
+call and relies on the `onError` toast), so this is a non-breaking
+contract change. Caught by reproducing with a mock that returns a
+genuinely empty `204` body (`new Response(null, { status: 204 })`)
+instead of a serialized empty object.
+
+**`TeamRoleChips`** — the members table's inline role-chip toggle group
+(admin/editor/analyst, multi-select, `data-active` fills `--primary`
+background with `on-primary` text) is extracted from
+`TeamSettingsMembersTable` into this shared molecule so the dialog's
+pending rows and the table use the identical implementation/CSS. Both gate
+each chip via the new `canAdministerTeamRole(capabilities, role)` helper
+(`core/hooks/teamCapabilities.ts`), replacing the table's former private
+closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
+text, default (inactive) border `1px solid outline` — was `0.5px
+outline-variant`, a size/color pair that didn't match any other chip-style
+control in the app. Chip padding-left/right `spacing-s` (`12px`, was
+`spacing-xs`/`8px`).
+
+**Members table: role chips are a live, single-click toggle in both
+directions.** `TeamRoleChips` renders identically here and in the
+add-members dialog, but only the table's instance is *live* — a click
+there immediately grants/revokes via the API, while the dialog's is a
+staged selection with no effect until "Ajouter". A confirmation step was
+added on the revoke path (2026-07-26) while investigating a report of "a
+member added with 2-3 roles ends up holding only the highest-priority
+one" — it turned out not to be the cause (see the `addTeamMember`-on-
+baseline fix above for the actual root cause) and was removed again at the
+developer's explicit request the same day: revoking a role is back to a
+single click, symmetric with granting. Also fixed in the same investigation
+(kept): `DataTable` accepted an optional `rowKey` (default: array index,
+unchanged for other consumers); `TeamSettingsMembersTable` now passes
+`(member) => member.user.id` — with the previous index-based key, any
+row-scoped state or in-flight handler could misattribute to the wrong
+member as soon as the list re-sorted (which `sortedMembers` does on every
+role change).
+
+**`Autocomplete` open-state rework (`isOpen` now derived, plus
+`minQueryLength`).** Previously `isOpen` was an imperatively toggled
+boolean (set on focus/blur/select), which needed a one-off patch when a
+second query typed while still focused (post-selection) didn't reopen the
+menu. Replaced with a derived value: `isOpen = isFocused && !dismissed &&
+queryValue.trim().length >= minQueryLength`, where `dismissed` is a
+one-shot flag set by Escape or a selection and cleared on the next
+focus/keystroke. New optional prop `minQueryLength` (default `0`, opens
+immediately on focus — e.g. `AdminTeamsPage`'s browsable full-user-list
+field) lets a consumer whose menu is backed by a server search that itself
+only queries past a minimum length (this dialog, `minQueryLength={2}`)
+avoid flashing an empty "no options" state below that threshold. Affects
+every `Autocomplete` consumer, not just this dialog.
+
+**`Autocomplete` keyboard navigation (2026-07-26).** The first option is
+now virtually focused (`aria-activedescendant` pattern, DOM focus stays on
+the input) as soon as the menu opens with results; `ArrowDown`/`ArrowUp`
+move it, wrapping at each end; `Enter` selects whichever option is
+currently focused (closing the menu and clearing the field, same as a
+click). The focused index resets to `0` on every fresh keystroke or
+re-focus rather than reactively whenever the `options` prop changes —
+`options` is a new array reference (`.filter()`/`.map()` result) on nearly
+every parent render, not only when the candidate list itself changes, so
+tying the reset to it would keep stomping on the user's own up/down
+navigation mid-browse. Implementation mirrors `Select`'s existing
+`activeIndex`/`moveActive` pattern verbatim (same wrap-around, same
+disabled-skip behavior). Surfaced (and fixed in the same pass) a latent bug
+in the shared `Menu`: its per-option DOM id was built from `option.value`,
+which for `Select`'s own primitive-typed options happened to stringify
+uniquely, but for `Autocomplete`'s object-typed candidates (`UserSummary`
+records) stringifies to the same `"[object Object]"` for every option —
+breaking both `activeId` matching and the `#${activeId}` scroll-into-view
+selector (unescaped `[`/`]` aren't valid there). Menu's item id (and
+`Select`'s matching `activeOptionId`) now use `option.key` instead — already
+required, already unique by contract (it's the React list key), and a
+plain string regardless of `T`.
+
+**`IconButton` default color.** `color` is now optional, defaulting to
+`on-surface-retreat` — the baseline color intended for icon buttons that
+don't need a stronger color to draw attention (e.g. this dialog's row
+`close` button). Every existing call site already passed `color` explicitly
+so this is additive only; new call sites can omit it instead of repeating
+the same value.
+
+**`Button`/`IconButton` outlined-variant border fix.** Both previously set
+`--btn-border` to the passed `color`'s own "main" token (e.g. `on-surface`'s
+`main` is `on-surface`, which in dark theme is a near-white tone) —
+per M3, the outlined variant's border is always the neutral `outline`
+token regardless of `color`; only the label/icon take the scheme's color.
+This was invisible in light theme (where `on-surface` happens to read dark
+too) but washed the border out to near-invisible in dark theme, which is
+what surfaced it here (this dialog's `Annuler` button, `color="on-surface"`).
+Fixed at the shared-component level (`--btn-border: var(--outline)` in both
+`Button.module.scss` and `IconButton.module.scss`), so every existing
+`variant="outlined"` call site is corrected without touching call sites.
 
 #### Open UX issues
 

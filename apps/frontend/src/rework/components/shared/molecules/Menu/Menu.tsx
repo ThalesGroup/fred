@@ -67,7 +67,14 @@ const MenuInternal = <T,>({
       onMouseDown={(e) => e.preventDefault()}
     >
       {options.map((option) => {
-        const itemId = `${baseId}-opt-${option.value}`;
+        // `option.key` (already required, already unique — it's React's own
+        // list key) rather than `option.value`: `value` can be any type,
+        // including a non-primitive object (e.g. a candidate user record in
+        // `Autocomplete`), which stringifies to the same "[object Object]"
+        // for every option and both breaks the id's uniqueness and isn't
+        // valid unescaped in the `#${activeId}` selector `Menu` itself uses
+        // below to scroll the active option into view.
+        const itemId = `${baseId}-opt-${option.key}`;
         const isFocused = activeId === itemId;
 
         const isSelected = Array.isArray(selectedId)

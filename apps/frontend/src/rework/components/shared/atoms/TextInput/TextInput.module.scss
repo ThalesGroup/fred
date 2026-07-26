@@ -73,6 +73,13 @@
   font: var(--font-body-medium);
 }
 
+/* Compact fields have no hint/error/counter text — drop the container
+ * entirely rather than leaving an empty row, so the field's rendered
+ * height is exactly the input's. */
+.input[data-compact="true"] .information {
+  display: none;
+}
+
 .hint {
   min-width: 0;
   overflow-wrap: break-word;

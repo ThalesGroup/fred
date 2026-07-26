@@ -18,15 +18,26 @@ interface MutationActionOptions<T> {
   onSuccess?: (result: T) => void;
 }
 
+export type MutationActionResult<T> = { ok: true; data: T } | { ok: false };
+
 export function useMutationAction() {
-  const runMutationAction = async <T>({ action, onError, onSuccess }: MutationActionOptions<T>): Promise<T | null> => {
+  // Discriminated result, not `T | null` — most 204 No Content mutations
+  // (add/grant/revoke a team role, etc.) resolve their RTK Query result to
+  // `null` on success (empty body), which is indistinguishable from "failed"
+  // if a caller ever needs to branch on success/failure rather than just
+  // firing the action and letting the toast in `onError` handle feedback.
+  const runMutationAction = async <T>({
+    action,
+    onError,
+    onSuccess,
+  }: MutationActionOptions<T>): Promise<MutationActionResult<T>> => {
     try {
       const result = await action();
       onSuccess?.(result);
-      return result;
+      return { ok: true, data: result };
     } catch (error) {
       onError(error);
-      return null;
+      return { ok: false };
     }
   };
 

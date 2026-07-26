@@ -18,13 +18,14 @@ import { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
-  color: ColorTheme;
+  /** Defaults to "on-surface-retreat" — the app's baseline icon-button color. */
+  color?: ColorTheme;
   variant: IconButtonVariant;
   size: ComponentSize;
   icon: IconProps;
 }
 
-export default function IconButton({ color, variant, size, icon, ...props }: IconButtonProps) {
+export default function IconButton({ color = "on-surface-retreat", variant, size, icon, ...props }: IconButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
 
   return (

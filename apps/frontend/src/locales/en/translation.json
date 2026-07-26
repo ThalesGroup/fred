@@ -393,7 +393,7 @@
       "itemsPerPage": "Items per page",
       "last": "Last page",
       "next": "Next page",
-      "pageNumber": "Page {{page}}",
+      "pageNumber": "Page {{page}} of {{pageCount}}",
       "prev": "Previous page",
       "totalItems": "{{count}} items"
     }
@@ -1517,11 +1517,23 @@
     },
     "teamSettings": {
       "members": {
-        "addMember": {
-          "placeholder": "Invite users"
+        "addMembersDialog": {
+          "buttonLabel": "Add members",
+          "cancel": "Cancel",
+          "confirm": "Add",
+          "pendingListEmpty": "No user selected yet",
+          "pendingListHeader": "Members to add to the team",
+          "removeAria": "Remove {{name}} from the list",
+          "searchPlaceholder": "Enter a name, first name, or user ID",
+          "subtitle": "Users will be added to the team immediately",
+          "title": "Add new members"
         },
         "errors": {
+          "addDetail": "Could not add this user to the team.",
+          "addSummary": "Failed to add member",
           "forbiddenDetail": "You are not allowed to perform this action.",
+          "grantDetail": "{{name}} was added, but the {{role}} role could not be granted.",
+          "grantSummary": "Failed to grant a role",
           "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",
           "removeMemberSummary": "Failed to remove member",

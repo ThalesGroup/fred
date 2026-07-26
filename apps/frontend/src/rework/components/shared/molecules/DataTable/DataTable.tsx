@@ -32,6 +32,13 @@ interface DataTableProps<T> {
    *  `ROWS_PER_PAGE_OPTIONS`). Omit to render every row with no pagination
    *  bar (default) — existing call sites are unaffected. */
   pageSize?: number;
+  /** Stable per-row identity, e.g. `(member) => member.user.id`. Omit only
+   *  for data that never reorders between renders — without it, React falls
+   *  back to array index as key, which misattributes any row-scoped
+   *  component state (open menus, in-flight click handlers) to the wrong
+   *  item as soon as `data` re-sorts (e.g. after an edit changes sort
+   *  order). */
+  rowKey?: (element: T) => string | number;
 }
 
 export interface DataTableColumn<T> {
@@ -52,6 +59,7 @@ export default function DataTable<T>({
   backgroundColor = "var(--surface-container)",
   firstColumnInset = false,
   pageSize,
+  rowKey,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
   const paginationEnabled = pageSize !== undefined;
@@ -90,7 +98,7 @@ export default function DataTable<T>({
           </div>
         ))}
         {pageData.map((line, lineIndex) => (
-          <div className={styles["datatable-row"]} key={`row-${lineIndex}`}>
+          <div className={styles["datatable-row"]} key={rowKey ? rowKey(line) : `row-${lineIndex}`}>
             {columns.map((column) => {
               return (
                 <div className={styles["datatable-cell"]} key={column.label}>
@@ -141,7 +149,7 @@ export default function DataTable<T>({
               onClick={() => setPage(currentPage - 1)}
             />
             <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-              {t("dataTable.pagination.pageNumber", { page: currentPage + 1 })}
+              {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
             </span>
             <IconButton
               color="on-surface"
