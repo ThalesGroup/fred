@@ -954,6 +954,28 @@ outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 `spacing-xs`/`8px`).
 
+**Members table: confirm before revoking a role (fixed 2026-07-26).**
+`TeamRoleChips` renders identically in both places, but only the table's
+instance is *live* — a click there immediately grants/revokes via the API,
+while the dialog's is a staged selection with no effect until "Ajouter".
+Reported symptom: a member added through the dialog with 2-3 roles ended up
+holding only the highest-priority one (admin > editor > analyst) once shown
+in the table. Investigation (control-plane audit log + a direct OpenFGA
+tuple read) showed every grant *did* persist — followed, within about a
+second, by an explicit revoke of the same role. The table's already-active
+chip requires only one click to undo, and a stray/second click landing on
+it right as the dialog closes is silent and instant, unlike every other
+destructive action on this page (remove member, leave team), which already
+confirm first. `TeamSettingsMembersTable`'s revoke path now does too
+(`ConfirmationDialog`, `criticalAction`, role + member name interpolated
+into the message) — granting is unaffected (still one click, additive and
+low-risk). Also fixed in the same pass: `DataTable` accepted an optional
+`rowKey` (default: array index, unchanged for other consumers);
+`TeamSettingsMembersTable` now passes `(member) => member.user.id` — with
+the previous index-based key, any row-scoped state or in-flight handler
+could misattribute to the wrong member as soon as the list re-sorted (which
+`sortedMembers` does on every role change).
+
 **`Autocomplete` open-state rework (`isOpen` now derived, plus
 `minQueryLength`).** Previously `isOpen` was an imperatively toggled
 boolean (set on focus/blur/select), which needed a one-off patch when a
