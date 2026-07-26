@@ -209,7 +209,7 @@ describe("AddTeamMembersDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("confirming with two selected roles adds with the highest-priority role and grants the other", async () => {
+  it("confirming with two selected roles always adds on the team_member baseline, then grants both roles", async () => {
     h.addTeamMember.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
@@ -225,9 +225,18 @@ describe("AddTeamMembersDialog", () => {
       await Promise.resolve();
     });
 
+    // Never add directly onto an elevated relation — a member with no
+    // separate team_member tuple has no floor to fall back to, and revoking
+    // their only elevated role later would 409 ("would silently remove them
+    // from the team").
     expect(h.addTeamMember).toHaveBeenCalledWith({
       teamId: "team-1",
-      addTeamMemberRequest: { user_id: "u1", relation: "team_editor" },
+      addTeamMemberRequest: { user_id: "u1", relation: "team_member" },
+    });
+    expect(h.grantTeamMemberRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      userId: "u1",
+      grantTeamMemberRoleRequest: { relation: "team_editor" },
     });
     expect(h.grantTeamMemberRole).toHaveBeenCalledWith({
       teamId: "team-1",
@@ -252,9 +261,9 @@ describe("AddTeamMembersDialog", () => {
       await Promise.resolve();
     });
 
-    // addTeamMember still succeeds (Alice is added as team_editor) — only
-    // the second grant fails, and it must say so by name and role rather
-    // than a generic "failed to update role" toast.
+    // addTeamMember still succeeds (Alice is added on the team_member
+    // baseline) — the grants fail, and it must say so by name and role
+    // rather than a generic "failed to update role" toast.
     expect(h.showError).toHaveBeenCalledWith(
       expect.objectContaining({
         detail: expect.stringContaining('"name":"Alice Doe (alice)"'),

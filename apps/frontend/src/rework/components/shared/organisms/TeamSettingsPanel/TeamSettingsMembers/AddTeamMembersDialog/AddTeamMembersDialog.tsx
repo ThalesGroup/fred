@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
-import TeamRoleChips, { ELEVATED_TEAM_ROLES } from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
+import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
@@ -112,21 +112,22 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
     setIsSubmitting(true);
 
     for (const member of pendingMembers) {
-      // AddTeamMemberRequest only carries one relation — add with the
-      // highest-priority selected role (falling back to the implicit
-      // `team_member` baseline), then grant any other selected elevated
-      // role one at a time, exactly like the members table already does
-      // for role changes on existing members. Errors surface via toast
-      // (below) but don't block the rest of the batch or keep the dialog
-      // open — the table reflects whatever actually succeeded.
-      const initialRole = ELEVATED_TEAM_ROLES.find((role) => member.roles.includes(role)) ?? "team_member";
-      const additionalRoles = member.roles.filter((role) => role !== initialRole);
-
+      // Always add on the team_member baseline, then grant every selected
+      // elevated role as its own tuple on top — never add directly on an
+      // elevated relation. A member added straight onto e.g. team_editor
+      // with no separate team_member tuple has no floor to fall back to:
+      // revoking their only elevated role would leave them with zero
+      // relations at all, which the backend correctly refuses ("would
+      // silently remove them from the team"). Every held role must stay
+      // revocable down to plain membership, never to nothing. Errors
+      // surface via toast (below) but don't block the rest of the batch or
+      // keep the dialog open — the table reflects whatever actually
+      // succeeded.
       const added = await runMutationAction({
         action: () =>
           addTeamMember({
             teamId: team.id,
-            addTeamMemberRequest: { user_id: member.user.id, relation: initialRole },
+            addTeamMemberRequest: { user_id: member.user.id, relation: "team_member" },
           }).unwrap(),
         onError: (error) =>
           notifyApiError(error, {
@@ -137,7 +138,7 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
       });
       if (added === null) continue;
 
-      for (const role of additionalRoles) {
+      for (const role of member.roles) {
         await runMutationAction({
           action: () =>
             grantTeamMemberRole({

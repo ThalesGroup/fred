@@ -933,13 +933,21 @@ generic `Dialog` primitive exists yet):
   surface as an error toast (`notifyApiError`), they just don't block the
   rest of the batch or keep the dialog open for a retry.
 
-**No new backend endpoint** — `AddTeamMemberRequest` only carries one
-`relation`, so confirming calls `addTeamMember` per pending user with their
-highest-priority selected role (`ELEVATED_TEAM_ROLES` order: admin > editor
-> analyst; falls back to the implicit `team_member` baseline when no chip is
-selected), then `grantTeamMemberRole` for each other selected elevated role
-— the same add-then-grant sequencing the members table already uses for
-role changes on existing members (§ AUTHZ-06 above).
+**No new backend endpoint** — confirming always calls `addTeamMember` on
+the `team_member` baseline first, then `grantTeamMemberRole` for every
+selected elevated role, one call per role (same pattern the members table
+already uses for role changes on existing members, § AUTHZ-06 above).
+**Never add directly onto an elevated relation** — a member added straight
+onto e.g. `team_editor` with no separate `team_member` tuple has no floor
+to fall back to: revoking their only elevated role later leaves them with
+zero relations at all, and the backend correctly 409s ("would silently
+remove them from the team, use remove_team_member instead") rather than
+allow that. Fixed 2026-07-26 — the first version picked the
+highest-priority selected role as the `addTeamMember` relation directly
+(skipping the grant call for that one role, saving an API round trip), which
+silently produced exactly this trap for every member added through the
+dialog with at least one elevated role: they'd display correctly, but their
+only/highest role could never be revoked back down to plain membership.
 
 **`TeamRoleChips`** — the members table's inline role-chip toggle group
 (admin/editor/analyst, multi-select, `data-active` fills `--primary`
@@ -957,24 +965,23 @@ control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 **Members table: confirm before revoking a role (fixed 2026-07-26).**
 `TeamRoleChips` renders identically in both places, but only the table's
 instance is *live* — a click there immediately grants/revokes via the API,
-while the dialog's is a staged selection with no effect until "Ajouter".
-Reported symptom: a member added through the dialog with 2-3 roles ended up
-holding only the highest-priority one (admin > editor > analyst) once shown
-in the table. Investigation (control-plane audit log + a direct OpenFGA
-tuple read) showed every grant *did* persist — followed, within about a
-second, by an explicit revoke of the same role. The table's already-active
-chip requires only one click to undo, and a stray/second click landing on
-it right as the dialog closes is silent and instant, unlike every other
-destructive action on this page (remove member, leave team), which already
-confirm first. `TeamSettingsMembersTable`'s revoke path now does too
-(`ConfirmationDialog`, `criticalAction`, role + member name interpolated
-into the message) — granting is unaffected (still one click, additive and
-low-risk). Also fixed in the same pass: `DataTable` accepted an optional
-`rowKey` (default: array index, unchanged for other consumers);
-`TeamSettingsMembersTable` now passes `(member) => member.user.id` — with
-the previous index-based key, any row-scoped state or in-flight handler
-could misattribute to the wrong member as soon as the list re-sorted (which
-`sortedMembers` does on every role change).
+while the dialog's is a staged selection with no effect until "Ajouter". A
+stray/second click on an already-active chip is silent and instant, unlike
+every other destructive action on this page (remove member, leave team),
+which already confirm first. `TeamSettingsMembersTable`'s revoke path now
+does too (`ConfirmationDialog`, `criticalAction`, role + member name
+interpolated into the message) — granting is unaffected (still one click,
+additive and low-risk). This was investigated as a candidate root cause for
+a report of "a member added with 2-3 roles ends up holding only the
+highest-priority one" — it wasn't (see the `addTeamMember`-on-baseline fix
+above for the actual cause), but the missing confirmation was still a real,
+independent gap worth closing on its own. Also fixed in the same pass:
+`DataTable` accepted an optional `rowKey` (default: array index, unchanged
+for other consumers); `TeamSettingsMembersTable` now passes
+`(member) => member.user.id` — with the previous index-based key, any
+row-scoped state or in-flight handler could misattribute to the wrong
+member as soon as the list re-sorted (which `sortedMembers` does on every
+role change).
 
 **`Autocomplete` open-state rework (`isOpen` now derived, plus
 `minQueryLength`).** Previously `isOpen` was an imperatively toggled
