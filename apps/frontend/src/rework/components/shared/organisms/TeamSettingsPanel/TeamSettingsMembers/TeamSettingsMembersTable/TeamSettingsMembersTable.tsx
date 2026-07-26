@@ -191,6 +191,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
                 label: t("rework.teamSettings.members.table.deleteAction"),
                 value: "DELETE",
                 key: "DELETE",
+                destructive: true,
               },
             ]}
             onSelect={(_) => {
