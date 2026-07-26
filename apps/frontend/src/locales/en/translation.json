@@ -1604,6 +1604,7 @@
         "settings": "Settings",
         "activity": "Activity",
         "evaluations": "Evaluations",
+        "usage": "Usage",
         "retention": "Retention"
       },
       "parameters": {

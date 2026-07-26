@@ -153,6 +153,17 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/evaluations` },
     });
   }
+  if (canSeeActivity) {
+    // Same elevated-role gate as Activity: the team usage dashboard
+    // (OBSERV-02 v3) has been reachable by direct URL only — this is its
+    // first in-app entry point for a real (non-personal) team.
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.usage"),
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: usageBase },
+    });
+  }
 
   return (
     <div className={styles.teamContentNavbarContainer}>
