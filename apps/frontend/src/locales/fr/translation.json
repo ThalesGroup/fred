@@ -847,9 +847,11 @@
         "kindFilter": {
           "tool": "Outils",
           "agent": "Agents",
+          "model": "Modèles",
           "aria": "Filtrer par type de capacité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
+        "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
         "col": {
           "capability": "Capacité",
           "enabledTeams": "Équipes activées",

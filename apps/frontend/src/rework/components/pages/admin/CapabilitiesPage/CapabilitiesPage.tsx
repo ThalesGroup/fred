@@ -43,11 +43,13 @@ import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { enabledTeamCount, isCapabilityUnused as isUnused, personalSpaceCount } from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
-// an agent template into this same catalog, CAPAB-01 RFC §8.6) — one admin
-// surface, filtered by kind, rather than a separate page: a tool can be
-// depended on by several agents, so admins need both views over the same
-// underlying enablement mechanism, not two disconnected ones.
-const KIND_FILTERS: Array<"tool" | "agent"> = ["tool", "agent"];
+// an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
+// pod-advertised projection of one models_catalog.yaml entry, OBSERV-02 v3
+// RFC §8.7) — one admin surface, filtered by kind, rather than a separate
+// page: a tool can be depended on by several agents, so admins need all
+// three views over the same underlying enablement mechanism, not several
+// disconnected ones.
+const KIND_FILTERS: Array<"tool" | "agent" | "model"> = ["tool", "agent", "model"];
 
 export default function CapabilitiesPage() {
   const { t } = useTranslation();
@@ -70,7 +72,7 @@ export default function CapabilitiesPage() {
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
-  const [kindFilter, setKindFilter] = useState<"tool" | "agent">("tool");
+  const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -347,7 +349,11 @@ export default function CapabilitiesPage() {
         <PageEmptyState
           icon="tune"
           message={t(
-            kindFilter === "agent" ? "rework.admin.capabilities.emptyAgents" : "rework.admin.capabilities.empty",
+            kindFilter === "agent"
+              ? "rework.admin.capabilities.emptyAgents"
+              : kindFilter === "model"
+                ? "rework.admin.capabilities.emptyModels"
+                : "rework.admin.capabilities.empty",
           )}
         />
       )}

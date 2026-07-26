@@ -847,9 +847,11 @@
         "kindFilter": {
           "tool": "Tools",
           "agent": "Agents",
+          "model": "Models",
           "aria": "Filter by capability kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
+        "emptyModels": "No models are advertised by any runtime pod yet.",
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
