@@ -1070,10 +1070,38 @@
       "refresh": "Actualiser",
       "refreshing": "Actualisation...",
       "sections": {
+        "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "overview": "Vue d'ensemble",
         "resources": "Ressources",
+        "tokenUsage": "Consommation de tokens",
         "users": "Utilisateurs"
+      },
+      "administration": {
+        "activitiesTitle": "Activités",
+        "modelsGovernanceLink": "Gérer les modèles",
+        "storageByTeam": {
+          "empty": "Aucune équipe proche de son quota de stockage.",
+          "title": "Stockage par équipe (% du quota utilisé)",
+          "valueLabel": "% du quota"
+        }
+      },
+      "tokenUsage": {
+        "byAgent": {
+          "empty": "Aucune consommation d'agent sur cette période.",
+          "title": "Consommation de tokens par agent",
+          "valueLabel": "Tokens"
+        },
+        "byModel": {
+          "empty": "Aucune consommation de modèle sur cette période.",
+          "title": "Consommation de tokens par modèle",
+          "valueLabel": "Tokens"
+        },
+        "overTime": {
+          "title": "Consommation de tokens dans le temps",
+          "valueLabel": "Tokens"
+        }
       },
       "timeRange": {
         "apply": "Appliquer",
@@ -1086,6 +1114,11 @@
         "title": "Équipes avec le plus de conversations",
         "valueLabel": "Conversations"
       }
+    },
+    "tokenUsageImpact": {
+      "costTitle": "Coût estimé",
+      "costValue": "{{cost}} $ (estimé)",
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
     },
     "teamUsage": {
       "title": "Ma consommation de tokens",

@@ -197,6 +197,15 @@ export const {
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
+  // Platform-wide or team-scoped token usage (OBSERV-02 v3, F1/F2) — same
+  // shape as the user_-prefixed personal presets above, different scope.
+  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
+  useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
+  useHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery: useTeamActivitySummaryQuery,
+  // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
+  useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
   useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation: useResetPlatformFullMutation,

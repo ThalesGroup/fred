@@ -1070,10 +1070,38 @@
       "refresh": "Refresh",
       "refreshing": "Refreshing...",
       "sections": {
+        "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "overview": "Usage overview",
         "resources": "Resources",
+        "tokenUsage": "Token usage",
         "users": "Users"
+      },
+      "administration": {
+        "activitiesTitle": "Activités",
+        "modelsGovernanceLink": "Manage models",
+        "storageByTeam": {
+          "empty": "No team is near its storage quota.",
+          "title": "Storage by team (% of quota used)",
+          "valueLabel": "% of quota"
+        }
+      },
+      "tokenUsage": {
+        "byAgent": {
+          "empty": "No agent usage in this period.",
+          "title": "Token usage by agent",
+          "valueLabel": "Tokens"
+        },
+        "byModel": {
+          "empty": "No model usage in this period.",
+          "title": "Token usage by model",
+          "valueLabel": "Tokens"
+        },
+        "overTime": {
+          "title": "Token usage over time",
+          "valueLabel": "Tokens"
+        }
       },
       "timeRange": {
         "apply": "Apply",
@@ -1086,6 +1114,11 @@
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
       }
+    },
+    "tokenUsageImpact": {
+      "costTitle": "Estimated cost",
+      "costValue": "${{cost}} (estimated)",
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
       "title": "My token usage",

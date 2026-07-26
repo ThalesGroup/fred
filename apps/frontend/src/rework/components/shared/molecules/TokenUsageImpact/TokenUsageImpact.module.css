@@ -1,0 +1,17 @@
+.impact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  margin-top: var(--spacing-xs);
+}
+
+.estimate {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.cost {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
