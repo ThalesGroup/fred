@@ -899,16 +899,23 @@ generic `Dialog` primitive exists yet):
   already scoped to non-members) — not auto-focused on open, and its menu
   only opens once the query is 2+ characters (`minQueryLength={2}`, see
   below), matching the backend search's own minimum.
-- **Pending list** (`<ul>`, no column headers): one row per selected-but-
-  not-yet-added candidate — name/username, a `TeamRoleChips` role selector
-  (see below), and a `close`-icon `IconButton` to drop the row. `1px solid
-  outline-retreat` border, `radius-s` (`8px`) corners, `spacing-s` (`12px`)
-  padding so rows aren't flush against the border. Capped at
-  `8.5 * var(--row-height)` (`--row-height: 4rem`) — the half-row is a
-  deliberate "more below" affordance — with a `4px`-wide
-  `::-webkit-scrollbar` (thumb color inherited from the app's existing
-  global `outline-retreat` scrollbar rule in `styles/index.css`, already
-  thin by default; this only narrows it further for the denser list).
+- **Pending-list container** — always rendered, even with zero pending
+  candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
+  corners, `spacing-s` (`12px`) padding so content isn't flush against the
+  border): a fixed `pendingListHeader` label ("Membres à ajouter à
+  l'équipe", `label-large`, `on-surface-retreat`) above either —
+  - the rows `<ul>` (no column headers) once ≥1 candidate is pending: name/
+    username, a `TeamRoleChips` role selector (see below), and a
+    `close`-icon `IconButton` to drop the row. Row height `3rem` (`48px`).
+    Capped at `8.5 * var(--row-height)` — the half-row is a deliberate
+    "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
+    (thumb color inherited from the app's existing global `outline-retreat`
+    scrollbar rule in `styles/index.css`, already thin by default; this
+    only narrows it further for the denser list); or
+  - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
+    sélectionné pour l'instant" placeholder, `min-height: 3 * var(--row-height)`
+    so it isn't a sliver.
+
   **No `overflow: hidden` at the dialog level** — everything is inset by
   the dialog's own padding, and clipping would also cut off the
   `Autocomplete` menu popover in the search row above the list (same class
@@ -956,6 +963,18 @@ don't need a stronger color to draw attention (e.g. this dialog's row
 `close` button). Every existing call site already passed `color` explicitly
 so this is additive only; new call sites can omit it instead of repeating
 the same value.
+
+**`Button`/`IconButton` outlined-variant border fix.** Both previously set
+`--btn-border` to the passed `color`'s own "main" token (e.g. `on-surface`'s
+`main` is `on-surface`, which in dark theme is a near-white tone) —
+per M3, the outlined variant's border is always the neutral `outline`
+token regardless of `color`; only the label/icon take the scheme's color.
+This was invisible in light theme (where `on-surface` happens to read dark
+too) but washed the border out to near-invisible in dark theme, which is
+what surfaced it here (this dialog's `Annuler` button, `color="on-surface"`).
+Fixed at the shared-component level (`--btn-border: var(--outline)` in both
+`Button.module.scss` and `IconButton.module.scss`), so every existing
+`variant="outlined"` call site is corrected without touching call sites.
 
 #### Open UX issues
 

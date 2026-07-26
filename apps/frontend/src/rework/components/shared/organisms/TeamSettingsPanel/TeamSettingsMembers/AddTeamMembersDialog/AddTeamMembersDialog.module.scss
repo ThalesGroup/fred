@@ -44,16 +44,31 @@
   position: relative;
 }
 
-// 8.5 rows tall — the half-row is a deliberate "there's more below" affordance.
-.pendingList {
-  --row-height: 4rem;
+// Always rendered (even with zero pending members) so the header stays put
+// as a landmark for the list below it.
+.pendingListContainer {
+  --row-height: 3rem;
 
   display: flex;
   flex-direction: column;
-  margin: 0;
+  gap: var(--spacing-xs);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-s);
   padding: var(--spacing-s);
+}
+
+.pendingListHeader {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+// 8.5 rows tall — the half-row is a deliberate "there's more below" affordance.
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
   max-height: calc(8.5 * var(--row-height));
   overflow-y: auto;
   list-style: none;
@@ -61,6 +76,16 @@
   &::-webkit-scrollbar {
     width: 4px;
   }
+}
+
+.pendingListEmpty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(3 * var(--row-height));
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+  text-align: center;
 }
 
 .pendingRow {

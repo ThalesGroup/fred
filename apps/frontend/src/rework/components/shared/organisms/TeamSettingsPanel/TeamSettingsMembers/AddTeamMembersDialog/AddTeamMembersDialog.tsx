@@ -189,31 +189,40 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
             />
           </div>
 
-          {pendingMembers.length > 0 && (
-            <ul className={styles.pendingList}>
-              {pendingMembers.map((member) => (
-                <li key={member.user.id} className={styles.pendingRow}>
-                  <span className={styles.pendingName}>{candidateLabel(member.user)}</span>
-                  <div className={styles.pendingRoleChips}>
-                    <TeamRoleChips
-                      heldRoles={member.roles}
-                      canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
-                      onToggle={(role, held) => handleToggleRole(member.user.id, role, held)}
+          <div className={styles.pendingListContainer}>
+            <div className={styles.pendingListHeader}>
+              {t("rework.teamSettings.members.addMembersDialog.pendingListHeader")}
+            </div>
+            {pendingMembers.length > 0 ? (
+              <ul className={styles.pendingList}>
+                {pendingMembers.map((member) => (
+                  <li key={member.user.id} className={styles.pendingRow}>
+                    <span className={styles.pendingName}>{candidateLabel(member.user)}</span>
+                    <div className={styles.pendingRoleChips}>
+                      <TeamRoleChips
+                        heldRoles={member.roles}
+                        canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
+                        onToggle={(role, held) => handleToggleRole(member.user.id, role, held)}
+                      />
+                    </div>
+                    <IconButton
+                      variant="icon"
+                      size="medium"
+                      icon={{ category: "outlined", type: "close" }}
+                      aria-label={t("rework.teamSettings.members.addMembersDialog.removeAria", {
+                        name: candidateLabel(member.user),
+                      })}
+                      onClick={() => handleRemovePending(member.user.id)}
                     />
-                  </div>
-                  <IconButton
-                    variant="icon"
-                    size="medium"
-                    icon={{ category: "outlined", type: "close" }}
-                    aria-label={t("rework.teamSettings.members.addMembersDialog.removeAria", {
-                      name: candidateLabel(member.user),
-                    })}
-                    onClick={() => handleRemovePending(member.user.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className={styles.pendingListEmpty}>
+                {t("rework.teamSettings.members.addMembersDialog.pendingListEmpty")}
+              </div>
+            )}
+          </div>
 
           <div className={styles.actions}>
             <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>

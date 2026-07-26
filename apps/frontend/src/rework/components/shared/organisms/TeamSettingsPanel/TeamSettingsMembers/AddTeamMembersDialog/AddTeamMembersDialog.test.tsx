@@ -136,6 +136,13 @@ describe("AddTeamMembersDialog", () => {
     expect(confirmButton().disabled).toBe(true);
   });
 
+  it("shows the pending-list container with its header and an empty placeholder even with no candidates selected", () => {
+    render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
+    expect(portal().textContent).toContain("rework.teamSettings.members.addMembersDialog.pendingListHeader");
+    expect(portal().textContent).toContain("rework.teamSettings.members.addMembersDialog.pendingListEmpty");
+    expect(portal().querySelector('ul[class*="pendingList"]')).toBeNull();
+  });
+
   it("does not focus the search input on open", () => {
     render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
     const input = portal().querySelector("input");
@@ -172,9 +179,11 @@ describe("AddTeamMembersDialog", () => {
     click(removeButton ?? null);
 
     // The removed candidate becomes searchable again, so it can still appear
-    // in the (closed) suggestions dropdown — assert on the pending list
-    // specifically, not the whole dialog's text.
-    expect(portal().querySelector('[class*="pendingList"]')).toBeNull();
+    // in the (closed) suggestions dropdown — assert on the rows list
+    // specifically (tag-scoped, so it doesn't match the always-present
+    // pendingListContainer/pendingListEmpty), not the whole dialog's text.
+    expect(portal().querySelector('ul[class*="pendingList"]')).toBeNull();
+    expect(portal().textContent).toContain("rework.teamSettings.members.addMembersDialog.pendingListEmpty");
     expect(confirmButton().disabled).toBe(true);
   });
 

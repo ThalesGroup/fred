@@ -1519,6 +1519,8 @@
           "buttonLabel": "Ajouter des membres",
           "cancel": "Annuler",
           "confirm": "Ajouter",
+          "pendingListEmpty": "Aucun utilisateur sélectionné pour l'instant",
+          "pendingListHeader": "Membres à ajouter à l'équipe",
           "removeAria": "Retirer {{name}} de la liste",
           "searchPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
           "subtitle": "Les utilisateurs seront immédiatement ajoutés à l'équipe",
