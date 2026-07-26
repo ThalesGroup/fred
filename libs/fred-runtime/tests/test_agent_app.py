@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
@@ -564,6 +564,9 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
+        async def aclose(self) -> None:
+            return None
+
         async def get(self, url: str, headers: dict[str, str] | None = None):
             assert (
                 url
@@ -670,6 +673,9 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
+        async def aclose(self) -> None:
+            return None
+
         async def get(self, url: str, headers: dict[str, str] | None = None):
             # Resolution says the instance is owned by "fredlab".
             return _FakeResponse(
@@ -724,6 +730,195 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
 
     assert response.status_code == 403
     assert "team" in response.json()["detail"].lower()
+
+
+def _managed_resolution_payload(owner_team_id: str = "fredlab") -> dict[str, object]:
+    return {
+        "agent_instance_id": "instance-1",
+        "template_agent_id": "sentinel.react.v2",
+        "owner_scope": "team",
+        "owner_team_id": owner_team_id,
+        "enabled": True,
+        "tuning": {
+            "role": "Sentinel",
+            "description": "Reports the current team scope.",
+            "tags": ["ops"],
+            "fields": [],
+        },
+    }
+
+
+class _RecordingResponse:
+    """Minimal httpx.Response double — status_code/json()/text only, as used by _resolve_agent_instance."""
+
+    def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+        self.text = json.dumps(payload)
+        self.reason_phrase = "error"
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
+def _install_recording_async_client(monkeypatch, response_factory):
+    """
+    Swap `httpx.AsyncClient` itself for a bare `.get()`/`.aclose()` recorder —
+    the same technique the control-plane execution tests above already use —
+    so the returned instance keeps the static type `httpx.AsyncClient` and can
+    be passed straight to `_resolve_agent_instance(http_client=...)`.
+
+    Returns (client, calls): `calls` is the list of recorded {"url", "headers"}
+    dicts, appended to in call order — safe to inspect for ordering/isolation.
+    """
+    calls: list[dict[str, Any]] = []
+
+    class _RecordingAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            call: dict[str, Any] = {
+                "url": url,
+                "headers": dict(headers) if headers else None,
+            }
+            calls.append(call)
+            return response_factory(call)
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _RecordingAsyncClient)
+    client = agent_app_module.httpx.AsyncClient()
+    return client, calls
+
+
+def _managed_instance_request() -> "agent_app_module._AgentExecuteRequest":
+    return agent_app_module._AgentExecuteRequest(
+        agent_instance_id="instance-1", message="hi"
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_reuses_the_injected_client_across_calls(
+    monkeypatch,
+) -> None:
+    """TURN-01: the function must only use the caller-supplied client, never build
+    its own httpx.AsyncClient per resolution — that per-turn construction was the
+    finding this fix removes."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    for _ in range(3):
+        await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token-a",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+        )
+
+    assert len(calls) == 3  # the one injected client served every resolution
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
+    monkeypatch,
+) -> None:
+    """Authorization/X-Request-Id stay per-request on the shared client — no
+    default header must survive from one turn's resolution to the next."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    await agent_app_module._resolve_agent_instance(
+        request=_managed_instance_request(),
+        registry=registry,
+        access_token="token-alice",
+        control_plane_url="http://control-plane:8222/control-plane/v1",
+        http_client=client,
+        team_id="fredlab",
+        request_id="req-alice",
+    )
+    await agent_app_module._resolve_agent_instance(
+        request=_managed_instance_request(),
+        registry=registry,
+        access_token="token-bob",
+        control_plane_url="http://control-plane:8222/control-plane/v1",
+        http_client=client,
+        team_id="fredlab",
+        request_id="req-bob",
+    )
+
+    first, second = calls
+    assert first["headers"] == {
+        "Authorization": "Bearer token-alice",
+        "X-Request-Id": "req-alice",
+    }
+    assert second["headers"] == {
+        "Authorization": "Bearer token-bob",
+        "X-Request-Id": "req-bob",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("upstream_status", "expected_status"),
+    [(404, 404), (403, 403), (500, 502)],
+)
+async def test_resolve_agent_instance_preserves_http_error_mapping(
+    monkeypatch, upstream_status: int, expected_status: int
+) -> None:
+    """The control-plane status → pod HTTPException mapping (404/403/other→502)
+    must be unchanged now that the call runs through an injected client."""
+    client, _calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse({}, status_code=upstream_status)
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+        )
+    assert exc.value.status_code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_supports_concurrent_calls_on_one_client(
+    monkeypatch,
+) -> None:
+    """Multiple in-flight turns must resolve concurrently against the single
+    shared client without cross-talk between their request ids/headers."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    async def _resolve(request_id: str):
+        return await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+            request_id=request_id,
+        )
+
+    request_ids = [f"req-{i}" for i in range(10)]
+    results = await asyncio.gather(*[_resolve(rid) for rid in request_ids])
+
+    assert len(results) == 10
+    assert {call["headers"]["X-Request-Id"] for call in calls} == set(request_ids)
 
 
 def test_create_agent_app_initializes_user_store_during_startup(
@@ -2836,6 +3031,7 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     )
     container = PodApplicationContext(minimal_config)
     container._kpi_writer = NoOpKPIWriter()
+    container.initialize_control_plane_client()
 
     await agent_app_module._authorize_and_resolve(
         request,
@@ -2909,6 +3105,7 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
     )
     container = PodApplicationContext(minimal_config)
     container._kpi_writer = _RecordingKPIWriter()
+    container.initialize_control_plane_client()
 
     await agent_app_module._authorize_and_resolve(
         request,

@@ -67,6 +67,7 @@ from .agent_app import (
     _iterate_runtime_event_payloads,
     _resolve_agent_instance,
 )
+from .dependencies import get_pod_container_from_app
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,9 @@ def create_openai_compat_router(
             registry=registry,
             access_token=access_token,
             control_plane_url=get_runtime_context().config.control_plane_url,
+            http_client=get_pod_container_from_app(
+                http_request.app
+            ).get_control_plane_http_client(),
         )
 
         completion_id = f"chatcmpl-{uuid4().hex}"

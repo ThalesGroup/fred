@@ -1169,6 +1169,7 @@ async def _resolve_agent_instance(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
     control_plane_url: str | None,
+    http_client: httpx.AsyncClient,
     team_id: str | None = None,
     request_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
@@ -1255,8 +1256,7 @@ async def _resolve_agent_instance(
         # (TURN-01 evidence gap: no way to join a turn to its binding call
         # besides timestamps).
         headers["X-Request-Id"] = request_id
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url, headers=headers or None)
+    response = await http_client.get(url, headers=headers or None)
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=404, detail=response.text or "Unknown agent instance."
@@ -1590,6 +1590,7 @@ async def _authorize_and_resolve(
             registry=registry,
             access_token=access_token,
             control_plane_url=get_runtime_context().config.control_plane_url,
+            http_client=container.get_control_plane_http_client(),
             team_id=request.effective_team_id(),
             request_id=binding_request_id,
         )
@@ -4000,12 +4001,13 @@ def create_agent_app(
         # Boot order (must be preserved — each step depends on the previous):
         # 1. log_setup         — formatter/handlers ready for all subsequent logs
         # 2. initialize_kpi_writer — needed by bootstrap_observability
-        # 3. bootstrap_observability — global tracer + metrics provider
-        # 4. attach_pod_container — container in app.state before any request
-        # 5. initialize_sql    — async, may take time
-        # 6. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 7. start_kpi_tasks   — asyncio tasks, after SQL engine is known
-        # 8. set_runtime_context — wires all built parts into the global config
+        # 3. initialize_control_plane_client — sync, no network until first call
+        # 4. bootstrap_observability — global tracer + metrics provider
+        # 5. attach_pod_container — container in app.state before any request
+        # 6. initialize_sql    — async, may take time
+        # 7. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 8. start_kpi_tasks   — asyncio tasks, after SQL engine is known
+        # 9. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
@@ -4016,6 +4018,7 @@ def create_agent_app(
         )
         container = build_pod_container(config)
         container.initialize_kpi_writer()
+        container.initialize_control_plane_client()
         bootstrap_observability(
             config.observability, kpi_writer=container.get_kpi_writer()
         )
