@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .authz import usable_model_capability_ids
 from .catalog import (
     ModelCatalog,
     load_model_catalog,
@@ -21,6 +22,7 @@ from .contracts import (
     FrozenModel,
     MatchValue,
     ModelCapability,
+    ModelNotUsableError,
     ModelProfile,
     ModelRouteMatch,
     ModelRouteRule,
@@ -38,6 +40,7 @@ __all__ = [
     "MatchValue",
     "ModelCapability",
     "ModelCatalog",
+    "ModelNotUsableError",
     "ModelProfile",
     "ModelRouteMatch",
     "ModelRouteRule",
@@ -49,4 +52,5 @@ __all__ = [
     "RoutedChatModelFactory",
     "load_model_catalog",
     "load_model_routing_policy_from_catalog",
+    "usable_model_capability_ids",
 ]

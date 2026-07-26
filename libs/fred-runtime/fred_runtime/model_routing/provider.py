@@ -26,6 +26,7 @@ from typing import Protocol
 
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
+from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
@@ -33,6 +34,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from .contracts import (
     ModelCapability,
+    ModelNotUsableError,
     ModelSelection,
     ModelSelectionRequest,
     ModelSelectionSource,
@@ -194,6 +196,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         Observability signals to look at:
         - info log on rule hit: `[V2][MODEL_ROUTING] ... source=rule rule=...`
         - debug log on default hit: `[V2][MODEL_ROUTING] ... source=default ...`
+
+        Fail-closed enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7):
+        raises `ModelNotUsableError` — never silently substitutes a different
+        model — when `binding.usable_model_ids` is not `None` (ReBAC active)
+        and the resolved model isn't in it. `binding.usable_model_ids` is
+        computed ONCE per turn by the caller, never here — this method may
+        run several times per turn (once per distinct `operation`) and must
+        never itself trigger a ReBAC call.
         """
         selection = self.select(
             definition=definition,
@@ -202,6 +212,24 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             purpose=purpose,
             operation=operation,
         )
+        if binding.usable_model_ids is not None:
+            capability_id = model_capability_id(
+                selection.model.provider or "", selection.model.name or ""
+            )
+            if capability_id not in binding.usable_model_ids:
+                logger.warning(
+                    "[V2][MODEL_ROUTING] denied: team=%s model=%s/%s (%s) not "
+                    "in usable_model_ids",
+                    binding.portable_context.team_id,
+                    selection.model.provider,
+                    selection.model.name,
+                    capability_id,
+                )
+                raise ModelNotUsableError(
+                    capability_id=capability_id,
+                    provider=selection.model.provider or "",
+                    name=selection.model.name or "",
+                )
         model = self._provider.build_model(
             selection.model, capability=selection.capability
         )

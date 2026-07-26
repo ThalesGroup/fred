@@ -441,3 +441,17 @@ class BoundRuntimeContext(FrozenModel):
             "Use this for tracing, correlation, identity, and small non-sensitive execution metadata."
         ),
     )
+    usable_model_ids: tuple[str, ...] | None = Field(
+        default=None,
+        description=(
+            'kind="model" capability ids this turn\'s team may use (OBSERV-02 '
+            "v3, AGENT-CAPABILITY-RFC.md §8.7), computed ONCE per turn by the "
+            "caller (never inside model-routing resolution — that runs "
+            "multiple times per turn and must never trigger a network call). "
+            "None means ReBAC is disabled/unconfigured — no restriction, the "
+            "same dev/identity-only posture every other pod-side check "
+            "already applies. A non-None, possibly-empty tuple means ReBAC "
+            "is active and this is exactly what is allowed; "
+            "RoutedChatModelFactory fails closed against it."
+        ),
+    )

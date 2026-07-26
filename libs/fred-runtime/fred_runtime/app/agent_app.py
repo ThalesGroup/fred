@@ -2520,6 +2520,19 @@ async def _iterate_runtime_event_payloads(
     ctx = request.context or {}
     correlation_id = ctx.get("correlation_id", request_id)
     resolved_team_id = team_id or ctx.get("team_id")
+    # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
+    # computed ONCE per turn, here — never inside model-routing resolution,
+    # which runs multiple times per turn and must never itself make a ReBAC
+    # call. No team context (agent-to-agent invocation) → no restriction,
+    # the same posture _authorize_execution_or_raise already applies to a
+    # teamless request.
+    usable_model_ids: tuple[str, ...] | None = None
+    if resolved_team_id is not None:
+        from ..model_routing import usable_model_capability_ids
+
+        rebac = get_runtime_context().config.rebac_engine
+        ids = await usable_model_capability_ids(rebac, resolved_team_id)
+        usable_model_ids = tuple(ids) if ids is not None else None
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None
@@ -2593,6 +2606,7 @@ async def _iterate_runtime_event_payloads(
     binding = BoundRuntimeContext(
         runtime_context=runtime_context,
         portable_context=portable_context,
+        usable_model_ids=usable_model_ids,
     )
 
     services = _build_runtime_services(

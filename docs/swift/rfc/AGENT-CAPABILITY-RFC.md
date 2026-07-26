@@ -1936,41 +1936,82 @@ exists for models today**: model selection is a per-turn runtime decision
 (`ModelRoutingResolver`, `libs/fred-runtime/fred_runtime/app/agent_app.py`)
 with no authorization check in the path at all — confirmed by grep, there is
 no `allowed_models`/`model_allowlist` concept anywhere in the codebase to
-reconcile with. This RFC does not yet specify that chokepoint; it is the
-one non-mechanical piece of new work this amendment introduces, and per the
-capability-boundary rule ("never put capability runtime code in
-control-plane") it must live in `fred-runtime`'s model-routing layer, not
-control-plane. Recommended shape for the follow-up design pass: extend
-`ModelRoutingResolver` to consult a `usable_model_ids`-style set (mirroring
-`usable_capability_ids`, §8.1) sourced from control-plane before resolving a
-profile; **fail closed** (reject the turn with an explicit
-"model disabled for this team" error) rather than silently substituting a
-different model when the resolved profile's capability entry is disabled —
-silent substitution would violate the "consistent experience" goal this
-whole dashboard effort is built around, and could route a turn to a model
-the team never agreed to use. This fallback rule is a recommendation, not
-yet confirmed — flag for explicit developer sign-off before implementation
-(Step 3).
+reconcile with.
 
-**Migration:** none for `models_catalog.yaml` itself (it stays exactly as
-is, routing-only). The one-time step is anchoring each projected `kind="model"`
-entry to the singleton organization (`ensure_capability_anchor`, reused
-unchanged) and deciding the initial `default_on` position for each of the
-~13 entries — recommend **default-on for all currently-routable models** at
-cutover (nothing is disabled on day one; platform_admin opts specific models
-out afterward), so the migration is a pure visibility addition, not a
-behavior change. This anchoring/default_on step only matters once the
-enforcement chokepoint below exists — until then, `kind="model"` entries are
-purely visible/toggleable in the admin catalog with zero effect on actual
-routing, so there is nothing to migrate yet.
+**Implemented (2026-07-26).** Confirmed with the developer: live per-request
+OpenFGA checks are already this platform's standing security posture for
+execution authorization (`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` —
+"never cached", a control-plane-signed/cached grant was explicitly rejected
+there, Appendix A). The naive placement — a live check inside
+`ModelRoutingResolver` — would run it multiple times per turn (once per
+distinct `operation`: routing, planning, tool-call, …), which is genuinely
+hotter than the existing once-per-request posture. Resolved shape, consistent
+with both constraints:
 
-**Status (2026-07-25):** the catalog-projection half above (fred-sdk `kind`
-literal + `model_capability_id`, the runtime endpoint, control-plane's
-fetch/aggregate/collision-guard) is implemented and tested — offline suites
-green: fred-sdk, fred-runtime, control-plane-backend. `CapabilitiesPage.tsx`'s
-`KIND_FILTERS` widen (frontend) is deferred to the same batch as the rest of
-this delivery's frontend work. The enforcement chokepoint below remains the
-one open, unimplemented piece.
+- `usable_model_capability_ids(rebac, team_id)` (new,
+  `fred_runtime/model_routing/authz.py`) — the pod's own local OpenFGA
+  `ListObjects` query (the pod already holds a `rebac_engine`, no
+  control-plane round-trip), computed **once per turn**, at the same point
+  `_authorize_execution_or_raise` already runs
+  (`_iterate_runtime_event_payloads`, `agent_app.py`) — not inside model
+  routing itself.
+- The result threads through the turn via a new
+  `BoundRuntimeContext.usable_model_ids: tuple[str, ...] | None` field
+  (fred-sdk) — `None` = ReBAC disabled/unconfigured, no restriction (the
+  same dev/identity-only posture every other pod-side check already has);
+  a non-`None`, possibly-empty tuple = exactly what's allowed.
+- `RoutedChatModelFactory.build_for_chat` (the single method both `build()`
+  and `build_for_operation()` funnel through) checks the resolved model
+  against it and **fails closed** — raises `ModelNotUsableError`, never
+  silently substitutes — when the set is present and the model isn't in it.
+
+**Deliberate small duplication, not resolved here:** `usable_model_capability_ids`
+mirrors control-plane's `capabilities/authz.py::usable_capability_ids` field-
+for-field (same OpenFGA relations, same personal-team contextual-edge
+handling) because that control-plane module cannot be imported into
+fred-runtime (separate deployables). The correct long-term fix — move this
+query logic into `fred-core`, which both already depend on — is real,
+separate refactor scope against already-shipped, tested control-plane code;
+tracked in `NOTES-OBSERV-02-FOLLOWUPS.md`, not attempted under this branch.
+
+**⚠️ Deployment-sequencing hazard, not yet resolved — blocks enabling ReBAC
+enforcement in any live deployment:** today, no team holds an explicit
+`can_use` grant on any `model__*` capability (nothing seeds one). The moment
+ReBAC is active for a team, `usable_model_capability_ids` returns an EMPTY
+set for it — not "unrestricted" — and every chat turn for that team fails
+closed with `ModelNotUsableError`. **The default-on seeding step below is
+not an optional migration nicety here — it is a hard prerequisite.** It must
+land and run (anchoring every currently-routable model + setting
+`default_on=True`, mirroring how `kind="tool"`/`kind="agent"` were seeded at
+their own CAPAB-01 rollout) in the same deploy as this enforcement code, or
+strictly before it — never after. This is the single most important thing
+for whoever picks up deployment of this piece to get right first.
+
+**Migration — NOT YET IMPLEMENTED, required before this can go live:**
+none for `models_catalog.yaml` itself (it stays exactly as is, routing-only).
+The required one-time step is anchoring each projected `kind="model"` entry
+to the singleton organization (`ensure_capability_anchor`, reused unchanged)
+and setting `default_on=True` for every currently-routable model — see the
+hazard box above for why this is a hard prerequisite, not an optional
+migration nicety, once the enforcement code below is deployed. Nothing
+disabled on day one; platform_admin opts specific models out afterward.
+
+**Status (2026-07-26):** both halves are now implemented and tested —
+offline suites green across fred-sdk, fred-runtime, control-plane-backend:
+- Catalog projection (visibility/toggle in the admin matrix): fred-sdk `kind`
+  literal + `model_capability_id`, the runtime `GET /agents/models-catalog`
+  endpoint, control-plane's fetch/aggregate/collision-guard.
+- Runtime enforcement (fail-closed): `usable_model_capability_ids`,
+  `BoundRuntimeContext.usable_model_ids`, `RoutedChatModelFactory`'s gate,
+  `ModelNotUsableError`.
+
+Two things remain, both required before production rollout, neither started:
+1. **The default-on seeding migration** (hazard box above) — without it,
+   enabling ReBAC for any team breaks all chat for that team.
+2. `CapabilitiesPage.tsx`'s `KIND_FILTERS` widen (frontend) — deferred to
+   the same batch as the rest of this delivery's frontend work (F1-F6);
+   until then, `platform_admin` can see `kind="model"` entries only via the
+   raw `GET /admin/capabilities` API, not the admin UI.
 
 ---
 
