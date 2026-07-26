@@ -778,6 +778,21 @@ would misrepresent that as still a live choice. No client-side write of
 `joining_mode` ever accompanies a visibility PATCH — the resulting
 `joining_mode`, if it changes, comes back from the server on refetch.
 
+**`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
+previously had no disabled styling at all — a `disabled` item was
+functionally inert (native attribute blocks the click) but visually
+identical to an enabled one. Added `&:disabled` with `pointer-events: none`
+(bulletproof no-hover/no-active/no-click, no need to guard the existing
+`:hover`/`:active` rules individually) plus, scoped to
+`.stateLayer:not([data-selected="true"])` only, a transparent background
+and `on-surface-muted` label color. Scoping to the unselected sub-case
+matters: the joining-mode group's disabled-while-private state always has
+one selected item (`invite_only`, forced) and one not (`open`) — the
+selected item keeps its normal filled selected-color styling, only the
+unselected `open` option reads as muted/transparent. Generic addition to
+the shared atom (any future disabled+unselected item elsewhere gets the
+same treatment for free), not special-cased to this one call site.
+
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
 matching every existing consumer's look exactly), applied via a
