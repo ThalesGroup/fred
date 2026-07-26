@@ -1,8 +1,10 @@
 # RFC: Rework Knowledge Workspace — Robust Resource Browser
 
-**Status:** proposed — RFC/workplan created 2026-06-18
+**Status:** proposed — RFC/workplan created 2026-06-18; phases A/C/D shipped as `TeamResourcesPage`
 **Author:** Dimitri Tombroff
 **Date:** 2026-06-18
+**Amended:** 2026-07-25 — Maxime Daragon (§13 — Resources dashboard v2: tab navigation, rich
+table, usage cards; supersedes parts of §4.1/§4.2, see note there)
 **ID:** FRONT-09
 **Backlog:** `docs/swift/backlog/FRONTEND-BACKLOG.md §15`
 **Related:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5`
@@ -80,6 +82,11 @@ FRONT-09 does not implement:
 
 ### 4.1 One workspace, typed views
 
+> **Superseded by §13 (2026-07-25).** This table predates FILES-04, which has since shipped
+> all four roots natively (`docs/swift/design/FILESYSTEM.md`). "Agent/User Files" is no
+> longer a future item — it, "Espace partagé", and "Espace perso" are live today alongside
+> Documents/Corpus. Kept below for history; see §13.1 for the current product model.
+
 The user-facing mental model is a workspace with typed views:
 
 | View | Primary content | First release |
@@ -95,6 +102,11 @@ Documents are the first implementation target because they are the highest-volum
 and already have upload, processing, preview, and task status behavior.
 
 ### 4.2 Recommended layout
+
+> **Superseded by §13.2 (2026-07-25).** The 3-pane layout below is what phases A/C/D shipped
+> as `TeamResourcesPage` (tree on the left, all four roots expandable at once). §13.2 proposes
+> replacing the left tree with a tab switcher (one root at a time) plus a breadcrumb
+> drill-down inside the selected root.
 
 Use an application workspace layout, not a landing-page or card dashboard:
 
@@ -423,6 +435,9 @@ Accessibility:
 
 ## 9. Workplan
 
+> §13 (2026-07-25) adds phases G/H/I below: tab navigation + breadcrumb, a rich `DataTable`
+> row (size/created/modified/author/status columns), search/sort, and usage dashboard cards.
+
 ### FRONT-09.A — RFC, route, and shell
 
 - [ ] Add route-gated `KnowledgeWorkspacePage` under rework.
@@ -576,3 +591,148 @@ Removal candidates after gate:
 - `apps/frontend/src/pages/KnowledgePage.tsx` legacy wrapper portions
 - `apps/frontend/src/components/documents/libraries/*` once no route imports them
 - `apps/frontend/src/components/resources/*` once resource views are replaced or retired
+
+---
+
+## 13. Amendment (2026-07-25) — Resources dashboard v2: tab navigation, rich table, usage cards
+
+**Status:** proposed — triggered by review of a UI mockup for `TeamResourcesPage`; not yet
+scheduled or implemented. Written against the codebase as it stands today (phases A/C/D of
+this RFC already shipped `TeamResourcesPage`, `DocumentWorkspace`, `TeamFilesystemBrowser`,
+`AgentFilesystemBrowser` — none of that is being redone here, only extended).
+
+### 13.1 Updated product model (supersedes §4.1's Documents/Agent-User-Files split)
+
+FILES-04 has shipped all four roots natively since this RFC was written. The current,
+accurate model:
+
+| View | Primary content | Status |
+| --- | --- | --- |
+| Corpus d'équipe | ingested documents, RAG-indexed (formerly "Documents") | live — `DocumentWorkspace` |
+| Espace perso | user's private files inside the team | live — `TeamFilesystemBrowser` |
+| Espace partagé | team-shared files; hidden for personal teams (`isPersonalTeam`) | live — `TeamFilesystemBrowser` |
+| Agents | per-agent-instance generated files, grouped by agent | live — `AgentFilesystemBrowser` |
+| Chat Contexts / Templates / Prompts / Operations | unchanged from §4.1 | still later/out of scope |
+
+### 13.2 Updated layout (supersedes §4.2's 3-pane tree)
+
+Replace the always-expanded left tree with a tab switcher — one root visible at a time,
+matching the four rows above — plus a breadcrumb drill-down inside the selected root:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Header: title, usage/quota cards (§13.5)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│ [Corpus d'équipe] [Espace perso] [Espace partagé] [Agents]           │
+├─────────────────────────────────────────────────────────────────────┤
+│ Breadcrumb: Ressources > Dossier 1 > Dossier 2      [+] [↑] [search] │
+│ DataTable (§13.3), paginated                                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Reuse the existing `Breadcrumb` molecule
+(`shared/molecules/Breadcrumb/Breadcrumb.tsx`) — already built and tested. The optional
+detail drawer (§5.1/§5.4) is unaffected.
+
+Open question (see §13.6 decision 7): does dropping "all roots expanded at once" regress
+any workflow that relied on seeing two roots side by side? No such workflow exists in the
+current code, but that doesn't rule out expected demand — needs a UX pass before this
+lands, not an assumption baked into the plan.
+
+### 13.3 Rich table rows — adopt `DataTable`, retire single-line rows
+
+`shared/molecules/DataTable/DataTable.tsx` already has the exact pagination footer this
+amendment needs (rows-per-page 20/50/100, first/prev/page-number/next/last), built and
+shipped separately from this RFC. Columns: Name, Taille, Création (date + author),
+Dernière MAJ (date + author), Statut, a preview action, and an actions menu.
+
+- **Corpus d'équipe:** zero backend change. `DocumentMetadata` already carries every field
+  needed: `file.file_size_bytes`, `identity.created`/`identity.author`,
+  `identity.modified`/`identity.last_modified_by`.
+- **Espace perso / Espace partagé / Agents:** `FilesystemResourceInfoResult` (the `/fs` DTO)
+  only carries `size`, `modified`, `created_by` today — no separate `created` timestamp, no
+  `modified_by` distinct from the original uploader. Add both fields (workplan phase H).
+
+### 13.4 Search + sort
+
+No search input or sort control exists in any of the three current browser components —
+folders/files are alphabetically pre-sorted client-side only. §6.2's
+`POST /documents/metadata/browse` contract already specs `query?` and `sort?` fields; they
+were anticipated but never wired to a UI control for Corpus. The `/fs/ls` endpoint backing
+the other three roots has no equivalent params yet — see §13.6 decision 6 for whether that
+gap needs closing in this same phase.
+
+### 13.5 Usage dashboard cards
+
+- **Histogram, files by type:** `shared/molecules/BarChart/BarChart.tsx` already exists
+  (used on `DataHub`/`TeamUsagePage`). Needs one new per-team, per-file-type count
+  aggregate — a small addition grouping on the already-stored file type.
+- **Pie chart, size by type + quota remaining:** `shared/molecules/PieChart/PieChart.tsx`
+  already exists. The quota/limit and current total-usage-in-bytes numbers already exist
+  server-side (`knowledge_flow_backend/features/ingestion/ingestion_controller.py:416`
+  `_check_quota_before_upload`; `control_plane_backend/teams/service.py:1203`
+  `max_resources_storage_size`) — but only as one aggregate total, not broken down by file
+  type. Needs a new by-type size aggregate; an extension of the existing quota check, not a
+  new subsystem.
+- **Tokens consumed by ingestion, + evolution graph:** **no tracking exists today.**
+  `TeamUsagePage` already tracks LLM token usage over time/by-agent/by-model
+  (`useUserTokenUsageOverTimeQuery` and siblings), but that is chat/agent inference usage —
+  not tokens spent by the ingestion pipeline's own LLM calls (summarization, embedding).
+  Verified: no token accounting exists anywhere in `knowledge_flow_backend`'s ingestion
+  path. This needs new instrumentation at the LLM/embedding call sites used during
+  ingestion — a different layer than the Resources UI. See §13.6 decision 5.
+
+### 13.6 New open decisions (extends §11)
+
+5. Should ingestion-time token tracking be its own tracked item (likely an `OBSERV-xx` ID,
+   since it's metrics/instrumentation, not a browser feature) rather than part of FRONT-09's
+   UI scope? **Recommendation: yes** — it touches LLM call instrumentation, not the
+   resources browser, and shouldn't block phases G/H/I below.
+6. Do Espace perso / Espace partagé / Agents get server-side search/sort in this same
+   phase, or does client-side sorting stay acceptable there given smaller expected tree
+   sizes? **Recommendation: defer** — ship search/sort for Corpus first (already spec'd in
+   §6.2), revisit the other three roots once real usage data shows tree sizes justify it.
+7. Does replacing the always-expanded tree with tabs regress a workflow that benefited
+   from seeing multiple roots at once? Needs a UX pass before §13.2 is implemented.
+
+### 13.7 Workplan additions
+
+#### FRONT-09.G — Tab navigation + breadcrumb
+
+- [ ] Replace `TeamResourcesPage`'s always-expanded root tree with a tab switcher (Corpus
+      d'équipe / Espace perso / Espace partagé / Agents), keeping the existing
+      `isPersonalTeam` rule that hides Espace partagé.
+- [ ] Wire the existing `Breadcrumb` molecule to drive drill-down inside the selected root.
+- [ ] Update `docs/swift/ux/COMPONENT-UX.md` with the new navigation model, noting it
+      supersedes the tree description.
+
+Acceptance: switching tabs and drilling into folders never triggers a request for a
+sibling root's content.
+
+#### FRONT-09.H — Rich table + search/sort
+
+- [ ] Add `created`/`modified_by` (naming TBD) to `FilesystemResourceInfoResult` in
+      Knowledge Flow; regenerate the OpenAPI client.
+- [ ] Replace `DocRow`/`FsEntry` single-line rows with `DataTable` (columns: Name, Taille,
+      Création, Dernière MAJ, Statut, preview, actions) across all four tabs.
+- [ ] Wire `DataTable`'s pagination footer to each tab's server-side offset/limit contract
+      (§6.2), not full-set client pagination.
+- [ ] Add a search input wired to `POST /documents/metadata/browse`'s existing `query`
+      field for Corpus.
+- [ ] Add a "Trier par" sort control wired to the existing `sort` field for Corpus.
+
+Acceptance: all four tabs show the same column set with real data, no `limit=10000`
+fetches; search/sort round-trip through the backend for Corpus; the other three tabs at
+minimum keep working with client-side sort as a documented interim state (§13.6 decision 6).
+
+#### FRONT-09.I — Usage dashboard cards
+
+- [ ] Add a per-team, per-file-type count aggregate (files-by-type histogram).
+- [ ] Add a per-team, per-file-type size aggregate alongside the existing quota/total-usage
+      numbers (size-by-type + remaining-quota pie chart).
+- [ ] Render both with the existing `BarChart`/`PieChart` molecules.
+- [ ] Ingestion token-consumption card: out of scope for this phase — track separately per
+      §13.6 decision 5.
+
+Acceptance: both cards render from real per-team data with no client-side aggregation over
+unbounded file lists.
