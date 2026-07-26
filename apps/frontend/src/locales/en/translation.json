@@ -1574,7 +1574,8 @@
         "teamBanner": {
           "title": "Team banner",
           "import": "Import",
-          "hint": "JPEG, PNG, or WebP · 5 MB maximum"
+          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
+          "noBanner": "No banner selected"
         },
         "teamPrompt": {
           "label": "Team context (prompt)",

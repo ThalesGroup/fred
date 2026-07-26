@@ -119,3 +119,21 @@ describe("TeamSettingsParameters joining mode", () => {
     expect(h.updateTeam).not.toHaveBeenCalled();
   });
 });
+
+describe("TeamSettingsParameters banner preview", () => {
+  it("shows an empty-state label when the team has no banner", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("rework.teamSettings.parameters.teamBanner.noBanner");
+  });
+
+  it("renders the banner image when the team has one", () => {
+    const team = { ...baseTeam("invite_only"), banner_image_url: "https://example.com/banner.png" };
+    render(<TeamSettingsParameters team={team} />);
+
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("https://example.com/banner.png");
+    expect(container.textContent).not.toContain("rework.teamSettings.parameters.teamBanner.noBanner");
+  });
+});

@@ -145,7 +145,15 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
               </Button>
               <span className={styles["team-banner-hint"]}>{t("rework.teamSettings.parameters.teamBanner.hint")}</span>
             </div>
-            <img className={styles["team-banner-preview"]} src={bannerImageUrl} alt="" />
+            <div className={styles["team-banner-preview"]}>
+              {bannerImageUrl ? (
+                <img className={styles["team-banner-preview-image"]} src={bannerImageUrl} alt="" />
+              ) : (
+                <span className={styles["team-banner-preview-empty"]}>
+                  {t("rework.teamSettings.parameters.teamBanner.noBanner")}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

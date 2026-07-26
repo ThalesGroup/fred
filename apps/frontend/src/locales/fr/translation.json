@@ -1574,7 +1574,8 @@
         "teamBanner": {
           "title": "Bannière de l'équipe",
           "import": "Importer",
-          "hint": "JPEG, PNG ou WebP · 5 Mo maximum"
+          "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
+          "noBanner": "Aucune bannière sélectionnée"
         },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
