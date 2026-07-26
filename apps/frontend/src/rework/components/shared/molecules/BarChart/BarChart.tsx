@@ -118,6 +118,7 @@ export default function BarChart({
                   axisLine={false}
                 />
                 <Tooltip
+                  cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
                     background: css["--surface-container-highest"],
                     border: `1px solid ${css["--outline-retreat"]}`,
@@ -150,6 +151,7 @@ export default function BarChart({
                   axisLine={false}
                 />
                 <Tooltip
+                  cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
                     background: css["--surface-container-highest"],
                     border: `1px solid ${css["--outline-retreat"]}`,
