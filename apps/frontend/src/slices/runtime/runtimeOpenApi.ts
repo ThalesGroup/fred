@@ -102,6 +102,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/mcp-catalog` }),
     }),
+    getModelsCatalogPodV1AgentsModelsCatalogGet: build.query<
+      GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse,
+      GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg
+    >({
+      query: () => ({ url: `/pod/v1/agents/models-catalog` }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -244,6 +250,9 @@ export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiArg = {
 };
 export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiResponse = /** status 200 Successful Response */ McpCatalogResponse;
 export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
+export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse =
+  /** status 200 Successful Response */ ModelCatalogResponse;
+export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
@@ -384,11 +393,19 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type TeamOperationRouteRule = {
+  operation: string;
+  purpose?: string | null;
+  rule_id: string;
+  target_profile_id: string;
+};
 export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
   agent_instance_id?: string | null;
   attachments_markdown?: string | null;
+  /** Team-chosen default chat model profile id (TEAM-ROUTING-POLICY-RFC.md §3/§8), resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml rule matches (§8.3) — the static YAML rules remain an ops-level override this can never beat. */
+  chat_default_profile_id?: string | null;
   checkpoint_id?: string | null;
   context_prompt_text?: string | null;
   correlation_id?: string | null;
@@ -398,6 +415,8 @@ export type RuntimeContext = {
   include_corpus_scope?: boolean | null;
   include_session_scope?: boolean | null;
   language?: string | null;
+  /** Team-authored per-operation model-routing overrides (TEAM-ROUTING-POLICY-RFC.md §3/§8), same resolution/precedence notes as chat_default_profile_id above. `None`, not `[]`, when unset — matches every other Group C list field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. */
+  operation_route_rules?: TeamOperationRouteRule[] | null;
   refresh_token?: string | null;
   search_policy?: ("strict" | "hybrid" | "semantic") | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
@@ -669,6 +688,16 @@ export type McpCatalogEntry = {
 export type McpCatalogResponse = {
   servers: McpCatalogEntry[];
 };
+export type ModelCatalogEntry = {
+  description?: string | null;
+  id: string;
+  name: string;
+  profile_ids?: string[];
+  provider: string;
+};
+export type ModelCatalogResponse = {
+  models: ModelCatalogEntry[];
+};
 export type Channel =
   | "final"
   | "plan"
@@ -860,7 +889,8 @@ export type CapabilityCatalogEntry = {
   /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   id: string;
-  kind?: "tool" | "agent";
+  kind?: "tool" | "agent" | "model";
+  model_profile_ids?: string[];
   /** i18n key */
   name: string;
   route_base_url?: string | null;
@@ -971,6 +1001,8 @@ export const {
   useLazyGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
+  useGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
+  useLazyGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,

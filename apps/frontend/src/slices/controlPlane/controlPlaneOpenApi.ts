@@ -533,6 +533,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setCapabilityPersonalScopeRequest,
       }),
     }),
+    getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
+      GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
+      GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy` }),
+    }),
+    updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: build.mutation<
+      UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiResponse,
+      UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy`,
+        method: "PATCH",
+        body: queryArg.updateTeamRoutingPolicyRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1223,6 +1239,17 @@ export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityI
   capabilityId: string;
   setCapabilityPersonalScopeRequest: SetCapabilityPersonalScopeRequest;
 };
+export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
+  /** status 200 Successful Response */ TeamRoutingPolicy;
+export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
+  teamId: string;
+};
+export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiResponse =
+  /** status 200 Successful Response */ TeamRoutingPolicy;
+export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg = {
+  teamId: string;
+  updateTeamRoutingPolicyRequest: UpdateTeamRoutingPolicyRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1840,6 +1867,7 @@ export type CapabilityCatalogEntry = {
   execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
+  model_profile_ids?: string[];
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -2164,6 +2192,12 @@ export type ChatControlDescriptor = {
     [key: string]: any;
   } | null;
 };
+export type TeamOperationRouteRule = {
+  rule_id: string;
+  operation: string;
+  purpose?: string | null;
+  target_profile_id: string;
+};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -2188,6 +2222,10 @@ export type ExecutionPreparation = {
   capability_base_urls?: {
     [key: string]: string;
   };
+  /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
+  chat_default_profile_id?: string | null;
+  /** Team's per-operation model-routing overrides, same resolution notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2). */
+  operation_route_rules?: TeamOperationRouteRule[];
 };
 export type BootstrapPlatformAdminResponse = {
   /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
@@ -2282,6 +2320,16 @@ export type CapabilityPersonalScopeResult = {
 };
 export type SetCapabilityPersonalScopeRequest = {
   scope: "enabled" | "disabled" | "default";
+};
+export type TeamRoutingPolicy = {
+  team_id: string;
+  version: number;
+  chat_default_profile_id?: string | null;
+  operation_rules?: TeamOperationRouteRule[];
+};
+export type UpdateTeamRoutingPolicyRequest = {
+  chat_default_profile_id?: string | null;
+  operation_rules?: TeamOperationRouteRule[];
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2706,6 +2754,9 @@ export const {
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
+  useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
+  useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
+  useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,
