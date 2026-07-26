@@ -896,10 +896,14 @@ generic `Dialog` primitive exists yet):
 - **Header:** title + subtitle (`body-medium`, `on-surface-retreat`).
 - **Search:** the same `Autocomplete` the old inline field used, reused
   as-is (candidates come from the existing `candidate-members` endpoint,
-  already scoped to non-members).
+  already scoped to non-members) — not auto-focused on open, and its menu
+  only opens once the query is 2+ characters (`minQueryLength={2}`, see
+  below), matching the backend search's own minimum.
 - **Pending list** (`<ul>`, no column headers): one row per selected-but-
   not-yet-added candidate — name/username, a `TeamRoleChips` role selector
-  (see below), and a `close`-icon `IconButton` to drop the row. Capped at
+  (see below), and a `close`-icon `IconButton` to drop the row. `1px solid
+  outline-retreat` border, `radius-s` (`8px`) corners, `spacing-s` (`12px`)
+  padding so rows aren't flush against the border. Capped at
   `8.5 * var(--row-height)` (`--row-height: 4rem`) — the half-row is a
   deliberate "more below" affordance — with a `4px`-wide
   `::-webkit-scrollbar` (thumb color inherited from the app's existing
@@ -911,7 +915,10 @@ generic `Dialog` primitive exists yet):
   of bug just fixed on the old inline field, see above).
 - **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
   (`filled`/`primary`, disabled while the list is empty or a submit is in
-  flight).
+  flight). Clicking `Ajouter` always closes the dialog once the batch
+  finishes, whether every add succeeded or not — per-user failures still
+  surface as an error toast (`notifyApiError`), they just don't block the
+  rest of the batch or keep the dialog open for a retry.
 
 **No new backend endpoint** — `AddTeamMemberRequest` only carries one
 `relation`, so confirming calls `addTeamMember` per pending user with their
@@ -919,9 +926,7 @@ highest-priority selected role (`ELEVATED_TEAM_ROLES` order: admin > editor
 > analyst; falls back to the implicit `team_member` baseline when no chip is
 selected), then `grantTeamMemberRole` for each other selected elevated role
 — the same add-then-grant sequencing the members table already uses for
-role changes on existing members (§ AUTHZ-06 above). On partial failure,
-succeeded users drop out of the pending list and failed ones stay for a
-retry; the dialog only auto-closes once every pending user succeeds.
+role changes on existing members (§ AUTHZ-06 above).
 
 **`TeamRoleChips`** — the members table's inline role-chip toggle group
 (admin/editor/analyst, multi-select, `data-active` fills `--primary`) is
@@ -931,15 +936,26 @@ Both gate each chip via the new `canAdministerTeamRole(capabilities, role)`
 helper (`core/hooks/teamCapabilities.ts`), replacing the table's former
 private closure of the same logic.
 
-**`Autocomplete` reopen-on-type fix.** Selecting an option closes the menu
-(`setIsOpen(false)`) without blurring the input — the listbox's
-`onMouseDown` preventDefault deliberately keeps focus in the field for a
-"search again immediately" flow. Previously, typing a second query while
-still focused left the menu closed (`isOpen` was only ever set on
-focus/blur), which read as broken as soon as a flow expected back-to-back
-searches. `onChange` now also sets `isOpen(true)`, so typing while focused
-always reopens the menu — affects every `Autocomplete` consumer, not just
-this dialog (currently also `AdminTeamsPage`).
+**`Autocomplete` open-state rework (`isOpen` now derived, plus
+`minQueryLength`).** Previously `isOpen` was an imperatively toggled
+boolean (set on focus/blur/select), which needed a one-off patch when a
+second query typed while still focused (post-selection) didn't reopen the
+menu. Replaced with a derived value: `isOpen = isFocused && !dismissed &&
+queryValue.trim().length >= minQueryLength`, where `dismissed` is a
+one-shot flag set by Escape or a selection and cleared on the next
+focus/keystroke. New optional prop `minQueryLength` (default `0`, opens
+immediately on focus — e.g. `AdminTeamsPage`'s browsable full-user-list
+field) lets a consumer whose menu is backed by a server search that itself
+only queries past a minimum length (this dialog, `minQueryLength={2}`)
+avoid flashing an empty "no options" state below that threshold. Affects
+every `Autocomplete` consumer, not just this dialog.
+
+**`IconButton` default color.** `color` is now optional, defaulting to
+`on-surface-retreat` — the baseline color intended for icon buttons that
+don't need a stronger color to draw attention (e.g. this dialog's row
+`close` button). Every existing call site already passed `color` explicitly
+so this is additive only; new call sites can omit it instead of repeating
+the same value.
 
 #### Open UX issues
 

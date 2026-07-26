@@ -108,6 +108,7 @@ function selectCandidate(user: UserSummary) {
   h.candidates = [user];
   const input = portal().querySelector("input") as HTMLInputElement;
   act(() => {
+    input.focus();
     nativeInputValueSetter.call(input, user.username);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -133,6 +134,24 @@ describe("AddTeamMembersDialog", () => {
     expect(portal().textContent).toContain("rework.teamSettings.members.addMembersDialog.title");
     expect(portal().textContent).toContain("rework.teamSettings.members.addMembersDialog.subtitle");
     expect(confirmButton().disabled).toBe(true);
+  });
+
+  it("does not focus the search input on open", () => {
+    render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
+    const input = portal().querySelector("input");
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it("does not open the suggestions menu below 2 characters", () => {
+    h.candidates = [alice];
+    render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
+    const input = portal().querySelector("input") as HTMLInputElement;
+    act(() => {
+      input.focus();
+      nativeInputValueSetter.call(input, "a");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(portal().querySelector('[class*="autocomplete-container"]')?.getAttribute("data-open")).toBe("false");
   });
 
   it("selecting a candidate adds a pending row and enables confirm", () => {
@@ -206,7 +225,7 @@ describe("AddTeamMembersDialog", () => {
     });
   });
 
-  it("keeps a failed user in the pending list and does not close the dialog", async () => {
+  it("closes the dialog even when a member's add call fails", async () => {
     h.addTeamMember.mockReturnValue({ unwrap: () => Promise.reject(new Error("boom")) });
     const onClose = vi.fn();
     render(<AddTeamMembersDialog open={true} team={team} onClose={onClose} />);
@@ -218,7 +237,6 @@ describe("AddTeamMembersDialog", () => {
       await Promise.resolve();
     });
 
-    expect(portal().textContent).toContain("Alice Doe (alice)");
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });

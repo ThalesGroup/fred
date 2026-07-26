@@ -111,13 +111,14 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
     if (pendingMembers.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
 
-    const failed: PendingMember[] = [];
     for (const member of pendingMembers) {
       // AddTeamMemberRequest only carries one relation — add with the
       // highest-priority selected role (falling back to the implicit
       // `team_member` baseline), then grant any other selected elevated
       // role one at a time, exactly like the members table already does
-      // for role changes on existing members.
+      // for role changes on existing members. Errors surface via toast
+      // (below) but don't block the rest of the batch or keep the dialog
+      // open — the table reflects whatever actually succeeded.
       const initialRole = ELEVATED_TEAM_ROLES.find((role) => member.roles.includes(role)) ?? "team_member";
       const additionalRoles = member.roles.filter((role) => role !== initialRole);
 
@@ -134,14 +135,10 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
             forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail"),
           }),
       });
-      if (added === null) {
-        failed.push(member);
-        continue;
-      }
+      if (added === null) continue;
 
-      let grantsOk = true;
       for (const role of additionalRoles) {
-        const granted = await runMutationAction({
+        await runMutationAction({
           action: () =>
             grantTeamMemberRole({
               teamId: team.id,
@@ -155,14 +152,11 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
               forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail"),
             }),
         });
-        if (granted === null) grantsOk = false;
       }
-      if (!grantsOk) failed.push(member);
     }
 
     setIsSubmitting(false);
-    setPendingMembers(failed);
-    if (failed.length === 0) onClose();
+    onClose();
   };
 
   return (
@@ -187,8 +181,8 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
               textInput={{
                 placeholder: t("rework.teamSettings.members.addMembersDialog.searchPlaceholder"),
                 icon: { category: "outlined", type: "search" },
-                autoFocus: true,
               }}
+              minQueryLength={2}
               onFieldValueChange={setSearchQuery}
               options={suggestions.map((user) => ({ label: candidateLabel(user), value: user, key: user.id }))}
               onSelect={handleSelectCandidate}
@@ -208,7 +202,6 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
                     />
                   </div>
                   <IconButton
-                    color="on-surface"
                     variant="icon"
                     size="medium"
                     icon={{ category: "outlined", type: "close" }}
