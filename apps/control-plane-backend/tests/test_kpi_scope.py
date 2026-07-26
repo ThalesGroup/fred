@@ -17,9 +17,11 @@
 now shares (OBSERV-02 v3, `KPI-ANALYTICS-RFC.md` §2.3/§2.4).
 
 Covers: platform-wide requires can_observe_platform (allow/deny), team-scoped
-requires can_read_members on that team (allow/deny), and that the two checks
-are never conflated (a team-scoped request never checks the org permission
-and vice versa).
+requires can_read_members on that team (allow/deny), that the two checks are
+never conflated (a team-scoped request never checks the org permission and
+vice versa), and that `platform_admin_only` swaps in can_manage_platform for
+the platform-wide admin-only presets (storage_by_team) without touching the
+team-scoped check.
 """
 
 from __future__ import annotations
@@ -117,6 +119,61 @@ async def test_team_scope_denied_for_non_member(
 
     with pytest.raises(AuthorizationError):
         await resolve_kpi_scope(request, _user(), TeamId("team-1"))
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_only_requires_can_manage_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """can_observe_platform alone must NOT satisfy a platform_admin_only preset
+    (e.g. storage_by_team's platform-wide ranked view) — a platform_observer
+    who is not also a platform_admin must be denied."""
+    from fred_core import ORGANIZATION_ID
+
+    rebac = _FakeRebac(
+        allow={(OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)}
+    )
+    request = _request_with(monkeypatch, rebac)
+
+    with pytest.raises(AuthorizationError):
+        await resolve_kpi_scope(request, _user(), None, platform_admin_only=True)
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_only_allowed_for_can_manage_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_core import ORGANIZATION_ID
+
+    rebac = _FakeRebac(
+        allow={(OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)}
+    )
+    request = _request_with(monkeypatch, rebac)
+
+    result = await resolve_kpi_scope(request, _user(), None, platform_admin_only=True)
+
+    assert result == KpiScope(team_id=None)
+    assert rebac.calls == [
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_only_does_not_affect_team_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """platform_admin_only is an org-scope concern only — a team-scoped call
+    for the same preset still just needs can_read_members on that team."""
+    team_id = TeamId("team-1")
+    rebac = _FakeRebac(allow={(TeamPermission.CAN_READ_MEMEBERS, str(team_id))})
+    request = _request_with(monkeypatch, rebac)
+
+    result = await resolve_kpi_scope(
+        request, _user(), team_id, platform_admin_only=True
+    )
+
+    assert result == KpiScope(team_id=team_id)
+    assert rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, str(team_id))]
 
 
 @pytest.mark.asyncio

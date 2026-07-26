@@ -45,7 +45,8 @@ class KpiScope:
     """The authorized scope a KPI preset query is allowed to read.
 
     `team_id is None` means platform-wide — the caller holds
-    `can_observe_platform` on the org. Otherwise the caller holds
+    `can_observe_platform` on the org (or `can_manage_platform`, for the
+    admin-only presets — see `resolve_kpi_scope`). Otherwise the caller holds
     `can_read_members` on that one team, and every query this scope backs
     MUST filter on `dims.team_id == team_id`; `resolve_kpi_scope` only proves
     the caller may ask, it does not filter the query for them.
@@ -55,23 +56,34 @@ class KpiScope:
 
 
 async def resolve_kpi_scope(
-    request: Request, user: KeycloakUser, team_id: TeamId | None
+    request: Request,
+    user: KeycloakUser,
+    team_id: TeamId | None,
+    *,
+    platform_admin_only: bool = False,
 ) -> KpiScope:
     """Authorize a KPI preset request and return its resolved scope.
 
     `team_id=None` requires `can_observe_platform` on the org (the original,
-    pre-v3 behavior — unchanged). A `team_id` requires `can_read_members` on
-    that team: the same permission the task bus's `scope=team` Activités view
+    pre-v3 behavior — unchanged), UNLESS the preset is in the platform-wide
+    admin-only section (§2.4/§2.5, e.g. `storage_by_team`'s cross-team ranked
+    view), in which case it requires `can_manage_platform` instead — the same
+    permission already gating `/admin/capabilities` and `scope=platform` task
+    queries, not a new one. A `team_id` requires `can_read_members` on that
+    team: the same permission the task bus's `scope=team` Activités view
     already requires (`fred_core.tasks.authz`), so "can this user see this
     team's operational data" has one shared vocabulary across KPI presets and
-    tasks, not two.
+    tasks, not two. `platform_admin_only` never affects the team-scoped check.
     """
 
     rebac = get_application_container(request).get_rebac_engine()
     if team_id is None:
-        await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
+        permission = (
+            OrganizationPermission.CAN_MANAGE_PLATFORM
+            if platform_admin_only
+            else OrganizationPermission.CAN_OBSERVE_PLATFORM
         )
+        await rebac.check_user_permission_or_raise(user, permission, ORGANIZATION_ID)
         return KpiScope(team_id=None)
     await rebac.check_user_permission_or_raise(
         user, TeamPermission.CAN_READ_MEMEBERS, str(team_id)

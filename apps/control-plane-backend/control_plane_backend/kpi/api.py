@@ -71,7 +71,12 @@ def build_kpi_router() -> APIRouter:
                 # Single authorization chokepoint for every preset (§2.3/§2.4,
                 # KPI-ANALYTICS-RFC.md v3) — handlers never check permissions
                 # themselves.
-                scope = await resolve_kpi_scope(request, user, team_id)
+                scope = await resolve_kpi_scope(
+                    request,
+                    user,
+                    team_id,
+                    platform_admin_only=p.platform_admin_only,
+                )
 
                 now = datetime.now(tz=timezone.utc)
                 resolved_since = since or (now - timedelta(days=30))

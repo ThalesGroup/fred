@@ -93,4 +93,8 @@ STORAGE_BY_TEAM_PRESET = PresetDef(
     handler=query_storage_by_team,
     summary="Current resource storage usage vs. quota, per team (ranked platform-wide, or one team when scoped)",
     team_scopable=True,
+    # Platform-wide (unscoped) call ranks every team's storage — admin-only
+    # (§2.4/§2.5's "Admin-only section"). Team-scoped calls (Page 2, one row)
+    # stay on the usual can_read_members check, unaffected by this flag.
+    platform_admin_only=True,
 )

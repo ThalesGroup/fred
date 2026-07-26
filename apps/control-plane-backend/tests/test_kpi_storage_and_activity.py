@@ -88,6 +88,13 @@ _SINCE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _UNTIL = datetime(2026, 1, 31, tzinfo=timezone.utc)
 
 
+def test_storage_by_team_preset_is_platform_admin_only() -> None:
+    """Regression guard for the §2.4 gate: the platform-wide (unscoped) call
+    ranks every team's storage and must require can_manage_platform, not the
+    weaker can_observe_platform every other platform-wide preset accepts."""
+    assert storage_by_team.STORAGE_BY_TEAM_PRESET.platform_admin_only is True
+
+
 @pytest.mark.asyncio
 async def test_storage_uses_per_team_override_over_platform_default(
     monkeypatch: pytest.MonkeyPatch,
