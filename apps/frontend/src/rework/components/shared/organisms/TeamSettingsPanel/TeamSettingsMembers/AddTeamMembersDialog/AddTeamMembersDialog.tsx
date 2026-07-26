@@ -123,7 +123,7 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
       // surface via toast (below) but don't block the rest of the batch or
       // keep the dialog open — the table reflects whatever actually
       // succeeded.
-      const added = await runMutationAction({
+      const addResult = await runMutationAction({
         action: () =>
           addTeamMember({
             teamId: team.id,
@@ -136,7 +136,13 @@ export default function AddTeamMembersDialog({ open, team, onClose }: AddTeamMem
             forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail"),
           }),
       });
-      if (added === null) continue;
+      // addTeamMember resolves 204 No Content -> `data` is `null` on
+      // success. Branch on `.ok`, never on the resolved value itself —
+      // `T | null` can't tell "failed" apart from "succeeded with a
+      // falsy/empty result", which every add/grant call here actually
+      // returns. Checking `=== null` silently skipped every grant below
+      // for every member, on every add, always.
+      if (!addResult.ok) continue;
 
       for (const role of member.roles) {
         await runMutationAction({

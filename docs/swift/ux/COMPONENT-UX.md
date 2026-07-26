@@ -949,6 +949,29 @@ silently produced exactly this trap for every member added through the
 dialog with at least one elevated role: they'd display correctly, but their
 only/highest role could never be revoked back down to plain membership.
 
+**`useMutationAction`: `T | null` can't tell "failed" from "succeeded with
+a falsy result" (fixed 2026-07-26).** After the fix above shipped, every
+grant call in the batch was still silently skipped — `handleConfirm`
+checked `addResult === null` to detect a failed `addTeamMember` call before
+proceeding to the grant loop. `add_team_member`/`grant_team_member_role`
+both respond `204 No Content`; `fetchBaseQuery` resolves an empty body to
+`null` **on success**. Every add in this dialog therefore always looked
+like a failure to that check, and the grant loop below it never ran — with
+no thrown error, no console error, and no toast, since nothing had actually
+failed. This reproduced 100% of the time against the real backend but
+**never** against any mocked backend used to investigate the two prior
+reports in this session, because every mock's fetch stub serialized a
+JSON body (`"{}"`, 2 characters) for every response regardless of status
+code — never a truly empty one — so `added` was never `null` in any of
+that testing. `useMutationAction.ts` (`core/hooks/useMutationAction.ts`)
+now returns a discriminated `{ ok: true; data: T } | { ok: false }`
+instead of `T | null`; `handleConfirm` branches on `.ok`. No other call
+site branched on the return value (every other consumer just awaits the
+call and relies on the `onError` toast), so this is a non-breaking
+contract change. Caught by reproducing with a mock that returns a
+genuinely empty `204` body (`new Response(null, { status: 204 })`)
+instead of a serialized empty object.
+
 **`TeamRoleChips`** — the members table's inline role-chip toggle group
 (admin/editor/analyst, multi-select, `data-active` fills `--primary`
 background with `on-primary` text) is extracted from

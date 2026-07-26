@@ -209,6 +209,39 @@ describe("AddTeamMembersDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("still grants every selected role when addTeamMember resolves to null (204 No Content)", async () => {
+    // The real backend's add-member endpoint returns 204 No Content, which
+    // RTK Query's fetchBaseQuery resolves as `null` on success — not an
+    // error. A add-result check of `=== null` would misread this as a
+    // failure and skip every grant below it; `.ok` must not.
+    h.addTeamMember.mockReturnValue({ unwrap: () => Promise.resolve(null) });
+    h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve(null) });
+    render(<AddTeamMembersDialog open={true} team={team} onClose={vi.fn()} />);
+    selectCandidate(alice);
+
+    click(roleChip("team_editor"));
+    click(roleChip("team_analyst"));
+
+    await act(async () => {
+      click(confirmButton());
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(h.grantTeamMemberRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      userId: "u1",
+      grantTeamMemberRoleRequest: { relation: "team_editor" },
+    });
+    expect(h.grantTeamMemberRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      userId: "u1",
+      grantTeamMemberRoleRequest: { relation: "team_analyst" },
+    });
+    expect(h.showError).not.toHaveBeenCalled();
+  });
+
   it("confirming with two selected roles always adds on the team_member baseline, then grants both roles", async () => {
     h.addTeamMember.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
