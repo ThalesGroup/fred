@@ -25,7 +25,7 @@
 }
 
 .tooltip-wrapper:hover .tooltip-content,
-.tooltip-wrapper:focus-within .tooltip-content {
+.tooltip-wrapper:has(:focus-visible) .tooltip-content {
   visibility: visible;
   opacity: 1;
 }
