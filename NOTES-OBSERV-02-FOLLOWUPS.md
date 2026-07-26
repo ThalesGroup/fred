@@ -231,10 +231,47 @@ of the model-building call chain.
 
 ---
 
-## Frontend F5 (deferred, mechanical)
+## Frontend F5 — done (2026-07-26)
 
-`CapabilitiesPage.tsx`'s `KIND_FILTERS: Array<"tool" | "agent">` (+ matching
-`useState`) needs `"model"` added, plus one i18n key. Confirmed one-line
-change (`kind` is a pure filter there, no branching) during the original
-research pass — not done yet, batched with the rest of this delivery's
-frontend work (F1-F6).
+`CapabilitiesPage.tsx`'s `KIND_FILTERS` widened to `"model"` + i18n key, as
+planned above. F1-F5 all shipped this pass (F6 doesn't exist — dropped with
+B8, see the RFC's §2.9 correction; the dev plan only ever goes to F5).
+
+## Two gaps found while implementing F1/F2, not part of the original plan
+
+### 19. B3/B4 (green/cost computation) had been silently skipped
+The original B1-B7 pass shipped every backend item except the green/cost
+layer §2.7 calls for — no `fred-core` module, no `model_impact_factors.yaml`,
+nothing wired into any token-usage preset. Unlike every other deferral in this
+file, this one wasn't documented anywhere (not even in `token_usage_over_time.py`'s
+own docstring, which just said "a deliberate separate follow-up pass" without
+flagging that the follow-up had no tracking). Found only because F1's
+green/cost widgets had nothing to render against. Implemented now:
+`fred_core.kpi.model_impact_factors` (`estimate_green_cost`, YAML-configured),
+wired into all six token-usage presets (platform/team/personal ×
+over_time/by_agent/by_model) via a per-bucket model-name sub-aggregation so a
+bucket mixing models stays exact rather than approximated.
+
+### 20. `storage_by_team`'s platform-wide view had the wrong authorization gate
+`resolve_kpi_scope` checked `can_observe_platform` uniformly for every
+platform-wide preset, but RFC §2.4 requires `can_manage_platform` for the
+admin-only section's presets specifically. `storage_by_team`'s unscoped call
+ranks every team's storage usage — cross-team data a plain `platform_observer`
+was never meant to see, and the frontend's admin-only section gate would have
+been cosmetic only without this. Fixed: `PresetDef.platform_admin_only` (only
+`storage_by_team`), threaded through `resolve_kpi_scope`/the router.
+`team_activity_summary` is unaffected — it requires `team_id` and only ever
+authorizes via `can_read_members`.
+
+### 21. `TaskActivity`'s own rows have no ack affordance
+F4 wired the real per-task ack (`POST /tasks/{id}/ack`) into `TaskCard`/
+`TaskDetailPopover` — the personal tray (`TaskTray`) and `MigrationPage`. But
+`TaskActivity` (now embedded in `AnalyticsPage`'s and `TeamUsagePage`'s new
+admin/editor sections, per §2.8) renders its own inline rows, not `TaskCard`,
+and has no dismiss button of its own. A platform/team admin reading Activités
+in these new dashboards has no one-click way to acknowledge a failed row from
+there — they'd need to find the same task in their personal tray, or wait for
+`acknowledged_at` to arrive from wherever else it does. Not fixed here: adding
+an ack column/button to `TaskActivity`'s row renderer is a real UI addition,
+not the "wire it into the two existing places the RFC named" this pass
+scoped. Worth its own small follow-up once this dashboard sees real usage.

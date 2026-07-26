@@ -2,9 +2,18 @@
 
 ## Status
 
-confirmed — v3 draft, pending developer sign-off before implementation (Step 3).
-v1/v2 (§2.1–§2.4, §2.6) already implemented and unchanged. v3 finalizes the
-target vision for all six product roles and is new scope. §2.9 corrected
+implemented (2026-07-26) — v3's full dev plan (§5) is done: backend B1-B9,
+frontend F1-F5. B8/F6 were dropped mid-implementation, no replacement (see
+§2.9 correction below). Both §6 sign-off items resolved during implementation
+rather than blocking it: the conversation-breakdown dimension shipped with
+the RFC's own proposed default (by agent, reusing `top_agents_by_conversations`
+— see §2.5 Page 2), and the model-routing fail-closed fallback was confirmed
+and implemented as B7 (`AGENT-CAPABILITY-RFC.md` §8.7). Two gaps found and
+fixed mid-implementation, not part of the original dev plan: B3/B4 (green/cost
+computation) had been silently skipped during the original B1-B7 pass —
+implemented now; `storage_by_team`'s platform-wide view was missing the
+`can_manage_platform` gate §2.4 specifies — fixed. v1/v2 (§2.1–§2.4, §2.6)
+were already implemented and unchanged before this pass. §2.9 corrected
 2026-07-25 mid-implementation: the "new platform settings" work it originally
 proposed was found to already exist (`max_resources_storage_size`,
 `team_delete_grace`/`max_idle`, CTRLP-12) — B8/F6 dropped from the dev plan,
@@ -601,12 +610,17 @@ and let the developer run live verification.
 
 ## 6. Open items requiring explicit Step 3 sign-off
 
-Carried over from inline notes above, collected here so none is missed:
+Carried over from inline notes above, collected here so none is missed. Both
+resolved during implementation (2026-07-26), neither redirected:
 
 1. **§2.5** — the team-dashboard conversation "répartition" breakdown
-   dimension (defaulting to by-agent unless redirected).
+   dimension (defaulting to by-agent unless redirected). Resolved: shipped
+   with the default — F2's shared section's `MultiSeriesLineChart` reuses
+   `top_agents_by_conversations`, team-scoped, as both "most active agents"
+   and the conversation breakdown.
 2. **§8.7 (`AGENT-CAPABILITY-RFC.md`)** — the model-routing fail-closed
    fallback behavior when a resolved profile's model capability is disabled.
+   Resolved: implemented as B7 (explicit error, never silent substitution).
 
 (§2.9's original item — confirm the single-global-quota scope cut — is
 withdrawn: the premise it was asking about turned out to be false, see the

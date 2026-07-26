@@ -994,18 +994,25 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 **Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
 **Status:** `Functional`
 
-Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b). Reuses `AnalyticsPage`'s chart
-primitives (`TimeSeriesLineChart`, `BarChart`, `TimeRangeSelector`, `ServiceNotice`) at
-`team/:teamId/usage`: a timeline of the requesting user's own token consumption plus
-breakdowns by agent and by model, all self-scoped server-side (no team/agent picker). Entry
-point is a new gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same
-slot team settings uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the
-two are mutually exclusive.
+Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
+(`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
+its own `Disclosure`) now sits below capability-gated team sections prepended above it, all
+in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
+`hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
+tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
+storage quota, conversations over time, and a most-active-agents breakdown. team_editor gets
+an ingestion-filtered Activités (`TaskActivity`) section; team_admin gets an unfiltered one plus
+a `team_activity_summary` trend line. Entry point is a new gear icon on the personal-space
+banner (`TeamContentNavbar.tsx`) — the same slot team settings uses, gated on `isPersonalTeam`
+instead of `canOpenTeamSettings` since the two are mutually exclusive.
 
 #### Open UX issues
 
 - Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
   `AnalyticsPage` but haven't been checked against a live stack with real token data.
+- All new v3 sections default their `Disclosure` open — consistent with `TaskActivity`'s own
+  convention, but the page now has up to 4 stacked disclosures; revisit if that reads as dense
+  once seen with real data.
 
 ---
 
@@ -1470,6 +1477,15 @@ including every `*_skipped` counter and `users_processed`, not just the
 granted/imported ones (AUTHZ-07 Step 3 close-out) — and the full warning list, open
 by default when warnings are present. A `failed` task renders `task.error` inline.
 
+New call sites (v3, OBSERV-02, 2026-07-26) — no component change, embedded as-is per
+§2.8: `AnalyticsPage`'s admin-only section (`scope="platform"`), `TeamUsagePage`'s
+team_editor section (`scope="team" kind="ingestion"`), and its team_admin section
+(`scope="team"`, unfiltered). Note: this organism's own rows have no ack/dismiss
+affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives
+in `TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a
+different, non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by`
+fields.
+
 #### Open UX issues
 
 - **Not yet design-reviewed** — implemented and covered by unit tests
@@ -1477,6 +1493,10 @@ by default when warnings are present. A `failed` task renders `task.error` inlin
   counter disclosure's layout, the "With warnings" flag's visual weight against the
   state badge, or density once a migration result has most of its ~15 counters
   populated at once.
+- **No ack affordance in this organism's own rows** — a platform/team admin reading
+  Activités here has no one-click way to mark a failed/cancelled row seen; only the
+  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Worth revisiting
+  once this dashboard sees real usage — see `NOTES-OBSERV-02-FOLLOWUPS.md`.
 
 #### Resolved
 

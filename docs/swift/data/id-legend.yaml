@@ -1765,8 +1765,8 @@ items:
 
   - id: OBSERV-02
     title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
-    status: draft (awaiting developer confirmation)
-    owner: fmuller
+    status: done
+    owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §7b"
@@ -1789,6 +1789,17 @@ items:
       surface. Open items pending Step 3 sign-off: team conversation-breakdown
       dimension, model-routing fail-closed fallback (CAPAB-01), single-global-
       quota scope cut for v1 — see KPI-ANALYTICS-RFC.md §6.
+      2026-07-26 (Dimitri Tombroff): v3 fully implemented — backend B1-B9,
+      frontend F1-F5 (F6 never existed, dropped with B8). Both §6 sign-off
+      items resolved (by-agent breakdown default shipped; B7 fail-closed
+      already done). Two gaps found and fixed mid-implementation, not in the
+      original plan: B3/B4 (green/cost) had been silently skipped during the
+      original pass, implemented now; `storage_by_team`'s platform-wide view
+      was missing the §2.4 `can_manage_platform` gate, fixed. Details in
+      `NOTES-OBSERV-02-FOLLOWUPS.md` entries #19-20. `default_on` seeding
+      migration (the B7 deployment hazard, NOTES #15) remains a hard
+      prerequisite before enabling this on any live deployment — not part of
+      this item, tracked separately.
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
