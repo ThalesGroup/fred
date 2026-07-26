@@ -20,12 +20,11 @@ import { TaskCard } from "../../molecules/TaskCard/TaskCard";
 import { Portal } from "../../utils/Portal";
 import {
   EVICTION_DELAY_MS,
-  failuresAcknowledged,
-  selectUnacknowledgedFailures,
   selectVisibleTasks,
   taskEvicted,
   trayClockTicked,
 } from "../../../../features/tasks/taskSlice";
+import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { TaskTrayTrigger } from "./TaskTrayTrigger";
 import styles from "./TaskTray.module.css";
 
@@ -36,7 +35,7 @@ export function TaskTray() {
   const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null);
 
   const visibleTasks = useSelector(selectVisibleTasks);
-  const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
 
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -54,13 +53,6 @@ export function TaskTray() {
     }
     setIsOpen((v) => !v);
   }, [isOpen]);
-
-  // Acknowledge failures when panel opens and failures are visible
-  useEffect(() => {
-    if (isOpen && unacknowledgedFailures > 0) {
-      dispatch(failuresAcknowledged());
-    }
-  }, [isOpen, unacknowledgedFailures, dispatch]);
 
   // Age terminal tasks out of the tray. `selectVisibleTasks` filters by elapsed
   // wall-clock, which no store change reflects on its own, so without these timers a
@@ -127,7 +119,14 @@ export function TaskTray() {
               {visibleTasks.length === 0 ? (
                 <div className={styles.emptyState}>{t("rework.tasks.tray.empty")}</div>
               ) : (
-                visibleTasks.map((task) => <TaskCard key={task.taskId} task={task} />)
+                visibleTasks.map((task) => (
+                  <TaskCard
+                    key={task.taskId}
+                    task={task}
+                    onAcknowledge={() => acknowledge(task.taskId)}
+                    acknowledging={isAcknowledging(task.taskId)}
+                  />
+                ))
               )}
             </div>
           </div>

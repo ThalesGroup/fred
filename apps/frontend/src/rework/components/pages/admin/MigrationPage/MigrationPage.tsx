@@ -32,6 +32,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { TeamStats } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
+import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { exportPlatform } from "../../../../features/migration/exportPlatform";
 import styles from "./MigrationPage.module.css";
@@ -40,6 +41,7 @@ export default function MigrationPage() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const tasks = useSelector(selectVisibleTasks);
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
   const [isLaunching, setIsLaunching] = useState(false);
@@ -269,7 +271,12 @@ export default function MigrationPage() {
           <h2 className={styles.sectionTitle}>{t("rework.tasks.page.active")}</h2>
           <div className={styles.grid}>
             {activeTasks.map((task) => (
-              <TaskCard key={task.taskId} task={task} />
+              <TaskCard
+                key={task.taskId}
+                task={task}
+                onAcknowledge={() => acknowledge(task.taskId)}
+                acknowledging={isAcknowledging(task.taskId)}
+              />
             ))}
           </div>
         </section>
@@ -280,7 +287,12 @@ export default function MigrationPage() {
           <h2 className={styles.sectionTitle}>{t("rework.tasks.page.terminal")}</h2>
           <div className={styles.grid}>
             {terminalTasks.map((task) => (
-              <TaskCard key={task.taskId} task={task} />
+              <TaskCard
+                key={task.taskId}
+                task={task}
+                onAcknowledge={() => acknowledge(task.taskId)}
+                acknowledging={isAcknowledging(task.taskId)}
+              />
             ))}
           </div>
         </section>

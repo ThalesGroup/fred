@@ -1491,7 +1491,6 @@
         }
       },
       "page": {
-        "ackFailures": "Acquitter les échecs ({{count}})",
         "active": "En cours",
         "clearCompleted": "Effacer les terminées",
         "empty": "Aucune tâche en cours",
@@ -1500,6 +1499,7 @@
         "title": "Tâches"
       },
       "popover": {
+        "acknowledge": "Ignorer",
         "close": "Fermer",
         "startedAgo": "démarré {{time}}",
         "title": "Détails — {{label}}"
@@ -1532,6 +1532,7 @@
         "inDays": "dans {{count}} j"
       },
       "card": {
+        "acknowledge": "Ignorer",
         "copyWarnings": "Copier les avertissements",
         "copied": "Copié !"
       }

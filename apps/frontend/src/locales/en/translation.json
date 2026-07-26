@@ -1491,7 +1491,6 @@
         }
       },
       "page": {
-        "ackFailures": "Acknowledge failures ({{count}})",
         "active": "In progress",
         "clearCompleted": "Clear completed",
         "empty": "No tasks in progress",
@@ -1500,6 +1499,7 @@
         "title": "Tasks"
       },
       "popover": {
+        "acknowledge": "Dismiss",
         "close": "Close",
         "startedAgo": "started {{time}}",
         "title": "Details — {{label}}"
@@ -1532,6 +1532,7 @@
         "inDays": "in {{count}}d"
       },
       "card": {
+        "acknowledge": "Dismiss",
         "copyWarnings": "Copy warnings",
         "copied": "Copied!"
       }

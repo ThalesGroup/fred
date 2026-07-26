@@ -19,7 +19,7 @@ import {
   taskEventReceived,
   taskEvicted,
   trayClockTicked,
-  failuresAcknowledged,
+  taskAcknowledged,
   completedTasksCleared,
   selectActiveTasks,
   selectVisibleTasks,
@@ -251,33 +251,36 @@ describe("trayClockTicked", () => {
   });
 });
 
-// ── failuresAcknowledged ──────────────────────────────────────────────────────
+// ── taskAcknowledged ──────────────────────────────────────────────────────────
+// Per-task, server-driven (TASK-EVENT-STREAM-RFC.md §2.10) — replaces the old
+// per-browser bulk `failuresAcknowledged` flag. The reducer only mirrors the
+// timestamp the server already returned from `POST /tasks/{id}/ack`; it does
+// not decide which tasks are eligible (the ack button's own visibility rule,
+// and the backend's own 409, already do that).
 
-describe("failuresAcknowledged", () => {
-  it("stamps acknowledgedAt on failed tasks with null acknowledgedAt", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:10:00Z"));
+describe("taskAcknowledged", () => {
+  it("stamps the server's acknowledgedAt onto the matching task", () => {
     const init = { byId: { t1: vm({ state: "failed", acknowledgedAt: null }) } };
-    const s = reducer(init, failuresAcknowledged());
+    const s = reducer(init, taskAcknowledged({ taskId: "t1", acknowledgedAt: "2026-01-01T00:10:00Z" }));
     expect(s.byId["t1"].acknowledgedAt).toBe(new Date("2026-01-01T00:10:00Z").getTime());
   });
 
-  it("stamps acknowledgedAt on cancelled tasks", () => {
-    const init = { byId: { t1: vm({ state: "cancelled", acknowledgedAt: null }) } };
-    const s = reducer(init, failuresAcknowledged());
+  it("only updates the targeted task, leaving others untouched", () => {
+    const init = {
+      byId: {
+        t1: vm({ taskId: "t1", state: "failed", acknowledgedAt: null }),
+        t2: vm({ taskId: "t2", state: "cancelled", acknowledgedAt: null }),
+      },
+    };
+    const s = reducer(init, taskAcknowledged({ taskId: "t1", acknowledgedAt: "2026-01-01T00:10:00Z" }));
     expect(s.byId["t1"].acknowledgedAt).not.toBeNull();
+    expect(s.byId["t2"].acknowledgedAt).toBeNull();
   });
 
-  it("does not overwrite an already-set acknowledgedAt", () => {
-    const init = { byId: { t1: vm({ state: "failed", acknowledgedAt: 42 }) } };
-    const s = reducer(init, failuresAcknowledged());
-    expect(s.byId["t1"].acknowledgedAt).toBe(42);
-  });
-
-  it("does not touch succeeded tasks", () => {
-    const init = { byId: { t1: vm({ state: "succeeded", acknowledgedAt: null }) } };
-    const s = reducer(init, failuresAcknowledged());
-    expect(s.byId["t1"].acknowledgedAt).toBeNull();
+  it("is a no-op for a task no longer in the store (e.g. already evicted)", () => {
+    const init = { byId: {} };
+    const s = reducer(init, taskAcknowledged({ taskId: "gone", acknowledgedAt: "2026-01-01T00:10:00Z" }));
+    expect(s.byId).toEqual({});
   });
 });
 

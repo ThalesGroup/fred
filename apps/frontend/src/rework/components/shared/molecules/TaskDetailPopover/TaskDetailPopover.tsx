@@ -17,9 +17,11 @@ import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { selectTask } from "../../../../features/tasks/taskSlice";
+import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { relativeTime } from "../../../../features/tasks/taskLabels";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
+import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./TaskDetailPopover.module.css";
 
@@ -33,6 +35,7 @@ interface TaskDetailPopoverProps {
 export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetailPopoverProps) {
   const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
   // Position the popover below the anchor element
@@ -80,6 +83,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
   const progressPct = task.progress !== null ? `${Math.round(task.progress * 100)}%` : null;
   const elapsedLabel = t("rework.tasks.popover.startedAgo", { time: relativeTime(task.registeredAt, t) });
   const targetLabel = task.target?.label ?? task.taskId;
+  const needsAttention = (task.state === "failed" || task.state === "cancelled") && task.acknowledgedAt === null;
 
   return createPortal(
     <div
@@ -128,6 +132,20 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
       {task.error && (
         <div className={styles.errorRow}>
           <span className={styles.errorText}>{task.error}</span>
+        </div>
+      )}
+
+      {needsAttention && (
+        <div className={styles.ackRow}>
+          <Button
+            color="on-surface"
+            variant="text"
+            size="small"
+            onClick={() => acknowledge(task.taskId)}
+            disabled={isAcknowledging(task.taskId)}
+          >
+            {t("rework.tasks.popover.acknowledge")}
+          </Button>
         </div>
       )}
     </div>,

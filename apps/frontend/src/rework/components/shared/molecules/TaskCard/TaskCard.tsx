@@ -25,18 +25,25 @@ import styles from "./TaskCard.module.css";
 
 interface TaskCardProps {
   task: TaskViewModel;
+  /** Present only when this task can be acknowledged (failed/cancelled, not
+   *  yet acknowledged) — the caller owns the `POST /tasks/{id}/ack` call and
+   *  the resulting store update (TASK-EVENT-STREAM-RFC.md §2.10). */
+  onAcknowledge?: () => void;
+  acknowledging?: boolean;
 }
 
 export function truncate(name: string, max = 32): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = TERMINAL_STATES.has(task.state);
   const timeMs = task.terminalAt ?? task.registeredAt;
   const displayName = task.target?.label ?? task.taskId;
+  const needsAttention =
+    (task.state === "failed" || task.state === "cancelled") && task.acknowledgedAt === null && !!onAcknowledge;
 
   const handleCopyWarnings = async () => {
     if (!task.warnings || task.warnings.length === 0) return;
@@ -52,6 +59,17 @@ export function TaskCard({ task }: TaskCardProps) {
           {truncate(displayName)}
         </span>
         <TaskStateBadge state={task.state} showLabel={false} size="sm" />
+        {needsAttention && (
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "close" }}
+            onClick={onAcknowledge}
+            disabled={acknowledging}
+            title={t("rework.tasks.card.acknowledge")}
+          />
+        )}
       </div>
 
       {!isTerminal && (
