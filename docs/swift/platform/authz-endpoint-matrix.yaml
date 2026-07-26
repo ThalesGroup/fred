@@ -271,6 +271,16 @@ operations:
     required_permission: can_rescue_team_admin
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/routing-policy
+    review_status: approved
+    required_permission: can_read_members # TEAM-05, #2118, TEAM-ROUTING-POLICY-RFC.md §6 — elevated-role read gate (team_admin/team_editor/team_analyst), same permission Activity's scope=team view already requires
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/routing-policy
+    review_status: approved
+    required_permission: can_update_resources # TEAM-05, #2118, TEAM-ROUTING-POLICY-RFC.md §6 — team_editor only, team_admin has zero write authority (hard cross-write rule)
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances
     review_status: pending_review
     required_permission: pending_review

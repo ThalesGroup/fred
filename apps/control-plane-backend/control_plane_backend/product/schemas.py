@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
+from fred_sdk.contracts.context import TeamOperationRouteRule
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
@@ -353,6 +354,25 @@ class ExecutionPreparation(BaseModel):
             "The instance-bound (in-session) counterpart of the template catalog's "
             "route_base_url: the frontend calls these pod routes directly (no "
             "proxy), with the same bearer it already uses for execution."
+        ),
+    )
+    chat_default_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "Team's default chat model profile id, resolved from its stored "
+            "TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, "
+            "TEAM-05, #2118). Null when the team has no routing policy — the "
+            "runtime then uses its own deployment default. The frontend folds this "
+            "onto RuntimeContext exactly like context_prompt_text (same three-hop "
+            "channel, same 'resolved once per session, not re-fetched per turn' "
+            "contract)."
+        ),
+    )
+    operation_route_rules: list[TeamOperationRouteRule] = Field(
+        default_factory=list,
+        description=(
+            "Team's per-operation model-routing overrides, same resolution "
+            "notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2)."
         ),
     )
 

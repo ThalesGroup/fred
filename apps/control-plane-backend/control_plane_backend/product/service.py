@@ -92,6 +92,9 @@ from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
 )
+from control_plane_backend.routing_policy.service import (
+    resolve_execution_routing_snapshot,
+)
 from control_plane_backend.scheduler.policies.policy_models import (
     duration_to_seconds,
 )
@@ -2868,6 +2871,15 @@ async def prepare_execution(
         authorization=authorization,
     )
 
+    # Team routing policy snapshot (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05,
+    # #2118) — resolved once here at session prep, same lifecycle as
+    # context_prompt_text above, NOT a per-turn lookup (that's how model
+    # *authorization*/usable_model_ids works, deliberately not this).
+    (
+        chat_default_profile_id,
+        operation_route_rules,
+    ) = await resolve_execution_routing_snapshot(team_id, deps)
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -2879,6 +2891,8 @@ async def prepare_execution(
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
+        chat_default_profile_id=chat_default_profile_id,
+        operation_route_rules=operation_route_rules,
     )
 
 
