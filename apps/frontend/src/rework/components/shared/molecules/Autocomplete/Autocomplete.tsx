@@ -51,7 +51,13 @@ export default function Autocomplete<T>({ textInput, options, onSelect, onFieldV
         {...textInput}
         onFocus={() => setIsOpen(true)}
         onBlur={() => setIsOpen(false)}
-        onChange={(e) => setQueryValue(e.target.value)}
+        onChange={(e) => {
+          setQueryValue(e.target.value);
+          // Selecting an option closes the menu without blurring the input
+          // (the listbox's onMouseDown prevents that) — typing again while
+          // still focused must reopen it, or the field looks unresponsive.
+          setIsOpen(true);
+        }}
         value={queryValue}
       />
       <div id={`${baseId}-menu`} className={styles["menu-popover"]} role="presentation">

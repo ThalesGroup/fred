@@ -1515,10 +1515,18 @@
     },
     "teamSettings": {
       "members": {
-        "addMember": {
-          "placeholder": "Invite users"
+        "addMembersDialog": {
+          "buttonLabel": "Add members",
+          "cancel": "Cancel",
+          "confirm": "Add",
+          "removeAria": "Remove {{name}} from the list",
+          "searchPlaceholder": "Enter a name, first name, or user ID",
+          "subtitle": "Users will be added to the team immediately",
+          "title": "Add new members"
         },
         "errors": {
+          "addDetail": "Could not add this user to the team.",
+          "addSummary": "Failed to add member",
           "forbiddenDetail": "You are not allowed to perform this action.",
           "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",

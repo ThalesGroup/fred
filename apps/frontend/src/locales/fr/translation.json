@@ -1515,10 +1515,18 @@
     },
     "teamSettings": {
       "members": {
-        "addMember": {
-          "placeholder": "Inviter des utilisateurs"
+        "addMembersDialog": {
+          "buttonLabel": "Ajouter des membres",
+          "cancel": "Annuler",
+          "confirm": "Ajouter",
+          "removeAria": "Retirer {{name}} de la liste",
+          "searchPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
+          "subtitle": "Les utilisateurs seront immédiatement ajoutés à l'équipe",
+          "title": "Ajouter de nouveaux membres"
         },
         "errors": {
+          "addDetail": "Impossible d'ajouter cet utilisateur à l'équipe.",
+          "addSummary": "Échec de l'ajout du membre",
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
           "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",

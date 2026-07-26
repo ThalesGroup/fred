@@ -16,6 +16,7 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -30,14 +31,8 @@ import {
   useRevokeTeamMemberRoleMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import styles from "./TeamSettingsMembersTable.module.scss";
+import { canAdministerTeamRole } from "@hooks/teamCapabilities.ts";
 
-// AUTHZ-06 (RFC Part 7 §34): a member may hold several of these at once (e.g.
-// a small team's sole admin who is also its editor and analyst) — each is
-// granted/revoked as its own independent, permission-checked action, never a
-// bulk role-set replace. `team_member` is deliberately excluded: it is the
-// implicit baseline when none of the three apply, not a toggle of its own.
-const ELEVATED_ROLES: UserTeamRelation[] = ["team_admin", "team_editor", "team_analyst"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
   team_admin: 0,
   team_editor: 1,
@@ -66,22 +61,16 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const [revokeTeamMemberRole] = useRevokeTeamMemberRoleMutation();
   const [removeTeamMember] = useRemoveTeamMemberMutation();
 
+  const capabilities = useTeamCapabilities(team);
   const {
     canAdministerMembers: can_administer_members,
     canAdministerEditors: can_administer_editors,
     canAdministerAnalysts: can_administer_analysts,
     canAdministerAdmins: can_administer_admins,
-  } = useTeamCapabilities(team);
+  } = capabilities;
 
   const can_administer_anyone =
     can_administer_members || can_administer_editors || can_administer_analysts || can_administer_admins;
-
-  function getAdministerPermissionForTeamRole(target: UserTeamRelation): boolean | undefined {
-    if (target === "team_editor") return can_administer_editors;
-    if (target === "team_analyst") return can_administer_analysts;
-    if (target === "team_admin") return can_administer_admins;
-    return can_administer_members;
-  }
 
   const handleGrantRole = useCallback(
     async (userId: string, relation: UserTeamRelation) => {
@@ -174,27 +163,13 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
         label: t("rework.teamSettings.members.table.role"),
         size: "1.5fr",
         cellRenderer: (teamMember) => (
-          <div className={styles.roleChips} role="group">
-            {ELEVATED_ROLES.map((role) => {
-              const held = teamMember.relations.includes(role);
-              const canAdminister = Boolean(getAdministerPermissionForTeamRole(role));
-              return (
-                <button
-                  key={role}
-                  type="button"
-                  className={styles.roleChip}
-                  data-active={held}
-                  aria-pressed={held}
-                  disabled={!canAdminister}
-                  onClick={() =>
-                    held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
-                  }
-                >
-                  {t(`rework.teamRoles.${role}`)}
-                </button>
-              );
-            })}
-          </div>
+          <TeamRoleChips
+            heldRoles={teamMember.relations}
+            canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
+            onToggle={(role, held) =>
+              held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
+            }
+          />
         ),
       },
     ];

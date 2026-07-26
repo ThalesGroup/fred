@@ -862,16 +862,84 @@ does that; `DataTable` clips its own rounded corners) and it was cropping
 the "add member" `Autocomplete` input's focus ring at the top of the flex
 column.
 
-**"Add member" `Autocomplete` (fixed 2026-07-26).** Uses `TextInput`'s
-`compact` variant, which now sets `display: none` on the hint/error/counter
-container (`.information`) instead of just skipping its flex/padding rules —
-previously the empty container still reserved a row's worth of height,
-which (a) misaligned the input's visual center against the title/
-`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover` (`top:
-100%` of the input's own wrapper) below the input with a large gap. Both
-now resolve automatically since the wrapper's rendered height matches the
-input exactly; the popover's only remaining offset is the deliberate
+**`Autocomplete` compact-field alignment (fixed 2026-07-26).** Uses
+`TextInput`'s `compact` variant, which now sets `display: none` on the
+hint/error/counter container (`.information`) instead of just skipping its
+flex/padding rules — previously the empty container still reserved a row's
+worth of height, which (a) misaligned the input's visual center against the
+title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
+(`top: 100%` of the input's own wrapper) below the input with a large gap.
+Both now resolve automatically since the wrapper's rendered height matches
+the input exactly; the popover's only remaining offset is the deliberate
 `margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `AddTeamMembersDialog` — bulk add with per-user role selection (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/AddTeamMembersDialog/AddTeamMembersDialog.tsx`,
+`src/rework/components/shared/molecules/TeamRoleChips/TeamRoleChips.tsx`
+**Status:** `Functional`, first pass from a supplied mockup — not yet
+design-reviewed.
+
+The Members header's inline Autocomplete text input is replaced by a
+`filled`/`primary` `Button` ("Ajouter des membres", same header slot). It
+opens `AddTeamMembersDialog` — a `Portal`-based modal following the
+`ConfirmationDialog`/`DuplicateAgentDialog` shell (overlay + card, no
+generic `Dialog` primitive exists yet):
+
+- **Header:** title + subtitle (`body-medium`, `on-surface-retreat`).
+- **Search:** the same `Autocomplete` the old inline field used, reused
+  as-is (candidates come from the existing `candidate-members` endpoint,
+  already scoped to non-members).
+- **Pending list** (`<ul>`, no column headers): one row per selected-but-
+  not-yet-added candidate — name/username, a `TeamRoleChips` role selector
+  (see below), and a `close`-icon `IconButton` to drop the row. Capped at
+  `8.5 * var(--row-height)` (`--row-height: 4rem`) — the half-row is a
+  deliberate "more below" affordance — with a `4px`-wide
+  `::-webkit-scrollbar` (thumb color inherited from the app's existing
+  global `outline-retreat` scrollbar rule in `styles/index.css`, already
+  thin by default; this only narrows it further for the denser list).
+  **No `overflow: hidden` at the dialog level** — everything is inset by
+  the dialog's own padding, and clipping would also cut off the
+  `Autocomplete` menu popover in the search row above the list (same class
+  of bug just fixed on the old inline field, see above).
+- **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
+  (`filled`/`primary`, disabled while the list is empty or a submit is in
+  flight).
+
+**No new backend endpoint** — `AddTeamMemberRequest` only carries one
+`relation`, so confirming calls `addTeamMember` per pending user with their
+highest-priority selected role (`ELEVATED_TEAM_ROLES` order: admin > editor
+> analyst; falls back to the implicit `team_member` baseline when no chip is
+selected), then `grantTeamMemberRole` for each other selected elevated role
+— the same add-then-grant sequencing the members table already uses for
+role changes on existing members (§ AUTHZ-06 above). On partial failure,
+succeeded users drop out of the pending list and failed ones stay for a
+retry; the dialog only auto-closes once every pending user succeeds.
+
+**`TeamRoleChips`** — the members table's inline role-chip toggle group
+(admin/editor/analyst, multi-select, `data-active` fills `--primary`) is
+extracted from `TeamSettingsMembersTable` into this shared molecule so the
+dialog's pending rows and the table use the identical implementation/CSS.
+Both gate each chip via the new `canAdministerTeamRole(capabilities, role)`
+helper (`core/hooks/teamCapabilities.ts`), replacing the table's former
+private closure of the same logic.
+
+**`Autocomplete` reopen-on-type fix.** Selecting an option closes the menu
+(`setIsOpen(false)`) without blurring the input — the listbox's
+`onMouseDown` preventDefault deliberately keeps focus in the field for a
+"search again immediately" flow. Previously, typing a second query while
+still focused left the menu closed (`isOpen` was only ever set on
+focus/blur), which read as broken as soon as a flow expected back-to-back
+searches. `onChange` now also sets `isOpen(true)`, so typing while focused
+always reopens the menu — affects every `Autocomplete` consumer, not just
+this dialog (currently also `AdminTeamsPage`).
 
 #### Open UX issues
 
