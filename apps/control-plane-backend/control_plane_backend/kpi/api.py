@@ -76,6 +76,7 @@ def build_kpi_router() -> APIRouter:
                     user,
                     team_id,
                     platform_admin_only=p.platform_admin_only,
+                    self_scoped=p.self_scoped,
                 )
 
                 now = datetime.now(tz=timezone.utc)

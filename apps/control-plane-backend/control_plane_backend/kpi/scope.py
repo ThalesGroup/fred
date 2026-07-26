@@ -61,6 +61,7 @@ async def resolve_kpi_scope(
     team_id: TeamId | None,
     *,
     platform_admin_only: bool = False,
+    self_scoped: bool = False,
 ) -> KpiScope:
     """Authorize a KPI preset request and return its resolved scope.
 
@@ -74,7 +75,18 @@ async def resolve_kpi_scope(
     already requires (`fred_core.tasks.authz`), so "can this user see this
     team's operational data" has one shared vocabulary across KPI presets and
     tasks, not two. `platform_admin_only` never affects the team-scoped check.
+
+    `self_scoped` (§2.4 "Personal presets (Page 3)") is checked first and
+    skips OpenFGA entirely: the preset's own query already filters on
+    `dims.user_id == user.uid`, so any authenticated user may call it — the
+    same "my own data" contract `team_id`/`platform_admin_only` never apply
+    to. Router-level validation (`api.py`) already rejects a `team_id` for
+    these (they are never `team_scopable`), so `team_id` is guaranteed None
+    here in practice; the check below does not depend on that guarantee.
     """
+
+    if self_scoped:
+        return KpiScope(team_id=None)
 
     rebac = get_application_container(request).get_rebac_engine()
     if team_id is None:

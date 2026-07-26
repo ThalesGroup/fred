@@ -19,9 +19,13 @@ now shares (OBSERV-02 v3, `KPI-ANALYTICS-RFC.md` §2.3/§2.4).
 Covers: platform-wide requires can_observe_platform (allow/deny), team-scoped
 requires can_read_members on that team (allow/deny), that the two checks are
 never conflated (a team-scoped request never checks the org permission and
-vice versa), and that `platform_admin_only` swaps in can_manage_platform for
-the platform-wide admin-only presets (storage_by_team) without touching the
-team-scoped check.
+vice versa), that `platform_admin_only` swaps in can_manage_platform for the
+platform-wide admin-only presets (storage_by_team) without touching the
+team-scoped check, and that `self_scoped` (the personal `user_token_usage_*`
+presets) bypasses OpenFGA entirely — regression test for the bug where every
+non-platform-admin/observer user got 403 on their own token usage, because
+the router called this chokepoint the same way for both platform-wide and
+personal presets.
 """
 
 from __future__ import annotations
@@ -189,3 +193,39 @@ async def test_team_scope_never_checks_org_permission(
     await resolve_kpi_scope(request, _user(), team_id)
 
     assert all(perm == TeamPermission.CAN_READ_MEMEBERS for perm, _ in rebac.calls)
+
+
+@pytest.mark.asyncio
+async def test_self_scoped_allowed_with_no_permissions_at_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard: a plain user with none of can_observe_platform,
+    can_manage_platform, or can_read_members on any team must still be able
+    to call a self_scoped preset (their own token usage) — that's the whole
+    point of self_scoped. Before this fix, the router applied the same
+    can_observe_platform check as any other platform-wide preset and 403'd
+    every non-admin/observer user out of their own data."""
+    rebac = _FakeRebac(allow=set())
+    request = _request_with(monkeypatch, rebac)
+
+    result = await resolve_kpi_scope(request, _user(), None, self_scoped=True)
+
+    assert result == KpiScope(team_id=None)
+    assert rebac.calls == []
+
+
+@pytest.mark.asyncio
+async def test_self_scoped_takes_priority_over_platform_admin_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """self_scoped is checked before platform_admin_only — a nonsensical
+    preset combining both must still skip OpenFGA, not require can_manage_platform."""
+    rebac = _FakeRebac(allow=set())
+    request = _request_with(monkeypatch, rebac)
+
+    result = await resolve_kpi_scope(
+        request, _user(), None, platform_admin_only=True, self_scoped=True
+    )
+
+    assert result == KpiScope(team_id=None)
+    assert rebac.calls == []

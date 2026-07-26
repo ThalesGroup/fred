@@ -114,4 +114,5 @@ USER_TOKEN_USAGE_BY_MODEL_PRESET = PresetDef(
     response_model=LabelValueResponse,
     handler=query_user_token_usage_by_model,
     summary=f"The requesting user's own token consumption broken down by the top {TOP_N} models",
+    self_scoped=True,
 )

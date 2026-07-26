@@ -136,4 +136,5 @@ USER_TOKEN_USAGE_OVER_TIME_PRESET = PresetDef(
     response_model=TimeSeriesResponse,
     handler=query_user_token_usage_over_time,
     summary="The requesting user's own LLM token consumption over time (input + output)",
+    self_scoped=True,
 )

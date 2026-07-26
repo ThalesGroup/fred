@@ -126,4 +126,5 @@ USER_TOKEN_USAGE_BY_AGENT_PRESET = PresetDef(
     response_model=LabelValueResponse,
     handler=query_user_token_usage_by_agent,
     summary=f"The requesting user's own token consumption broken down by the top {TOP_N} agents",
+    self_scoped=True,
 )

@@ -40,3 +40,10 @@ class PresetDef:
     # when `team_id` is None. Never affects the team-scoped check
     # (`can_read_members`), which applies uniformly regardless of this flag.
     platform_admin_only: bool = False
+    # True only for the personal presets (§2.4 "Personal presets (Page 3)"):
+    # the handler itself filters `WHERE dims.user_id = requesting_user.uid`,
+    # so no OpenFGA check applies — any authenticated user may call it. Must
+    # never be combined with `team_scopable=True`: the router rejects a
+    # `team_id` query param for these the same way it does for any other
+    # preset that isn't `team_scopable`.
+    self_scoped: bool = False
