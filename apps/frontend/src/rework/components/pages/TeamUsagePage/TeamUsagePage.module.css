@@ -48,3 +48,26 @@
     grid-column: auto;
   }
 }
+
+/* Compact number tiles for the team-shared section, wrapping across the width
+   — same pattern as AnalyticsPage's overview row. */
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--spacing-s);
+  margin-bottom: var(--spacing-m);
+}
+
+/* team_admin's Activités section: summary line + the embedded TaskActivity
+   organism, stacked. */
+.sectionStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.activitySummary {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

@@ -1122,6 +1122,7 @@
     },
     "teamUsage": {
       "title": "My token usage",
+      "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
         "valueLabel": "Tokens"
@@ -1135,6 +1136,31 @@
         "empty": "No model usage in this period.",
         "title": "Usage by model",
         "valueLabel": "Tokens"
+      },
+      "team": {
+        "sectionTitle": "Team usage",
+        "editorSectionTitle": "Activités (ingestion)",
+        "adminSectionTitle": "Activités",
+        "membersLabel": "Members",
+        "agentsLabel": "Agents",
+        "documentsLabel": "Documents",
+        "quota": {
+          "empty": "No storage quota configured for this team.",
+          "title": "Storage quota (% used)",
+          "valueLabel": "% of quota"
+        },
+        "conversationsOverTime": {
+          "title": "Conversations over time",
+          "valueLabel": "Conversations"
+        },
+        "mostActiveAgents": {
+          "title": "Most active agents",
+          "valueLabel": "Conversations"
+        },
+        "activitySummary": {
+          "active": "{{count}} conversations in this period — active",
+          "quiet": "{{count}} conversations in this period — quiet"
+        }
       }
     },
     "back": "Back",

@@ -1122,6 +1122,7 @@
     },
     "teamUsage": {
       "title": "Ma consommation de tokens",
+      "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
         "valueLabel": "Tokens"
@@ -1135,6 +1136,31 @@
         "empty": "Aucune consommation de modèle sur cette période.",
         "title": "Consommation par modèle",
         "valueLabel": "Tokens"
+      },
+      "team": {
+        "sectionTitle": "Consommation de l'équipe",
+        "editorSectionTitle": "Activités (ingestion)",
+        "adminSectionTitle": "Activités",
+        "membersLabel": "Membres",
+        "agentsLabel": "Agents",
+        "documentsLabel": "Documents",
+        "quota": {
+          "empty": "Aucun quota de stockage configuré pour cette équipe.",
+          "title": "Quota de stockage (% utilisé)",
+          "valueLabel": "% du quota"
+        },
+        "conversationsOverTime": {
+          "title": "Conversations dans le temps",
+          "valueLabel": "Conversations"
+        },
+        "mostActiveAgents": {
+          "title": "Agents les plus actifs",
+          "valueLabel": "Conversations"
+        },
+        "activitySummary": {
+          "active": "{{count}} conversations sur cette période — active",
+          "quiet": "{{count}} conversations sur cette période — calme"
+        }
       }
     },
     "back": "Retour",
