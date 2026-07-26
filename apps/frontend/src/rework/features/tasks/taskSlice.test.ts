@@ -65,6 +65,7 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,
+    warnings: null,
     ...overrides,
   };
 }

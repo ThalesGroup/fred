@@ -27,13 +27,18 @@ export interface PlatformImportLaunch {
 // Raw fetch (not the generated mutation) because the multipart upload is not
 // handled by the generated client; the response type is still the generated one.
 // Backend: POST /control-plane/v1/import-export/import (MIGR-05, PLATFORM-IMPORT-RFC).
-export async function launchPlatformImport(file: File, label?: string): Promise<PlatformImportLaunch> {
+export async function launchPlatformImport(
+  file: File,
+  label?: string,
+  realmFile?: File,
+): Promise<PlatformImportLaunch> {
   const token = KeyCloakService.GetToken() ?? "";
 
   const form = new FormData();
   form.append("file", file);
   const trimmed = label?.trim();
   if (trimmed) form.append("label", trimmed);
+  if (realmFile) form.append("realm_file", realmFile);
 
   const response = await fetch("/control-plane/v1/import-export/import", {
     method: "POST",

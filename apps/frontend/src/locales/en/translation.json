@@ -931,6 +931,42 @@
             "defaultError": "Could not reset the personal-space default."
           }
         }
+      },
+      "corpusAudit": {
+        "title": "Corpus audit",
+        "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
+        "loading": "Loading the corpus audit…",
+        "loadError": "Could not load the corpus audit.",
+        "refresh": "Refresh",
+        "fix": "Repair documents",
+        "fixing": "Repairing…",
+        "empty": "No anomalies to show.",
+        "noAnomalies": "No anomalies found — the content store, vector store, and metadata are in sync.",
+        "anomaliesFound_one": "{{count}} anomaly found.",
+        "anomaliesFound_other": "{{count}} anomalies found.",
+        "fixSuccess_one": "Repair complete — {{count}} document's processing status was reset. Nothing was deleted.",
+        "fixSuccess_other": "Repair complete — {{count}} documents' processing status was reset. Nothing was deleted.",
+        "fixError": "Could not repair the documents.",
+        "stats": {
+          "metadata": "Metadata records",
+          "vectors": "Vector-store documents",
+          "content": "Content-store documents"
+        },
+        "col": {
+          "document": "Document",
+          "sourceTag": "Source",
+          "metadata": "Metadata",
+          "vectorStore": "Vector store",
+          "contentStore": "Content store",
+          "vectorChunks": "Chunks",
+          "issues": "Issues"
+        },
+        "fixConfirm": {
+          "title": "Repair documents with a stale processing status?",
+          "message": "Resets the processing stage of documents whose status claims done when the content or vector store disagrees, so they become honestly re-processable. Nothing is deleted — orphan vector/content-store records with no matching document are left as-is for you to review or remove by hand.",
+          "confirm": "Repair documents",
+          "cancel": "Cancel"
+        }
       }
     },
     "agentCard": {
@@ -1267,6 +1303,7 @@
         "menu": {
           "analytics": "Analytics",
           "capabilities": "Capabilities",
+          "corpusAudit": "Corpus audit",
           "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Activity",
@@ -1343,6 +1380,7 @@
         "labelPlaceholder": "e.g. castle-prod",
         "launch": "Launch migration",
         "launching": "Launching...",
+        "keaLink": "Kea → Swift cutover tools (temporary) →",
         "title": "Platform migration",
         "import": {
           "title": "Import"
@@ -1362,6 +1400,16 @@
           "confirmLabel": "Reset",
           "cancelLabel": "Cancel",
           "error": "Reset failed"
+        },
+        "resetFull": {
+          "launch": "Full teardown",
+          "running": "Wiping…",
+          "taskLabel": "Platform full teardown",
+          "confirmTitle": "Full teardown — wipe everything except the root admin?",
+          "confirmMessage": "Permanently deletes every agent, tag, document, team, and prompt, every OpenFGA permission, and every Keycloak user. Only the identity that completed root bootstrap and your own account (if different) survive. This is different from \"Reset platform\" above — use it only to recover from a failed cutover import.",
+          "confirmLabel": "Wipe everything",
+          "cancelLabel": "Cancel",
+          "error": "Full teardown failed"
         },
         "stats": {
           "title": "Overview",
@@ -1421,6 +1469,10 @@
         "inMinutes": "in {{count}} min",
         "inHours": "in {{count}}h",
         "inDays": "in {{count}}d"
+      },
+      "card": {
+        "copyWarnings": "Copy warnings",
+        "copied": "Copied!"
       }
     },
     "adminTeams": {

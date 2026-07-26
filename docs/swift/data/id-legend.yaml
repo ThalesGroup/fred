@@ -1544,6 +1544,13 @@ items:
       rework code, and backend browse contracts that remain fast for users with
       hundreds of files.
 
+      Amended 2026-07-25 (RFC §13): resources dashboard v2 — tab switcher +
+      breadcrumb replacing the always-expanded tree (§13.2), DataTable-based rich
+      rows with size/created/modified/author/status columns (§13.3), search/sort
+      (§13.4), and usage cards (files-by-type histogram, size-by-type +
+      quota pie chart; ingestion token tracking explicitly carved out as a
+      separate future item, §13.6). New phases G/H/I added to the workplan.
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress
@@ -2495,7 +2502,7 @@ items:
 
   - id: MIGR-05
     title: "Platform import service — kea→swift configuration restore (atomic import + export/reset/stats, admin UI)"
-    status: in_progress
+    status: done
     parent: MIGR-00
     owner: Dimitri
     refs:
@@ -2503,14 +2510,17 @@ items:
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
       The 'metadata' topic — swift-side import counterpart to kea's throwaway export. Full current
-      contract: PLATFORM-IMPORT-RFC.md (rewritten 2026-07-16 to state the current contract only —
-      history is in git log, not inline). SHIPPED: atomic import of agents+tags+document-metadata+
-      team-metadata (single SQLAlchemy transaction in a FastAPI BackgroundTask, idempotent by PK),
-      swift-native export/reset, Platform-data stats dashboard, declarative users.json team/platform
-      role provisioning (fail-closed), validated+versioned manifest, honest content_keys + stage
-      reconciliation (05.13). DEFERRED (kea-import path only): OpenFGA tuple restore (05.04 — ops
-      bulk-copy Option A), agent prompt transfer (05.11). Document binaries move via MIGR-06;
-      embeddings rebuilt by MIGR-07 (re-vectorize trigger after import not yet wired).
+      contract: CONTROL-PLANE-PRODUCT-CONTRACT.md (import/export/reset/reset-full/stats
+      endpoints, bundle format, kea transform rules) — PLATFORM-IMPORT-RFC.md is now a compacted
+      closed-out pointer, history is in git log. SHIPPED (05.01-05.16, 05.18, #1954, validated on
+      a real kea dump 2026-07-22): atomic import/export/reset, kea agent+tag+metadata+team
+      transform, OpenFGA tuple restore with role transformation, agent prompt/tuning transfer,
+      chat-contexts → personal prompts, teams/platform roles from the bundled Keycloak realm
+      export, standalone realm_file upload + full-teardown reset-full (05.18, 2026-07-24) — the
+      kea-side partial-export 403 is no longer a blocker (realm_file upload works around it).
+      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07. Only remaining item:
+      05.17 (user-state/GCU rows migration), deliberately deferred — out of #1954 scope, see
+      KEA-MIGRATION-BACKLOG.md §0bis.
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"
@@ -2525,17 +2535,22 @@ items:
 
   - id: MIGR-07
     title: "Products — re-vectorization on the target"
-    status: open
+    status: in_progress
     parent: MIGR-00
     refs:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0quater"
       rfc: "docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md"
+      issue: 2111
     notes: >
       The 'products' topic. Embeddings (OpenSearch *-vector-index-mistral) are rebuilt on the
       target, not transported. Redesign the existing stubbed /corpus/revectorize endpoint onto a
       Temporal workflow over the existing output_process activity, streaming progress via the
       fred-core task/event API. input/ and output/ are mirrored together so only embeddings need
       regeneration. kea→swift delta: same embedding model → vectors compatible; index name maps.
+      2026-07-25: backend built (list_documents_in_scope activity, RevectorizeCorpusWorkflow +
+      RevectorizeDocument workflows, /corpus/revectorize wired to a real task_run + Temporal
+      workflow, source_tag scope authz gap fixed — see CORPUS-REVECTORIZE-RFC.md §8). Remaining:
+      MIGR-07.04 (migration UI "Rebuild embeddings" trigger) — separate future step.
 
   - id: MIGR-04
     title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"

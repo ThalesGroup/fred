@@ -86,7 +86,11 @@ async def _get_task(client: AsyncClient, task_id: str) -> dict[str, Any]:
 
 
 def _stub_open_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(import_export_api, "open_bundle", lambda data: object())
+    monkeypatch.setattr(
+        import_export_api,
+        "open_bundle",
+        lambda data, external_realm_data=None: object(),
+    )
 
 
 def _stub_run_import(monkeypatch: pytest.MonkeyPatch, report: MigrationReport) -> None:

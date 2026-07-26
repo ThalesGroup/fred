@@ -49,15 +49,26 @@ class SnapshotManifest(BaseModel):
 class KBundle:
     """An opened kea snapshot zip, ready to iterate over tables and tuples."""
 
-    def __init__(self, zf: zipfile.ZipFile, manifest: SnapshotManifest) -> None:
+    def __init__(
+        self,
+        zf: zipfile.ZipFile,
+        manifest: SnapshotManifest,
+        external_realm: dict[str, Any] | None = None,
+    ) -> None:
         self._zf = zf
         self.manifest = manifest
+        self._external_realm = external_realm
 
     def iter_table(self, table: str) -> Iterator[dict[str, Any]]:
-        """Yield one dict per row from a postgres/<table>.jsonl entry."""
-        path = f"postgres/{table}.jsonl"
+        """Yield one dict per row from a postgres/<table>.jsonl entry.
+
+        `table` must be the file name the producer actually wrote: kea bundles
+        use main's `migration/snapshot.py::EXPORT_TABLES` names verbatim
+        (`teammetadata`, `mcp-server`, …); swift-native bundles use the names
+        `exporter.py` writes (`team_metadata`, `agent_instance`, …).
+        """
         try:
-            data = self._zf.read(path).decode("utf-8")
+            data = self._zf.read(f"postgres/{table}.jsonl").decode("utf-8")
         except KeyError:
             return
         for line in data.splitlines():
@@ -78,6 +89,27 @@ class KBundle:
             return json.loads(self._zf.read("openfga/tuples.json"))
         except KeyError:
             return []
+
+    def keycloak_realm(self) -> dict[str, Any] | None:
+        """Return the Keycloak realm export to use for this import, None if none available.
+
+        Precedence (PLATFORM-IMPORT-RFC.md §9.1): a standalone realm supplied at
+        `open_bundle(..., external_realm_data=...)` always wins over the zip's own
+        `keycloak/realm.json` — never merged, never compared. This is the practical
+        cutover workaround for kea's `exportClients` 403 (§8): re-export the realm
+        directly from Keycloak and upload it alongside the zip.
+
+        Kea bundles carry `keycloak/realm.json` best-effort (main's `_dump_realm`)
+        when present. A partial-export contains the realm's groups (the kea team
+        names) but never its users; a full `kc export --users` also carries
+        `users[]` with their `realmRoles`.
+        """
+        if self._external_realm is not None:
+            return self._external_realm
+        try:
+            return json.loads(self._zf.read("keycloak/realm.json"))
+        except KeyError:
+            return None
 
     def demo_users(self) -> list[BundleUserEntry]:
         """Return the typed users.json provisioning list, empty list if absent.
@@ -100,15 +132,26 @@ class KBundle:
         self._zf.close()
 
 
-def open_bundle(data: bytes) -> KBundle:
+def open_bundle(data: bytes, external_realm_data: bytes | None = None) -> KBundle:
     """Open a snapshot zip from raw bytes, parse and validate its manifest.
 
     Rejects a bundle whose `format_version`/`users_schema_version` isn't in
     the supported set — no silent default when the key is absent or wrong,
     per the canonical contract in `PLATFORM-IMPORT-RFC.md`.
+
+    `external_realm_data`, when given, is a standalone Keycloak realm export
+    (raw JSON bytes) that takes precedence over the zip's own
+    `keycloak/realm.json` — see `KBundle.keycloak_realm()` and RFC §9.1.
     """
     zf = zipfile.ZipFile(io.BytesIO(data))
     raw = json.loads(zf.read("manifest.json"))
+    # Kea's exporter (main branch, `migration/snapshot.py`) predates the
+    # `users_schema_version` field and will never emit it — kea bundles also
+    # never carry a `users.json`, so the field is meaningless for them. Default
+    # it for non-swift bundles only; swift producers must keep declaring both
+    # versions explicitly (no silent default), per PLATFORM-IMPORT-RFC.md §4.
+    if raw.get("source_platform", "kea") != "swift":
+        raw.setdefault("users_schema_version", 1)
     manifest = SnapshotManifest.model_validate(raw)
     if manifest.format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise UnsupportedBundleFormatError(
@@ -120,4 +163,7 @@ def open_bundle(data: bytes) -> KBundle:
             f"Unsupported users.json schema version {manifest.users_schema_version}; "
             f"this importer understands {sorted(SUPPORTED_USERS_SCHEMA_VERSIONS)}"
         )
-    return KBundle(zf, manifest)
+    external_realm = (
+        json.loads(external_realm_data) if external_realm_data is not None else None
+    )
+    return KBundle(zf, manifest, external_realm=external_realm)

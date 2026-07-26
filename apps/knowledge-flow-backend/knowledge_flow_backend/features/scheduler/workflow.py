@@ -184,6 +184,17 @@ def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
     )
 
 
+def _wf_should_skip_revectorize(*, mode: Any, force: bool, chunk_count: int) -> bool:
+    """
+    True when a document already has vectors and neither `force` nor a `full` mode
+    require rebuilding them (RFC docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md §4: "mode:
+    full -> delete + re-embed every in-scope doc. mode: incremental -> only docs with
+    0 vectors."). Kept as a pure function (no Temporal context needed) so the
+    decision matrix is directly unit-testable.
+    """
+    return mode == "incremental" and not force and chunk_count > 0
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
@@ -591,3 +602,154 @@ class ProcessPull:
             child_workflow_run=ProcessPullFile.run,
             child_prefix="ProcessPullFile",
         )
+
+
+# ── MIGR-07: corpus re-vectorization ──────────────────────────────────────────
+# Mirrors the ProcessPull/ProcessPullFile parent/child shape above: the parent
+# resolves scope and batches children, each child re-vectorizes one document from
+# its already-stored input/output content (RFC docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md
+# §3). Same plain-data boundary rule applies — see module docstring.
+
+
+@workflow.defn
+class RevectorizeDocument:
+    @workflow.run
+    async def run(self, document_uid: str, options: Any, user: Any, task_id: str | None) -> dict:
+        """
+        Re-vectorize one document: skip if already vectorized (incremental, no
+        force), else delete existing vectors (if any) and re-run `output_process`.
+
+        Failures are caught and reported (`failed: True`) rather than raised, so one
+        bad document doesn't abort the whole corpus batch — the parent workflow tallies
+        `processed`/`failed` into a single terminal task event either way.
+        """
+        mode = _wf_get(options, "mode", "incremental")
+        force = bool(_wf_get(options, "force", False))
+
+        try:
+            count = await workflow.execute_activity(
+                "get_chunk_count",
+                args=[document_uid],
+                schedule_to_close_timeout=timedelta(minutes=5),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+
+            if _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=count):
+                if task_id:
+                    await workflow.execute_activity(
+                        "emit_ingestion_task_event",
+                        args=[task_id, "running", "skip", None, None, 1, 1, 0, document_uid, document_uid],
+                        schedule_to_close_timeout=timedelta(hours=1),
+                        retry_policy=RetryPolicy(maximum_attempts=1),
+                    )
+                return {"document_uid": document_uid, "skipped": True, "failed": False}
+
+            if force or count > 0:
+                await workflow.execute_activity(
+                    "delete_vectors",
+                    args=[document_uid],
+                    schedule_to_close_timeout=timedelta(minutes=10),
+                    retry_policy=RetryPolicy(maximum_attempts=3),
+                )
+
+            prepared = await workflow.execute_activity(
+                "prepare_revectorize_file",
+                args=[document_uid, user],
+                schedule_to_close_timeout=timedelta(minutes=5),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+            file = _wf_get(prepared, "file")
+            metadata = _wf_get(prepared, "metadata")
+
+            await workflow.execute_activity(
+                "output_process",
+                args=[file, metadata, False],
+                schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", "vectorized", None, None, 1, 1, 0, document_uid, document_uid],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            return {"document_uid": document_uid, "skipped": False, "failed": False}
+        except Exception as exc:
+            if task_id:
+                error_str = str(exc).strip() or "Revectorize failed"
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", None, None, error_str, 0, 1, 1, document_uid, document_uid],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            return {"document_uid": document_uid, "skipped": False, "failed": True}
+
+
+@workflow.defn
+class RevectorizeCorpusWorkflow:
+    @workflow.run
+    async def run(self, payload: Any) -> dict:
+        """
+        Resolve `payload.scope` to document_uids, then batch `RevectorizeDocument`
+        children (same bounded-parallelism shape as `_wf_run_parent_pipeline`), and
+        emit one running/succeeded overall event carrying processed/total/failed
+        counts. Never raises for per-document failures — see `RevectorizeDocument`.
+        """
+        scope = _wf_get(payload, "scope", {}) or {}
+        options = _wf_get(payload, "options", {}) or {}
+        user = _wf_get(payload, "user", {}) or {}
+        task_id = _wf_get(payload, "task_id", None)
+        max_parallelism = max(1, int(_wf_get(payload, "max_parallelism", 1) or 1))
+
+        document_uids = await workflow.execute_activity(
+            "list_documents_in_scope",
+            args=[scope],
+            schedule_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )
+        total = len(document_uids)
+
+        if task_id:
+            await workflow.execute_activity(
+                "emit_ingestion_task_event",
+                args=[task_id, "running", "listed", 0.0, None, 0, total, 0, None, None],
+                schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+
+        processed = 0
+        failed = 0
+        workflow_id = workflow.info().workflow_id
+
+        for batch_start in range(0, total, max_parallelism):
+            batch = document_uids[batch_start : batch_start + max_parallelism]
+            handles = []
+            for offset, document_uid in enumerate(batch):
+                index = batch_start + offset
+                digest = hashlib.sha256(document_uid.encode()).hexdigest()[:12]
+                handle = await workflow.start_child_workflow(
+                    RevectorizeDocument.run,
+                    args=[document_uid, options, user, task_id],
+                    id=f"{workflow_id}-revectorize-{index}-{digest}",
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+                handles.append(handle)
+
+            for handle in handles:
+                result = await handle
+                processed += 1
+                if _wf_get(result, "failed", False):
+                    failed += 1
+
+        if task_id:
+            await workflow.execute_activity(
+                "emit_ingestion_task_event",
+                args=[task_id, "succeeded", "done", 1.0, None, processed, total, failed, None, None],
+                schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+
+        return {"total": total, "processed": processed, "failed": failed}
