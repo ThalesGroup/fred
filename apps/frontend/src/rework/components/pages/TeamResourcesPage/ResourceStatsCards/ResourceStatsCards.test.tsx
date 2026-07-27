@@ -24,8 +24,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 let capturedBarRows: unknown;
-let capturedPieRows: unknown;
-let capturedPieColors: unknown;
+let capturedSizeSegments: unknown;
 
 vi.mock("@shared/molecules/BarChart/BarChart.tsx", () => ({
   default: (props: { rows: unknown }) => {
@@ -34,10 +33,9 @@ vi.mock("@shared/molecules/BarChart/BarChart.tsx", () => ({
   },
 }));
 
-vi.mock("@shared/molecules/PieChart/PieChart.tsx", () => ({
-  default: (props: { rows: unknown; colors: unknown }) => {
-    capturedPieRows = props.rows;
-    capturedPieColors = props.colors;
+vi.mock("./SizeByTypeBar.tsx", () => ({
+  default: (props: { segments: unknown }) => {
+    capturedSizeSegments = props.segments;
     return null;
   },
 }));
@@ -81,9 +79,7 @@ describe("ResourceStatsCards", () => {
     ]);
   });
 
-  it("drops zero-size buckets from the pie chart but keeps each surviving bucket's fixed color", () => {
-    // "text" (index 1) is zero and should be dropped without the "ppt" bucket
-    // (index 2) inheriting "text"'s color slot.
+  it("assigns each bucket its developer-specified color (orange/blue/red/green/grey), not a sequential slice", () => {
     render(
       <ResourceStatsCards
         entries={[
@@ -95,13 +91,11 @@ describe("ResourceStatsCards", () => {
       />,
     );
 
-    expect(capturedPieRows).toEqual([
-      { label: "pdf", value: 100 },
-      { label: "ppt", value: 200 },
-    ]);
-    // pdf (bucket index 0) and ppt (bucket index 2) each keep their own fixed
-    // color — ppt must NOT inherit "text"'s color[1] slot just because "text"
-    // was dropped for being zero-size.
-    expect(capturedPieColors).toEqual([SERIES_COLORS[0], SERIES_COLORS[2]]);
+    const segments = capturedSizeSegments as { key: string; value: number; color: string }[];
+    expect(segments.find((s) => s.key === "pdf")).toMatchObject({ value: 100, color: SERIES_COLORS[1] }); // orange
+    expect(segments.find((s) => s.key === "text")).toMatchObject({ value: 0, color: SERIES_COLORS[0] }); // blue
+    expect(segments.find((s) => s.key === "ppt")).toMatchObject({ value: 200, color: SERIES_COLORS[8] }); // red
+    expect(segments.find((s) => s.key === "excel")).toMatchObject({ value: 0, color: SERIES_COLORS[2] }); // green
+    expect(segments.find((s) => s.key === "other")).toMatchObject({ value: 0, color: SERIES_COLORS[9] }); // grey
   });
 });

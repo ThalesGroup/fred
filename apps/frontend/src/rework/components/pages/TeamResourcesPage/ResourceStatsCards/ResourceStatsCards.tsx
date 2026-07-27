@@ -14,15 +14,26 @@
 
 import { useTranslation } from "react-i18next";
 import BarChart from "@shared/molecules/BarChart/BarChart.tsx";
-import PieChart from "@shared/molecules/PieChart/PieChart.tsx";
 import { SERIES_COLORS } from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart.tsx";
 import type { ResourceTypeStatsEntry } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { formatBytes } from "../../../../utils/formatBytes.ts";
+import SizeByTypeBar from "./SizeByTypeBar.tsx";
 import styles from "./ResourceStatsCards.module.css";
 
-// Fixed categorical order (FRONT-09.I) — colors must stay pinned to the same
-// bucket across renders, never cycled to whatever order the API returns.
+// Fixed categorical order (FRONT-09.I) — must stay pinned to the same bucket
+// across renders, never cycled to whatever order the API returns.
 const BUCKET_ORDER = ["pdf", "text", "ppt", "excel", "other"] as const;
-const BUCKET_COLORS = SERIES_COLORS.slice(0, BUCKET_ORDER.length);
+
+// Explicit, meaning-carrying assignment (developer request, 2026-07-27) — not
+// the generic sequential SERIES_COLORS slice used elsewhere: orange = PDF,
+// blue = Texte, red = PPT, green = Excel/CSV, grey = Autres.
+const BUCKET_COLOR: Record<(typeof BUCKET_ORDER)[number], string> = {
+  pdf: SERIES_COLORS[1], // orange
+  text: SERIES_COLORS[0], // blue
+  ppt: SERIES_COLORS[8], // red
+  excel: SERIES_COLORS[2], // green
+  other: SERIES_COLORS[9], // grey
+};
 
 interface ResourceStatsCardsProps {
   entries: ResourceTypeStatsEntry[] | undefined;
@@ -38,17 +49,12 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
     label: t(`rework.resources.stats.bucket.${bucket}`),
     value: byBucket.get(bucket)?.count ?? 0,
   }));
-  // Zero-size buckets are dropped (an empty pie slice adds noise, not
-  // signal), but color must stay pinned to its bucket — filter row and
-  // color together, in lockstep, rather than re-deriving color from the
-  // post-filter index.
-  const sizeEntries = BUCKET_ORDER.map((bucket, i) => ({
+  const sizeSegments = BUCKET_ORDER.map((bucket) => ({
+    key: bucket,
     label: t(`rework.resources.stats.bucket.${bucket}`),
     value: byBucket.get(bucket)?.size_bytes ?? 0,
-    color: BUCKET_COLORS[i],
-  })).filter((entry) => entry.value > 0);
-  const sizeRows = sizeEntries.map(({ label, value }) => ({ label, value }));
-  const sizeColors = sizeEntries.map((entry) => entry.color);
+    color: BUCKET_COLOR[bucket],
+  }));
 
   return (
     <div className={styles.grid}>
@@ -62,13 +68,12 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
         sortOrder="none"
         compact
       />
-      <PieChart
+      <SizeByTypeBar
         title={t("rework.resources.stats.sizeByType.title")}
-        rows={sizeRows}
+        segments={sizeSegments}
         isLoading={isLoading}
         isError={isError}
-        colors={sizeColors}
-        compact
+        formatValue={formatBytes}
       />
     </div>
   );

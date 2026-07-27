@@ -9,23 +9,6 @@
   padding: var(--spacing-l);
 }
 
-.section[data-compact] {
-  gap: var(--spacing-2xs);
-  border-radius: var(--radius-s);
-  padding: var(--spacing-s);
-  height: 120px;
-  overflow: hidden;
-}
-
-.section[data-compact] .title {
-  font: var(--font-label-small);
-}
-
-.section[data-compact] .chartArea {
-  max-width: none;
-  overflow: hidden;
-}
-
 .chartArea {
   display: flex;
   flex: 1;
