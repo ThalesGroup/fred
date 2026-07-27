@@ -33,9 +33,21 @@ interface PieChartProps {
    *  `SERIES_COLORS` (from `MultiSeriesLineChart`) for 3+ categorical
    *  slices instead of picking new hex values. */
   colors?: string[];
+  /** Shrinks padding/title/chart to fit a ~120px-tall card (e.g. a dashboard tile
+   *  row) instead of the roomier default section. The legend moves beside the
+   *  pie (using width, not height) and shrinks to fit the same band. */
+  compact?: boolean;
 }
 
-export default function PieChart({ title, rows, emptyMessage, isLoading, isError, colors }: PieChartProps) {
+export default function PieChart({
+  title,
+  rows,
+  emptyMessage,
+  isLoading,
+  isError,
+  colors,
+  compact = false,
+}: PieChartProps) {
   const { t } = useTranslation();
   const css = getCssVars(
     "--on-surface-retreat",
@@ -51,7 +63,7 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
   const COLORS = colors ?? [css["--primary"], css["--tertiary"]];
 
   return (
-    <section className={styles.section}>
+    <section className={styles.section} data-compact={compact || undefined}>
       <div className={styles.header}>
         <h2 className={styles.title}>{title}</h2>
       </div>
@@ -64,9 +76,17 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
 
       {!!rows.length && (
         <div className={styles.chartArea}>
-          <ResponsiveContainer width="100%" height={220}>
-            <RechartsPieChart>
-              <Pie data={rows} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={80} strokeWidth={0}>
+          <ResponsiveContainer width="100%" height={compact ? 80 : 220}>
+            <RechartsPieChart margin={compact ? { top: 0, right: 0, left: 0, bottom: 0 } : undefined}>
+              <Pie
+                data={rows}
+                dataKey="value"
+                nameKey="label"
+                cx={compact ? "30%" : "50%"}
+                cy="50%"
+                outerRadius={compact ? 32 : 80}
+                strokeWidth={0}
+              >
                 {rows.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
@@ -85,8 +105,13 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
                 formatter={(value: number, name: string) => [value.toLocaleString(), name]}
               />
               <Legend
+                layout={compact ? "vertical" : "horizontal"}
+                verticalAlign={compact ? "middle" : "bottom"}
+                align={compact ? "right" : "center"}
+                iconSize={compact ? 6 : 14}
                 wrapperStyle={{
-                  fontSize: 12,
+                  fontSize: compact ? 9 : 12,
+                  lineHeight: compact ? "1.4" : undefined,
                   fontFamily: css["--font-family-base"],
                   color: css["--on-surface-retreat"],
                 }}

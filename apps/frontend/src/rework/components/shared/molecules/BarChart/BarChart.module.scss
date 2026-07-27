@@ -7,6 +7,16 @@
   padding: var(--spacing-l);
 }
 
+.section[data-compact] {
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs);
+  height: 120px;
+}
+
+.section[data-compact] .title {
+  font: var(--font-label-small);
+}
+
 .header {
   display: flex;
   justify-content: space-between;

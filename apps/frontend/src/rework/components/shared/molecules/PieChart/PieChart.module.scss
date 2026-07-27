@@ -9,6 +9,20 @@
   padding: var(--spacing-l);
 }
 
+.section[data-compact] {
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs);
+  height: 120px;
+}
+
+.section[data-compact] .title {
+  font: var(--font-label-small);
+}
+
+.section[data-compact] .chartArea {
+  max-width: none;
+}
+
 .chartArea {
   display: flex;
   flex: 1;

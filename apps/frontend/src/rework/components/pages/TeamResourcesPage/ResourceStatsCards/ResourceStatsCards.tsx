@@ -62,6 +62,7 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
           isError={isError}
           orientation="vertical"
           sortOrder="none"
+          compact
         />
         <PieChart
           title={t("rework.resources.stats.sizeByType.title")}
@@ -69,6 +70,7 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
           isLoading={isLoading}
           isError={isError}
           colors={sizeColors}
+          compact
         />
       </div>
     </Disclosure>

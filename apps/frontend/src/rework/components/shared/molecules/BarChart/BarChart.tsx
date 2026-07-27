@@ -45,6 +45,11 @@ interface BarChartProps {
    * "vertical" — bars grow upward, labels on the X axis at the bottom.
    */
   orientation?: "horizontal" | "vertical";
+  /** Shrinks padding/title/chart to fit a ~120px-tall card (e.g. a dashboard tile
+   *  row) instead of the roomier default section. Axis tick labels are dropped —
+   *  there isn't room for them at this size — so `valueLabel`/tooltip carries the
+   *  meaning instead. */
+  compact?: boolean;
 }
 
 export default function BarChart({
@@ -57,6 +62,7 @@ export default function BarChart({
   sortOrder = "desc",
   barHeight = 32,
   orientation = "horizontal",
+  compact = false,
 }: BarChartProps) {
   const { t } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
@@ -76,10 +82,11 @@ export default function BarChart({
   const isVertical = orientation === "vertical";
 
   // Horizontal: height grows with number of bars. Vertical: fixed height, width is unrestricted.
-  const chartHeight = isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
+  // Compact: fits a ~120px card (8px padding + a small title leave ~80px for the chart itself).
+  const chartHeight = compact ? 80 : isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
 
   return (
-    <section ref={sectionRef} className={styles.section}>
+    <section ref={sectionRef} className={styles.section} data-compact={compact || undefined}>
       <div className={styles.header}>
         <h2 className={styles.title}>{title}</h2>
       </div>
@@ -97,18 +104,23 @@ export default function BarChart({
               <RechartsBarChart
                 data={displayRows}
                 layout="horizontal"
-                margin={{ top: 8, right: 8, left: 8, bottom: 40 }}
+                margin={compact ? { top: 2, right: 2, left: 2, bottom: 2 } : { top: 8, right: 8, left: 8, bottom: 40 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />
+                {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />}
                 <XAxis
                   type="category"
                   dataKey="label"
-                  tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                  tick={{
+                    fill: css["--on-surface-retreat"],
+                    fontSize: compact ? 9 : 11,
+                    fontFamily: css["--font-family-base"],
+                  }}
                   tickLine={false}
-                  axisLine={{ stroke: css["--outline-retreat"] }}
-                  angle={-35}
-                  textAnchor="end"
+                  axisLine={compact ? false : { stroke: css["--outline-retreat"] }}
+                  angle={compact ? 0 : -35}
+                  textAnchor={compact ? "middle" : "end"}
                   interval={0}
+                  height={compact ? 14 : undefined}
                 />
                 <YAxis
                   type="number"
@@ -116,6 +128,7 @@ export default function BarChart({
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
                   axisLine={false}
+                  hide={compact}
                 />
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
