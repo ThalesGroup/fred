@@ -4,8 +4,6 @@
 
 **Backlog**: [`../backlog/KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md)
 
-**Detailed procedure**: [`MIGRATION-CASTLE-TO-S3NS.html`](MIGRATION-CASTLE-TO-S3NS.html)
-
 This document keeps the production cutover model small and explicit. The
 implementation RFCs stay focused on the pieces that are not built yet.
 
@@ -14,28 +12,46 @@ implementation RFCs stay focused on the pieces that are not built yet.
 Run the migration in this order:
 
 1. Freeze the source for a consistent capture.
-2. Bootstrap identity on the target.
-3. Mirror document binaries.
-4. Import metadata.
-5. Rebuild derived products.
-6. Verify, cut over users, and keep the source as rollback.
+2. Mirror document binaries.
+3. Import metadata (identity is resolved by username inline, see below).
+4. Rebuild derived products.
+5. Verify, cut over users, and keep the source as rollback.
 
-Do not reorder these steps. Metadata references identity IDs, metadata joins to
-document binaries by `document_uid`, and product rebuilds depend on imported
-metadata plus mirrored `output/` artifacts.
+Do not reorder these steps. Metadata joins to document binaries by
+`document_uid`, and product rebuilds depend on imported metadata plus
+mirrored `output/` artifacts.
 
-## Four Topics
+## Three Topics
 
 | Topic | Tracked as | Owner | Rule |
 | --- | --- | --- | --- |
-| identity | MIGR-04 | platform/ops | Preserve Keycloak user `sub` before any application import. Team IDs are no longer Keycloak group IDs — see the migration note below. |
 | data | MIGR-06 | application migration | Mirror MinIO buckets key-for-key; never rewrite `document_uid` paths. |
-| metadata | MIGR-02 + MIGR-05 | application migration | Restore the config graph from the export zip into a fresh target only. |
+| metadata | MIGR-02 + MIGR-05 | application migration | Restore the config graph from the export zip into a fresh target only; resolves identity by username inline (no separate identity step — see below). |
 | products | MIGR-07 | application migration | Rebuild embeddings and other derived artifacts on the target. |
+
+## Identity — resolved by username, not preserved
+
+At the start of a migration run, target Keycloak holds **only the root admin** —
+there is no out-of-band identity bootstrap step and no expectation that a
+user's Keycloak `sub` carries over from the source. A fresh Keycloak mints a
+new `sub` for each person the first time they log in via SSO.
+
+The metadata import resolves identity by **username**, using `kea_sub →
+username` from the bundle and `username → swift_sub` from the live target
+Keycloak (`kea_reconciliation.py`). Three outcomes per user: `MATCHED` (same
+`sub` both sides), `RELINKED` (found under a different `swift_sub` — that
+`sub` is used everywhere), `PENDING` (username not yet in target Keycloak,
+i.e. before their first login). A `PENDING` user never blocks the rest of the
+import: everything keyed on their identity is deferred, never written under
+the old kea `sub`. Re-running the same import after their first login
+resolves them to `MATCHED`/`RELINKED` and completes the deferred data —
+convergent, no duplicates. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` for the
+contract detail.
 
 ## Non-Negotiables
 
-- Keycloak user IDs (`sub`) are preserved, not remapped.
+- No Keycloak `sub` from the kea export is ever written as a Swift identity;
+  identity is resolved by username as described above.
 - Teams are not Keycloak groups (AUTHZ-05 review item 9, `platform/REBAC.md`,
   `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6): a team is a `team_metadata`
   row plus explicit OpenFGA relation tuples (`team_admin`/`team_editor`/
@@ -59,10 +75,9 @@ AUTHZ-05 review item 9 (2026-07-10, `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Par
 `team_metadata` row (independently generated `uuid4().hex` id, plus `name`) with
 membership as explicit OpenFGA relation tuples (`team_admin`/`team_editor`/
 `team_analyst`/`team_member`) — no Keycloak group backs it, and there is no group ID to
-preserve as the team ID. This revamps how MIGR-04/MIGR-02 must handle teams: user
-identity migration (`sub` preservation) is unaffected, but team migration is now "create
-a `team_metadata` row per source team, then write the equivalent membership tuples
-directly" rather than "preserve the group ID." The concrete import mechanics for this
+preserve as the team ID. This revamps how MIGR-02 must handle teams: team migration is
+now "create a `team_metadata` row per source team, then write the equivalent membership
+tuples directly" rather than "preserve the group ID." The concrete import mechanics for this
 (source team enumeration, id/name mapping, tuple-writing order) are not yet designed —
 track as a follow-up before this document's team-related steps are treated as
 actionable.
@@ -71,7 +86,7 @@ actionable.
 
 | Area | Current state |
 | --- | --- |
-| Identity | Runbook exists in `KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`; platform-owned and not implemented by Swift code. Note: swift ignores Keycloak realm roles — kea platform admins must be re-granted `platform_admin` explicitly (bundle `users.json` or bootstrap). |
+| Identity | Implemented inline in the metadata import (`kea_reconciliation.py`): username-based resolution, `MATCHED`/`RELINKED`/`PENDING`. Platform roles come from the bundled realm export's `realmRoles` when a full export is provided (MIGR-05.16); otherwise `users.json`/bootstrap is the fallback channel. |
 | Data mirror | Procedure tracked in MIGR-06; no Swift service is expected for the `mc mirror` itself. |
 | Metadata import backend | Implemented (2026-07-24): `POST /control-plane/v1/import-export/import` (`control_plane_backend/import_export/`), atomic transaction + task events. Kea path covers agents (incl. prompt/tuning transfer), chat-contexts → personal prompts, tags/metadata, teammetadata, and OpenFGA tuple restore with role transformation (`owner→team_admin+team_editor`, `manager→team_editor`, `member→team_member`). Validated against a real kea dump (2026-07-22). |
 | Metadata import UI | **Platform data** admin page, wired to the live backend (MIGR-05.06). |
@@ -91,7 +106,9 @@ actionable.
 
 Stop the cutover if any of these are true:
 
-- a target Keycloak user gets a new UUID;
+- a `MATCHED`/`RELINKED`/`PENDING` classification writes a kea `sub` as a Swift
+  identity anywhere (identity bug, not a normal outcome — `RELINKED` users
+  getting a new `swift_sub` is expected and handled, not a failure);
 - metadata import sees identities, teams, documents, or agent templates it cannot
   validate or map;
 - the target already contains data that violates the fresh-target import policy;

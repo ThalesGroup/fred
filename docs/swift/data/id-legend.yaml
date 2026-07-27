@@ -2544,15 +2544,15 @@ items:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md"
       runbook: "docs/swift/ops/KEA_SWIFT_CUTOVER.md"
     notes: >
-      Umbrella for the full Kea→Swift production migration. Three workstreams:
+      Umbrella for the full Kea→Swift production migration. Workstreams:
       (1) cherry-picks / code adaptations from Kea (MIGR-01),
       (2) Postgres data migration and backfill scripts (MIGR-02),
       (3) feature parity — Kea features missing in Swift (MIGR-03),
-      (4) platform identity bootstrap prerequisite (MIGR-04),
-      (5) swift platform import service (MIGR-05),
-      (6) data — MinIO mc mirror (MIGR-06),
-      (7) products — re-vectorization (MIGR-07).
-      Migration model & vocabulary (identity → data → metadata → products) and order:
+      (4) swift platform import service, incl. inline identity resolution (MIGR-05),
+      (5) data — MinIO mc mirror (MIGR-06),
+      (6) products — re-vectorization (MIGR-07).
+      MIGR-04 (identity) folded into MIGR-05 — see that entry.
+      Migration model & vocabulary (data → metadata → products) and order:
       docs/swift/backlog/KEA-MIGRATION-BACKLOG.md → "Migration model".
 
   - id: MIGR-05
@@ -2609,19 +2609,22 @@ items:
 
   - id: MIGR-04
     title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"
-    status: open
+    status: folded
     parent: MIGR-00
     owner: Sébastien
     refs:
-      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0"
-      runbook: "docs/swift/ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md"
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md — Migration model"
     notes: >
-      Platform prerequisite, must complete before any application data import. Fred keys all
-      ownership and OpenFGA tuples on the Keycloak `sub`; the target (S3NS) Keycloak must be
-      seeded by exporting on-prem users with their `id` so each user's `sub` is preserved.
-      Acceptance: a real user logs into S3NS via SSO and their token `sub` equals their on-prem
-      UUID. Application team rehearses locally with one shared Keycloak (kea+swift) which models
-      the post-bootstrap state but does not exercise the bootstrap itself.
+      Folded into MIGR-05 (2026-07-27). The out-of-band ops-owned prerequisite this item
+      described — pre-seed target Keycloak so every user's `sub` carries over — was never built;
+      the actual, shipped strategy is the opposite: target Keycloak starts with only the root
+      admin, and identity is resolved by username inline inside the metadata import
+      (`kea_reconciliation.py`, MIGR-05.04) — MATCHED / RELINKED / PENDING, no sub preserved, no
+      separate identity step. `KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md` (the runbook this item
+      pointed to) has been deleted as obsolete. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` for the
+      live contract. (Orthogonal, unmerged: #2126 explores actively provisioning users into
+      target Keycloak with `sub` preserved from a Keycloak SQL dump — additive on top of this
+      same reconciliation pipeline, not a return to the old out-of-band bootstrap doctrine.)
 
   - id: MIGR-01
     title: "Cherry-picks and code adaptations from Kea to Swift"
