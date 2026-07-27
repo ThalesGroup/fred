@@ -8,9 +8,9 @@ _how to work_ in this repository. Human developers start with `docs/swift/README
 ## Prime directive — extend, do not duplicate
 
 Before writing any spec, RFC, type, or document: check whether it already exists.
-This codebase has complete contracts, registered IDs, and active backlogs. The most
-common failure mode is producing new material that duplicates or contradicts what is
-already specified. Find and extend; do not create.
+This codebase has complete contracts and active backlogs. The most common failure
+mode is producing new material that duplicates or contradicts what is already
+specified. Find and extend; do not create.
 
 Do not invent a new architecture, endpoint family, migration direction, or abstraction
 unless an RFC is written and the developer confirms. When in doubt, choose the smallest
@@ -33,14 +33,7 @@ the task — do not create a duplicate. For status/planning questions, query
 GitHub directly (`gh issue list`, `gh issue view`) rather than looking for a
 tracking doc to read.
 
-**2. ID lookup (narrow scope)** — open `docs/swift/data/id-legend.yaml` only
-when the task is tied to an RFC or a genuine cross-cutting architecture
-decision. Most issues do not need an ID — the GitHub issue itself (title,
-label, milestone) is the tracking unit; do not register one just to have one.
-If an entry exists: read its `status` — if `done` or `deferred`, ask before
-reopening.
-
-**3. Contract lookup** — before adding any field, endpoint, or type, check:
+**2. Contract lookup** — before adding any field, endpoint, or type, check:
 
 - Execution surface → `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
 - Product/session/admin surface → `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`
@@ -48,13 +41,20 @@ reopening.
 If the field exists but is not yet exposed, extend the contract. Do not create a
 parallel type outside these files.
 
-**4. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
-covers the area, amend it rather than creating a new one.
+**3. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
+covers the area, amend it rather than creating a new one. **RFCs are proposals,
+not verified truth** — each records intent at the time it was written (or
+amended) and its own `**Status:**` line, but it can still be superseded by a
+later decision that never made it back into the doc. Cross-check an RFC's
+design against the actual code and the frozen contract docs before treating it
+as current; if they diverge, the code and contract docs win — flag the
+divergence (or amend the RFC) rather than implementing what the RFC says over
+what's actually decided.
 
-**5. Convergence check (before close-out)** — does the code match the GitHub
-issue's intent, and (if one exists) the RFC/`id-legend.yaml` entry? Fix
-divergence before closing. Close the GitHub issue or leave a status comment —
-that is the only tracking surface that needs to stay current.
+**4. Convergence check (before close-out)** — does the code match the GitHub
+issue's intent, and (if one exists) the RFC's? Fix divergence before closing.
+Close the GitHub issue or leave a status comment — that is the only tracking
+surface that needs to stay current.
 
 ---
 
@@ -66,7 +66,7 @@ Decision tree for every piece of new content:
       → write/amend RFC in docs/swift/rfc/. Stop until developer confirms.
     New feature, endpoint, or component?
       → check for an existing GitHub issue (swift-golive / swift ga milestone).
-        Add an id-legend.yaml entry only if an RFC backs it. Stop until developer confirms.
+        Stop until developer confirms.
     Code style, typing, or testing rule?
       → docs/CONVENTIONS.md
     Architecture overview or component map?
@@ -81,10 +81,10 @@ Decision tree for every piece of new content:
 alternatives considered, impact on existing contracts. Mechanical fixes (typo,
 missing agreed field) are exempt — state why.
 
-**Step 2 — Backlog entry (RFC-backed work only).** If Step 1 produced an RFC,
-add/confirm its `id-legend.yaml` entry and, if a domain backlog file is still
-actively maintained for that area, link it there. Skip entirely for routine
-issue-driven work — the GitHub issue is the entry.
+**Step 2 — Backlog link (RFC-backed work only).** If Step 1 produced an RFC and
+a domain backlog file is still actively maintained for that area, link the RFC
+there. Skip entirely for routine issue-driven work — the GitHub issue is the
+entry.
 
 **Step 3 — Developer confirmation.** Present: what will be built, which files
 touched, which tests added, which docs updated. **Do not begin until confirmed.**
@@ -93,8 +93,8 @@ One sentence of approval is enough.
 **Step 3.5 — GitHub issue (execution handoff).** Most work starts from an
 existing GitHub issue (`swift-golive` / `swift ga` milestone) — that's the
 normal case, use it. If none exists for the task, offer to create one before
-implementing. If Step 1 produced an RFC or Step 2 an `id-legend.yaml` entry,
-link them in the issue. Do not implement authorless, untracked work.
+implementing. If Step 1 produced an RFC, link it in the issue. Do not
+implement authorless, untracked work.
 
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
@@ -120,7 +120,7 @@ reporting done.
 | New behaviour, API field, or contract change                      | Update spec table in the relevant design doc                                             |
 | Frozen contract touched (`execution.py`, `agent_app.py`, OpenAPI) | Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8` or `CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
-| RFC-backed item finished                                          | Mark `id-legend.yaml` status `done`, close the GitHub issue                              |
+| RFC-backed item finished                                          | Update the RFC's `**Status:**` line, close the GitHub issue                              |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
@@ -137,46 +137,28 @@ GitHub issue instead.
 - Code: <one line — what was changed>
 - Tests: <pass / n tests added / why none needed>
 - Docs updated: <list each file touched, or "none — mechanical fix">
-- Tracking: <GitHub issue # closed/updated, or id-legend.yaml entry updated, or "none — not tracked">
+- Tracking: <GitHub issue # closed/updated, or "none — not tracked">
 - Skipped steps: <list any Step 1–3 steps skipped and why>
 ```
 
 ---
 
-## Task IDs and the registry
+## Task ID convention (informal — no registry)
 
-Format: `DOMAIN-NN` — a 4-7 letter domain code and a two-digit sequential number.
+`docs/swift/data/id-legend.yaml` was removed (2026-07-27): a 2600+ line
+central registry that assistants spent significant time reading and that
+created a second, easily stale source of truth alongside GitHub — its
+`status: done`/`deferred` fields were repeatedly mistaken for a decided
+architecture rather than the RFC snapshot they actually reflected. GitHub
+Issues/Milestones are the only tracking surface now; see "Operational
+queries" above.
 
-| Code      | Area                                                      |
-| --------- | --------------------------------------------------------- |
-| `AUTHZ`   | Authorization model — RBAC→ReBAC migration, OpenFGA schema, authz teardown |
-| `CHAT`    | Chat UI — options panel, attachments, sessions, rendering |
-| `CTRLP`   | Control plane — APIs, sessions, instances, lifecycle, MCP |
-| `EVAL`    | Agent evaluation, scoring, harness                        |
-| `FRONT`   | Frontend migration and refactor (excluding chat UI)       |
-| `MEMORY`  | Multi-agent conversational memory                         |
-| `OBSERV`  | Observability, metrics, Prometheus, KPIs                  |
-| `OPS`     | CLI, deployment, environment ops                          |
-| `PROMPT`  | Prompt safety, library, context picker, marketplace       |
-| `QUALITY` | Quality refactors — typing, file size, test coverage      |
-| `RUNTIME` | Execution contracts, SDK, ChatContext, runtime CLI        |
-| `VALID`   | End-to-end validation, live-stack scenarios               |
-
-Examples: `MEMORY-01`, `PROMPT-04`, `CHAT-03`. No sub-phase suffixes.
-If an item needs a parent relationship, use the `parent:` field in `id-legend.yaml`.
-
-**Scope narrowed (2026-07-16):** an ID is only needed when the work is tied to
-an RFC or a genuine cross-cutting architecture decision. Routine issues do not
-need one — the GitHub issue (title, label, milestone) is the tracking unit.
-Forcing an ID onto every issue is exactly the busywork that made the old
-tracking docs unmaintainable; do not recreate it.
-
-Rules (when an ID is warranted):
-
-1. Add the ID to `id-legend.yaml` before implementation starts, with an `issue:`
-   ref to the GitHub issue and, if applicable, an `rfc:` ref.
-2. The ID appears in the commit subject and the GitHub issue.
-3. Keep `id-legend.yaml` status in sync with the GitHub issue's open/closed state.
+The `DOMAIN-NN` shorthand (e.g. `MEMORY-01`, `CAPAB-02`, `MIGR-05`) can still
+be useful as an informal label in a commit subject or GitHub issue title when
+work is tied to an RFC or a genuine cross-cutting architecture decision —
+purely mnemonic, not a registered ID. There is nothing to add it to and
+nothing to keep in sync: the GitHub issue is the tracking unit, and an RFC's
+own `**Status:**` line (if any) tracks the design.
 
 ---
 
@@ -281,7 +263,6 @@ Do not silently expand scope. Do not silently delete content.
 | Gemini agent instructions                | `GEMINI.md`                                           |
 | Team activity, current focus (thin — points to GitHub) | `docs/swift/STATUS.md`                  |
 | Active work, milestones (`swift-golive`, `swift ga`)   | GitHub Issues/Milestones (`gh issue list`) |
-| RFC-backed feature IDs (narrow scope)     | `docs/swift/data/id-legend.yaml`                      |
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
@@ -292,4 +273,4 @@ Do not silently expand scope. Do not silently delete content.
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
 | Track manifests                          | `docs/swift/tracks/`                                  |
 | Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `docs/PMO.md` |
-| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `PMO-BOARD.md`/`sprint.yaml` removed 2026-07-21, never recreate them |
+| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `PMO-BOARD.md`/`sprint.yaml` removed 2026-07-21, `id-legend.yaml` removed 2026-07-27, never recreate them |

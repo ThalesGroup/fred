@@ -730,7 +730,7 @@ Persistence options:
 
 Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch) are configured externally and do not contaminate Fred's licensing.
 
-Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03` (see `docs/swift/data/id-legend.yaml`). Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
+Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03`. Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 
 - `pymupdf` / `pymupdf4llm` (PDF processing, `knowledge-flow-backend`) — dual-licensed **AGPL-3.0 / Artifex Commercial License**. Currently a mandatory dependency; being made optional with a non-AGPL (`docling`/`pypdf`) default path so the default distribution ships with no AGPL code (tracked in [issue #1950](https://github.com/ThalesGroup/fred/issues/1950)).
 - `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).

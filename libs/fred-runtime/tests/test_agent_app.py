@@ -2333,9 +2333,9 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
     CAPAB-02 stopgap: `GraphRuntime` never consults `CapabilityAgentBlock.hitl`
     (`invoke_runtime_tool` calls the tool directly) — a capability declaring a
     `HitlSpec` approval gate would silently run ungated on a Graph agent. Full
-    Graph HITL enforcement is deferred (id-legend.yaml CAPAB-02); until then,
-    selecting such a capability on a Graph agent must fail loudly, not run
-    unapproved.
+    Graph HITL enforcement is deferred (see AGENT-CAPABILITY-RFC.md §3.9);
+    until then, selecting such a capability on a Graph agent must fail loudly,
+    not run unapproved.
 
     Example:
     - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent -q`

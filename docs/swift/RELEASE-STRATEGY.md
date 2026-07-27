@@ -39,7 +39,6 @@ Every release branch carries its **complete documentation tree** under
 docs/swift/       ← all docs for the swift release
   STATUS.md
   WORKPLAN.md
-  data/id-legend.yaml
   backlog/
   design/
   platform/

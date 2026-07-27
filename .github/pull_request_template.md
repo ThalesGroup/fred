@@ -16,10 +16,11 @@
 
 ## 1. What problem does this solve — and where is it tracked?
 
-<!-- ID from docs/swift/data/id-legend.yaml (e.g. S1, CP-2, M1-F.3).
-     If there is no ID, explain why this work exists at all. -->
+<!-- GitHub issue # this PR closes/addresses (title, label, milestone are the
+     tracking unit — there is no separate ID registry). If there is no issue,
+     explain why this work exists at all. -->
 
-**ID:** <!-- S1 / CP-2 / … / "no ID — mechanical fix because …" -->
+**Issue:** <!-- #1234 / … / "no issue — mechanical fix because …" -->
 
 **Problem in one sentence:**
 
