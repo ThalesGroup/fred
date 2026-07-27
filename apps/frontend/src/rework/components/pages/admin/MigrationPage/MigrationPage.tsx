@@ -274,7 +274,7 @@ export default function MigrationPage() {
               <TaskCard
                 key={task.taskId}
                 task={task}
-                onAcknowledge={() => acknowledge(task.taskId)}
+                onAcknowledge={() => acknowledge(task.taskId, task.kind)}
                 acknowledging={isAcknowledging(task.taskId)}
               />
             ))}
@@ -290,7 +290,7 @@ export default function MigrationPage() {
               <TaskCard
                 key={task.taskId}
                 task={task}
-                onAcknowledge={() => acknowledge(task.taskId)}
+                onAcknowledge={() => acknowledge(task.taskId, task.kind)}
                 acknowledging={isAcknowledging(task.taskId)}
               />
             ))}

@@ -141,7 +141,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
             color="on-surface"
             variant="text"
             size="small"
-            onClick={() => acknowledge(task.taskId)}
+            onClick={() => acknowledge(task.taskId, task.kind)}
             disabled={isAcknowledging(task.taskId)}
           >
             {t("rework.tasks.popover.acknowledge")}

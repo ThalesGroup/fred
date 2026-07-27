@@ -15,6 +15,8 @@
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { useAcknowledgeTaskMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { taskBackendFor } from "./taskKinds";
 import { taskAcknowledged } from "./taskSlice";
 
 /**
@@ -24,16 +26,31 @@ import { taskAcknowledged } from "./taskSlice";
  * `failuresAcknowledged` bulk flag. Used by every place a `TaskCard`/
  * `TaskDetailPopover` renders a dismiss affordance (`TaskTray`,
  * `MigrationPage`), so the call + local-store update happens exactly once.
+ *
+ * Routed by `taskBackendFor` (same map `useTaskSseManager` uses for its SSE
+ * stream) — this used to always call control-plane regardless of which
+ * backend actually owns the task, so a failed ingestion task's ack 404'd
+ * and silently left the button visible (#2123 review).
  */
 export function useTaskAcknowledgement() {
   const dispatch = useDispatch();
-  const [ackTask] = useAcknowledgeTaskMutation();
+  const [ackControlPlane] = useAcknowledgeTaskMutation();
+  const [ackKnowledgeFlow] = useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
-  const acknowledge = async (taskId: string) => {
+  const acknowledge = async (taskId: string, kind: string | null) => {
+    const backend = taskBackendFor(kind);
+    if (backend === "evaluation") {
+      // No acknowledgement endpoint exists on the evaluation backend yet
+      // (tracked separately, not part of #2123) — nothing to call; the
+      // button stays visible rather than silently pretending to succeed.
+      return;
+    }
     setPendingTaskId(taskId);
     try {
-      const result = await ackTask({ taskId }).unwrap();
+      const result = await (
+        backend === "control-plane" ? ackControlPlane({ taskId }) : ackKnowledgeFlow({ taskId })
+      ).unwrap();
       dispatch(taskAcknowledged({ taskId, acknowledgedAt: result.acknowledged_at }));
     } catch {
       // 409 (already acknowledged, e.g. by another admin) or a transient

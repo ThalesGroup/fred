@@ -123,7 +123,7 @@ export function TaskTray() {
                   <TaskCard
                     key={task.taskId}
                     task={task}
-                    onAcknowledge={() => acknowledge(task.taskId)}
+                    onAcknowledge={() => acknowledge(task.taskId, task.kind)}
                     acknowledging={isAcknowledging(task.taskId)}
                   />
                 ))
