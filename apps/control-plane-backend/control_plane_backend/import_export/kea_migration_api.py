@@ -38,7 +38,6 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
-    RelationType,
     get_current_user,
 )
 from pydantic import BaseModel
@@ -50,24 +49,10 @@ from control_plane_backend.import_export.agent_map import (
 )
 from control_plane_backend.import_export.api import MAX_UPLOAD_BYTES
 from control_plane_backend.import_export.bundle import KBundle, open_bundle
-from control_plane_backend.import_export.importer import (  # temporary reuse — see module docstring
-    MigrationReport,
-    _merge_kea_team_rows,
-    _realm_group_names,
-    _realm_platform_role_grants,
-    transform_kea_tuples,
-)
 from control_plane_backend.import_export.kea_reconciliation import (
     KeaReconciliationReport,
     KeaUserResolver,
-    derive_team_member_relations,
-    drop_orphan_team_relations,
-    drop_orphan_teams,
-    find_admin_less_teams,
-    kea_known_group_ids,
-    kea_username_by_sub,
-    resolve_platform_grants,
-    resolve_relation_subjects,
+    build_kea_reconciliation_plan,
 )
 from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
@@ -177,11 +162,6 @@ async def _build_dry_run_response(
 ) -> KeaDryRunResponse:
     is_swift_native = bundle.manifest.source_platform == "swift"
 
-    report = MigrationReport(
-        import_id="dry-run", source_platform=bundle.manifest.source_platform
-    )
-    kea_report = KeaReconciliationReport()
-
     if is_swift_native:
         return KeaDryRunResponse(
             source_platform="swift",
@@ -201,10 +181,8 @@ async def _build_dry_run_response(
             summary_lines=["swift-native snapshot — kea reconciliation does not apply"],
         )
 
-    tuples = bundle.openfga_tuples()
-    keycloak_realm = bundle.keycloak_realm()
-    kea_username_index = kea_username_by_sub(keycloak_realm)
     resolver = await KeaUserResolver.create(user_deps)
+    kea_report = KeaReconciliationReport()
 
     # Agents — classification only, no team/creator resolution needed for counts.
     gap_templates: list[str] = []
@@ -222,58 +200,10 @@ async def _build_dry_run_response(
             gap += 1
             gap_templates.append(result.kea_template or row.get("id", "<unknown>"))
 
-    # Teams — merge + orphan-drop, exactly like a real import.
-    raw_team_metadata = _merge_kea_team_rows(
-        list(bundle.iter_table("teammetadata")),
-        tuples,
-        _realm_group_names(keycloak_realm),
-        report,
-    )
-    raw_team_metadata = drop_orphan_teams(
-        raw_team_metadata, kea_known_group_ids(keycloak_realm), kea_report
-    )
-
-    # Identity + team-membership reconciliation — the heart of the preview.
-    transform = transform_kea_tuples(tuples)
-    # Mirror `drop_orphan_team_relations` on the real import path (importer.py):
-    # a team `drop_orphan_teams` already excluded above must not still count
-    # toward this preview's relation-resolution stats.
-    transform.relations = drop_orphan_team_relations(
-        transform.relations, kea_report.orphan_teams_dropped
-    )
-    resolved_relations = await resolve_relation_subjects(
-        transform.relations, kea_username_index, resolver, kea_report
-    )
-    already_elevated = {
-        (str(r.subject.id), str(r.resource.id))
-        for r in resolved_relations
-        if r.relation
-        in (
-            RelationType.TEAM_ADMIN,
-            RelationType.TEAM_EDITOR,
-            RelationType.TEAM_ANALYST,
-        )
-    }
-    group_name_to_team_id = {
-        row["name"]: row["id"] for row in raw_team_metadata if row.get("name")
-    }
-    member_relations = await derive_team_member_relations(
-        keycloak_realm,
-        group_name_to_team_id,
-        already_elevated,
-        kea_username_index,
-        resolver,
-        kea_report,
-    )
-    kea_report.admin_less_teams = find_admin_less_teams(
-        {row["id"] for row in raw_team_metadata},
-        resolved_relations + member_relations,
-    )
-
-    realm_grants, _dropped_editors = _realm_platform_role_grants(keycloak_realm)
-    realm_grants = await resolve_platform_grants(
-        realm_grants, kea_username_index, resolver, kea_report
-    )
+    # Team merge, OpenFGA tuple restore, and platform-role resolution — the
+    # exact same plan `importer.py::_run_import_body` executes for a real
+    # import, computed here with zero writes.
+    plan = await build_kea_reconciliation_plan(bundle, resolver, kea_report)
 
     def _view(items: list) -> list[KeaUserResolutionView]:  # type: ignore[type-arg]
         return [
@@ -292,14 +222,14 @@ async def _build_dry_run_response(
         agents_ignored=ignored,
         agents_gap=gap,
         agents_gap_templates=sorted(set(gap_templates)),
-        teams_total=len(raw_team_metadata),
+        teams_total=len(plan.team_metadata),
         teams_orphan_dropped=sorted(kea_report.orphan_teams_dropped),
         teams_admin_less=sorted(kea_report.admin_less_teams),
         users_matched=_view(kea_report.matched),
         users_relinked=_view(kea_report.relinked),
         users_pending=_view(kea_report.pending),
-        team_member_grants_ready=len(member_relations),
+        team_member_grants_ready=kea_report.team_member_grants,
         team_member_grants_pending=kea_report.team_member_pending,
-        platform_role_grants_ready=len(realm_grants),
+        platform_role_grants_ready=len(plan.realm_platform_grants),
         summary_lines=kea_report.summary_lines(),
     )

@@ -32,7 +32,7 @@ Why this exists (design session 2026-07-25):
   opposite (`team_member` is a stored tuple, "never derived from Keycloak roles or
   groups"). So kea's plain team members only ever show up in a Keycloak *group
   membership* export (`realm.json` `users[].groups`), never in an OpenFGA tuple dump —
-  `transform_kea_tuples` (importer.py) has nothing to translate for them.
+  `transform_kea_tuples` (this module) has nothing to translate for them.
 - The swift Keycloak (S3NS) may be empty, partially populated, or fully populated at
   the moment this import runs — never assumed. An identity that can't be resolved yet
   is skipped cleanly (not failed) and reported as "pending first login": every write
@@ -47,6 +47,7 @@ Why this exists (design session 2026-07-25):
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -54,6 +55,7 @@ from typing import Any
 
 from fred_core import RebacReference, Relation, RelationType, Resource
 
+from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.service import find_user_subs_bulk
 
@@ -622,3 +624,399 @@ def find_admin_less_teams(
         if r.relation is RelationType.TEAM_ADMIN
     }
     return sorted(all_team_ids - admined)
+
+
+# ── Team merge / OpenFGA tuple transform (moved from importer.py 2026-07-28) ──
+#
+# These were previously defined in importer.py (the permanent executor) and
+# re-imported into kea_migration_api.py (the temporary dry-run router) as
+# "temporary reuse". Moving them here instead means:
+# - importer.py imports FROM this module only, never the reverse — matches
+#   this module's own docstring ("nothing outside this file... imports from
+#   this module") now literally true, and keeps the deletable surface in one
+#   place.
+# - `build_kea_reconciliation_plan` below can call them directly without a
+#   circular import.
+
+
+def _realm_group_names(realm: dict[str, Any] | None) -> dict[str, str]:
+    """Return group_id → group name from a Keycloak realm export.
+
+    On kea a team's id IS its Keycloak group id, and the group name is the
+    only place the team's name exists (kea `teammetadata` has no name column).
+    Walks sub-groups too, defensively — kea teams are top-level groups.
+    """
+    names: dict[str, str] = {}
+
+    def _walk(groups: list[dict[str, Any]]) -> None:
+        for group in groups:
+            group_id = group.get("id")
+            name = group.get("name")
+            if isinstance(group_id, str) and isinstance(name, str) and name:
+                names[group_id] = name
+            _walk(group.get("subGroups") or [])
+
+    _walk((realm or {}).get("groups") or [])
+    return names
+
+
+def _merge_kea_team_rows(
+    raw_team_metadata: list[dict[str, Any]],
+    tuples: list[dict[str, Any]],
+    group_names: dict[str, str],
+    warnings: list[str],
+) -> list[dict[str, Any]]:
+    """Build the full kea team list: every team referenced by tuples, named.
+
+    Kea materialises a `teammetadata` row only when a team was customized
+    (description / privacy / banner) — an untouched team exists solely as a
+    Keycloak group plus OpenFGA tuples. Swift requires a `teammetadata` row
+    (NOT NULL unique `name`) for every team, so this merges:
+    - team ids ← every `team:<id>` reference in the tuple dump (excluding the
+      kea shared personal team and swift-style personal ids),
+    - customization ← the kea `teammetadata` row when present,
+    - name ← the realm export's group name; falls back to the id (warned)
+      when the bundle has no realm export or the group is gone.
+    """
+    teams: dict[str, dict[str, Any]] = {}
+    for t in tuples:
+        for ref in (t.get("object", ""), t.get("user", "")):
+            if not ref.startswith("team:"):
+                continue
+            team_id = ref.removeprefix("team:")
+            if team_id == _KEA_SHARED_PERSONAL_TEAM_ID or team_id.startswith(
+                "personal-"
+            ):
+                continue
+            teams.setdefault(team_id, {"id": team_id})
+    for row in raw_team_metadata:
+        team_id = row.get("id")
+        if not team_id:
+            continue
+        merged = teams.setdefault(team_id, {})
+        merged.update(row)
+        merged["id"] = team_id
+
+    unnamed: list[str] = []
+    for team_id, row in teams.items():
+        realm_name = group_names.get(team_id)
+        if realm_name:
+            row["name"] = realm_name
+        elif not row.get("name"):
+            # `_import_team_metadata` falls back to name=id; surface it.
+            unnamed.append(team_id)
+    if unnamed:
+        warnings.append(
+            f"{len(unnamed)} team(s) have no name in the bundle (keycloak "
+            "realm export missing or group deleted) — they are named by "
+            f"their id: {', '.join(sorted(unnamed))}"
+        )
+    return [teams[team_id] for team_id in sorted(teams)]
+
+
+def _realm_platform_role_grants(
+    realm: dict[str, Any] | None,
+) -> tuple[list[tuple[str, RelationType]], list[str]]:
+    """Derive swift platform-role grants from a realm export's users, if any.
+
+    Kea platform roles are Keycloak realm roles (`admin`/`editor`/`viewer`)
+    carried per-user — present only in a FULL realm export (`kc export
+    --users`); a partial-export has no `users[]` and yields nothing here.
+    Mapping (AUTHZ target model): `admin` → platform_admin, `viewer` →
+    platform_observer, `editor` → dropped (no swift equivalent — returned
+    separately for a warning).
+    """
+    grants: list[tuple[str, RelationType]] = []
+    dropped_editors: list[str] = []
+    for user in (realm or {}).get("users") or []:
+        sub = user.get("id")
+        if not isinstance(sub, str) or not sub:
+            continue
+        roles = set(user.get("realmRoles") or [])
+        if "admin" in roles:
+            grants.append((sub, RelationType.PLATFORM_ADMIN))
+        if "viewer" in roles:
+            grants.append((sub, RelationType.PLATFORM_OBSERVER))
+        if "editor" in roles:
+            dropped_editors.append(user.get("username") or sub)
+    return grants, dropped_editors
+
+
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+# Kea team roles are hierarchical (owner ⊃ manager ⊃ member); swift team_admin
+# and team_editor are orthogonal (REBAC.md "hard cross-write rule"), so a kea
+# owner must receive BOTH to keep the content authority it had. Mapping
+# approved by the developer on 2026-07-24. `team_analyst` has no kea source
+# and is never synthesized.
+_KEA_TEAM_ROLE_TO_SWIFT: dict[str, tuple[RelationType, ...]] = {
+    "owner": (RelationType.TEAM_ADMIN, RelationType.TEAM_EDITOR),
+    "manager": (RelationType.TEAM_EDITOR,),
+    "member": (RelationType.TEAM_MEMBER,),
+}
+
+# The kea shared personal-space team id (`PERSONAL_TEAM_ID` on main). Swift
+# personal spaces are per-user (`personal-{uid}`) and their access tuple is
+# self-healed on first use, so kea personal-team tuples must be dropped, not
+# translated.
+_KEA_SHARED_PERSONAL_TEAM_ID = "personal"
+
+_RESOURCE_BY_PREFIX: dict[str, Resource] = {
+    "user": Resource.USER,
+    "team": Resource.TEAM,
+    "organization": Resource.ORGANIZATION,
+    "agent": Resource.AGENT,
+    "tag": Resource.TAGS,
+    "document": Resource.DOCUMENTS,
+}
+
+
+@dataclass
+class KeaTupleTransform:
+    """Outcome of transforming a kea tuple dump into swift relations."""
+
+    relations: list[Relation] = field(default_factory=list)
+    dropped_personal: int = 0
+    dropped_non_uuid: int = 0
+    dropped_resource_parent: int = 0
+    dropped_unknown: int = 0
+    unknown_shapes: set[str] = field(default_factory=set)
+
+    @property
+    def dropped_total(self) -> int:
+        return (
+            self.dropped_personal
+            + self.dropped_non_uuid
+            + self.dropped_resource_parent
+            + self.dropped_unknown
+        )
+
+
+def transform_kea_tuples(tuples: list[dict[str, Any]]) -> KeaTupleTransform:
+    """Map a kea OpenFGA tuple dump onto the swift authorization model.
+
+    - team `owner`/`manager`/`member` tuples are aggregated per (user, team)
+      and re-emitted as swift `team_*` relations; a user with an elevated role
+      never also gets a redundant direct `team_member` tuple (schema.fga
+      derives it).
+    - `agent`/`tag`/`document` ownership and `team#organization`/`team#public`
+      tuples replay 1:1 (identical relation names on both models).
+    - dropped: anything touching the kea shared personal team, `resource#parent`
+      (resources migrate to prompt rows, which have no OpenFGA object),
+      non-UUID user subjects (pre-MIGR-04 username tuples), and any shape the
+      swift model does not know.
+    """
+    out = KeaTupleTransform()
+    team_roles: dict[tuple[str, str], set[str]] = {}
+    seen: set[tuple[str, str, str, str, str]] = set()
+
+    def _emit(
+        subject: RebacReference, relation: RelationType, resource: RebacReference
+    ) -> None:
+        key = (
+            subject.type.value,
+            str(subject.id),
+            relation.value,
+            resource.type.value,
+            str(resource.id),
+        )
+        if key in seen:
+            return
+        seen.add(key)
+        out.relations.append(
+            Relation(subject=subject, relation=relation, resource=resource)
+        )
+
+    def _split(ref: str) -> tuple[str, str]:
+        prefix, _, ident = ref.partition(":")
+        return prefix, ident
+
+    for t in tuples:
+        subj_type, subj_id = _split(t.get("user", ""))
+        rel = t.get("relation", "")
+        obj_type, obj_id = _split(t.get("object", ""))
+
+        touches_shared_personal = (
+            obj_type == "team" and obj_id == _KEA_SHARED_PERSONAL_TEAM_ID
+        ) or (subj_type == "team" and subj_id == _KEA_SHARED_PERSONAL_TEAM_ID)
+        if touches_shared_personal:
+            out.dropped_personal += 1
+            continue
+        if obj_type == "resource":
+            out.dropped_resource_parent += 1
+            continue
+        if subj_type == "user" and subj_id != "*" and not _UUID_RE.match(subj_id):
+            out.dropped_non_uuid += 1
+            continue
+
+        if (
+            obj_type == "team"
+            and subj_type == "user"
+            and rel in _KEA_TEAM_ROLE_TO_SWIFT
+        ):
+            team_roles.setdefault((subj_id, obj_id), set()).add(rel)
+            continue
+
+        replayable = (
+            (obj_type == "agent" and rel == "owner" and subj_type in ("user", "team"))
+            or (
+                obj_type == "tag"
+                and rel in ("owner", "editor", "viewer")
+                and subj_type in ("user", "team")
+            )
+            or (obj_type == "tag" and rel == "parent" and subj_type == "tag")
+            or (obj_type == "document" and rel == "parent" and subj_type == "tag")
+            or (
+                obj_type == "team"
+                and rel == "organization"
+                and subj_type == "organization"
+            )
+            or (obj_type == "team" and rel == "public" and subj_type == "user")
+        )
+        subject_res = _RESOURCE_BY_PREFIX.get(subj_type)
+        object_res = _RESOURCE_BY_PREFIX.get(obj_type)
+        if not replayable or subject_res is None or object_res is None:
+            out.dropped_unknown += 1
+            out.unknown_shapes.add(f"{subj_type} {rel} {obj_type}")
+            continue
+        _emit(
+            RebacReference(subject_res, subj_id),
+            RelationType(rel),
+            RebacReference(object_res, obj_id),
+        )
+
+    for (uid, team_id), kea_roles in sorted(team_roles.items()):
+        targets: set[RelationType] = set()
+        for role in kea_roles & {"owner", "manager"}:
+            targets.update(_KEA_TEAM_ROLE_TO_SWIFT[role])
+        if not targets and "member" in kea_roles:
+            targets.add(RelationType.TEAM_MEMBER)
+        for relation in sorted(targets, key=lambda r: r.value):
+            _emit(
+                RebacReference(Resource.USER, uid),
+                relation,
+                RebacReference(Resource.TEAM, team_id),
+            )
+
+    return out
+
+
+@dataclass
+class KeaReconciliationPlan:
+    """Pure, deterministic reconciliation output for one kea bundle — the single
+    source of truth shared by the dry-run preview (`kea_migration_api.py`) and
+    the real import (`importer.py`). Building it performs Keycloak reads (via
+    the shared, bulk-prefetched `resolver`) but zero Postgres/OpenFGA writes;
+    both callers execute it identically instead of each recomputing their own
+    version of the same team-merge/tuple-transform/relation-resolution sequence.
+    """
+
+    team_metadata: list[dict[str, Any]]
+    resolved_relations: list[Relation]
+    realm_platform_grants: list[tuple[str, RelationType]]
+    warnings: list[str]
+    tuples_dropped_total: int
+
+
+async def build_kea_reconciliation_plan(
+    bundle: KBundle,
+    resolver: KeaUserResolver,
+    kea_report: KeaReconciliationReport,
+) -> KeaReconciliationPlan:
+    """Compute team metadata, resolved OpenFGA relations, and platform-role
+    grants for one kea bundle — exactly once, called identically by the
+    dry-run preview and the real import (previously copy-pasted, sequencing
+    and all, between `kea_migration_api.py` and `importer.py`).
+
+    `kea_report` is mutated in place (matched/relinked/pending users,
+    orphan-dropped teams, admin-less teams, team-member grant counts) — the
+    caller passes the same instance used elsewhere in its own run so every
+    identity resolution in the run lands in one report, not scattered across
+    several.
+    """
+    tuples = bundle.openfga_tuples()
+    keycloak_realm = bundle.keycloak_realm()
+    kea_username_index = kea_username_by_sub(keycloak_realm)
+    warnings: list[str] = []
+
+    team_metadata = _merge_kea_team_rows(
+        list(bundle.iter_table("teammetadata")),
+        tuples,
+        _realm_group_names(keycloak_realm),
+        warnings,
+    )
+    team_metadata = drop_orphan_teams(
+        team_metadata, kea_known_group_ids(keycloak_realm), kea_report
+    )
+
+    resolved_relations: list[Relation] = []
+    tuples_dropped_total = 0
+    if tuples:
+        transform = transform_kea_tuples(tuples)
+        tuples_dropped_total = transform.dropped_total
+        # A team `drop_orphan_teams` already excluded above must not still
+        # get its OpenFGA tuples written.
+        transform.relations = drop_orphan_team_relations(
+            transform.relations, kea_report.orphan_teams_dropped
+        )
+        if transform.dropped_non_uuid:
+            warnings.append(
+                f"{transform.dropped_non_uuid} OpenFGA tuple(s) with a "
+                "non-UUID user subject dropped (pre-MIGR-04 username tuples)"
+            )
+        if transform.dropped_unknown:
+            warnings.append(
+                f"{transform.dropped_unknown} OpenFGA tuple(s) dropped — no "
+                "swift equivalent for: " + ", ".join(sorted(transform.unknown_shapes))
+            )
+
+        resolved_relations = await resolve_relation_subjects(
+            transform.relations, kea_username_index, resolver, kea_report
+        )
+        already_elevated = {
+            (str(r.subject.id), str(r.resource.id))
+            for r in resolved_relations
+            if r.relation
+            in (
+                RelationType.TEAM_ADMIN,
+                RelationType.TEAM_EDITOR,
+                RelationType.TEAM_ANALYST,
+            )
+        }
+        group_name_to_team_id = {
+            row["name"]: row["id"] for row in team_metadata if row.get("name")
+        }
+        member_relations = await derive_team_member_relations(
+            keycloak_realm,
+            group_name_to_team_id,
+            already_elevated,
+            kea_username_index,
+            resolver,
+            kea_report,
+        )
+        resolved_relations = resolved_relations + member_relations
+        kea_report.admin_less_teams = find_admin_less_teams(
+            {row["id"] for row in team_metadata}, resolved_relations
+        )
+
+    realm_grants, dropped_editors = _realm_platform_role_grants(keycloak_realm)
+    if dropped_editors:
+        warnings.append(
+            f"kea platform role 'editor' dropped for {len(dropped_editors)} "
+            f"user(s) (no swift equivalent): "
+            f"{format_usernames_for_warning(dropped_editors)}"
+        )
+    realm_grants = await resolve_platform_grants(
+        realm_grants, kea_username_index, resolver, kea_report
+    )
+
+    return KeaReconciliationPlan(
+        team_metadata=team_metadata,
+        resolved_relations=resolved_relations,
+        realm_platform_grants=realm_grants,
+        warnings=warnings,
+        tuples_dropped_total=tuples_dropped_total,
+    )

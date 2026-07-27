@@ -24,6 +24,8 @@ from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.importer import (
     MigrationReport,
     run_import,
+)
+from control_plane_backend.import_export.kea_reconciliation import (
     transform_kea_tuples,
 )
 from control_plane_backend.models.base import Base as CPBase
