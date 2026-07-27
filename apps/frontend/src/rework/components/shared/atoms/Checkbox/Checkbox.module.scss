@@ -1,0 +1,90 @@
+.checkbox-container {
+  display: inline-flex;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.native-input {
+  position: absolute;
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border-width: 0;
+  white-space: nowrap;
+
+  &:focus-visible + .box {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  &:disabled + .box {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:checked + .box,
+  &[data-indeterminate] + .box {
+    --checkbox-border-color: var(--primary);
+    --checkbox-background-color: var(--primary);
+
+    .mark {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  &:not(:checked):not([data-indeterminate]) + .box {
+    .state-layer:hover {
+      --checkbox-state-layer-background-color: var(--state-on-surface-hover);
+    }
+  }
+
+  &:checked + .box .state-layer:hover,
+  &[data-indeterminate] + .box .state-layer:hover {
+    --checkbox-state-layer-background-color: var(--state-on-primary-hover);
+  }
+}
+
+.box {
+  --checkbox-border-color: var(--outline);
+  --checkbox-background-color: transparent;
+  position: relative;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+  border: 2px solid var(--checkbox-border-color);
+  border-radius: var(--radius-xs);
+  background-color: var(--checkbox-background-color);
+  width: 1.125rem;
+  height: 1.125rem;
+  overflow: hidden;
+}
+
+.state-layer {
+  display: flex;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 100ms ease;
+  inset: -0.4375rem;
+  border-radius: 999px;
+  background-color: var(--checkbox-state-layer-background-color, transparent);
+}
+
+.mark {
+  transform: scale(0.6);
+  opacity: 0;
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+  fill: none;
+  stroke: var(--on-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 0.875rem;
+  height: 0.875rem;
+}

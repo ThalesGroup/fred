@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import DataTable, { DataTableColumn } from "./DataTable.tsx";
+import DataTable, { DataTableColumn, SortState } from "./DataTable.tsx";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -125,5 +125,114 @@ describe("DataTable", () => {
     click(first);
     expect(rowValues()[0]).toBe("1");
     expect(prev.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("DataTable sorting", () => {
+  const sortableColumns: DataTableColumn<Row>[] = [
+    { label: "Id", cellRenderer: (row) => <span>{row.id}</span>, sortable: true, sortValue: (row) => row.id },
+  ];
+
+  function headerButton(): HTMLButtonElement {
+    return container.querySelector('[class*="header-sort-button"]') as HTMLButtonElement;
+  }
+
+  it("sorts ascending then descending then back to the original order (uncontrolled)", () => {
+    const rows = [{ id: 3 }, { id: 1 }, { id: 2 }];
+    render(<DataTable columns={sortableColumns} data={rows} />);
+    expect(rowValues()).toEqual(["3", "1", "2"]);
+
+    click(headerButton());
+    expect(rowValues()).toEqual(["1", "2", "3"]);
+
+    click(headerButton());
+    expect(rowValues()).toEqual(["3", "2", "1"]);
+
+    click(headerButton());
+    expect(rowValues()).toEqual(["3", "1", "2"]);
+  });
+
+  it("defers to the caller in controlled mode instead of sorting locally", () => {
+    const rows = [{ id: 3 }, { id: 1 }, { id: 2 }];
+    const onSortChange = vi.fn();
+    render(<DataTable columns={sortableColumns} data={rows} sortState={null} onSortChange={onSortChange} />);
+
+    click(headerButton());
+
+    // Data order is untouched — the caller owns re-fetching/re-sorting.
+    expect(rowValues()).toEqual(["3", "1", "2"]);
+    expect(onSortChange).toHaveBeenCalledWith({ columnLabel: "Id", direction: "asc" });
+  });
+
+  it("reflects the controlled sortState's direction on the active column", () => {
+    const rows = [{ id: 3 }, { id: 1 }, { id: 2 }];
+    const sortState: SortState = { columnLabel: "Id", direction: "desc" };
+    render(<DataTable columns={sortableColumns} data={rows} sortState={sortState} onSortChange={vi.fn()} />);
+
+    expect(headerButton().dataset.active).toBe("true");
+  });
+});
+
+describe("DataTable selection", () => {
+  const rows = makeRows(3);
+
+  function checkboxes(): HTMLInputElement[] {
+    return Array.from(container.querySelectorAll('input[type="checkbox"]'));
+  }
+
+  it("renders one checkbox per row plus a header checkbox", () => {
+    render(<DataTable columns={columns} data={rows} selectable rowKey={(r) => r.id} selectedKeys={new Set()} />);
+    expect(checkboxes()).toHaveLength(4);
+  });
+
+  it("toggles a single row and reports the updated selection", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set([1])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    // checkboxes()[0] is the header "select all"; row checkboxes follow in row order.
+    click(checkboxes()[2]);
+
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1, 2]));
+  });
+
+  it("selects/deselects every row on the page via the header checkbox", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    click(checkboxes()[0]);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1, 2, 3]));
+  });
+
+  it("marks the header checkbox indeterminate when only some rows are selected", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set([1])}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    expect(checkboxes()[0].hasAttribute("data-indeterminate")).toBe(true);
   });
 });

@@ -18,8 +18,10 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import type { MultiSeriesPoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./MultiSeriesLineChart.module.scss";
 
-// Distinct palette — works on both light and dark surfaces.
-const SERIES_COLORS = [
+// Distinct palette — works on both light and dark surfaces. Exported so other
+// multi-category charts (e.g. PieChart's `colors` prop) can reuse the same
+// vetted set instead of picking new hex values.
+export const SERIES_COLORS = [
   "#4e8cff",
   "#f97316",
   "#22c55e",

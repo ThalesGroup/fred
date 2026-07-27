@@ -396,6 +396,10 @@
       "pageNumber": "Page {{page}} of {{pageCount}}",
       "prev": "Previous page",
       "totalItems": "{{count}} items"
+    },
+    "selection": {
+      "selectAllOnPage": "Select all rows on this page",
+      "selectRow": "Select row"
     }
   },
   "dialogs": {
@@ -1324,10 +1328,32 @@
         "prev": "Previous page"
       },
       "status": {
-        "failed": "Failed",
-        "processing": "Processing",
-        "raw": "Raw",
+        "failed": "Error",
+        "processing": "Processing...",
+        "raw": "Pending",
         "ready": "Ready"
+      },
+      "bulkActions": {
+        "selectedCount": "{{count}} selected",
+        "delete": "Delete",
+        "excludeFromSearch": "Exclude from search"
+      },
+      "stats": {
+        "toggle": "Statistics",
+        "filesByType": {
+          "title": "Files by type",
+          "valueLabel": "Files"
+        },
+        "sizeByType": {
+          "title": "Size by type"
+        },
+        "bucket": {
+          "pdf": "PDF",
+          "text": "Text",
+          "ppt": "PPT",
+          "excel": "Excel",
+          "other": "Other"
+        }
       },
       "title": "Resources",
       "toast": {

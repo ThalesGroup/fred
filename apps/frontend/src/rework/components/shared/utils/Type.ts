@@ -133,6 +133,11 @@ export const materialIcons = [
   "request_quote",
   "history",
   "category",
+  "notes",
+  "drive_file_rename_outline",
+  "search_off",
+  "arrow_upward",
+  "arrow_downward",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

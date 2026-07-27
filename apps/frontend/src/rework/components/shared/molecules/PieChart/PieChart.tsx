@@ -28,9 +28,14 @@ interface PieChartProps {
   emptyMessage?: string;
   isLoading: boolean;
   isError: boolean;
+  /** Slice colors, one per row in order. Defaults to the 2-tone
+   *  primary/tertiary pair (unchanged default behavior); pass the shared
+   *  `SERIES_COLORS` (from `MultiSeriesLineChart`) for 3+ categorical
+   *  slices instead of picking new hex values. */
+  colors?: string[];
 }
 
-export default function PieChart({ title, rows, emptyMessage, isLoading, isError }: PieChartProps) {
+export default function PieChart({ title, rows, emptyMessage, isLoading, isError, colors }: PieChartProps) {
   const { t } = useTranslation();
   const css = getCssVars(
     "--on-surface-retreat",
@@ -43,7 +48,7 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
     "--radius-s",
   );
 
-  const COLORS = [css["--primary"], css["--tertiary"]];
+  const COLORS = colors ?? [css["--primary"], css["--tertiary"]];
 
   return (
     <section className={styles.section}>

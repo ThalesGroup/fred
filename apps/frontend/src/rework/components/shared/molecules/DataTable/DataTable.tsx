@@ -13,13 +13,21 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import { OptionModel } from "@models/Option.model.ts";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
+
+export type SortDirection = "asc" | "desc";
+export interface SortState {
+  columnLabel: string;
+  direction: SortDirection;
+}
 
 interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
@@ -37,14 +45,45 @@ interface DataTableProps<T> {
    *  back to array index as key, which misattributes any row-scoped
    *  component state (open menus, in-flight click handlers) to the wrong
    *  item as soon as `data` re-sorts (e.g. after an edit changes sort
-   *  order). */
+   *  order). Required when `selectable` is set. */
   rowKey?: (element: T) => string | number;
+  /** Adds a leading checkbox column. Selection is scoped to the checkbox
+   *  itself (not the whole row) — rows here typically carry their own
+   *  clickable actions (preview, menu), so a whole-row click target would
+   *  fight with those instead of being an unambiguous convenience. */
+  selectable?: boolean;
+  selectedKeys?: ReadonlySet<string | number>;
+  onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
+  /** Controlled sort — pass together with `onSortChange` when the caller
+   *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
+   *  for DataTable to sort `data` internally using each column's
+   *  `sortValue`. */
+  sortState?: SortState | null;
+  onSortChange?: (next: SortState | null) => void;
 }
 
 export interface DataTableColumn<T> {
   label: string;
   size?: string;
   cellRenderer?: (element: T) => React.ReactNode;
+  /** Enables click-to-sort on this column's header. */
+  sortable?: boolean;
+  /** Value compared when sorting this column client-side (uncontrolled
+   *  mode — ignored when the table's sort is controlled via `onSortChange`,
+   *  since the caller is then responsible for the order of `data`). */
+  sortValue?: (element: T) => string | number | Date | null | undefined;
+}
+
+function compareSortValues(
+  a: string | number | Date | null | undefined,
+  b: string | number | Date | null | undefined,
+): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  if (a instanceof Date || b instanceof Date) return new Date(a).getTime() - new Date(b).getTime();
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
 }
 
 const rowsPerPageOptions: OptionModel<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
@@ -60,26 +99,79 @@ export default function DataTable<T>({
   firstColumnInset = false,
   pageSize,
   rowKey,
+  selectable = false,
+  selectedKeys,
+  onSelectionChange,
+  sortState: controlledSortState,
+  onSortChange,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
   const paginationEnabled = pageSize !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
+  const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
+  const sortIsControlled = onSortChange !== undefined;
+  const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
 
-  const pageCount = paginationEnabled ? Math.max(1, Math.ceil(data.length / rowsPerPage)) : 1;
+  const sortedData = useMemo(() => {
+    // Controlled sort: the caller already ordered `data` (e.g. a sorted
+    // server response) — sorting it again here would fight that order.
+    if (sortIsControlled || !sortState) return data;
+    const column = columns.find((c) => c.label === sortState.columnLabel);
+    if (!column?.sortValue) return data;
+    const sorted = [...data].sort((a, b) => compareSortValues(column.sortValue!(a), column.sortValue!(b)));
+    if (sortState.direction === "desc") sorted.reverse();
+    return sorted;
+  }, [data, sortState, sortIsControlled, columns]);
+
+  const handleHeaderSortClick = (column: DataTableColumn<T>) => {
+    if (!column.sortable) return;
+    const isCurrent = sortState?.columnLabel === column.label;
+    // Cycle asc -> desc -> unsorted, matching the small-header sort icon
+    // convention (arrow visible only on the active column).
+    const nextDirection: SortDirection | null = !isCurrent ? "asc" : sortState!.direction === "asc" ? "desc" : null;
+    const next: SortState | null = nextDirection ? { columnLabel: column.label, direction: nextDirection } : null;
+    if (sortIsControlled) {
+      onSortChange!(next);
+    } else {
+      setUncontrolledSortState(next);
+    }
+  };
+
+  const pageCount = paginationEnabled ? Math.max(1, Math.ceil(sortedData.length / rowsPerPage)) : 1;
   // Clamped rather than reset-on-change: if a row is removed and the current
   // page no longer exists, fall back to the new last page instead of jumping
   // the user back to page 1.
   const currentPage = Math.min(page, pageCount - 1);
   const pageData = paginationEnabled
-    ? data.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
-    : data;
+    ? sortedData.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
+    : sortedData;
 
-  const tableGridLayout = columns
-    .map((column) => {
-      return column.size ? `${column.size}` : "1fr";
-    })
-    .join(" ");
+  const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
+  const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
+  const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
+  const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
+
+  const toggleRow = (key: string | number) => {
+    if (!onSelectionChange) return;
+    const next = new Set(selectedKeys ?? []);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onSelectionChange(next);
+  };
+
+  const toggleAllOnPage = () => {
+    if (!onSelectionChange) return;
+    const next = new Set(selectedKeys ?? []);
+    if (allOnPageSelected) pageKeys.forEach((key) => next.delete(key));
+    else pageKeys.forEach((key) => next.add(key));
+    onSelectionChange(next);
+  };
+
+  const tableGridLayout = [
+    ...(selectable ? ["2.5rem"] : []),
+    ...columns.map((column) => (column.size ? `${column.size}` : "1fr")),
+  ].join(" ");
 
   const containerClasses = [styles["datatable-container"]];
   if (firstColumnInset) containerClasses.push(styles["first-column-inset"]);
@@ -92,22 +184,64 @@ export default function DataTable<T>({
       }
     >
       <div className={styles["datatable-body"]}>
-        {columns.map((column) => (
-          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
-            <span className={styles["header-content"]}>{column.label}</span>
+        {selectable && (
+          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`}>
+            <Checkbox
+              checked={allOnPageSelected}
+              indeterminate={someOnPageSelected}
+              onChange={toggleAllOnPage}
+              aria-label={t("dataTable.selection.selectAllOnPage")}
+            />
           </div>
-        ))}
-        {pageData.map((line, lineIndex) => (
-          <div className={styles["datatable-row"]} key={rowKey ? rowKey(line) : `row-${lineIndex}`}>
-            {columns.map((column) => {
-              return (
-                <div className={styles["datatable-cell"]} key={column.label}>
-                  {column.cellRenderer(line)}
+        )}
+        {columns.map((column) => {
+          const isSorted = sortState?.columnLabel === column.label;
+          return (
+            <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
+              {column.sortable ? (
+                <button
+                  type="button"
+                  className={styles["header-sort-button"]}
+                  data-active={isSorted || undefined}
+                  onClick={() => handleHeaderSortClick(column)}
+                >
+                  <span className={styles["header-content"]}>{column.label}</span>
+                  <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
+                    <Icon
+                      category="outlined"
+                      type={isSorted && sortState?.direction === "desc" ? "arrow_downward" : "arrow_upward"}
+                    />
+                  </span>
+                </button>
+              ) : (
+                <span className={styles["header-content"]}>{column.label}</span>
+              )}
+            </div>
+          );
+        })}
+        {pageData.map((line, lineIndex) => {
+          const key = rowKey ? rowKey(line) : lineIndex;
+          return (
+            <div className={styles["datatable-row"]} key={key}>
+              {selectable && (
+                <div className={styles["datatable-cell"]}>
+                  <Checkbox
+                    checked={selectedKeys?.has(key) ?? false}
+                    onChange={() => toggleRow(key)}
+                    aria-label={t("dataTable.selection.selectRow")}
+                  />
                 </div>
-              );
-            })}
-          </div>
-        ))}
+              )}
+              {columns.map((column) => {
+                return (
+                  <div className={styles["datatable-cell"]} key={column.label}>
+                    {column.cellRenderer?.(line)}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
       {paginationEnabled && (
         <div className={styles["datatable-footer"]}>

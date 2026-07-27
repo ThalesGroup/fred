@@ -63,6 +63,50 @@
   padding-left: var(--spacing-l);
 }
 
+.header-sort-button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+
+  .header-content {
+    color: var(--on-surface-retreat);
+  }
+
+  &:hover .header-content {
+    color: var(--on-surface);
+  }
+
+  &[data-active] .header-content {
+    color: var(--primary);
+  }
+}
+
+.sort-icon {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  color: var(--primary);
+  font-size: 1.125rem;
+
+  &[data-visible] {
+    opacity: 1;
+  }
+}
+
+.header-sort-button:hover .sort-icon {
+  opacity: 0.6;
+}
+
+.header-sort-button:hover .sort-icon[data-visible] {
+  opacity: 1;
+}
+
 .datatable-footer {
   display: flex;
   flex-shrink: 0;
