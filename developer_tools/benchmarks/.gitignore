@@ -3,6 +3,7 @@ ws_bench
 ws_bench.exe
 fred-benchmarks
 agentic_bench_client.exe
+results/
 
 # Go build cache/output
 *.test

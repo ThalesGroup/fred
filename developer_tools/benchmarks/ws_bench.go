@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -105,6 +106,8 @@ type config struct {
 	Protocol              string // "ws" or "sse"
 	SSEUserID             string
 	SSETeamID             string
+	AgentInstanceID       string
+	JSONReportPath        string
 }
 
 type result struct {
@@ -112,8 +115,42 @@ type result struct {
 	Err      error
 }
 
+type benchmarkLatencyReport struct {
+	Min int64 `json:"min_ms"`
+	Avg int64 `json:"avg_ms"`
+	P50 int64 `json:"p50_ms"`
+	P95 int64 `json:"p95_ms"`
+	P99 int64 `json:"p99_ms"`
+	Max int64 `json:"max_ms"`
+}
+
+type benchmarkJSONReport struct {
+	SchemaVersion     string                  `json:"schema_version"`
+	GeneratedAt       string                  `json:"generated_at"`
+	Outcome           string                  `json:"outcome"`
+	Protocol          string                  `json:"protocol"`
+	Target            string                  `json:"target"`
+	SSEMode           string                  `json:"sse_mode,omitempty"`
+	AgentID           string                  `json:"agent_id,omitempty"`
+	AgentInstanceID   string                  `json:"agent_instance_id,omitempty"`
+	TeamID            string                  `json:"team_id,omitempty"`
+	Clients           int                     `json:"clients"`
+	RequestsPerClient int                     `json:"requests_per_client,omitempty"`
+	TotalRequests     int                     `json:"total_requests"`
+	Success           int                     `json:"success"`
+	Errors            int                     `json:"errors"`
+	ElapsedMS         int64                   `json:"elapsed_ms"`
+	RequestsPerSecond float64                 `json:"requests_per_second"`
+	Latency           *benchmarkLatencyReport `json:"latency,omitempty"`
+	ErrorSamples      []string                `json:"error_samples,omitempty"`
+}
+
 func main() {
 	cfg := parseFlags()
+	if err := validateConfig(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	if cfg.Clients <= 0 {
 		fmt.Fprintln(os.Stderr, "clients must be > 0")
 		os.Exit(2)
@@ -257,7 +294,14 @@ func main() {
 	}
 
 	elapsed := time.Since(start)
-	printSummary(cfg, totalRequests, durations, errorCount, errorSamples, elapsed)
+	report := printSummary(cfg, totalRequests, durations, errorCount, errorSamples, elapsed)
+	if cfg.JSONReportPath != "" {
+		if err := writeJSONReport(cfg.JSONReportPath, report); err != nil {
+			fmt.Fprintf(os.Stderr, "write JSON report: %v\n", err)
+		} else {
+			fmt.Printf("JSON report: %s\n", cfg.JSONReportPath)
+		}
+	}
 }
 
 // parseFlags exists to let the benchmark exercise plain chat and public RAG
@@ -273,7 +317,9 @@ func parseFlags() config {
 
 	protocolFlag := flag.String("protocol", "ws", "Transport protocol: ws (agentic-backend) or sse (fred-runtime)")
 	sseUserIDFlag := flag.String("sse-user-id", "bench", "User ID injected into runtime_context for SSE requests (keys sessions per user)")
-	sseTeamIDFlag := flag.String("sse-team-id", "", "Team ID injected into runtime_context for SSE requests (optional)")
+	sseTeamIDFlag := flag.String("sse-team-id", "", "Team ID injected into runtime_context for SSE requests (optional for direct mode, required for managed mode)")
+	agentInstanceIDFlag := flag.String("agent-instance-id", "", "Managed mode: control-plane agent instance UUID (SSE only, requires -sse-team-id; mutually exclusive with agent_id on the wire)")
+	jsonReportFlag := flag.String("json-report", "", "Optional path for a machine-readable benchmark summary (never contains token or prompt)")
 	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "Endpoint URL (ws/wss for protocol=ws, http/https for protocol=sse)")
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
@@ -366,7 +412,25 @@ func parseFlags() config {
 		Protocol:              strings.ToLower(strings.TrimSpace(*protocolFlag)),
 		SSEUserID:             strings.TrimSpace(*sseUserIDFlag),
 		SSETeamID:             strings.TrimSpace(*sseTeamIDFlag),
+		AgentInstanceID:       strings.TrimSpace(*agentInstanceIDFlag),
+		JSONReportPath:        strings.TrimSpace(*jsonReportFlag),
 	}
+}
+
+// validateConfig enforces the SSE managed-mode flag combination: -agent-instance-id
+// is SSE-only and always needs -sse-team-id (the pod authorizes on runtime_context.team_id).
+// -agent-uuid (WS existing-agent mode) is untouched by this check.
+func validateConfig(cfg config) error {
+	if cfg.AgentInstanceID == "" {
+		return nil
+	}
+	if cfg.Protocol != "sse" {
+		return fmt.Errorf("-agent-instance-id requires -protocol=sse (got %q)", cfg.Protocol)
+	}
+	if cfg.SSETeamID == "" {
+		return fmt.Errorf("-agent-instance-id (managed mode) requires -sse-team-id")
+	}
+	return nil
 }
 
 func runOnce(cfg config) result {
@@ -497,7 +561,20 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 	fmt.Printf("\n%s\n", style("BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Protocol:", colorDim), cfg.Protocol)
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	if cfg.Protocol == "sse" {
+		if cfg.AgentInstanceID != "" {
+			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "managed")
+			fmt.Printf("%s %s\n", style("Agent instance ID:", colorDim), cfg.AgentInstanceID)
+		} else {
+			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "direct")
+			fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+		}
+		if cfg.SSETeamID != "" {
+			fmt.Printf("%s %s\n", style("Team ID:", colorDim), cfg.SSETeamID)
+		}
+	} else {
+		fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	}
 	if cfg.AgentUUID != "" {
 		fmt.Printf("%s %s\n", style("Agent source:", colorDim), "provided UUID")
 	}
@@ -1128,17 +1205,90 @@ func makeStyler(enabled bool) func(string, ...string) string {
 	}
 }
 
-func printSummary(cfg config, total int, durations []time.Duration, errorCount int, errorSamples []string, elapsed time.Duration) {
-	success := len(durations)
-	style := makeStyler(shouldColor())
-	outcome := "OK"
-	outcomeColor := colorGreen
+func buildJSONReport(cfg config, total int, durations []time.Duration, errorCount int, errorSamples []string, elapsed time.Duration) benchmarkJSONReport {
+	redactedErrorSamples := make([]string, 0, len(errorSamples))
+	for _, sample := range errorSamples {
+		redactedErrorSamples = append(redactedErrorSamples, redactReportText(cfg, sample))
+	}
+	report := benchmarkJSONReport{
+		SchemaVersion:     "v1",
+		GeneratedAt:       time.Now().UTC().Format(time.RFC3339Nano),
+		Outcome:           "OK",
+		Protocol:          cfg.Protocol,
+		Target:            redactReportText(cfg, cfg.URL),
+		Clients:           cfg.Clients,
+		RequestsPerClient: cfg.RequestsPerClient,
+		TotalRequests:     total,
+		Success:           len(durations),
+		Errors:            errorCount,
+		ElapsedMS:         elapsed.Milliseconds(),
+		ErrorSamples:      redactedErrorSamples,
+	}
+	if elapsed > 0 {
+		report.RequestsPerSecond = float64(report.Success) / elapsed.Seconds()
+	}
 	if errorCount > 0 {
-		outcome = "DEGRADED"
+		report.Outcome = "DEGRADED"
+	}
+	if report.Success == 0 {
+		report.Outcome = "FAILED"
+	}
+	if cfg.Protocol == "sse" {
+		report.TeamID = cfg.SSETeamID
+		if cfg.AgentInstanceID != "" {
+			report.SSEMode = "managed"
+			report.AgentInstanceID = cfg.AgentInstanceID
+		} else {
+			report.SSEMode = "direct"
+			report.AgentID = cfg.AgentID
+		}
+	} else {
+		report.AgentID = cfg.AgentID
+	}
+	if len(durations) > 0 {
+		stats := summarize(durations)
+		report.Latency = &benchmarkLatencyReport{
+			Min: stats.Min.Milliseconds(),
+			Avg: stats.Avg.Milliseconds(),
+			P50: stats.P50.Milliseconds(),
+			P95: stats.P95.Milliseconds(),
+			P99: stats.P99.Milliseconds(),
+			Max: stats.Max.Milliseconds(),
+		}
+	}
+	return report
+}
+
+func redactReportText(cfg config, value string) string {
+	for _, sensitiveValue := range []string{cfg.Token, cfg.Message} {
+		if sensitiveValue != "" {
+			value = strings.ReplaceAll(value, sensitiveValue, "[REDACTED]")
+		}
+	}
+	return value
+}
+
+func writeJSONReport(path string, report benchmarkJSONReport) error {
+	payload, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	return os.WriteFile(path, payload, 0o644)
+}
+
+func printSummary(cfg config, total int, durations []time.Duration, errorCount int, errorSamples []string, elapsed time.Duration) benchmarkJSONReport {
+	report := buildJSONReport(cfg, total, durations, errorCount, errorSamples, elapsed)
+	success := report.Success
+	style := makeStyler(shouldColor())
+	outcomeColor := colorGreen
+	if report.Outcome == "DEGRADED" {
 		outcomeColor = colorYellow
 	}
-	if success == 0 {
-		outcome = "FAILED"
+	if report.Outcome == "FAILED" {
 		outcomeColor = colorRed
 	}
 	successPct := 0.0
@@ -1147,9 +1297,22 @@ func printSummary(cfg config, total int, durations []time.Duration, errorCount i
 	}
 
 	fmt.Printf("\n%s\n", style("BENCH SUMMARY", colorBold, colorCyan))
-	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(outcome, colorBold, outcomeColor))
+	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(report.Outcome, colorBold, outcomeColor))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	if cfg.Protocol == "sse" {
+		if cfg.AgentInstanceID != "" {
+			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "managed")
+			fmt.Printf("%s %s\n", style("Agent instance ID:", colorDim), cfg.AgentInstanceID)
+		} else {
+			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "direct")
+			fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+		}
+		if cfg.SSETeamID != "" {
+			fmt.Printf("%s %s\n", style("Team ID:", colorDim), cfg.SSETeamID)
+		}
+	} else {
+		fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	}
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), total)
 	fmt.Printf("%s %d\n", style("Concurrent clients:", colorDim), cfg.Clients)
 	if cfg.RequestsPerClient > 0 {
@@ -1183,6 +1346,7 @@ func printSummary(cfg config, total int, durations []time.Duration, errorCount i
 			fmt.Printf("%s %s\n", style("-", colorRed), sample)
 		}
 	}
+	return report
 }
 
 type latencyStats struct {

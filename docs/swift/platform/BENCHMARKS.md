@@ -4,6 +4,45 @@ Running log of local bench sessions against the mock LLM (`mock-openai-server`).
 
 ---
 
+## Current usage (2026-07-26) — Swift managed SSE
+
+The Go client in `developer_tools/benchmarks` supports three modes: legacy WS
+(`agentic-backend`, historical), direct SSE (`agent_id`, dev-only), and managed
+SSE (`agent_instance_id` + `runtime_context.team_id`), which is the same
+binding the frontend uses through `/prepare-execution` and
+`/agents/execute/stream`. See `developer_tools/benchmarks/README.md` for the
+full flag reference and canonical commands.
+
+Minimal managed run (1 client × 1 request) against a local swift stack:
+
+```bash
+AGENTIC_TOKEN="$TOKEN" make run ARGS='\
+  -protocol=sse \
+  -url=http://127.0.0.1:8000/fred/agents/v2/agents/execute/stream \
+  -agent-instance-id=<AGENT_INSTANCE_UUID> \
+  -sse-team-id=personal-<ADMIN_UID> \
+  -message="Réponds simplement : test réussi" \
+  -clients=1 \
+  -requests-per-client=1 \
+  -ramp-duration=0s \
+  -timeout=30s \
+  -json-report=results/smoke.json'
+```
+
+This exercises the managed runtime core (JWT + OpenFGA/personal-space
+authorization, session/checkpoint continuity, SSE event handling) the same
+way a production frontend call does. It does **not** cover browser-side
+timings or the UI's preparatory requests (`/frontend/bootstrap`,
+`/prepare-execution`) — whether issued once eagerly or before every send,
+those calls are not measured by this load generator.
+
+For repeatable local campaigns, `-json-report` emits a versioned, redacted
+summary (counts, throughput, and latency percentiles). The token and prompt are
+never serialized. Raw local artifacts are stored below
+`developer_tools/benchmarks/results/` and are intentionally not committed.
+
+---
+
 ## Bench snapshot (2026-07-08) — swift / fred-runtime (preliminary)
 
 First bench pass on the swift architecture (`fred-agents` + `fred-runtime`, SSE transport)

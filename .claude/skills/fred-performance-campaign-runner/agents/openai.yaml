@@ -1,0 +1,4 @@
+interface:
+  display_name: "FRED Performance Campaign Runner"
+  short_description: "Run guarded local FRED load campaigns"
+  default_prompt: "Use $fred-performance-campaign-runner to run a guarded local managed-SSE consolidation campaign and produce a redacted performance report."
