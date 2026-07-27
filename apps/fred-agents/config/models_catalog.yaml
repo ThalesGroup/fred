@@ -239,19 +239,4 @@ profiles:
       provider: anthropic
       name: claude-sonnet-4-6
 
-rules:
-  - rule_id: github-assistant-to-local-mock
-    capability: chat
-    target_profile_id: default.chat.mock
-    match:
-      agent_id: fred.github.assistant
-  - rule_id: marc-personal-space-mock
-    capability: chat
-    target_profile_id: default.chat.mock
-    match:
-      team_id: personal-f161fadc-34ee-4a62-9e7f-6f81f679e463
-  - rule_id: marc-personal-space-mock-language
-    capability: language
-    target_profile_id: default.language.mock
-    match:
-      team_id: personal-f161fadc-34ee-4a62-9e7f-6f81f679e463
+rules: []
