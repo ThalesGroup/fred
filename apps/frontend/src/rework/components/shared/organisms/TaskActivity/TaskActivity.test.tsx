@@ -17,10 +17,14 @@
 // key, so we assert on which key each row uses.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
-const h = vi.hoisted(() => ({ tasks: [] as TaskSummary[] }));
+const h = vi.hoisted(() => ({
+  tasks: [] as TaskSummary[],
+  acknowledge: vi.fn(),
+  acknowledging: null as string | null,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -37,6 +41,27 @@ vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({
 }));
 vi.mock("@shared/atoms/TaskProgressBar/TaskProgressBar", () => ({
   TaskProgressBar: () => <span data-progress />,
+}));
+vi.mock("@shared/atoms/Button/Button.tsx", () => ({
+  default: ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="ack-button" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("@rework/features/tasks/useTaskAcknowledgement", () => ({
+  useTaskAcknowledgement: () => ({
+    acknowledge: h.acknowledge,
+    isAcknowledging: (taskId: string) => h.acknowledging === taskId,
+  }),
 }));
 
 import TaskActivity from "./TaskActivity";
@@ -259,5 +284,49 @@ describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
     // visible text content ("Import details") is its accessible name.
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>/);
     expect(html).toContain("rework.taskActivity.migration.detailsTitle");
+  });
+});
+
+// #2123 review — the persisted, shared activity surface must expose the same
+// acknowledge affordance as the session-local TaskCard/TaskDetailPopover, or
+// the server-side acknowledgement feature is unreachable from its primary
+// dashboard.
+
+describe("TaskActivity acknowledge action", () => {
+  beforeEach(() => {
+    h.acknowledge.mockClear();
+    h.acknowledging = null;
+  });
+
+  it("shows the acknowledge button on a failed, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a1", state: "failed", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+    expect(html).toContain("rework.taskActivity.acknowledge");
+  });
+
+  it("shows the acknowledge button on a cancelled, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a2", state: "cancelled", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+  });
+
+  it("hides the acknowledge button once the task is acknowledged", () => {
+    h.tasks = [task({ task_id: "a3", state: "failed", acknowledged_at: "2026-01-02T00:00:00Z" })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("never shows the acknowledge button on a succeeded task", () => {
+    h.tasks = [task({ task_id: "a4", state: "succeeded", acknowledged_at: null })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("disables the acknowledge button while that task's acknowledgement is in flight", () => {
+    h.tasks = [task({ task_id: "a5", state: "failed", acknowledged_at: null })];
+    h.acknowledging = "a5";
+    const html = render();
+    expect(html).toMatch(/data-testid="ack-button"[^>]*disabled/);
   });
 });

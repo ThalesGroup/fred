@@ -2098,6 +2098,7 @@
       "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
       "withWarnings": "Avec avertissements",
       "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "acknowledge": "Ignorer",
       "migration": {
         "detailsTitle": "Détail de l'import",
         "warningsTitle": "Avertissements ({{count}})",

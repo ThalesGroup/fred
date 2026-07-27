@@ -27,10 +27,12 @@
 
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button.tsx";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import { dueRelative, relativeTime } from "@rework/features/tasks/taskLabels";
+import { useTaskAcknowledgement } from "@rework/features/tasks/useTaskAcknowledgement";
 import {
   useListTasksControlPlaneV1TasksGetQuery,
   type MigrationDetail,
@@ -146,6 +148,7 @@ function byDueAsc(a: TaskSummary, b: TaskSummary): number {
 
 export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps) {
   const { t, i18n } = useTranslation();
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
 
   const { data, isLoading, isError } = useListTasksControlPlaneV1TasksGetQuery(
     { scope, teamId: teamId ?? undefined, kind },
@@ -177,6 +180,12 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
   const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => {
     const result = migrationResult(task);
     const withWarnings = hasMigrationWarnings(task);
+    // Same gate TaskCard/TaskDetailPopover use for the session-local Redux
+    // view of this task — the persisted server-side record (this component's
+    // own data source) must offer the identical dismiss affordance, or the
+    // acknowledgement feature is only reachable from the transient popover,
+    // never from its primary dashboard (#2123 review).
+    const needsAttention = (task.state === "failed" || task.state === "cancelled") && task.acknowledged_at == null;
     return (
       <li key={task.task_id} className={styles.row}>
         <div className={styles.rowMain}>
@@ -192,6 +201,17 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
             )}
           </span>
           <span className={styles.meta}>{meta}</span>
+          {needsAttention && (
+            <Button
+              color="on-surface"
+              variant="text"
+              size="small"
+              onClick={() => acknowledge(task.task_id, task.kind)}
+              disabled={isAcknowledging(task.task_id)}
+            >
+              {t("rework.taskActivity.acknowledge")}
+            </Button>
+          )}
         </div>
         {/* A failed task must show *why*, not just that it failed — never rendered
             alongside a success reading, and never for a task that has no error. */}

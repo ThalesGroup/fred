@@ -2098,6 +2098,7 @@
       "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
       "withWarnings": "With warnings",
       "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "acknowledge": "Dismiss",
       "migration": {
         "detailsTitle": "Import details",
         "warningsTitle": "Warnings ({{count}})",
