@@ -55,7 +55,9 @@ def _task_run_indexes() -> set[str]:
     inspector = sa.inspect(bind)
     if "task_run" not in inspector.get_table_names():
         return {_INDEX_NAME}  # table absent (fresh create_all) → treat as present
-    return {ix["name"] for ix in inspector.get_indexes("task_run")}
+    return {
+        ix["name"] for ix in inspector.get_indexes("task_run") if ix["name"] is not None
+    }
 
 
 def upgrade() -> None:
