@@ -1323,7 +1323,11 @@
       },
       "loading": "Loading resources...",
       "preview": {
-        "title": "Document preview"
+        "title": "Document preview",
+        "tabs": {
+          "file": "File",
+          "raw": "Raw"
+        }
       },
       "pagination": {
         "next": "Next page",
@@ -1336,6 +1340,7 @@
         "raw": "Pending",
         "ready": "Ready"
       },
+      "byAi": "by AI",
       "bulkActions": {
         "selectedCount": "{{count}} selected",
         "delete": "Delete",

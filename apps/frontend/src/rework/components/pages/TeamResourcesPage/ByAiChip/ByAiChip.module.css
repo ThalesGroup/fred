@@ -1,0 +1,15 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  border-radius: var(--radius-full);
+  background: var(--secondary-container);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.chip :global(.material-symbols-outlined) {
+  font-size: 0.75rem;
+}

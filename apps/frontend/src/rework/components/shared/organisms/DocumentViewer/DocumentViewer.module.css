@@ -12,3 +12,21 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+.viewerWithToggle {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.viewerTabs {
+  flex-shrink: 0;
+  padding: 0 var(--spacing-l);
+}
+
+.viewerBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

@@ -1323,7 +1323,11 @@
       },
       "loading": "Chargement des ressources...",
       "preview": {
-        "title": "Aperçu du document"
+        "title": "Aperçu du document",
+        "tabs": {
+          "file": "Fichier",
+          "raw": "Raw"
+        }
       },
       "pagination": {
         "next": "Page suivante",
@@ -1336,6 +1340,7 @@
         "raw": "En attente",
         "ready": "Prêt"
       },
+      "byAi": "par IA",
       "bulkActions": {
         "selectedCount": "{{count}} sélectionné(s)",
         "delete": "Supprimer",

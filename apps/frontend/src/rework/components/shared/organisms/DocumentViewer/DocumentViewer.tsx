@@ -13,11 +13,15 @@
 // limitations under the License.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
+import Tabs from "@shared/molecules/Tabs/Tabs.tsx";
 import { PdfStreamingDocumentViewer } from "../../../../../common/PdfStreamingDocumentViewer";
 import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { decodeMaybeBase64Utf8, isPdfFile, isTabularFile } from "../../../../utils/documentViewerUtils";
 import styles from "./DocumentViewer.module.css";
+
+type ViewMode = "file" | "raw";
 
 interface DocumentViewerProps {
   documentUid: string;
@@ -27,6 +31,13 @@ interface DocumentViewerProps {
   /** Called once markdown content loads successfully — lets a host derive a title
    * fallback (e.g. the first H1) without duplicating the fetch. Never called for PDFs. */
   onMarkdownLoaded?: (content: string) => void;
+  /** Shows a "Fichier"/"Raw" toggle above the content, letting the user switch to the
+   *  markdown extraction for a file that would otherwise only render its native
+   *  strategy (currently: PDF only — every other format already renders nothing but
+   *  its markdown extraction, so there is nothing to toggle to). Default off, so
+   *  existing callers (`DocumentViewerPage`, the pre-FRONT-09 preview drawer) keep
+   *  rendering exactly one strategy per file type, unchanged. */
+  showRawToggle?: boolean;
 }
 
 /**
@@ -38,12 +49,46 @@ interface DocumentViewerProps {
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
-export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded }: DocumentViewerProps) {
-  if (isPdfFile(fileName)) {
+export function DocumentViewer({
+  documentUid,
+  fileName,
+  onMarkdownLoaded,
+  showRawToggle = false,
+}: DocumentViewerProps) {
+  const { t } = useTranslation();
+  const [view, setView] = useState<ViewMode>("file");
+  const isPdf = isPdfFile(fileName);
+
+  if (!isPdf) {
+    return (
+      <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+    );
+  }
+
+  if (!showRawToggle) {
     return <PdfStreamingDocumentViewer documentUid={documentUid} />;
   }
+
   return (
-    <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+    <div className={styles.viewerWithToggle}>
+      <div className={styles.viewerTabs}>
+        <Tabs<ViewMode>
+          tabs={[
+            { value: "file", label: t("rework.resources.preview.tabs.file") },
+            { value: "raw", label: t("rework.resources.preview.tabs.raw") },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      </div>
+      <div className={styles.viewerBody}>
+        {view === "file" ? (
+          <PdfStreamingDocumentViewer documentUid={documentUid} />
+        ) : (
+          <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />
+        )}
+      </div>
+    </div>
   );
 }
 

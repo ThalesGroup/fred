@@ -1,0 +1,23 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.chip[data-variant="processing"] {
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+}
+
+.chip[data-variant="pending"] {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.chip[data-variant="failed"] {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
