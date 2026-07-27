@@ -26,6 +26,7 @@ import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -76,13 +77,25 @@ export default function TeamContentNavbar() {
   const relationsLoaded = !!selectedTeam && "my_relations" in selectedTeam;
   const roleLabel = (() => {
     const priority: Record<string, number> = { team_admin: 0, team_editor: 1, team_analyst: 2 };
-    const heldRoles = (selectedTeam?.my_relations ?? []).filter((relation) => relation in priority);
-    if (heldRoles.length === 0) return t("rework.teamRoles.team_member");
-    return heldRoles
+    const heldRoles = (selectedTeam?.my_relations ?? [])
+      .filter((relation) => relation in priority)
       .slice()
-      .sort((a, b) => priority[a] - priority[b])
-      .map((relation) => t(`rework.teamRoles.${relation}`))
-      .join(" · ");
+      .sort((a, b) => priority[a] - priority[b]);
+    if (heldRoles.length === 0) return t("rework.teamRoles.team_member");
+    const labelText = heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
+    // team_admin sorts first (priority 0), so when held it's always the
+    // opening token of `labelText` — the shield only needs to prefix the
+    // whole string, same glyph as the TeamSelectionItem admin badge (#2100)
+    // minus its circular background/outline.
+    if (heldRoles[0] !== "team_admin") return labelText;
+    return (
+      <span className={styles.roleLabelWithIcon}>
+        <span className={styles.roleLabelAdminIcon} aria-hidden="true">
+          <Icon category="outlined" type="shield" filled />
+        </span>
+        {labelText}
+      </span>
+    );
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 

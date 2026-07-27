@@ -91,17 +91,10 @@
 
 .teamJoiningLabel {
   /* Escape-hatch margin (see design system guidance): this offset applies
-   * only to the two label-only states (closed/invite-only) — the sibling
-   * join/request buttons in the same footer slot must stay flush with the
-   * card's padding edge, so it can't be solved with footer padding/gap. */
+   * only to the label-only (invite-only) state — the sibling join button in
+   * the same footer slot must stay flush with the card's padding edge, so
+   * it can't be solved with footer padding/gap. */
   margin-right: var(--spacing-xs);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
-
-  &[data-tone="muted"] {
-    color: var(--on-surface-muted);
-  }
-
-  &[data-tone="retreat"] {
-    color: var(--on-surface-retreat);
-  }
 }

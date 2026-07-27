@@ -46,7 +46,10 @@
     }
 
     &.btn-outlined {
-      --btn-border: #{map.get($scheme, "main")};
+      // M3: the outlined variant's border is always the neutral `outline`
+      // token, regardless of `color` — only the icon/state-layer take the
+      // scheme's color. Matches Button's outlined variant.
+      --btn-border: var(--outline);
       --btn-text-color: #{map.get($scheme, "main")};
 
       &:hover:not(:disabled) {

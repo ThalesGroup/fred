@@ -127,6 +127,7 @@ from fred_core.teams.metadata_store import (
     TeamMetadataPatch,
     TeamMetadataRow,
     TeamMetadataStore,
+    TeamVisibility,
 )
 
 from .common import get_config
@@ -219,6 +220,7 @@ __all__ = [
     "convert_pptx_bytes_to_pdf",
     "convert_pptx_file_to_pdf",
     "JoiningMode",
+    "TeamVisibility",
     "TeamMetadata",
     "TeamMetadataPatch",
     "TeamMetadataStore",

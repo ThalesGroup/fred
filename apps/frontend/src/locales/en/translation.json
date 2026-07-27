@@ -393,7 +393,7 @@
       "itemsPerPage": "Items per page",
       "last": "Last page",
       "next": "Next page",
-      "pageNumber": "Page {{page}}",
+      "pageNumber": "Page {{page}} of {{pageCount}}",
       "prev": "Previous page",
       "totalItems": "{{count}} items"
     }
@@ -1373,9 +1373,17 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "deleteDialog": {
+          "title": "Delete this conversation?",
+          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
+          "confirm": "Delete",
+          "cancel": "Cancel"
+        },
         "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
+        "groupByAgent": "Group by agent",
         "loading": "Loading...",
-        "title": "Chat"
+        "title": "Chat",
+        "unknownAgent": "Unknown agent"
       },
       "marketplace": {
         "menu": {
@@ -1564,8 +1572,6 @@
     },
     "teamCard": {
       "join": "Join",
-      "requestToJoin": "Request to join",
-      "closedTeam": "Closed team",
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
     },
@@ -1577,16 +1583,33 @@
     },
     "teamSettings": {
       "members": {
-        "addMember": {
-          "placeholder": "Invite users"
+        "addMembersDialog": {
+          "buttonLabel": "Add members",
+          "cancel": "Cancel",
+          "confirm": "Add",
+          "pendingListEmpty": "No user selected yet",
+          "pendingListHeader": "Members to add to the team",
+          "removeAria": "Remove {{name}} from the list",
+          "searchPlaceholder": "Enter a name, first name, or user ID",
+          "subtitle": "Users will be added to the team immediately",
+          "title": "Add new members"
         },
         "errors": {
+          "addDetail": "Could not add this user to the team.",
+          "addSummary": "Failed to add member",
           "forbiddenDetail": "You are not allowed to perform this action.",
+          "grantDetail": "{{name}} was added, but the {{role}} role could not be granted.",
+          "grantSummary": "Failed to grant a role",
           "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",
           "removeMemberSummary": "Failed to remove member",
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
+        },
+        "search": {
+          "ariaLabel": "Search for a member",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Last name, First name, Identifiant"
         },
         "table": {
           "actions": "Actions",
@@ -1633,12 +1656,22 @@
         },
         "joiningMode": {
           "label": "Joining mode",
+          "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "requestOnly": "Request only",
-          "inviteOnly": "Invite only",
-          "closed": "Closed"
+          "inviteOnly": "Invite only"
         },
-        "teamBannerTitle": "Team banner",
+        "visibility": {
+          "label": "Team visibility",
+          "support": "Determines whether the team is visible on the marketplace to every user.",
+          "public": "Public",
+          "private": "Private"
+        },
+        "teamBanner": {
+          "title": "Team banner",
+          "import": "Import",
+          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
+          "noBanner": "No banner selected"
+        },
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."

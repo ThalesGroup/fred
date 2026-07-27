@@ -16,6 +16,7 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -30,14 +31,8 @@ import {
   useRevokeTeamMemberRoleMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import styles from "./TeamSettingsMembersTable.module.scss";
+import { canAdministerTeamRole } from "@hooks/teamCapabilities.ts";
 
-// AUTHZ-06 (RFC Part 7 §34): a member may hold several of these at once (e.g.
-// a small team's sole admin who is also its editor and analyst) — each is
-// granted/revoked as its own independent, permission-checked action, never a
-// bulk role-set replace. `team_member` is deliberately excluded: it is the
-// implicit baseline when none of the three apply, not a toggle of its own.
-const ELEVATED_ROLES: UserTeamRelation[] = ["team_admin", "team_editor", "team_analyst"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
   team_admin: 0,
   team_editor: 1,
@@ -54,9 +49,25 @@ function compareStrings(valA: string | null | undefined, valB: string | null | u
 
 interface TeamSettingsMembersTableProps {
   team: TeamWithPermissions;
+  /** Free-text query matched against first name, last name, and username —
+   * a member must match every whitespace-separated token in at least one of
+   * those three fields (so "Marie Dupont" and "Dupont Marie" both match a
+   * member named Marie Dupont). Applied client-side: `useListTeamMembersQuery`
+   * already fetches every member in one call, no backend pagination/search
+   * to coordinate with. Ignored below 2 characters. */
+  search: string;
 }
 
-export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTableProps) {
+const MIN_SEARCH_LENGTH = 2;
+
+function matchesSearch(member: TeamMember, tokens: string[]): boolean {
+  const haystacks = [member.user.first_name, member.user.last_name, member.user.username]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
+}
+
+export default function TeamSettingsMembersTable({ team, search }: TeamSettingsMembersTableProps) {
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
@@ -66,22 +77,16 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const [revokeTeamMemberRole] = useRevokeTeamMemberRoleMutation();
   const [removeTeamMember] = useRemoveTeamMemberMutation();
 
+  const capabilities = useTeamCapabilities(team);
   const {
     canAdministerMembers: can_administer_members,
     canAdministerEditors: can_administer_editors,
     canAdministerAnalysts: can_administer_analysts,
     canAdministerAdmins: can_administer_admins,
-  } = useTeamCapabilities(team);
+  } = capabilities;
 
   const can_administer_anyone =
     can_administer_members || can_administer_editors || can_administer_analysts || can_administer_admins;
-
-  function getAdministerPermissionForTeamRole(target: UserTeamRelation): boolean | undefined {
-    if (target === "team_editor") return can_administer_editors;
-    if (target === "team_analyst") return can_administer_analysts;
-    if (target === "team_admin") return can_administer_admins;
-    return can_administer_members;
-  }
 
   const handleGrantRole = useCallback(
     async (userId: string, relation: UserTeamRelation) => {
@@ -156,6 +161,13 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     );
   }, [teamMembers]);
 
+  const filteredMembers = useMemo(() => {
+    const trimmed = search.trim().toLowerCase();
+    if (trimmed.length < MIN_SEARCH_LENGTH) return sortedMembers;
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    return sortedMembers.filter((member) => matchesSearch(member, tokens));
+  }, [sortedMembers, search]);
+
   const columns = useMemo((): DataTableColumn<TeamMember>[] => {
     const cols: DataTableColumn<TeamMember>[] = [
       {
@@ -174,27 +186,13 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
         label: t("rework.teamSettings.members.table.role"),
         size: "1.5fr",
         cellRenderer: (teamMember) => (
-          <div className={styles.roleChips} role="group">
-            {ELEVATED_ROLES.map((role) => {
-              const held = teamMember.relations.includes(role);
-              const canAdminister = Boolean(getAdministerPermissionForTeamRole(role));
-              return (
-                <button
-                  key={role}
-                  type="button"
-                  className={styles.roleChip}
-                  data-active={held}
-                  aria-pressed={held}
-                  disabled={!canAdminister}
-                  onClick={() =>
-                    held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
-                  }
-                >
-                  {t(`rework.teamRoles.${role}`)}
-                </button>
-              );
-            })}
-          </div>
+          <TeamRoleChips
+            heldRoles={teamMember.relations}
+            canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
+            onToggle={(role, held) =>
+              held ? handleRevokeRole(teamMember.user.id, role) : handleGrantRole(teamMember.user.id, role)
+            }
+          />
         ),
       },
     ];
@@ -205,7 +203,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
         cellRenderer: (teamMember) => (
           <IconButtonMenu<"DELETE">
             iconButton={{
-              color: "on-surface",
+              color: "on-surface-retreat",
               variant: "icon",
               size: "medium",
               icon: { category: "outlined", type: "more_horiz" },
@@ -216,6 +214,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
                 label: t("rework.teamSettings.members.table.deleteAction"),
                 value: "DELETE",
                 key: "DELETE",
+                destructive: true,
               },
             ]}
             onSelect={(_) => {
@@ -238,5 +237,13 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     handleRemoveMember,
   ]);
 
-  return <DataTable columns={columns} data={sortedMembers} firstColumnInset pageSize={20} />;
+  return (
+    <DataTable
+      columns={columns}
+      data={filteredMembers}
+      rowKey={(member) => member.user.id}
+      firstColumnInset
+      pageSize={20}
+    />
+  );
 }

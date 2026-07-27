@@ -1599,7 +1599,8 @@ export type CreateUserRequest = {
   enabled?: boolean;
 };
 export type GcuVersionsType = "v1";
-export type JoiningMode = "open" | "request_only" | "invite_only" | "closed";
+export type JoiningMode = "open" | "invite_only";
+export type TeamVisibility = "public" | "private";
 export type TeamPermission =
   | "can_read"
   | "can_update_info"
@@ -1635,6 +1636,7 @@ export type TeamWithPermissions = {
   is_member?: boolean;
   description?: string | null;
   joining_mode?: JoiningMode;
+  visibility?: TeamVisibility;
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
@@ -1655,6 +1657,7 @@ export type Team = {
   is_member?: boolean;
   description?: string | null;
   joining_mode?: JoiningMode;
+  visibility?: TeamVisibility;
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
@@ -1666,6 +1669,7 @@ export type CreateTeamRequest = {
 export type UpdateTeamRequest = {
   description?: string | null;
   joining_mode?: JoiningMode | null;
+  visibility?: TeamVisibility | null;
   banner_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;

@@ -1698,3 +1698,75 @@ existed but wasn't authorized before).
 **Remaining open item:** MIGR-07.04, the migration UI's "Rebuild embeddings"
 final-step trigger button (reuse the same task atoms already used by import)
 — a real future item, not yet built.
+
+## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
+
+**`JoiningMode` drops `request_only` and `closed`**, leaving `open` /
+`invite_only` — see §24 for the original 4-value contract and
+`FRED-TEAM-CONFIG-RFC.md` §5.1.1 for the full amendment rationale.
+`request_only` depended on a notification system that was never built and
+shipped with its marketplace affordance permanently disabled; `closed` never
+enforced anything `invite_only` didn't (identical write-path gating, only
+marketplace copy differed).
+
+**Default changes.** `Team.joining_mode`'s default (`Team`, `TeamWithPermissions`,
+the ORM column, and the personal-space synthetic team previously hardcoded to
+`closed`) moves from `request_only` to `invite_only`. Every row currently in
+`request_only` or `closed` is backfilled to `invite_only` by migration
+`9ee7b44b0d57` — the conservative mapping, no team becomes self-service `open`
+as a side effect.
+
+**Import/export.** A platform bundle exported before this change may still
+carry `request_only`/`closed` literally in its `team_metadata.joining_mode`
+field; `importer.py`'s `_LEGACY_JOINING_MODES` normalizes both to
+`invite_only` on import so the row never lands with a value the current
+enum — and therefore any later read of it — would reject.
+
+**Marketplace (`TeamCard`).** Collapses from 4 branches to 2: `open` shows
+the self-service Join button; every other state (now only `invite_only`)
+shows a static "Invite only" label. No behavior change to the `open` branch
+or to `POST /teams/{team_id}/join`'s server-side gate (`joining_mode == open`,
+unchanged).
+
+## 30. Contract Notes — TEAM-10, team visibility (public/private) (2026-07-26)
+
+**New field: `Team.visibility: TeamVisibility` (`public`/`private`, default
+`public`)** — added to `Team`, `TeamWithPermissions`, `UpdateTeamRequest`.
+Full design: `FRED-TEAM-CONFIG-RFC.md` §5.1.2. Gates marketplace
+discoverability, a question `joining_mode` (§5.1.1/§24/§29) never answered —
+`INVITE_ONLY` still means "listed, join needs an admin," not "does not
+appear at all."
+
+**Mechanism — the ReBAC `public` relation becomes conditional.** §24's
+`ensure_team_public_relations` (unconditional for every team) is now called
+only for `PUBLIC` teams; `PRIVATE` teams get the new, symmetric
+`RebacEngine.revoke_team_public_relations` instead (same relation shape,
+`delete_relations`). Both are idempotent and called from the same two
+sites as before (`_list_teams` lazily on every listing, `create_team`/
+`update_team` immediately) — `update_team` syncs the affected team's
+relation the moment `visibility` changes, not on the next list call. A
+private team is not merely unlisted: `can_read = team_member or public`
+means a non-member's direct `GET /teams/{team_id}` now also 403s (no
+`public`-relation path left) — `team_member`-gated access is completely
+unaffected, so a private team behaves identically to a public one for its
+own members.
+
+**Interaction with `joining_mode` — downgrade, never reject.** A `PRIVATE`
+team cannot be `OPEN` (self-service join onto an undiscoverable,
+unreadable-to-non-members team is incoherent). `update_team` resolves the
+patch's *resulting* `visibility`/`joining_mode` (an untouched field keeps
+its current stored value) and, if that combination would be
+`PRIVATE`+`OPEN`, silently rewrites `joining_mode` to `INVITE_ONLY` in the
+same patch — never trusts which field the client "meant" to win, and never
+returns a 4xx for this combination. Frontend enforcement
+(`TeamSettingsParameters`) disables the joining-mode `ButtonGroup` entirely
+while `visibility === private`, so the invalid combination is unreachable
+from the UI in the first place; the server-side downgrade is the
+authoritative backstop.
+
+**Default and migration.** `PUBLIC` for both new and pre-existing teams
+(migration `8092a626d4d0`, `server_default='public'`) — preserves every
+team's current unconditional marketplace presence exactly; nothing becomes
+private as a side effect of this rollout. A bundle exported before this
+field existed has no `visibility` key at all; `importer.py` defaults the
+row to `public` on import, same reasoning.

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { TeamPermission } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamPermission, UserTeamRelation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 /**
  * One boolean per `TeamPermission` the backend can grant on a team
@@ -101,4 +101,16 @@ export function hasElevatedTeamRole(capabilities: TeamCapabilities): boolean {
     capabilities.canRunEvaluations ||
     capabilities.canManageEvaluationCorpus
   );
+}
+
+/**
+ * Which granular "administer" permission gates granting/revoking a given
+ * `UserTeamRelation` — shared by the members table's role chips and the
+ * add-members dialog's role chips so both gate identically.
+ */
+export function canAdministerTeamRole(capabilities: TeamCapabilities, role: UserTeamRelation): boolean {
+  if (role === "team_editor") return capabilities.canAdministerEditors;
+  if (role === "team_analyst") return capabilities.canAdministerAnalysts;
+  if (role === "team_admin") return capabilities.canAdministerAdmins;
+  return capabilities.canAdministerMembers;
 }

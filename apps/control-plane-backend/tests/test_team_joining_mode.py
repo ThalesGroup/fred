@@ -86,18 +86,14 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
     )
 
 
-@pytest.mark.parametrize(
-    "joining_mode",
-    [JoiningMode.REQUEST_ONLY, JoiningMode.INVITE_ONLY, JoiningMode.CLOSED],
-)
-async def test_join_team_rejects_when_not_open(
-    joining_mode: JoiningMode,
-) -> None:
+async def test_join_team_rejects_when_not_open() -> None:
     rebac = _FakeRebac()
     store = _FakeMetadataStore(
         {
             "guarded-team": TeamMetadata(
-                id=TeamId("guarded-team"), name="Guarded", joining_mode=joining_mode
+                id=TeamId("guarded-team"),
+                name="Guarded",
+                joining_mode=JoiningMode.INVITE_ONLY,
             )
         }
     )
@@ -105,7 +101,7 @@ async def test_join_team_rejects_when_not_open(
     with pytest.raises(TeamNotOpenForJoiningError) as excinfo:
         await join_team(_user(), TeamId("guarded-team"), _deps(rebac, store))
 
-    assert excinfo.value.joining_mode == joining_mode
+    assert excinfo.value.joining_mode == JoiningMode.INVITE_ONLY
     assert rebac.added_relations == []  # never writes when the gate fails
 
 

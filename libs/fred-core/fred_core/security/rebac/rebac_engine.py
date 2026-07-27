@@ -512,17 +512,21 @@ class RebacEngine(ABC):
         """Ensure each team grants `public` (profile/discovery `can_read`) to
         every user (TEAM-09, RFC FRED-TEAM-CONFIG-RFC.md §5.1.1).
 
-        Marketplace discovery is unconditional for every team regardless of
-        `joining_mode` — only the ability to become a member is gated (see
-        `JoiningMode`). This mirrors `ensure_team_organization_relations`
-        exactly: idempotent (`on_duplicate_writes=IGNORE` at the OpenFGA
-        write layer), called both at team creation and lazily on every team
-        listing, so it backfills every pre-existing team without a separate
-        one-off migration.
+        Marketplace discovery is gated by `TeamVisibility` (TEAM-10, RFC
+        §5.1.2), never by `joining_mode` — only the ability to become a
+        member is gated (see `JoiningMode`). Callers must pass only teams
+        whose stored `visibility` is `PUBLIC`; a `PRIVATE` team's `public`
+        relation is instead withheld/revoked via
+        `revoke_team_public_relations` below. This mirrors
+        `ensure_team_organization_relations` exactly: idempotent
+        (`on_duplicate_writes=IGNORE` at the OpenFGA write layer), called
+        both at team creation and lazily on every team listing, so it
+        backfills every pre-existing public team without a separate one-off
+        migration.
 
         Example:
         - Before returning `GET /teams`, ensure `user:* -> public -> team:<id>`
-          exists for every team about to be listed.
+          exists for every `PUBLIC` team about to be listed.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -544,6 +548,50 @@ class RebacEngine(ABC):
             for team_id in unique_team_ids
         ]
         return await self.add_relations(relations)
+
+    async def revoke_team_public_relations(
+        self,
+        team_ids: Iterable[str],
+    ) -> str | None:
+        """Revoke `public` from every user for each team — the inverse of
+        `ensure_team_public_relations`, for teams whose `TeamVisibility` is
+        `PRIVATE` (TEAM-10, RFC FRED-TEAM-CONFIG-RFC.md §5.1.2).
+
+        A private team must be entirely unreadable to non-members — not just
+        absent from the marketplace listing, but also refused on a direct
+        `GET /teams/{team_id}` (both paths gate on the same `can_read =
+        team_member or public` computed relation). Revoking `public` rather
+        than layering a separate "listed" concept keeps that single
+        computed relation authoritative for both surfaces. `team_member`
+        access is untouched — a private team behaves identically to a
+        public one for its own members.
+
+        Idempotent (deleting an absent tuple is a no-op) and safe to call
+        both lazily (every team listing, alongside
+        `ensure_team_public_relations` for the public subset) and
+        immediately on a `visibility` change (`update_team`), matching the
+        grant side's own dual call sites.
+        """
+        unique_team_ids: list[str] = []
+        seen: set[str] = set()
+        for team_id in team_ids:
+            if not team_id or team_id in seen:
+                continue
+            seen.add(team_id)
+            unique_team_ids.append(team_id)
+
+        if not unique_team_ids:
+            return None
+
+        relations = [
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            for team_id in unique_team_ids
+        ]
+        return await self.delete_relations(relations)
 
     async def add_user_relation(
         self,

@@ -15,7 +15,7 @@
 import styles from "./ButtonGroup.module.scss";
 import ButtonGroupItem, { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
-import { KeyboardEvent, MouseEvent, useRef, useState } from "react";
+import { CSSProperties, KeyboardEvent, MouseEvent, useRef, useState } from "react";
 
 interface ButtonGroupProps {
   items: ButtonGroupItemProps[];
@@ -37,6 +37,9 @@ interface ButtonGroupProps {
   /** When provided, turns the component into a controlled tab strip. */
   selectedIndex?: number;
   onSelectedIndexChange?: (index: number) => void;
+  /** Pill background color, e.g. when the group sits on a surface that
+   * already matches the default `surface-container`. */
+  backgroundColor?: string;
 }
 
 export default function ButtonGroup({
@@ -49,6 +52,7 @@ export default function ButtonGroup({
   defaultSelectedIndex = 0,
   selectedIndex,
   onSelectedIndexChange,
+  backgroundColor = "var(--surface-container)",
 }: ButtonGroupProps) {
   const [internalIndex, setInternalIndex] = useState(defaultSelectedIndex);
   const resolvedIndex = selectedIndex !== undefined ? selectedIndex : internalIndex;
@@ -130,6 +134,7 @@ export default function ButtonGroup({
       data-full-width={fullWidth}
       role={variant === "radio" ? "radiogroup" : "tablist"}
       aria-label={ariaLabel}
+      style={{ "--button-group-background-color": backgroundColor } as CSSProperties}
     >
       {items.map((item, index) => (
         <ButtonGroupItem

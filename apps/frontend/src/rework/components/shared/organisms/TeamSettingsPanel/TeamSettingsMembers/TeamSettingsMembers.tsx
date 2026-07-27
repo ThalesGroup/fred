@@ -14,14 +14,13 @@
 
 import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
 import LeaveTeamButton from "./LeaveTeamButton/LeaveTeamButton.tsx";
-import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
-import { useState } from "react";
+import AddTeamMembersDialog from "./AddTeamMembersDialog/AddTeamMembersDialog.tsx";
+import Button from "@shared/atoms/Button/Button.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions, UserSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import {
-  useAddTeamMemberMutation,
-  useSearchCandidateTeamMembersQuery,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import styles from "./TeamSettingsMembers.module.scss";
 
@@ -34,24 +33,10 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   const { canAdministerMembers: can_administer_members } = useTeamCapabilities(team);
 
-  const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberMutation();
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [addUserQuery, setAddUserQuery] = useState<string>("");
-  const trimmedQuery = addUserQuery.trim();
-
-  const { data: suggestions = [] } = useSearchCandidateTeamMembersQuery(
-    { teamId: team.id, query: trimmedQuery },
-    { skip: !can_administer_members || trimmedQuery.length < 2 },
-  );
-
-  const handleAddMember = async (user: UserSummary) => {
-    if (isAddingMember) return;
-    await addTeamMember({
-      teamId: team.id,
-      addTeamMemberRequest: { user_id: user.id, relation: "team_member" },
-    });
-    setAddUserQuery("");
-  };
   return (
     <div className={styles["team-settings-members-container"]}>
       <div className={styles["team-settings-members-header"]}>
@@ -59,25 +44,48 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
           <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
           <LeaveTeamButton team={team} />
         </div>
-        {can_administer_members && (
-          <Autocomplete<UserSummary>
-            textInput={{
-              placeholder: t("rework.teamSettings.members.addMember.placeholder"),
-              icon: { category: "outlined", type: "search" },
-            }}
-            onFieldValueChange={setAddUserQuery}
-            options={suggestions.map((user) => ({
-              label: `${user.first_name} ${user.last_name} (${user.username})`,
-              value: user,
-              key: user.id,
-            }))}
-            onSelect={handleAddMember}
-          ></Autocomplete>
-        )}
+        <div className={styles["team-settings-members-header-right"]}>
+          <div className={styles["team-settings-members-search"]}>
+            <TextInput
+              ref={searchInputRef}
+              compact
+              icon={{ category: "outlined", type: "search" }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("rework.teamSettings.members.search.placeholder")}
+              aria-label={t("rework.teamSettings.members.search.ariaLabel")}
+              style={search ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
+            />
+            {search && (
+              <span className={styles["team-settings-members-search-clear"]}>
+                <IconButton
+                  type="button"
+                  size="small"
+                  color="on-surface-retreat"
+                  variant="icon"
+                  icon={{ category: "outlined", type: "close" }}
+                  aria-label={t("rework.teamSettings.members.search.clearAriaLabel")}
+                  onClick={() => {
+                    setSearch("");
+                    searchInputRef.current?.focus();
+                  }}
+                />
+              </span>
+            )}
+          </div>
+          {can_administer_members && (
+            <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
+              {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
+            </Button>
+          )}
+        </div>
       </div>
       <div className={styles["team-settings-members-table-wrapper"]}>
-        <TeamSettingsMembersTable team={team} />
+        <TeamSettingsMembersTable team={team} search={search} />
       </div>
+      {can_administer_members && (
+        <AddTeamMembersDialog open={isAddDialogOpen} team={team} onClose={() => setIsAddDialogOpen(false)} />
+      )}
     </div>
   );
 }

@@ -28,8 +28,10 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
   const tooltipId = useId();
   // Single-element children get aria-describedby wired to the tooltip text so
   // screen readers announce it for both hover and keyboard focus (the CSS
-  // already reveals the tooltip on :focus-within) — without this, role="tooltip"
-  // alone isn't programmatically linked to the element it describes.
+  // already reveals the tooltip on :has(:focus-visible) — not :focus-within,
+  // which would also fire on the lingering focus a mouse click leaves behind)
+  // — without this, role="tooltip" alone isn't programmatically linked to the
+  // element it describes.
   const child = isValidElement(children)
     ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })
     : children;

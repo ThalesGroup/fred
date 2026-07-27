@@ -21,11 +21,12 @@ interface ChatListItemProps {
   sessionId: string;
   href: string;
   label: string;
+  agentName?: string;
   dateLabel?: string;
   onDelete: (e: React.MouseEvent) => void;
 }
 
-export function ChatListItem({ sessionId, href, label, dateLabel, onDelete }: ChatListItemProps) {
+export function ChatListItem({ sessionId, href, label, agentName, dateLabel, onDelete }: ChatListItemProps) {
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
 
@@ -33,7 +34,13 @@ export function ChatListItem({ sessionId, href, label, dateLabel, onDelete }: Ch
     <Link to={href} className={styles.chatItemContainer} data-selected={isSelected}>
       <div className={styles.chatDescription}>
         <div className={styles.title}>{label}</div>
-        {dateLabel && <div className={styles.date}>{dateLabel}</div>}
+        {(agentName || dateLabel) && (
+          <div className={styles.date}>
+            {agentName && <span className={styles.agentName}>{agentName}</span>}
+            {agentName && dateLabel && " · "}
+            {dateLabel}
+          </div>
+        )}
       </div>
       <span className={styles.chatActions}>
         <DeleteIconButton size="small" onClick={onDelete} />

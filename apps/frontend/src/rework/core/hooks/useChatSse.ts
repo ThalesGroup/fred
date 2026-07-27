@@ -225,6 +225,12 @@ export function useChatSse(
         }
 
         case "final": {
+          // `final` is the only reliable end-of-turn signal on this stream (see
+          // agent_app.py's `execute_stream` docstring) — the contract's
+          // `turn_persisted` event is defined but never actually emitted, so the
+          // session's activity timestamp/list position must be refreshed here
+          // instead of waiting on that dead event.
+          onTurnPersisted?.(sessionId);
           // Authoritative frame — replaces any accumulated delta at the same rank.
           const rank = deltaRankRef.current ?? rankRef.current++;
           const parts: ChatMessage["parts"] = [{ type: "text", text: event.content ?? "" }];

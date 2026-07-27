@@ -210,7 +210,9 @@ export default function Select<T>({
   };
 
   const activeOption = isOpen && activeIndex >= 0 ? options[activeIndex] : undefined;
-  const activeOptionId = activeOption ? `${baseId}-opt-${activeOption.value}` : undefined;
+  // Must match Menu's own itemId, which is keyed by `option.key` (unique by
+  // contract) rather than `option.value` (can be a non-primitive).
+  const activeOptionId = activeOption ? `${baseId}-opt-${activeOption.key}` : undefined;
 
   return (
     <div

@@ -683,6 +683,30 @@ _(none yet)_
 
 ---
 
+### Delete confirmation in `ChatList` (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatList.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`
+**Status:** `Functional`
+
+Clicking a session tile's `DeleteIconButton` used to call the delete
+mutation immediately, with no confirmation step (and swallowed the error
+silently). Now opens the shared `ConfirmationDialog` (via
+`useConfirmationDialog`, already wrapping the app in `App.tsx`) first —
+the mutation only fires from `onConfirm`. Same inverted-emphasis
+destructive pattern as "Delete agent" (`TeamAgentsPage`) and "Leave team"
+(`LeaveTeamButton`): `criticalAction: true`, `cancelVariant: "filled"` /
+`cancelColor: "primary"` (Cancel stays the visually dominant filled
+button), `confirmVariant: "text"` (Delete drops to a low-emphasis text
+button, colored `error` via `criticalAction`). New i18n keys under
+`rework.sidebar.chatList.deleteDialog.{title,message,confirm,cancel}`,
+message interpolates the session's own displayed label (title, or the
+UUID-prefix fallback from the open issue above) — same shape as
+`rework.agentCard.deleteDialog`.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -719,15 +743,13 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 **Status:** `Functional`
 
 Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
-affordance (TEAM-09) is driven entirely by the team's `joining_mode`, gated
-on `!team.is_member`:
+affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
+the team's `joining_mode`, gated on `!team.is_member`:
 
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `request_only` | "Request to join" button, permanently `disabled` — the notification system to route requests to team admins doesn't exist yet |
 | `invite_only` | No button; muted label (`on-surface-retreat`) |
-| `closed` | No button; muted label (`on-surface-muted`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -735,36 +757,93 @@ The former lock icon next to the team name (driven by the retired
 footer label already communicates restricted-join state more specifically,
 so keeping both would duplicate the signal.
 
-#### Open UX issues
-
-- **`request_only` disabled button has no explanatory affordance** — a
-  permanently-disabled button with no tooltip/hint may read as broken to
-  users rather than "not yet supported." Consider a tooltip or helper text
-  once the underlying notification system is scoped.
+`request_only` (a disabled "Request to join" button — the notification
+system to route requests to team admins was never built) and `closed` (a
+second muted label, indistinguishable in practice from `invite_only`) were
+dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
-### `TeamSettingsParameters` — joining-mode control
+### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
 **Status:** `Functional`
 
-Replaced the `is_private` `Switch` row with a 4-way `ButtonGroup`
-(`variant="radio"`), label left / control right in the same
-`form-section` container. Each option carries its own selected-state color
-via the `ButtonGroupItem` color-per-item extension (see below): `open` →
-`success`, `request_only`/`invite_only` → `secondary`, `closed` → `error`.
-Selecting an option PATCHes `joining_mode` immediately (no separate save
-step), mirroring the retired Switch's auto-save behavior.
+Two stacked rows (`.team-settings-toggle-row`, label left / control right)
+share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
+`gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
+**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+`size="small"`, plain group-level `color="secondary"` — no per-item color,
+same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
+Selecting an option PATCHes immediately (no separate save step), mirroring
+the retired `is_private` `Switch`'s auto-save behavior this control replaced.
 
-#### `ButtonGroup` / `ButtonGroupItem` — per-item color override (TEAM-09)
+Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
+`request_only` and `closed` were dropped from the `JoiningMode` enum
+entirely (see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29). Originally shipped
+as a 4-way group with a distinct selected-state color per option
+(`open`→`success`, `closed`→`error`) via a `ButtonGroupItem` per-item
+`color?: ColorTheme` override; both the 2 extra options and the per-item
+color scheme were dropped in the same pass. `ButtonGroupItem` still
+supports the `color` override prop, but no shipped consumer uses it — the
+plain group-level color pattern is what every `ButtonGroup` consumer
+follows now.
 
-`ButtonGroupItemProps` gained an optional `color?: ColorTheme` that overrides
-the group-level `color` for that single item only (falls back to the
-group's `color` when omitted) — needed because this control's four options
-each use a different semantic color when selected, not one color for the
-whole group like every prior `ButtonGroup` consumer. Backward compatible:
-existing call sites that never set `item.color` are unaffected.
+**Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
+(`public`/`private`, default `public`) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+mechanism. A `private` team can never be `open`: while
+`visibility === "private"`, every item in the joining-mode `ButtonGroup`
+below carries `disabled` (the whole group reads as inert, not just the
+`open` option) — enforced this way rather than only disabling `open`
+because the server may have just silently downgraded a stored `open` to
+`invite_only` the moment visibility flipped, and a half-disabled group
+would misrepresent that as still a live choice. No client-side write of
+`joining_mode` ever accompanies a visibility PATCH — the resulting
+`joining_mode`, if it changes, comes back from the server on refetch.
+
+**`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
+previously had no disabled styling at all — a `disabled` item was
+functionally inert (native attribute blocks the click) but visually
+identical to an enabled one. Added `&:disabled` with `pointer-events: none`
+(bulletproof no-hover/no-active/no-click, no need to guard the existing
+`:hover`/`:active` rules individually) plus, scoped to
+`.stateLayer:not([data-selected="true"])` only, a transparent background
+and `on-surface-muted` label color. Scoping to the unselected sub-case
+matters: the joining-mode group's disabled-while-private state always has
+one selected item (`invite_only`, forced) and one not (`open`) — the
+selected item keeps its normal filled selected-color styling, only the
+unselected `open` option reads as muted/transparent. Generic addition to
+the shared atom (any future disabled+unselected item elsewhere gets the
+same treatment for free), not special-cased to this one call site.
+
+**`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
+optional `backgroundColor` prop (default `var(--surface-container)`,
+matching every existing consumer's look exactly), applied via a
+`--button-group-background-color` CSS custom property rather than a
+hardcoded class — same escape-hatch pattern as `DataTable`'s own
+`backgroundColor` prop. Both rows in this panel override it to
+`var(--surface-container-lowest)`, since they already sit inside a
+`surface-container` `form-section` and the default pill color would
+otherwise blend into it.
+
+### `TeamSettingsParameters` — team banner upload
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
+**Status:** `Functional`
+
+Banner upload is a `Button` (`variant="outlined"`, `size="small"`,
+`icon={{ category: "outlined", type: "upload" }}`, label "Importer"/"Import")
+that triggers a hidden native `<input type="file">` via `fileInputRef`,
+replacing the earlier click-the-image `ImageFileInput` pattern. Below the
+button, a `body-small` / `on-surface-muted` caption states the supported
+formats and size limit (JPEG/PNG/WebP, 5 MB max — matches the
+`ALLOWED_TYPES`/`MAX_BANNER_SIZE` client-side validation already in
+`handleBannerUpload`). To the button's right, an `<img>` preview
+(`.team-banner-preview`) renders the current/staged banner at the same
+240×88 width/height ratio as `TeamContentNavbar`'s `.bannerContainer`, so
+the preview shows the same crop the image gets once applied to the nav
+banner.
 
 ---
 
@@ -834,14 +913,18 @@ containers:
   `on-surface-retreat`).
 - **Right**, left to right: a rows-per-page `Select` (20/50/100, our own
   molecule, not MUI), then `IconButton` (`medium`, `icon` variant,
-  `on-surface`) first-page / previous-page, the current page number
-  (`body-medium`, `on-surface-retreat`), then next-page / last-page. All four
-  nav buttons disable at their respective bound (first/prev at page 1,
-  next/last at the last page) — the footer itself never hides, even when
-  every row fits on one page, so the count and page-size control stay
-  reachable. New icons `first_page`/`last_page` added to the app's Material
-  Symbols allow-list (`shared/utils/Type.ts`). New i18n keys: top-level
-  `dataTable.pagination.{first,prev,next,last,totalItems}`.
+  `on-surface`) first-page / previous-page, the current page label
+  ("Page X sur Y" / "Page X of Y", `body-medium`, `on-surface-retreat`,
+  `tabular-nums`), then next-page / last-page. All four nav buttons disable
+  at their respective bound (first/prev at page 1, next/last at the last
+  page) — the footer itself never hides, even when every row fits on one
+  page, so the count and page-size control stay reachable. New icons
+  `first_page`/`last_page` added to the app's Material Symbols allow-list
+  (`shared/utils/Type.ts`). New i18n keys: top-level
+  `dataTable.pagination.{first,prev,next,last,totalItems}`. The page label
+  (`dataTable.pagination.pageNumber`) is fixed-width (`7rem`, centered) so
+  the neighbouring nav buttons don't shift as either the current page or the
+  total page count gains a digit.
 
 `TeamSettingsMembersTable` is the first consumer, at an initial `pageSize={20}`
 (the rows-per-page `Select` lets the user switch to 50/100 from there).
@@ -851,7 +934,272 @@ flex column (`height: 100%` from the already-24px-padded `.teamSettingsPage`
 shell): the header row is fixed height, and the table wrapper takes
 `flex: 1; min-height: 0` so the table's bottom edge sits exactly `24px`
 above the viewport bottom, scrolling internally past `pageSize` rows on very
-short viewports rather than growing the page.
+short viewports rather than growing the page. The container's own
+`overflow: hidden` was removed — it isn't needed for the shrink-to-fit
+chain (`min-height: 0` on both the container and the table wrapper already
+does that; `DataTable` clips its own rounded corners) and it was cropping
+the "add member" `Autocomplete` input's focus ring at the top of the flex
+column.
+
+**`Autocomplete` compact-field alignment (fixed 2026-07-26).** Uses
+`TextInput`'s `compact` variant, which now sets `display: none` on the
+hint/error/counter container (`.information`) instead of just skipping its
+flex/padding rules — previously the empty container still reserved a row's
+worth of height, which (a) misaligned the input's visual center against the
+title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
+(`top: 100%` of the input's own wrapper) below the input with a large gap.
+Both now resolve automatically since the wrapper's rendered height matches
+the input exactly; the popover's only remaining offset is the deliberate
+`margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `TeamSettingsMembers` — member search field (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx`
+**Status:** `Functional`
+
+Reuses the exact same input the header's `AddTeamMembersDialog`-launch used
+to use before #2117 replaced it with a button: `TextInput` in `compact`
+mode with a leading `search` icon, no `label` — not the `SearchField`
+molecule (`PromptsPage`/`CapabilityTeamMatrixDrawer`'s search), which was
+tried first and rejected as visually inconsistent with the rest of this
+panel. `TextInput` already accepts native input attributes (`placeholder`,
+`aria-label`, `style`, `ref`) via its prop spread, so no component change
+was needed for the placeholder text, the accessible name on an icon-only
+field, or the clear button below.
+
+Placeholder: "Nom, Prénom, Identifiant" / "Last name, First name,
+Identifiant" — matches the three searchable fields (and the `username`
+column's "Identifiant" label) rather than a full sentence, unlike
+`AddTeamMembersDialog`'s own search placeholder ("Entrer un nom, prénom ou
+ID utilisateur").
+
+Clear button: once `search` is non-empty, a `small`/`on-surface-retreat`
+`IconButton` (`close`) appears absolutely-positioned inside the field
+(`.team-settings-members-search-clear`, vertically centered, `right:
+var(--spacing-2xs)`) — composed locally around `TextInput` rather than
+built into it, so the shared atom's API/behavior for every other consumer
+stays untouched. Clearing calls `setSearch("")` and refocuses the input via
+a local `ref` (same pattern as `SearchField`'s own clear button), so focus
+never leaves the field. `TextInput` gets an inline `style={{ paddingRight:
+... }}` only while the button is showing, reserving room so typed text
+never runs under it.
+
+Sits in the header's right-hand group (`.team-settings-members-header-right`,
+`gap: var(--spacing-m)` = 16px), immediately left of the conditional
+"Ajouter des membres" `Button` — both share that flex row so the search
+field is still shown flush right even for members without
+`can_administer_members` (button hidden, search alone). Fixed
+`width: 280px` on the field's wrapper, since `TextInput`'s root is
+`width: 100%` and needs a container to stop it filling the header row.
+
+Filtering is purely client-side: `useListTeamMembersQuery({ teamId })`
+already fetches every member in one uncapped call (`DataTable`'s pagination,
+per #2108 above, only slices that already-fetched array), so there's no
+backend search endpoint to coordinate with. Below 2 characters the query is
+ignored (every member shows); at 2+, the query is split on whitespace into
+tokens and a member matches when **every** token is found in **at least
+one** of `first_name`/`last_name`/`username` (case-insensitive substring) —
+so "doe alice" and "alice doe" both match a member named Alice Doe, and a
+lone token matches on first name, last name, or the "Identifiant" column
+(`username`) alone.
+
+The row's `IconButtonMenu` ("more" action) color also moved from
+`on-surface` to `on-surface-retreat` in this pass — a deliberate de-emphasis
+of that column, unrelated to search but shipped in the same change.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `AddTeamMembersDialog` — bulk add with per-user role selection (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/AddTeamMembersDialog/AddTeamMembersDialog.tsx`,
+`src/rework/components/shared/molecules/TeamRoleChips/TeamRoleChips.tsx`
+**Status:** `Functional`, first pass from a supplied mockup — not yet
+design-reviewed.
+
+The Members header's inline Autocomplete text input is replaced by a
+`filled`/`primary` `Button` ("Ajouter des membres", same header slot). It
+opens `AddTeamMembersDialog` — a `Portal`-based modal following the
+`ConfirmationDialog`/`DuplicateAgentDialog` shell (overlay + card, no
+generic `Dialog` primitive exists yet):
+
+- **Header:** title + subtitle (`body-medium`, `on-surface-retreat`).
+- **Search:** the same `Autocomplete` the old inline field used, reused
+  as-is (candidates come from the existing `candidate-members` endpoint,
+  already scoped to non-members) — auto-focused on open, and its menu only
+  opens once the query is 2+ characters (`minQueryLength={2}`, see below),
+  matching the backend search's own minimum.
+- **Pending-list container** — always rendered, even with zero pending
+  candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
+  corners, `spacing-s` (`12px`) padding so content isn't flush against the
+  border): a fixed `pendingListHeader` label ("Membres à ajouter à
+  l'équipe", `label-large`, `on-surface-retreat`) above either —
+  - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
+    (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
+    selector (see below, `8px` gap between its own chips), and a
+    `close`-icon `IconButton` to drop the row. Each row is
+    `surface-container-highest` background, `radius-s` (`8px`) corners,
+    `padding-left: spacing-m` (`16px`, `padding-right` stays `spacing-xs`/
+    `8px`), height `3rem` (`48px`) — a visually distinct "chip" resting
+    inside the outer bordered container, not flush rules between rows.
+    List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
+    "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
+    (thumb color inherited from the app's existing global `outline-retreat`
+    scrollbar rule in `styles/index.css`, already thin by default; this
+    only narrows it further for the denser list); or
+  - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
+    sélectionné pour l'instant" placeholder, `height: var(--row-height)`
+    (`48px`) — same height as a single pending row, so the container's
+    overall height doesn't jump between the empty and one-candidate states.
+
+  **No `overflow: hidden` at the dialog level** — everything is inset by
+  the dialog's own padding, and clipping would also cut off the
+  `Autocomplete` menu popover in the search row above the list (same class
+  of bug just fixed on the old inline field, see above).
+- **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
+  (`filled`/`primary`, disabled while the list is empty or a submit is in
+  flight). Clicking `Ajouter` always closes the dialog once the batch
+  finishes, whether every add succeeded or not — per-user failures still
+  surface as an error toast (`notifyApiError`), they just don't block the
+  rest of the batch or keep the dialog open for a retry.
+
+**No new backend endpoint** — confirming always calls `addTeamMember` on
+the `team_member` baseline first, then `grantTeamMemberRole` for every
+selected elevated role, one call per role (same pattern the members table
+already uses for role changes on existing members, § AUTHZ-06 above).
+**Never add directly onto an elevated relation** — a member added straight
+onto e.g. `team_editor` with no separate `team_member` tuple has no floor
+to fall back to: revoking their only elevated role later leaves them with
+zero relations at all, and the backend correctly 409s ("would silently
+remove them from the team, use remove_team_member instead") rather than
+allow that. Fixed 2026-07-26 — the first version picked the
+highest-priority selected role as the `addTeamMember` relation directly
+(skipping the grant call for that one role, saving an API round trip), which
+silently produced exactly this trap for every member added through the
+dialog with at least one elevated role: they'd display correctly, but their
+only/highest role could never be revoked back down to plain membership.
+
+**`useMutationAction`: `T | null` can't tell "failed" from "succeeded with
+a falsy result" (fixed 2026-07-26).** After the fix above shipped, every
+grant call in the batch was still silently skipped — `handleConfirm`
+checked `addResult === null` to detect a failed `addTeamMember` call before
+proceeding to the grant loop. `add_team_member`/`grant_team_member_role`
+both respond `204 No Content`; `fetchBaseQuery` resolves an empty body to
+`null` **on success**. Every add in this dialog therefore always looked
+like a failure to that check, and the grant loop below it never ran — with
+no thrown error, no console error, and no toast, since nothing had actually
+failed. This reproduced 100% of the time against the real backend but
+**never** against any mocked backend used to investigate the two prior
+reports in this session, because every mock's fetch stub serialized a
+JSON body (`"{}"`, 2 characters) for every response regardless of status
+code — never a truly empty one — so `added` was never `null` in any of
+that testing. `useMutationAction.ts` (`core/hooks/useMutationAction.ts`)
+now returns a discriminated `{ ok: true; data: T } | { ok: false }`
+instead of `T | null`; `handleConfirm` branches on `.ok`. No other call
+site branched on the return value (every other consumer just awaits the
+call and relies on the `onError` toast), so this is a non-breaking
+contract change. Caught by reproducing with a mock that returns a
+genuinely empty `204` body (`new Response(null, { status: 204 })`)
+instead of a serialized empty object.
+
+**`TeamRoleChips`** — the members table's inline role-chip toggle group
+(admin/editor/analyst, multi-select, `data-active` fills `--primary`
+background with `on-primary` text) is extracted from
+`TeamSettingsMembersTable` into this shared molecule so the dialog's
+pending rows and the table use the identical implementation/CSS. Both gate
+each chip via the new `canAdministerTeamRole(capabilities, role)` helper
+(`core/hooks/teamCapabilities.ts`), replacing the table's former private
+closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
+text, default (inactive) border `1px solid outline` — was `0.5px
+outline-variant`, a size/color pair that didn't match any other chip-style
+control in the app. Chip padding-left/right `spacing-s` (`12px`, was
+`spacing-xs`/`8px`).
+
+**Members table: role chips are a live, single-click toggle in both
+directions.** `TeamRoleChips` renders identically here and in the
+add-members dialog, but only the table's instance is *live* — a click
+there immediately grants/revokes via the API, while the dialog's is a
+staged selection with no effect until "Ajouter". A confirmation step was
+added on the revoke path (2026-07-26) while investigating a report of "a
+member added with 2-3 roles ends up holding only the highest-priority
+one" — it turned out not to be the cause (see the `addTeamMember`-on-
+baseline fix above for the actual root cause) and was removed again at the
+developer's explicit request the same day: revoking a role is back to a
+single click, symmetric with granting. Also fixed in the same investigation
+(kept): `DataTable` accepted an optional `rowKey` (default: array index,
+unchanged for other consumers); `TeamSettingsMembersTable` now passes
+`(member) => member.user.id` — with the previous index-based key, any
+row-scoped state or in-flight handler could misattribute to the wrong
+member as soon as the list re-sorted (which `sortedMembers` does on every
+role change).
+
+**`Autocomplete` open-state rework (`isOpen` now derived, plus
+`minQueryLength`).** Previously `isOpen` was an imperatively toggled
+boolean (set on focus/blur/select), which needed a one-off patch when a
+second query typed while still focused (post-selection) didn't reopen the
+menu. Replaced with a derived value: `isOpen = isFocused && !dismissed &&
+queryValue.trim().length >= minQueryLength`, where `dismissed` is a
+one-shot flag set by Escape or a selection and cleared on the next
+focus/keystroke. New optional prop `minQueryLength` (default `0`, opens
+immediately on focus — e.g. `AdminTeamsPage`'s browsable full-user-list
+field) lets a consumer whose menu is backed by a server search that itself
+only queries past a minimum length (this dialog, `minQueryLength={2}`)
+avoid flashing an empty "no options" state below that threshold. Affects
+every `Autocomplete` consumer, not just this dialog.
+
+**`Autocomplete` keyboard navigation (2026-07-26).** The first option is
+now virtually focused (`aria-activedescendant` pattern, DOM focus stays on
+the input) as soon as the menu opens with results; `ArrowDown`/`ArrowUp`
+move it, wrapping at each end; `Enter` selects whichever option is
+currently focused (closing the menu and clearing the field, same as a
+click). The focused index resets to `0` on every fresh keystroke or
+re-focus rather than reactively whenever the `options` prop changes —
+`options` is a new array reference (`.filter()`/`.map()` result) on nearly
+every parent render, not only when the candidate list itself changes, so
+tying the reset to it would keep stomping on the user's own up/down
+navigation mid-browse. Implementation mirrors `Select`'s existing
+`activeIndex`/`moveActive` pattern verbatim (same wrap-around, same
+disabled-skip behavior). Surfaced (and fixed in the same pass) a latent bug
+in the shared `Menu`: its per-option DOM id was built from `option.value`,
+which for `Select`'s own primitive-typed options happened to stringify
+uniquely, but for `Autocomplete`'s object-typed candidates (`UserSummary`
+records) stringifies to the same `"[object Object]"` for every option —
+breaking both `activeId` matching and the `#${activeId}` scroll-into-view
+selector (unescaped `[`/`]` aren't valid there). Menu's item id (and
+`Select`'s matching `activeOptionId`) now use `option.key` instead — already
+required, already unique by contract (it's the React list key), and a
+plain string regardless of `T`.
+
+**`IconButton` default color.** `color` is now optional, defaulting to
+`on-surface-retreat` — the baseline color intended for icon buttons that
+don't need a stronger color to draw attention (e.g. this dialog's row
+`close` button). Every existing call site already passed `color` explicitly
+so this is additive only; new call sites can omit it instead of repeating
+the same value.
+
+**`Button`/`IconButton` outlined-variant border fix.** Both previously set
+`--btn-border` to the passed `color`'s own "main" token (e.g. `on-surface`'s
+`main` is `on-surface`, which in dark theme is a near-white tone) —
+per M3, the outlined variant's border is always the neutral `outline`
+token regardless of `color`; only the label/icon take the scheme's color.
+This was invisible in light theme (where `on-surface` happens to read dark
+too) but washed the border out to near-invisible in dark theme, which is
+what surfaced it here (this dialog's `Annuler` button, `color="on-surface"`).
+Fixed at the shared-component level (`--btn-border: var(--outline)` in both
+`Button.module.scss` and `IconButton.module.scss`), so every existing
+`variant="outlined"` call site is corrected without touching call sites.
 
 #### Open UX issues
 
@@ -882,7 +1230,12 @@ Helps a user recognize their role in each team they belong to.
   labels (already shown as chips in the Members table). Falls back to
   "Membre" when no elevated role is held. Not shown for the personal space,
   or for a non-member merely browsing a public/marketplace team pre-join
-  (`selectedTeam.is_member`).
+  (`selectedTeam.is_member`). When `team_admin` is held (always the first
+  token — roles are priority-sorted, admin first), the same Shield glyph as
+  the `TeamSelectionItem` badge (`color: secondary`, 12px) prefixes the
+  label, without that badge's circular background/outline — inline, `gap:
+  var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
+  label itself isn't shown there) — left for a follow-up task.
 - Backend: new `TeamWithPermissions.my_relations` field — see
   `CONTROL-PLANE-PRODUCT-CONTRACT.md` §26 for why `permissions` alone
   couldn't reliably answer "is this user actually team_analyst".

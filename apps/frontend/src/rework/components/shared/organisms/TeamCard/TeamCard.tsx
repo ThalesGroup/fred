@@ -119,20 +119,8 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               {t("rework.teamCard.join")}
             </Button>
           )}
-          {!team.is_member && team.joining_mode === "request_only" && (
-            <Button color={"primary"} variant={"outlined"} size={"medium"} disabled onClick={(e) => e.preventDefault()}>
-              {t("rework.teamCard.requestToJoin")}
-            </Button>
-          )}
-          {!team.is_member && team.joining_mode === "closed" && (
-            <span className={styles.teamJoiningLabel} data-tone="muted">
-              {t("rework.teamCard.closedTeam")}
-            </span>
-          )}
           {!team.is_member && team.joining_mode === "invite_only" && (
-            <span className={styles.teamJoiningLabel} data-tone="retreat">
-              {t("rework.teamCard.inviteOnly")}
-            </span>
+            <span className={styles.teamJoiningLabel}>{t("rework.teamCard.inviteOnly")}</span>
           )}
         </div>
       </div>

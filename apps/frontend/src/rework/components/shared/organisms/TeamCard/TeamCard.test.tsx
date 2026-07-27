@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TEAM-09: the marketplace card's join affordance is driven entirely by
-// `joining_mode` (+ `is_member`) now that the mailto flow is gone — one
-// state per mode, plus the self-service join mutation actually firing for
-// OPEN.
+// TEAM-09 (narrowed to 2 states 2026-07-26): the marketplace card's join
+// affordance is driven entirely by `joining_mode` (+ `is_member`) — the join
+// button for OPEN, an "invite only" label otherwise, plus the self-service
+// join mutation actually firing for OPEN.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -107,22 +107,6 @@ describe("TeamCard joining_mode rendering", () => {
     });
 
     expect(h.joinTeam).toHaveBeenCalledWith({ teamId: "team-1" });
-  });
-
-  it("REQUEST_ONLY + not a member: shows a disabled request button", () => {
-    render(<TeamCard team={baseTeam({ joining_mode: "request_only" })} withDescription={false} />);
-
-    const button = container.querySelector("button");
-    expect(button).not.toBeNull();
-    expect(button?.textContent).toContain("rework.teamCard.requestToJoin");
-    expect(button?.disabled).toBe(true);
-  });
-
-  it("CLOSED + not a member: no button, shows the closed-team label", () => {
-    render(<TeamCard team={baseTeam({ joining_mode: "closed" })} withDescription={false} />);
-
-    expect(container.querySelector("button")).toBeNull();
-    expect(container.textContent).toContain("rework.teamCard.closedTeam");
   });
 
   it("INVITE_ONLY + not a member: no button, shows the invite-only label", () => {

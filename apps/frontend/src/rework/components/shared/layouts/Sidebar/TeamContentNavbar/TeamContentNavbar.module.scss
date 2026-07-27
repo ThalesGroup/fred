@@ -63,11 +63,34 @@
 /* Roles the current user holds on this team, e.g. "Admin · Analyst" or
  * "Member" (#2100) — bottom-left of the banner, below the name/gear row. */
 .teamRoleLabel {
+  display: flex;
   position: relative;
+  align-items: center;
   z-index: 1;
   color: inherit;
   font: var(--font-label-medium);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Shield glyph prefixing the role label when the user holds team_admin —
+ * same glyph/color/size as the TeamSelectionItem admin badge, without its
+ * circular background/outline (#2100 follow-up). */
+.roleLabelWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.roleLabelAdminIcon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin-right: var(--spacing-3xs);
+  height: 1em; /* match the label text's own height — 1.33em (its line-height)
+   * made the icon's box taller than the text next to it, pushing that text
+   * upward inside the row. */
+  color: var(--secondary);
+  font-size: 12px;
 }
 
 .navigationContainer {
