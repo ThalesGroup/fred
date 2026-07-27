@@ -124,6 +124,27 @@ async def _demo_context_prompt(ctx: ToolContext) -> str:
     return f"ctxprompt:{ctx.binding.runtime_context.context_prompt_text or 'none'}"
 
 
+@tool("demo.team_routing", description="Return the bound team routing policy snapshot.")
+async def _demo_team_routing(ctx: ToolContext) -> str:
+    """
+    Return the team routing policy fields bound to the current runtime context.
+
+    Why this exists:
+    - control-plane resolves a team's chat_default_profile_id/operation_route_rules
+      at prepare-execution and the frontend forwards them unchanged, but the
+      runtime rebuilt RuntimeContext from the request and silently dropped both
+      fields — so no team's routing policy ever reached model selection
+      (fred_runtime.model_routing.provider.resolve_team_override always saw None)
+
+    How to use it:
+    - invoked by the team-routing regression agent through the runtime
+    """
+
+    rc = ctx.binding.runtime_context
+    rule_ids = ",".join(r.rule_id for r in (rc.operation_route_rules or []))
+    return f"profile:{rc.chat_default_profile_id or 'none'}|rules:{rule_ids or 'none'}"
+
+
 class _EchoAgent(ReActAgent):
     """
     Small authored agent used to validate pod runtime wiring.
@@ -457,6 +478,16 @@ class _ContextPromptAgent(ReActAgent):
     tools = (_demo_context_prompt,)
 
 
+class _TeamRoutingAgent(ReActAgent):
+    """Tiny agent that surfaces the bound team routing policy through a tool."""
+
+    agent_id: str = "rags.sample.team_routing"
+    role: str = "Team routing probe"
+    description: str = "Reports the team routing policy snapshot it received."
+    system_prompt_template: str = "Use the demo_team_routing tool, then answer."
+    tools = (_demo_team_routing,)
+
+
 def test_execute_forwards_context_prompt_text_to_agent_binding(
     monkeypatch, tmp_path
 ) -> None:
@@ -524,6 +555,87 @@ def test_execute_forwards_context_prompt_text_to_agent_binding(
     # The tool echoed the bound context_prompt_text — proving the field survived
     # the request → RuntimeContext binding (not dropped → not "ctxprompt:none").
     assert any("CTXMARKER-9f3a" in p.get("content", "") for p in tool_results)
+
+
+def test_execute_forwards_team_routing_policy_to_agent_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression: `runtime_context.chat_default_profile_id`/`operation_route_rules`
+    must reach the agent binding.
+
+    Why this exists:
+    - control-plane resolves a team's routing policy at prepare-execution and the
+      frontend forwards it via `runtime_context`, but the runtime rebuilt
+      `RuntimeContext` from the request and silently dropped both fields — so
+      `fred_runtime.model_routing.provider.resolve_team_override` always saw
+      `None`, and no team's routing policy (TEAM-ROUTING-POLICY-RFC.md §3/§8)
+      ever affected a real chat turn's model selection, despite the full
+      control-plane API + frontend settings panel resolving and storing it.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-routing-1",
+                        "name": "demo_team_routing",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": "rags.sample.team_routing",
+                "input": "hello",
+                "session_id": "session-routing",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "chat_default_profile_id": "chat.anthropic.claude-sonnet",
+                    "operation_route_rules": [
+                        {
+                            "rule_id": "planning-to-haiku",
+                            "operation": "planning",
+                            "target_profile_id": "chat.anthropic.claude-haiku",
+                        }
+                    ],
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    # The tool echoed the bound routing policy — proving both fields survived
+    # the request → RuntimeContext binding (not dropped → not "profile:none").
+    echoed = " ".join(p.get("content", "") for p in tool_results)
+    assert "profile:chat.anthropic.claude-sonnet" in echoed
+    assert "rules:planning-to-haiku" in echoed
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(

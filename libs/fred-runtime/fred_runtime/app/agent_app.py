@@ -89,6 +89,7 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    TeamOperationRouteRule,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
@@ -2631,6 +2632,20 @@ async def _iterate_runtime_event_payloads(
         # When the final file is deleted this is absent, so the per-turn runtime
         # notice disappears without leaving a checkpointed system message behind.
         attachments_markdown=ctx.get("attachments_markdown"),
+        # Team routing policy snapshot (TEAM-ROUTING-POLICY-RFC.md §3/§8):
+        # control-plane resolves it once at prepare-execution and the frontend
+        # forwards it unchanged, same channel as context_prompt_text above — but
+        # it was also silently dropped here, so resolve_team_override in
+        # fred_runtime.model_routing.provider always saw None and no team's
+        # routing policy ever took effect on a real chat turn. ctx already holds
+        # the flat dict from to_legacy_context()'s model_dump(exclude_none=True);
+        # operation_route_rules needs re-validating back into typed rows.
+        chat_default_profile_id=ctx.get("chat_default_profile_id"),
+        operation_route_rules=[
+            TeamOperationRouteRule.model_validate(rule)
+            for rule in (ctx.get("operation_route_rules") or [])
+        ]
+        or None,
     )
 
     binding = BoundRuntimeContext(
