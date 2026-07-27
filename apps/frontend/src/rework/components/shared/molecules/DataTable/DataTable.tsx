@@ -194,10 +194,10 @@ export default function DataTable<T>({
             />
           </div>
         )}
-        {columns.map((column) => {
+        {columns.map((column, columnIndex) => {
           const isSorted = sortState?.columnLabel === column.label;
           return (
-            <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
+            <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={columnIndex}>
               {column.sortable ? (
                 <button
                   type="button"
@@ -232,9 +232,9 @@ export default function DataTable<T>({
                   />
                 </div>
               )}
-              {columns.map((column) => {
+              {columns.map((column, columnIndex) => {
                 return (
-                  <div className={styles["datatable-cell"]} key={column.label}>
+                  <div className={styles["datatable-cell"]} key={columnIndex}>
                     {column.cellRenderer?.(line)}
                   </div>
                 );

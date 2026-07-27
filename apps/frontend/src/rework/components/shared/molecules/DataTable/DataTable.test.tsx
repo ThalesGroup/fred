@@ -85,6 +85,25 @@ describe("DataTable", () => {
     expect(footer()).toBeNull();
   });
 
+  // Regression: two columns with the same (often empty, e.g. an unlabeled
+  // status/actions cell) label used to collide on `key={column.label}` for
+  // both header and body cells, which broke reconciliation badly enough to
+  // stop the page from rendering at all in production.
+  it("does not warn about duplicate keys when multiple columns share an (empty) label", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const multiBlankColumns: DataTableColumn<Row>[] = [
+      { label: "Id", cellRenderer: (row) => <span>{row.id}</span> },
+      { label: "", cellRenderer: () => <span>status</span> },
+      { label: "", cellRenderer: () => <span>actions</span> },
+    ];
+
+    render(<DataTable columns={multiBlankColumns} data={makeRows(3)} />);
+
+    const duplicateKeyWarning = consoleError.mock.calls.some((call) => String(call[0]).includes("same key"));
+    expect(duplicateKeyWarning).toBe(false);
+    consoleError.mockRestore();
+  });
+
   it("shows a persistent footer with the total item count even when every row fits on one page", () => {
     render(<DataTable columns={columns} data={makeRows(10)} pageSize={20} />);
     expect(rowValues()).toHaveLength(10);

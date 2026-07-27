@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -83,12 +83,6 @@ interface DocumentWorkspaceProps {
   isPersonalTeam: boolean;
 }
 
-/** Imperative handle so the Resources root "+" can drive the corpus add actions. */
-export interface DocumentWorkspaceHandle {
-  openUpload: () => void;
-  openNewFolder: () => void;
-}
-
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
 
@@ -105,10 +99,7 @@ function rowKey(row: Row): string {
  * children (subfolders + documents). Heavy listing stays on the backend:
  * folders lazy-load their first document page on entry.
  */
-const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceProps>(function DocumentWorkspace(
-  { teamId, isPersonalTeam },
-  ref,
-) {
+function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -163,17 +154,6 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      openUpload: () => setUploadOpen(true),
-      openNewFolder: () => {
-        if (canCreateFolder) setCreateOpen(true);
-      },
-    }),
-    [canCreateFolder],
-  );
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
@@ -624,66 +604,69 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
 
   return (
     <div className={styles.workspace}>
-      <div className={styles.toolbar}>
-        <Breadcrumb segments={breadcrumbSegments} />
-        <span className={styles.toolbarEnd}>
-          <BulkActionsBar
-            selectedCount={selectedDocs.length}
-            onDelete={bulkDelete}
-            onExcludeFromSearch={bulkExcludeFromSearch}
-          />
-          {canCreateFolder && (
-            <>
-              <IconButton
-                color="on-surface"
-                variant="outlined"
-                size="small"
-                icon={{ category: "outlined", type: "create_new_folder" }}
-                aria-label={t("rework.resources.menu.newFolder")}
-                title={t("rework.resources.menu.newFolder")}
-                onClick={() => setCreateOpen(true)}
-              />
-              <IconButton
-                color="on-surface"
-                variant="outlined"
-                size="small"
-                icon={{ category: "outlined", type: "upload" }}
-                aria-label={t("rework.resources.action.addFile")}
-                title={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
-                disabled={!currentTag}
-                onClick={() => setUploadOpen(true)}
-              />
-            </>
-          )}
-        </span>
-      </div>
-
-      {tagsLoading ? (
-        <div className={styles.hint}>{t("rework.resources.loading")}</div>
-      ) : isEmpty ? (
-        <div className={styles.hint}>
-          {currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")}
+      <div className={styles.card}>
+        <div className={styles.toolbar}>
+          <Breadcrumb segments={breadcrumbSegments} />
+          <span className={styles.toolbarEnd}>
+            <BulkActionsBar
+              selectedCount={selectedDocs.length}
+              onDelete={bulkDelete}
+              onExcludeFromSearch={bulkExcludeFromSearch}
+            />
+            {canCreateFolder && (
+              <>
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "create_new_folder" }}
+                  aria-label={t("rework.resources.menu.newFolder")}
+                  title={t("rework.resources.menu.newFolder")}
+                  onClick={() => setCreateOpen(true)}
+                />
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "upload" }}
+                  aria-label={t("rework.resources.action.addFile")}
+                  title={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
+                  disabled={!currentTag}
+                  onClick={() => setUploadOpen(true)}
+                />
+              </>
+            )}
+          </span>
         </div>
-      ) : (
-        <DataTable<Row>
-          columns={columns}
-          data={rows}
-          rowKey={rowKey}
-          firstColumnInset
-          selectable
-          selectedKeys={selectedKeys}
-          onSelectionChange={setSelectedKeys}
-        />
-      )}
-      {page && page.total > PAGE_SIZE && currentTag && (
-        <ResourcePagination
-          offset={page.offset}
-          limit={PAGE_SIZE}
-          total={page.total}
-          onPrev={() => void loadTagPage(currentTag.id, Math.max(0, page.offset - PAGE_SIZE))}
-          onNext={() => void loadTagPage(currentTag.id, page.offset + PAGE_SIZE)}
-        />
-      )}
+
+        {tagsLoading ? (
+          <div className={styles.hint}>{t("rework.resources.loading")}</div>
+        ) : isEmpty ? (
+          <div className={styles.hint}>
+            {currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")}
+          </div>
+        ) : (
+          <DataTable<Row>
+            columns={columns}
+            data={rows}
+            rowKey={rowKey}
+            firstColumnInset
+            selectable
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+            backgroundColor="transparent"
+          />
+        )}
+        {page && page.total > PAGE_SIZE && currentTag && (
+          <ResourcePagination
+            offset={page.offset}
+            limit={PAGE_SIZE}
+            total={page.total}
+            onPrev={() => void loadTagPage(currentTag.id, Math.max(0, page.offset - PAGE_SIZE))}
+            onNext={() => void loadTagPage(currentTag.id, page.offset + PAGE_SIZE)}
+          />
+        )}
+      </div>
 
       <InlineDrawer
         open={!!commands.previewTarget}
@@ -743,6 +726,6 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
       )}
     </div>
   );
-});
+}
 
 export default DocumentWorkspace;

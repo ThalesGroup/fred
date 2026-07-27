@@ -19,12 +19,25 @@
   gap: var(--spacing-s);
 }
 
+/* One card wraps the breadcrumb/actions toolbar and the table together —
+ * overflow: hidden clips DataTable's own corner radius so only this card's
+ * corners show, letting the two visually read as a single surface. */
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  overflow: hidden;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-retreat);
+  padding: var(--spacing-s) var(--spacing-m);
 }
 
 .toolbarEnd {
@@ -79,7 +92,7 @@
 }
 
 .hint {
-  padding: var(--spacing-s) var(--spacing-xs);
+  padding: var(--spacing-l) var(--spacing-m);
   color: var(--on-surface-muted);
   font: var(--font-body-small);
 }

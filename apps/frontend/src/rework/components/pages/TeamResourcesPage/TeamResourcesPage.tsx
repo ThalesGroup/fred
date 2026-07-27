@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import Tabs, { type TabItem } from "@shared/molecules/Tabs/Tabs.tsx";
@@ -32,7 +31,7 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import { formatBytes } from "../../../utils/formatBytes.ts";
-import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
 import AgentFilesystemBrowser from "./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
@@ -63,7 +62,6 @@ export default function TeamResourcesPage() {
   const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
   const userRoot = `teams/${fsTeamId}/users/${userId}`;
   const sharedRoot = `teams/${fsTeamId}/shared`;
-  const corpusRef = useRef<DocumentWorkspaceHandle>(null);
   const { data: team } = useGetTeamQuery({ teamId });
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
 
@@ -174,30 +172,7 @@ export default function TeamResourcesPage() {
       <Tabs<ResourceRootTab> tabs={rootTabs} value={activeTab} onChange={setActiveTab} />
 
       <div className={styles.panel}>
-        {activeTab === "resources" && (
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "database" }}
-            title={t("rework.resources.roots.resources")}
-            hint={t("rework.resources.hints.resources")}
-            meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
-            collapsible={false}
-            action={
-              canCreateFolder ? (
-                <IconButton
-                  color="on-surface"
-                  variant="outlined"
-                  size="xs"
-                  icon={{ category: "outlined", type: "create_new_folder" }}
-                  aria-label={t("rework.resources.menu.newFolder")}
-                  title={t("rework.resources.menu.newFolder")}
-                  onClick={() => corpusRef.current?.openNewFolder()}
-                />
-              ) : undefined
-            }
-          >
-            <DocumentWorkspace ref={corpusRef} teamId={teamId} isPersonalTeam={isPersonalTeam} />
-          </WorkspaceRoot>
-        )}
+        {activeTab === "resources" && <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />}
 
         {activeTab === "mine" && (
           <WorkspaceRoot
