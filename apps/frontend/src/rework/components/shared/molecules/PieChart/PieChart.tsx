@@ -76,7 +76,7 @@ export default function PieChart({
 
       {!!rows.length && (
         <div className={styles.chartArea}>
-          <ResponsiveContainer width="100%" height={compact ? 80 : 220}>
+          <ResponsiveContainer width="100%" height={compact ? 76 : 220}>
             <RechartsPieChart margin={compact ? { top: 0, right: 0, left: 0, bottom: 0 } : undefined}>
               <Pie
                 data={rows}
@@ -84,7 +84,7 @@ export default function PieChart({
                 nameKey="label"
                 cx={compact ? "30%" : "50%"}
                 cy="50%"
-                outerRadius={compact ? 32 : 80}
+                outerRadius={compact ? 30 : 80}
                 strokeWidth={0}
               >
                 {rows.map((_, i) => (

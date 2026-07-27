@@ -82,8 +82,8 @@ export default function BarChart({
   const isVertical = orientation === "vertical";
 
   // Horizontal: height grows with number of bars. Vertical: fixed height, width is unrestricted.
-  // Compact: fits a ~120px card (8px padding + a small title leave ~80px for the chart itself).
-  const chartHeight = compact ? 80 : isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
+  // Compact: fits a 120px card (12px padding + a small title leave ~76px for the chart itself).
+  const chartHeight = compact ? 76 : isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
 
   return (
     <section ref={sectionRef} className={styles.section} data-compact={compact || undefined}>

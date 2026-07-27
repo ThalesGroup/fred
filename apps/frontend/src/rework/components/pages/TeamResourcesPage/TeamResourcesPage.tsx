@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import Tabs, { type TabItem } from "@shared/molecules/Tabs/Tabs.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
@@ -67,6 +68,7 @@ export default function TeamResourcesPage() {
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
 
   const [activeTab, setActiveTab] = useState<ResourceRootTab>("resources");
+  const [statsOpen, setStatsOpen] = useState(true);
   // "Espace partagé" only exists for a real team — if the active team turns out to be
   // personal (e.g. navigating here via a stale tab from a different team), fall back
   // rather than leave a tab selected that's about to disappear from the switcher.
@@ -134,25 +136,34 @@ export default function TeamResourcesPage() {
           <h1 className={styles.title}>{t("rework.resources.pageTitle")}</h1>
           <p className={styles.subtitle}>{t("rework.resources.pageSubtitle")}</p>
         </div>
-        {hasQuota && (
-          <div className={styles.quota}>
-            <div className={styles.quotaLabelRow}>
-              <span className={styles.quotaLabel}>{t("rework.resources.storageQuota")}</span>
-              <span className={styles.quotaValue}>
-                {formatBytes(team!.current_resources_storage_size ?? 0)} /{" "}
-                {formatBytes(team!.max_resources_storage_size!)}
-              </span>
+        <div className={styles.headerEnd}>
+          <SettingChip
+            label={t("rework.resources.stats.toggle")}
+            icon={{ category: "outlined", type: "bar_chart" }}
+            open={statsOpen}
+            activeColor="secondary"
+            onClick={() => setStatsOpen((value) => !value)}
+          />
+          {hasQuota && (
+            <div className={styles.quota}>
+              <div className={styles.quotaLabelRow}>
+                <span className={styles.quotaLabel}>{t("rework.resources.storageQuota")}</span>
+                <span className={styles.quotaValue}>
+                  {formatBytes(team!.current_resources_storage_size ?? 0)} /{" "}
+                  {formatBytes(team!.max_resources_storage_size!)}
+                </span>
+              </div>
+              <ProgressBar
+                theme="primary"
+                current={team!.current_resources_storage_size ?? 0}
+                max={team!.max_resources_storage_size!}
+              />
             </div>
-            <ProgressBar
-              theme="primary"
-              current={team!.current_resources_storage_size ?? 0}
-              max={team!.max_resources_storage_size!}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
-      {activeTab !== "agents" && (
+      {statsOpen && activeTab !== "agents" && (
         <ResourceStatsCards
           entries={activeStats?.data?.entries}
           isLoading={activeStats?.isLoading ?? false}

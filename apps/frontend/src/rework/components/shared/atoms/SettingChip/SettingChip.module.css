@@ -27,6 +27,11 @@
   color: var(--primary);
 }
 
+.chip[data-open="true"][data-active-color="secondary"] {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
 .chip:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

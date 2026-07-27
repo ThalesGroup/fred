@@ -9,8 +9,10 @@
 
 .section[data-compact] {
   gap: var(--spacing-2xs);
-  padding: var(--spacing-xs);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s);
   height: 120px;
+  overflow: hidden;
 }
 
 .section[data-compact] .title {

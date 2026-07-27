@@ -43,6 +43,12 @@
   font: var(--font-body-medium);
 }
 
+.headerEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
 .quota {
   display: flex;
   flex-direction: column;

@@ -75,6 +75,7 @@ vi.mock("./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx", () => ({
 }));
 vi.mock("./FsRootMeta/FsRootMeta.tsx", () => ({ default: () => null }));
 vi.mock("./FsRootAddMenu/FsRootAddMenu.tsx", () => ({ default: () => null }));
+vi.mock("./ResourceStatsCards/ResourceStatsCards.tsx", () => ({ default: () => <div data-testid="stats-cards" /> }));
 
 import TeamResourcesPage from "./TeamResourcesPage.tsx";
 
@@ -152,5 +153,30 @@ describe("TeamResourcesPage tab switcher", () => {
     probe.team = { id: "team-1" };
     render();
     expect(container.textContent).not.toContain("rework.resources.storageQuota");
+  });
+});
+
+describe("TeamResourcesPage stats toggle", () => {
+  function statsToggle(): HTMLButtonElement {
+    const button = Array.from(container.querySelectorAll("button")).find((b) => b.hasAttribute("aria-expanded"));
+    if (!button) throw new Error("stats toggle chip not rendered");
+    return button;
+  }
+
+  it("shows the stats cards by default", () => {
+    render();
+    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("hides the stats cards when the header chip is toggled off, and back on when clicked again", () => {
+    render();
+
+    click(statsToggle());
+    expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
+
+    click(statsToggle());
+    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
   });
 });
