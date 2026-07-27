@@ -27,6 +27,7 @@ at all when there is nothing to fix up or no `product_deps` was supplied.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -38,7 +39,7 @@ from control_plane_backend.import_export.importer import run_import
 from control_plane_backend.models.base import Base as CPBase
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
-from fred_core.tasks.models import StartMigrationRequest
+from fred_core.tasks.models import MigrationTaskEvent, StartMigrationRequest, TaskState
 from fred_core.tasks.service import TaskService
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -110,6 +111,19 @@ async def _run(
         engine=engine,
         agent_instance_store=AgentInstanceStore(engine),
         product_deps=product_deps,
+    )
+    # Mirror `import_export/api.py`'s real background-task wrapper, which
+    # always marks the task terminal after `run_import` returns — required
+    # since `uq_task_run_single_active_migration` (Area 2) now enforces at
+    # most one non-terminal `kind="migration"` row per engine, and this
+    # helper is called more than once against the same `engine` below.
+    await task_service.record(
+        MigrationTaskEvent(
+            task_id=start.task_id,
+            state=TaskState.succeeded,
+            seq=0,
+            timestamp=datetime.now(timezone.utc),
+        )
     )
 
 

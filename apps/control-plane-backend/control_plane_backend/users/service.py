@@ -299,6 +299,46 @@ async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
     return users
 
 
+async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
+    """
+    Resolve every Keycloak username in the realm to its `sub`, in one pass.
+
+    Why this function exists:
+    - the kea->swift migration (`import_export/kea_reconciliation.py`) resolves
+      potentially thousands of distinct usernames per run; one Admin API call
+      per username does not scale to a cutover-size realm (~2000 users). This
+      reuses the same paginated sweep `list_users` already relies on
+      (`_fetch_all_users`) so the whole realm is listed once, then every
+      username resolves against an in-memory dict instead of a network call.
+
+    How to use it:
+    - call once per migration run, before resolving any individual username
+    - returns `{}` when Keycloak M2M is disabled — callers fall back to the
+      per-username `find_user_sub_by_username` path in that case
+
+    Example:
+    - `subs_by_username = await find_user_subs_bulk(user_deps)`
+    """
+    admin = _get_keycloak_admin(deps)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot bulk-resolve users.")
+        return {}
+
+    raw_users = await _fetch_all_users(admin)
+    out: dict[str, str] = {}
+    for raw_user in raw_users:
+        username = raw_user.get("username")
+        user_id = raw_user.get("id")
+        if (
+            isinstance(username, str)
+            and username
+            and isinstance(user_id, str)
+            and user_id
+        ):
+            out[username] = user_id
+    return out
+
+
 async def find_user_details_by_id(
     user_id: UUID,
     user_store: BaseUserStore,

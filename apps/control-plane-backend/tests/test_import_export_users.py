@@ -53,6 +53,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -69,6 +70,7 @@ from control_plane_backend.import_export.importer import (
     _run_users_phase,
     run_import,
 )
+from control_plane_backend.import_export.kea_reconciliation import KeaUserResolver
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -99,7 +101,11 @@ from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.tasks.models import StartMigrationRequest
+from fred_core.tasks.models import (
+    MigrationTaskEvent,
+    StartMigrationRequest,
+    TaskState,
+)
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -415,7 +421,7 @@ async def _run(
         StartMigrationRequest(), created_by=platform_admin.uid
     )
     bundle = open_bundle(bundle_bytes)
-    return await run_import(
+    report = await run_import(
         bundle=bundle,
         import_id="imp-users-1",
         task_id=start.task_id,
@@ -426,6 +432,21 @@ async def _run(
         user_deps=user_deps,
         team_deps=team_deps,
     )
+    # Mirror `import_export/api.py`'s real background-task wrapper, which
+    # always marks the task terminal after `run_import` returns — required
+    # since `uq_task_run_single_active_migration` (Area 2) now enforces at
+    # most one non-terminal `kind="migration"` row; a second `_run()` call
+    # reusing the same `engine` would otherwise collide with the first task
+    # still sitting in a non-terminal state.
+    await task_service.record(
+        MigrationTaskEvent(
+            task_id=start.task_id,
+            state=TaskState.succeeded,
+            seq=0,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+    return report
 
 
 # ── users phase: end-to-end through run_import ─────────────────────────────
@@ -879,9 +900,11 @@ async def test_run_users_phase_rebac_disabled_guard_precedes_every_counter_incre
             )
         ]
 
+        resolver = await KeaUserResolver.create(user_deps)
         with pytest.raises(BundleProvisioningError, match="ReBAC is disabled"):
             await _run_users_phase(
                 bundle_users=bundle_users,
+                resolver=resolver,
                 platform_admin=platform_admin,
                 user_deps=user_deps,
                 team_deps=team_deps,
@@ -1071,7 +1094,10 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
         BundleUserEntry(username="nopass"),
     ]
 
-    await _provision_bundle_identities(bundle_users, user_deps, platform_admin, report)
+    resolver = await KeaUserResolver.create(user_deps)
+    await _provision_bundle_identities(
+        bundle_users, resolver, user_deps, platform_admin, report
+    )
 
     assert report.identities_created == 1
     assert len(admin.create_calls) == 1

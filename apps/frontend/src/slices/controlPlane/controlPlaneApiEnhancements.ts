@@ -220,6 +220,7 @@ export const {
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
   useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation: useResetPlatformFullMutation,
+  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:

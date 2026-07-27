@@ -802,7 +802,36 @@ class MetadataService:
         if metadata.tags:
             for tag_id in metadata.tags.tag_ids:
                 await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+        await self._persist_metadata_and_follow_up(user, metadata)
 
+    async def save_document_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+        """
+        Same as `save_document_metadata`, but skips the per-tag `TagPermission.UPDATE`
+        check.
+
+        Why this exists:
+        - the corpus-revectorize migration path
+          (`features/scheduler/activities.py::output_process_trusted`) is
+          authorized once, at the platform level, by
+          `corpus_manager_controller._authorize_scope` (`CAN_MANAGE_PLATFORM`)
+          before the whole workflow starts — re-checking `TagPermission.UPDATE`
+          per document here would reject a root/platform admin who is not
+          individually a member of every team the migration touches, the same
+          class of gap `mark_document_vectorized`
+          (`features/scheduler/activities.py`) already works around for the
+          `VECTORIZED` stage.
+        - every other follow-up (Parquet pruning, storage-quota adjustment,
+          tag timestamps, ReBAC parent link) still runs unchanged — this must
+          never become a silent metadata write that skips them, only the
+          permission check.
+
+        Never call this from a router or any other user-facing service —
+        reachable only from the already-platform-authorized migration/
+        corpus-revectorize activity path.
+        """
+        await self._persist_metadata_and_follow_up(user, metadata)
+
+    async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         try:
             prev_metadata = None
             try:

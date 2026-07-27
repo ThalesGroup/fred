@@ -73,6 +73,7 @@ Pre-conditions handled outside this module (MIGR-04 / MIGR-06):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -102,6 +103,20 @@ from fred_core.tasks.models import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from openfga_sdk.exceptions import (
+    ApiAttributeError,
+    ApiException,
+    ApiKeyError,
+    ApiValueError,
+    AuthenticationError,
+    FgaValidationException,
+    ForbiddenException,
+    NotFoundException,
+    RateLimitExceededError,
+    ServiceException,
+    UnauthorizedException,
+    ValidationException,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -149,7 +164,7 @@ from control_plane_backend.teams.schemas import (
 from control_plane_backend.teams.service import create_team
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import CreateUserRequest
-from control_plane_backend.users.service import create_user, find_user_sub_by_username
+from control_plane_backend.users.service import create_user
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +229,25 @@ class BundleProvisioningError(Exception):
     - raise it with a message naming every offending entry/team/role so the
       operator can fix the bundle in one pass, not one failed re-run at a
       time.
+    """
+
+
+class OpenFgaConvergenceError(Exception):
+    """An OpenFGA write could not be applied after the bounded local retry.
+
+    Why this type exists:
+    - a mid-run OpenFGA outage must end the task `failed`, never `succeeded`
+      with a partial tuple set silently missing — see `_retry_openfga_write`.
+    - message-only, mirroring `BundleProvisioningError` above: `MigrationReport`
+      stays frozen for `MigrationResult`/OpenAPI stability (see its own
+      docstring), so the phase and replay-safety statement live in the message,
+      not a new report field.
+
+    How to use it:
+    - raised by `_retry_openfga_write` naming the phase and stating that
+      re-running the same import is safe (OpenFGA writes are idempotent,
+      `on_duplicate_writes=IGNORE`, so already-applied tuples are skipped, not
+      duplicated, on the next attempt).
     """
 
 
@@ -726,6 +760,90 @@ _EMIT_EVERY = 25
 # cutover-scale bundle (~2000 users x 52 teams) can carry thousands of tuples.
 _TUPLE_WRITE_CHUNK_SIZE = 20
 
+# Bounded local retry around every OpenFGA write in this module (no retry logic
+# exists in `RebacEngine`/`RebacEngine.add_relations` itself — a first failure in
+# a `asyncio.gather` chunk aborts immediately). 3 attempts, doubling backoff —
+# enough to ride out a transient blip without turning a genuine outage into a
+# long-hanging request.
+_OPENFGA_WRITE_ATTEMPTS = 3
+_OPENFGA_RETRY_BASE_DELAY_SECONDS = 0.5
+
+
+def _is_transient_openfga_error(exc: Exception) -> bool:
+    """True when retrying the same OpenFGA write might succeed.
+
+    Deliberately conservative: an exception type this function doesn't
+    recognize is treated as non-transient (fail fast, honest error) rather
+    than retried blindly — retrying a structurally wrong write (bad shape,
+    unauthorized client, unknown store) only delays an honest failure.
+    """
+    if isinstance(
+        exc,
+        (
+            ValidationException,
+            ForbiddenException,
+            NotFoundException,
+            UnauthorizedException,
+            AuthenticationError,
+            FgaValidationException,
+            ApiValueError,
+            ApiAttributeError,
+            ApiKeyError,
+        ),
+    ):
+        return False
+    if isinstance(exc, (ServiceException, RateLimitExceededError)):
+        return True
+    if isinstance(exc, ApiException):
+        return exc.status is None or exc.status >= 500
+    return isinstance(exc, (OSError, asyncio.TimeoutError))
+
+
+async def _retry_openfga_write(
+    write: Callable[[], Awaitable[Any]],
+    *,
+    phase: str,
+) -> None:
+    """Bounded retry around one OpenFGA write — transient errors only.
+
+    A non-transient error, or the last attempt of a transient one, raises
+    `OpenFgaConvergenceError` naming `phase` and stating that a re-import is
+    safe — never silently swallowed, never retried forever.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, _OPENFGA_WRITE_ATTEMPTS + 1):
+        try:
+            await write()
+            return
+        except Exception as exc:  # noqa: BLE001 — classified just below
+            last_exc = exc
+            if (
+                not _is_transient_openfga_error(exc)
+                or attempt == _OPENFGA_WRITE_ATTEMPTS
+            ):
+                raise OpenFgaConvergenceError(
+                    f"{phase}: OpenFGA write failed after {attempt} attempt(s): "
+                    f"{exc}. Re-running this import is safe — OpenFGA writes "
+                    "are idempotent (on_duplicate_writes=IGNORE), so "
+                    "already-applied relations are skipped, not duplicated, "
+                    "on the next attempt."
+                ) from exc
+            await asyncio.sleep(_OPENFGA_RETRY_BASE_DELAY_SECONDS * 2 ** (attempt - 1))
+    # Unreachable — the loop above always either returns or raises.
+    raise AssertionError("unreachable") from last_exc
+
+
+async def _write_relations_with_retry(
+    rebac: RebacEngine,
+    chunk: list[Relation],
+    *,
+    actor_uid: str | None,
+    phase: str,
+) -> None:
+    await _retry_openfga_write(
+        lambda: rebac.add_relations(chunk, actor_uid=actor_uid), phase=phase
+    )
+
 
 async def _emit(
     task_service: TaskService,
@@ -823,6 +941,19 @@ async def _grant_platform_role(
     )
 
 
+async def _grant_platform_role_with_retry(
+    rebac: RebacEngine,
+    user_sub: str,
+    relation: RelationType,
+    *,
+    actor_uid: str | None = None,
+) -> None:
+    await _retry_openfga_write(
+        lambda: _grant_platform_role(rebac, user_sub, relation, actor_uid=actor_uid),
+        phase="openfga_platform_roles",
+    )
+
+
 async def _grant_team_role_via_import(
     rebac: RebacEngine,
     user_sub: str,
@@ -869,6 +1000,7 @@ async def _grant_team_role_via_import(
 
 async def _provision_bundle_identities(
     bundle_users: list[BundleUserEntry],
+    resolver: KeaUserResolver,
     user_deps: UserServiceDependencies,
     platform_admin: KeycloakUser,
     report: MigrationReport,
@@ -877,7 +1009,7 @@ async def _provision_bundle_identities(
 
     Runs before username resolution so the role phase below can then resolve
     every entry, including the ones just created here. An entry is only
-    created when it has no existing Keycloak identity (`find_user_sub_by_username`
+    created when it has no existing Keycloak identity (`resolver.find_sub`
     → `None`) AND carries a `password` — an entry with no `password` is assumed
     to already exist and is never force-created. Uses the write-gated
     `users/service.py::create_user` (already Keycloak-Admin-M2M-gated); if M2M
@@ -885,13 +1017,19 @@ async def _provision_bundle_identities(
     `KeycloakM2MUserOperationDisabledError`, which is left to propagate rather
     than swallowed — this makes Keycloak Admin M2M configuration an explicit
     precondition of importing a bundle that creates identities.
+
+    Resolution goes through the shared `resolver` (bulk-prefetched once per
+    run, see `KeaUserResolver`) instead of a bare `find_user_sub_by_username`
+    call, and a newly created identity is immediately `remember`ed so
+    `_resolve_bundle_usernames` right below never re-resolves it over the
+    network.
     """
     for entry in bundle_users:
-        if await find_user_sub_by_username(entry.username, user_deps) is not None:
+        if await resolver.find_sub(entry.username) is not None:
             continue  # already exists — identity phase never overwrites
         if entry.password is None:
             continue  # no password supplied — cannot create, role phase will report it missing
-        await create_user(
+        created = await create_user(
             platform_admin,
             CreateUserRequest(
                 username=entry.username,
@@ -902,6 +1040,7 @@ async def _provision_bundle_identities(
             ),
             user_deps,
         )
+        resolver.remember(entry.username, created.id)
         report.identities_created += 1
 
 
@@ -937,26 +1076,29 @@ def _validate_bundle_role_names(bundle_users: list[BundleUserEntry]) -> None:
 
 async def _resolve_bundle_usernames(
     bundle_users: list[BundleUserEntry],
-    user_deps: UserServiceDependencies,
+    resolver: KeaUserResolver,
 ) -> dict[str, str]:
     """Resolve each unique `username` in the bundle to a Keycloak `sub` once.
 
-    Read-only (`find_user_sub_by_username` never creates a user). AUTHZ-07
-    Step 2: a username still unresolved after the identity phase is now a
-    fail-closed condition — raises `BundleProvisioningError` naming every
-    unresolved username, aborting the users phase, instead of being skipped
-    and reported while the rest of the import continues to a `succeeded`
-    state.
+    Read-only (`resolver.find_sub` never creates a user). Goes through the
+    same shared, bulk-prefetched `resolver` as `_provision_bundle_identities`
+    — no separate per-call `attempted` set needed, the resolver's own caches
+    already dedupe, including identities `_provision_bundle_identities` just
+    created (`remember`ed, resolved with zero further I/O). AUTHZ-07 Step 2: a
+    username still unresolved after the identity phase is now a fail-closed
+    condition — raises `BundleProvisioningError` naming every unresolved
+    username, aborting the users phase, instead of being skipped and reported
+    while the rest of the import continues to a `succeeded` state.
     """
     resolved: dict[str, str] = {}
     unresolved: list[str] = []
-    attempted: set[str] = set()
+    seen: set[str] = set()
     for entry in bundle_users:
         username = entry.username
-        if username in attempted:
+        if username in seen:
             continue
-        attempted.add(username)
-        sub = await find_user_sub_by_username(username, user_deps)
+        seen.add(username)
+        sub = await resolver.find_sub(username)
         if sub is None:
             unresolved.append(username)
             continue
@@ -1161,6 +1303,7 @@ async def _apply_bundle_user_roles(
 async def _run_users_phase(
     *,
     bundle_users: list[BundleUserEntry],
+    resolver: KeaUserResolver,
     platform_admin: KeycloakUser,
     user_deps: UserServiceDependencies,
     team_deps: TeamServiceDependencies,
@@ -1208,8 +1351,10 @@ async def _run_users_phase(
             "ReBAC before importing a bundle that contains users.json."
         )
     _validate_bundle_role_names(bundle_users)
-    await _provision_bundle_identities(bundle_users, user_deps, platform_admin, report)
-    resolved = await _resolve_bundle_usernames(bundle_users, user_deps)
+    await _provision_bundle_identities(
+        bundle_users, resolver, user_deps, platform_admin, report
+    )
+    resolved = await _resolve_bundle_usernames(bundle_users, resolver)
     referenced_team_names, team_admin_seed_subs = _collect_team_admin_seeds(
         bundle_users, resolved
     )
@@ -1233,6 +1378,55 @@ async def _run_users_phase(
 
 
 async def run_import(
+    *,
+    bundle: KBundle,
+    import_id: str,
+    task_id: str,
+    task_service: TaskService,
+    engine: AsyncEngine,
+    agent_instance_store: AgentInstanceStore,
+    platform_admin: KeycloakUser | None = None,
+    user_deps: UserServiceDependencies | None = None,
+    team_deps: TeamServiceDependencies | None = None,
+    product_deps: ProductServiceDependencies | None = None,
+    rebac: RebacEngine | None = None,
+) -> MigrationReport:
+    """Import one snapshot bundle — thin wrapper guaranteeing `bundle.close()`.
+
+    `bundle.close()` must run on every exit path, including an exception
+    raised anywhere in `_run_import_body` (a Keycloak/OpenFGA/Postgres
+    failure partway through) — previously a bare trailing call, skipped on
+    any earlier exception. A failure while closing the bundle itself is
+    logged, never allowed to mask the real exception from `_run_import_body`.
+    """
+    try:
+        return await _run_import_body(
+            bundle=bundle,
+            import_id=import_id,
+            task_id=task_id,
+            task_service=task_service,
+            engine=engine,
+            agent_instance_store=agent_instance_store,
+            platform_admin=platform_admin,
+            user_deps=user_deps,
+            team_deps=team_deps,
+            product_deps=product_deps,
+            rebac=rebac,
+        )
+    finally:
+        try:
+            bundle.close()
+        except Exception:
+            logger.warning(
+                "[import-export] import %s: bundle.close() failed after the "
+                "import itself finished/failed — ignored, does not affect "
+                "the reported outcome",
+                import_id,
+                exc_info=True,
+            )
+
+
+async def _run_import_body(
     *,
     bundle: KBundle,
     import_id: str,
@@ -1278,7 +1472,7 @@ async def run_import(
     kea_username_index = (
         {} if is_swift_native else kea_username_by_sub(kea_realm_for_reconciliation)
     )
-    kea_resolver = KeaUserResolver(user_deps)
+    kea_resolver = await KeaUserResolver.create(user_deps)
     kea_report = KeaReconciliationReport()
     if not is_swift_native:
         agent_team_index = await resolve_agent_team_index(
@@ -1428,6 +1622,91 @@ async def run_import(
         raw_team_metadata = drop_orphan_teams(
             raw_team_metadata, kea_known_group_ids(keycloak_realm), kea_report
         )
+
+    # ── KEA CUTOVER 2026 — resolve every Keycloak-dependent write BEFORE the
+    # Postgres transaction opens: relation-subject resolution, team_member
+    # derivation, and platform-role-grant resolution all need the (bulk-
+    # prefetched, see kea_reconciliation.py) `kea_resolver` — none of them
+    # depend on anything the transaction below writes (team ids are bundle-
+    # derived Keycloak group ids, never Postgres-generated). This is a
+    # fail-fast improvement, not a correctness fix — the writes these produce
+    # were already safely re-runnable (idempotent skip-if-exists Postgres
+    # inserts, idempotent OpenFGA `add_relation`) even when resolved after the
+    # transaction. Doing it first means a Keycloak failure aborts the whole
+    # import before any Postgres row is written this run, instead of after
+    # agents/tags/resources/metadata/team_metadata already committed.
+    resolved_relations: list[Relation] = []
+    realm_grants: list[tuple[str, RelationType]] = []
+    if not is_swift_native and tuples:
+        transform = transform_kea_tuples(tuples)
+        report.tuples_dropped = transform.dropped_total
+        # Mirror `drop_orphan_teams` on the tuple-restore path: a team excluded
+        # from `teammetadata` above must not still get its OpenFGA tuples
+        # written (see `drop_orphan_team_relations`' docstring).
+        transform.relations = drop_orphan_team_relations(
+            transform.relations, kea_report.orphan_teams_dropped
+        )
+        if transform.dropped_non_uuid:
+            report.warnings.append(
+                f"{transform.dropped_non_uuid} OpenFGA tuple(s) with a "
+                "non-UUID user subject dropped (pre-MIGR-04 username tuples)"
+            )
+        if transform.dropped_unknown:
+            report.warnings.append(
+                f"{transform.dropped_unknown} OpenFGA tuple(s) dropped — no "
+                "swift equivalent for: " + ", ".join(sorted(transform.unknown_shapes))
+            )
+
+        # 1) rewrite every USER-typed subject to its resolved swift sub
+        #    (dropping ones that can't be resolved yet — see
+        #    kea_reconciliation.py); 2) derive `team_member` grants from
+        #    kea's Keycloak group membership, the one Fred relation with no
+        #    OpenFGA-tuple source on kea.
+        resolved_relations = await resolve_relation_subjects(
+            transform.relations, kea_username_index, kea_resolver, kea_report
+        )
+        already_elevated = {
+            (str(r.subject.id), str(r.resource.id))
+            for r in resolved_relations
+            if r.relation
+            in (
+                RelationType.TEAM_ADMIN,
+                RelationType.TEAM_EDITOR,
+                RelationType.TEAM_ANALYST,
+            )
+        }
+        group_name_to_team_id = {
+            row["name"]: row["id"] for row in raw_team_metadata if row.get("name")
+        }
+        member_relations = await derive_team_member_relations(
+            kea_realm_for_reconciliation,
+            group_name_to_team_id,
+            already_elevated,
+            kea_username_index,
+            kea_resolver,
+            kea_report,
+        )
+        resolved_relations = resolved_relations + member_relations
+        kea_report.admin_less_teams = find_admin_less_teams(
+            {row["id"] for row in raw_team_metadata}, resolved_relations
+        )
+
+    if not is_swift_native:
+        # Kea platform roles are Keycloak realm roles per user — never
+        # tuples. They only travel in a FULL realm export (`kc export
+        # --users`); a partial-export yields nothing here and the grants
+        # then come from `users.json` (or manual bootstrap).
+        realm_grants, dropped_editors = _realm_platform_role_grants(keycloak_realm)
+        if dropped_editors:
+            report.warnings.append(
+                f"kea platform role 'editor' dropped for {len(dropped_editors)} "
+                f"user(s) (no swift equivalent): "
+                f"{format_usernames_for_warning(dropped_editors)}"
+            )
+        realm_grants = await resolve_platform_grants(
+            realm_grants, kea_username_index, kea_resolver, kea_report
+        )
+    # ── END KEA CUTOVER 2026 (pre-transaction resolution) ──────────────────────
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
     session_factory = make_session_factory(engine)
@@ -1697,65 +1976,11 @@ async def run_import(
     # idempotence (`add_relation` ignores duplicates), so a partial tuple
     # replay is safely re-runnable. Replaces the former "ops bulk-copy" plan,
     # which would have pushed kea relation names (`owner`/`manager`/`member`
-    # on team objects) that no longer exist in the swift model.
-    if not is_swift_native and tuples:
-        transform = transform_kea_tuples(tuples)
-        report.tuples_dropped = transform.dropped_total
-        # KEA CUTOVER 2026 — mirror `drop_orphan_teams` on the tuple-restore path: a
-        # team excluded from `teammetadata` above must not still get its OpenFGA
-        # tuples written (see drop_orphan_team_relations' docstring).
-        transform.relations = drop_orphan_team_relations(
-            transform.relations, kea_report.orphan_teams_dropped
-        )
-        if transform.dropped_non_uuid:
-            report.warnings.append(
-                f"{transform.dropped_non_uuid} OpenFGA tuple(s) with a "
-                "non-UUID user subject dropped (pre-MIGR-04 username tuples)"
-            )
-        if transform.dropped_unknown:
-            report.warnings.append(
-                f"{transform.dropped_unknown} OpenFGA tuple(s) dropped — no "
-                "swift equivalent for: " + ", ".join(sorted(transform.unknown_shapes))
-            )
-
-        # ── KEA CUTOVER 2026 — identity + plain-membership reconciliation ──────
-        # 1) rewrite every USER-typed subject to its resolved swift sub (dropping
-        #    ones that can't be resolved yet — see kea_reconciliation.py);
-        # 2) derive `team_member` grants from kea's Keycloak group membership, the
-        #    one Fred relation with no OpenFGA-tuple source on kea.
-        resolved_relations = await resolve_relation_subjects(
-            transform.relations, kea_username_index, kea_resolver, kea_report
-        )
-        already_elevated = {
-            (str(r.subject.id), str(r.resource.id))
-            for r in resolved_relations
-            if r.relation
-            in (
-                RelationType.TEAM_ADMIN,
-                RelationType.TEAM_EDITOR,
-                RelationType.TEAM_ANALYST,
-            )
-        }
-        group_name_to_team_id = {
-            row["name"]: row["id"] for row in raw_team_metadata if row.get("name")
-        }
-        member_relations = await derive_team_member_relations(
-            kea_realm_for_reconciliation,
-            group_name_to_team_id,
-            already_elevated,
-            kea_username_index,
-            kea_resolver,
-            kea_report,
-        )
-        resolved_relations = resolved_relations + member_relations
-        kea_report.admin_less_teams = find_admin_less_teams(
-            {row["id"] for row in raw_team_metadata}, resolved_relations
-        )
-        # ── END KEA CUTOVER 2026 (relation resolution) ─────────────────────────
-
-        if not resolved_relations:
-            pass
-        elif rebac is None or not rebac.enabled:
+    # on team objects) that no longer exist in the swift model. Relations were
+    # already fully resolved above, before the transaction — this is the write
+    # only.
+    if resolved_relations:
+        if rebac is None or not rebac.enabled:
             report.warnings.append(
                 f"{len(resolved_relations)} OpenFGA relation(s) NOT restored: "
                 "ReBAC engine unavailable or disabled — re-run the import "
@@ -1767,7 +1992,9 @@ async def run_import(
             actor_uid = platform_admin.uid if platform_admin else None
             for start in range(0, total, _TUPLE_WRITE_CHUNK_SIZE):
                 chunk = resolved_relations[start : start + _TUPLE_WRITE_CHUNK_SIZE]
-                await rebac.add_relations(chunk, actor_uid=actor_uid)
+                await _write_relations_with_retry(
+                    rebac, chunk, actor_uid=actor_uid, phase="openfga_tuples"
+                )
                 report.tuples_written += len(chunk)
                 processed = start + len(chunk)
                 await _emit(
@@ -1784,32 +2011,22 @@ async def run_import(
     # Kea platform roles are Keycloak realm roles per user — never tuples, so
     # the tuple phase above cannot restore them. They only travel in a FULL
     # realm export (`kc export --users`); a partial-export yields nothing here
-    # and the grants then come from `users.json` (or manual bootstrap).
-    if not is_swift_native:
-        realm_grants, dropped_editors = _realm_platform_role_grants(keycloak_realm)
-        if dropped_editors:
+    # and the grants then come from `users.json` (or manual bootstrap). Grants
+    # were already fully resolved above, before the transaction — this is the
+    # write only.
+    if realm_grants:
+        if rebac is None or not rebac.enabled:
             report.warnings.append(
-                f"kea platform role 'editor' dropped for {len(dropped_editors)} "
-                f"user(s) (no swift equivalent): "
-                f"{format_usernames_for_warning(dropped_editors)}"
+                f"{len(realm_grants)} platform role(s) from the realm "
+                "export NOT granted: ReBAC engine unavailable or disabled"
             )
-        # KEA CUTOVER 2026 — resolve kea subs to swift subs before granting.
-        realm_grants = await resolve_platform_grants(
-            realm_grants, kea_username_index, kea_resolver, kea_report
-        )
-        if realm_grants:
-            if rebac is None or not rebac.enabled:
-                report.warnings.append(
-                    f"{len(realm_grants)} platform role(s) from the realm "
-                    "export NOT granted: ReBAC engine unavailable or disabled"
+        else:
+            actor_uid = platform_admin.uid if platform_admin else None
+            for sub, relation in realm_grants:
+                await _grant_platform_role_with_retry(
+                    rebac, sub, relation, actor_uid=actor_uid
                 )
-            else:
-                actor_uid = platform_admin.uid if platform_admin else None
-                for sub, relation in realm_grants:
-                    await _grant_platform_role(
-                        rebac, sub, relation, actor_uid=actor_uid
-                    )
-                    report.platform_roles_granted += 1
+                report.platform_roles_granted += 1
 
     # ── Phase 5: users.json declarative provisioning (AUTHZ-07 §40.2) ─────────
     # Outside the atomic transaction above: this phase calls full team/ReBAC
@@ -1825,6 +2042,7 @@ async def run_import(
             )
         await _run_users_phase(
             bundle_users=demo_users,
+            resolver=kea_resolver,
             platform_admin=platform_admin,
             user_deps=user_deps,
             team_deps=team_deps,
@@ -1944,5 +2162,4 @@ async def run_import(
         step_override=summary,
     )
 
-    bundle.close()
     return report

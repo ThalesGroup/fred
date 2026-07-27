@@ -46,9 +46,19 @@ def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     ) -> str | None:
         return _PLAN_A_USERNAME_TO_SUB.get(username)
 
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        # `KeaUserResolver.create` always attempts a bulk prefetch first — stub
+        # it empty so every test here exercises the per-username fallback
+        # (stubbed above) exactly as before the bulk resolver was introduced.
+        return {}
+
     monkeypatch.setattr(
         "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
         _fake_find_user_sub_by_username,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
     )
 
 

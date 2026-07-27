@@ -37,6 +37,7 @@ from knowledge_flow_backend.features.scheduler.activities import (
     list_documents_in_scope,
     mark_document_vectorized,
     output_process,
+    output_process_trusted,
     prepare_revectorize_file,
 )
 from knowledge_flow_backend.features.scheduler.pull_files_activities import (
@@ -126,6 +127,7 @@ async def run_worker(
             pull_input_process,
             push_input_process,
             output_process,
+            output_process_trusted,
             fast_store_vectors,
             fast_delete_vectors,
             emit_ingestion_task_event,

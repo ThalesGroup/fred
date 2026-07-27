@@ -1480,6 +1480,16 @@
           "cancelLabel": "Annuler",
           "error": "Échec de l'effacement complet"
         },
+        "resetRebac": {
+          "launch": "Reset + OpenFGA",
+          "running": "Réinitialisation…",
+          "taskLabel": "Reset plateforme + OpenFGA",
+          "confirmTitle": "Réinitialiser les données et OpenFGA — garder les utilisateurs Keycloak ?",
+          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, ainsi que tous les tuples OpenFGA. Les utilisateurs Keycloak ne sont PAS affectés — à utiliser entre deux essais d'import répétés pour repartir sur des permissions propres sans perdre les comptes de test créés à la main.",
+          "confirmLabel": "Réinitialiser",
+          "cancelLabel": "Annuler",
+          "error": "Échec de la réinitialisation"
+        },
         "stats": {
           "title": "Vue d'ensemble",
           "refresh": "Rafraîchir",
