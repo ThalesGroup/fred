@@ -51,6 +51,8 @@ storage:
     port: 5432
     database: fred
     username: fred
+    pool_size: 20
+    max_overflow: 20
   opensearch:
     host: "https://localhost:9200"
     username: "admin"
