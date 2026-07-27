@@ -312,9 +312,15 @@ async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
       username resolves against an in-memory dict instead of a network call.
 
     How to use it:
-    - call once per migration run, before resolving any individual username
-    - returns `{}` when Keycloak M2M is disabled — callers fall back to the
-      per-username `find_user_sub_by_username` path in that case
+    - call once per migration run; the caller (`KeaUserResolver`) treats the
+      result as the authoritative snapshot of the target realm for the whole
+      run — a username missing from it is unresolved (PENDING), never looked
+      up individually
+    - returns `{}` when Keycloak M2M is disabled — callers treat that exactly
+      like a real bulk sweep that found no users, not as "unavailable, fall
+      back to a per-username lookup"
+    - a real Keycloak/network failure raises and is left to propagate — never
+      swallowed into an empty snapshot
 
     Example:
     - `subs_by_username = await find_user_subs_bulk(user_deps)`

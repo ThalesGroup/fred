@@ -53,38 +53,25 @@ TEAM_FREDLAB = "05186d87-139d-4adb-8d6a-95d61d7afdb4"
 # tests exercising PENDING/RELINKED override `_stub_username_resolution` (see
 # `test_kea_reconciliation.py`) instead of using this default.
 _PLAN_A_USERNAME_TO_SUB = {"bob": UID_BOB, "liam": UID_LIAM, "alice": UID_ALICE}
-# Non-None sentinel: `KeaUserResolver` only ever checks `is not None` before
-# calling `find_user_sub_by_username`/`find_user_subs_bulk`, both monkeypatched
-# below — the real `UserServiceDependencies`/Keycloak Admin client is never
-# exercised in this file.
+# Non-None sentinel: `KeaUserResolver.create` only ever checks `is not None`
+# before calling `find_user_subs_bulk`, monkeypatched below — the real
+# `UserServiceDependencies`/Keycloak Admin client is never exercised in this file.
 _FAKE_USER_DEPS = object()
 
 
 @pytest.fixture(autouse=True)
 def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """KEA CUTOVER 2026 — simulate Keycloak S3NS username lookups without a
+    """KEA CUTOVER 2026 — simulate a Keycloak S3NS bulk realm listing without a
     live Keycloak. Default: `_PLAN_A_USERNAME_TO_SUB` (kea sub == swift sub for
-    known test users); anyone else resolves to PENDING (not found).
-
-    `KeaUserResolver.create` always attempts a bulk prefetch first (real
-    cutover-scale behaviour, see `kea_reconciliation.py`) — stubbed here to an
-    empty prefetch so every test in this file continues to exercise the
-    per-username fallback path (`find_user_sub_by_username`, stubbed above)
-    exactly as before the bulk resolver was introduced.
+    known test users); anyone else is absent from the snapshot and resolves to
+    PENDING (not found) — `KeaUserResolver` treats a successful bulk snapshot as
+    authoritative and never falls back to a per-username lookup (see
+    `kea_reconciliation.py`).
     """
 
-    async def _fake_find_user_sub_by_username(
-        username: str, _deps: object
-    ) -> str | None:
-        return _PLAN_A_USERNAME_TO_SUB.get(username)
-
     async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
-        return {}
+        return dict(_PLAN_A_USERNAME_TO_SUB)
 
-    monkeypatch.setattr(
-        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
-        _fake_find_user_sub_by_username,
-    )
     monkeypatch.setattr(
         "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
         _fake_find_user_subs_bulk,

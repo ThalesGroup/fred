@@ -255,6 +255,12 @@ class _FakeKeycloakAdmin:
     `a_delete_user`, ...) raises via `__getattr__` instead of silently
     succeeding — the load-bearing guarantee that username resolution never
     creates or mutates a Keycloak identity.
+
+    Serves two distinct `a_get_users` query shapes, exactly like a real
+    Keycloak Admin API: a single-username exact lookup (`find_user_sub_by_username`)
+    and the paginated bulk listing `_fetch_all_users`/`find_user_subs_bulk` use
+    (`{"first": ..., "max": ...}`, no `username` key) — `KeaUserResolver` only
+    ever exercises the latter now that bulk resolution is authoritative.
     """
 
     def __init__(self, directory: dict[str, str]) -> None:
@@ -264,10 +270,18 @@ class _FakeKeycloakAdmin:
     async def a_get_users(
         self, query: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        self.calls.append(query or {})
-        username = (query or {}).get("username")
-        sub = self._directory.get(cast(str, username))
-        return [{"id": sub, "username": username}] if sub else []
+        query = query or {}
+        self.calls.append(query)
+        username = query.get("username")
+        if username is not None:
+            sub = self._directory.get(cast(str, username))
+            return [{"id": sub, "username": username}] if sub else []
+        first = cast(int, query.get("first", 0))
+        max_ = cast(int, query.get("max", len(self._directory)))
+        all_users = [
+            {"id": sub, "username": uname} for uname, sub in self._directory.items()
+        ]
+        return all_users[first : first + max_]
 
     def __getattr__(self, name: str) -> Any:
         raise AttributeError(
@@ -296,9 +310,20 @@ class _FakeWritableKeycloakAdmin:
     async def a_get_users(
         self, query: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        username = (query or {}).get("username")
-        sub = self._directory.get(cast(str, username))
-        return [{"id": sub, "username": username}] if sub else []
+        query = query or {}
+        username = query.get("username")
+        if username is not None:
+            sub = self._directory.get(cast(str, username))
+            return [{"id": sub, "username": username}] if sub else []
+        # Bulk pagination shape (`_fetch_all_users`/`find_user_subs_bulk`) —
+        # `KeaUserResolver` prefetches through this path, never per-username,
+        # so a directory mutated by `a_create_user` must be visible here too.
+        first = cast(int, query.get("first", 0))
+        max_ = cast(int, query.get("max", len(self._directory)))
+        all_users = [
+            {"id": sub, "username": uname} for uname, sub in self._directory.items()
+        ]
+        return all_users[first : first + max_]
 
     async def a_create_user(
         self, payload: dict[str, Any], exist_ok: bool = False
