@@ -1537,6 +1537,7 @@ items:
       rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
       execution: "TeamResourcesPage at /team/:teamId/resources (A/C/D landed 2026-06-18)"
+      issue: "https://github.com/ThalesGroup/fred/issues/2128"
     notes: >
       RFC/workplan for a rework-native replacement of the old KnowledgeHub,
       resource, and library pages. Target: simple professional file/resource
@@ -1550,6 +1551,12 @@ items:
       (§13.4), and usage cards (files-by-type histogram, size-by-type +
       quota pie chart; ingestion token tracking explicitly carved out as a
       separate future item, §13.6). New phases G/H/I added to the workplan.
+
+      Amended 2026-07-27 (RFC §13.8/§13.9): rename support (folder rename
+      reuses existing PUT /tags/{tag_id}; document rename and /fs rename are
+      new) and a bulk-actions bar (new DataTable selection mode + bulk
+      delete/exclude). New phases J/K added. Implementation of G/H/I/J/K
+      starting now, co-owned with Maxime Daragon.
 
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"

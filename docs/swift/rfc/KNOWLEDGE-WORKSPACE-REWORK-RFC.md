@@ -5,7 +5,10 @@
 **Date:** 2026-06-18
 **Amended:** 2026-07-25 — Maxime Daragon (§13 — Resources dashboard v2: tab navigation, rich
 table, usage cards; supersedes parts of §4.1/§4.2, see note there)
+**Amended:** 2026-07-27 — Maxime Daragon (§13.8/§13.9 — rename support, bulk actions bar;
+extends the FRONT-09.G/H/I workplan with FRONT-09.J/K)
 **ID:** FRONT-09
+**Issue:** https://github.com/ThalesGroup/fred/issues/2128 (§13.7/§13.11 phases G-K)
 **Backlog:** `docs/swift/backlog/FRONTEND-BACKLOG.md §15`
 **Related:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5`
 **Contract impact:** may add Knowledge Flow browse endpoints; no control-plane binary ownership
@@ -736,3 +739,102 @@ minimum keep working with client-side sort as a documented interim state (§13.6
 
 Acceptance: both cards render from real per-team data with no client-side aggregation over
 unbounded file lists.
+
+### 13.8 Rename (new — not covered by phases G/H/I)
+
+Prompted by the dashboard-v2 mockup review, which adds a "Renommer" row action
+(`drive_file_rename_outline`) across all four tabs.
+
+- **Corpus d'équipe, folder (tag) rename:** already supported —
+  `PUT /tags/{tag_id}` (`tag_controller.py:155`) accepts a `TagUpdate` with
+  `name`/`path`, explicitly documented as "Update a tag (can rename/move via
+  name/path)". No backend change needed; only frontend wiring.
+- **Corpus d'équipe, document rename:** **not supported.** `PUT
+  /document/metadata/{document_uid}` only toggles `retrievable`
+  (`metadata/controller.py:155`) — there is no display-name field on
+  `DocumentMetadata` distinct from the ingested file name. Needs a new field
+  and a new update path (extend the existing `PUT
+  /document/metadata/{document_uid}` to also accept an optional
+  `display_name`, rather than adding a second endpoint).
+- **Espace perso / Espace partagé / Agents (`/fs`):** **not supported at
+  all** — `mcp_fs_controller.py` has no PATCH/PUT/move verb. Needs a new
+  endpoint, e.g. `POST /fs/rename/{path:path}` taking a `{new_name}` body,
+  following the existing per-path-segment convention used by
+  `mkdir`/`delete`/`upload`.
+
+Rename is a mutation, not a table-shape change, so it does not belong in
+FRONT-09.H — tracked as its own phase (§13.7 addition below).
+
+### 13.9 Bulk actions bar
+
+Prompted by the same mockup: a "select all" checkbox column drives a
+contextual bulk-actions bar (outlined buttons with icon, rendered to the left
+of the existing create-folder/add-file icon buttons) exposing bulk delete and
+bulk "exclure de la recherche".
+
+- **`DataTable` has no row-selection support today** (`shared/molecules/DataTable/DataTable.tsx`
+  — confirmed no `checkbox`/`selection` prop). This is a shared-molecule
+  extension, not a page-local hack: add an optional `selectable` mode
+  (checkbox column + `onSelectionChange`) to `DataTable` itself so any future
+  table (not just Resources) can opt in.
+- Bulk delete reuses each tab's existing single-delete mutation, invoked per
+  selected row (Corpus: `DELETE /tags/{tag_id}` cascade already exists for
+  folders, per-document delete via `removeFromLibrary`; `/fs`: `DELETE
+  /fs/delete/{path}` per entry). No new bulk-specific backend endpoint —
+  the bar issues N requests client-side, consistent with how cascade delete
+  already behaves for a single folder today.
+- Bulk "exclure de la recherche" reuses `PUT
+  /document/metadata/{document_uid}` (`retrievable=false`) per selected
+  document; only meaningful for Corpus (the other three tabs have no
+  retrievable concept), so the bar's "exclure" action is Corpus-only —
+  hidden, not disabled, on the other three tabs.
+
+### 13.10 New open decisions (extends §11/§13.6)
+
+8. Should bulk delete show per-row progress/partial-failure state (N of M
+   succeeded) or an all-or-nothing spinner? **Recommendation:** per-row
+   status, consistent with the existing 3s processing-status poll pattern
+   already used elsewhere on this page — a bulk op is not meaningfully
+   different from N concurrent single ops.
+9. Corpus document rename — does `display_name` participate in vector search
+   metadata (e.g. shown in citations), or is it purely a browser-cosmetic
+   field over the underlying ingested filename? **Resolved 2026-07-27:**
+   cosmetic only for v1 — `display_name` is browser-display-only, citations
+   keep using the ingested filename, no ingestion/citation code changes.
+   **Follow-up (out of scope for FRONT-09.J):** a later phase should
+   propagate `display_name` into citations and backfill it onto documents
+   ingested before this field existed. Not tracked under a dedicated ID yet —
+   raise a new backlog/id-legend entry when that phase is scheduled.
+
+### 13.11 Workplan additions (extends §13.7)
+
+#### FRONT-09.J — Rename
+
+- [ ] Wire "Renommer" (folder) to existing `PUT /tags/{tag_id}` for Corpus.
+- [ ] Add `display_name` to `DocumentMetadata` + extend `PUT
+      /document/metadata/{document_uid}` to accept it; wire "Renommer" (file)
+      for Corpus. Cosmetic only (decision 9) — do not touch ingestion,
+      vectorization, or citation code.
+- [ ] Add `POST /fs/rename/{path:path}` to `mcp_fs_controller.py`; wire
+      "Renommer" for Espace perso / Espace partagé / Agents.
+- [ ] Regenerate `knowledgeFlowOpenApi.ts`.
+
+Acceptance: renaming a folder or file in any of the four tabs updates the row
+in place with no full-table refetch; renaming a Corpus document does not
+break existing citations pointing at its `document_uid`.
+
+#### FRONT-09.K — Bulk actions bar
+
+- [ ] Add optional row-selection mode to `DataTable` (checkbox column,
+      `onSelectionChange`), documented as a general-purpose molecule
+      capability, not Resources-specific.
+- [ ] Add the contextual bulk-actions bar (outlined buttons, left of the
+      create-folder/add-file icon buttons) to `TeamResourcesPage`, wired to
+      per-row delete / per-row `retrievable=false` (Corpus only) as described
+      in §13.9.
+- [ ] Update `docs/swift/ux/COMPONENT-UX.md` with the new selection + bulk
+      action pattern.
+
+Acceptance: selecting rows across a paginated table only affects rows on the
+current page (no "select all N across all pages" ambiguity in this phase);
+bulk delete surfaces per-row failures instead of silently dropping them.
