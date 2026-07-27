@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import BarChart from "@shared/molecules/BarChart/BarChart.tsx";
 import PieChart from "@shared/molecules/PieChart/PieChart.tsx";
 import { SERIES_COLORS } from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart.tsx";
@@ -33,6 +34,7 @@ interface ResourceStatsCardsProps {
 
 export default function ResourceStatsCards({ entries, isLoading, isError }: ResourceStatsCardsProps) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
 
   const byBucket = new Map((entries ?? []).map((entry) => [entry.bucket, entry]));
   const countRows = BUCKET_ORDER.map((bucket) => ({
@@ -52,27 +54,38 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
   const sizeColors = sizeEntries.map((entry) => entry.color);
 
   return (
-    <Disclosure title={t("rework.resources.stats.toggle")} defaultOpen>
-      <div className={styles.grid}>
-        <BarChart
-          title={t("rework.resources.stats.filesByType.title")}
-          rows={countRows}
-          valueLabel={t("rework.resources.stats.filesByType.valueLabel")}
-          isLoading={isLoading}
-          isError={isError}
-          orientation="vertical"
-          sortOrder="none"
-          compact
-        />
-        <PieChart
-          title={t("rework.resources.stats.sizeByType.title")}
-          rows={sizeRows}
-          isLoading={isLoading}
-          isError={isError}
-          colors={sizeColors}
-          compact
-        />
-      </div>
-    </Disclosure>
+    <div className={styles.row}>
+      {open && (
+        <div className={styles.grid}>
+          <BarChart
+            title={t("rework.resources.stats.filesByType.title")}
+            rows={countRows}
+            valueLabel={t("rework.resources.stats.filesByType.valueLabel")}
+            isLoading={isLoading}
+            isError={isError}
+            orientation="vertical"
+            sortOrder="none"
+            compact
+          />
+          <PieChart
+            title={t("rework.resources.stats.sizeByType.title")}
+            rows={sizeRows}
+            isLoading={isLoading}
+            isError={isError}
+            colors={sizeColors}
+            compact
+          />
+        </div>
+      )}
+      <IconButton
+        color="on-surface"
+        variant="icon"
+        size="small"
+        icon={{ category: "outlined", type: open ? "expand_less" : "expand_more" }}
+        aria-label={t("rework.resources.stats.toggle")}
+        title={t("rework.resources.stats.toggle")}
+        onClick={() => setOpen((value) => !value)}
+      />
+    </div>
   );
 }

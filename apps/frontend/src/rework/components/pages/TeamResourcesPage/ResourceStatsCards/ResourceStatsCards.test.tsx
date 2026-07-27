@@ -104,4 +104,22 @@ describe("ResourceStatsCards", () => {
     // was dropped for being zero-size.
     expect(capturedPieColors).toEqual([SERIES_COLORS[0], SERIES_COLORS[2]]);
   });
+
+  it("shows the cards by default, with the toggle button as the only other row content", () => {
+    render(<ResourceStatsCards entries={[]} isLoading={false} isError={false} />);
+    expect(capturedBarRows).not.toBeUndefined();
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+  });
+
+  it("hides the cards (without unmounting the toggle) once collapsed", () => {
+    render(<ResourceStatsCards entries={[]} isLoading={false} isError={false} />);
+    capturedBarRows = undefined;
+
+    act(() => {
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(capturedBarRows).toBeUndefined();
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+  });
 });
