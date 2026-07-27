@@ -25,7 +25,10 @@ from __future__ import annotations
 
 import pytest
 
-from knowledge_flow_backend.features.scheduler.workflow import _wf_should_skip_revectorize
+from knowledge_flow_backend.features.scheduler.workflow import (
+    _wf_final_revectorize_state,
+    _wf_should_skip_revectorize,
+)
 
 
 @pytest.mark.parametrize(
@@ -45,3 +48,23 @@ from knowledge_flow_backend.features.scheduler.workflow import _wf_should_skip_r
 )
 def test_should_skip_revectorize_matches_rfc_scope_semantics(mode, force, chunk_count, expected) -> None:
     assert _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=chunk_count) is expected
+
+
+def test_final_revectorize_state_is_succeeded_when_nothing_failed() -> None:
+    assert _wf_final_revectorize_state(failed=0, total=5) == ("succeeded", None)
+
+
+def test_final_revectorize_state_is_failed_when_any_document_failed() -> None:
+    """The terminal-status regression this fixes: previously the workflow
+    always emitted `"succeeded"` regardless of `failed`, silently hiding
+    per-document failures (e.g. the cross-team CSV permission gap
+    `output_process_trusted` fixes) behind an apparently clean run."""
+    state, error = _wf_final_revectorize_state(failed=2, total=5)
+    assert state == "failed"
+    assert error == "2 of 5 document(s) failed to re-vectorize"
+
+
+def test_final_revectorize_state_failed_even_when_every_document_failed() -> None:
+    state, error = _wf_final_revectorize_state(failed=5, total=5)
+    assert state == "failed"
+    assert error == "5 of 5 document(s) failed to re-vectorize"

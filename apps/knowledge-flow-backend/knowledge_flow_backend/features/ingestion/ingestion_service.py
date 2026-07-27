@@ -137,6 +137,14 @@ class IngestionService:
         logger.debug(f"Saving metadata {metadata}")
         return await self.metadata_service.save_document_metadata(user, metadata)
 
+    async def save_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+        """Same as `save_metadata`, but bypasses the per-tag permission check —
+        see `MetadataService.save_document_metadata_trusted` for why this is
+        safe: reachable only from the already-platform-authorized corpus-
+        revectorize migration path."""
+        logger.debug(f"Saving metadata (trusted) {metadata}")
+        return await self.metadata_service.save_document_metadata_trusted(user, metadata)
+
     async def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.

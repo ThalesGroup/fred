@@ -33,6 +33,8 @@ from fred_core.documents.document_structures import (
     FileInfo,
     Identity,
     Processing,
+    ProcessingStage,
+    ProcessingStatus,
     SourceInfo,
     SourceType,
 )
@@ -43,6 +45,7 @@ from knowledge_flow_backend.features.scheduler.activities import (
     delete_vectors,
     get_chunk_count,
     list_documents_in_scope,
+    mark_document_vectorized,
     prepare_revectorize_file,
 )
 
@@ -158,6 +161,28 @@ def test_get_chunk_count_returns_zero_when_store_raises():
     assert result == 0
 
 
+def test_get_chunk_count_runs_the_blocking_opensearch_call_in_a_thread():
+    """The sync OpenSearch call must never run straight on the Temporal
+    worker's event loop — confirms `asyncio.to_thread` is actually the
+    dispatch mechanism, not just that the underlying method got called."""
+    vector_store = MagicMock()
+    vector_store.get_document_chunk_count.return_value = 3
+    app_ctx = MagicMock()
+    app_ctx.get_create_vector_store.return_value = vector_store
+
+    with (
+        patch(_PATCH_CTX, return_value=app_ctx),
+        patch(
+            "knowledge_flow_backend.features.scheduler.activities.asyncio.to_thread",
+            new=AsyncMock(side_effect=lambda fn, **kw: fn(**kw)),
+        ) as to_thread_mock,
+    ):
+        result = _run(get_chunk_count("doc-1"))
+
+    assert result == 3
+    to_thread_mock.assert_awaited_once_with(vector_store.get_document_chunk_count, document_uid="doc-1")
+
+
 # ── delete_vectors ──────────────────────────────────────────────────────────────
 
 
@@ -172,19 +197,36 @@ def test_delete_vectors_calls_vector_store_delete():
     vector_store.delete_vectors_for_document.assert_called_once_with(document_uid="doc-1")
 
 
-# ── prepare_revectorize_file ────────────────────────────────────────────────────
+def test_delete_vectors_runs_the_blocking_opensearch_call_in_a_thread():
+    vector_store = MagicMock()
+    app_ctx = MagicMock()
+    app_ctx.get_create_vector_store.return_value = vector_store
 
-_PATCH_GET_INGESTION_SERVICE = "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service"
+    with (
+        patch(_PATCH_CTX, return_value=app_ctx),
+        patch(
+            "knowledge_flow_backend.features.scheduler.activities.asyncio.to_thread",
+            new=AsyncMock(side_effect=lambda fn, **kw: fn(**kw)),
+        ) as to_thread_mock,
+    ):
+        _run(delete_vectors("doc-1"))
+
+    to_thread_mock.assert_awaited_once_with(vector_store.delete_vectors_for_document, document_uid="doc-1")
+
+
+# ── prepare_revectorize_file ────────────────────────────────────────────────────
 
 _USER = KeycloakUser(uid="alice", username="alice", email=None, roles=[]).model_dump()
 
 
 def test_prepare_revectorize_file_builds_file_and_metadata_bundle():
     metadata = _make_metadata("doc-1", document_name="report.pdf", source_tag="kea-import")
-    ingestion_service = MagicMock()
-    ingestion_service.get_metadata = AsyncMock(return_value=metadata)
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=metadata)
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
 
-    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
+    with patch(_PATCH_CTX, return_value=app_ctx):
         result = _run(prepare_revectorize_file("doc-1", _USER))
 
     assert isinstance(result, RevectorizePreparedFile)
@@ -193,13 +235,42 @@ def test_prepare_revectorize_file_builds_file_and_metadata_bundle():
     assert result.file.source_tag == "kea-import"
     assert result.file.display_name == "report.pdf"
     assert result.file.processed_by.uid == "alice"
+    metadata_store.get_metadata_by_uid.assert_awaited_once_with("doc-1")
+
+
+def test_prepare_revectorize_file_reads_the_raw_store_without_a_per_user_permission_check():
+    """MIGR-07 CSV/cross-team fix: a root/platform admin who is not a member of
+    the document's team must still be able to prepare it for revectorize —
+    reading through the raw metadata store, never
+    `ingestion_service.get_metadata`'s `DocumentPermission.READ`-checked path,
+    which would reject exactly this caller. Mirrors
+    `test_list_documents_in_scope_returns_document_uids_directly_without_querying_metadata_store`.
+    """
+    metadata = _make_metadata("doc-1", source_tag="kea-import")
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=metadata)
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
+
+    with (
+        patch(_PATCH_CTX, return_value=app_ctx),
+        patch(
+            "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
+            side_effect=AssertionError("must not go through the per-user-checked ingestion_service.get_metadata path"),
+        ),
+    ):
+        result = _run(prepare_revectorize_file("doc-1", _USER))
+
+    assert result.metadata.document_uid == "doc-1"
 
 
 def test_prepare_revectorize_file_raises_non_retryable_when_document_missing():
-    ingestion_service = MagicMock()
-    ingestion_service.get_metadata = AsyncMock(return_value=None)
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=None)
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
 
-    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
+    with patch(_PATCH_CTX, return_value=app_ctx):
         with pytest.raises(exceptions.ApplicationError) as exc_info:
             _run(prepare_revectorize_file("missing-doc", _USER))
 
@@ -209,11 +280,46 @@ def test_prepare_revectorize_file_raises_non_retryable_when_document_missing():
 def test_prepare_revectorize_file_raises_non_retryable_when_source_tag_missing():
     metadata = _make_metadata("doc-1", source_tag="uploads")
     metadata.source.source_tag = None  # SourceInfo.source_tag is Optional[str] in practice
-    ingestion_service = MagicMock()
-    ingestion_service.get_metadata = AsyncMock(return_value=metadata)
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=metadata)
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
 
-    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
+    with patch(_PATCH_CTX, return_value=app_ctx):
         with pytest.raises(exceptions.ApplicationError) as exc_info:
             _run(prepare_revectorize_file("doc-1", _USER))
 
     assert exc_info.value.non_retryable is True
+
+
+# ── mark_document_vectorized (MIGR-07.04) ───────────────────────────────────────
+
+
+def test_mark_document_vectorized_marks_stage_done_and_saves():
+    metadata = _make_metadata("doc-1")
+    metadata.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED)
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=metadata)
+    metadata_store.save_metadata = AsyncMock()
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
+
+    with patch(_PATCH_CTX, return_value=app_ctx):
+        _run(mark_document_vectorized("doc-1"))
+
+    assert metadata.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.DONE
+    metadata_store.get_metadata_by_uid.assert_awaited_once_with("doc-1")
+    metadata_store.save_metadata.assert_awaited_once_with(metadata)
+
+
+def test_mark_document_vectorized_is_a_noop_when_document_missing():
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=None)
+    metadata_store.save_metadata = AsyncMock()
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
+
+    with patch(_PATCH_CTX, return_value=app_ctx):
+        _run(mark_document_vectorized("missing-doc"))  # must not raise
+
+    metadata_store.save_metadata.assert_not_awaited()

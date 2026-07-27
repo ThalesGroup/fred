@@ -78,7 +78,18 @@ async def run_teardown(
     engine: AsyncEngine,
     rebac: RebacEngine,
     user_deps: UserServiceDependencies,
+    wipe_keycloak: bool = True,
 ) -> TeardownReport:
+    """Wipe OpenFGA and Postgres unconditionally; wipe Keycloak users only when
+    `wipe_keycloak` is True (the default, full-teardown behavior).
+
+    `wipe_keycloak=False` backs `POST /reset-rebac` (PLATFORM-IMPORT-RFC.md §9.2
+    addendum) — a repeated-rehearsal reset that clears stale OpenFGA tuples and
+    Postgres rows between test cycles without discarding manually-provisioned
+    Keycloak accounts (e.g. a test user created to exercise the PENDING→RELINKED
+    reconciliation path), which the narrow `POST /reset` cannot do (it never
+    touches OpenFGA) and `POST /reset-full` over-does (it also wipes Keycloak).
+    """
     preserved_uids = await resolve_preserved_uids(caller, engine)
     report = TeardownReport(preserved_uids=sorted(preserved_uids))
 
@@ -103,21 +114,22 @@ async def run_teardown(
         )
     report.team_ids_wiped = len(team_ids)
 
-    # ── 2. Keycloak — delete every non-preserved user. ────────────────────
-    for summary in all_users:
-        if summary.id in preserved_uids:
-            continue
-        try:
-            await delete_user(caller, summary.id, user_deps)
-            report.users_deleted += 1
-        except UserNotFoundError:
-            pass  # already gone — a retry after a partial prior run
-        except Exception:
-            logger.exception(
-                "[import-export] reset-full: failed to delete Keycloak user %s",
-                summary.id,
-            )
-            report.users_delete_failed.append(summary.id)
+    # ── 2. Keycloak — delete every non-preserved user (skipped for reset-rebac). ──
+    if wipe_keycloak:
+        for summary in all_users:
+            if summary.id in preserved_uids:
+                continue
+            try:
+                await delete_user(caller, summary.id, user_deps)
+                report.users_deleted += 1
+            except UserNotFoundError:
+                pass  # already gone — a retry after a partial prior run
+            except Exception:
+                logger.exception(
+                    "[import-export] reset-full: failed to delete Keycloak user %s",
+                    summary.id,
+                )
+                report.users_delete_failed.append(summary.id)
 
     # ── 3. Postgres, one atomic transaction. ───────────────────────────────
     async with session_factory() as session:
@@ -144,9 +156,10 @@ async def run_teardown(
     report.prompts_deleted = getattr(prompts_result, "rowcount", 0)
 
     logger.warning(
-        "[import-export] reset-full by %s: preserved=%s users_deleted=%d "
+        "[import-export] %s by %s: preserved=%s users_deleted=%d "
         "users_delete_failed=%s teams_wiped=%d agents=%d tags=%d documents=%d "
         "teams_rows=%d prompts=%d",
+        "reset-full" if wipe_keycloak else "reset-rebac",
         caller.uid,
         report.preserved_uids,
         report.users_deleted,

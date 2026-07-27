@@ -2,7 +2,12 @@
 
 Matches the production database as of 2026-04-01.
 Only teammetadata — the state of prod at the time Alembic was introduced.
-Stamp production with: alembic stamp d01a50e94bec
+
+Idempotent: skips CREATE TABLE if a database already has ``teammetadata`` (e.g. a
+pre-Alembic prod/staging clone that was never explicitly stamped, or a Job re-run
+against a database left in a partial state). Without this guard, running against
+such a database raises ``DuplicateTableError`` instead of proceeding to the rest
+of head.
 
 Revision ID: d01a50e94bec
 Revises:
@@ -22,8 +27,16 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _teammetadata_exists() -> bool:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return "teammetadata" in inspector.get_table_names()
+
+
 def upgrade() -> None:
     """Upgrade schema."""
+    if _teammetadata_exists():
+        return
     op.create_table(
         "teammetadata",
         sa.Column("id", sa.String(), nullable=False),
@@ -48,4 +61,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    if not _teammetadata_exists():
+        return
     op.drop_table("teammetadata")

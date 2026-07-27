@@ -39,12 +39,32 @@ in how they move and who owns them. Do not blur them.
 
 **Two runs, two ID disciplines:**
 - **kea → kea** (castle → s3ns, the **first** run): same schema, same names both ends
-  (DB `fred_kea`, store `kea`, buckets `kea-*`, index `kea-vector-index-mistral`, realm `app`).
+  (DB `fred_kea`, store `kea`, index `kea-vector-index-mistral`, realm `app`).
   **No transformation** — a faithful mirror.
 - **kea → swift** (later): identity & data assumptions hold unchanged; only **names map**
-  (store `kea`→`fred`, buckets `kea-*`→unprefixed, index `kea-…`→`vector-index-mistral`).
+  (store `kea`→`fred`, index `kea-…`→`vector-index-mistral`).
   The **metadata transform** (agent `payload_json`→`agent_instance`, per-user personal teams,
   UUID-only user-tuple filter) is swift-specific — see [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md).
+
+**Correction, 2026-07-27 — bucket naming was wrong above.** The `kea-*`→unprefixed
+bucket-name mapping stated in earlier versions of this section was a **local rehearsal
+artifact** (the docker-compose test stack prefixes its own kea-simulation buckets with
+`kea-` to keep them apart from the swift-simulation ones sharing the same SeaweedFS
+instance), not the real convention. Confirmed today against the actual GCS layout:
+- **kea/castle** (both the old MinIO deployment and the new GCS one — identical):
+  bucket names carry **no prefix at all** — `knowledge-flow-content-documents`,
+  `knowledge-flow-content-objects`, `control-plane-content-objects`, `filesystem`, `app-bucket`.
+- **swift/S3NS**: bucket names carry whatever prefix the Helm chart injects at deploy
+  time — an operator choice, not an application constant. TP-S3NS today uses
+  `prism-swift-` (e.g. `prism-swift-knowledge-flow-documents`,
+  `prism-swift-filesystem`) — the same prefix already used in the integration
+  environment, added by hand in the Helm values.
+
+  Nothing in the application code assumes either naming — MIGR-06 (`mc mirror`) is a
+  pure ops step external to the Fred codebase, so this is a documentation correction,
+  not a code fix. When mapping source→target buckets for a real mirror, read the
+  actual bucket name from each environment's own Helm values/console rather than
+  assuming a fixed prefix pattern on either side.
 
 **Two ID shapes — never conflate:**
 - **`document_uid`** = 32-hex (`3ac3729e2152447081df3717ce338ffe`). **The MinIO folder name.**

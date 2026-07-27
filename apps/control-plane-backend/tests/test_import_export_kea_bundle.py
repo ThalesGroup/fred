@@ -13,6 +13,8 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +32,11 @@ from fred_core import Relation, RelationType
 from fred_core.documents.tag_models import TagRow
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
-from fred_core.tasks.models import StartMigrationRequest
+from fred_core.tasks.models import (
+    MigrationTaskEvent,
+    StartMigrationRequest,
+    TaskState,
+)
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
@@ -47,26 +53,28 @@ TEAM_FREDLAB = "05186d87-139d-4adb-8d6a-95d61d7afdb4"
 # tests exercising PENDING/RELINKED override `_stub_username_resolution` (see
 # `test_kea_reconciliation.py`) instead of using this default.
 _PLAN_A_USERNAME_TO_SUB = {"bob": UID_BOB, "liam": UID_LIAM, "alice": UID_ALICE}
-# Non-None sentinel: `KeaUserResolver` only ever checks `is not None` before
-# calling `find_user_sub_by_username`, which is monkeypatched below — the real
+# Non-None sentinel: `KeaUserResolver.create` only ever checks `is not None`
+# before calling `find_user_subs_bulk`, monkeypatched below — the real
 # `UserServiceDependencies`/Keycloak Admin client is never exercised in this file.
 _FAKE_USER_DEPS = object()
 
 
 @pytest.fixture(autouse=True)
 def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """KEA CUTOVER 2026 — simulate Keycloak S3NS username lookups without a
+    """KEA CUTOVER 2026 — simulate a Keycloak S3NS bulk realm listing without a
     live Keycloak. Default: `_PLAN_A_USERNAME_TO_SUB` (kea sub == swift sub for
-    known test users); anyone else resolves to PENDING (not found)."""
+    known test users); anyone else is absent from the snapshot and resolves to
+    PENDING (not found) — `KeaUserResolver` treats a successful bulk snapshot as
+    authoritative and never falls back to a per-username lookup (see
+    `kea_reconciliation.py`).
+    """
 
-    async def _fake_find_user_sub_by_username(
-        username: str, _deps: object
-    ) -> str | None:
-        return _PLAN_A_USERNAME_TO_SUB.get(username)
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return dict(_PLAN_A_USERNAME_TO_SUB)
 
     monkeypatch.setattr(
-        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
-        _fake_find_user_sub_by_username,
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
     )
 
 
@@ -208,6 +216,12 @@ class FakeRebac:
     ) -> None:
         self.relations.append(relation)
 
+    async def add_relations(
+        self, relations: Iterable[Relation], *, actor_uid: str | None = None
+    ) -> None:
+        for relation in relations:
+            await self.add_relation(relation, actor_uid=actor_uid)
+
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     # prompt_models is already imported above (PromptRow) — only agent_instance_models
@@ -242,7 +256,7 @@ async def _import(
             engine=tasks_engine, backend=SchedulerBackend.MEMORY
         )
         start = await task_service.start(StartMigrationRequest(), created_by="tester")
-        return await run_import(
+        report = await run_import(
             bundle=open_bundle(bundle_bytes, external_realm_data=external_realm_data),
             import_id="imp-kea",
             task_id=start.task_id,
@@ -252,6 +266,22 @@ async def _import(
             rebac=rebac,  # type: ignore[arg-type]
             user_deps=_FAKE_USER_DEPS,  # type: ignore[arg-type]
         )
+        # Mirror `import_export/api.py`'s real background-task wrapper, which
+        # always marks the task terminal after `run_import` returns —
+        # required since `uq_task_run_single_active_migration` (Area 2) now
+        # enforces at most one non-terminal `kind="migration"` row per
+        # `tasks_engine`, and several tests in this file call `_import` more
+        # than once against the same `engine` (and therefore the same
+        # deterministic `.tasks` sqlite file) to prove idempotency.
+        await task_service.record(
+            MigrationTaskEvent(
+                task_id=start.task_id,
+                state=TaskState.succeeded,
+                seq=0,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        return report
     finally:
         await tasks_engine.dispose()
 

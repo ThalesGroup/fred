@@ -13,10 +13,13 @@ from pathlib import Path
 
 import pytest
 from control_plane_backend.import_export.kea_reconciliation import (
+    KeaReconciliationReport,
+    KeaUserResolver,
     drop_orphan_team_relations,
     format_usernames_for_warning,
     kea_known_group_ids,
     kea_username_by_sub,
+    resolve_user_sub,
 )
 from fred_core import RebacReference, Relation, RelationType, Resource
 from tests.test_import_export_kea_bundle import (
@@ -33,22 +36,21 @@ UID_UNKNOWN = "b3f6a1e2-2222-4444-8888-000000000001"
 
 # KEA CUTOVER 2026 — pytest fixtures are NOT inherited across sibling test
 # modules just by importing helpers from them, so this file needs its own copy
-# of the "Plan A" username-resolution stub (see test_import_export_kea_bundle.py
-# for the rationale). Individual tests below override it locally where they
-# need a different outcome (PENDING / RELINKED).
+# of the "Plan A" bulk-snapshot stub (see test_import_export_kea_bundle.py for
+# the rationale). Individual tests below override it locally where they need a
+# different outcome (PENDING / RELINKED) — the bulk snapshot is authoritative,
+# so overriding it is the only way to change what a test's users resolve to.
 _PLAN_A_USERNAME_TO_SUB = {"bob": UID_BOB, "liam": UID_LIAM}
 
 
 @pytest.fixture(autouse=True)
 def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _fake_find_user_sub_by_username(
-        username: str, _deps: object
-    ) -> str | None:
-        return _PLAN_A_USERNAME_TO_SUB.get(username)
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return dict(_PLAN_A_USERNAME_TO_SUB)
 
     monkeypatch.setattr(
-        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
-        _fake_find_user_sub_by_username,
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
     )
 
 
@@ -151,12 +153,12 @@ async def test_relinked_user_uses_the_swift_side_sub(
     swift-side sub, not silently dropped or written under the wrong (kea) sub."""
     swift_sub_for_bob = "99999999-9999-9999-9999-999999999999"
 
-    async def _fake_lookup(username: str, _deps: object) -> str | None:
-        return swift_sub_for_bob if username == "bob" else None
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return {"bob": swift_sub_for_bob}
 
     monkeypatch.setattr(
-        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
-        _fake_lookup,
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
     )
     engine = await _make_engine(tmp_path, "relinked.sqlite3")
     try:
@@ -263,3 +265,150 @@ async def test_admin_less_team_is_warned_loudly(tmp_path: Path) -> None:
         assert any("ZERO team_admin" in w and "team-nb" in w for w in report.warnings)
     finally:
         await engine.dispose()
+
+
+# ── KeaUserResolver: bulk-snapshot-is-authoritative regression coverage ───────
+#
+# The bug: `KeaUserResolver.find_sub` used to fall back to a per-username
+# `find_user_sub_by_username` Keycloak Admin API call whenever a username was
+# missing from the bulk prefetch — exactly the case for ~1899 of ~1900 kea
+# usernames on a first cutover import (swift Keycloak starts with only the
+# root admin). That silently turned the "one bulk sweep" optimization back
+# into ~1900 individual round trips, slow enough to blow past the dry-run's
+# HTTP timeout. The fix: a successful bulk sweep (`find_user_subs_bulk`) is now
+# the single, authoritative source `find_sub` ever consults — present in it
+# resolves, absent from it is PENDING immediately, no fallback call, ever.
+
+
+@pytest.mark.asyncio
+async def test_bulk_snapshot_authoritative_no_individual_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production scenario, at small scale: a username missing from the bulk
+    snapshot — whether the snapshot is empty or only carries the root admin —
+    must resolve to PENDING off that snapshot alone. Zero calls to
+    `find_user_sub_by_username`, ever."""
+    individual_calls = 0
+
+    async def _spy_find_user_sub_by_username(
+        _username: str, _deps: object
+    ) -> str | None:
+        nonlocal individual_calls
+        individual_calls += 1
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.users.service.find_user_sub_by_username",
+        _spy_find_user_sub_by_username,
+    )
+
+    root_admin_sub = "00000000-0000-0000-0000-000000000000"
+
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return {"root-admin": root_admin_sub}
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
+    )
+
+    resolver = await KeaUserResolver.create(user_deps=object())
+    for username in ("kea-user-1", "kea-user-2", "kea-user-3"):
+        assert await resolver.find_sub(username) is None
+    assert await resolver.find_sub("root-admin") == root_admin_sub
+
+    assert individual_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_username_present_in_bulk_snapshot_resolves_its_sub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return {"bob": UID_BOB}
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
+    )
+
+    resolver = await KeaUserResolver.create(user_deps=object())
+    assert await resolver.find_sub("bob") == UID_BOB
+    assert await resolver.find_sub("ghost") is None
+
+
+@pytest.mark.asyncio
+async def test_remember_resolves_an_identity_created_mid_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_provision_bundle_identities` creates a Keycloak user for a bundle entry
+    missing from the bulk snapshot, then `remember()`s it — the very next
+    resolution (e.g. the role phase's `_resolve_bundle_usernames`) must see it
+    immediately, with no further Keycloak call of any kind."""
+
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
+    )
+
+    resolver = await KeaUserResolver.create(user_deps=object())
+    assert await resolver.find_sub("newuser") is None  # PENDING before creation
+
+    resolver.remember("newuser", "brand-new-sub")
+
+    assert await resolver.find_sub("newuser") == "brand-new-sub"
+
+
+@pytest.mark.asyncio
+async def test_bulk_sweep_exception_propagates_before_any_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real Keycloak/network failure during the bulk sweep must abort the
+    import before any Postgres write — `KeaUserResolver.create` runs before the
+    transaction opens, so letting the exception propagate here is what makes
+    that guarantee hold."""
+
+    class _KeycloakBulkSweepFailed(Exception):
+        pass
+
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        raise _KeycloakBulkSweepFailed("realm listing failed")
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
+    )
+
+    with pytest.raises(_KeycloakBulkSweepFailed):
+        await KeaUserResolver.create(user_deps=object())
+
+
+@pytest.mark.asyncio
+async def test_report_buckets_never_duplicate_the_same_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same kea sub is legitimately resolved from more than one call site
+    (relation subjects, agent owner, tag owner, ...) — each must land in
+    `report.matched`/`report.pending` exactly once, not once per call site."""
+
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return {"bob": UID_BOB}
+
+    monkeypatch.setattr(
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
+    )
+
+    resolver = await KeaUserResolver.create(user_deps=object())
+    report = KeaReconciliationReport()
+    username_by_sub = {UID_BOB: "bob", UID_UNKNOWN: "ghost"}
+
+    for _ in range(2):
+        await resolve_user_sub(UID_BOB, username_by_sub, resolver, report)
+        await resolve_user_sub(UID_UNKNOWN, username_by_sub, resolver, report)
+
+    assert len(report.matched) == 1
+    assert len(report.pending) == 1

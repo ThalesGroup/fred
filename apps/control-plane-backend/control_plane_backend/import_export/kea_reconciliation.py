@@ -46,6 +46,7 @@ Why this exists (design session 2026-07-25):
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -54,7 +55,7 @@ from typing import Any
 from fred_core import RebacReference, Relation, RelationType, Resource
 
 from control_plane_backend.users.dependencies import UserServiceDependencies
-from control_plane_backend.users.service import find_user_sub_by_username
+from control_plane_backend.users.service import find_user_subs_bulk
 
 
 class KeaUserOutcome(str, Enum):
@@ -160,27 +161,81 @@ class KeaReconciliationReport:
 
 
 class KeaUserResolver:
-    """Resolves kea Keycloak subs to swift (S3NS) Keycloak subs, live, by username.
+    """Resolves kea Keycloak subs to swift (S3NS) Keycloak subs, by username,
+    against one bulk snapshot of the target realm taken at construction time.
 
-    One instance per run — caches every username lookup, since a bundle's OpenFGA
-    tuples and Keycloak group memberships both reference the same handful of real
-    people repeatedly; this keeps a run to one Keycloak Admin API call per *distinct*
-    username, not per reference.
+    One instance per run, shared by every call site that needs a username -> sub
+    lookup (relation subjects, agent/tag/resource owners, platform-role grants,
+    team-membership derivation, and the `users.json` provisioning phase in
+    `importer.py`) — never construct a second instance mid-run, or the whole point
+    of the shared cache/prefetch below is lost.
+
+    A cutover-scale run (~2000 users) makes bulk resolution the only viable
+    strategy: Swift starts with just the root admin in Keycloak, so on a first
+    import essentially every kea username is missing from the target realm.
+    `create()` lists the whole target realm once (`find_user_subs_bulk`, itself a
+    single paginated sweep) and builds an in-memory `username -> sub` index —
+    the *complete* answer for this run. That snapshot is treated as authoritative
+    even when empty (or when Keycloak M2M is disabled and it comes back `{}`): a
+    username missing from it resolves to `None` (PENDING) immediately, with zero
+    further Keycloak calls. There is deliberately no per-username fallback lookup
+    — one was tried and it silently reintroduced up to ~1900 individual Admin API
+    calls on exactly the production scenario the bulk prefetch exists to avoid,
+    slow enough to blow past the dry-run's HTTP timeout. A username created mid-run
+    by `_provision_bundle_identities` is folded into the same snapshot via
+    `remember()`, so it resolves with zero further I/O too. If the bulk sweep
+    itself raises (a real Keycloak/network error), that exception is left to
+    propagate — `create()` is called before the Postgres transaction opens, so a
+    broken bulk sweep fails the import before anything is written.
     """
 
-    def __init__(self, user_deps: UserServiceDependencies | None) -> None:
-        self._user_deps = user_deps
+    def __init__(self, prefetched: dict[str, str] | None = None) -> None:
+        self._prefetched: dict[str, str] = dict(prefetched or {})
         self._cache: dict[str, KeaUserResolution] = {}
+
+    @classmethod
+    async def create(
+        cls, user_deps: UserServiceDependencies | None
+    ) -> "KeaUserResolver":
+        """Build a resolver with the target realm's users prefetched in bulk.
+
+        The one recommended construction path for both the real import and the
+        dry-run preview (`kea_migration_api.py`) — see the class docstring for why
+        a bulk prefetch, never a per-username lookup, is what keeps a
+        cutover-scale run fast and bounded. A real bulk-sweep failure (Keycloak
+        down, network error) propagates from here, aborting the import before any
+        Postgres write.
+        """
+        prefetched = (
+            await find_user_subs_bulk(user_deps) if user_deps is not None else {}
+        )
+        return cls(prefetched)
+
+    async def find_sub(self, username: str) -> str | None:
+        """Resolve one username to its swift sub — the shared low-level primitive.
+
+        A pure dict lookup against the bulk-prefetched snapshot (see the class
+        docstring): present -> its sub, absent -> `None` (PENDING). Never makes a
+        Keycloak call itself — the bulk snapshot taken at `create()` time is the
+        single source of truth for the whole life of this resolver instance.
+        """
+        return self._prefetched.get(username)
+
+    def remember(self, username: str, swift_sub: str) -> None:
+        """Record an identity resolvable with zero further I/O this run.
+
+        Called right after `_provision_bundle_identities` creates a Keycloak user —
+        without this, `find_sub` would see the new username missing from the
+        bulk-prefetched snapshot and treat it as PENDING, even though this same
+        run just created it.
+        """
+        self._prefetched[username] = swift_sub
 
     async def resolve(self, kea_sub: str, kea_username: str) -> KeaUserResolution:
         cached = self._cache.get(kea_username)
         if cached is not None:
             return cached
-        swift_sub = (
-            await find_user_sub_by_username(kea_username, self._user_deps)
-            if self._user_deps is not None
-            else None
-        )
+        swift_sub = await self.find_sub(kea_username)
         if swift_sub is None:
             result = KeaUserResolution(
                 kea_sub, kea_username, KeaUserOutcome.PENDING, None
@@ -283,6 +338,13 @@ async def resolve_user_sub(
     return resolution.swift_sub
 
 
+# Keycloak Admin API calls per distinct username, bounded so a cutover-scale run
+# (~2000 users) doesn't fire thousands of concurrent requests at once — still fast,
+# since KeaUserResolver caches by username and this pre-pass already deduplicates by
+# kea_sub before resolving.
+_RESOLVE_CONCURRENCY = 15
+
+
 async def resolve_relation_subjects(
     relations: list[Relation],
     username_by_sub: dict[str, str],
@@ -297,13 +359,23 @@ async def resolve_relation_subjects(
     user subject cannot be resolved yet (PENDING) is dropped from the output — not
     written this run — and counted in `report.pending`, so a later re-run picks it up.
     """
+    distinct_kea_subs = list(
+        {str(r.subject.id) for r in relations if r.subject.type == Resource.USER}
+    )
+    resolved: dict[str, str | None] = {}
+    for start in range(0, len(distinct_kea_subs), _RESOLVE_CONCURRENCY):
+        chunk = distinct_kea_subs[start : start + _RESOLVE_CONCURRENCY]
+        results = await asyncio.gather(
+            *(resolve_user_sub(sub, username_by_sub, resolver, report) for sub in chunk)
+        )
+        resolved.update(zip(chunk, results))
+
     out: list[Relation] = []
     for relation in relations:
         if relation.subject.type != Resource.USER:
             out.append(relation)
             continue
-        kea_sub = str(relation.subject.id)
-        swift_sub = await resolve_user_sub(kea_sub, username_by_sub, resolver, report)
+        swift_sub = resolved[str(relation.subject.id)]
         if swift_sub is None:
             continue
         out.append(

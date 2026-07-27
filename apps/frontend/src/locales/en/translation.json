@@ -1480,6 +1480,16 @@
           "cancelLabel": "Cancel",
           "error": "Full teardown failed"
         },
+        "resetRebac": {
+          "launch": "Reset + OpenFGA",
+          "running": "Resetting…",
+          "taskLabel": "Platform reset + OpenFGA",
+          "confirmTitle": "Reset platform data and OpenFGA — keep Keycloak users?",
+          "confirmMessage": "Permanently deletes all agents, tags, documents, teams, and prompts, and every OpenFGA permission tuple. Keycloak users are NOT affected — use this between repeated import rehearsals to clear stale permissions without losing manually-provisioned test accounts.",
+          "confirmLabel": "Reset",
+          "cancelLabel": "Cancel",
+          "error": "Reset failed"
+        },
         "stats": {
           "title": "Overview",
           "refresh": "Refresh",

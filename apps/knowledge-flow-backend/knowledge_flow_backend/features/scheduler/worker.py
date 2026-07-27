@@ -35,7 +35,9 @@ from knowledge_flow_backend.features.scheduler.activities import (
     fast_store_vectors,
     get_chunk_count,
     list_documents_in_scope,
+    mark_document_vectorized,
     output_process,
+    output_process_trusted,
     prepare_revectorize_file,
 )
 from knowledge_flow_backend.features.scheduler.pull_files_activities import (
@@ -125,6 +127,7 @@ async def run_worker(
             pull_input_process,
             push_input_process,
             output_process,
+            output_process_trusted,
             fast_store_vectors,
             fast_delete_vectors,
             emit_ingestion_task_event,
@@ -132,6 +135,7 @@ async def run_worker(
             get_chunk_count,
             delete_vectors,
             prepare_revectorize_file,
+            mark_document_vectorized,
         ],
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,
