@@ -91,17 +91,29 @@ async def emit_process_kpis(interval_s: float, kpi_writer) -> None:
     - RSS/VMS and open_fds come from /proc.
     - Memory % uses cgroup limits when present (K8s), otherwise host MemTotal.
     - CPU % is process CPU-time delta / wall-time delta (can exceed 100%).
+
+    event_loop_lag_ms:
+    - measured as how much longer than requested this tick's own
+      `asyncio.sleep(interval_s)` actually took, using the event loop's
+      monotonic clock. A busy/blocked loop delays this wakeup past its
+      scheduled time; a healthy loop wakes up within a few ms of it.
     """
     actor = KPIActor(type="system")
     mem_limit_mb = _get_memory_limit_mb()
     last_cpu_time: Optional[float] = None
     last_ts = time.monotonic()
+    loop = asyncio.get_running_loop()
+    expected_wake: Optional[float] = None
     while True:
         try:
             now = time.monotonic()
             cpu_pct_value: Optional[float] = None
             rss_pct_value: Optional[float] = None
             elapsed_since_last = now - last_ts
+
+            if expected_wake is not None:
+                lag_ms = max(0.0, (loop.time() - expected_wake) * 1000.0)
+                kpi_writer.gauge("event_loop_lag_ms", lag_ms, unit="ms", actor=actor)
 
             try:
                 proc_times = os.times()
@@ -171,6 +183,7 @@ async def emit_process_kpis(interval_s: float, kpi_writer) -> None:
             )
         except Exception:
             logger.exception("Process KPI tick failed; continuing")
+        expected_wake = loop.time() + interval_s
         await asyncio.sleep(interval_s)
 
 

@@ -24,6 +24,11 @@ from fred_core.kpi.kpi_reader_structures import (
     KPIQueryResult,
     TimeBucket,
 )
+from fred_core.kpi.kpi_runtime_stage_metric import (
+    RuntimeStage,
+    record_runtime_stage_metric,
+    runtime_stage_timer,
+)
 from fred_core.kpi.kpi_writer import KPIDefaults, KPIWriter
 from fred_core.kpi.kpi_writer_structures import (
     Cost,
@@ -35,6 +40,12 @@ from fred_core.kpi.kpi_writer_structures import (
     Trace,
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
+from fred_core.kpi.model_impact_factors import (
+    GreenCostEstimate,
+    ModelImpactFactors,
+    estimate_green_cost,
+    load_model_impact_factors,
+)
 from fred_core.kpi.noop_kpi_writer import Dims, NoOpKPIWriter
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
@@ -44,6 +55,10 @@ __all__ = [
     "KPIMiddleware",
     "BaseKPIWriter",
     "Dims",
+    "GreenCostEstimate",
+    "ModelImpactFactors",
+    "estimate_green_cost",
+    "load_model_impact_factors",
     "KPIWriter",
     "KPIDefaults",
     "NoOpKPIWriter",
@@ -66,4 +81,7 @@ __all__ = [
     "emit_sql_pool_kpis",
     "record_phase_metric",
     "phase_timer",
+    "RuntimeStage",
+    "record_runtime_stage_metric",
+    "runtime_stage_timer",
 ]

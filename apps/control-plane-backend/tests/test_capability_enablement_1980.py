@@ -901,11 +901,17 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     async def _fake_fetch_agents(base_url: str, runtime_id: str):
         return []
 
+    async def _fake_fetch_models(base_url: str):
+        return []
+
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
     )
     monkeypatch.setattr(
         product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
@@ -931,6 +937,11 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     list `kind="agent"` entries alongside `kind="tool"` ones — a SEPARATE
     fetch (`_agent_capabilities_for_source`), never merged into the runtime's
     own capability registry (see that function's docstring for why).
+
+    OBSERV-02 v3 (RFC §8.7) extends the same union contract to a third
+    kind — `kind="model"` (`_model_capabilities_for_source`) — covered here
+    too rather than in a fully separate test, since it's the exact same
+    three-way-union shape.
     """
     from types import SimpleNamespace
 
@@ -955,11 +966,29 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
             )
         ]
 
+    async def _fake_fetch_models(base_url: str):
+        # OBSERV-02 v3 (RFC §8.7): kind="model" is a THIRD separate fetch,
+        # same union contract as kind="agent" above.
+        return [
+            CapabilityCatalogEntry(
+                id="model__openai__gpt-5.1",
+                version="1",
+                name="gpt-5.1",
+                description="gpt-5.1",
+                icon="neurology",
+                kind="model",
+                team_scope=TeamScopePolicy.ADMIN_GATED,
+            )
+        ]
+
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
     )
     monkeypatch.setattr(
         product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
@@ -976,9 +1005,10 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     catalog = await aggregate_capability_catalog(deps)
 
     sentinel_id = product_service.template_capability_id("runtime-a", "sentinel")
-    assert set(catalog) == {"doc_access", sentinel_id}
+    assert set(catalog) == {"doc_access", sentinel_id, "model__openai__gpt-5.1"}
     assert catalog[sentinel_id].kind == "agent"
     assert catalog["doc_access"].kind == "tool"
+    assert catalog["model__openai__gpt-5.1"].kind == "model"
 
 
 @pytest.mark.asyncio
@@ -1019,11 +1049,17 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
             )
         ]
 
+    async def _fake_fetch_models(base_url: str):
+        return []
+
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
     )
     monkeypatch.setattr(
         product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
@@ -1043,6 +1079,69 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
     # the id, never overwritten — the collision this prefix exists to prevent.
     assert set(catalog) == {"doc_access", colliding_tool_id}
     assert catalog[colliding_tool_id].kind == "agent"
+
+
+@pytest.mark.asyncio
+async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespace(
+    monkeypatch,
+) -> None:
+    """OBSERV-02 v3 (RFC §8.7): `MODEL_CAPABILITY_NAMESPACE_PREFIX` (`model__`)
+    gets the exact same collision guard as `agent__` above — a `kind="tool"`
+    entry that happens to land in that namespace must be quarantined, never
+    silently admitted to shadow the real model entry."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+
+    colliding_tool_id = "model__openai__gpt-5.1"
+
+    async def _fake_fetch(base_url: str):
+        return [_entry("doc_access"), _entry(colliding_tool_id, kind="tool")]
+
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return []
+
+    async def _fake_fetch_models(base_url: str):
+        return [
+            CapabilityCatalogEntry(
+                id=colliding_tool_id,
+                version="1",
+                name="gpt-5.1",
+                description="gpt-5.1",
+                icon="neurology",
+                kind="model",
+                team_scope=TeamScopePolicy.ADMIN_GATED,
+            )
+        ]
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod", runtime_id="runtime-a"
+                    )
+                ]
+            )
+        )
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert catalog[colliding_tool_id].kind == "model"
 
 
 @pytest.mark.asyncio

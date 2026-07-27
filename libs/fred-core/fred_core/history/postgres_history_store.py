@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -57,6 +58,8 @@ from fred_core.history.history_schema import (
     MessagePart,
     Role,
 )
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.base_sql import advisory_lock_key, run_ddl_with_advisory_lock
 
@@ -150,8 +153,11 @@ class PostgresHistoryStore(BaseHistoryStore):
       must not be duplicated; upsert collapses retries cleanly
     """
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(
+        self, engine: AsyncEngine, *, kpi: BaseKPIWriter | None = None
+    ) -> None:
         self._engine = engine
+        self._kpi = kpi
         self._sessions = make_session_factory(engine)
         self._metadata = MetaData()
         SessionHistoryRow.__table__.to_metadata(self._metadata)  # type: ignore[attr-defined]
@@ -237,8 +243,18 @@ class PostgresHistoryStore(BaseHistoryStore):
                 ]
             },
         )
+        pool_wait_start = time.monotonic()
         async with use_session(self._sessions, session) as s:
+            pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+            sql_start = time.monotonic()
             await s.execute(upsert_stmt)
+            record_persist_metrics(
+                self._kpi,
+                store="history",
+                op="save",
+                pool_wait_ms=pool_wait_ms,
+                sql_ms=(time.monotonic() - sql_start) * 1000.0,
+            )
 
     # ------------------------------------------------------------------
     # Read

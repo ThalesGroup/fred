@@ -166,6 +166,29 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/evaluations` },
     });
   }
+  if (canSeeActivity) {
+    // Same elevated-role gate as Activity: the team usage dashboard
+    // (OBSERV-02 v3) has been reachable by direct URL only — this is its
+    // first in-app entry point for a real (non-personal) team.
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.usage"),
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: usageBase },
+    });
+  }
+  if (canSeeActivity) {
+    // TEAM-05, #2118: same elevated-role gate as Activity/Usage for
+    // visibility (team_admin/team_editor/team_analyst all may read) — the
+    // page itself renders read-only for anyone without canUpdateResources
+    // (team_editor), same read/write split TeamSettingsPage already applies.
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.routing"),
+      icon: { category: "outlined", type: "hub", filled: false },
+      linkProps: { to: `${settingsBase}/routing` },
+    });
+  }
 
   return (
     <div className={styles.teamContentNavbarContainer}>

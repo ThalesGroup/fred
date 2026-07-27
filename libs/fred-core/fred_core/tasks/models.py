@@ -286,7 +286,43 @@ class TaskSummary(BaseModel):
         | ErasureDetail
         | None
     ) = None
+    # Persisted acknowledgement (OBSERV-02 v3 / rev. 3 §2.10). Both None means
+    # "not acknowledged" — the caller must still re-check `needs_attention()`
+    # against the CURRENT state before trusting this as "resolved": a task
+    # acknowledged once and then failing again is acknowledged-but-needing-
+    # attention again (see `needs_attention`'s docstring).
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
 
 
 class TaskListResponse(BaseModel):
     tasks: list[TaskSummary]
+
+
+def needs_attention(kind: str, state: TaskState, step: str | None) -> bool:
+    """Whether a task is in a state an admin should notice and act on
+    (OBSERV-02 v3, `TASK-EVENT-STREAM-RFC.md` rev. 3 §2.10) — the
+    acknowledgement gate: a task that does NOT need attention cannot be
+    acknowledged (`POST /tasks/{id}/ack` → 409).
+
+    `failed`/`cancelled` cover every kind uniformly. `erasure` is the one
+    exception: it deliberately never reaches `failed` (RGPD — an erasure is
+    retried forever, never given up on, see `ErasureDetail.attempts`), so its
+    attention signal is the `step == "stalled"` convention instead, set after
+    `ERASURE_STALL_AFTER_ATTEMPTS` retries while the task is still `running`.
+
+    This is a pure function of CURRENT state, never a stored flag — a task
+    acknowledged once that later fails again has a newer failure than the old
+    acknowledgement, and callers must compare `acknowledged_at` against the
+    task's last-event timestamp (`updated_at`), not just check it is set, or a
+    second failure on the same task id would stay silently hidden.
+    """
+    if state in (TaskState.failed, TaskState.cancelled):
+        return True
+    return kind == "erasure" and step == "stalled"
+
+
+class AcknowledgeTaskResponse(BaseModel):
+    task_id: str
+    acknowledged_at: datetime
+    acknowledged_by: str | None

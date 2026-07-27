@@ -92,6 +92,9 @@ from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
 )
+from control_plane_backend.routing_policy.service import (
+    resolve_execution_routing_snapshot,
+)
 from control_plane_backend.scheduler.policies.policy_models import (
     duration_to_seconds,
 )
@@ -665,6 +668,62 @@ async def _agent_capabilities_for_source(
             default_capability_ids=tuple(template.default_capability_ids),
         )
         for template in templates
+    ]
+
+
+async def _model_capabilities_for_source(
+    base_url: str,
+) -> list[CapabilityCatalogEntry] | None:
+    """
+    Project one pod's routable models into `kind="model"` catalog entries
+    (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+
+    Unlike `kind="agent"` projections above, this data does NOT come from
+    `/agents/templates` — `models_catalog.yaml` is loaded only by the
+    runtime pod itself (routing-internal, no control-plane consumer before
+    this), so it needs its own fetch: `GET {base_url}/agents/models-catalog`.
+    The runtime derives each entry's `id` (`model_capability_id`, fred-sdk —
+    same reserved-prefix contract `aggregate_capability_catalog`'s
+    collision guard enforces); control-plane trusts it as-is rather than
+    re-deriving it, the same trust boundary `kind="tool"` ids already cross.
+
+    `team_scope` is hardcoded `ADMIN_GATED`, same platform policy as every
+    other kind (RFC §8.3 — this deployment never uses `DEFAULT_ON`).
+
+    Best-effort: returns `None` when the pod is unreachable, same contract
+    as `_agent_capabilities_for_source` — the caller treats `None` as empty.
+    """
+
+    url = f"{base_url.rstrip('/')}/agents/models-catalog"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        # Best-effort (see docstring): an unreachable pod is expected/handled,
+        # not a fault worth WARNING-level attention on every poll cycle it
+        # recurs. Also covers a pre-#2110 pod that doesn't advertise this
+        # route yet (404) — treated the same as unreachable, not fatal.
+        logger.debug(
+            "[capability-catalog] failed to fetch models catalog from %s: %s",
+            base_url,
+            exc,
+        )
+        return None
+    return [
+        CapabilityCatalogEntry(
+            id=entry["id"],
+            version="1",
+            name=entry["name"],
+            description=entry.get("description") or entry["name"],
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(entry.get("profile_ids") or ()),
+        )
+        for entry in payload.get("models", [])
+        if isinstance(entry, dict) and "id" in entry and "name" in entry
     ]
 
 
@@ -2812,6 +2871,15 @@ async def prepare_execution(
         authorization=authorization,
     )
 
+    # Team routing policy snapshot (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05,
+    # #2118) — resolved once here at session prep, same lifecycle as
+    # context_prompt_text above, NOT a per-turn lookup (that's how model
+    # *authorization*/usable_model_ids works, deliberately not this).
+    (
+        chat_default_profile_id,
+        operation_route_rules,
+    ) = await resolve_execution_routing_snapshot(team_id, deps)
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -2823,6 +2891,8 @@ async def prepare_execution(
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
+        chat_default_profile_id=chat_default_profile_id,
+        operation_route_rules=operation_route_rules,
     )
 
 

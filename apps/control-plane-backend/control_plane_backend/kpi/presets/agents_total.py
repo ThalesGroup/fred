@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Request
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser
+from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
@@ -31,54 +32,62 @@ logger = logging.getLogger(__name__)
 _AGENT_METRICS = ["agent.created_total", "agent.deleted_total"]
 
 
-async def _count_all_agents(request: Request) -> int:
-    container = get_application_container(request)
-    store = container.get_agent_instance_store()
-    return await store.count_all()
+async def _count_all_agents(request: Request, team_id: TeamId | None) -> int:
+    store = get_application_container(request).get_agent_instance_store()
+    if team_id is None:
+        return await store.count_all()
+    # No dedicated count_by_team — list_by_team is the existing team-scoped
+    # lookup (reused as-is, per-team agent counts are small).
+    return len(await store.list_by_team(team_id))
 
 
 def _count_events(
-    store: OpenSearchKPIStore, metric_name: str, since: datetime, until: datetime
+    store: OpenSearchKPIStore,
+    metric_name: str,
+    since: datetime,
+    until: datetime,
+    team_id: TeamId | None,
 ) -> int:
-    body: dict[str, Any] = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": since.isoformat(),
-                                "lte": until.isoformat(),
-                            }
-                        }
-                    },
-                    {"term": {"metric.name": metric_name}},
-                ]
+    filters: list[dict[str, Any]] = [
+        {
+            "range": {
+                "@timestamp": {
+                    "gte": since.isoformat(),
+                    "lte": until.isoformat(),
+                }
             }
         },
+        {"term": {"metric.name": metric_name}},
+    ]
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
+    body: dict[str, Any] = {
+        "size": 0,
+        "query": {"bool": {"filter": filters}},
         "aggs": {"total": {"value_count": {"field": "metric.name"}}},
     }
     resp = store.client.search(index=store.index, body=body)
     return int(resp.get("aggregations", {}).get("total", {}).get("value", 0))
 
 
-def _has_any_agent_events_before(store: OpenSearchKPIStore, cutoff: datetime) -> bool:
+def _has_any_agent_events_before(
+    store: OpenSearchKPIStore, cutoff: datetime, team_id: TeamId | None
+) -> bool:
     """Return True if any agent lifecycle KPI event was recorded before `cutoff`.
 
     When False, instrumentation had not yet been deployed at that point in time
-    and historical reconstruction is impossible.
+    (platform-wide), or this team simply has no agent yet (team-scoped) — either
+    way historical reconstruction is impossible and the caller must say so.
     """
+    filters: list[dict[str, Any]] = [
+        {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
+        {"terms": {"metric.name": _AGENT_METRICS}},
+    ]
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
     body: dict[str, Any] = {
         "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
-                    {"terms": {"metric.name": _AGENT_METRICS}},
-                ]
-            }
-        },
+        "query": {"bool": {"filter": filters}},
     }
     resp = store.client.search(index=store.index, body=body)
     return int(resp.get("hits", {}).get("total", {}).get("value", 0)) > 0
@@ -91,27 +100,27 @@ async def query_agents_total(
     since: datetime,
     until: datetime,
     request: Request,
+    team_id: TeamId | None = None,
 ) -> ScalarWithDeltaResponse:
-    await (
-        get_application_container(request)
-        .get_rebac_engine()
-        .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
-        )
-    )
+    # Authorization already resolved by the router (kpi/api.py, KpiScope).
+    del user
 
     now = datetime.now(tz=timezone.utc)
 
     # If no agent lifecycle events exist before `until`, instrumentation was not
     # deployed yet for this period — we cannot reconstruct the historical count.
-    if not _has_any_agent_events_before(store, until):
+    if not _has_any_agent_events_before(store, until, team_id):
         return ScalarWithDeltaResponse(unavailable=True, since=since, until=until)
 
-    current_count = await _count_all_agents(request)
-    created_in_range = _count_events(store, "agent.created_total", since, until)
-    deleted_in_range = _count_events(store, "agent.deleted_total", since, until)
-    created_after = _count_events(store, "agent.created_total", until, now)
-    deleted_after = _count_events(store, "agent.deleted_total", until, now)
+    current_count = await _count_all_agents(request, team_id)
+    created_in_range = _count_events(
+        store, "agent.created_total", since, until, team_id
+    )
+    deleted_in_range = _count_events(
+        store, "agent.deleted_total", since, until, team_id
+    )
+    created_after = _count_events(store, "agent.created_total", until, now, team_id)
+    deleted_after = _count_events(store, "agent.deleted_total", until, now, team_id)
 
     count_at_until = current_count - created_after + deleted_after
 
@@ -128,4 +137,5 @@ AGENTS_TOTAL_PRESET = PresetDef(
     response_model=ScalarWithDeltaResponse,
     handler=query_agents_total,
     summary="Current total number of enrolled agents and net change over the selected time range",
+    team_scopable=True,  # agent.created_total/agent.deleted_total carry dims.team_id
 )

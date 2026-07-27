@@ -847,9 +847,11 @@
         "kindFilter": {
           "tool": "Outils",
           "agent": "Agents",
+          "model": "Modèles",
           "aria": "Filtrer par type de capacité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
+        "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
         "col": {
           "capability": "Capacité",
           "enabledTeams": "Équipes activées",
@@ -1068,10 +1070,38 @@
       "refresh": "Actualiser",
       "refreshing": "Actualisation...",
       "sections": {
+        "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "overview": "Vue d'ensemble",
         "resources": "Ressources",
+        "tokenUsage": "Consommation de tokens",
         "users": "Utilisateurs"
+      },
+      "administration": {
+        "activitiesTitle": "Activités",
+        "modelsGovernanceLink": "Gérer les modèles",
+        "storageByTeam": {
+          "empty": "Aucune équipe proche de son quota de stockage.",
+          "title": "Stockage par équipe (% du quota utilisé)",
+          "valueLabel": "% du quota"
+        }
+      },
+      "tokenUsage": {
+        "byAgent": {
+          "empty": "Aucune consommation d'agent sur cette période.",
+          "title": "Consommation de tokens par agent",
+          "valueLabel": "Tokens"
+        },
+        "byModel": {
+          "empty": "Aucune consommation de modèle sur cette période.",
+          "title": "Consommation de tokens par modèle",
+          "valueLabel": "Tokens"
+        },
+        "overTime": {
+          "title": "Consommation de tokens dans le temps",
+          "valueLabel": "Tokens"
+        }
       },
       "timeRange": {
         "apply": "Appliquer",
@@ -1085,8 +1115,14 @@
         "valueLabel": "Conversations"
       }
     },
+    "tokenUsageImpact": {
+      "costTitle": "Coût estimé",
+      "costValue": "{{cost}} $ (estimé)",
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
+    },
     "teamUsage": {
       "title": "Ma consommation de tokens",
+      "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
         "valueLabel": "Tokens"
@@ -1100,6 +1136,31 @@
         "empty": "Aucune consommation de modèle sur cette période.",
         "title": "Consommation par modèle",
         "valueLabel": "Tokens"
+      },
+      "team": {
+        "sectionTitle": "Consommation de l'équipe",
+        "editorSectionTitle": "Activités (ingestion)",
+        "adminSectionTitle": "Activités",
+        "membersLabel": "Membres",
+        "agentsLabel": "Agents",
+        "documentsLabel": "Documents",
+        "quota": {
+          "empty": "Aucun quota de stockage configuré pour cette équipe.",
+          "title": "Quota de stockage (% utilisé)",
+          "valueLabel": "% du quota"
+        },
+        "conversationsOverTime": {
+          "title": "Conversations dans le temps",
+          "valueLabel": "Conversations"
+        },
+        "mostActiveAgents": {
+          "title": "Agents les plus actifs",
+          "valueLabel": "Conversations"
+        },
+        "activitySummary": {
+          "active": "{{count}} conversations sur cette période — active",
+          "quiet": "{{count}} conversations sur cette période — calme"
+        }
       }
     },
     "back": "Retour",
@@ -1438,7 +1499,6 @@
         }
       },
       "page": {
-        "ackFailures": "Acquitter les échecs ({{count}})",
         "active": "En cours",
         "clearCompleted": "Effacer les terminées",
         "empty": "Aucune tâche en cours",
@@ -1447,6 +1507,7 @@
         "title": "Tâches"
       },
       "popover": {
+        "acknowledge": "Ignorer",
         "close": "Fermer",
         "startedAgo": "démarré {{time}}",
         "title": "Détails — {{label}}"
@@ -1479,6 +1540,7 @@
         "inDays": "dans {{count}} j"
       },
       "card": {
+        "acknowledge": "Ignorer",
         "copyWarnings": "Copier les avertissements",
         "copied": "Copié !"
       }
@@ -1565,7 +1627,27 @@
         "settings": "Paramètres",
         "activity": "Activité",
         "evaluations": "Évaluations",
+        "usage": "Consommation",
+        "routing": "Routage des modèles",
         "retention": "Rétention"
+      },
+      "routing": {
+        "defaultProfile": {
+          "title": "Modèle de chat par défaut",
+          "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
+          "label": "Identifiant du profil par défaut",
+          "placeholder": "ex. default.chat.mistral"
+        },
+        "operationRules": {
+          "title": "Règles par opération",
+          "explanation": "Remplacer le modèle par défaut pour une opération runtime spécifique (ex. planning), éventuellement affinée par un objectif (purpose).",
+          "operation": "Opération",
+          "purpose": "Objectif (optionnel)",
+          "targetProfileId": "Identifiant du profil",
+          "addRule": "Ajouter une règle"
+        },
+        "save": "Enregistrer",
+        "saveError": "Impossible d'enregistrer la politique de routage."
       },
       "parameters": {
         "description": {
@@ -2016,6 +2098,7 @@
       "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention.",
       "withWarnings": "Avec avertissements",
       "withWarningsHint": "Cette tâche s'est terminée, mais une partie a été ignorée ou n'a pas pu être totalement réconciliée — voir le détail.",
+      "acknowledge": "Ignorer",
       "migration": {
         "detailsTitle": "Détail de l'import",
         "warningsTitle": "Avertissements ({{count}})",

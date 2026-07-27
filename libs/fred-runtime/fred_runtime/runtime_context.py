@@ -143,6 +143,13 @@ class RuntimeConfig:
     history_store: Any | None = None  # PostgresHistoryStore — avoids circular import
     inprocess_toolkit_factory: InprocessToolkitFactory | None = None
     http_client_limits: Mapping[str, Any] | None = None
+    # Resolved models_catalog.yaml path (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md
+    # §8.7) — threaded through from AgentPodConfig.get_models_catalog_path()
+    # at boot (same source `_build_chat_model_factory` already reads to build
+    # `chat_model_factory`), so the `GET /agents/models-catalog` admin-catalog
+    # endpoint can re-read the file without needing the full AgentPodConfig
+    # object, which isn't otherwise reachable from RuntimeContext.
+    models_catalog_path: str | None = None
 
 
 class RuntimeContext:

@@ -72,3 +72,31 @@
     grid-column: auto;
   }
 }
+
+/* Admin-only section: storage chart, Activités embed, governance link —
+   stacked, not a bento grid (each item's height is content-driven, not
+   uniform like the KPI charts above). */
+.sectionStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.subheading {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.governanceLink {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  color: var(--primary);
+  font: var(--font-body-medium-emphasized);
+  text-decoration: none;
+}
+
+.governanceLink:hover {
+  text-decoration: underline;
+}

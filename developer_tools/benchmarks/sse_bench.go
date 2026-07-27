@@ -11,21 +11,28 @@ import (
 	"time"
 )
 
-// sseExecuteRequest maps to RuntimeExecuteRequest (direct agent_id mode, no grant required).
-// Use agent_id for dev/bench; production frontends use agent_instance_id + execution_grant.
+// sseExecuteRequest maps to RuntimeExecuteRequest. Exactly one of AgentID
+// (direct template mode) or AgentInstanceID (managed mode, team comes from
+// RuntimeContext.team_id) must be set — see RUNTIME-EXECUTION-CONTRACT.md §2.3.
 type sseExecuteRequest struct {
-	AgentID        string            `json:"agent_id,omitempty"`
-	Input          string            `json:"input"`
-	SessionID      string            `json:"session_id,omitempty"`
-	RuntimeContext map[string]string `json:"runtime_context,omitempty"`
+	AgentID         string            `json:"agent_id,omitempty"`
+	AgentInstanceID string            `json:"agent_instance_id,omitempty"`
+	Input           string            `json:"input"`
+	SessionID       string            `json:"session_id,omitempty"`
+	RuntimeContext  map[string]string `json:"runtime_context,omitempty"`
 }
 
-// sseEvent covers both normal events (have "kind") and execution errors (have "error", no "kind").
-// Normal error path: runtime yields {"error": "..."} on unhandled exceptions (no kind field).
-// Structured events: all carry a "kind" discriminator per RuntimeEventKind.
+// sseEvent covers both normal events (have "kind") and the legacy bare error
+// shape (have "error", no "kind"). Structured events carry a "kind"
+// discriminator per RuntimeEventKind. execution_error is terminal
+// (RUNTIME-EXECUTION-CONTRACT.md §0: "No final will follow"). node_error is
+// NOT terminal — it is a recoverable per-node warning the graph can route
+// past on its way to final, so it is intentionally not classified here; the
+// scan loop below just keeps reading past it.
 type sseEvent struct {
-	Kind  string `json:"kind"`
-	Error string `json:"error,omitempty"`
+	Kind    string `json:"kind"`
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"` // execution_error
 }
 
 // sseMaxLineBytes is the scanner buffer ceiling.
@@ -47,11 +54,10 @@ func runSSEOnce(cfg config) result {
 	return runSSEWithSession(cfg, cfg.SessionID)
 }
 
-func runSSEWithSession(cfg config, sessionID string) result {
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-	defer cancel()
-
+// buildSSEExecuteRequest maps cfg + sessionID to the RuntimeExecuteRequest wire
+// shape. Managed mode (AgentInstanceID set) sends agent_instance_id and never
+// agent_id; direct mode (the historical behaviour) sends agent_id only.
+func buildSSEExecuteRequest(cfg config, sessionID string) sseExecuteRequest {
 	// runtime_context carries user_id so sessions are keyed per-user, not all under "unknown".
 	runtimeCtx := map[string]string{"user_id": "bench"}
 	if cfg.SSEUserID != "" {
@@ -62,11 +68,26 @@ func runSSEWithSession(cfg config, sessionID string) result {
 	}
 
 	body := sseExecuteRequest{
-		AgentID:        cfg.AgentID,
 		Input:          cfg.Message,
 		SessionID:      sessionID,
 		RuntimeContext: runtimeCtx,
 	}
+	if cfg.AgentInstanceID != "" {
+		// Managed mode: agent_instance_id + runtime_context.team_id, never agent_id
+		// (RuntimeExecuteRequest requires exactly one of the two — RUNTIME-EXECUTION-CONTRACT.md §2.3).
+		body.AgentInstanceID = cfg.AgentInstanceID
+	} else {
+		body.AgentID = cfg.AgentID
+	}
+	return body
+}
+
+func runSSEWithSession(cfg config, sessionID string) result {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+
+	body := buildSSEExecuteRequest(cfg, sessionID)
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		return result{Err: err}
@@ -113,13 +134,17 @@ func runSSEWithSession(cfg config, sessionID string) result {
 		if err := json.Unmarshal([]byte(raw), &evt); err != nil {
 			continue
 		}
-		// Execution crash: runtime yields {"error": "..."} with no kind field.
+		// Legacy bare error shape: runtime yields {"error": "..."} with no kind field.
 		if evt.Error != "" {
 			return result{Err: fmt.Errorf("agent error: %s", evt.Error)}
 		}
-		if evt.Kind == "final" {
+		switch evt.Kind {
+		case "execution_error":
+			return result{Err: fmt.Errorf("execution_error: %s", evt.Message)}
+		case "final":
 			return result{Duration: time.Since(start)}
 		}
+		// node_error (and any other kind) is not terminal: keep reading toward final/execution_error.
 	}
 	if err := scanner.Err(); err != nil {
 		return result{Err: err}

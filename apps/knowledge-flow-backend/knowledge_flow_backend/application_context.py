@@ -848,7 +848,7 @@ class ApplicationContext:
 
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:
-            self._rebac_engine = rebac_factory(self.configuration.security)
+            self._rebac_engine = rebac_factory(self.configuration.security, kpi_writer=self.get_kpi_writer())
 
         return self._rebac_engine
 

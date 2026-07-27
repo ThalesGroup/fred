@@ -14,6 +14,7 @@
 
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
+    AcknowledgeTaskResponse,
     ErasureDetail,
     ErasureReason,
     ErasureTaskEvent,
@@ -39,9 +40,14 @@ from fred_core.tasks.models import (
     TaskState,
     TaskSummary,
     TaskTarget,
+    needs_attention,
 )
 from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
-from fred_core.tasks.service import TaskService, run_reconcile_sweeper
+from fred_core.tasks.service import (
+    TaskNotAcknowledgeableError,
+    TaskService,
+    run_reconcile_sweeper,
+)
 from fred_core.tasks.sse import HEARTBEAT_INTERVAL, task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError, TaskStore
 from fred_core.tasks.workflow_control import (
@@ -78,6 +84,8 @@ __all__ = [
     "StartEvaluationParams",
     "TaskSummary",
     "TaskListResponse",
+    "AcknowledgeTaskResponse",
+    "needs_attention",
     # orm models
     "TaskRunRow",
     "TaskEventLogRow",
@@ -95,6 +103,7 @@ __all__ = [
     "TaskStore",
     # service
     "TaskService",
+    "TaskNotAcknowledgeableError",
     "run_reconcile_sweeper",
     # sse
     "HEARTBEAT_INTERVAL",

@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
+    AcknowledgeTaskResponse,
     ErasureTaskEvent,
     EvaluationTaskEvent,
     IngestionTaskEvent,
@@ -35,6 +36,7 @@ from fred_core.tasks.models import (
     TaskLogEvent,
     TaskState,
     TaskTarget,
+    needs_attention,
 )
 from fred_core.tasks.orm_models import TaskRunRow
 from fred_core.tasks.store import TaskNotFoundError, TaskStore
@@ -50,6 +52,16 @@ logger = logging.getLogger(__name__)
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class TaskNotAcknowledgeableError(Exception):
+    """Raised by `TaskService.acknowledge` when the task does not currently
+    need attention (`needs_attention()` is False) — maps to 409, mirroring
+    the existing `/cancel` 409-on-unsupported-kind pattern."""
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__(f"task {task_id!r} does not need attention")
+        self.task_id = task_id
 
 
 class TaskService:
@@ -110,6 +122,29 @@ class TaskService:
             raise TaskNotFoundError(task_id)
         if run.execution_id:
             await self._control.cancel(run.execution_id)
+
+    async def acknowledge(self, task_id: str, *, by: str) -> AcknowledgeTaskResponse:
+        """Acknowledge a task that needs attention (rev. 3 §2.10).
+
+        Authorization is the caller's responsibility (routers call
+        `authorize_task_access` before this — same view-level rule as
+        list/stream, deliberately broader than `authorize_task_mutation`: any
+        team reader may dismiss a teammate's failed ingestion, not only its
+        creator or a platform admin). This method owns only the
+        needs-attention gate and the write.
+        """
+        run = await self.store.get_run(task_id)
+        if run is None:
+            raise TaskNotFoundError(task_id)
+        if not needs_attention(run.kind, TaskState(run.state), run.step):
+            raise TaskNotAcknowledgeableError(task_id)
+        acknowledged = await self.store.acknowledge(task_id, by=by)
+        assert acknowledged.acknowledged_at is not None  # just set, above
+        return AcknowledgeTaskResponse(
+            task_id=task_id,
+            acknowledged_at=acknowledged.acknowledged_at,
+            acknowledged_by=acknowledged.acknowledged_by,
+        )
 
     async def get_run(self, task_id: str) -> TaskRunRow | None:
         return await self.store.get_run(task_id)

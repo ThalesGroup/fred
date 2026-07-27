@@ -12,17 +12,20 @@ from fred_core import (
 )
 from fred_core.security.rebac.rebac_engine import RebacEngine
 from fred_core.tasks.authz import (
+    authorize_task_access,
     authorize_task_mutation,
     authorize_task_stream,
     list_tasks_scoped,
 )
 from fred_core.tasks.models import (
+    AcknowledgeTaskResponse,
     StartTaskRequest,
     StartTaskResponse,
     TaskListResponse,
 )
-from fred_core.tasks.service import TaskService
+from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
+from fred_core.tasks.store import TaskNotFoundError
 
 from control_plane_backend.app.dependencies import get_application_container
 
@@ -112,5 +115,28 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         await authorize_task_mutation(user, run, rebac)
         await service.cancel(task_id)
         return {"task_id": task_id}
+
+    @router.post("/tasks/{task_id}/ack", response_model=AcknowledgeTaskResponse)
+    async def acknowledge_task(
+        task_id: str,
+        user: Annotated[KeycloakUser, Depends(get_current_user)],
+        service: Annotated[TaskService, Depends(_get_task_service)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+    ) -> AcknowledgeTaskResponse:
+        run = await service.get_run(task_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        # View-level rule (§2.10) — deliberately NOT authorize_task_mutation:
+        # any team reader may dismiss a teammate's failed task, not only its
+        # creator or a platform admin.
+        await authorize_task_access(user, run, rebac)
+        try:
+            return await service.acknowledge(task_id, by=user.uid)
+        except TaskNotFoundError:
+            raise HTTPException(status_code=404, detail="Task not found")
+        except TaskNotAcknowledgeableError:
+            raise HTTPException(
+                status_code=409, detail="Task does not currently need attention"
+            )
 
     return router

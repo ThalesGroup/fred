@@ -26,6 +26,7 @@ from typing import Protocol
 
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
+from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
@@ -33,11 +34,13 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from .contracts import (
     ModelCapability,
+    ModelNotUsableError,
     ModelSelection,
     ModelSelectionRequest,
     ModelSelectionSource,
+    TeamRoutingProfileDriftError,
 )
-from .resolver import ModelRoutingResolver
+from .resolver import ModelRoutingResolver, resolve_team_override
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +197,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         Observability signals to look at:
         - info log on rule hit: `[V2][MODEL_ROUTING] ... source=rule rule=...`
         - debug log on default hit: `[V2][MODEL_ROUTING] ... source=default ...`
+
+        Fail-closed enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7):
+        raises `ModelNotUsableError` — never silently substitutes a different
+        model — when `binding.usable_model_ids` is not `None` (ReBAC active)
+        and the resolved model isn't in it. `binding.usable_model_ids` is
+        computed ONCE per turn by the caller, never here — this method may
+        run several times per turn (once per distinct `operation`) and must
+        never itself trigger a ReBAC call.
         """
         selection = self.select(
             definition=definition,
@@ -202,6 +213,24 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             purpose=purpose,
             operation=operation,
         )
+        if binding.usable_model_ids is not None:
+            capability_id = model_capability_id(
+                selection.model.provider or "", selection.model.name or ""
+            )
+            if capability_id not in binding.usable_model_ids:
+                logger.warning(
+                    "[V2][MODEL_ROUTING] denied: team=%s model=%s/%s (%s) not "
+                    "in usable_model_ids",
+                    binding.portable_context.team_id,
+                    selection.model.provider,
+                    selection.model.name,
+                    capability_id,
+                )
+                raise ModelNotUsableError(
+                    capability_id=capability_id,
+                    provider=selection.model.provider or "",
+                    name=selection.model.name or "",
+                )
         model = self._provider.build_model(
             selection.model, capability=selection.capability
         )
@@ -209,7 +238,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise TypeError(
                 "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."
             )
-        if selection.source == ModelSelectionSource.RULE:
+        if selection.source in (
+            ModelSelectionSource.RULE,
+            ModelSelectionSource.TEAM_POLICY,
+        ):
             logger.info(
                 "[V2][MODEL_ROUTING] agent=%s source=%s rule=%s profile=%s model=%s/%s team=%s user=%s",
                 definition.agent_id,
@@ -263,6 +295,13 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
 
         Fallback / errors:
         - resolver fallback/default and errors are handled in `ModelRoutingResolver`
+        - when the static resolver falls through to the capability default, a
+          second, narrower pass applies the team's own routing policy if one
+          exists (`TEAM-ROUTING-POLICY-RFC.md` §7-§8) — see
+          `resolve_team_override`. A static `models_catalog.yaml` rule match
+          always wins over team policy; team policy only fills the gap a
+          static rule left open. Raises `TeamRoutingProfileDriftError` if the
+          team policy names a profile this deployment's catalog doesn't have.
 
         Observability signals to look at:
         - this function does not log directly
@@ -276,7 +315,33 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             user_id=binding.portable_context.user_id,
             operation=operation,
         )
-        return self._resolver.resolve(request)
+        selection = self._resolver.resolve(request)
+        if (
+            selection.source != ModelSelectionSource.DEFAULT
+            or capability != ModelCapability.CHAT
+        ):
+            return selection
+
+        team_profile_id = resolve_team_override(
+            operation_route_rules=binding.runtime_context.operation_route_rules,
+            chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
+            operation=operation,
+            purpose=purpose,
+        )
+        if team_profile_id is None:
+            return selection
+
+        profile = self._resolver.profile_or_none(team_profile_id)
+        if profile is None:
+            raise TeamRoutingProfileDriftError(profile_id=team_profile_id)
+        return ModelSelection(
+            source=ModelSelectionSource.TEAM_POLICY,
+            capability=capability,
+            profile_id=profile.profile_id,
+            model=profile.model.model_copy(deep=True),
+            rule_id=None,
+            matched_criteria=0,
+        )
 
 
 # Backward-compatible aliases within the isolated slice.

@@ -32,7 +32,7 @@ x-kf-embedding-model: &bench-kf-embedding-model
 
 x-kf-chat-model: &bench-kf-chat-model
   provider: openai
-  name: gpt-4o
+  name: mock-openai-chat
   settings:
     base_url: http://mock-openai-server:8383/v1
     temperature: 0
@@ -47,7 +47,7 @@ x-kf-chat-model: &bench-kf-chat-model
 
 x-kf-vision-model: &bench-kf-vision-model
   provider: openai
-  name: gpt-4o
+  name: mock-openai-chat
   settings:
     base_url: http://mock-openai-server:8383/v1
     temperature: 0
@@ -71,14 +71,14 @@ applications:
           capability: chat
           model:
             provider: openai
-            name: gpt-4o
+            name: mock-openai-chat
             settings:
               base_url: http://mock-openai-server:8383/v1
         - profile_id: default.language.mock
           capability: language
           model:
             provider: openai
-            name: gpt-4o
+            name: mock-openai-chat
             settings:
               base_url: http://mock-openai-server:8383/v1
       rules:

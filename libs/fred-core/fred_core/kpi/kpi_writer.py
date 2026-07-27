@@ -318,6 +318,15 @@ class KPIWriter(BaseKPIWriter):
             if dims.get("status"):
                 parts.append(f"status={dims['status']}")
             name = "|".join(parts)
+        # Preserve per-stage visibility for the TURN-01 pre-LLM stage metric —
+        # isolated from the app.phase_latency_ms branch above on purpose (see
+        # kpi_runtime_stage_metric.py: a dedicated, closed-set mechanism).
+        elif name == "runtime.stage_latency_ms":
+            dims = event.dims or {}
+            parts = [name]
+            if dims.get("runtime_stage"):
+                parts.append(f"runtime_stage={dims['runtime_stage']}")
+            name = "|".join(parts)
         value = float(event.metric.value)
         with self._summary_lock:
             rollup = self._summary_rollups.get(name)
@@ -356,7 +365,9 @@ class KPIWriter(BaseKPIWriter):
         # and llm token counters (per-window sum shows cost pressure at a glance).
         chat_items = []
         for name, rollup in snapshot.items():
-            if name.startswith("app.phase_latency_ms"):
+            if name.startswith("app.phase_latency_ms") or name.startswith(
+                "runtime.stage_latency_ms"
+            ):
                 chat_items.append((name, rollup))
             elif name in (
                 "persist_pool_wait_ms",

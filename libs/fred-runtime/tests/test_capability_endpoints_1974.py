@@ -552,6 +552,9 @@ def _fake_control_plane(tuning_extra: dict[str, object]):
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
+        async def aclose(self) -> None:
+            return None
+
         async def get(self, url: str, headers: dict[str, str] | None = None):
             return _FakeResponse(
                 {

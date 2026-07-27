@@ -23,6 +23,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypedDict
 
+import httpx
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
@@ -37,6 +38,14 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# Dedicated to control-plane runtime-binding calls only (TURN-01) — a
+# per-turn resolution, not the LLM/KF traffic shape, hence deliberately
+# smaller pool bounds than fred_core.model.http_clients.
+_CONTROL_PLANE_CLIENT_TIMEOUT = httpx.Timeout(10.0)
+_CONTROL_PLANE_CLIENT_LIMITS = httpx.Limits(
+    max_connections=50, max_keepalive_connections=20, keepalive_expiry=10.0
+)
 
 
 # ---------------------------------------------------------------------------
@@ -89,10 +98,11 @@ class PodApplicationContext:
     Call the initialize_* methods inside the FastAPI lifespan after log setup.
 
     Boot order (enforced by lifespan):
-    1. initialize_kpi_writer()   — sync, fast; needed by bootstrap_observability
-    2. initialize_sql()          — async; may take time on first start
-    3. start_metrics_exporter()  — sync; starts prometheus thread if configured
-    4. start_kpi_tasks()         — async; starts background asyncio tasks
+    1. initialize_kpi_writer()          — sync, fast; needed by bootstrap_observability
+    2. initialize_control_plane_client() — sync, fast; no network until first call
+    3. initialize_sql()                 — async; may take time on first start
+    4. start_metrics_exporter()         — sync; starts prometheus thread if configured
+    5. start_kpi_tasks()                — async; starts background asyncio tasks
     """
 
     def __init__(self, configuration: AgentPodConfig) -> None:
@@ -101,6 +111,7 @@ class PodApplicationContext:
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
         self._kpi_writer: BaseKPIWriter | None = None
+        self._control_plane_http_client: httpx.AsyncClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
         self._kpi_turns_lock = threading.Lock()
@@ -122,6 +133,13 @@ class PodApplicationContext:
             log_level=config.app.log_level,
         )
 
+    def initialize_control_plane_client(self) -> None:
+        """Build the pod-wide async HTTP client for control-plane runtime-binding calls."""
+        self._control_plane_http_client = httpx.AsyncClient(
+            timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
+            limits=_CONTROL_PLANE_CLIENT_LIMITS,
+        )
+
     async def initialize_sql(self) -> None:
         """Build SQL engine, checkpointer, and history store (SQL-backed only)."""
         from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -135,8 +153,8 @@ class PodApplicationContext:
                 self.configuration.storage.postgres
             )
             init_user_store(engine)
-            checkpointer = FredSqlCheckpointer(engine)
-            history_store = PostgresHistoryStore(engine)
+            checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
+            history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
             self._sql_engine = engine
             self._checkpointer = checkpointer
             self._history_store = history_store
@@ -199,6 +217,14 @@ class PodApplicationContext:
     def get_history_store(self) -> HistoryStorePort | None:
         return self._history_store
 
+    def get_control_plane_http_client(self) -> httpx.AsyncClient:
+        if self._control_plane_http_client is None:
+            raise RuntimeError(
+                "Control-plane HTTP client not initialized — "
+                "call initialize_control_plane_client() first"
+            )
+        return self._control_plane_http_client
+
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is None:
             raise RuntimeError(
@@ -220,6 +246,8 @@ class PodApplicationContext:
         if self._sql_engine is not None:
             await self._sql_engine.dispose()
             logger.info("[fred-runtime] SQL engine disposed")
+        if self._control_plane_http_client is not None:
+            await self._control_plane_http_client.aclose()
         self._stop_metrics_exporter()
 
     def _stop_metrics_exporter(self) -> None:

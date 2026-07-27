@@ -85,13 +85,15 @@ class CapabilityEnablementItem(BaseModel):
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
     )
-    kind: Literal["tool", "agent"] = Field(
+    kind: Literal["tool", "agent", "model"] = Field(
         default="tool",
         description=(
             '"tool": a pod-advertised capability. "agent": a control-plane'
             "-side projection of an agent template into this same catalog"
             " (CAPAB-01, RFC §8.6) — every team's access to every agent is an"
-            " explicit admin grant, exactly like a tool."
+            ' explicit admin grant, exactly like a tool. "model": a'
+            " pod-advertised projection of one models_catalog.yaml"
+            " (provider, name) pair (OBSERV-02 v3, RFC §8.7)."
         ),
     )
     suspended_instances: int = Field(

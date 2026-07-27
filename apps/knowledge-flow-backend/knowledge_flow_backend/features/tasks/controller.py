@@ -7,13 +7,15 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.tasks.authz import (
+    authorize_task_access,
     authorize_task_mutation,
     authorize_task_stream,
     list_tasks_scoped,
 )
-from fred_core.tasks.models import TaskListResponse
-from fred_core.tasks.service import TaskService
+from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse
+from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
+from fred_core.tasks.store import TaskNotFoundError
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
 
@@ -81,3 +83,27 @@ class TasksController:
             await authorize_task_mutation(user, run, get_rebac_engine())
             await self._service.cancel(task_id)
             return {"task_id": task_id}
+
+        @router.post(
+            "/tasks/{task_id}/ack",
+            tags=["Tasks"],
+            response_model=AcknowledgeTaskResponse,
+            summary="Acknowledge a task that needs attention",
+        )
+        async def acknowledge_task(
+            task_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> AcknowledgeTaskResponse:
+            run = await self._service.get_run(task_id)
+            if run is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            # View-level rule (§2.10) — deliberately NOT authorize_task_mutation:
+            # any team reader may dismiss a teammate's failed task, not only its
+            # creator or a platform admin.
+            await authorize_task_access(user, run, get_rebac_engine())
+            try:
+                return await self._service.acknowledge(task_id, by=user.uid)
+            except TaskNotFoundError:
+                raise HTTPException(status_code=404, detail="Task not found")
+            except TaskNotAcknowledgeableError:
+                raise HTTPException(status_code=409, detail="Task does not currently need attention")

@@ -26,7 +26,10 @@ import logging
 import re
 
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.capability.manifest import CAPABILITY_ID_PATTERN
+from fred_sdk.contracts.capability.manifest import (
+    CAPABILITY_ID_PATTERN,
+    MODEL_CAPABILITY_NAMESPACE_PREFIX,
+)
 
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
@@ -51,6 +54,7 @@ async def aggregate_capability_catalog(
         AGENT_CAPABILITY_NAMESPACE_PREFIX,
         _agent_capabilities_for_source,
         _available_capabilities_for_source,
+        _model_capabilities_for_source,
     )
 
     catalog: dict[str, CapabilityCatalogEntry] = {}
@@ -75,6 +79,12 @@ async def aggregate_capability_catalog(
         entries = entries + (
             await _agent_capabilities_for_source(source.base_url, source.runtime_id)
             or []
+        )
+        # `kind="model"` projections (OBSERV-02 v3, RFC §8.7) — a third,
+        # separate fetch, same best-effort contract as the agent fetch above:
+        # `None` on an unreachable pod, treated as empty here.
+        entries = entries + (
+            await _model_capabilities_for_source(source.base_url) or []
         )
         for entry in entries:
             if not _CAPABILITY_ID_RE.fullmatch(entry.id):
@@ -108,6 +118,23 @@ async def aggregate_capability_catalog(
                     entry.id,
                     source.base_url,
                     AGENT_CAPABILITY_NAMESPACE_PREFIX,
+                )
+                continue
+            if entry.kind != "model" and entry.id.startswith(
+                MODEL_CAPABILITY_NAMESPACE_PREFIX
+            ):
+                # Same guarantee as the agent-prefix check above, for
+                # kind="model" projections (OBSERV-02 v3, RFC §8.7) — a
+                # same-prefixed tool/MCP-server id would silently shadow (or
+                # be shadowed by) the real model entry.
+                logger.error(
+                    "[capability-catalog] refusing kind=%r capability id %r "
+                    'from %s: the %r prefix is reserved for kind="model" '
+                    "projections — rename this tool/MCP-server id",
+                    entry.kind,
+                    entry.id,
+                    source.base_url,
+                    MODEL_CAPABILITY_NAMESPACE_PREFIX,
                 )
                 continue
             catalog[entry.id] = entry

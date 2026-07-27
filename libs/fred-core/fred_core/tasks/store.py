@@ -288,6 +288,30 @@ class TaskStore:
                 updated_at=row.updated_at,
                 scheduled_for=row.scheduled_for,
                 detail=_parse_task_detail(row.kind, row.detail),
+                acknowledged_at=row.acknowledged_at,
+                acknowledged_by=row.acknowledged_by,
             )
             for row in rows
         ]
+
+    async def acknowledge(
+        self,
+        task_id: str,
+        *,
+        by: str,
+        session: AsyncSession | None = None,
+    ) -> TaskRunRow:
+        """Stamp `acknowledged_at`/`acknowledged_by` on a task (rev. 3 §2.10).
+
+        The "needs attention" gate is the CALLER's responsibility
+        (`TaskService.acknowledge`, using `needs_attention()`) — this method
+        only ever writes the two columns, unconditionally, so it stays a pure
+        persistence primitive with no business rule duplicated here.
+        """
+        async with use_session(self._sessions, session) as s:
+            run = await s.get(TaskRunRow, task_id)
+            if run is None:
+                raise TaskNotFoundError(task_id)
+            run.acknowledged_at = _utcnow()
+            run.acknowledged_by = by
+        return run

@@ -23,10 +23,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser
+from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
-from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeriesResponse
 from control_plane_backend.kpi.utils import resolve_interval
@@ -41,34 +41,30 @@ async def query_messages_over_time(
     since: datetime,
     until: datetime,
     request: Request,
+    team_id: TeamId | None = None,
 ) -> TimeSeriesResponse:
-    await (
-        get_application_container(request)
-        .get_rebac_engine()
-        .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
-        )
-    )
+    # Authorization already resolved by the router (kpi/api.py, KpiScope).
+    del user, request
 
     interval, date_fmt = resolve_interval(since, until)
 
-    body: dict[str, Any] = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": since.isoformat(),
-                                "lte": until.isoformat(),
-                            }
-                        }
-                    },
-                    {"term": {"metric.name": "agent.turn_completed"}},
-                ]
+    filters: list[dict[str, Any]] = [
+        {
+            "range": {
+                "@timestamp": {
+                    "gte": since.isoformat(),
+                    "lte": until.isoformat(),
+                }
             }
         },
+        {"term": {"metric.name": "agent.turn_completed"}},
+    ]
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
+
+    body: dict[str, Any] = {
+        "size": 0,
+        "query": {"bool": {"filter": filters}},
         "aggs": {
             "by_time": {
                 "date_histogram": {
@@ -110,4 +106,5 @@ MESSAGES_OVER_TIME_PRESET = PresetDef(
     response_model=TimeSeriesResponse,
     handler=query_messages_over_time,
     summary="Agent turn completions (messages) over time, bucketed by auto-selected interval",
+    team_scopable=True,  # agent.turn_completed carries dims.team_id
 )

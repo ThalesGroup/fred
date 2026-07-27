@@ -53,6 +53,45 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
 
+class ModelNotUsableError(RuntimeError):
+    """Raised when a resolved profile's model is not `can_use`-authorized for
+    the requesting team (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7) — the
+    fail-closed gate `RoutedChatModelFactory.build_for_chat` enforces against
+    `BoundRuntimeContext.usable_model_ids`. Deliberately never substitutes a
+    different model — an agent turn silently routed to a model the team never
+    agreed to use would violate the whole point of admin-gated enablement.
+
+    Propagates like any other resolver/provider exception from
+    `build_for_chat` (see that method's docstring) — the runtime's generic
+    turn-level exception handling surfaces it as an `execution_error` event,
+    never a raw crash.
+    """
+
+    def __init__(self, *, capability_id: str, provider: str, name: str) -> None:
+        self.capability_id = capability_id
+        self.provider = provider
+        self.name = name
+        super().__init__(
+            f"Model {provider}/{name} ({capability_id!r}) is not enabled for this team."
+        )
+
+
+class TeamRoutingProfileDriftError(RuntimeError):
+    """Raised when a team's routing policy (`RuntimeContext.chat_default_profile_id`
+    / `.operation_route_rules`, `TEAM-ROUTING-POLICY-RFC.md` §8.3-8.4) references a
+    `target_profile_id` absent from this runtime deployment's catalog. Deliberately
+    never falls back to another profile — control-plane and this pod's
+    `models_catalog.yaml` have drifted, and silently picking a different model
+    would hide that rather than surface it."""
+
+    def __init__(self, *, profile_id: str) -> None:
+        self.profile_id = profile_id
+        super().__init__(
+            f"Team routing policy references profile {profile_id!r}, which is not "
+            "in this runtime deployment's model catalog."
+        )
+
+
 # One criterion can be a single exact value or a tuple of allowed values.
 MatchValue: TypeAlias = str | tuple[str, ...]
 
@@ -350,6 +389,7 @@ class ModelSelectionSource(str, Enum):
 
     DEFAULT = "default"
     RULE = "rule"
+    TEAM_POLICY = "team_policy"
 
 
 class ModelSelection(FrozenModel):

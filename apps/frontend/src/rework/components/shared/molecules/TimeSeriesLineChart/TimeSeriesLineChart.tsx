@@ -91,6 +91,7 @@ export default function TimeSeriesLineChart({
               width={32}
             />
             <Tooltip
+              cursor={{ stroke: css["--outline-retreat"] }}
               contentStyle={{
                 background: css["--surface-container-highest"],
                 border: `1px solid ${css["--outline-retreat"]}`,

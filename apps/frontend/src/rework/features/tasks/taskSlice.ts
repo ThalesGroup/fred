@@ -116,13 +116,15 @@ export const taskSlice = createSlice({
       }
     },
 
-    failuresAcknowledged(state) {
-      const now = Date.now();
-      for (const vm of Object.values(state.byId)) {
-        if ((vm.state === "failed" || vm.state === "cancelled") && vm.acknowledgedAt === null) {
-          vm.acknowledgedAt = now;
-        }
-      }
+    /** A single task was acknowledged server-side (`POST /tasks/{id}/ack`,
+     *  TASK-EVENT-STREAM-RFC.md §2.10) — mirror the server's timestamp into
+     *  the local view model so `selectVisibleTasks`'s eviction timer and
+     *  `selectUnacknowledgedFailures` see it, same as before, but driven by a
+     *  real per-task server record instead of a per-browser bulk flag. */
+    taskAcknowledged(state, action: PayloadAction<{ taskId: string; acknowledgedAt: string }>) {
+      const vm = state.byId[action.payload.taskId];
+      if (!vm) return;
+      vm.acknowledgedAt = new Date(action.payload.acknowledgedAt).getTime();
     },
   },
 });
@@ -132,7 +134,7 @@ export const {
   taskEventReceived,
   taskEvicted,
   trayClockTicked,
-  failuresAcknowledged,
+  taskAcknowledged,
   completedTasksCleared,
 } = taskSlice.actions;
 

@@ -17,26 +17,65 @@
 // key, so we assert on which key each row uses.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
-const h = vi.hoisted(() => ({ tasks: [] as TaskSummary[] }));
+const h = vi.hoisted(() => ({
+  tasks: [] as TaskSummary[],
+  kfTasks: [] as TaskSummary[],
+  evalTasks: [] as TaskSummary[],
+  acknowledge: vi.fn(),
+  acknowledging: null as string | null,
+}));
+
+// Faithful enough to RTK Query's real `skip` contract for this test's
+// purposes: a skipped query never contributes data, matching how a kind
+// filter narrows TaskActivity down to the one backend that owns it.
+function mockListTasks(tasks: () => TaskSummary[]) {
+  return (_args: unknown, opts?: { skip?: boolean }) =>
+    opts?.skip
+      ? { data: undefined, isLoading: false, isError: false }
+      : { data: { tasks: tasks() }, isLoading: false, isError: false };
+}
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useListTasksControlPlaneV1TasksGetQuery: () => ({
-    data: { tasks: h.tasks },
-    isLoading: false,
-    isError: false,
-  }),
+  useListTasksControlPlaneV1TasksGetQuery: mockListTasks(() => h.tasks),
+}));
+vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  useListTasksKnowledgeFlowV1TasksGetQuery: mockListTasks(() => h.kfTasks),
+}));
+vi.mock("../../../../../slices/evaluation/evaluationOpenApi", () => ({
+  useListTasksEvaluationV1TasksGetQuery: mockListTasks(() => h.evalTasks),
 }));
 vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({
   TaskStateBadge: ({ state }: { state: string }) => <span data-badge={state} />,
 }));
 vi.mock("@shared/atoms/TaskProgressBar/TaskProgressBar", () => ({
   TaskProgressBar: () => <span data-progress />,
+}));
+vi.mock("@shared/atoms/Button/Button.tsx", () => ({
+  default: ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="ack-button" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("@rework/features/tasks/useTaskAcknowledgement", () => ({
+  useTaskAcknowledgement: () => ({
+    acknowledge: h.acknowledge,
+    isAcknowledging: (taskId: string) => h.acknowledging === taskId,
+  }),
 }));
 
 import TaskActivity from "./TaskActivity";
@@ -57,8 +96,10 @@ function task(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state"
   } as TaskSummary;
 }
 
-function render(): string {
-  return renderToStaticMarkup(<TaskActivity scope="platform" />);
+function render(props: { scope?: "platform" | "team"; teamId?: string; kind?: string } = {}): string {
+  return renderToStaticMarkup(
+    <TaskActivity scope={props.scope ?? "platform"} teamId={props.teamId} kind={props.kind} />,
+  );
 }
 
 describe("TaskActivity completed-row labelling", () => {
@@ -259,5 +300,104 @@ describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
     // visible text content ("Import details") is its accessible name.
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>/);
     expect(html).toContain("rework.taskActivity.migration.detailsTitle");
+  });
+});
+
+// #2123 review — the persisted, shared activity surface must expose the same
+// acknowledge affordance as the session-local TaskCard/TaskDetailPopover, or
+// the server-side acknowledgement feature is unreachable from its primary
+// dashboard.
+
+describe("TaskActivity acknowledge action", () => {
+  beforeEach(() => {
+    h.acknowledge.mockClear();
+    h.acknowledging = null;
+  });
+
+  it("shows the acknowledge button on a failed, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a1", state: "failed", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+    expect(html).toContain("rework.taskActivity.acknowledge");
+  });
+
+  it("shows the acknowledge button on a cancelled, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a2", state: "cancelled", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+  });
+
+  it("hides the acknowledge button once the task is acknowledged", () => {
+    h.tasks = [task({ task_id: "a3", state: "failed", acknowledged_at: "2026-01-02T00:00:00Z" })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("never shows the acknowledge button on a succeeded task", () => {
+    h.tasks = [task({ task_id: "a4", state: "succeeded", acknowledged_at: null })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("disables the acknowledge button while that task's acknowledgement is in flight", () => {
+    h.tasks = [task({ task_id: "a5", state: "failed", acknowledged_at: null })];
+    h.acknowledging = "a5";
+    const html = render();
+    expect(html).toMatch(/data-testid="ack-button"[^>]*disabled/);
+  });
+});
+
+// #2123 review — kind="ingestion" used to always query control-plane, which
+// never has ingestion tasks (they live in knowledge-flow); the ingestion
+// panel was silently always empty. No kind filter must aggregate every
+// backend; a kind filter must narrow to (only) the backend that owns it.
+
+// Distinct label per fixture so assertions can tell rows apart — the default
+// task() target label ("chat") is the same for every task otherwise.
+function labelled(task_id: string): { type: "conversation"; id: string; label: string } {
+  return { type: "conversation", id: task_id, label: task_id };
+}
+
+describe("TaskActivity multi-backend aggregation", () => {
+  beforeEach(() => {
+    h.tasks = [];
+    h.kfTasks = [];
+    h.evalTasks = [];
+  });
+
+  it("merges control-plane and knowledge-flow tasks when no kind filter is given", () => {
+    h.tasks = [task({ task_id: "cp1", state: "succeeded", kind: "erasure", target: labelled("cp1") })];
+    h.kfTasks = [task({ task_id: "kf1", state: "succeeded", kind: "ingestion", target: labelled("kf1") })];
+    const html = render();
+    expect(html).toContain(">cp1<");
+    expect(html).toContain(">kf1<");
+  });
+
+  it("kind='ingestion' queries only knowledge-flow, never control-plane", () => {
+    h.tasks = [task({ task_id: "cp2", state: "succeeded", kind: "erasure", target: labelled("cp2") })];
+    h.kfTasks = [task({ task_id: "kf2", state: "succeeded", kind: "ingestion", target: labelled("kf2") })];
+    const html = render({ kind: "ingestion" });
+    expect(html).toContain(">kf2<");
+    expect(html).not.toContain(">cp2<");
+  });
+
+  it("kind='migration' queries only control-plane, never knowledge-flow", () => {
+    h.tasks = [task({ task_id: "cp3", state: "succeeded", kind: "migration", target: labelled("cp3") })];
+    h.kfTasks = [task({ task_id: "kf3", state: "succeeded", kind: "ingestion", target: labelled("kf3") })];
+    const html = render({ kind: "migration" });
+    expect(html).toContain(">cp3<");
+    expect(html).not.toContain(">kf3<");
+  });
+
+  it("includes evaluation tasks when scope is 'team' and no kind filter is given", () => {
+    h.evalTasks = [task({ task_id: "ev1", state: "succeeded", kind: "evaluation", target: labelled("ev1") })];
+    const html = render({ scope: "team", teamId: "nb" });
+    expect(html).toContain(">ev1<");
+  });
+
+  it("never queries evaluation for scope 'platform' (no platform-wide evaluation listing exists)", () => {
+    h.evalTasks = [task({ task_id: "ev2", state: "succeeded", kind: "evaluation", target: labelled("ev2") })];
+    const html = render({ scope: "platform" });
+    expect(html).not.toContain(">ev2<");
   });
 });

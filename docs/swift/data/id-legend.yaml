@@ -855,6 +855,14 @@ items:
       `depends_on` (a capability declaring it needs others) and the
       refuse-and-signal admin UX when enabling an agent without its tool
       dependencies granted — deferred fast-follow, not implemented.
+      2026-07-25 (Dimitri Tombroff, draft pending sign-off): RFC §8.7 adds a
+      third `kind="model"`, projecting `models_catalog.yaml` profiles
+      (deduplicated by (provider, name)) into this same catalog/enablement
+      model — driven by OBSERV-02 v3's platform_admin model-governance need.
+      Admin dashboard reuse is mechanical (`kind` is already a pure filter);
+      the one new piece is a runtime enforcement chokepoint in fred-runtime's
+      model routing, which doesn't exist for any kind today and needs its own
+      design confirmation before implementation.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -1757,11 +1765,47 @@ items:
 
   - id: OBSERV-02
     title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
-    status: draft
-    owner: fmuller
+    status: done
+    owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §7b"
+      execution: "GitHub issue #2110"
+    notes: >
+      2026-07-25 (Dimitri Tombroff): v3 finalizes the target vision for all six
+      product roles (platform_admin, platform_observer, team_admin, team_editor,
+      team_analyst, team_member) — Page 2 "team dashboard" (v1/v2 left it
+      unbuilt) is now fully specified, plus green/carbon+electricity metrics
+      (essential, shown everywhere token usage is shown) and an optional $ cost
+      estimate. Deliberately built as a thin layer over three existing systems
+      rather than new parallel ones: KPI presets (parameterized with an optional
+      team_id, not forked per scope), the capability enablement system (models
+      become a third `kind="model"`, amended directly into CAPAB-01 /
+      `AGENT-CAPABILITY-RFC.md` §8.7 — not duplicated here), and the task bus
+      (Activités panels embed the existing `TaskActivity` organism; persisted
+      acknowledgement amended directly into OPS-04 / `TASK-EVENT-STREAM-RFC.md`
+      §2.10 — not duplicated here). New platform settings (storage quota
+      default, erasure retention duration) is the one genuinely new small
+      surface. Open items pending Step 3 sign-off: team conversation-breakdown
+      dimension, model-routing fail-closed fallback (CAPAB-01), single-global-
+      quota scope cut for v1 — see KPI-ANALYTICS-RFC.md §6.
+      2026-07-26 (Dimitri Tombroff): v3 fully implemented — backend B1-B9,
+      frontend F1-F5 (F6 never existed, dropped with B8). Both §6 sign-off
+      items resolved (by-agent breakdown default shipped; B7 fail-closed
+      already done). Two gaps found and fixed mid-implementation, not in the
+      original plan: B3/B4 (green/cost) had been silently skipped during the
+      original pass, implemented now; `storage_by_team`'s platform-wide view
+      was missing the §2.4 `can_manage_platform` gate, fixed. Details in
+      `NOTES-OBSERV-02-FOLLOWUPS.md` entries #19-20.
+      2026-07-27 (Dimitri Tombroff): the B7 deployment hazard (NOTES #14/#15,
+      `AGENT-CAPABILITY-RFC.md` §8.7) is resolved by decision, not by writing
+      a seeding migration — `platform_admin` uses the existing generic
+      default-on toggle (already kind-agnostic) to opt a model in
+      platform-wide. No migration ships in v1. The remaining requirement is
+      operational: on any deployment where ReBAC is already active, toggle
+      default-on for the desired model(s) in the same deploy window as B7's
+      enforcement code, or strictly before it — see NOTES #15 for the runbook
+      detail.
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"
@@ -1888,6 +1932,12 @@ items:
       (tag→team resolution existed for quota checks but was never reused to tag the task).
       Pending: the central-table/RemoteTaskClient backend consolidation (deferred to after
       finalization).
+      2026-07-25 (Dimitri Tombroff, draft pending sign-off): rev. 3 (§2.10) adds persisted
+      acknowledgement — `acknowledged_at`/`acknowledged_by` on `task_run`, `POST
+      /tasks/{id}/ack` — replacing the client-only, tray-bulk-only `failuresAcknowledged`
+      Redux flag. Driven by OBSERV-02 v3's platform/team "Activités" dashboard panels, which
+      embed the existing `TaskActivity` organism unchanged and needed dismissal to be a real,
+      shared server state rather than a per-browser gesture.
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
@@ -2121,10 +2171,20 @@ items:
     status: open
     owner: Dimitri
     parent: TEAM-01
-    blocked_on: "TEAM-02 and TEAM-03"
     refs:
       rfc: "docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+    notes: >
+      Rewritten 2026-07-26 on top of the shipped models-as-capability system
+      (#2110): the model-guardrail binding in RFC §7 now uses existing
+      kind="model" capability enablement instead of a new TeamPlatformPolicy
+      object, and the runtime contract in §8 is a session-prep
+      ExecutionPreparation snapshot, not a per-turn one. No longer
+      blocked_on TEAM-02 (the specific write-permission pattern it needs —
+      required_permissions=[CAN_UPDATE_RESOURCES] via
+      get_team_by_id_from_service — is already established elsewhere in
+      product/api.py) or TEAM-03 (model_guardrails, its only overlap with
+      this RFC, is superseded — see TEAM-PLATFORM-POLICY-RFC.md header).
 
   - id: TEAM-06
     title: "Prompt-library scope and governance realignment for team configuration"

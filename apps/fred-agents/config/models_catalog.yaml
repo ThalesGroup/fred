@@ -206,7 +206,7 @@ profiles:
     capability: chat
     model:
       provider: openai
-      name: gpt-4o
+      name: mock-openai-chat
       settings:
         base_url: http://localhost:8383/v1
 
@@ -214,7 +214,7 @@ profiles:
     capability: language
     model:
       provider: openai
-      name: gpt-4o
+      name: mock-openai-chat
       settings:
         base_url: http://localhost:8383/v1
 

@@ -318,11 +318,15 @@ describe("CapabilitiesPage catalog rows", () => {
   });
 });
 
-describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6)", () => {
-  it("shows only tool-kind capabilities by default, hiding agent-kind rows", () => {
+describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
+  it("shows only tool-kind capabilities by default, hiding agent-kind and model-kind rows", () => {
     h.list = {
       data: {
-        items: [cap({ id: "web_search", kind: "tool" }), cap({ id: "sentinel", kind: "agent" })],
+        items: [
+          cap({ id: "web_search", kind: "tool" }),
+          cap({ id: "sentinel", kind: "agent" }),
+          cap({ id: "gpt5_1", kind: "model" }),
+        ],
       },
       isLoading: false,
       isError: false,
@@ -330,6 +334,7 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6)", () => {
     const html = render();
     expect(html).toContain("cap.web_search");
     expect(html).not.toContain("cap.sentinel");
+    expect(html).not.toContain("cap.gpt5_1");
   });
 
   it("treats a capability with no kind as a tool (backward-compatible default)", () => {
@@ -337,10 +342,11 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6)", () => {
     expect(render()).toContain("cap.legacy_cap");
   });
 
-  it("renders the Tools/Agents filter toggle", () => {
+  it("renders the Tools/Agents/Models filter toggle", () => {
     h.list = { data: { items: [] }, isLoading: false, isError: false };
     const html = render();
     expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
     expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
+    expect(html).toContain("rework.admin.capabilities.kindFilter.model");
   });
 });

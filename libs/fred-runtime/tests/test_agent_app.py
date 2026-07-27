@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
@@ -35,6 +35,7 @@ from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -121,6 +122,27 @@ async def _demo_context_prompt(ctx: ToolContext) -> str:
     """
 
     return f"ctxprompt:{ctx.binding.runtime_context.context_prompt_text or 'none'}"
+
+
+@tool("demo.team_routing", description="Return the bound team routing policy snapshot.")
+async def _demo_team_routing(ctx: ToolContext) -> str:
+    """
+    Return the team routing policy fields bound to the current runtime context.
+
+    Why this exists:
+    - control-plane resolves a team's chat_default_profile_id/operation_route_rules
+      at prepare-execution and the frontend forwards them unchanged, but the
+      runtime rebuilt RuntimeContext from the request and silently dropped both
+      fields — so no team's routing policy ever reached model selection
+      (fred_runtime.model_routing.provider.resolve_team_override always saw None)
+
+    How to use it:
+    - invoked by the team-routing regression agent through the runtime
+    """
+
+    rc = ctx.binding.runtime_context
+    rule_ids = ",".join(r.rule_id for r in (rc.operation_route_rules or []))
+    return f"profile:{rc.chat_default_profile_id or 'none'}|rules:{rule_ids or 'none'}"
 
 
 class _EchoAgent(ReActAgent):
@@ -456,6 +478,16 @@ class _ContextPromptAgent(ReActAgent):
     tools = (_demo_context_prompt,)
 
 
+class _TeamRoutingAgent(ReActAgent):
+    """Tiny agent that surfaces the bound team routing policy through a tool."""
+
+    agent_id: str = "rags.sample.team_routing"
+    role: str = "Team routing probe"
+    description: str = "Reports the team routing policy snapshot it received."
+    system_prompt_template: str = "Use the demo_team_routing tool, then answer."
+    tools = (_demo_team_routing,)
+
+
 def test_execute_forwards_context_prompt_text_to_agent_binding(
     monkeypatch, tmp_path
 ) -> None:
@@ -525,6 +557,87 @@ def test_execute_forwards_context_prompt_text_to_agent_binding(
     assert any("CTXMARKER-9f3a" in p.get("content", "") for p in tool_results)
 
 
+def test_execute_forwards_team_routing_policy_to_agent_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression: `runtime_context.chat_default_profile_id`/`operation_route_rules`
+    must reach the agent binding.
+
+    Why this exists:
+    - control-plane resolves a team's routing policy at prepare-execution and the
+      frontend forwards it via `runtime_context`, but the runtime rebuilt
+      `RuntimeContext` from the request and silently dropped both fields — so
+      `fred_runtime.model_routing.provider.resolve_team_override` always saw
+      `None`, and no team's routing policy (TEAM-ROUTING-POLICY-RFC.md §3/§8)
+      ever affected a real chat turn's model selection, despite the full
+      control-plane API + frontend settings panel resolving and storing it.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-routing-1",
+                        "name": "demo_team_routing",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": "rags.sample.team_routing",
+                "input": "hello",
+                "session_id": "session-routing",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "chat_default_profile_id": "chat.anthropic.claude-sonnet",
+                    "operation_route_rules": [
+                        {
+                            "rule_id": "planning-to-haiku",
+                            "operation": "planning",
+                            "target_profile_id": "chat.anthropic.claude-haiku",
+                        }
+                    ],
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    # The tool echoed the bound routing policy — proving both fields survived
+    # the request → RuntimeContext binding (not dropped → not "profile:none").
+    echoed = " ".join(p.get("content", "") for p in tool_results)
+    assert "profile:chat.anthropic.claude-sonnet" in echoed
+    assert "rules:planning-to-haiku" in echoed
+
+
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     monkeypatch, tmp_path
 ) -> None:
@@ -563,12 +676,17 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
+        async def aclose(self) -> None:
+            return None
+
         async def get(self, url: str, headers: dict[str, str] | None = None):
             assert (
                 url
                 == "http://control-plane:8222/control-plane/v1/teams/fredlab/agent-instances/instance-1/runtime"
             )
-            assert headers == {"Authorization": "Bearer test-token"}
+            assert headers is not None
+            assert headers["Authorization"] == "Bearer test-token"
+            assert headers["X-Request-Id"]  # correlation id, TURN-01
             return _FakeResponse(
                 {
                     "agent_instance_id": "instance-1",
@@ -667,6 +785,9 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
+        async def aclose(self) -> None:
+            return None
+
         async def get(self, url: str, headers: dict[str, str] | None = None):
             # Resolution says the instance is owned by "fredlab".
             return _FakeResponse(
@@ -721,6 +842,195 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
 
     assert response.status_code == 403
     assert "team" in response.json()["detail"].lower()
+
+
+def _managed_resolution_payload(owner_team_id: str = "fredlab") -> dict[str, object]:
+    return {
+        "agent_instance_id": "instance-1",
+        "template_agent_id": "sentinel.react.v2",
+        "owner_scope": "team",
+        "owner_team_id": owner_team_id,
+        "enabled": True,
+        "tuning": {
+            "role": "Sentinel",
+            "description": "Reports the current team scope.",
+            "tags": ["ops"],
+            "fields": [],
+        },
+    }
+
+
+class _RecordingResponse:
+    """Minimal httpx.Response double — status_code/json()/text only, as used by _resolve_agent_instance."""
+
+    def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+        self.text = json.dumps(payload)
+        self.reason_phrase = "error"
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
+def _install_recording_async_client(monkeypatch, response_factory):
+    """
+    Swap `httpx.AsyncClient` itself for a bare `.get()`/`.aclose()` recorder —
+    the same technique the control-plane execution tests above already use —
+    so the returned instance keeps the static type `httpx.AsyncClient` and can
+    be passed straight to `_resolve_agent_instance(http_client=...)`.
+
+    Returns (client, calls): `calls` is the list of recorded {"url", "headers"}
+    dicts, appended to in call order — safe to inspect for ordering/isolation.
+    """
+    calls: list[dict[str, Any]] = []
+
+    class _RecordingAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            call: dict[str, Any] = {
+                "url": url,
+                "headers": dict(headers) if headers else None,
+            }
+            calls.append(call)
+            return response_factory(call)
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _RecordingAsyncClient)
+    client = agent_app_module.httpx.AsyncClient()
+    return client, calls
+
+
+def _managed_instance_request() -> "agent_app_module._AgentExecuteRequest":
+    return agent_app_module._AgentExecuteRequest(
+        agent_instance_id="instance-1", message="hi"
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_reuses_the_injected_client_across_calls(
+    monkeypatch,
+) -> None:
+    """TURN-01: the function must only use the caller-supplied client, never build
+    its own httpx.AsyncClient per resolution — that per-turn construction was the
+    finding this fix removes."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    for _ in range(3):
+        await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token-a",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+        )
+
+    assert len(calls) == 3  # the one injected client served every resolution
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
+    monkeypatch,
+) -> None:
+    """Authorization/X-Request-Id stay per-request on the shared client — no
+    default header must survive from one turn's resolution to the next."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    await agent_app_module._resolve_agent_instance(
+        request=_managed_instance_request(),
+        registry=registry,
+        access_token="token-alice",
+        control_plane_url="http://control-plane:8222/control-plane/v1",
+        http_client=client,
+        team_id="fredlab",
+        request_id="req-alice",
+    )
+    await agent_app_module._resolve_agent_instance(
+        request=_managed_instance_request(),
+        registry=registry,
+        access_token="token-bob",
+        control_plane_url="http://control-plane:8222/control-plane/v1",
+        http_client=client,
+        team_id="fredlab",
+        request_id="req-bob",
+    )
+
+    first, second = calls
+    assert first["headers"] == {
+        "Authorization": "Bearer token-alice",
+        "X-Request-Id": "req-alice",
+    }
+    assert second["headers"] == {
+        "Authorization": "Bearer token-bob",
+        "X-Request-Id": "req-bob",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("upstream_status", "expected_status"),
+    [(404, 404), (403, 403), (500, 502)],
+)
+async def test_resolve_agent_instance_preserves_http_error_mapping(
+    monkeypatch, upstream_status: int, expected_status: int
+) -> None:
+    """The control-plane status → pod HTTPException mapping (404/403/other→502)
+    must be unchanged now that the call runs through an injected client."""
+    client, _calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse({}, status_code=upstream_status)
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+        )
+    assert exc.value.status_code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_instance_supports_concurrent_calls_on_one_client(
+    monkeypatch,
+) -> None:
+    """Multiple in-flight turns must resolve concurrently against the single
+    shared client without cross-talk between their request ids/headers."""
+    client, calls = _install_recording_async_client(
+        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
+    )
+    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
+
+    async def _resolve(request_id: str):
+        return await agent_app_module._resolve_agent_instance(
+            request=_managed_instance_request(),
+            registry=registry,
+            access_token="token",
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+            http_client=client,
+            team_id="fredlab",
+            request_id=request_id,
+        )
+
+    request_ids = [f"req-{i}" for i in range(10)]
+    results = await asyncio.gather(*[_resolve(rid) for rid in request_ids])
+
+    assert len(results) == 10
+    assert {call["headers"]["X-Request-Id"] for call in calls} == set(request_ids)
 
 
 def test_create_agent_app_initializes_user_store_during_startup(
@@ -2832,6 +3142,8 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
         }
     )
     container = PodApplicationContext(minimal_config)
+    container._kpi_writer = NoOpKPIWriter()
+    container.initialize_control_plane_client()
 
     await agent_app_module._authorize_and_resolve(
         request,
@@ -2846,3 +3158,87 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     assert request.runtime_context.access_token == "header-jwt"
     assert request.runtime_context.refresh_token is None
     assert request.effective_user_id() == "alice"
+
+
+@pytest.mark.asyncio
+async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
+    monkeypatch, minimal_config
+) -> None:
+    """
+    TURN-01 instrumentation: `_authorize_and_resolve` must time pod-side
+    OpenFGA authorization and instance resolution as two distinct
+    `runtime.stage_latency_ms` stages (pod_authz, runtime_binding), both
+    before `_stream()`'s own `turn_start` — additive only,
+    `agent.turn_completed`'s total_ms is untouched. This is the dedicated,
+    Prometheus-labelled `runtime_stage` mechanism (isolated from the generic,
+    unlabelled `app.phase_latency_ms`/`phase` used by Graph/checkpoint/KF).
+
+    The runtime_binding stage must also carry a `trace.trace_id`, and that
+    same id must reach `_resolve_agent_instance` as `request_id` (the value
+    later sent as `X-Request-Id` to control-plane, TURN-01 correlation).
+    """
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    resolve_calls: list[dict] = []
+    target = SimpleNamespace(
+        team_id="fredlab", definition=None, agent_instance_name=None
+    )
+
+    async def _fake_resolve(**kwargs):
+        resolve_calls.append(kwargs)
+        return target
+
+    monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
+    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
+    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
+    monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
+    monkeypatch.setattr(
+        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+    )
+
+    request = RuntimeExecuteRequest.model_validate(
+        {
+            "input": "hi",
+            "agent_instance_id": "inst-1",
+            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+        }
+    )
+    container = PodApplicationContext(minimal_config)
+    container._kpi_writer = _RecordingKPIWriter()
+    container.initialize_control_plane_client()
+
+    await agent_app_module._authorize_and_resolve(
+        request,
+        authenticated_user=_ALICE,
+        container=container,
+        registry={},
+        access_token="header-jwt",
+    )
+
+    phases = {
+        e["dims"]["runtime_stage"]: e
+        for e in emitted
+        if e["name"] == "runtime.stage_latency_ms"
+    }
+    assert set(phases) == {"pod_authz", "runtime_binding"}
+    assert phases["pod_authz"].get("trace") is None
+
+    binding_event = phases["runtime_binding"]
+    assert binding_event["trace"] is not None
+    trace_id = binding_event["trace"]["trace_id"]
+    assert trace_id
+
+    assert len(resolve_calls) == 1
+    assert resolve_calls[0]["request_id"] == trace_id

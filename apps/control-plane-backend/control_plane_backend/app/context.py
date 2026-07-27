@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from fred_core import (
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
+from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.scheduler import (
     SchedulerBackend,
     TemporalClientProvider,
@@ -44,6 +47,7 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -73,12 +77,14 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
+        self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
         self._service_token_provider: M2MTokenProvider | None = None
+        self._kpi_tasks: list[asyncio.Task[None]] = []
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -172,6 +178,32 @@ class ApplicationContext:
             prom_cfg.port,
         )
 
+    def start_kpi_tasks(self) -> None:
+        """Start background KPI flush tasks (process + SQL pool health).
+
+        control-plane previously had no periodic process.*/event_loop_lag_ms
+        sampler (unlike fred-runtime and knowledge-flow), leaving it with no
+        CPU/RSS/event-loop-lag visibility. Mirrors
+        `PodApplicationContext.start_kpi_tasks`.
+        """
+        kpi_writer = self.get_kpi_writer()
+        interval_s = float(
+            self.configuration.observability.kpi.process_metrics_interval_sec
+        )
+        if interval_s <= 0 or isinstance(kpi_writer, NoOpKPIWriter):
+            return
+        self._kpi_tasks = [
+            asyncio.create_task(emit_process_kpis(interval_s, kpi_writer)),
+            asyncio.create_task(
+                emit_sql_pool_kpis(
+                    interval_s,
+                    kpi_writer,
+                    self.get_pg_async_engine(),
+                    pool_name="control-plane-postgres",
+                )
+            ),
+        ]
+
     def get_session_store(self) -> BaseSessionStore:
         if self._session_store is None:
             self._session_store = PostgresSessionStore(
@@ -243,7 +275,9 @@ class ApplicationContext:
 
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:
-            self._rebac_engine = rebac_factory(self.configuration.security)
+            self._rebac_engine = rebac_factory(
+                self.configuration.security, kpi_writer=self.get_kpi_writer()
+            )
         return self._rebac_engine
 
     def get_service_token_provider(self) -> M2MTokenProvider:
@@ -294,6 +328,13 @@ class ApplicationContext:
             )
         return self._team_capability_settings_store
 
+    def get_team_routing_policy_store(self) -> TeamRoutingPolicyStore:
+        if self._team_routing_policy_store is None:
+            self._team_routing_policy_store = TeamRoutingPolicyStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._team_routing_policy_store
+
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:
             self._session_metadata_store = SessionMetadataStore(
@@ -337,6 +378,11 @@ class ApplicationContext:
         return self._evaluation_store
 
     async def shutdown(self) -> None:
+        for task in self._kpi_tasks:
+            task.cancel()
+        if self._kpi_tasks:
+            await asyncio.gather(*self._kpi_tasks, return_exceptions=True)
+        self._kpi_tasks = []
         if self._rebac_engine is not None:
             try:
                 await self._rebac_engine.close()

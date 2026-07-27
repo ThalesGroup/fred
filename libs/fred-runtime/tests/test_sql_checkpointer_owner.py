@@ -30,6 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import empty_checkpoint
@@ -98,6 +99,39 @@ async def _seed_history(engine, rows: list[dict]) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(md.create_all)
         await conn.execute(insert(history), rows)
+
+
+@pytest.mark.asyncio
+async def test_aput_emits_persist_sql_and_pool_wait_metrics(engine):
+    """
+    TURN-01 instrumentation: `aput`/`aput_writes` must emit `persist_sql_ms`
+    and `persist_pool_wait_ms` (previously referenced by the KPI summary
+    formatter but emitted by no code site at all), dims={store, op}.
+    """
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    cp = FredSqlCheckpointer(engine, prefix="v2_", kpi=_RecordingKPIWriter())
+    await _put(cp, "thread-A")
+
+    names = {e["name"] for e in emitted}
+    assert {"persist_sql_ms", "persist_pool_wait_ms"} <= names
+    put_events = [
+        e for e in emitted if e["dims"] == {"store": "checkpoint", "op": "put"}
+    ]
+    assert len(put_events) == 2  # sql + pool_wait, same dims
+    for event in put_events:
+        assert event["value"] >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_aput_is_silent_without_a_kpi_writer(engine):
+    # Default kpi=None (matches the plain `checkpointer` fixture) must not raise.
+    cp = FredSqlCheckpointer(engine, prefix="v2_")
+    await _put(cp, "thread-A")
 
 
 @pytest.mark.asyncio

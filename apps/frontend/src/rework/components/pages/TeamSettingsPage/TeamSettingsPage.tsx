@@ -17,6 +17,7 @@ import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
+import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
@@ -33,7 +34,7 @@ export default function TeamSettingsPage() {
   const { section } = useParams<{ section: string }>();
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateInfo, canUpdateAgents } = capabilities;
+  const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —
@@ -54,7 +55,7 @@ export default function TeamSettingsPage() {
     section === "members" ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
     (section === "evaluations" && canUpdateAgents) ||
-    (section === "activity" && hasElevatedTeamRole(capabilities));
+    ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
   if (section && !sectionAllowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
 
   const renderSection = () => {
@@ -73,6 +74,10 @@ export default function TeamSettingsPage() {
         // The exact same shared surface the platform admin sees (OPS-04 §3.4),
         // scoped to this team. Server enforces CAN_READ_MEMBERS.
         return <TaskActivity scope="team" teamId={teamId} />;
+      case "routing":
+        // TEAM-05, #2118: team_editor writes, team_admin reads (hard
+        // cross-write rule) — canUpdateResources is team_editor-only.
+        return <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateResources} />;
       default:
         return <Navigate to={`/team/${teamId}/settings/members`} replace />;
     }

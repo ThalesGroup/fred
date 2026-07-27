@@ -14,12 +14,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import AwareDatetime, BaseModel
 
 
 class TimeSeriesPoint(BaseModel):
     date: str  # display-formatted label produced by strftime (e.g. "Jan 15")
     value: float
+    # Populated only by the token-usage presets (KPI-ANALYTICS-RFC.md §2.7) —
+    # every other preset leaves these None. Estimates, not billing-grade.
+    co2e_grams: float | None = None
+    kwh: float | None = None
+    cost_usd: float | None = None
 
 
 class TimeSeriesResponse(BaseModel):
@@ -55,6 +62,11 @@ class ScalarWithDeltaResponse(BaseModel):
 class LabelValuePoint(BaseModel):
     label: str
     value: int
+    # Populated only by the token-usage presets (KPI-ANALYTICS-RFC.md §2.7) —
+    # every other preset leaves these None. Estimates, not billing-grade.
+    co2e_grams: float | None = None
+    kwh: float | None = None
+    cost_usd: float | None = None
 
 
 class LabelValueResponse(BaseModel):
@@ -76,3 +88,33 @@ class MultiSeriesTimeSeriesResponse(BaseModel):
     since: AwareDatetime
     until: AwareDatetime
     interval: str
+
+
+class TeamStorageRow(BaseModel):
+    team_id: str
+    label: str
+    used_bytes: int
+    # None only when neither a per-team override nor a platform default is
+    # configured — an unlimited team, not a data gap.
+    quota_bytes: int | None = None
+
+
+class TeamStorageResponse(BaseModel):
+    """Current resource-storage usage vs. quota, per team (a state gauge, not
+    a time-bucketed metric — `since`/`until` are echoed for API consistency
+    with every other preset, not used to filter this query)."""
+
+    rows: list[TeamStorageRow]
+    since: AwareDatetime
+    until: AwareDatetime
+
+
+class TeamActivitySummaryResponse(BaseModel):
+    """One team's activity trend — team_admin's governance-focused Activités
+    panel content (KPI-ANALYTICS-RFC.md §2.5)."""
+
+    last_active_at: AwareDatetime | None  # None = no session ever recorded
+    sessions_in_range: int
+    trend: Literal["active", "quiet"]  # "active" = >=1 session in range
+    since: AwareDatetime
+    until: AwareDatetime

@@ -15,13 +15,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fred_core import KeycloakUser, get_current_user
+from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets import PRESETS
+from control_plane_backend.kpi.scope import resolve_kpi_scope
 
 
 def get_kpi_store(request: Request) -> OpenSearchKPIStore:
@@ -48,19 +51,46 @@ def build_kpi_router() -> APIRouter:
                     default=None,
                     description="End of the time range (ISO 8601 datetime). Defaults to now.",
                 ),
+                team_id: TeamId | None = Query(
+                    default=None,
+                    description=(
+                        "Scope the query to one team instead of the whole platform. "
+                        "Requires can_read_members on that team. Only accepted for "
+                        "presets whose underlying data actually carries a team "
+                        "dimension — others reject it with 400."
+                    ),
+                ),
                 user: KeycloakUser = Depends(get_current_user),
                 store: OpenSearchKPIStore = Depends(get_kpi_store),
             ):
+                if team_id is not None and not p.team_scopable:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"preset {p.name!r} does not support team_id scoping",
+                    )
+                # Single authorization chokepoint for every preset (§2.3/§2.4,
+                # KPI-ANALYTICS-RFC.md v3) — handlers never check permissions
+                # themselves.
+                scope = await resolve_kpi_scope(
+                    request,
+                    user,
+                    team_id,
+                    platform_admin_only=p.platform_admin_only,
+                    self_scoped=p.self_scoped,
+                )
+
                 now = datetime.now(tz=timezone.utc)
                 resolved_since = since or (now - timedelta(days=30))
                 resolved_until = until or now
-                return await p.handler(
-                    store,
+                kwargs: dict[str, Any] = dict(
                     user=user,
                     since=resolved_since,
                     until=resolved_until,
                     request=request,
                 )
+                if p.team_scopable:
+                    kwargs["team_id"] = scope.team_id
+                return await p.handler(store, **kwargs)
 
             return handler
 

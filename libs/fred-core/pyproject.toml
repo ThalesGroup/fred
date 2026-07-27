@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "3.4.7"
+version = "3.6.0"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -59,6 +59,7 @@ include = ["fred_core*"]
 [tool.setuptools.package-data]
 "fred_core" = ["py.typed"]
 "fred_core.security.rebac" = ["schema.fga", "schema.fga.json"]
+"fred_core.kpi" = ["model_impact_factors.yaml"]
 
 [dependency-groups]
 dev = [

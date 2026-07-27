@@ -21,6 +21,58 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
 
 ---
 
+## Performance & concurrency
+
+Applies to `fred-runtime`, `fred-core`, and any backend serving concurrent
+requests. Production shape to design against: ~200 users hitting one
+`fred-agents` instance at once, up to 4 replicas running concurrently, and
+every agent turn calling a remote LLM API gateway — that call path is the
+top priority; tool invocation is the second. This section carries the same
+weight as code quality — a change that passes `make code-quality` but stalls
+the event loop or goes dark in Grafana is not done. See the
+`fred-performance-reviewer` skill for the full review checklist; the rules
+below are what to follow while writing the code, not just at review time.
+
+- **No blocking I/O inside `async def`.** No sync `requests`/`psycopg2`/`boto3`/
+  sync SDK call made inline inside a coroutine on a request path. Offload via a
+  thread executor if no async client exists — never call it inline "for now".
+- **Independent async work runs concurrently, not sequentially.** Multiple tool
+  calls, fetches, or lookups with no ordering dependency use
+  `asyncio.gather`/`TaskGroup`. A sequential `await` in a `for` loop needs a real
+  ordering reason, or it's a bug.
+- **KPI/log emission never opens a synchronous network call in a hot path.**
+  Emit through the existing `KPIWriter`/`kpi.timer(...)`/`emit_audit_log`
+  machinery, which is backed by `ResilientSinkStore`
+  (`libs/fred-core/fred_core/common/resilient_sink.py`) — a bounded queue drained
+  by a background thread behind a circuit breaker. Do not add a new store or
+  logger that talks to OpenSearch/an external sink directly from request code.
+- **New LLM-call or tool-call code routes through the existing observability
+  middlewares**, not a hand-rolled call: `TracingKpiMiddleware`
+  (`libs/fred-runtime/fred_runtime/react/middleware/tracing_kpi.py`, emits
+  `llm.call_latency_ms`) and `ToolObservabilityMiddleware`
+  (`libs/fred-runtime/fred_runtime/react/middleware/tool_observability.py`,
+  emits `agent.tool_latency_ms`/`agent.tool_failed_total`). Bypassing them makes
+  the new path invisible in Grafana.
+- **A new KPI dimension must be in `PROMETHEUS_ALLOWED_LABELS`**
+  (`libs/fred-core/fred_core/kpi/prometheus_kpi_store.py`) to reach Grafana at
+  all. Adding a label is a deliberate decision, not automatic — user, session,
+  and team identity must never become a Prometheus label (see
+  `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §3).
+- **Every outbound call to the remote LLM gateway or any external service has an
+  explicit, bounded timeout.** An unbounded call under concurrent load can pin a
+  shared connection-pool slot and stall unrelated requests.
+- **Shared HTTP/model clients are process-wide singletons** built via
+  `fred_core/model/http_clients.py` / `fred_core/model/factory.py` — never
+  construct a new client per request. Note the existing "first caller wins" pool
+  config behavior: a second model/gateway with different timeout/pool needs will
+  have its config silently ignored — check this explicitly when adding one.
+- **New in-memory state (cache, buffer, rate limiter) must state whether it's
+  pod-local or shared.** `fred-agents` runs multiple replicas; anything whose
+  correctness depends on seeing all traffic (not just one pod's share) needs a
+  shared backing store, not a module-level dict/deque.
+
+---
+
 ## Python
 
 - **Pydantic models for all public contracts.** Request bodies, response bodies,

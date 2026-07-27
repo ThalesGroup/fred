@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from fred_sdk.contracts.context import TeamOperationRouteRule
+
 from .contracts import (
     MatchValue,
     ModelCapability,
@@ -204,3 +206,55 @@ class ModelRoutingResolver:
         """Read one profile by id from the pre-indexed catalog."""
 
         return self._profiles_by_id[profile_id]
+
+    def profile_or_none(self, profile_id: str) -> ModelProfile | None:
+        """Public counterpart to `_profile` for callers outside this class that
+        must not raise `KeyError` on an unknown id — e.g. `RoutedChatModelFactory`
+        resolving a team-policy `target_profile_id` (§8.4 drift rule,
+        `TEAM-ROUTING-POLICY-RFC.md`), which needs to distinguish "unknown to this
+        deployment" from a Python-internal error and raise its own typed
+        `TeamRoutingProfileDriftError` instead."""
+
+        return self._profiles_by_id.get(profile_id)
+
+
+def resolve_team_override(
+    *,
+    operation_route_rules: list[TeamOperationRouteRule] | None,
+    chat_default_profile_id: str | None,
+    operation: str | None,
+    purpose: str,
+) -> str | None:
+    """
+    Second, narrower resolution pass applied only when the static
+    `models_catalog.yaml` `rules:` fell through to the capability default
+    (`TEAM-ROUTING-POLICY-RFC.md` §8.3) — never consulted otherwise, so a
+    static rule always wins over team policy.
+
+    Precedence, identical in shape to `ModelRoutingResolver.resolve` but over
+    the much smaller (operation, purpose) criteria a `TeamOperationRouteRule`
+    carries (§4):
+    1. a rule matching both `operation` and `purpose` wins
+    2. else a rule matching `operation` with `purpose=None` (wildcard) wins
+    3. else `chat_default_profile_id` if set
+    4. else `None` — caller keeps the static catalog default unchanged
+
+    Pure function, no I/O, no side effects — easy to unit test in isolation
+    from the resolver/provider wiring.
+    """
+
+    operation_match: str | None = None
+    wildcard_match: str | None = None
+    for rule in operation_route_rules or []:
+        if rule.operation != operation:
+            continue
+        if rule.purpose == purpose:
+            operation_match = rule.target_profile_id
+        elif rule.purpose is None and wildcard_match is None:
+            wildcard_match = rule.target_profile_id
+
+    if operation_match is not None:
+        return operation_match
+    if wildcard_match is not None:
+        return wildcard_match
+    return chat_default_profile_id

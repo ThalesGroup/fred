@@ -19,11 +19,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
-from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import LabelValuePoint, LabelValueResponse
 from control_plane_backend.teams.dependencies import get_team_service_dependencies
@@ -62,13 +61,9 @@ async def query_top_teams_by_sessions(
     until: datetime,
     request: Request,
 ) -> LabelValueResponse:
-    await (
-        get_application_container(request)
-        .get_rebac_engine()
-        .check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
-        )
-    )
+    # Authorization already resolved by the router (kpi/api.py, KpiScope).
+    # Not team_scopable: this ranking is inherently cross-team by definition.
+    del user
 
     body: dict[str, Any] = {
         "size": 0,

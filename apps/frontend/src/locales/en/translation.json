@@ -847,9 +847,11 @@
         "kindFilter": {
           "tool": "Tools",
           "agent": "Agents",
+          "model": "Models",
           "aria": "Filter by capability kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
+        "emptyModels": "No models are advertised by any runtime pod yet.",
         "col": {
           "capability": "Capability",
           "enabledTeams": "Enabled teams",
@@ -1068,10 +1070,38 @@
       "refresh": "Refresh",
       "refreshing": "Refreshing...",
       "sections": {
+        "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "overview": "Usage overview",
         "resources": "Resources",
+        "tokenUsage": "Token usage",
         "users": "Users"
+      },
+      "administration": {
+        "activitiesTitle": "Activités",
+        "modelsGovernanceLink": "Manage models",
+        "storageByTeam": {
+          "empty": "No team is near its storage quota.",
+          "title": "Storage by team (% of quota used)",
+          "valueLabel": "% of quota"
+        }
+      },
+      "tokenUsage": {
+        "byAgent": {
+          "empty": "No agent usage in this period.",
+          "title": "Token usage by agent",
+          "valueLabel": "Tokens"
+        },
+        "byModel": {
+          "empty": "No model usage in this period.",
+          "title": "Token usage by model",
+          "valueLabel": "Tokens"
+        },
+        "overTime": {
+          "title": "Token usage over time",
+          "valueLabel": "Tokens"
+        }
       },
       "timeRange": {
         "apply": "Apply",
@@ -1085,8 +1115,14 @@
         "valueLabel": "Conversations"
       }
     },
+    "tokenUsageImpact": {
+      "costTitle": "Estimated cost",
+      "costValue": "${{cost}} (estimated)",
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
+    },
     "teamUsage": {
       "title": "My token usage",
+      "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
         "valueLabel": "Tokens"
@@ -1100,6 +1136,31 @@
         "empty": "No model usage in this period.",
         "title": "Usage by model",
         "valueLabel": "Tokens"
+      },
+      "team": {
+        "sectionTitle": "Team usage",
+        "editorSectionTitle": "Activités (ingestion)",
+        "adminSectionTitle": "Activités",
+        "membersLabel": "Members",
+        "agentsLabel": "Agents",
+        "documentsLabel": "Documents",
+        "quota": {
+          "empty": "No storage quota configured for this team.",
+          "title": "Storage quota (% used)",
+          "valueLabel": "% of quota"
+        },
+        "conversationsOverTime": {
+          "title": "Conversations over time",
+          "valueLabel": "Conversations"
+        },
+        "mostActiveAgents": {
+          "title": "Most active agents",
+          "valueLabel": "Conversations"
+        },
+        "activitySummary": {
+          "active": "{{count}} conversations in this period — active",
+          "quiet": "{{count}} conversations in this period — quiet"
+        }
       }
     },
     "back": "Back",
@@ -1438,7 +1499,6 @@
         }
       },
       "page": {
-        "ackFailures": "Acknowledge failures ({{count}})",
         "active": "In progress",
         "clearCompleted": "Clear completed",
         "empty": "No tasks in progress",
@@ -1447,6 +1507,7 @@
         "title": "Tasks"
       },
       "popover": {
+        "acknowledge": "Dismiss",
         "close": "Close",
         "startedAgo": "started {{time}}",
         "title": "Details — {{label}}"
@@ -1479,6 +1540,7 @@
         "inDays": "in {{count}}d"
       },
       "card": {
+        "acknowledge": "Dismiss",
         "copyWarnings": "Copy warnings",
         "copied": "Copied!"
       }
@@ -1565,7 +1627,27 @@
         "settings": "Settings",
         "activity": "Activity",
         "evaluations": "Evaluations",
+        "usage": "Usage",
+        "routing": "Model routing",
         "retention": "Retention"
+      },
+      "routing": {
+        "defaultProfile": {
+          "title": "Default chat model",
+          "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
+          "label": "Default profile id",
+          "placeholder": "e.g. default.chat.mistral"
+        },
+        "operationRules": {
+          "title": "Operation overrides",
+          "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
+          "operation": "Operation",
+          "purpose": "Purpose (optional)",
+          "targetProfileId": "Profile id",
+          "addRule": "Add rule"
+        },
+        "save": "Save",
+        "saveError": "Could not save the routing policy."
       },
       "parameters": {
         "description": {
@@ -2016,6 +2098,7 @@
       "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention.",
       "withWarnings": "With warnings",
       "withWarningsHint": "This task completed, but part of it was skipped or could not be fully reconciled — see details.",
+      "acknowledge": "Dismiss",
       "migration": {
         "detailsTitle": "Import details",
         "warningsTitle": "Warnings ({{count}})",

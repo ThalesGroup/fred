@@ -16,20 +16,22 @@ import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { selectActiveTasks, taskEventReceived } from "./taskSlice";
+import { taskBackendFor, type TaskBackend } from "./taskKinds";
 import { TERMINAL_STATES, type AnyTaskEvent } from "./taskTypes";
 
 // Task events are served by the backend that runs the task: ingestion/reindex
 // tasks live in knowledge-flow, migration and conversation erasure in the
-// control-plane, evaluation campaigns in the evaluation backend.
-const DEFAULT_BASE_PATH = "/knowledge-flow/v1";
-const BASE_PATH_BY_KIND: Record<string, string> = {
-  migration: "/control-plane/v1",
-  erasure: "/control-plane/v1",
+// control-plane, evaluation campaigns in the evaluation backend. Backend
+// selection itself lives in taskKinds.taskBackendFor, shared with
+// useTaskAcknowledgement.
+const BASE_PATH_BY_BACKEND: Record<TaskBackend, string> = {
+  "knowledge-flow": "/knowledge-flow/v1",
+  "control-plane": "/control-plane/v1",
   evaluation: "/evaluation/v1",
 };
 
 export function taskEventsBasePath(kind: string | null): string {
-  return (kind && BASE_PATH_BY_KIND[kind]) || DEFAULT_BASE_PATH;
+  return BASE_PATH_BY_BACKEND[taskBackendFor(kind)];
 }
 
 /**

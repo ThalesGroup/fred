@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
+import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fred_runtime.app.container import build_pod_container
@@ -49,6 +51,79 @@ def test_pod_context_get_kpi_writer_succeeds_after_initialize(minimal_config) ->
     container.initialize_kpi_writer()
     writer = container.get_kpi_writer()
     assert writer is not None
+
+
+def test_pod_context_control_plane_client_raises_before_initialize(
+    minimal_config,
+) -> None:
+    """get_control_plane_http_client() must raise until initialize runs (TURN-01)."""
+    container = PodApplicationContext(minimal_config)
+    with pytest.raises(RuntimeError, match="initialize_control_plane_client"):
+        container.get_control_plane_http_client()
+
+
+def test_pod_context_control_plane_client_is_reused_across_calls(
+    minimal_config,
+) -> None:
+    """Every caller must observe the exact same client instance — no per-turn
+    construction (TURN-01's finding)."""
+    container = PodApplicationContext(minimal_config)
+    container.initialize_control_plane_client()
+
+    first = container.get_control_plane_http_client()
+    second = container.get_control_plane_http_client()
+
+    assert first is second
+
+
+def test_pod_context_control_plane_client_has_explicit_bounded_timeout_and_pool(
+    minimal_config, monkeypatch
+) -> None:
+    """The shared client must be built with an explicit, bounded timeout and
+    pool — not the httpx default (unbounded connect/read, unlimited connections)."""
+    from fred_runtime.app import context as context_module
+
+    captured: dict[str, object] = {}
+
+    class _RecordingAsyncClient:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(context_module.httpx, "AsyncClient", _RecordingAsyncClient)
+
+    container = PodApplicationContext(minimal_config)
+    container.initialize_control_plane_client()
+
+    timeout = cast(httpx.Timeout, captured["timeout"])
+    limits = cast(httpx.Limits, captured["limits"])
+    assert timeout.connect is not None and timeout.connect > 0
+    assert timeout.read is not None and timeout.read > 0
+    assert limits.max_connections is not None
+    assert limits.max_keepalive_connections is not None
+
+
+@pytest.mark.asyncio
+async def test_pod_context_shutdown_closes_control_plane_client(
+    minimal_config,
+) -> None:
+    """shutdown() must close the shared control-plane client (TURN-01)."""
+    container = PodApplicationContext(minimal_config)
+    container.initialize_control_plane_client()
+    client = container.get_control_plane_http_client()
+    assert not client.is_closed
+
+    await container.shutdown()
+
+    assert client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_pod_context_shutdown_without_control_plane_client_does_not_raise(
+    minimal_config,
+) -> None:
+    """shutdown() must stay a no-op for this resource when it was never initialized."""
+    container = PodApplicationContext(minimal_config)
+    await container.shutdown()  # must not raise
 
 
 @pytest.mark.asyncio

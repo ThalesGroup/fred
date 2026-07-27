@@ -1,4 +1,56 @@
-## Mock OpenAI server + Agentic benchmark quickstart
+## Swift managed SSE — current local usage
+
+This is the current, actively-used mode: it reproduces the control-plane
+binding a production frontend uses (`agent_instance_id` +
+`runtime_context.team_id`) against a local `fred-runtime` pod, over
+`-protocol=sse`. Use `-agent-instance-id` together with `-sse-team-id`; never
+pass `-agent` in this mode (it is ignored — the request carries
+`agent_instance_id`, not `agent_id`).
+
+```bash
+AGENTIC_TOKEN="$TOKEN" make run ARGS='\
+  -protocol=sse \
+  -url=http://127.0.0.1:8000/fred/agents/v2/agents/execute/stream \
+  -agent-instance-id=<AGENT_INSTANCE_UUID> \
+  -sse-team-id=personal-<ADMIN_UID> \
+  -message="Réponds simplement : test réussi" \
+  -clients=1 \
+  -requests-per-client=1 \
+  -ramp-duration=0s \
+  -timeout=30s \
+  -json-report=results/smoke.json'
+```
+
+Scale up by raising `-clients`/`-requests-per-client` (each client keeps its
+own session and sends its requests sequentially); e.g. `-clients=5
+-requests-per-client=2`, then `-clients=20 -requests-per-client=3`. Keep
+`-ramp-duration=0s` to start every client at the same time.
+
+This covers the managed runtime core only — Keycloak JWT + OpenFGA/personal-
+space authorization, session/checkpoint continuity, and SSE event handling:
+`final` is success, `execution_error` is a terminal failure (no `final` will
+follow), and `node_error` is a recoverable per-node warning that can precede
+`final` — the client keeps reading past it rather than failing the request.
+It does **not** measure browser rendering, nor the UI's preparatory calls
+(`/frontend/bootstrap`, `/prepare-execution`), whether issued once eagerly or
+before every send.
+
+`AGENTIC_TOKEN` must be a real Keycloak user JWT — never print it (the
+recap/summary below intentionally never include it).
+
+`-json-report=<path>` writes a versioned machine-readable summary for
+automation. It contains the stage configuration, request counts, throughput,
+latency percentiles, and bounded error samples. The bearer token and benchmark
+prompt are redacted and are never serialized. Local campaign artifacts belong
+under `results/`, which is ignored by Git.
+
+**Historical modes below** (WebSocket `agentic-backend`, and direct SSE with
+a bare `agent_id`) are kept working but are not the current target — the
+managed mode above is.
+
+---
+
+## Mock OpenAI server + Agentic benchmark quickstart (historical, WebSocket / agentic-backend)
 
 ### 1) Clone and run the mock server
 

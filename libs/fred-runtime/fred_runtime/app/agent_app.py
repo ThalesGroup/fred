@@ -58,6 +58,7 @@ from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
+from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
@@ -88,6 +89,7 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    TeamOperationRouteRule,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
@@ -967,6 +969,66 @@ class _McpCatalogResponse(BaseModel):
     servers: list[_McpCatalogEntry]
 
 
+class _ModelCatalogEntry(BaseModel):
+    id: str
+    provider: str
+    name: str
+    description: str | None = None
+    profile_ids: list[str] = Field(default_factory=list)
+    """Every `models_catalog.yaml` profile_id sharing this entry's
+    (provider, name) — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
+    translation: a routing policy picks by profile_id (finer-grained than
+    this capability id), so control-plane needs a way back from profile_id
+    to capability id for write-time enablement validation, and the
+    team-settings picker needs the reverse (which profile_ids this enabled
+    capability actually offers). Declaration order in the source YAML,
+    first-seen first — same order `default_profile_by_capability` favors."""
+
+
+class _ModelCatalogResponse(BaseModel):
+    models: list[_ModelCatalogEntry]
+
+
+def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
+    """One `_ModelCatalogEntry` per distinct (provider, name) pair in a
+    loaded `ModelCatalog` (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+
+    Pulled out of `get_models_catalog` as a pure function so it is directly
+    unit-testable without a running app (`agent_app.py` has no existing
+    FastAPI TestClient harness — building one just for this route would be
+    disproportionate; this function is where the actual logic worth testing
+    lives). `catalog` is typed `Any` here to avoid a module-level
+    `..model_routing` import (see the route's own lazy import for why);
+    callers pass a real `ModelCatalog`.
+    """
+    from fred_sdk.contracts.capability.manifest import model_capability_id
+
+    seen: dict[tuple[str, str], _ModelCatalogEntry] = {}
+    for profile in catalog.profiles:
+        provider = profile.model.provider
+        name = profile.model.name
+        # ModelProfile.validate_model (contracts.py) already guarantees both
+        # are non-empty strings for every profile that exists — asserted
+        # (not a skip/continue) so this narrows the type instead of hiding
+        # an invariant violation the validator itself is supposed to prevent.
+        assert provider and name, (
+            f"ModelProfile {profile.profile_id!r} passed validation without provider/name"
+        )
+        key = (provider, name)
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = _ModelCatalogEntry(
+                id=model_capability_id(provider, name),
+                provider=provider,
+                name=name,
+                description=profile.description,
+                profile_ids=[profile.profile_id],
+            )
+        else:
+            existing.profile_ids.append(profile.profile_id)
+    return list(seen.values())
+
+
 class _ResolvedAgentInstance(BaseModel):
     agent_instance_id: str
     template_agent_id: str
@@ -1120,7 +1182,9 @@ async def _resolve_agent_instance(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
     control_plane_url: str | None,
+    http_client: httpx.AsyncClient,
     team_id: str | None = None,
+    request_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -1195,9 +1259,17 @@ async def _resolve_agent_instance(
         f"{control_plane_url.rstrip('/')}/teams/{team_id}/agent-instances/"
         f"{request.agent_instance_id}/runtime"
     )
-    headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url, headers=headers)
+    headers: dict[str, str] = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if request_id:
+        # Correlates this pod-side call with the control-plane request it
+        # triggers — both sides stamp the same id as `trace.trace_id` on their
+        # `runtime.stage_latency_ms{runtime_stage=runtime_binding*}` event
+        # (TURN-01 evidence gap: no way to join a turn to its binding call
+        # besides timestamps).
+        headers["X-Request-Id"] = request_id
+    response = await http_client.get(url, headers=headers or None)
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=404, detail=response.text or "Unknown agent instance."
@@ -1507,7 +1579,8 @@ async def _authorize_and_resolve(
         )
     await _validate_session_checkpoint_access(request)
     await _enforce_session_ownership(request, authenticated_user, container)
-    await _authorize_execution_or_raise(request, authenticated_user, container)
+    async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
+        await _authorize_execution_or_raise(request, authenticated_user, container)
     internal_req = _to_internal_request(request)
     # Stamp the trusted service-agent verdict (never the caller-supplied
     # context) so per-tool-call re-authorization can mirror the bypass
@@ -1521,13 +1594,19 @@ async def _authorize_and_resolve(
     else:
         ctx.pop("is_service_agent", None)
     internal_req.context = ctx
-    target = await _resolve_agent_instance(
-        request=internal_req,
-        registry=registry,
-        access_token=access_token,
-        control_plane_url=get_runtime_context().config.control_plane_url,
-        team_id=request.effective_team_id(),
-    )
+    binding_request_id = str(uuid4())
+    async with runtime_stage_timer(
+        container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
+    ):
+        target = await _resolve_agent_instance(
+            request=internal_req,
+            registry=registry,
+            access_token=access_token,
+            control_plane_url=get_runtime_context().config.control_plane_url,
+            http_client=container.get_control_plane_http_client(),
+            team_id=request.effective_team_id(),
+            request_id=binding_request_id,
+        )
     _validate_resolved_team(request, target.team_id, container)
     return internal_req, target
 
@@ -2472,6 +2551,19 @@ async def _iterate_runtime_event_payloads(
     ctx = request.context or {}
     correlation_id = ctx.get("correlation_id", request_id)
     resolved_team_id = team_id or ctx.get("team_id")
+    # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
+    # computed ONCE per turn, here — never inside model-routing resolution,
+    # which runs multiple times per turn and must never itself make a ReBAC
+    # call. No team context (agent-to-agent invocation) → no restriction,
+    # the same posture _authorize_execution_or_raise already applies to a
+    # teamless request.
+    usable_model_ids: tuple[str, ...] | None = None
+    if resolved_team_id is not None:
+        from ..model_routing import usable_model_capability_ids
+
+        rebac = get_runtime_context().config.rebac_engine
+        ids = await usable_model_capability_ids(rebac, resolved_team_id)
+        usable_model_ids = tuple(ids) if ids is not None else None
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None
@@ -2540,11 +2632,26 @@ async def _iterate_runtime_event_payloads(
         # When the final file is deleted this is absent, so the per-turn runtime
         # notice disappears without leaving a checkpointed system message behind.
         attachments_markdown=ctx.get("attachments_markdown"),
+        # Team routing policy snapshot (TEAM-ROUTING-POLICY-RFC.md §3/§8):
+        # control-plane resolves it once at prepare-execution and the frontend
+        # forwards it unchanged, same channel as context_prompt_text above — but
+        # it was also silently dropped here, so resolve_team_override in
+        # fred_runtime.model_routing.provider always saw None and no team's
+        # routing policy ever took effect on a real chat turn. ctx already holds
+        # the flat dict from to_legacy_context()'s model_dump(exclude_none=True);
+        # operation_route_rules needs re-validating back into typed rows.
+        chat_default_profile_id=ctx.get("chat_default_profile_id"),
+        operation_route_rules=[
+            TeamOperationRouteRule.model_validate(rule)
+            for rule in (ctx.get("operation_route_rules") or [])
+        ]
+        or None,
     )
 
     binding = BoundRuntimeContext(
         runtime_context=runtime_context,
         portable_context=portable_context,
+        usable_model_ids=usable_model_ids,
     )
 
     services = _build_runtime_services(
@@ -2943,6 +3050,42 @@ def _build_agent_router(
                 for srv in mcp_configuration.servers
             ]
         )
+
+    @router.get("/models-catalog")
+    async def get_models_catalog() -> _ModelCatalogResponse:
+        """
+        Return this pod's routable models, one entry per distinct
+        (provider, name) pair (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+
+        Why this endpoint exists:
+        - control-plane's capability catalog aggregation
+          (`aggregate_capability_catalog`) has no other way to learn what
+          models this pod can route to — `models_catalog.yaml` is loaded
+          only here, for routing, with no prior control-plane consumer.
+        - one entry per (provider, name), not per catalog profile: a model
+          used for both the `chat` and `language` routing capability is one
+          admin enablement decision, not two.
+
+        Re-reads `models_catalog.yaml` fresh on every call (same file
+        `_build_chat_model_factory` loaded once at boot) rather than
+        caching the parsed catalog — this route is polled rarely (admin
+        catalog refresh), never per-turn, so the extra local file read is
+        immaterial and keeps this always consistent with whatever the pod
+        would actually resolve, with no separate cache to go stale.
+
+        How to use it:
+        - call from control-plane's `_model_capabilities_for_source`
+
+        Example:
+        - `GET /fred/agents/v2/agents/models-catalog`
+        """
+        from ..model_routing import load_model_catalog
+
+        catalog_path = get_runtime_context().config.models_catalog_path
+        if not catalog_path:
+            return _ModelCatalogResponse(models=[])
+        catalog = load_model_catalog(catalog_path)
+        return _ModelCatalogResponse(models=_project_model_catalog_entries(catalog))
 
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(
@@ -3885,12 +4028,13 @@ def create_agent_app(
         # Boot order (must be preserved — each step depends on the previous):
         # 1. log_setup         — formatter/handlers ready for all subsequent logs
         # 2. initialize_kpi_writer — needed by bootstrap_observability
-        # 3. bootstrap_observability — global tracer + metrics provider
-        # 4. attach_pod_container — container in app.state before any request
-        # 5. initialize_sql    — async, may take time
-        # 6. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 7. start_kpi_tasks   — asyncio tasks, after SQL engine is known
-        # 8. set_runtime_context — wires all built parts into the global config
+        # 3. initialize_control_plane_client — sync, no network until first call
+        # 4. bootstrap_observability — global tracer + metrics provider
+        # 5. attach_pod_container — container in app.state before any request
+        # 6. initialize_sql    — async, may take time
+        # 7. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 8. start_kpi_tasks   — asyncio tasks, after SQL engine is known
+        # 9. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
@@ -3901,6 +4045,7 @@ def create_agent_app(
         )
         container = build_pod_container(config)
         container.initialize_kpi_writer()
+        container.initialize_control_plane_client()
         bootstrap_observability(
             config.observability, kpi_writer=container.get_kpi_writer()
         )
@@ -3918,7 +4063,11 @@ def create_agent_app(
         # every execution against OpenFGA; a disabled/Noop engine (dev) means
         # identity-only. Safe in all modes — the factory returns a Noop with a
         # KeycloackDisabled admin client when user/m2m auth is off.
-        rebac_engine = rebac_factory(security) if security is not None else None
+        rebac_engine = (
+            rebac_factory(security, kpi_writer=container.get_kpi_writer())
+            if security is not None
+            else None
+        )
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
         container.start_metrics_exporter()
@@ -3939,6 +4088,7 @@ def create_agent_app(
                     checkpointer=checkpointer,
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
+                    models_catalog_path=config.get_models_catalog_path(),
                     inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,

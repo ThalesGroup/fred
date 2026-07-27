@@ -20,6 +20,7 @@ from control_plane_backend.capabilities.settings_store import (
 )
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
@@ -55,6 +56,7 @@ class ProductServiceDependencies:
     team_dependencies: TeamServiceDependencies
     get_agent_instance_store: Callable[[], AgentInstanceStore]
     get_team_capability_settings_store: Callable[[], TeamCapabilitySettingsStore]
+    get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_team_metadata_store: Callable[[], TeamMetadataStore]
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
@@ -90,6 +92,7 @@ def build_product_service_dependencies(
         team_dependencies=build_team_service_dependencies(container),
         get_agent_instance_store=container.get_agent_instance_store,
         get_team_capability_settings_store=container.get_team_capability_settings_store,
+        get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_session_metadata_store=container.get_session_metadata_store,
         get_team_metadata_store=container.get_team_metadata_store,
         get_session_attachment_store=container.get_session_attachment_store,

@@ -2,8 +2,11 @@
 
 **Status:** Team-approved (2026-07-09) — all tiers. Implementation starts with the
 Tier 2 `create_agent` migration. Amended 2026-07-09 with design-review resolutions
-(§3.9, §5.3, §5.4, §7.1, §7.2, §9.1, §12).
-**Author:** Florian Muller
+(§3.9, §5.3, §5.4, §7.1, §7.2, §9.1, §12). Amended 2026-07-25 (Dimitri Tombroff,
+draft pending sign-off) — §8.7 adds `kind="model"`, folding LLM model
+enable/disable into the existing capability admission and admin-dashboard
+mechanism, as part of the OBSERV-02 role-based dashboard finalization.
+**Author:** Florian Muller (§8.7: Dimitri Tombroff)
 **Scope:** `fred-sdk` (contracts, capability manifest, middleware base), `fred-runtime`
 (agent assembly, `create_agent` migration, capability registry), `control-plane-backend`
 (capability catalog proxy, ReBAC team-scoping), `apps/frontend` (widget + part-renderer +
@@ -1826,6 +1829,202 @@ capability of `kind="agent"` in this exact same object space:
 > reopen the "same object space, no new type" decision this section already
 > made (§7.5's rejection of a parallel admission model), for a problem a
 > reserved id prefix fully solves within the existing model.
+
+### 8.7 `kind="model"`: LLM models as capabilities (2026-07-25 amendment)
+
+**Motivation.** The OBSERV-02 dashboard finalization (`KPI-ANALYTICS-RFC.md` v3)
+gives `platform_admin` a quotas/governance surface. Model choice belongs next
+to it: today a platform_admin has no way to turn a model on/off platform-wide
+or per team — model routing (`models_catalog.yaml`, §below) is entirely a
+runtime-internal concern, invisible to the product surface. Rather than invent
+a bespoke model-enablement mechanism, this section makes `kind="model"` a
+third projection of the existing capability object space — the same move
+§8.6 already made once for `kind="agent"`: "no new FGA type, no parallel
+system." Every mechanism this RFC built for `kind="tool"`/`kind="agent"` —
+schema, `can_use`, the enablement write path (§8.2–§8.3), the admin dashboard
+(§8.5) — now governs all three kinds uniformly.
+
+**Catalog projection, not authorship — and NOT a direct file read.**
+Like `kind="agent"` entries (§8.6: "no `CapabilityManifest` of kind
+`'agent'` is ever authored"), no one hand-writes a `kind="model"` manifest
+either. `models_catalog.yaml` (`apps/fred-agents/config/models_catalog.yaml`,
+loaded by `fred_runtime.model_routing.catalog.load_model_catalog`) remains
+the sole source of truth for routing (profiles, provider settings, routing
+rules) — untouched by this change.
+
+**Corrected during implementation (2026-07-25):** this section originally
+proposed a projector living alongside `aggregate_capability_catalog`
+(control-plane-backend) that reads `models_catalog.yaml` directly. That is
+architecturally wrong for a real multi-pod deployment: control-plane has no
+filesystem access to a runtime pod's mounted config, and — critically for a
+platform running **multiple fred-agents replicas/deployments** — different
+runtime sources can in principle carry different catalogs, so there is no
+single file for control-plane to read even if it could. The actual shape
+mirrors `kind="agent"` more closely than first assumed, but with one
+difference: `kind="agent"` entries are synthesized control-plane-side purely
+from data already fetched (`/agents/templates`), while `models_catalog.yaml`
+has no existing control-plane consumer at all — a new pod-side fetch was
+unavoidable, following the exact pattern `_fetch_mcp_catalog`/`GET
+/agents/mcp-catalog` already established for cross-service catalog exposure:
+
+1. **fred-runtime** (`agent_app.py`) exposes `GET /agents/models-catalog`,
+   loading `models_catalog.yaml` fresh on every call (rare polling, never
+   per-turn — no caching needed) and projecting `catalog.profiles` into one
+   entry per distinct `(provider, name)` pair — **not** one per `profile_id`.
+   Today's 26 profiles collapse to ~13 catalog entries; a model used for
+   both `chat` and `language` capability is one enablement decision, not
+   two, because that is the unit an admin actually reasons about ("can this
+   team use GPT-4o" — not "can this team use GPT-4o-as-chat-profile vs
+   GPT-4o-as-language-profile"). The runtime derives the id itself
+   (`model_capability_id(provider, name)`, fred-sdk — a shared helper, not
+   duplicated logic, since both the runtime that generates ids and
+   control-plane's collision guard need the exact same namespace contract)
+   and returns it directly; control-plane trusts it as-is, the same trust
+   boundary `kind="tool"` ids already cross.
+2. **control-plane-backend** (`product/service.py::_model_capabilities_for_source`)
+   fetches that endpoint per runtime source — a THIRD fetch in
+   `aggregate_capability_catalog`, alongside the existing tool and agent
+   fetches, same best-effort contract (`None` on an unreachable pod).
+   `MODEL_CAPABILITY_NAMESPACE_PREFIX` (`model__`, fred-sdk) gets the exact
+   same reserved-prefix collision guard `AGENT_CAPABILITY_NAMESPACE_PREFIX`
+   already has.
+
+The entry's `id` (e.g. `model__openai__gpt-5.1`) internally corresponds to
+every `profile_id` sharing that `(provider, name)` — an implementation
+detail resolved at read time from `catalog.profiles`, never persisted
+separately or exposed to the enablement layer, which only ever sees the
+entry `id`.
+
+**Field mapping onto the existing shape** (`CapabilityCatalogEntry`,
+`libs/fred-sdk/fred_sdk/contracts/capability/manifest.py`):
+
+| Field | Value for `kind="model"` |
+|---|---|
+| `id` | `model__<provider>__<name>` (normalized) |
+| `name`, `description` | Derived from the profile's `model.name` / `description` |
+| `icon` | A fixed "model" icon (no per-provider icon set in v1) |
+| `team_scope` | `ADMIN_GATED` (same default as tool/agent) |
+| `config_fields` | Empty — no agent-creation-time config for a model |
+| `team_settings_fields` | Empty in v1 — no per-team model parameters |
+| `assets` | Empty |
+| `execution_models` | Default `("react", "graph")`, ignored for this kind (same no-op as `kind="agent"` already accepts, §8.6) |
+| `default_capability_ids` | Empty (agent-only field, unused here) |
+| `route_base_url` | `None` — a model entry advertises no router |
+
+No field is incompatible; every unused field already has a defined
+zero-value from the `kind="agent"` precedent.
+
+**Admin dashboard: zero new UI.** `CapabilitiesPage.tsx` treats `kind` as a
+pure filter/grouping value in exactly one place (`KIND_FILTERS`, and the
+matching `useState`) — the tri-state team matrix
+(`CapabilityTeamMatrixDrawer.tsx`), health column, and default-on toggle
+never branch on `kind`. **Shipped (`5ee4813f`, OBSERV-02 v3 F5):**
+`KIND_FILTERS`/its `useState` type widened to `Array<"tool" | "agent" |
+"model">` (hand-written, not a registry hotspot) plus one i18n key — no other
+frontend code needed a `kind="model"` branch. The three generated `kind`
+unions (`controlPlaneOpenApi.ts`, `runtimeOpenApi.ts`) widened automatically
+once the backend `Literal` changed and the clients were regenerated (`make
+update-control-plane-api`, `make update-runtime-api`) — never hand-edited,
+per the standing contract rule.
+
+**The one genuinely new piece: runtime enforcement.** Every existing kind has
+a live enforcement chokepoint — `kind="tool"` gates tool selection via
+`can_use_capability` at agent-save time, `kind="agent"` gates template
+enrollment the same way, and both suspend/revive dependent agent instances
+on revocation/grant (§8.2, `enablement.py`). **No equivalent chokepoint
+exists for models today**: model selection is a per-turn runtime decision
+(`ModelRoutingResolver`, `libs/fred-runtime/fred_runtime/app/agent_app.py`)
+with no authorization check in the path at all — confirmed by grep, there is
+no `allowed_models`/`model_allowlist` concept anywhere in the codebase to
+reconcile with.
+
+**Implemented (2026-07-26).** Confirmed with the developer: live per-request
+OpenFGA checks are already this platform's standing security posture for
+execution authorization (`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` —
+"never cached", a control-plane-signed/cached grant was explicitly rejected
+there, Appendix A). The naive placement — a live check inside
+`ModelRoutingResolver` — would run it multiple times per turn (once per
+distinct `operation`: routing, planning, tool-call, …), which is genuinely
+hotter than the existing once-per-request posture. Resolved shape, consistent
+with both constraints:
+
+- `usable_model_capability_ids(rebac, team_id)` (new,
+  `fred_runtime/model_routing/authz.py`) — the pod's own local OpenFGA
+  `ListObjects` query (the pod already holds a `rebac_engine`, no
+  control-plane round-trip), computed **once per turn**, at the same point
+  `_authorize_execution_or_raise` already runs
+  (`_iterate_runtime_event_payloads`, `agent_app.py`) — not inside model
+  routing itself.
+- The result threads through the turn via a new
+  `BoundRuntimeContext.usable_model_ids: tuple[str, ...] | None` field
+  (fred-sdk) — `None` = ReBAC disabled/unconfigured, no restriction (the
+  same dev/identity-only posture every other pod-side check already has);
+  a non-`None`, possibly-empty tuple = exactly what's allowed.
+- `RoutedChatModelFactory.build_for_chat` (the single method both `build()`
+  and `build_for_operation()` funnel through) checks the resolved model
+  against it and **fails closed** — raises `ModelNotUsableError`, never
+  silently substitutes — when the set is present and the model isn't in it.
+
+**Deliberate small duplication, not resolved here:** `usable_model_capability_ids`
+mirrors control-plane's `capabilities/authz.py::usable_capability_ids` field-
+for-field (same OpenFGA relations, same personal-team contextual-edge
+handling) because that control-plane module cannot be imported into
+fred-runtime (separate deployables). The correct long-term fix — move this
+query logic into `fred-core`, which both already depend on — is real,
+separate refactor scope against already-shipped, tested control-plane code;
+tracked in `NOTES-OBSERV-02-FOLLOWUPS.md`, not attempted under this branch.
+
+**✅ Deployment-sequencing hazard — resolved 2026-07-27 (no migration built):**
+today, no team holds an explicit `can_use` grant on any `model__*` capability
+(nothing auto-seeds one — `team_scope` for `kind="model"` stays `ADMIN_GATED`,
+see the field-mapping table above). The moment ReBAC is active for a team,
+`usable_model_capability_ids` returns an EMPTY set for it — not
+"unrestricted" — and every chat turn for that team fails closed with
+`ModelNotUsableError`. **Resolution: no auto-seeding migration is built for
+v1.** `PUT /admin/capabilities/{id}/default-on` (§8.3/§8.5) already exists,
+is kind-agnostic (`set_capability_default_on`, `enablement.py`, has no `kind`
+branch), and already works unmodified for `kind="model"` entries — the same
+admin action that turns on a `tool`/`agent` capability platform-wide turns on
+a model. That is the intended v1 mechanism: `platform_admin` opts a model IN
+via the existing admin UI/API, nothing is on by default. The operational
+consequence replaces the migration requirement: **on any deployment where
+ReBAC is already active for at least one team, the platform_admin must
+toggle default-on for the desired model(s) (e.g. the mock-openai profile
+used for perf campaigns) in the same deploy window as this enforcement
+code — before, or immediately as, ReBAC enforcement reaches that team** —
+otherwise that team's chat fails closed until the toggle is flipped. This is
+now a deploy-runbook step, not a code gap; tracked in
+`NOTES-OBSERV-02-FOLLOWUPS.md` #14/#15.
+
+**Migration: none, by design.** `models_catalog.yaml` stays exactly as is,
+routing-only. No migration writes `default_on` tuples for `kind="model"`
+entries — `platform_admin` sets them via the generic toggle above, one model
+at a time, same UX as any other capability. This was a deliberate scope cut
+for the first PR (simpler, no backfill code, no migration to test) traded
+against the manual runbook step above; auto-seeding every routable model at
+first registration (mirroring how `kind="tool"`/`kind="agent"` were seeded at
+CAPAB-01 rollout) remains a legitimate future improvement if the manual step
+proves error-prone in practice, but is not required for this to ship safely.
+
+**Status (2026-07-26):** both halves are now implemented and tested —
+offline suites green across fred-sdk, fred-runtime, control-plane-backend:
+- Catalog projection (visibility/toggle in the admin matrix): fred-sdk `kind`
+  literal + `model_capability_id`, the runtime `GET /agents/models-catalog`
+  endpoint, control-plane's fetch/aggregate/collision-guard.
+- Runtime enforcement (fail-closed): `usable_model_capability_ids`,
+  `BoundRuntimeContext.usable_model_ids`, `RoutedChatModelFactory`'s gate,
+  `ModelNotUsableError`.
+
+**2026-07-27 update:** both remaining items are now closed.
+1. ~~The default-on seeding migration~~ — resolved by decision, not code: no
+   migration is built (see above); `platform_admin` uses the existing generic
+   default-on toggle instead, with a mandatory deploy-runbook step covering
+   the same hazard.
+2. `CapabilitiesPage.tsx`'s `KIND_FILTERS` widen (frontend) — shipped
+   (`5ee4813f`, OBSERV-02 v3 F5): `KIND_FILTERS` includes `"model"`, and
+   neither the default-on toggle column nor the team matrix drawer branches
+   on `kind`, so the existing admin UI already covers models with no
+   kind-specific code.
 
 ---
 

@@ -4,11 +4,15 @@
 > `ExecutionGrant`**: the control-plane issues no signed (or unsigned) authorization token.
 > Managed execution is **authenticated** by the caller's **Keycloak JWT** and **authorized by
 > the agent pod itself**, per request, via an **OpenFGA ReBAC check** on the team carried in
-> `runtime_context.team_id`. The control-plane's `prepare-execution` resolves only *where* the
+> `runtime_context.team_id` for regular collaborative-team users (with the documented
+> intrinsic-personal and service-agent cases). The control-plane's `prepare-execution` resolves only *where* the
 > agent runs (URLs) and the session's context — never a capability. §0–§3 describe this model;
 > the dated entries in §8 record the abandoned signed-grant approach as history. See
 > [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
 > (§13/D5) and the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
+
+RFC links in this document preserve decision history only. This design document
+is the current authority for implemented runtime behavior.
 
 > ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
 > `_authorize_execution_or_raise` now recognizes a **service identity** (a caller holding
@@ -106,7 +110,7 @@ Browser / CLI                control-plane              fred-runtime pod
      │     runtime_context: { team_id }  ← pod authorizes here│
      │   }                                                    │
      │                              pod: JWT identity +        │
-     │                              OpenFGA CAN_READ(team)     │
+     │                              team authorization         │
      │◄── data: {"kind":"status","status":"starting"} ────────│
      │◄── data: {"kind":"assistant_delta","delta":"I will…"} ─│
      │◄── data: {"kind":"tool_call","tool_name":"check_bal…"} ─│
@@ -123,10 +127,15 @@ Browser / CLI                control-plane              fred-runtime pod
 | **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (forbidden under the `c3` profile)    |
 
 The managed path is the only one authorized for production frontend calls. The
-agent pod authenticates the Keycloak JWT and authorizes the request itself with a
-pod-side OpenFGA check on `runtime_context.team_id`. `control-plane` resolves which
+agent pod authenticates the Keycloak JWT and authorizes the request itself:
+OpenFGA `CAN_READ` for regular collaborative-team users, exact intrinsic
+ownership for a personal space, or the scoped service-agent rule.
+`control-plane` resolves which
 runtime pod serves which agent instance (via `prepare-execution`) but issues no
-capability and is never on the execution path.
+capability and never proxies the SSE stream. The runtime currently performs an
+internal control-plane binding lookup again before activation, so control-plane
+availability and latency remain a pre-LLM dependency; §0.2 records that current
+implementation honestly.
 
 > **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** the **Direct** path now refuses
 > agents with `AgentDefinition.public=False`: `_resolve_agent_instance` returns 404 for a
@@ -214,7 +223,7 @@ Browser                    control-plane              fred-runtime pod
   │                             │  • validate Keycloak JWT    │
   │                             │    (strict iss/aud under c3)│
   │                             │  • session ownership        │
-  │                             │  • OpenFGA CAN_READ(team)   │
+  │                             │  • authorize team scope     │
   │                             │  • resolve instance (ReBAC) │
   │◄── SSE stream ─────────────────────────────────────────│
   │   (see section 0 for event sequence)                    │
@@ -237,9 +246,10 @@ credential the pod must trust.
    validated JWT; any body-supplied `access_token` / `refresh_token` is neutralized.
 2. **Session ownership** — an existing `session_id` must belong to the caller
    (conversations are private per owner; blocks intra-team session hijacking).
-3. **OpenFGA authorization** — the caller must hold `CAN_READ` on
-   `runtime_context.team_id` (the canonical team id, e.g. `personal-<uid>` for a
-   personal space). Denial fails closed (403). Under the `c3` profile a direct
+3. **Team authorization** — a regular collaborative-team caller must hold
+   OpenFGA `CAN_READ`; a personal-space caller must present the exact canonical
+   `personal-<uid>` derived from the JWT; the scoped service-agent rule is the
+   only other bypass. Denial fails closed (403). Under the `c3` profile a direct
    `agent_id` is forbidden entirely.
 4. **Team-scoped resolution** — the instance template + tuning is resolved from the
    control-plane through a ReBAC-gated, team-scoped callback, then the resolved
@@ -247,6 +257,86 @@ credential the pod must trust.
 
 **HITL resume** follows the exact same path with `execution_action: "resume"` and
 `resume_payload` in the request body instead of a new user message.
+
+---
+
+## 0.2 One-turn hot path, performance, and scalability contract
+
+This section is the current operational design authority for one managed turn.
+It replaces inference from dated RFC narratives. The source-backed review and
+per-finding acceptance criteria live in
+[`2026-07-26-agent-turn-core`](../reviews/performance/2026-07-26-agent-turn-core/README.md).
+
+### Current execution sequence
+
+| Order | Boundary | Work on the critical path before the next boundary |
+|---:|---|---|
+| 1 | `POST /agents/execute/stream` | Validate request and Keycloak identity; normalize trusted runtime context |
+| 2 | Session/checkpoint access | Verify resumed checkpoint ownership when applicable; for an existing session, verify existence and owner in PostgreSQL |
+| 3 | Pod execution authorization | For a regular collaborative-team user, require OpenFGA `CAN_READ`; personal ownership and the scoped service-agent rule keep their documented behavior |
+| 4 | Managed runtime binding | Call the control-plane internal binding endpoint, authorize the team there, read the instance and team capability settings, then cross-check the resolved owner team |
+| 5 | Model authorization | Resolve usable model capabilities with a team-scoped OpenFGA lookup before model routing |
+| 6 | Runtime activation | Build request context/services/capabilities, activate MCP tools, construct the selected ReAct/Deep/Graph runtime and executor |
+| 7 | Model/tool loop | Stream remote LLM output; execute tools and any HITL pause/resume; checkpoint through the shared async SQL engine |
+| 8 | SSE delivery | Serialize typed events and deliver them directly from the runtime pod to the caller |
+| 9 | Completion/history | Emit turn telemetry, then persist the projected history asynchronously and fail-open relative to the already delivered response |
+
+The control-plane does **not** proxy step 8, but its internal lookup in step 4
+means it is still a synchronous dependency of runtime activation. A production
+turn is not ready for its first LLM token until steps 1–6 complete.
+
+### Runtime performance invariants
+
+Every implementation and review must preserve these invariants:
+
+1. **LLM latency first, tool latency second.** Pre-LLM work has an explicit
+   budget; every runtime emits the canonical `llm.call_latency_ms` and
+   `agent.tool_latency_ms` signals through the resilient KPI sink.
+2. **No synchronous I/O in async execution.** Network, SQL, filesystem, token
+   refresh, and sink operations reached from an `async def` must be natively
+   async or isolated behind a deliberately bounded executor.
+3. **Bound every remote wait and shared resource.** LLM, OpenFGA,
+   control-plane, MCP, Keycloak, Knowledge Flow, SQL-pool acquisition, pending
+   history work, and pod admission need explicit time/capacity limits.
+4. **Share transports, not request identity.** Reuse process-wide HTTP/model
+   transports where safe. Tokens, checkpoint state, request baggage,
+   interceptors, and authorization decisions remain request/principal scoped.
+5. **Concurrency must be intentional.** Independent I/O may use bounded
+   concurrency (`asyncio.gather` or a task group). Security checks and ordering
+   dependencies must not be parallelized merely to hide an over-fetching
+   contract.
+6. **Conversation work is bounded.** Model-input history, persisted checkpoint
+   growth, tool calls per turn, parallel tool calls, event buffering, and
+   background persistence have explicit budgets and overload behavior.
+7. **Replica scope is explicit.** A pod-local cache or in-memory queue is never
+   described as shared or durable. Its key, TTL, invalidation, token treatment,
+   and behavior across deployment replicas are part of the design.
+8. **Authorization stays fail-closed.** Performance work must not weaken
+   turn-start, model-capability, or per-tool authorization or extend revocation
+   staleness without an approved security decision.
+
+### Current compliance status (2026-07-26)
+
+| Area | Current status | Evidence / required follow-up |
+|---|---|---|
+| Direct SSE path | **Meets design** — the control-plane does not proxy the stream | §0.1 |
+| LLM transport | **Meets base design** — async streaming, shared connection pool, explicit connect/read/write/pool timeout | `fred_core.model.http_clients`; production model catalog |
+| Knowledge Flow transport | **Meets base design** — shared async client and explicit tuning | `fred_runtime.common.kf_http_client` |
+| Binding call budget | **Gap (P1)** — full team projection causes about 21 control-plane ReBAC operations per managed turn and the pod creates a fresh HTTP client | [TURN-01](../reviews/performance/2026-07-26-agent-turn-core/TURN-01-control-plane-runtime-binding-fanout.md) |
+| Model authorization | **Needs load evidence (P1)** — one additional OpenFGA lookup before every team-scoped LLM turn | [PERF-02](../reviews/performance/2026-07-26-observ-02-v3/PERF-02-model-authz-openfga-hot-path.md) |
+| MCP activation | **Needs load evidence (P1)** — sequential cold discovery, token-scoped pod cache, no singleflight | [TURN-02](../reviews/performance/2026-07-26-agent-turn-core/TURN-02-mcp-cold-path-and-cache-scope.md) |
+| ReAct/Deep model/tool boundary | **Mostly meets design** — canonical KPI/audit middleware and per-tool ReBAC; the authorization cost needs an explicit stage metric and load budget | [core review](../reviews/performance/2026-07-26-agent-turn-core/README.md) |
+| Graph model/tool boundary | **Gap (P1)** — bypasses canonical LLM/tool KPI, tool audit, and per-call ReBAC | [TURN-03](../reviews/performance/2026-07-26-agent-turn-core/TURN-03-graph-runtime-observability-and-authz.md) |
+| Turn resource budgets | **Gap (P1)** — 500-message model window, no default tool-call cap, unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md) |
+| SSE/history lifecycle | **Needs load evidence (P2)** — full payload buffering and unbounded fire-and-forget persistence tasks | [TURN-05](../reviews/performance/2026-07-26-agent-turn-core/TURN-05-sse-buffering-and-history-backpressure.md) |
+| Pod/SQL admission | **Needs load evidence (P1)** — Uvicorn limit unset; shared async SQL pool defaults to 15 maximum connections | [TURN-06](../reviews/performance/2026-07-26-agent-turn-core/TURN-06-admission-and-sql-capacity.md) |
+| Token refresh | **Gap (P1)** — synchronous Keycloak HTTP is reachable from async Knowledge Flow/MCP recovery | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
+| Runtime construction | **Needs load evidence (P2)** — runtime/executor/ReAct compilation repeats per turn | [TURN-08](../reviews/performance/2026-07-26-agent-turn-core/TURN-08-per-turn-runtime-rebuild.md) |
+
+The call-budget estimate and P1/P2 labels above are review findings, not measured
+production SLO results. The design is considered performance-validated only
+after the relevant 200-concurrent-turn, four-replica scenarios and overload
+behavior are recorded in the dossiers.
 
 ---
 
@@ -259,7 +349,9 @@ runtime pods.
 Every agent execution is:
 
 - attributable to `user_id + team_id + agent_instance_id`
-- authorized by a **pod-side OpenFGA check** (identity proven by the Keycloak JWT)
+- authorized by the **pod-side team rule** (identity proven by the Keycloak
+  JWT; OpenFGA for regular collaborative teams, with the documented intrinsic
+  personal/service-agent cases)
 - scoped to a `session_id` for multi-turn continuity
 - optionally resumable from a `checkpoint_id`
 - observable through enriched trace/KPI/metrics metadata that preserves the
@@ -288,40 +380,32 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   (`fred_core.security.oidc`). Under the `c3` profile it validates issuer and
   audience strictly (`verify_aud=True`), and each pod validates `aud == its own
   client_id` (per-agent audience — anti-confused-deputy, decision D5c).
-- **Authorization** — the pod runs a per-request OpenFGA check that the caller
-  holds `CAN_READ` on `runtime_context.team_id` (the same relation the
-  control-plane required before it would mint a grant). This is the model
-  already homologated on `main`'s agentic-backend, re-instantiated per pod, and
-  it applies uniformly to collaborative teams and **personal spaces** alike
-  (`personal-<uid>`) — see below for how a personal space's own `CAN_READ`
-  comes to hold true.
+- **Authorization** — for a collaborative team, the pod runs a per-request
+  OpenFGA check that the caller holds `CAN_READ` on
+  `runtime_context.team_id`. A canonical personal space
+  (`personal-<authenticated uid>`) uses intrinsic ownership by exact identity
+  comparison, and the evaluation worker's `service_agent` identity uses the
+  separately documented team-scoped bypass. Every other case fails closed.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
-The team in `runtime_context.team_id` is caller-supplied but safe: OpenFGA only
-authorizes teams the user actually has a relation to. A missing team on a managed
-request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
-survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
+The team in `runtime_context.team_id` is caller-supplied but safe: a
+collaborative team must pass OpenFGA, and a personal-team identifier must equal
+the canonical identifier derived from the authenticated user. A missing team on
+a managed request fails closed (403). The `ExecutionGrantAction` enum (`execute`
+/ `resume`) survives as the `execution_action` field; the `ExecutionGrant`
+envelope does not.
 
-**Personal spaces are real ReBAC team objects.** A personal space
-(`fred_core.common.personal_team_id(uid)`) has no `team_metadata` row — it
-stays a synthetic, system-recognized team on the control-plane product
-surface (`build_personal_team`) — but it is a first-class object in the ReBAC
-graph, exactly like a collaborative team. `agent_app.py` carries no
-personal-space-specific authorization code at all; the plain
-`rebac.check_user_team_permission_or_raise(user, CAN_READ, team_id)` call
-below handles it correctly, because `fred-core` self-heals the owner's own
-tuple and write-guards every other write to a personal team — see
-[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08)
-for the full mechanism, shared by every backend, not just this runtime.
-
-Net effect at this call site: the caller's own personal space authorizes
-(audited `rebac_authorized`, same as any other team); another user's personal
-space, or the bare `"personal"` alias (for which no tuple is ever
-provisioned), denies (audited `rebac_denied`) — with no special-casing needed
-in this file. `service_agent` callers are unaffected: their team-scoped,
-OpenFGA-free authorization (§ below, RFC EVAL-AUTH Solution A) is checked
-first and returns before the `CAN_READ` check is reached.
+**Personal-space authorization at this runtime boundary is intrinsic.** A
+personal space has no `team_metadata` row and remains synthetic on the
+control-plane product surface (`build_personal_team`). The runtime authorizes
+only `fred_core.common.personal_team_id(authenticated_user.uid)` by exact
+comparison, without an OpenFGA request. Another user's `personal-*` identifier
+and the bare `"personal"` alias deny. Other platform operations may still model
+personal teams in ReBAC as documented in
+[`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08);
+that does not change this turn-start fast path. `service_agent` callers are
+unaffected: their team-scoped, OpenFGA-free authorization is checked first.
 
 **Architectural constraint (unchanged):**
 
@@ -376,8 +460,9 @@ through `_authorize_and_resolve` in `agent_app.py`, which performs, in order:
 
 1. identity stamping from the validated JWT (body tokens neutralized),
 2. session/checkpoint consistency + session-ownership enforcement,
-3. pod-side OpenFGA authorization on `runtime_context.team_id`
-   (`_authorize_execution_or_raise`),
+3. pod-side team authorization (`_authorize_execution_or_raise`): OpenFGA for
+   a regular collaborative team, exact intrinsic ownership for a personal
+   space, or the scoped service-agent rule,
 4. team-scoped instance resolution via a ReBAC-gated control-plane callback,
 5. a final cross-check of the resolved owner team against the caller's claimed team.
 
@@ -1818,8 +1903,14 @@ contract first. Do not patch the generated TypeScript by hand.
 
 1. `team_id` is mandatory and explicit in every managed execution (`runtime_context.team_id`).
 2. `agent_instance_id` is the default execution target; `agent_id` is dev-only and forbidden under the `c3` profile.
-3. Managed execution is authorized by the **pod itself**: a valid Keycloak JWT plus an OpenFGA `CAN_READ` check on `runtime_context.team_id`. There is **no `ExecutionGrant`**.
-4. The **pod is the execution authority**; control-plane resolves *where* an agent runs (`prepare-execution`) but issues no capability and is never on the execution path.
+3. Managed execution is authorized by the **pod itself**: a valid Keycloak JWT
+   plus the team rule in §2.2 (OpenFGA for regular collaborative teams, with the
+   documented intrinsic personal/service-agent cases). There is **no
+   `ExecutionGrant`**.
+4. The **pod is the execution authority**; control-plane resolves *where* an
+   agent runs and issues no capability. It never proxies SSE, but the runtime's
+   per-turn internal binding lookup currently keeps it on the pre-LLM critical
+   path (§0.2).
 5. Checkpoint/session access must be authorized at session scope (the session must belong to the caller).
 6. Fred code must not rebuild native Kubernetes routing/discovery behavior.
 7. No request field may carry infrastructure secrets; the pod resolves config from control-plane via a ReBAC-gated, team-scoped callback — never a secret.

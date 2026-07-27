@@ -31,6 +31,7 @@ How to use:
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -43,6 +44,36 @@ from ..models import FieldSpec, TeamScopePolicy
 # URL-safe subset, enforced at declaration so a bad id fails pod boot loudly
 # instead of crashing control-plane tuple writes (#1988).
 CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
+
+# Reserved id prefix for every `kind="model"` catalog entry (OBSERV-02 v3,
+# AGENT-CAPABILITY-RFC.md §8.7 — same structural-collision guard
+# `AGENT_CAPABILITY_NAMESPACE_PREFIX` already gives `kind="agent"`
+# projections, control-plane-side in `product/service.py`). `kind="model"`
+# entries are likewise a projection — no `CapabilityManifest` of kind
+# "model" is ever authored — but unlike "agent" they are advertised BY the
+# runtime pod (`GET /agents/models-catalog`), not synthesized from data
+# control-plane already has. Both the runtime (id generation,
+# `model_capability_id` below) and control-plane (the same
+# reserved-prefix collision guard `aggregate_capability_catalog` already
+# applies to `agent__`) need this exact prefix, so it lives here in
+# fred-sdk — the one package both already depend on — rather than being
+# duplicated by convention in two places.
+MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
+
+
+def model_capability_id(provider: str, name: str) -> str:
+    """Stable, namespaced capability id for one (provider, model name) pair.
+
+    One entry per distinct (provider, name), not per `models_catalog.yaml`
+    profile — a model used for both the `chat` and `language` routing
+    capability is one enablement decision, not two. Non-id-safe characters
+    (anything outside `CAPABILITY_ID_PATTERN`'s charset) are normalized to
+    `-` so a provider/model name containing e.g. `:` or `/` never produces
+    an id OpenFGA would reject.
+    """
+    safe_provider = re.sub(r"[^A-Za-z0-9._-]", "-", provider)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "-", name)
+    return f"{MODEL_CAPABILITY_NAMESPACE_PREFIX}{safe_provider}__{safe_name}"
 
 
 class UploadedFile(BaseModel):
@@ -243,7 +274,11 @@ class CapabilityManifest(BaseModel):
     # space (CAPAB-01, RFC §8.6) — no `CapabilityManifest` of kind "agent" is
     # ever authored; this discriminator exists on `CapabilityCatalogEntry` for
     # that projection and is carried here only so the two models stay aligned.
-    kind: Literal["tool", "agent"] = "tool"
+    # "model" (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7): same story —
+    # no `CapabilityManifest` of kind "model" is ever authored either, it is
+    # a runtime-advertised projection of one `models_catalog.yaml` (provider,
+    # name) pair.
+    kind: Literal["tool", "agent", "model"] = "tool"
     # Which execution models this capability's runtime actually works under
     # (CAPAB-02, RFC §3.2/§3.9). Default = both, correct for any capability
     # whose only runtime need is `tools()` (execution-model-agnostic by
@@ -313,10 +348,12 @@ class CapabilityCatalogEntry(BaseModel):
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
-    # "tool" (pod-advertised capability) or "agent" (control-plane-side
-    # projection of an agent template into this catalog, CAPAB-01 RFC §8.6) —
-    # see `CapabilityManifest.kind`.
-    kind: Literal["tool", "agent"] = "tool"
+    # "tool" (pod-advertised capability), "agent" (control-plane-side
+    # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
+    # or "model" (pod-advertised projection of one models_catalog.yaml
+    # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
+    # `CapabilityManifest.kind`.
+    kind: Literal["tool", "agent", "model"] = "tool"
     # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
     # future catalog/UI filter can hide a ReAct-only capability from a Graph
     # template's picker instead of only failing loud at selection time.
@@ -335,6 +372,15 @@ class CapabilityCatalogEntry(BaseModel):
     # 2026-07-19 `depends_on` fast-follow, GitHub #2004 item 5). Always empty
     # for `kind="tool"` entries.
     default_capability_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Every `models_catalog.yaml` profile_id sharing this entry's (provider,
+    # name) — TEAM-ROUTING-POLICY-RFC.md §7.1: a team routing policy picks by
+    # profile_id, finer-grained than this entry's (provider, name)-keyed
+    # capability id, so control-plane needs the mapping back from profile_id
+    # to capability id (write-time enablement validation) and the
+    # team-settings picker needs the reverse (which profile_ids an enabled
+    # capability actually offers). Always empty for kind="tool"/"agent"
+    # entries — only `kind="model"` populates it.
+    model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def from_manifest(
