@@ -15,7 +15,7 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TeamMember, TeamWithPermissions } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
@@ -102,7 +102,7 @@ describe("TeamSettingsMembersTable — role chip toggling", () => {
         relations: ["team_editor"],
       } as TeamMember,
     ];
-    render(<TeamSettingsMembersTable team={team} />);
+    render(<TeamSettingsMembersTable team={team} search="" />);
 
     click(roleChip("team_editor"));
 
@@ -122,7 +122,7 @@ describe("TeamSettingsMembersTable — role chip toggling", () => {
         relations: ["team_member"],
       } as TeamMember,
     ];
-    render(<TeamSettingsMembersTable team={team} />);
+    render(<TeamSettingsMembersTable team={team} search="" />);
 
     click(roleChip("team_editor"));
 
@@ -132,5 +132,58 @@ describe("TeamSettingsMembersTable — role chip toggling", () => {
       userId: "u1",
       grantTeamMemberRoleRequest: { relation: "team_editor" },
     });
+  });
+});
+
+describe("TeamSettingsMembersTable — search filtering", () => {
+  function rowIdentifiants(): string[] {
+    return Array.from(container.querySelectorAll('[class*="datatable-row"]')).map(
+      (row) => row.querySelector("div")?.textContent ?? "",
+    );
+  }
+
+  beforeEach(() => {
+    h.teamMembers = [
+      { user: { id: "u1", first_name: "Alice", last_name: "Doe", username: "alice.doe" }, relations: ["team_member"] },
+      {
+        user: { id: "u2", first_name: "Bob", last_name: "Martin", username: "bob.martin" },
+        relations: ["team_member"],
+      },
+    ] as TeamMember[];
+  });
+
+  it("below 2 characters, shows every member unfiltered", () => {
+    render(<TeamSettingsMembersTable team={team} search="a" />);
+    expect(rowIdentifiants()).toEqual(["alice.doe", "bob.martin"]);
+  });
+
+  it("matches on first name alone", () => {
+    render(<TeamSettingsMembersTable team={team} search="ali" />);
+    expect(rowIdentifiants()).toEqual(["alice.doe"]);
+  });
+
+  it("matches on last name alone", () => {
+    render(<TeamSettingsMembersTable team={team} search="martin" />);
+    expect(rowIdentifiants()).toEqual(["bob.martin"]);
+  });
+
+  it("matches on username/identifiant alone", () => {
+    render(<TeamSettingsMembersTable team={team} search="bob.martin" />);
+    expect(rowIdentifiants()).toEqual(["bob.martin"]);
+  });
+
+  it("matches combined first + last name regardless of word order", () => {
+    render(<TeamSettingsMembersTable team={team} search="doe alice" />);
+    expect(rowIdentifiants()).toEqual(["alice.doe"]);
+  });
+
+  it("is case-insensitive and returns nothing when no field matches", () => {
+    render(<TeamSettingsMembersTable team={team} search="ALICE" />);
+    expect(rowIdentifiants()).toEqual(["alice.doe"]);
+
+    act(() => root.unmount());
+    container.remove();
+    render(<TeamSettingsMembersTable team={team} search="nobody" />);
+    expect(rowIdentifiants()).toEqual([]);
   });
 });

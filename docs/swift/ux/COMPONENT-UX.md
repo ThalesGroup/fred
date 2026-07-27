@@ -683,6 +683,30 @@ _(none yet)_
 
 ---
 
+### Delete confirmation in `ChatList` (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatList.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`
+**Status:** `Functional`
+
+Clicking a session tile's `DeleteIconButton` used to call the delete
+mutation immediately, with no confirmation step (and swallowed the error
+silently). Now opens the shared `ConfirmationDialog` (via
+`useConfirmationDialog`, already wrapping the app in `App.tsx`) first —
+the mutation only fires from `onConfirm`. Same inverted-emphasis
+destructive pattern as "Delete agent" (`TeamAgentsPage`) and "Leave team"
+(`LeaveTeamButton`): `criticalAction: true`, `cancelVariant: "filled"` /
+`cancelColor: "primary"` (Cancel stays the visually dominant filled
+button), `confirmVariant: "text"` (Delete drops to a low-emphasis text
+button, colored `error` via `criticalAction`). New i18n keys under
+`rework.sidebar.chatList.deleteDialog.{title,message,confirm,cancel}`,
+message interpolates the session's own displayed label (title, or the
+UUID-prefix fallback from the open issue above) — same shape as
+`rework.agentCard.deleteDialog`.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -719,15 +743,13 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 **Status:** `Functional`
 
 Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
-affordance (TEAM-09) is driven entirely by the team's `joining_mode`, gated
-on `!team.is_member`:
+affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
+the team's `joining_mode`, gated on `!team.is_member`:
 
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `request_only` | "Request to join" button, permanently `disabled` — the notification system to route requests to team admins doesn't exist yet |
 | `invite_only` | No button; muted label (`on-surface-retreat`) |
-| `closed` | No button; muted label (`on-surface-muted`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -735,36 +757,93 @@ The former lock icon next to the team name (driven by the retired
 footer label already communicates restricted-join state more specifically,
 so keeping both would duplicate the signal.
 
-#### Open UX issues
-
-- **`request_only` disabled button has no explanatory affordance** — a
-  permanently-disabled button with no tooltip/hint may read as broken to
-  users rather than "not yet supported." Consider a tooltip or helper text
-  once the underlying notification system is scoped.
+`request_only` (a disabled "Request to join" button — the notification
+system to route requests to team admins was never built) and `closed` (a
+second muted label, indistinguishable in practice from `invite_only`) were
+dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
-### `TeamSettingsParameters` — joining-mode control
+### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
 **Status:** `Functional`
 
-Replaced the `is_private` `Switch` row with a 4-way `ButtonGroup`
-(`variant="radio"`), label left / control right in the same
-`form-section` container. Each option carries its own selected-state color
-via the `ButtonGroupItem` color-per-item extension (see below): `open` →
-`success`, `request_only`/`invite_only` → `secondary`, `closed` → `error`.
-Selecting an option PATCHes `joining_mode` immediately (no separate save
-step), mirroring the retired Switch's auto-save behavior.
+Two stacked rows (`.team-settings-toggle-row`, label left / control right)
+share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
+`gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
+**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+`size="small"`, plain group-level `color="secondary"` — no per-item color,
+same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
+Selecting an option PATCHes immediately (no separate save step), mirroring
+the retired `is_private` `Switch`'s auto-save behavior this control replaced.
 
-#### `ButtonGroup` / `ButtonGroupItem` — per-item color override (TEAM-09)
+Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
+`request_only` and `closed` were dropped from the `JoiningMode` enum
+entirely (see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29). Originally shipped
+as a 4-way group with a distinct selected-state color per option
+(`open`→`success`, `closed`→`error`) via a `ButtonGroupItem` per-item
+`color?: ColorTheme` override; both the 2 extra options and the per-item
+color scheme were dropped in the same pass. `ButtonGroupItem` still
+supports the `color` override prop, but no shipped consumer uses it — the
+plain group-level color pattern is what every `ButtonGroup` consumer
+follows now.
 
-`ButtonGroupItemProps` gained an optional `color?: ColorTheme` that overrides
-the group-level `color` for that single item only (falls back to the
-group's `color` when omitted) — needed because this control's four options
-each use a different semantic color when selected, not one color for the
-whole group like every prior `ButtonGroup` consumer. Backward compatible:
-existing call sites that never set `item.color` are unaffected.
+**Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
+(`public`/`private`, default `public`) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+mechanism. A `private` team can never be `open`: while
+`visibility === "private"`, every item in the joining-mode `ButtonGroup`
+below carries `disabled` (the whole group reads as inert, not just the
+`open` option) — enforced this way rather than only disabling `open`
+because the server may have just silently downgraded a stored `open` to
+`invite_only` the moment visibility flipped, and a half-disabled group
+would misrepresent that as still a live choice. No client-side write of
+`joining_mode` ever accompanies a visibility PATCH — the resulting
+`joining_mode`, if it changes, comes back from the server on refetch.
+
+**`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
+previously had no disabled styling at all — a `disabled` item was
+functionally inert (native attribute blocks the click) but visually
+identical to an enabled one. Added `&:disabled` with `pointer-events: none`
+(bulletproof no-hover/no-active/no-click, no need to guard the existing
+`:hover`/`:active` rules individually) plus, scoped to
+`.stateLayer:not([data-selected="true"])` only, a transparent background
+and `on-surface-muted` label color. Scoping to the unselected sub-case
+matters: the joining-mode group's disabled-while-private state always has
+one selected item (`invite_only`, forced) and one not (`open`) — the
+selected item keeps its normal filled selected-color styling, only the
+unselected `open` option reads as muted/transparent. Generic addition to
+the shared atom (any future disabled+unselected item elsewhere gets the
+same treatment for free), not special-cased to this one call site.
+
+**`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
+optional `backgroundColor` prop (default `var(--surface-container)`,
+matching every existing consumer's look exactly), applied via a
+`--button-group-background-color` CSS custom property rather than a
+hardcoded class — same escape-hatch pattern as `DataTable`'s own
+`backgroundColor` prop. Both rows in this panel override it to
+`var(--surface-container-lowest)`, since they already sit inside a
+`surface-container` `form-section` and the default pill color would
+otherwise blend into it.
+
+### `TeamSettingsParameters` — team banner upload
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
+**Status:** `Functional`
+
+Banner upload is a `Button` (`variant="outlined"`, `size="small"`,
+`icon={{ category: "outlined", type: "upload" }}`, label "Importer"/"Import")
+that triggers a hidden native `<input type="file">` via `fileInputRef`,
+replacing the earlier click-the-image `ImageFileInput` pattern. Below the
+button, a `body-small` / `on-surface-muted` caption states the supported
+formats and size limit (JPEG/PNG/WebP, 5 MB max — matches the
+`ALLOWED_TYPES`/`MAX_BANNER_SIZE` client-side validation already in
+`handleBannerUpload`). To the button's right, an `<img>` preview
+(`.team-banner-preview`) renders the current/staged banner at the same
+240×88 width/height ratio as `TeamContentNavbar`'s `.bannerContainer`, so
+the preview shows the same crop the image gets once applied to the nav
+banner.
 
 ---
 
@@ -872,6 +951,69 @@ title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
 Both now resolve automatically since the wrapper's rendered height matches
 the input exactly; the popover's only remaining offset is the deliberate
 `margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+
+#### Open UX issues
+
+- Not yet design-reviewed. First functional pass only.
+
+---
+
+### `TeamSettingsMembers` — member search field (2026-07-26)
+
+**Location:**
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx`
+**Status:** `Functional`
+
+Reuses the exact same input the header's `AddTeamMembersDialog`-launch used
+to use before #2117 replaced it with a button: `TextInput` in `compact`
+mode with a leading `search` icon, no `label` — not the `SearchField`
+molecule (`PromptsPage`/`CapabilityTeamMatrixDrawer`'s search), which was
+tried first and rejected as visually inconsistent with the rest of this
+panel. `TextInput` already accepts native input attributes (`placeholder`,
+`aria-label`, `style`, `ref`) via its prop spread, so no component change
+was needed for the placeholder text, the accessible name on an icon-only
+field, or the clear button below.
+
+Placeholder: "Nom, Prénom, Identifiant" / "Last name, First name,
+Identifiant" — matches the three searchable fields (and the `username`
+column's "Identifiant" label) rather than a full sentence, unlike
+`AddTeamMembersDialog`'s own search placeholder ("Entrer un nom, prénom ou
+ID utilisateur").
+
+Clear button: once `search` is non-empty, a `small`/`on-surface-retreat`
+`IconButton` (`close`) appears absolutely-positioned inside the field
+(`.team-settings-members-search-clear`, vertically centered, `right:
+var(--spacing-2xs)`) — composed locally around `TextInput` rather than
+built into it, so the shared atom's API/behavior for every other consumer
+stays untouched. Clearing calls `setSearch("")` and refocuses the input via
+a local `ref` (same pattern as `SearchField`'s own clear button), so focus
+never leaves the field. `TextInput` gets an inline `style={{ paddingRight:
+... }}` only while the button is showing, reserving room so typed text
+never runs under it.
+
+Sits in the header's right-hand group (`.team-settings-members-header-right`,
+`gap: var(--spacing-m)` = 16px), immediately left of the conditional
+"Ajouter des membres" `Button` — both share that flex row so the search
+field is still shown flush right even for members without
+`can_administer_members` (button hidden, search alone). Fixed
+`width: 280px` on the field's wrapper, since `TextInput`'s root is
+`width: 100%` and needs a container to stop it filling the header row.
+
+Filtering is purely client-side: `useListTeamMembersQuery({ teamId })`
+already fetches every member in one uncapped call (`DataTable`'s pagination,
+per #2108 above, only slices that already-fetched array), so there's no
+backend search endpoint to coordinate with. Below 2 characters the query is
+ignored (every member shows); at 2+, the query is split on whitespace into
+tokens and a member matches when **every** token is found in **at least
+one** of `first_name`/`last_name`/`username` (case-insensitive substring) —
+so "doe alice" and "alice doe" both match a member named Alice Doe, and a
+lone token matches on first name, last name, or the "Identifiant" column
+(`username`) alone.
+
+The row's `IconButtonMenu` ("more" action) color also moved from
+`on-surface` to `on-surface-retreat` in this pass — a deliberate de-emphasis
+of that column, unrelated to search but shipped in the same change.
 
 #### Open UX issues
 

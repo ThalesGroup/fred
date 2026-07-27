@@ -520,6 +520,7 @@ def _print_team_table(teams: list[Team], *, color_enabled: bool) -> None:
             ColumnSpec("name", 32, lambda t: t.name),
             ColumnSpec("members", 7, lambda t: str(t.member_count or 0), align=">"),
             ColumnSpec("joining", 12, lambda t: str(t.joining_mode.value), align=">"),
+            ColumnSpec("visibility", 10, lambda t: str(t.visibility.value), align=">"),
         ],
         color_enabled=color_enabled,
     )
@@ -725,6 +726,7 @@ def _print_team_details(team: TeamWithPermissions, *, color_enabled: bool) -> No
         f"  description:{' ' if team.description else ''}{team.description or 'none'}"
     )
     print(f"  joining:    {team.joining_mode.value}")
+    print(f"  visibility: {team.visibility.value}")
     print(f"  members:    {team.member_count or 0}")
     print(
         "  admins:     "

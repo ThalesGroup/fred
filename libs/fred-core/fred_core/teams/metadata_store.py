@@ -40,18 +40,33 @@ def utcnow() -> datetime:
 class JoiningMode(str, Enum):
     """TEAM-09 (RFC FRED-TEAM-CONFIG-RFC.md §5.1.1): replaces the former
     standalone `is_private` bool. Gates only whether/how a user can become a
-    member — never marketplace visibility, which is now unconditional for
-    every team (see `RebacEngine.ensure_team_public_relations`)."""
+    member — marketplace discoverability is `TeamVisibility`'s job instead
+    (§5.1.2). Narrowed to 2 states 2026-07-26: `REQUEST_ONLY` depended on a
+    notification system that was never built, and `CLOSED` never enforced
+    anything `INVITE_ONLY` didn't — see the RFC amendment. A `PRIVATE` team
+    can never be `OPEN` (see `TeamVisibility`)."""
 
     OPEN = "open"
-    REQUEST_ONLY = "request_only"
     INVITE_ONLY = "invite_only"
-    CLOSED = "closed"
+
+
+class TeamVisibility(str, Enum):
+    """TEAM-10 (RFC FRED-TEAM-CONFIG-RFC.md §5.1.2): gates marketplace
+    discoverability, independent of `JoiningMode`. `PRIVATE` withholds the
+    ReBAC `public` relation entirely (see
+    `RebacEngine.ensure_team_public_relations`/`revoke_team_public_relations`)
+    — a non-member has no `can_read` on a private team, not just a hidden
+    marketplace listing. A `PRIVATE` team can never have `joining_mode ==
+    OPEN` (enforced in `update_team`, never trusting the client)."""
+
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 class TeamMetadataPatch(BaseModel):
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
+    visibility: TeamVisibility | None = None
     banner_object_storage_key: str | None = Field(default=None, max_length=300)
     banner_image_url: str | None = Field(default=None, max_length=300)
     # CTRLP-12 (RFC §3.B): per-team retention fields, patched through the same
@@ -68,6 +83,8 @@ class TeamMetadataPatch(BaseModel):
             values["description"] = payload["description"]
         if "joining_mode" in payload:
             values["joining_mode"] = payload["joining_mode"]
+        if "visibility" in payload:
+            values["visibility"] = payload["visibility"]
         if "banner_object_storage_key" in payload:
             values["banner_object_storage_key"] = payload["banner_object_storage_key"]
         elif "banner_image_url" in payload:
@@ -86,7 +103,8 @@ class TeamMetadata(BaseModel):
     # group backs it anymore.
     name: str
     description: str | None = None
-    joining_mode: JoiningMode = JoiningMode.REQUEST_ONLY
+    joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
+    visibility: TeamVisibility = TeamVisibility.PUBLIC
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -150,6 +168,7 @@ class TeamMetadataStore:
                 name=row.name,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,
@@ -204,6 +223,7 @@ class TeamMetadataStore:
                 name=row.name,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,
@@ -235,6 +255,7 @@ class TeamMetadataStore:
                 name=row.name,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,

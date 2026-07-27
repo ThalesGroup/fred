@@ -49,9 +49,25 @@ function compareStrings(valA: string | null | undefined, valB: string | null | u
 
 interface TeamSettingsMembersTableProps {
   team: TeamWithPermissions;
+  /** Free-text query matched against first name, last name, and username —
+   * a member must match every whitespace-separated token in at least one of
+   * those three fields (so "Marie Dupont" and "Dupont Marie" both match a
+   * member named Marie Dupont). Applied client-side: `useListTeamMembersQuery`
+   * already fetches every member in one call, no backend pagination/search
+   * to coordinate with. Ignored below 2 characters. */
+  search: string;
 }
 
-export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTableProps) {
+const MIN_SEARCH_LENGTH = 2;
+
+function matchesSearch(member: TeamMember, tokens: string[]): boolean {
+  const haystacks = [member.user.first_name, member.user.last_name, member.user.username]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
+}
+
+export default function TeamSettingsMembersTable({ team, search }: TeamSettingsMembersTableProps) {
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
@@ -145,6 +161,13 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     );
   }, [teamMembers]);
 
+  const filteredMembers = useMemo(() => {
+    const trimmed = search.trim().toLowerCase();
+    if (trimmed.length < MIN_SEARCH_LENGTH) return sortedMembers;
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    return sortedMembers.filter((member) => matchesSearch(member, tokens));
+  }, [sortedMembers, search]);
+
   const columns = useMemo((): DataTableColumn<TeamMember>[] => {
     const cols: DataTableColumn<TeamMember>[] = [
       {
@@ -180,7 +203,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
         cellRenderer: (teamMember) => (
           <IconButtonMenu<"DELETE">
             iconButton={{
-              color: "on-surface",
+              color: "on-surface-retreat",
               variant: "icon",
               size: "medium",
               icon: { category: "outlined", type: "more_horiz" },
@@ -217,7 +240,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   return (
     <DataTable
       columns={columns}
-      data={sortedMembers}
+      data={filteredMembers}
       rowKey={(member) => member.user.id}
       firstColumnInset
       pageSize={20}

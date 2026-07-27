@@ -2150,7 +2150,7 @@ items:
   # RGPD-ready increment. See docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md §3.B.
 
   - id: TEAM-09
-    title: "Joining mode: replace is_private with a 4-state marketplace join model"
+    title: "Joining mode: replace is_private with a 2-state marketplace join model"
     status: in_progress
     owner: Maxime
     parent: TEAM-01
@@ -2159,13 +2159,41 @@ items:
       issue: "https://github.com/ThalesGroup/fred/issues/2084"
     notes: >
       Replaces TeamMetadata's is_private bool with a JoiningMode enum (OPEN,
-      REQUEST_ONLY, INVITE_ONLY, CLOSED). Adds the first self-service
-      membership write path, POST /teams/{team_id}/join, gated on
-      joining_mode == OPEN and restricted to self-granting team_member only.
-      Existing teams migrate to REQUEST_ONLY regardless of prior is_private
-      (matches current mailto-based behavior exactly). REQUEST_ONLY's
-      marketplace "Request" button ships disabled pending a notification
-      system to route requests to team_admins.
+      INVITE_ONLY). Adds the first self-service membership write path,
+      POST /teams/{team_id}/join, gated on joining_mode == OPEN and
+      restricted to self-granting team_member only. Originally shipped
+      2026-07-23 as a 4-state enum (OPEN, REQUEST_ONLY, INVITE_ONLY,
+      CLOSED); narrowed to 2 states 2026-07-26 (migration 9ee7b44b0d57) —
+      REQUEST_ONLY depended on a notification system that was never built,
+      and CLOSED never enforced anything INVITE_ONLY didn't. Existing
+      teams migrated to REQUEST_ONLY on the original rollout, then to
+      INVITE_ONLY (from REQUEST_ONLY or CLOSED) on the narrowing —
+      the conservative mapping, no team becomes self-service OPEN as a
+      side effect. See CONTROL-PLANE-PRODUCT-CONTRACT.md §29.
+
+  - id: TEAM-10
+    title: "Team visibility: public/private marketplace discoverability, independent of joining_mode"
+    status: in_progress
+    owner: Maxime
+    parent: TEAM-01
+    refs:
+      rfc: "docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md §5.1.2"
+    notes: >
+      Adds TeamMetadata.visibility (TeamVisibility: PUBLIC default, PRIVATE),
+      gating marketplace discoverability — a question joining_mode never
+      answered (INVITE_ONLY still means listed, join needs an admin, not
+      "does not appear at all"). Mechanism: ensure_team_public_relations
+      (TEAM-09, previously unconditional) now runs only for PUBLIC teams;
+      PRIVATE teams get the new symmetric revoke_team_public_relations
+      instead, so a non-member loses can_read entirely (not just the
+      marketplace listing) — team_member access is unaffected. A PRIVATE
+      team can never be joining_mode == OPEN: update_team silently
+      downgrades to INVITE_ONLY after resolving the patch's resulting
+      state (never rejects), and the settings-page joining-mode
+      ButtonGroup is entirely disabled while private. Migration 8092a626d4d0
+      backfills every existing team to PUBLIC — no team becomes newly
+      private as a side effect. See CONTROL-PLANE-PRODUCT-CONTRACT.md §30.
+      No GitHub issue yet — flag to Maxime to open one.
 
   # ── QUALITY ───────────────────────────────────────────────────────────
 

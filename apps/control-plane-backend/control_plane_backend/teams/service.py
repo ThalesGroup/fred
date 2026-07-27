@@ -23,6 +23,7 @@ from fred_core import (
     Resource,
     SessionSchema,
     TeamPermission,
+    TeamVisibility,
     create_keycloak_admin,
     is_service_agent,
 )
@@ -344,10 +345,22 @@ async def _list_teams(
     all_teams = await deps.get_team_metadata_store().list_all()
     team_ids = [metadata.id for metadata in all_teams]
     consistency_token = await rebac.ensure_team_organization_relations(team_ids)
-    # TEAM-09: every team is unconditionally marketplace-discoverable —
-    # `joining_mode` gates only the ability to become a member, never
-    # visibility. Idempotent, so this also backfills pre-existing teams.
-    await rebac.ensure_team_public_relations(team_ids)
+    # TEAM-10: marketplace discoverability is gated by `visibility`, not
+    # `joining_mode` (which only ever gates the ability to become a
+    # member). Both calls are idempotent, so this also lazily
+    # backfills/corrects every pre-existing team on each listing.
+    public_team_ids = [
+        metadata.id
+        for metadata in all_teams
+        if metadata.visibility == TeamVisibility.PUBLIC
+    ]
+    private_team_ids = [
+        metadata.id
+        for metadata in all_teams
+        if metadata.visibility == TeamVisibility.PRIVATE
+    ]
+    await rebac.ensure_team_public_relations(public_team_ids)
+    await rebac.revoke_team_public_relations(private_team_ids)
 
     if filter_by_can_read:
         authorized_teams_refs = await rebac.lookup_user_resources(
@@ -590,8 +603,9 @@ async def update_team(
 
     Why this function exists:
     - collaborative teams need a single business path for editable metadata,
-      including `joining_mode` (TEAM-09) — marketplace visibility itself is no
-      longer conditional on any team field (see `ensure_team_public_relations`)
+      including `joining_mode` (TEAM-09) and `visibility` (TEAM-10) —
+      marketplace discoverability is gated by `visibility` alone (see
+      `ensure_team_public_relations`/`revoke_team_public_relations`)
 
     How to use it:
     - call it from the team PATCH route after authenticating the current user
@@ -619,10 +633,31 @@ async def update_team(
         if {"team_delete_grace", "max_idle"} & request.model_fields_set:
             await _reject_retention_overflow(team_id, request, deps)
             patch_data["retention_updated_by"] = user.uid
+        # TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Resolve
+        # what visibility/joining_mode would be *after* this patch (an
+        # untouched field keeps its current stored value) and, if that
+        # combination is invalid, downgrade joining_mode rather than reject
+        # the request — never trusting the client's belief about which
+        # field "wins".
+        resulting_visibility = patch_data.get("visibility", metadata.visibility)
+        resulting_joining_mode = patch_data.get("joining_mode", metadata.joining_mode)
+        if (
+            resulting_visibility == TeamVisibility.PRIVATE
+            and resulting_joining_mode == JoiningMode.OPEN
+        ):
+            patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
         updated = await deps.get_team_metadata_store().upsert(team_id, patch)
         if updated is not None:
             metadata = updated
+        if "visibility" in patch_data:
+            # Sync the ReBAC `public` relation immediately rather than
+            # waiting for the next `_list_teams` lazy backfill — mirrors
+            # `create_team`'s own "don't wait" grant.
+            if metadata.visibility == TeamVisibility.PUBLIC:
+                await rebac.ensure_team_public_relations([team_id])
+            else:
+                await rebac.revoke_team_public_relations([team_id])
 
     teams = await _enrich_teams_with_membership(
         rebac,
@@ -1214,6 +1249,7 @@ async def _enrich_teams_with_membership(
                 is_member=user.uid in member_ids,
                 description=metadata.description,
                 joining_mode=metadata.joining_mode,
+                visibility=metadata.visibility,
                 banner_image_url=banner_image_url,
                 max_resources_storage_size=max_storage,
                 current_resources_storage_size=metadata.current_resources_storage_size,

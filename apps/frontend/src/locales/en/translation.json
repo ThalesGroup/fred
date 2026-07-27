@@ -1312,6 +1312,12 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "deleteDialog": {
+          "title": "Delete this conversation?",
+          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
+          "confirm": "Delete",
+          "cancel": "Cancel"
+        },
         "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
         "groupByAgent": "Group by agent",
         "loading": "Loading...",
@@ -1504,8 +1510,6 @@
     },
     "teamCard": {
       "join": "Join",
-      "requestToJoin": "Request to join",
-      "closedTeam": "Closed team",
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
     },
@@ -1540,6 +1544,11 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
+        "search": {
+          "ariaLabel": "Search for a member",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Last name, First name, Identifiant"
+        },
         "table": {
           "actions": "Actions",
           "deleteAction": "Delete",
@@ -1565,12 +1574,22 @@
         },
         "joiningMode": {
           "label": "Joining mode",
+          "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "requestOnly": "Request only",
-          "inviteOnly": "Invite only",
-          "closed": "Closed"
+          "inviteOnly": "Invite only"
         },
-        "teamBannerTitle": "Team banner",
+        "visibility": {
+          "label": "Team visibility",
+          "support": "Determines whether the team is visible on the marketplace to every user.",
+          "public": "Public",
+          "private": "Private"
+        },
+        "teamBanner": {
+          "title": "Team banner",
+          "import": "Import",
+          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
+          "noBanner": "No banner selected"
+        },
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."

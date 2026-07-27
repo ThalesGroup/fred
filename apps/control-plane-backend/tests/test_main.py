@@ -58,10 +58,12 @@ from fred_core import (
     RelationType,
     SessionSchema,
     TeamPermission,
+    TeamVisibility,
     get_current_user,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.security import oidc
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.teams.metadata_store import TeamMetadata
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
@@ -582,7 +584,7 @@ async def _fake_get_team_by_id(
         id=TeamId(_team_id),
         name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
         member_count=1,
-        joining_mode=JoiningMode.CLOSED,
+        joining_mode=JoiningMode.INVITE_ONLY,
         admins=[],
         permissions=[],
     )
@@ -760,7 +762,8 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "member_count": 1,
             "admins": [],
             "is_member": True,
-            "joining_mode": "closed",
+            "joining_mode": "invite_only",
+            "visibility": "public",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -819,6 +822,10 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
 
         # TEAM-09: `_list_teams` also lazily backfills marketplace visibility.
         async def ensure_team_public_relations(self, _team_ids) -> str | None:
+            return None
+
+        # TEAM-10: and lazily revokes it for teams marked private.
+        async def revoke_team_public_relations(self, _team_ids) -> str | None:
             return None
 
         async def lookup_user_resources(
@@ -1291,7 +1298,8 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "member_count": 1,
         "admins": [],
         "is_member": True,
-        "joining_mode": "closed",
+        "joining_mode": "invite_only",
+        "visibility": "public",
         "permissions": [
             "can_read",
             "can_update_resources",
@@ -4750,6 +4758,176 @@ async def test_update_team_checks_can_update_info_permission(
     ]
 
 
+class _FakeVisibilityRebac(NoopRebacEngine):
+    """Records `ensure_team_public_relations`/`revoke_team_public_relations`
+    calls so TEAM-10's immediate ReBAC sync in `update_team` is verifiable.
+    Subclasses `NoopRebacEngine` (authorizes everything, persists nothing)
+    for every other collaborator `update_team` touches downstream
+    (`_get_user_roles_in_team`, `_get_team_permissions_for_user`, ...) —
+    only the two relation-sync methods are overridden."""
+
+    def __init__(self) -> None:
+        self.granted_team_ids: list[list[str]] = []
+        self.revoked_team_ids: list[list[str]] = []
+
+    async def ensure_team_public_relations(self, team_ids) -> str | None:
+        self.granted_team_ids.append(list(team_ids))
+        return None
+
+    async def revoke_team_public_relations(self, team_ids) -> str | None:
+        self.revoked_team_ids.append(list(team_ids))
+        return None
+
+
+def _setup_update_team_test(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    starting_joining_mode: JoiningMode,
+    starting_visibility: TeamVisibility,
+):
+    class _FakeMetadataStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def get_by_team_id(self, team_id, session=None) -> TeamMetadata | None:
+            return None
+
+        async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
+            payload = patch.model_dump(exclude_unset=True)
+            self.calls.append((team_id, payload))
+            return TeamMetadata(
+                id=TeamId(team_id),
+                name="Thales",
+                joining_mode=payload.get("joining_mode", starting_joining_mode),
+                visibility=payload.get("visibility", starting_visibility),
+            )
+
+    fake_metadata_store = _FakeMetadataStore()
+    rebac = _FakeVisibilityRebac()
+
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        return (
+            TeamMetadata(
+                id=TeamId("thales"),
+                name="Thales",
+                joining_mode=starting_joining_mode,
+                visibility=starting_visibility,
+            ),
+            "token",
+        )
+
+    async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
+        return [TeamPermission.CAN_UPDATE_INFO]
+
+    async def _fake_enrich_teams_with_membership(*_args, **_kwargs):
+        return [Team(id=TeamId("thales"), name="Thales")]
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._get_team_permissions_for_user",
+        _fake_get_team_permissions_for_user,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._enrich_teams_with_membership",
+        _fake_enrich_teams_with_membership,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: fake_metadata_store,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: rebac,
+    )
+    return fake_metadata_store, rebac
+
+
+@pytest.mark.asyncio
+async def test_update_team_downgrades_joining_mode_when_visibility_turns_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Setting
+    visibility=private on a team that's currently OPEN must silently
+    downgrade joining_mode to invite_only, not reject the request."""
+    fake_metadata_store, rebac = _setup_update_team_test(
+        monkeypatch,
+        starting_joining_mode=JoiningMode.OPEN,
+        starting_visibility=TeamVisibility.PUBLIC,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/thales", json={"visibility": "private"}
+        )
+
+    assert resp.status_code == 200
+    assert fake_metadata_store.calls == [
+        ("thales", {"visibility": "private", "joining_mode": "invite_only"})
+    ]
+    assert rebac.revoked_team_ids == [["thales"]]
+    assert rebac.granted_team_ids == []
+
+
+@pytest.mark.asyncio
+async def test_update_team_downgrades_joining_mode_when_open_requested_on_private_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same invariant, the other direction: requesting joining_mode=open on a
+    team that's already PRIVATE must not flip it to OPEN — it silently stays
+    (or becomes) invite_only instead."""
+    fake_metadata_store, rebac = _setup_update_team_test(
+        monkeypatch,
+        starting_joining_mode=JoiningMode.INVITE_ONLY,
+        starting_visibility=TeamVisibility.PRIVATE,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/thales", json={"joining_mode": "open"}
+        )
+
+    assert resp.status_code == 200
+    assert fake_metadata_store.calls == [("thales", {"joining_mode": "invite_only"})]
+    # visibility wasn't part of this request, so no ReBAC sync call is expected.
+    assert rebac.revoked_team_ids == []
+    assert rebac.granted_team_ids == []
+
+
+@pytest.mark.asyncio
+async def test_update_team_syncs_rebac_public_relation_when_visibility_turns_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reverse transition (private -> public) must grant `public`
+    immediately rather than waiting for the next marketplace list call."""
+    fake_metadata_store, rebac = _setup_update_team_test(
+        monkeypatch,
+        starting_joining_mode=JoiningMode.INVITE_ONLY,
+        starting_visibility=TeamVisibility.PRIVATE,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/thales", json={"visibility": "public"}
+        )
+
+    assert resp.status_code == 200
+    assert fake_metadata_store.calls == [("thales", {"visibility": "public"})]
+    assert rebac.granted_team_ids == [["thales"]]
+    assert rebac.revoked_team_ids == []
+
+
 @pytest.mark.asyncio
 async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     monkeypatch: pytest.MonkeyPatch,
@@ -7979,7 +8157,7 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
             name="Thales",
             member_count=1,
             is_member=False,
-            joining_mode=JoiningMode.CLOSED,
+            joining_mode=JoiningMode.INVITE_ONLY,
             max_resources_storage_size=5368709120,
             current_resources_storage_size=0,
         ),

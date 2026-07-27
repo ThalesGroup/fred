@@ -98,6 +98,7 @@ def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
         "name": row.name,
         "description": row.description,
         "joining_mode": row.joining_mode,
+        "visibility": row.visibility,
         "banner_object_storage_key": row.banner_object_storage_key,
         "max_resources_storage_size": row.max_resources_storage_size,
         "current_resources_storage_size": row.current_resources_storage_size,

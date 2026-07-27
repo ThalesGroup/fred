@@ -105,6 +105,25 @@
       }
     }
   }
+
+  /* Unselected + disabled (e.g. "Open" while a team is private): fully
+   * inert — pointer-events:none blocks hover/active/click outright, no
+   * :not(:disabled) guards needed on the rules above — and reads as a
+   * muted, non-interactive option rather than just an unclickable one.
+   * The selected item (e.g. "Invite only", forced by the same rule) stays
+   * on its normal selected coloring — only the unselected option mutes. */
+  &:disabled {
+    cursor: default;
+    pointer-events: none;
+
+    .stateLayer:not([data-selected="true"]) {
+      --item-background-color: transparent;
+
+      .label {
+        --label-color: var(--on-surface-muted);
+      }
+    }
+  }
 }
 
 .errorDot {

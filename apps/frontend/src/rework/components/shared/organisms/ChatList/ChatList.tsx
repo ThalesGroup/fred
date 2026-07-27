@@ -23,6 +23,7 @@ import {
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider.tsx";
 import styles from "./ChatList.module.scss";
 
 type Session = NonNullable<
@@ -49,6 +50,7 @@ function formatSessionDate(dateStr: string | undefined): string {
 export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { showConfirmationDialog } = useConfirmationDialog();
   const [groupByAgent, setGroupByAgent] = useState(false);
 
   const { data: sessions, isLoading } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
@@ -70,29 +72,45 @@ export default function ChatList({ teamId }: ChatListProps) {
   );
   const isEmpty = !isLoading && managedSessions.length === 0;
 
-  const handleDelete = (sessionId: string, href: string) => async (e: React.MouseEvent) => {
+  const handleDelete = (sessionId: string, href: string, label: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    await deleteSession({ teamId: teamId!, sessionId })
-      .unwrap()
-      .catch(() => {});
-    const sessionPath = href.split("?")[0];
-    if (window.location.pathname === sessionPath) {
-      navigate(`/team/${teamId}/agents`);
-    }
+    showConfirmationDialog({
+      criticalAction: true,
+      title: t("rework.sidebar.chatList.deleteDialog.title"),
+      message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
+      confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
+      cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
+      // Same inverted emphasis as "Delete agent"/"Leave team" — Cancel stays
+      // the visually dominant filled button, Delete drops to a low-emphasis
+      // text button.
+      cancelVariant: "filled",
+      cancelColor: "primary",
+      confirmVariant: "text",
+      onConfirm: async () => {
+        await deleteSession({ teamId: teamId!, sessionId })
+          .unwrap()
+          .catch(() => {});
+        const sessionPath = href.split("?")[0];
+        if (window.location.pathname === sessionPath) {
+          navigate(`/team/${teamId}/agents`);
+        }
+      },
+    });
   };
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
     const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
+    const label = session.title || session.session_id.slice(0, 8) + "…";
     return (
       <ChatListItem
         key={session.session_id}
         sessionId={session.session_id}
         href={href}
-        label={session.title || session.session_id.slice(0, 8) + "…"}
+        label={label}
         agentName={showAgentName ? agentNameByInstanceId.get(session.agent_instance_id) : undefined}
         dateLabel={formatSessionDate(session.updated_at)}
-        onDelete={handleDelete(session.session_id, href)}
+        onDelete={handleDelete(session.session_id, href, label)}
       />
     );
   };

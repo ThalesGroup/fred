@@ -1312,6 +1312,12 @@
         "title": "Espace administration"
       },
       "chatList": {
+        "deleteDialog": {
+          "title": "Supprimer cette conversation ?",
+          "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
+          "confirm": "Supprimer",
+          "cancel": "Annuler"
+        },
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
         "groupByAgent": "Grouper par agent",
         "loading": "Chargement...",
@@ -1504,8 +1510,6 @@
     },
     "teamCard": {
       "join": "Rejoindre",
-      "requestToJoin": "Demander",
-      "closedTeam": "Équipe fermée",
       "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
     },
@@ -1540,6 +1544,11 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
+        "search": {
+          "ariaLabel": "Rechercher un membre",
+          "clearAriaLabel": "Effacer la recherche",
+          "placeholder": "Nom, Prénom, Identifiant"
+        },
         "table": {
           "actions": "Actions",
           "deleteAction": "Supprimer",
@@ -1565,12 +1574,22 @@
         },
         "joiningMode": {
           "label": "Mode d'adhésion",
+          "support": "Les utilisateurs peuvent rejoindre votre équipe librement ou uniquement sur invitation.",
           "open": "Ouverte",
-          "requestOnly": "Sur demande",
-          "inviteOnly": "Sur invitation",
-          "closed": "Fermée"
+          "inviteOnly": "Sur invitation"
         },
-        "teamBannerTitle": "Bannière de l'équipe",
+        "visibility": {
+          "label": "Visibilité de l'équipe",
+          "support": "Détermine si l'équipe est visible sur la marketplace par tous les utilisateurs.",
+          "public": "Publique",
+          "private": "Privée"
+        },
+        "teamBanner": {
+          "title": "Bannière de l'équipe",
+          "import": "Importer",
+          "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
+          "noBanner": "Aucune bannière sélectionnée"
+        },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."
