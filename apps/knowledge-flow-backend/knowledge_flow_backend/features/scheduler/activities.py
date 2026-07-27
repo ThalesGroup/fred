@@ -318,7 +318,7 @@ async def delete_vectors(document_uid: str) -> None:
 
 
 @activity.defn
-async def mark_document_vectorized(document_uid: str, user: dict) -> None:
+async def mark_document_vectorized(document_uid: str) -> None:
     """Mark VECTORIZED done for a document whose vectors were left untouched.
 
     Companion to the revectorize workflow's incremental skip
@@ -328,19 +328,27 @@ async def mark_document_vectorized(document_uid: str, user: dict) -> None:
     `NOT_STARTED`, even though `get_chunk_count` just proved vectors exist.
     Best-effort: a document that vanished between the count check and this
     call is not this activity's problem to raise about.
+
+    Reads and writes through the raw metadata store, not `ingestion_service`'s
+    per-user-ReBAC-checked `get_metadata`/`save_metadata` — same reasoning as
+    `list_documents_in_scope`: the migration-default `source_tag` scope spans
+    arbitrary teams and is authorized once, at the platform level
+    (`CAN_MANAGE_PLATFORM`), by the controller before this workflow starts.
+    Re-applying a per-document `DocumentPermission.READ` check for the calling
+    user here would reject every document outside that user's own teams —
+    confirmed live against this session's own test data (an OpenFGA `read`
+    check for the calling platform-admin on a team-owned, non-member document
+    returned `allowed: false`).
     """
-    from fred_core import KeycloakUser
+    from knowledge_flow_backend.application_context import ApplicationContext
 
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
-
-    keycloak_user = KeycloakUser.model_validate(user)
-    ingestion_service = get_ingestion_service()
-    metadata = await ingestion_service.get_metadata(keycloak_user, document_uid)
+    metadata_store = ApplicationContext.get_instance().get_metadata_store()
+    metadata = await metadata_store.get_metadata_by_uid(document_uid)
     if metadata is None:
         activity.logger.warning("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s not found, nothing to mark", document_uid)
         return
     metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-    await ingestion_service.save_metadata(keycloak_user, metadata=metadata)
+    await metadata_store.save_metadata(metadata)
     activity.logger.info("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s marked VECTORIZED (vectors pre-existed)", document_uid)
 
 

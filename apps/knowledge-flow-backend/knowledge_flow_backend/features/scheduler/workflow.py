@@ -642,7 +642,7 @@ class RevectorizeDocument:
                 # its vectors were correct and untouched (MIGR-07.04).
                 await workflow.execute_activity(
                     "mark_document_vectorized",
-                    args=[document_uid, user],
+                    args=[document_uid],
                     schedule_to_close_timeout=timedelta(minutes=5),
                     retry_policy=RetryPolicy(maximum_attempts=3),
                 )

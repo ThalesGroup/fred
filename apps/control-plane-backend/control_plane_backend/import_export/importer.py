@@ -264,21 +264,32 @@ class MigrationReport:
 
 
 # `MigrationResult.warnings` ends up in a `pg_notify` payload (fred_core.tasks.bus),
-# capped at ~8000 bytes by Postgres — the same failure class that crashed a real
-# 1008-user rehearsal run (2026-07-25, see format_usernames_for_warning above).
-# That fix only bounded the PENDING/RELINKED name lists; a cutover-scale bundle can
-# still accumulate one warning line per skipped agent/resource/prompt, so the
-# aggregate list itself needs the same cap.
-_MAX_WARNING_LINES = 50
+# capped at ~8000 bytes by Postgres for the WHOLE event — the same failure class that
+# crashed a real 1008-user rehearsal run (2026-07-25, see format_usernames_for_warning
+# above). That fix only bounded the PENDING/RELINKED name lists; a cutover-scale bundle
+# can still accumulate one warning line per skipped agent/resource/prompt, OR carry a
+# single very long line from an uncapped join elsewhere (unnamed-team IDs, unknown
+# tuple shapes) — a line-count cap alone doesn't bound either case, only a byte budget
+# does. Half the Postgres NOTIFY limit, leaving headroom for the rest of the event's
+# fields and JSON overhead.
+_MAX_WARNINGS_BYTES = 4000
 
 
 def _cap_warnings(warnings: list[str]) -> list[str]:
-    if len(warnings) <= _MAX_WARNING_LINES:
-        return list(warnings)
-    shown = warnings[:_MAX_WARNING_LINES]
-    shown.append(
-        f"… (+{len(warnings) - _MAX_WARNING_LINES} more warning(s), see server logs)"
-    )
+    total_bytes = 0
+    shown: list[str] = []
+    for line in warnings:
+        line_bytes = len(line.encode("utf-8"))
+        if total_bytes + line_bytes > _MAX_WARNINGS_BYTES:
+            remaining = _MAX_WARNINGS_BYTES - total_bytes
+            if remaining > 100:  # a short fragment isn't worth keeping
+                truncated = line.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
+                shown.append(truncated + "…")
+            break
+        shown.append(line)
+        total_bytes += line_bytes
+    if len(shown) < len(warnings):
+        shown.append(f"… (+{len(warnings) - len(shown)} more warning(s), see server logs)")
     return shown
 
 

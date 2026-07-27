@@ -228,26 +228,28 @@ def test_prepare_revectorize_file_raises_non_retryable_when_source_tag_missing()
 def test_mark_document_vectorized_marks_stage_done_and_saves():
     metadata = _make_metadata("doc-1")
     metadata.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED)
-    ingestion_service = MagicMock()
-    ingestion_service.get_metadata = AsyncMock(return_value=metadata)
-    ingestion_service.save_metadata = AsyncMock()
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=metadata)
+    metadata_store.save_metadata = AsyncMock()
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
 
-    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
-        _run(mark_document_vectorized("doc-1", _USER))
+    with patch(_PATCH_CTX, return_value=app_ctx):
+        _run(mark_document_vectorized("doc-1"))
 
     assert metadata.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.DONE
-    ingestion_service.save_metadata.assert_awaited_once()
-    saved_user, saved_kwargs = ingestion_service.save_metadata.await_args.args, ingestion_service.save_metadata.await_args.kwargs
-    assert saved_user[0].uid == "alice"
-    assert saved_kwargs["metadata"] is metadata
+    metadata_store.get_metadata_by_uid.assert_awaited_once_with("doc-1")
+    metadata_store.save_metadata.assert_awaited_once_with(metadata)
 
 
 def test_mark_document_vectorized_is_a_noop_when_document_missing():
-    ingestion_service = MagicMock()
-    ingestion_service.get_metadata = AsyncMock(return_value=None)
-    ingestion_service.save_metadata = AsyncMock()
+    metadata_store = MagicMock()
+    metadata_store.get_metadata_by_uid = AsyncMock(return_value=None)
+    metadata_store.save_metadata = AsyncMock()
+    app_ctx = MagicMock()
+    app_ctx.get_metadata_store.return_value = metadata_store
 
-    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
-        _run(mark_document_vectorized("missing-doc", _USER))  # must not raise
+    with patch(_PATCH_CTX, return_value=app_ctx):
+        _run(mark_document_vectorized("missing-doc"))  # must not raise
 
-    ingestion_service.save_metadata.assert_not_awaited()
+    metadata_store.save_metadata.assert_not_awaited()
