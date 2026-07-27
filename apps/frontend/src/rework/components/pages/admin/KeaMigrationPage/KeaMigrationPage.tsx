@@ -26,12 +26,14 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { personalTeamId } from "@shared/utils/teamId";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import type { KeaDryRunResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useCorpusRevectorizeMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useResetPlatformRebacMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./KeaMigrationPage.module.css";
 
@@ -99,6 +101,8 @@ export default function KeaMigrationPage() {
   const [sourceTag, setSourceTag] = useState("");
   const [revectorizeCorpus, { isLoading: isRevectorizing }] = useCorpusRevectorizeMutation();
   const [revectorizeResult, setRevectorizeResult] = useState<string | null>(null);
+  const [resetPlatformRebac, { isLoading: isTearingDown }] = useResetPlatformRebacMutation();
+  const [showTeardownConfirm, setShowTeardownConfirm] = useState(false);
 
   const canRun = file !== null && !isDryRunning && !isApplying;
 
@@ -179,6 +183,23 @@ export default function KeaMigrationPage() {
       );
       setRevectorizeResult(`Reconstruction lancée — task ${task_id}. Suivre la progression sur /admin/migration.`);
       setSourceTag("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleTeardownConfirmed = async () => {
+    setShowTeardownConfirm(false);
+    setError(null);
+    try {
+      const { task_id } = await resetPlatformRebac().unwrap();
+      dispatch(
+        taskRegistered({
+          taskId: task_id,
+          kind: "migration",
+          target: { type: "platform", id: task_id, label: "Teardown plateforme" },
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -315,6 +336,37 @@ export default function KeaMigrationPage() {
         </div>
         {revectorizeResult && <div className={styles.success}>{revectorizeResult}</div>}
       </div>
+
+      <div className={styles.report}>
+        <span className={styles.reportTitle}>Teardown (tests uniquement)</span>
+        <p className={`${styles.intro} ${styles.dangerLine}`}>
+          Supprime équipes, agents, prompts, tags et documents (Postgres) ainsi que tous les tuples OpenFGA —
+          l&apos;admin root et ton propre compte sont préservés. Les comptes Keycloak, OpenSearch et S3 ne sont jamais
+          touchés. À utiliser uniquement pour repartir sur une base propre entre deux répétitions d&apos;import.
+        </p>
+        <div className={styles.actions}>
+          <Button
+            color="error"
+            variant="outlined"
+            size="medium"
+            onClick={() => setShowTeardownConfirm(true)}
+            disabled={isTearingDown}
+          >
+            {isTearingDown ? "Teardown en cours…" : "Teardown"}
+          </Button>
+        </div>
+      </div>
+
+      <ConfirmationDialog
+        open={showTeardownConfirm}
+        title="Teardown — supprimer équipes, agents et OpenFGA ?"
+        message="Supprime définitivement les agents, tags, documents, équipes et prompts (Postgres), ainsi que tous les tuples OpenFGA. Les comptes Keycloak, OpenSearch et S3 ne sont pas affectés. Action irréversible."
+        confirmLabel="Teardown"
+        cancelLabel="Annuler"
+        criticalAction
+        onConfirm={handleTeardownConfirmed}
+        onCancel={() => setShowTeardownConfirm(false)}
+      />
     </div>
   );
 }

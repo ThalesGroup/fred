@@ -1,7 +1,7 @@
-"""Migration-task concurrency guard (PLATFORM-IMPORT-RFC.md §9.2).
+"""Migration-task concurrency guard (CONTROL-PLANE-PRODUCT-CONTRACT.md §27).
 
-`POST /import` and `POST /reset-full` must both refuse to start while another
-migration task (import / reset / reset-full) is still running or pending —
+`POST /import` and `POST /reset-rebac` must both refuse to start while another
+migration task (import / reset / reset-rebac) is still running or pending —
 an import racing a teardown on the same instance is exactly the scenario a
 cutover-day operator cannot safely reason about.
 """

@@ -1470,26 +1470,6 @@
           "cancelLabel": "Cancel",
           "error": "Reset failed"
         },
-        "resetFull": {
-          "launch": "Full teardown",
-          "running": "Wiping…",
-          "taskLabel": "Platform full teardown",
-          "confirmTitle": "Full teardown — wipe everything except the root admin?",
-          "confirmMessage": "Permanently deletes every agent, tag, document, team, and prompt, every OpenFGA permission, and every Keycloak user. Only the identity that completed root bootstrap and your own account (if different) survive. This is different from \"Reset platform\" above — use it only to recover from a failed cutover import.",
-          "confirmLabel": "Wipe everything",
-          "cancelLabel": "Cancel",
-          "error": "Full teardown failed"
-        },
-        "resetRebac": {
-          "launch": "Reset + OpenFGA",
-          "running": "Resetting…",
-          "taskLabel": "Platform reset + OpenFGA",
-          "confirmTitle": "Reset platform data and OpenFGA — keep Keycloak users?",
-          "confirmMessage": "Permanently deletes all agents, tags, documents, teams, and prompts, and every OpenFGA permission tuple. Keycloak users are NOT affected — use this between repeated import rehearsals to clear stale permissions without losing manually-provisioned test accounts.",
-          "confirmLabel": "Reset",
-          "cancelLabel": "Cancel",
-          "error": "Reset failed"
-        },
         "stats": {
           "title": "Overview",
           "refresh": "Refresh",

@@ -1,8 +1,8 @@
-"""Full teardown coverage (MIGR-05.18, PLATFORM-IMPORT-RFC.md §9.2).
+"""Teardown coverage (MIGR-05.18, CONTROL-PLANE-PRODUCT-CONTRACT.md §27).
 
 `run_teardown` must: (a) preserve exactly the union of the root-bootstrap
-identity and the calling operator, (b) wipe every other Keycloak user and
-every OpenFGA tuple touching a non-preserved user or any team, (c) wipe the
+identity and the calling operator, (b) wipe every OpenFGA tuple touching a
+non-preserved user or any team while never touching Keycloak, (c) wipe the
 five Postgres tables `POST /reset` never touches on its own
 (`team_metadata`, `prompt`) plus the three it already did, and (d) be safe to
 call twice in a row (a retry after a partial prior run must not raise).
@@ -26,7 +26,7 @@ from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.bootstrap_models import PlatformBootstrapRow
 from control_plane_backend.models.prompt_models import PromptRow
 from control_plane_backend.users.dependencies import UserServiceDependencies
-from control_plane_backend.users.schemas import UserNotFoundError, UserSummary
+from control_plane_backend.users.schemas import UserSummary
 from fred_core import KeycloakUser, RebacReference, Resource
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
@@ -58,9 +58,9 @@ class FakeRebac:
 
 
 def _user_deps() -> UserServiceDependencies:
-    # `list_users`/`delete_user` are monkeypatched at the teardown module
-    # level in every test below — these dependencies are never dereferenced,
-    # only threaded through to satisfy the function signature.
+    # `list_users` is monkeypatched at the teardown module level in every
+    # test below — these dependencies are never dereferenced, only threaded
+    # through to satisfy the function signature.
     return UserServiceDependencies(
         configuration=cast(Any, None),
         create_keycloak_admin_client=cast(Any, lambda: None),
@@ -193,20 +193,13 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
             _summary(REGULAR_UID_A),
             _summary(REGULAR_UID_B),
         ]
-        deleted: list[str] = []
 
         async def fake_list_users(
             _current_user: KeycloakUser, _deps: UserServiceDependencies
         ) -> list[UserSummary]:
             return all_users
 
-        async def fake_delete_user(
-            _current_user: KeycloakUser, user_id: str, _deps: UserServiceDependencies
-        ) -> None:
-            deleted.append(user_id)
-
         monkeypatch.setattr(teardown_impl, "list_users", fake_list_users)
-        monkeypatch.setattr(teardown_impl, "delete_user", fake_delete_user)
 
         caller = KeycloakUser(uid=CALLER_UID, username="operator", roles=[])
         rebac = FakeRebac()
@@ -218,9 +211,6 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
         )
 
         assert report.preserved_uids == sorted([ROOT_UID, CALLER_UID])
-        assert sorted(deleted) == sorted([REGULAR_UID_A, REGULAR_UID_B])
-        assert report.users_deleted == 2
-        assert report.users_delete_failed == []
 
         wiped_user_refs = {
             r.id for r in rebac.wiped_references if r.type == Resource.USER
@@ -253,9 +243,9 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
 async def test_run_teardown_is_safe_to_retry_after_partial_prior_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Simulates a crash right after the Keycloak-delete step: Postgres rows
-    still present, but Keycloak already reflects a deleted regular user — the
-    second call must not raise on the already-gone identity."""
+    """Simulates a crash right after the OpenFGA-wipe step, before the
+    Postgres transaction committed — a retry must converge to the same
+    fully-wiped end state without raising."""
     engine = await _make_engine(tmp_path, "teardown-retry.sqlite3")
     try:
         await _seed(engine, completed_by=ROOT_UID)
@@ -266,13 +256,7 @@ async def test_run_teardown_is_safe_to_retry_after_partial_prior_run(
         ) -> list[UserSummary]:
             return all_users
 
-        async def fake_delete_user_already_gone(
-            _current_user: KeycloakUser, user_id: str, _deps: UserServiceDependencies
-        ) -> None:
-            raise UserNotFoundError(user_id)
-
         monkeypatch.setattr(teardown_impl, "list_users", fake_list_users)
-        monkeypatch.setattr(teardown_impl, "delete_user", fake_delete_user_already_gone)
 
         caller = KeycloakUser(uid=CALLER_UID, username="operator", roles=[])
         report = await run_teardown(
@@ -281,51 +265,16 @@ async def test_run_teardown_is_safe_to_retry_after_partial_prior_run(
             rebac=cast(Any, FakeRebac()),
             user_deps=_user_deps(),
         )
-
-        # Already-gone identities are skipped, not reported as failures.
-        assert report.users_deleted == 0
-        assert report.users_delete_failed == []
         counts = await _row_counts(engine)
         assert all(v == 0 for v in counts.values())
-    finally:
-        await engine.dispose()
 
-
-@pytest.mark.asyncio
-async def test_run_teardown_records_keycloak_delete_failures_without_raising(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    engine = await _make_engine(tmp_path, "teardown-kc-failure.sqlite3")
-    try:
-        await _seed(engine, completed_by=ROOT_UID)
-        all_users = [_summary(ROOT_UID), _summary(CALLER_UID), _summary(REGULAR_UID_A)]
-
-        async def fake_list_users(
-            _current_user: KeycloakUser, _deps: UserServiceDependencies
-        ) -> list[UserSummary]:
-            return all_users
-
-        async def fake_delete_user_boom(
-            _current_user: KeycloakUser, user_id: str, _deps: UserServiceDependencies
-        ) -> None:
-            raise RuntimeError("Keycloak unreachable")
-
-        monkeypatch.setattr(teardown_impl, "list_users", fake_list_users)
-        monkeypatch.setattr(teardown_impl, "delete_user", fake_delete_user_boom)
-
-        caller = KeycloakUser(uid=CALLER_UID, username="operator", roles=[])
-        report = await run_teardown(
+        # Retry on an already-wiped instance must not raise.
+        report_retry = await run_teardown(
             caller=caller,
             engine=engine,
             rebac=cast(Any, FakeRebac()),
             user_deps=_user_deps(),
         )
-
-        # A Keycloak failure is surfaced in the report, not raised — Postgres
-        # still gets wiped so a retry (which re-attempts the failed user) has
-        # as little left to do as possible.
-        assert report.users_delete_failed == [REGULAR_UID_A]
-        counts = await _row_counts(engine)
-        assert all(v == 0 for v in counts.values())
+        assert report_retry.preserved_uids == report.preserved_uids
     finally:
         await engine.dispose()

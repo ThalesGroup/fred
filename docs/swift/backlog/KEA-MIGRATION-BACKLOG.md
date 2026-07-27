@@ -164,19 +164,25 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   partial-export carries no users → `users.json`/bootstrap remains the channel. Ops fallback for
   both: SQL on the Keycloak DB (`keycloak_group`, `user_role_mapping`×`keycloak_role`).
 
-- [x] **MIGR-05.18** — Standalone `realm_file` upload + full teardown (2026-07-24, cutover
-  hardening). `POST /import` gains an optional second multipart field `realm_file` — a Keycloak
-  realm export supplied independently of the zip, taking precedence over the zip's own
-  `keycloak/realm.json` when present. Unblocks cutover regardless of the kea-side `exportClients`
-  403 (§0bis "Open" item below is now a nice-to-have, not a blocker). New `POST /reset-full`
-  (distinct endpoint/button from `/reset`, which keeps its narrow dev/test-cycle scope
-  unchanged): full platform teardown back to bootstrap-only state — OpenFGA
-  (`delete_user_relations` per non-preserved user, `delete_all_relations_of_reference` per team),
-  Keycloak (`delete_user` per non-preserved user), Postgres (`agent_instance`, `tag`,
-  `document_metadata`, `team_metadata`, `prompt` in one transaction). Preserves
-  `platformbootstrap.completed_by` ∪ the calling operator's identity. Migration-task concurrency
-  guard (`/import` and `/reset-full` refuse to start while another migration task is active).
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §9
+- [x] **MIGR-05.18** — Standalone `realm_file` upload + teardown (2026-07-24, cutover
+  hardening; simplified 2026-07-27). `POST /import` gains an optional second multipart field
+  `realm_file` — a Keycloak realm export supplied independently of the zip, taking precedence
+  over the zip's own `keycloak/realm.json` when present. Unblocks cutover regardless of the
+  kea-side `exportClients` 403 (§0bis "Open" item below is now a nice-to-have, not a blocker).
+  `POST /reset-rebac` (distinct endpoint/button from `/reset`, which keeps its narrow
+  dev/test-cycle scope unchanged): test-only teardown back to bootstrap-only state — OpenFGA
+  (`delete_all_relations_of_reference` per non-preserved user, per team), Postgres
+  (`agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt` in one transaction).
+  Preserves `platformbootstrap.completed_by` ∪ the calling operator's identity. **Never touches
+  Keycloak** — Fred does not own Keycloak identity lifecycle (identity is resolved by username
+  against a live target Keycloak, never created/destroyed by this tooling, see
+  `ops/KEA_SWIFT_CUTOVER.md`). `POST /reset-full` (which also deleted Keycloak users) is removed
+  as of 2026-07-27 — it was cutover-day recovery scaffolding that contradicted this design; its
+  UI button moves from the general **Platform data** page into the kea-specific
+  `KeaMigrationPage.tsx` (deleted together with that page after cutover) as the single **Teardown**
+  affordance. Migration-task concurrency guard (`/import` and `/reset-rebac` refuse to start while
+  another migration task is active).
+  — Contract: [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md) §27, §31
 
 - [ ] **MIGR-05.17** — **User-state migration — future task, deliberately out of #1954 (which
   focuses on teams).** Still unowned on the application side:

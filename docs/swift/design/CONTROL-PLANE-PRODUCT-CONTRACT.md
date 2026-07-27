@@ -1770,3 +1770,35 @@ team's current unconditional marketplace presence exactly; nothing becomes
 private as a side effect of this rollout. A bundle exported before this
 field existed has no `visibility` key at all; `importer.py` defaults the
 row to `public` on import, same reasoning.
+
+## 31. Contract Notes — teardown never touches Keycloak, `/reset-full` removed (2026-07-27)
+
+**`POST /import-export/reset-full` is removed.** §27 documented it as a
+three-step sweep (OpenFGA, then Keycloak user deletion, then Postgres) for
+cutover-day recovery. Auditing the kea→swift migration code surfaced that
+Fred should never own Keycloak identity lifecycle: per
+`docs/swift/ops/KEA_SWIFT_CUTOVER.md`, identity is resolved by username
+against a live target Keycloak, never created or destroyed by the migration
+path. `run_teardown` (`import_export/teardown.py`) drops its Keycloak-delete
+step and the `wipe_keycloak` parameter entirely — it now only wipes OpenFGA
+(every tuple touching a non-preserved user or any team) and Postgres
+(`agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`),
+exactly the ordering §27 described minus step (2). Object storage and vector
+embeddings remain untouched, as before.
+
+**`POST /import-export/reset-rebac` is now the sole teardown action** —
+its behavior is unchanged (it never touched Keycloak), only `/reset-full`
+disappears since it was otherwise identical once Keycloak is out of the
+picture. `POST /reset` (the narrow agents+tags+metadata-only reset) is
+unaffected.
+
+**UI.** The general-purpose **Platform data** admin page (`MigrationPage.tsx`)
+drops both the "Full teardown" and "Reset + OpenFGA" buttons — a
+Keycloak/OpenFGA/Postgres wipe is test/rehearsal tooling, not a
+general-purpose platform feature. A single **Teardown** button (wired to
+`reset-rebac`) moves into the kea-specific `KeaMigrationPage.tsx`, which is
+already scheduled for deletion after the S3NS cutover — this keeps the
+temporary migration-rehearsal affordance temporary too, instead of leaving a
+destructive button permanently on the general admin surface.
+
+`authz-endpoint-matrix.yaml` drops the `/reset-full` row.

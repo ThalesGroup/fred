@@ -896,12 +896,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
     }),
-    resetPlatformFullControlPlaneV1ImportExportResetFullPost: build.mutation<
-      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse,
-      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/import-export/reset-full`, method: "POST" }),
-    }),
     resetPlatformRebacControlPlaneV1ImportExportResetRebacPost: build.mutation<
       ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse,
       ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg
@@ -1515,9 +1509,6 @@ export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
-export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse =
-  /** status 202 Successful Response */ ResetLaunchResponse;
-export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg = void;
 export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
 export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg = void;
@@ -2828,7 +2819,6 @@ export const {
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
-  useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation,
   useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation,
   useKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostMutation,
 } = injectedRtkApi;

@@ -2565,16 +2565,18 @@ items:
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
       The 'metadata' topic — swift-side import counterpart to kea's throwaway export. Full current
-      contract: CONTROL-PLANE-PRODUCT-CONTRACT.md (import/export/reset/reset-full/stats
+      contract: CONTROL-PLANE-PRODUCT-CONTRACT.md §27/§31 (import/export/reset/reset-rebac/stats
       endpoints, bundle format, kea transform rules) — PLATFORM-IMPORT-RFC.md is now a compacted
       closed-out pointer, history is in git log. SHIPPED (05.01-05.16, 05.18, #1954, validated on
       a real kea dump 2026-07-22): atomic import/export/reset, kea agent+tag+metadata+team
       transform, OpenFGA tuple restore with role transformation, agent prompt/tuning transfer,
       chat-contexts → personal prompts, teams/platform roles from the bundled Keycloak realm
-      export, standalone realm_file upload + full-teardown reset-full (05.18, 2026-07-24) — the
+      export, standalone realm_file upload + test-only teardown (05.18, 2026-07-24) — the
       kea-side partial-export 403 is no longer a blocker (realm_file upload works around it).
-      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07. Only remaining item:
-      05.17 (user-state/GCU rows migration), deliberately deferred — out of #1954 scope, see
+      2026-07-27: reset-full removed — teardown (reset-rebac) never touches Keycloak, Fred does
+      not own its identity lifecycle; see CONTROL-PLANE-PRODUCT-CONTRACT.md §31. Document
+      binaries move via MIGR-06; embeddings rebuilt by MIGR-07. Only remaining item: 05.17
+      (user-state/GCU rows migration), deliberately deferred — out of #1954 scope, see
       KEA-MIGRATION-BACKLOG.md §0bis.
 
   - id: MIGR-06
