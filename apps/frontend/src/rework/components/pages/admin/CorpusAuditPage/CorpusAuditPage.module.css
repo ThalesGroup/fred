@@ -56,6 +56,9 @@
 }
 
 .status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }

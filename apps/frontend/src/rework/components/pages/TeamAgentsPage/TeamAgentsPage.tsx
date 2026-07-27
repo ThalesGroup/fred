@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -407,6 +408,7 @@ export default function TeamAgentsPage() {
 
       {isLoadingInstances ? (
         <div className={styles.loadingState}>
+          <Spinner size={20} />
           {t("rework.teams.agents.loading", { agentsNicknamePlural: agentsNicknamePlural.toLowerCase() })}
         </div>
       ) : templatesUnavailable ? (

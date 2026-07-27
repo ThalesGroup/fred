@@ -19,6 +19,7 @@ import { selectTask } from "../../../../features/tasks/taskSlice";
 import { getKindMeta } from "../../../../features/tasks/taskKinds";
 import { STATE_COLOR, stateLabel } from "../../../../features/tasks/taskLabels";
 import { TaskDetailPopover } from "../../molecules/TaskDetailPopover/TaskDetailPopover";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import styles from "./TaskIndicator.module.css";
 
 interface TaskIndicatorProps {
@@ -55,7 +56,7 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
         ) : task.state === "cancelled" ? (
           <BanIcon color={fg} size={ringSize} />
         ) : task.state === "running" ? (
-          <SpinningRing color={fg} size={ringSize} />
+          <Spinner color={fg} size={ringSize} />
         ) : (
           <span className={styles.dot} data-state={task.state} style={{ "--dot-color": fg } as React.CSSProperties} />
         )}
@@ -119,35 +120,6 @@ function BanIcon({ color, size }: SvgProps) {
     >
       <circle cx="12" cy="12" r="9" />
       <line x1="5.7" y1="5.7" x2="18.3" y2="18.3" />
-    </svg>
-  );
-}
-
-function SpinningRing({ color, size }: SvgProps) {
-  const strokeWidth = 2;
-  const r = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * r;
-  const cx = size / 2;
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className={styles.spinningRing}
-      style={{ flexShrink: 0 }}
-    >
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="currentColor" strokeWidth={strokeWidth} opacity={0.18} />
-      <circle
-        cx={cx}
-        cy={cx}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={`${circumference * 0.75} ${circumference * 0.25}`}
-      />
     </svg>
   );
 }

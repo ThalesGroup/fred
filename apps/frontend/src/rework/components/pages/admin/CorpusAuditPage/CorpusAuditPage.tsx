@@ -26,6 +26,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
@@ -159,7 +160,12 @@ export default function CorpusAuditPage() {
         </div>
       </header>
 
-      {isLoading && <p className={styles.status}>{t("rework.admin.corpusAudit.loading")}</p>}
+      {isLoading && (
+        <p className={styles.status}>
+          <Spinner size={16} />
+          {t("rework.admin.corpusAudit.loading")}
+        </p>
+      )}
       {isError && <p className={styles.statusError}>{t("rework.admin.corpusAudit.loadError")}</p>}
 
       {!isLoading && !isError && data && (
