@@ -624,8 +624,9 @@ matching the four rows above — plus a breadcrumb drill-down inside the selecte
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Header: title, subtitle           Stockage (team quota) 4.2/5 Go [██]│
-│ Usage/quota cards (§13.5, collapsible)                                │
+│ Header: title, subtitle      [📊 chip] Stockage (team quota) 4.2/5 Go│
+├─────────────────────────────────────────────────────────────────────┤
+│ Usage cards (§13.5, 120px), only rendered while the chip is active   │
 ├─────────────────────────────────────────────────────────────────────┤
 │ [Corpus d'équipe] [Espace perso] [Espace partagé] [Agents]           │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -635,8 +636,12 @@ matching the four rows above — plus a breadcrumb drill-down inside the selecte
 ```
 
 Revised 2026-07-27: the team storage quota (existing `TeamStorageResponse`, no new
-backend) sits top-right of the page header, next to the title/subtitle — not inside the
-collapsible stats section, so it stays visible even when that section is collapsed.
+backend) sits top-right of the page header, next to the title/subtitle — always visible.
+**Revised again 2026-07-27** (second pass, developer request): the stats section's
+show/hide control is a `SettingChip` immediately to the quota's left in that same header
+row, not a button inside the cards' own row — see §13.5. `TeamResourcesPage` conditionally
+renders `ResourceStatsCards` on that chip's state; the cards row itself carries no chrome
+of its own beyond the two 120px cards.
 
 Reuse the existing `Breadcrumb` molecule
 (`shared/molecules/Breadcrumb/Breadcrumb.tsx`) — already built and tested. The optional
@@ -718,11 +723,31 @@ gap needs closing in this same phase.
   (used on `DataHub`/`TeamUsagePage`). Backed by a new `FileTypeBucket` enum
   (`fred_core.documents.document_structures`, 5 buckets: pdf/text/ppt/excel/other) and
   `file_type_bucket(name)` mapper, shared by both new stats endpoints below.
-- **Pie chart, size by type + quota remaining:** `shared/molecules/PieChart/PieChart.tsx`
-  already exists. Per-type size now available from the same two endpoints; the existing
-  quota/limit total (`control_plane_backend/teams/service.py:1203`
-  `max_resources_storage_size`) is unchanged and composed client-side alongside the
-  per-type breakdown for the "remaining" slice.
+- **Size by type — revised 2026-07-27, developer request: not a pie chart.** A new
+  `SizeByTypeBar` (`TeamResourcesPage/ResourceStatsCards/SizeByTypeBar.tsx`) — one
+  full-width horizontal bar split into colored segments proportional to each type's
+  share of total size, legend inline below it inside the same card (nothing renders
+  outside the card's bounds). Deliberately not a `PieChart` variant: a single stacked
+  row with a fixed legend fits the compact card footprint below in a way a donut +
+  external legend does not. Colors are an explicit, meaning-carrying assignment, not
+  the generic sequential `SERIES_COLORS` slice used for the histogram: orange = PDF,
+  blue = Texte, red = PPT, green = Excel/CSV, grey = Autres — reusing
+  `MultiSeriesLineChart`'s existing `SERIES_COLORS` values (already vetted for both
+  themes) rather than picking new hex codes. `PieChart.tsx` itself reverted to its
+  pre-FRONT-09 state — its `colors`/`compact` props, added then made unused by this
+  swap, would have been dead code.
+- **Card footprint — revised 2026-07-27:** both cards fixed at 120px tall, 8px border
+  radius, 12px padding (down from the initial 220px/16px/24px pass) — `compact` prop
+  on `BarChart`, dedicated sizing on `SizeByTypeBar`. The quota/limit total
+  (`control_plane_backend/teams/service.py:1203` `max_resources_storage_size`) is
+  unchanged and rendered separately in the page header (§13.2), not composed into
+  either card.
+- **Toggle — revised 2026-07-27:** the show/hide control for this whole section moved
+  out of the cards' own row (it displaced them vertically) into the page header, as a
+  `SettingChip` (icon `bar_chart`, `activeColor="secondary"` — a new opt-in prop,
+  default `"primary"`, so every other `SettingChip` caller is unaffected) placed left
+  of the storage quota. `ResourceStatsCards` no longer owns open/close state — the
+  parent conditionally renders it.
 - **Corpus:** `GET /tags/stats?team_id=...` (`tag_controller.py`) — computed on read by
   `TagService.get_corpus_type_stats`, unioning `get_document_metadata_in_tag` over every
   team-authorized library tag, deduped by `document_uid`. Not an incrementally-maintained
@@ -773,22 +798,35 @@ sibling root's content.
 
 - [x] Add `created`/`modified_by` to `FilesystemResourceInfoResult` in Knowledge Flow;
       regenerate the OpenAPI client (landed, commit `d8639314`).
-- [ ] Replace `DocRow`/`FsEntry` single-line rows with `DataTable` (columns: Name, Taille,
+- [x] Replace `DocRow`/`FsEntry` single-line rows with `DataTable` (columns: Name, Taille,
       Création, Auteur, an unlabeled status-chip cell, Preview + `⋮` actions — revised
-      2026-07-27, no Dernière MAJ column, no dedicated Statut column) across all four tabs.
-- [ ] Build the status-chip cell: nothing for `ready`; a Chip (tertiary/warning/error) for
-      processing/pending/failed. New small piece, not a `DocStatusBadge` variant.
-- [ ] Build the "by AI" chip cell from `origin === "agent_generated"` — Corpus rows never
-      show it (no agent-generated concept there today).
-- [ ] Collapse the row's two preview icons into one: extend `DocumentViewer` with an
-      optional in-viewer "Fichier"/"Raw" toggle (default off, existing callers unaffected).
-- [ ] Add the team storage quota (existing `TeamStorageResponse`) to the page header,
-      top-right, always visible regardless of the stats section's collapsed state.
+      2026-07-27, no Dernière MAJ column, no dedicated Statut column) — **Corpus d'équipe
+      only** (commit `e480c027`). Espace perso / Espace partagé / Agents still on the old
+      `TeamFilesystemBrowser`/`AgentFilesystemBrowser` single-line rows — not started.
+- [x] Build the status-chip cell: nothing for `ready`; a Chip (tertiary/warning/error) for
+      processing/pending/failed. New small piece, not a `DocStatusBadge` variant
+      (`StatusChip.tsx`, commit `162dd8cb`). Wired on Corpus; not yet on the other 3 tabs.
+- [x] Build the "by AI" chip cell from `origin === "agent_generated"` (`ByAiChip.tsx`,
+      commit `162dd8cb`) — Corpus rows never show it (no agent-generated concept there
+      today). Not yet wired anywhere, since it only applies to the 3 tabs not started.
+- [x] Collapse the row's two preview icons into one: `DocumentViewer` gained
+      `showRawToggle` (commit `162dd8cb`), wired on Corpus's preview drawer.
+- [x] Add the team storage quota (existing `TeamStorageResponse`) to the page header,
+      top-right, always visible (commit `d9cc6b05`).
 - [ ] Wire `DataTable`'s pagination footer to each tab's server-side offset/limit contract
-      (§6.2), not full-set client pagination.
+      (§6.2), not full-set client pagination. Corpus still uses the pre-existing
+      `ResourcePagination` widget below the table for folders over 50 documents — not
+      DataTable's own footer, which paginates a client-side array.
 - [ ] Add a search input wired to `POST /documents/metadata/browse`'s existing `query`
       field for Corpus.
 - [ ] Add a "Trier par" sort control wired to the existing `sort` field for Corpus.
+
+**Corpus-only interim gaps, landed with the DataTable rewrite (commit `e480c027`),
+not regressions — the old tree never had a "current folder" concept to compare against:**
+dropping OS files now only works directly on a folder row (not anywhere inside its
+formerly-expanded subtree, since folders no longer nest visually); per-folder aggregate
+"N processing / N failed" badges are dropped from folder rows (each document's own status
+chip is still visible one level down).
 
 Acceptance: all four tabs show the same column set with real data, no `limit=10000`
 fetches; search/sort round-trip through the backend for Corpus; the other three tabs at
@@ -796,10 +834,13 @@ minimum keep working with client-side sort as a documented interim state (§13.6
 
 #### FRONT-09.I — Usage dashboard cards
 
-- [ ] Add a per-team, per-file-type count aggregate (files-by-type histogram).
-- [ ] Add a per-team, per-file-type size aggregate alongside the existing quota/total-usage
-      numbers (size-by-type + remaining-quota pie chart).
-- [ ] Render both with the existing `BarChart`/`PieChart` molecules.
+- [x] Add a per-team, per-file-type count aggregate (files-by-type histogram) — `GET
+      /tags/stats` + `GET /fs/stats/{path}` (commit `d8639314`).
+- [x] Add a per-team, per-file-type size aggregate alongside the existing quota/total-usage
+      numbers — same two endpoints. **Not a pie chart** — see §13.5's 2026-07-27 revision:
+      rendered as `SizeByTypeBar`, a stacked horizontal bar, per developer request.
+- [x] Render with `BarChart` (histogram, `compact` prop) and the new `SizeByTypeBar`
+      (commits `f869a611`, `1c640dbd`) — not `PieChart`, superseded per the above.
 - [ ] Ingestion token-consumption card: out of scope for this phase — track separately per
       §13.6 decision 5.
 

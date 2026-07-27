@@ -1558,6 +1558,18 @@ items:
       delete/exclude). New phases J/K added. Implementation of G/H/I/J/K
       starting now, co-owned with Maxime Daragon.
 
+      Progress as of 2026-07-27 (same day, later): backend for J/K landed
+      (`d8639314`), G landed (`d9cc6b05`), stats cards + DocumentViewer
+      toggle + status/AI chips landed (`f869a611`, `162dd8cb`), Corpus tab
+      fully on DataTable with rename + bulk actions (`e480c027`). Espace
+      perso/partagé/Agents (`TeamFilesystemBrowser`/`AgentFilesystemBrowser`)
+      not started — still on the pre-FRONT-09 single-line rows. Also
+      corrected mid-flight, developer request: the size-by-type card is a
+      stacked horizontal bar (`SizeByTypeBar`), not the pie chart originally
+      spec'd in §13.5 — RFC text updated to match, `PieChart.tsx` reverted
+      to its pre-FRONT-09 state since nothing uses it anymore. Server-side
+      pagination/search/sort for Corpus (§13.4) not started.
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress
