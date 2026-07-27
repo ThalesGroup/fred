@@ -624,7 +624,8 @@ matching the four rows above — plus a breadcrumb drill-down inside the selecte
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Header: title, usage/quota cards (§13.5)                             │
+│ Header: title, subtitle           Stockage (team quota) 4.2/5 Go [██]│
+│ Usage/quota cards (§13.5, collapsible)                                │
 ├─────────────────────────────────────────────────────────────────────┤
 │ [Corpus d'équipe] [Espace perso] [Espace partagé] [Agents]           │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -632,6 +633,10 @@ matching the four rows above — plus a breadcrumb drill-down inside the selecte
 │ DataTable (§13.3), paginated                                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+Revised 2026-07-27: the team storage quota (existing `TeamStorageResponse`, no new
+backend) sits top-right of the page header, next to the title/subtitle — not inside the
+collapsible stats section, so it stays visible even when that section is collapsed.
 
 Reuse the existing `Breadcrumb` molecule
 (`shared/molecules/Breadcrumb/Breadcrumb.tsx`) — already built and tested. The optional
@@ -646,20 +651,57 @@ lands, not an assumption baked into the plan.
 
 `shared/molecules/DataTable/DataTable.tsx` already has the exact pagination footer this
 amendment needs (rows-per-page 20/50/100, first/prev/page-number/next/last), built and
-shipped separately from this RFC. Columns: Name, Taille, Création (date + author),
-Dernière MAJ (date + author), Statut, a preview action, and an actions menu.
+shipped separately from this RFC.
+
+**Revised 2026-07-27, from mockup review** (supersedes the original §13.3 column list —
+no longer Création+Dernière MAJ as two 2-line date+author columns, and no longer a
+dedicated Statut column):
+
+Columns: Name (folder/file-type icon + name), Taille, **Création** (date + time only),
+**Auteur** (single flat column — the user who added the document/created the folder;
+**not** two-line, and **not** paired with a "Dernière MAJ" column, which is dropped from
+the table entirely), an unlabeled status-chip cell, and one action cell (Preview icon +
+`⋮` more menu).
 
 - **Corpus d'équipe:** zero backend change. `DocumentMetadata` already carries every field
-  needed: `file.file_size_bytes`, `identity.created`/`identity.author`,
-  `identity.modified`/`identity.last_modified_by`.
+  needed: `file.file_size_bytes`, `identity.created`/`identity.author`.
 - **Espace perso / Espace partagé / Agents:** `FilesystemResourceInfoResult` (the `/fs` DTO)
-  only carries `size`, `modified`, `created_by` today — no separate `created` timestamp, no
-  `modified_by` distinct from the original uploader. Added in `mcp_fs_service.py`'s
-  `_stamp_provenance` (workplan phase H) — **v1 approximation**: local/MinIO/GCS track no
-  creation time distinct from mtime and no per-write actor distinct from the path owner, so
-  `created` mirrors `modified` and `modified_by` mirrors `created_by` until real per-object
-  tracking exists. Documented on the dataclass; not a regression, since no better signal
-  exists today.
+  only carried `size`, `modified`, `created_by` before this RFC — no separate `created`
+  timestamp. Added in `mcp_fs_service.py`'s `_stamp_provenance` (workplan phase H) —
+  **v1 approximation**: local/MinIO/GCS track no creation time distinct from mtime, so
+  `created` mirrors `modified`. `modified_by` was also added (mirrors `created_by`) but,
+  per the 2026-07-27 mockup review, **is not surfaced as a column** — the data stays on
+  the DTO for a later "Dernière MAJ" pass if one gets scheduled, not wasted, just unused
+  for now.
+
+**Status chip (replaces the Statut column):** no chip at all for the common case
+(ingested/ready — silence, not a green checkmark). A chip only appears for a state that
+needs attention: `processing` → tertiary ("Traitement..."), `raw`/pending → warning ("En
+attente"), `failed` → error ("Erreur"). This is a rendering change only — reuses
+`DocStatusBadge`'s existing color mapping (§ already updated 2026-07-25) but as a Chip,
+not the dot+label pattern, and returns nothing for `ready` instead of a colored dot. Build
+as a small new presentational piece (not a `DocStatusBadge` prop toggle) so the existing
+dot+label rendering used elsewhere is untouched.
+
+**"by AI" chip:** reuses the existing `origin === "agent_generated"` provenance signal
+(`provenance.py`, already computed for Espace perso/partagé/Agents by `_stamp_provenance`).
+**Does not apply to Corpus** — ingestion is never agent-driven in the current provenance
+model (`derive_provenance` returns `ORIGIN_INGESTED`/`PRODUCER_INGESTION` for `/corpus`,
+never `agent_generated`), so Corpus rows never show this chip in v1, even though the
+mockup shows one on a Corpus row — treated as a mockup/reality mismatch, not a new
+tracking requirement, per developer confirmation 2026-07-27.
+
+**Unified Preview action:** the row's eye icon is the only preview affordance — no second
+"markdown preview" icon. It opens `shared/organisms/DocumentViewer/DocumentViewer.tsx`
+(already built, FRONT-13), extended with an in-viewer "Fichier"/"Raw" toggle so the user
+can switch to the extracted-markdown view even for a file `DocumentViewer` would otherwise
+auto-render natively (e.g. a PDF) — today it silently picks one strategy per file type with
+no user-facing choice. New optional prop, default off, so `DocumentViewerPage` and the
+current `DocumentWorkspace` preview drawer keep their existing behavior unless they opt in.
+
+**Team storage quota in the page header:** reuses the existing control-plane
+`TeamStorageResponse`/`max_resources_storage_size` quota already wired for `TeamUsagePage`
+— no new backend. Shown once per page (team-wide), not per-tab.
 
 ### 13.4 Search + sort
 
@@ -729,10 +771,19 @@ sibling root's content.
 
 #### FRONT-09.H — Rich table + search/sort
 
-- [ ] Add `created`/`modified_by` (naming TBD) to `FilesystemResourceInfoResult` in
-      Knowledge Flow; regenerate the OpenAPI client.
+- [x] Add `created`/`modified_by` to `FilesystemResourceInfoResult` in Knowledge Flow;
+      regenerate the OpenAPI client (landed, commit `d8639314`).
 - [ ] Replace `DocRow`/`FsEntry` single-line rows with `DataTable` (columns: Name, Taille,
-      Création, Dernière MAJ, Statut, preview, actions) across all four tabs.
+      Création, Auteur, an unlabeled status-chip cell, Preview + `⋮` actions — revised
+      2026-07-27, no Dernière MAJ column, no dedicated Statut column) across all four tabs.
+- [ ] Build the status-chip cell: nothing for `ready`; a Chip (tertiary/warning/error) for
+      processing/pending/failed. New small piece, not a `DocStatusBadge` variant.
+- [ ] Build the "by AI" chip cell from `origin === "agent_generated"` — Corpus rows never
+      show it (no agent-generated concept there today).
+- [ ] Collapse the row's two preview icons into one: extend `DocumentViewer` with an
+      optional in-viewer "Fichier"/"Raw" toggle (default off, existing callers unaffected).
+- [ ] Add the team storage quota (existing `TeamStorageResponse`) to the page header,
+      top-right, always visible regardless of the stats section's collapsed state.
 - [ ] Wire `DataTable`'s pagination footer to each tab's server-side offset/limit contract
       (§6.2), not full-set client pagination.
 - [ ] Add a search input wired to `POST /documents/metadata/browse`'s existing `query`
