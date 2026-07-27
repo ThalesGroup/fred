@@ -29,6 +29,11 @@ interface WorkspaceRootProps {
   defaultOpen?: boolean;
   /** The discreet "+" add control, rendered right after the title (a menu trigger). */
   action?: ReactNode;
+  /** false renders a static panel header (no chevron, always expanded, not a button) —
+   *  for hosts that already gate visibility themselves (e.g. a tab switcher, FRONT-09.G),
+   *  so this root doesn't also try to collapse/expand on top of that. Default true keeps
+   *  the original accordion-row behavior for existing callers. */
+  collapsible?: boolean;
   children: ReactNode;
 }
 
@@ -46,32 +51,50 @@ export default function WorkspaceRoot({
   meta,
   defaultOpen = false,
   action,
+  collapsible = true,
   children,
 }: WorkspaceRootProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const isOpen = collapsible ? open : true;
+
+  const titleNode = hint ? (
+    <DetailedTooltip label={title} description={hint} placement="bottom-start">
+      <span className={styles.title}>{title}</span>
+    </DetailedTooltip>
+  ) : (
+    <span className={styles.title}>{title}</span>
+  );
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-collapsible={collapsible}>
       <div className={styles.headerRow}>
-        <button type="button" className={styles.toggle} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-          <span className={styles.chevron} data-expanded={open || undefined}>
-            <Icon category="outlined" type="chevron_right" />
-          </span>
-          <span className={styles.icon}>
-            <Icon {...icon} />
-          </span>
-          {hint ? (
-            <DetailedTooltip label={title} description={hint} placement="bottom-start">
-              <span className={styles.title}>{title}</span>
-            </DetailedTooltip>
-          ) : (
-            <span className={styles.title}>{title}</span>
-          )}
-        </button>
+        {collapsible ? (
+          <button
+            type="button"
+            className={styles.toggle}
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={isOpen}
+          >
+            <span className={styles.chevron} data-expanded={isOpen || undefined}>
+              <Icon category="outlined" type="chevron_right" />
+            </span>
+            <span className={styles.icon}>
+              <Icon {...icon} />
+            </span>
+            {titleNode}
+          </button>
+        ) : (
+          <div className={styles.toggle}>
+            <span className={styles.icon}>
+              <Icon {...icon} />
+            </span>
+            {titleNode}
+          </div>
+        )}
         {action && <span className={styles.add}>{action}</span>}
         {meta != null && <span className={styles.meta}>{meta}</span>}
       </div>
-      {open && <div className={styles.body}>{children}</div>}
+      {isOpen && <div className={collapsible ? styles.body : styles.bodyFlush}>{children}</div>}
     </div>
   );
 }

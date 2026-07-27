@@ -6,6 +6,10 @@
   border-bottom: none;
 }
 
+.root[data-collapsible="false"] {
+  border-bottom: none;
+}
+
 .headerRow {
   display: flex;
   align-items: center;
@@ -79,4 +83,9 @@
 /* folder rows: 34px, file rows: 58px — applied by the body content */
 .body {
   padding: 0 6px 6px 34px;
+}
+
+/* Non-collapsible mode has no chevron to align under, so no left indent. */
+.bodyFlush {
+  padding: 0 6px 6px;
 }

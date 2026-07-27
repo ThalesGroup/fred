@@ -1239,10 +1239,13 @@
     },
     "resources": {
       "workspaceTitle": "Files",
+      "pageTitle": "Team resources",
+      "pageSubtitle": "Manage local resources, manually added to the team",
+      "storageQuota": "Storage",
       "roots": {
-        "resources": "Corpus",
+        "resources": "Team corpus",
         "mine": "My space",
-        "team": "Team space",
+        "team": "Shared space",
         "agents": "Agents",
         "removedAgent": "Removed agent",
         "indexed": "indexed corpus",

@@ -27,13 +27,43 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-s);
 }
 
 .title {
   margin: 0;
-  font: var(--font-headline-small);
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.quota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 12rem;
+}
+
+.quotaLabelRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+  font: var(--font-body-medium);
+}
+
+.quotaLabel {
+  color: var(--on-surface);
+}
+
+.quotaValue {
+  color: var(--on-surface-retreat);
+  font-variant-numeric: tabular-nums;
 }
 
 .content {
@@ -43,7 +73,8 @@
   min-height: 0;
 }
 
-.tree {
+.tree,
+.panel {
   display: flex;
   flex-direction: column;
 }

@@ -1239,10 +1239,13 @@
     },
     "resources": {
       "workspaceTitle": "Fichiers",
+      "pageTitle": "Ressources de l'équipe",
+      "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",
+      "storageQuota": "Stockage",
       "roots": {
-        "resources": "Corpus",
-        "mine": "Mon espace",
-        "team": "Espace d'équipe",
+        "resources": "Corpus d'équipe",
+        "mine": "Espace perso",
+        "team": "Espace partagé",
         "agents": "Agents",
         "removedAgent": "Agent supprimé",
         "indexed": "corpus indexé",

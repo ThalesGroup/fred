@@ -27,6 +27,7 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
 import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { formatBytes } from "../../../../utils/formatBytes";
 import type { OptionModel } from "@models/Option.model";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import styles from "./DocumentUploadDrawer.module.css";
@@ -84,14 +85,6 @@ export function scheduleFile(
         }
       });
   });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function DocumentUploadDrawer({
