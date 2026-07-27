@@ -1277,6 +1277,12 @@
         "addFile": "Add a file",
         "newFolder": "New folder"
       },
+      "columns": {
+        "name": "Name",
+        "size": "Size",
+        "created": "Created",
+        "author": "Author"
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
@@ -1288,10 +1294,12 @@
         "newSubfolder": "New subfolder in \"{{name}}\"",
         "preview": "Preview",
         "process": "Process",
-        "searchable": "Toggle searchable"
+        "rename": "Rename",
+        "searchable": "Exclude from search"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
+        "deleteBulkMessage": "Remove {{count}} documents from this folder?",
         "deleteTitle": "Remove document",
         "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
         "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
@@ -1320,6 +1328,12 @@
         "nameLabel": "Name",
         "namePlaceholder": "e.g. Reports 2026",
         "title": "New folder"
+      },
+      "renameModal": {
+        "title": "Rename",
+        "nameLabel": "Name",
+        "save": "Save",
+        "error": "Could not rename"
       },
       "loading": "Loading resources...",
       "preview": {

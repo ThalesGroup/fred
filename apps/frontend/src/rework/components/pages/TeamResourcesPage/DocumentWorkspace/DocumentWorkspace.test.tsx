@@ -188,21 +188,11 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     ]);
   });
 
-  it("targets the folder when the drop lands on its expanded contents, not the row itself", async () => {
-    await act(async () => {
-      folderToggle("CIR").click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    const hint = [...container.querySelectorAll("div")].find((d) => d.textContent === "rework.resources.empty.folder");
-    if (!hint) throw new Error("expanded empty-folder hint not rendered");
-
-    await drop(hint, filesTransfer([new File(["a"], "a.pdf")]));
-
-    const props = lastDrawerProps();
-    expect(props.isOpen).toBe(true);
-    expect(props.destinationPath).toBe("CIR");
-    expect((props.metadata as { tags: string[] }).tags).toEqual(["tag-cir"]);
-  });
+  // FRONT-09.G replaced the always-expanded tree with breadcrumb drill-down: a
+  // folder's children are only visible after navigating INTO it (a full view
+  // swap), not nested under its row — so "drop lands on expanded contents
+  // distinct from the row" no longer has an equivalent. Dropping directly on
+  // a folder row (covered above) is the one drop surface in the new model.
 
   it("ignores a drop that carries no files (e.g. dragged text)", async () => {
     await drop(folderToggle("CIR"), filesTransfer([]));

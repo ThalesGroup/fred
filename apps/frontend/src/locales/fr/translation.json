@@ -1277,6 +1277,12 @@
         "addFile": "Ajouter un fichier",
         "newFolder": "Nouveau dossier"
       },
+      "columns": {
+        "name": "Nom",
+        "size": "Taille",
+        "created": "Création",
+        "author": "Auteur"
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
@@ -1288,10 +1294,12 @@
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
         "process": "Traiter",
-        "searchable": "Activer/désactiver la recherche"
+        "rename": "Renommer",
+        "searchable": "Exclure de la recherche"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
+        "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
@@ -1320,6 +1328,12 @@
         "nameLabel": "Nom",
         "namePlaceholder": "ex. Rapports 2026",
         "title": "Nouveau dossier"
+      },
+      "renameModal": {
+        "title": "Renommer",
+        "nameLabel": "Nom",
+        "save": "Enregistrer",
+        "error": "Impossible de renommer"
       },
       "loading": "Chargement des ressources...",
       "preview": {

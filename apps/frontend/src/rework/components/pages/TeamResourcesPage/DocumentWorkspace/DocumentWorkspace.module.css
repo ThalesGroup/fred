@@ -22,38 +22,64 @@
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 
-/* No card: the list breathes full-width, separated by light rules (filets). */
-.list {
+.toolbarEnd {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
-/* Each row is full-width so its rule spans edge to edge; indentation is applied
- * inside via padding-left, which never insets the border. The filet sits on TOP
- * of each row (suppressed on the very first) so it only ever separates two rows
- * — the last row never draws a line that would double the section border below. */
-.row {
-  border-top: 1px solid var(--outline-retreat);
+.nameButton {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  text-align: left;
 }
 
-.list > div:first-child > .row:first-child {
-  border-top: none;
+.nameButton:hover {
+  color: var(--primary);
 }
 
-/* A folder subtree (row + expanded contents) targeted by an OS-file drag: same
- * affordance as the upload drawer's dropzone (primary dashed outline + tint) so
- * "drop here" reads instantly. Outline (not border) keeps row layout untouched. */
-.list [data-drag-over] {
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.nameCell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionsCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+/* A folder row targeted by an OS-file drag: same affordance as the upload
+ * drawer's dropzone (primary dashed outline + tint) so "drop here" reads
+ * instantly. Outline (not border) keeps row layout untouched. */
+.nameButton[data-drag-over] {
   outline: 1.5px dashed var(--primary);
   outline-offset: -1.5px;
   background: color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 .hint {
-  padding: var(--spacing-2xs) var(--spacing-xs);
+  padding: var(--spacing-s) var(--spacing-xs);
   color: var(--on-surface-muted);
   font: var(--font-body-small);
 }
