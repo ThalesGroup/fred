@@ -283,13 +283,17 @@ def _cap_warnings(warnings: list[str]) -> list[str]:
         if total_bytes + line_bytes > _MAX_WARNINGS_BYTES:
             remaining = _MAX_WARNINGS_BYTES - total_bytes
             if remaining > 100:  # a short fragment isn't worth keeping
-                truncated = line.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
+                truncated = line.encode("utf-8")[:remaining].decode(
+                    "utf-8", errors="ignore"
+                )
                 shown.append(truncated + "…")
             break
         shown.append(line)
         total_bytes += line_bytes
     if len(shown) < len(warnings):
-        shown.append(f"… (+{len(warnings) - len(shown)} more warning(s), see server logs)")
+        shown.append(
+            f"… (+{len(warnings) - len(shown)} more warning(s), see server logs)"
+        )
     return shown
 
 
