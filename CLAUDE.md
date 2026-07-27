@@ -106,6 +106,12 @@ make test           # offline unit tests only
 ```
 
 Fix before proceeding. Do not report done with red tests or lint errors.
+Performance carries the same weight as these checks, not a lesser one — see
+`docs/CONVENTIONS.md §Performance & concurrency`. If the change touches the
+agent execution loop, an LLM or tool call site, KPI/log emission, a shared
+client/cache, or anything else that runs per-turn or per-request under
+concurrent load, also run the `fred-performance-reviewer` skill before
+reporting done.
 
 **Step 6 — Doc update checklist.**
 
@@ -117,6 +123,7 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 | RFC-backed item finished                                          | Mark `id-legend.yaml` status `done`, close the GitHub issue                              |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
+| Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
 
 `docs/swift/backlog/BACKLOG.md` and `WORKPLAN.md` are frozen — never write to
 them. Do not mark backlog checkboxes or add WORKPLAN rows. `PMO-BOARD.md` and
