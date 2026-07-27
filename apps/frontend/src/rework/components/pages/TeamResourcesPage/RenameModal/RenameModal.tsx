@@ -93,7 +93,7 @@ export default function RenameModal({ open, onClose, initialName, onSubmit }: Re
               <IconButton
                 color="on-surface"
                 variant="icon"
-                size="xs"
+                size="medium"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label={t("common.close")}
                 onClick={onClose}

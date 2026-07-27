@@ -104,6 +104,12 @@ describe("DataTable", () => {
     consoleError.mockRestore();
   });
 
+  it("threads a custom rowHeight into the container as a CSS variable, leaving other consumers' default untouched", () => {
+    render(<DataTable columns={columns} data={makeRows(3)} rowHeight="2.5rem" />);
+    const container = document.querySelector('[class*="datatable-container"]') as HTMLElement;
+    expect(container.style.getPropertyValue("--datatable-row-height")).toBe("2.5rem");
+  });
+
   it("shows a persistent footer with the total item count even when every row fits on one page", () => {
     render(<DataTable columns={columns} data={makeRows(10)} pageSize={20} />);
     expect(rowValues()).toHaveLength(10);
@@ -253,5 +259,108 @@ describe("DataTable selection", () => {
     );
 
     expect(checkboxes()[0].hasAttribute("data-indeterminate")).toBe(true);
+  });
+
+  // Regression: the checkbox cell used to be a plain `.datatable-cell`, so
+  // `firstColumnInset`'s `:first-child` rule (meant for the Name/label
+  // column) landed on the checkbox instead, shoving it off-center in its
+  // narrow track. The checkbox cell now carries its own class so the CSS
+  // can target it (center it) and exclude it from that inset independently.
+  it("gives the checkbox cell its own class, distinct from a plain content cell", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    const checkboxCell = checkboxes()[0].closest('[class*="datatable-cell"]');
+    expect(checkboxCell?.className).toMatch(/datatable-cell-select/);
+  });
+});
+
+describe("DataTable server pagination", () => {
+  // `data` here is already "the current page" (as a real caller would fetch
+  // it) — never a full dataset DataTable would need to slice itself.
+  const currentPageRows = makeRows(3);
+
+  it("shows the caller's totalCount, not data.length, and renders every row passed without re-slicing", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 120, offset: 20, limit: 10, onOffsetChange: vi.fn() }}
+      />,
+    );
+    expect(footer()?.textContent).toContain("120");
+    expect(rowValues()).toEqual(currentPageRows.map((r) => String(r.id)));
+  });
+
+  it("derives the current/total page count from totalCount and limit, and calls onOffsetChange on navigation", () => {
+    const onOffsetChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 100, offset: 20, limit: 10, onOffsetChange, onLimitChange: vi.fn() }}
+      />,
+    );
+    // offset 20 / limit 10 -> page 3 of 10
+    expect(footer()?.textContent).toContain("3");
+    expect(footer()?.textContent).toContain("10");
+
+    const [, first, prev, next, last] = footerButtons();
+    click(next);
+    expect(onOffsetChange).toHaveBeenCalledWith(30);
+    click(prev);
+    expect(onOffsetChange).toHaveBeenCalledWith(10);
+    click(first);
+    expect(onOffsetChange).toHaveBeenCalledWith(0);
+    click(last);
+    expect(onOffsetChange).toHaveBeenCalledWith(90);
+  });
+
+  it("hides the rows-per-page selector when onLimitChange is omitted", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 100, offset: 0, limit: 10, onOffsetChange: vi.fn() }}
+      />,
+    );
+    expect(footer()?.textContent).not.toContain("dataTable.pagination.itemsPerPage");
+    // Only the 4 nav buttons remain, no rows-per-page select control.
+    expect(footerButtons()).toHaveLength(4);
+  });
+
+  it("shows the rows-per-page selector when onLimitChange is provided", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 100, offset: 0, limit: 10, onOffsetChange: vi.fn(), onLimitChange: vi.fn() }}
+      />,
+    );
+    expect(footer()?.textContent).toContain("dataTable.pagination.itemsPerPage");
+    expect(footerButtons()).toHaveLength(5);
+  });
+
+  it("disables first/prev on the first page and next/last on the last page", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 30, offset: 0, limit: 10, onOffsetChange: vi.fn(), onLimitChange: vi.fn() }}
+      />,
+    );
+    const [, first, prev, next, last] = footerButtons();
+    expect(first.hasAttribute("disabled")).toBe(true);
+    expect(prev.hasAttribute("disabled")).toBe(true);
+    expect(next.hasAttribute("disabled")).toBe(false);
+    expect(last.hasAttribute("disabled")).toBe(false);
   });
 });

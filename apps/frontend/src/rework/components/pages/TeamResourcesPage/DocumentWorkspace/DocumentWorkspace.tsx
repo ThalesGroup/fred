@@ -20,6 +20,7 @@ import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import type { OptionModel } from "@models/Option.model.ts";
@@ -52,10 +53,9 @@ import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
 import { deriveDocStatus } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
-import { ResourcePagination } from "./ResourcePagination/ResourcePagination.tsx";
 import styles from "./DocumentWorkspace.module.css";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
@@ -154,6 +154,9 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Shared across the whole browser (not per-tag) — matches how the members
+  // table's rows-per-page selector is one setting for the whole DataTable.
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
@@ -163,14 +166,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const currentTag = currentNode.tagsHere[0] ?? null;
 
   const loadTagPage = useCallback(
-    async (tagId: string, offset: number) => {
+    async (tagId: string, offset: number, limit: number = rowsPerPage) => {
       setPerTag((prev) => ({
         ...prev,
         [tagId]: { docs: prev[tagId]?.docs ?? [], total: prev[tagId]?.total ?? 0, offset, loading: true },
       }));
       try {
         const res = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit: PAGE_SIZE },
+          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit },
         }).unwrap();
         setPerTag((prev) => ({
           ...prev,
@@ -180,7 +183,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
         setPerTag((prev) => ({ ...prev, [tagId]: { ...prev[tagId], loading: false } as PageState }));
       }
     },
-    [browseDocumentsByTag],
+    [browseDocumentsByTag, rowsPerPage],
+  );
+
+  const handleRowsPerPageChange = useCallback(
+    (limit: number) => {
+      setRowsPerPage(limit);
+      if (currentTag) void loadTagPage(currentTag.id, 0, limit);
+    },
+    [currentTag, loadTagPage],
   );
 
   const navigateTo = useCallback((full: string | null) => {
@@ -485,7 +496,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const columns: DataTableColumn<Row>[] = [
     {
       label: t("rework.resources.columns.name"),
-      size: "3fr",
+      size: "2fr",
       cellRenderer: (row) =>
         row.kind === "folder" ? (
           <button
@@ -506,22 +517,37 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     },
     {
       label: t("rework.resources.columns.size"),
-      cellRenderer: (row) =>
-        row.kind === "folder"
-          ? t("rework.resources.folder.docCount", { count: row.node.tagsHere[0]?.item_ids?.length ?? 0 })
-          : formatBytes(row.doc.file?.file_size_bytes ?? 0),
+      size: "6.5rem",
+      cellRenderer: (row) => (
+        <span className={styles.nowrapCell}>
+          {row.kind === "folder"
+            ? t("rework.resources.folder.docCount", { count: row.node.tagsHere[0]?.item_ids?.length ?? 0 })
+            : formatBytes(row.doc.file?.file_size_bytes ?? 0)}
+        </span>
+      ),
     },
     {
       label: t("rework.resources.columns.created"),
-      cellRenderer: (row) =>
-        formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.identity.created),
+      size: "9rem",
+      cellRenderer: (row) => (
+        <span className={styles.nowrapCell}>
+          {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.identity.created)}
+        </span>
+      ),
     },
     {
+      // `identity.author` is the file's own embedded-metadata author, not
+      // the Fred user who uploaded it — RFC §13.10 decision 10 / FRONT-09.L.
+      // No `uploaded_by` field exists yet, so this renders "—" for every
+      // document until that backend field ships (RFC-tracked, not silently
+      // dropped).
       label: t("rework.resources.columns.author"),
-      cellRenderer: (row) => (row.kind === "document" ? (row.doc.identity.author ?? "—") : "—"),
+      size: "9rem",
+      cellRenderer: () => <span className={styles.nowrapCell}>—</span>,
     },
     {
       label: "",
+      size: "6rem",
       cellRenderer: (row) => {
         if (row.kind !== "document") return null;
         const status = reprocessOverrides[row.doc.identity.document_uid]
@@ -537,9 +563,9 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
         <span className={styles.actionsCell}>
           {row.kind === "document" && (
             <IconButton
-              color="on-surface"
+              color="on-surface-retreat"
               variant="icon"
-              size="small"
+              size="medium"
               icon={{ category: "outlined", type: "visibility" }}
               aria-label={t("rework.resources.action.preview")}
               title={t("rework.resources.action.preview")}
@@ -548,9 +574,9 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
           )}
           <IconButtonMenu<"rename" | "delete" | "searchable" | "process">
             iconButton={{
-              color: "on-surface",
+              color: "on-surface-retreat",
               variant: "icon",
-              size: "small",
+              size: "medium",
               icon: { category: "outlined", type: "more_vert" },
               "aria-label": t("rework.resources.action.more"),
             }}
@@ -616,19 +642,19 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
             {canCreateFolder && (
               <>
                 <IconButton
-                  color="on-surface"
+                  color="on-surface-retreat"
                   variant="icon"
-                  size="small"
+                  size="medium"
                   icon={{ category: "outlined", type: "create_new_folder" }}
                   aria-label={t("rework.resources.menu.newFolder")}
                   title={t("rework.resources.menu.newFolder")}
                   onClick={() => setCreateOpen(true)}
                 />
                 <IconButton
-                  color="on-surface"
+                  color="on-surface-retreat"
                   variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "upload" }}
+                  size="medium"
+                  icon={{ category: "outlined", type: "upload_file" }}
                   aria-label={t("rework.resources.action.addFile")}
                   title={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
                   disabled={!currentTag}
@@ -640,31 +666,39 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
         </div>
 
         {tagsLoading ? (
-          <div className={styles.hint}>{t("rework.resources.loading")}</div>
+          <div className={`${styles.hint} ${styles.loadingHint}`}>
+            <Spinner size={16} />
+            {t("rework.resources.loading")}
+          </div>
         ) : isEmpty ? (
           <div className={styles.hint}>
             {currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")}
           </div>
         ) : (
-          <DataTable<Row>
-            columns={columns}
-            data={rows}
-            rowKey={rowKey}
-            firstColumnInset
-            selectable
-            selectedKeys={selectedKeys}
-            onSelectionChange={setSelectedKeys}
-            backgroundColor="transparent"
-          />
-        )}
-        {page && page.total > PAGE_SIZE && currentTag && (
-          <ResourcePagination
-            offset={page.offset}
-            limit={PAGE_SIZE}
-            total={page.total}
-            onPrev={() => void loadTagPage(currentTag.id, Math.max(0, page.offset - PAGE_SIZE))}
-            onNext={() => void loadTagPage(currentTag.id, page.offset + PAGE_SIZE)}
-          />
+          <div className={styles.tableFill}>
+            <DataTable<Row>
+              columns={columns}
+              data={rows}
+              rowKey={rowKey}
+              rowHeight="2.5rem"
+              firstColumnInset
+              selectable
+              selectedKeys={selectedKeys}
+              onSelectionChange={setSelectedKeys}
+              backgroundColor="transparent"
+              serverPagination={
+                currentTag
+                  ? {
+                      totalCount: page?.total ?? 0,
+                      offset: page?.offset ?? 0,
+                      limit: rowsPerPage,
+                      onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
+                      onLimitChange: handleRowsPerPageChange,
+                    }
+                  : undefined
+              }
+            />
+          </div>
         )}
       </div>
 

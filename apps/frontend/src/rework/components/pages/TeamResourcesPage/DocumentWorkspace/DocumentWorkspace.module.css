@@ -15,8 +15,10 @@
 
 .workspace {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
+  min-height: 0;
 }
 
 /* One card wraps the breadcrumb/actions toolbar and the table together —
@@ -24,10 +26,23 @@
  * corners show, letting the two visually read as a single surface. */
 .card {
   display: flex;
+  flex: 1;
   flex-direction: column;
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
+  min-height: 0;
   overflow: hidden;
+}
+
+/* The table is the one flexible region between the fixed-height toolbar
+ * above and DataTable's own fixed-height footer below — it grows to fill
+ * whatever vertical space the page gives `.card`, down to the page's own
+ * bottom padding, instead of just sizing to its rows' content height. */
+.tableFill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .toolbar {
@@ -37,7 +52,7 @@
   align-items: center;
   gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-retreat);
-  padding: var(--spacing-s) var(--spacing-m);
+  padding: var(--spacing-xs) var(--spacing-m);
 }
 
 .toolbarEnd {
@@ -54,6 +69,7 @@
   border: none;
   background: none;
   padding: 0;
+  min-width: 0;
   color: var(--on-surface);
   font: var(--font-body-large);
   text-align: left;
@@ -70,9 +86,22 @@
   min-width: 0;
 }
 
+/* The file/folder icon must keep its natural size no matter how narrow the
+ * Name column gets — only the label (below) truncates, never the icon. */
+.nameButton [class*="material-symbols"],
+.nameCell [class*="material-symbols"] {
+  flex-shrink: 0;
+}
+
 .nameCell span {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Taille/Création/Auteur: always readable on one line, never squeezed
+ * to a second line under a fixed-width column. */
+.nowrapCell {
   white-space: nowrap;
 }
 
@@ -95,4 +124,10 @@
   padding: var(--spacing-l) var(--spacing-m);
   color: var(--on-surface-muted);
   font: var(--font-body-small);
+}
+
+.loadingHint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
 }

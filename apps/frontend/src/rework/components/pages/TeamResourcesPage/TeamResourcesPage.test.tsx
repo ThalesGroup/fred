@@ -163,20 +163,20 @@ describe("TeamResourcesPage stats toggle", () => {
     return button;
   }
 
-  it("shows the stats cards by default", () => {
+  it("hides the stats cards by default", () => {
     render();
-    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
-    expect(statsToggle().getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("hides the stats cards when the header chip is toggled off, and back on when clicked again", () => {
+  it("shows the stats cards when the header chip is toggled on, and back off when clicked again", () => {
     render();
+
+    click(statsToggle());
+    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("true");
 
     click(statsToggle());
     expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
-    expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
-
-    click(statsToggle());
-    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
   });
 });

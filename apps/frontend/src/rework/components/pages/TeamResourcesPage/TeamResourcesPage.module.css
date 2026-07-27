@@ -85,11 +85,17 @@
   flex-direction: column;
 }
 
+.panel {
+  flex: 1;
+  min-height: 0;
+}
+
 .loadingState {
   display: flex;
   flex: 1;
   justify-content: center;
   align-items: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-xl);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

@@ -1,10 +1,15 @@
 .chip {
   display: inline-flex;
   align-items: center;
+  gap: var(--spacing-3xs);
   border-radius: var(--radius-full);
   padding: var(--spacing-3xs) var(--spacing-xs);
   font: var(--font-label-small);
   white-space: nowrap;
+}
+
+.chip :global(.material-symbols-outlined) {
+  font-size: 0.75rem;
 }
 
 .chip[data-variant="processing"] {
@@ -20,4 +25,24 @@
 .chip[data-variant="failed"] {
   background: var(--error-container);
   color: var(--on-error-container);
+}
+
+/* "Fait respirer" the pending icon: a slow, gradual pulse — distinct from
+ * TaskIndicator's faster 1.4s pulse, since this one should read as patient
+ * waiting, not urgent activity. */
+.breathingIcon {
+  display: inline-flex;
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.85);
+    opacity: 0.4;
+  }
 }

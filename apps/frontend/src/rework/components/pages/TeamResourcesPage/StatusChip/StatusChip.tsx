@@ -14,11 +14,15 @@
 
 import { useTranslation } from "react-i18next";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import styles from "./StatusChip.module.css";
 
 interface StatusChipProps {
   status: DocStatus;
 }
+
+const ICON_SIZE = 12;
 
 /**
  * Resources dashboard v2's status cell (RFC §13.3): silence for the common
@@ -34,6 +38,15 @@ export function StatusChip({ status }: StatusChipProps) {
   const variant = status === "raw" ? "pending" : status;
   return (
     <span className={styles.chip} data-variant={variant}>
+      {variant === "processing" ? (
+        <Spinner size={ICON_SIZE} />
+      ) : variant === "pending" ? (
+        <span className={styles.breathingIcon}>
+          <Icon category="outlined" type="sync" />
+        </span>
+      ) : (
+        <Icon category="outlined" type="error_outline" />
+      )}
       {t(`rework.resources.status.${status}`)}
     </span>
   );

@@ -29,6 +29,22 @@ export interface SortState {
   direction: SortDirection;
 }
 
+/** Controlled, server-side pagination — pass together with a `data` array that
+ *  already IS the current page's rows (the caller fetched them, e.g. via
+ *  offset/limit). Omit for DataTable to paginate `data` itself in-memory via
+ *  `pageSize`; the two are mutually exclusive (`serverPagination` wins). */
+export interface ServerPagination {
+  /** True row count across every page — not `data.length`, which is only this page. */
+  totalCount: number;
+  /** Current page's starting index (0-based). */
+  offset: number;
+  /** Rows per page, as already used for the `data` the caller fetched. */
+  limit: number;
+  onOffsetChange: (offset: number) => void;
+  /** Wires up the rows-per-page selector. Omit to keep `limit` fixed and hide it. */
+  onLimitChange?: (limit: number) => void;
+}
+
 interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
   data: T[];
@@ -36,10 +52,17 @@ interface DataTableProps<T> {
   /** Extra left inset on the first column (header + every row), for tables
    *  whose content otherwise sits flush against the table's left edge. */
   firstColumnInset?: boolean;
+  /** Overrides the row height (header + body, both become equal) — e.g.
+   *  "2.5rem" for a denser table. Omit to keep each row type's own default
+   *  height, unaffected — other DataTable call sites don't opt in. */
+  rowHeight?: string;
   /** Enables pagination and sets the initial rows-per-page (should be one of
    *  `ROWS_PER_PAGE_OPTIONS`). Omit to render every row with no pagination
-   *  bar (default) — existing call sites are unaffected. */
+   *  bar (default) — existing call sites are unaffected. Ignored when
+   *  `serverPagination` is set. */
   pageSize?: number;
+  /** Server-side pagination — see `ServerPagination`. Takes precedence over `pageSize`. */
+  serverPagination?: ServerPagination;
   /** Stable per-row identity, e.g. `(member) => member.user.id`. Omit only
    *  for data that never reorders between renders — without it, React falls
    *  back to array index as key, which misattributes any row-scoped
@@ -97,7 +120,9 @@ export default function DataTable<T>({
   data,
   backgroundColor = "var(--surface-container)",
   firstColumnInset = false,
+  rowHeight,
   pageSize,
+  serverPagination,
   rowKey,
   selectable = false,
   selectedKeys,
@@ -106,9 +131,10 @@ export default function DataTable<T>({
   onSortChange,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
-  const paginationEnabled = pageSize !== undefined;
+  const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
+  const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
@@ -138,14 +164,33 @@ export default function DataTable<T>({
     }
   };
 
-  const pageCount = paginationEnabled ? Math.max(1, Math.ceil(sortedData.length / rowsPerPage)) : 1;
+  const pageCount = paginationEnabled
+    ? Math.max(
+        1,
+        Math.ceil((serverPagination ? serverPagination.totalCount : sortedData.length) / effectiveRowsPerPage),
+      )
+    : 1;
   // Clamped rather than reset-on-change: if a row is removed and the current
   // page no longer exists, fall back to the new last page instead of jumping
-  // the user back to page 1.
-  const currentPage = Math.min(page, pageCount - 1);
-  const pageData = paginationEnabled
-    ? sortedData.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
-    : sortedData;
+  // the user back to page 1. Server-side pagination has no local `page` state
+  // to clamp — the offset is the caller's source of truth.
+  const currentPage = serverPagination
+    ? Math.floor(serverPagination.offset / serverPagination.limit)
+    : Math.min(page, pageCount - 1);
+  // Server-paginated `data` already IS the current page's rows (the caller
+  // fetched exactly that window) — slicing it again here would drop rows.
+  const pageData =
+    paginationEnabled && !serverPagination
+      ? sortedData.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
+      : sortedData;
+
+  const goToPage = (targetPage: number) => {
+    if (serverPagination) {
+      serverPagination.onOffsetChange(targetPage * serverPagination.limit);
+    } else {
+      setPage(targetPage);
+    }
+  };
 
   const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
@@ -180,12 +225,18 @@ export default function DataTable<T>({
     <div
       className={containerClasses.join(" ")}
       style={
-        { "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties
+        {
+          "--grid-layout": tableGridLayout,
+          "--datatable-background-color": backgroundColor,
+          ...(rowHeight ? { "--datatable-row-height": rowHeight } : {}),
+        } as React.CSSProperties
       }
     >
       <div className={styles["datatable-body"]}>
         {selectable && (
-          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`}>
+          <div
+            className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]} ${styles["datatable-cell-select"]}`}
+          >
             <Checkbox
               checked={allOnPageSelected}
               indeterminate={someOnPageSelected}
@@ -224,7 +275,7 @@ export default function DataTable<T>({
           return (
             <div className={styles["datatable-row"]} key={key}>
               {selectable && (
-                <div className={styles["datatable-cell"]}>
+                <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
                     onChange={() => toggleRow(key)}
@@ -247,23 +298,33 @@ export default function DataTable<T>({
         <div className={styles["datatable-footer"]}>
           <div className={styles["datatable-footer-left"]}>
             <span className={styles["footer-label"]}>
-              {t("dataTable.pagination.totalItems", { count: data.length })}
+              {t("dataTable.pagination.totalItems", {
+                count: serverPagination ? serverPagination.totalCount : data.length,
+              })}
             </span>
           </div>
           <div className={styles["datatable-footer-right"]}>
-            <span className={styles["footer-label"]}>{t("dataTable.pagination.itemsPerPage")}</span>
-            <div className={styles["footer-rows-per-page-select"]}>
-              <Select<number>
-                size="small"
-                compact
-                value={rowsPerPage}
-                options={rowsPerPageOptions}
-                onChange={(value) => {
-                  setRowsPerPage(value);
-                  setPage(0);
-                }}
-              />
-            </div>
+            {(!serverPagination || serverPagination.onLimitChange) && (
+              <>
+                <span className={styles["footer-label"]}>{t("dataTable.pagination.itemsPerPage")}</span>
+                <div className={styles["footer-rows-per-page-select"]}>
+                  <Select<number>
+                    size="small"
+                    compact
+                    value={effectiveRowsPerPage}
+                    options={rowsPerPageOptions}
+                    onChange={(value) => {
+                      if (serverPagination?.onLimitChange) {
+                        serverPagination.onLimitChange(value);
+                      } else {
+                        setRowsPerPage(value);
+                        setPage(0);
+                      }
+                    }}
+                  />
+                </div>
+              </>
+            )}
             <IconButton
               color="on-surface"
               variant="icon"
@@ -271,7 +332,7 @@ export default function DataTable<T>({
               icon={{ category: "outlined", type: "first_page" }}
               aria-label={t("dataTable.pagination.first")}
               disabled={currentPage <= 0}
-              onClick={() => setPage(0)}
+              onClick={() => goToPage(0)}
             />
             <IconButton
               color="on-surface"
@@ -280,7 +341,7 @@ export default function DataTable<T>({
               icon={{ category: "outlined", type: "chevron_left" }}
               aria-label={t("dataTable.pagination.prev")}
               disabled={currentPage <= 0}
-              onClick={() => setPage(currentPage - 1)}
+              onClick={() => goToPage(currentPage - 1)}
             />
             <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
               {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
@@ -292,7 +353,7 @@ export default function DataTable<T>({
               icon={{ category: "outlined", type: "chevron_right" }}
               aria-label={t("dataTable.pagination.next")}
               disabled={currentPage >= pageCount - 1}
-              onClick={() => setPage(currentPage + 1)}
+              onClick={() => goToPage(currentPage + 1)}
             />
             <IconButton
               color="on-surface"
@@ -301,7 +362,7 @@ export default function DataTable<T>({
               icon={{ category: "outlined", type: "last_page" }}
               aria-label={t("dataTable.pagination.last")}
               disabled={currentPage >= pageCount - 1}
-              onClick={() => setPage(pageCount - 1)}
+              onClick={() => goToPage(pageCount - 1)}
             />
           </div>
         </div>

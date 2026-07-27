@@ -670,6 +670,15 @@ the table entirely), an unlabeled status-chip cell, and one action cell (Preview
 
 - **Corpus d'équipe:** zero backend change. `DocumentMetadata` already carries every field
   needed: `file.file_size_bytes`, `identity.created`/`identity.author`.
+  **Revised 2026-07-27 — `identity.author` is the wrong field for the Auteur column.**
+  It's populated from the file's own embedded metadata (e.g. a .docx's "Author" core
+  property, see `docx_markdown_processor.py`), not from the Fred/Keycloak user who
+  uploaded it. `identity.last_modified_by` isn't a substitute either — it's a mix of the
+  same embedded-metadata field and, on later in-app mutations (rename, retag), the acting
+  Fred user's uid; it is never stamped with the uploader at ingestion time. No field for
+  "who uploaded this" exists on `Identity` today. **Decision (developer-confirmed
+  2026-07-27):** add it properly — see decision 10 and FRONT-09.L below. Until that field
+  ships, the Auteur cell renders `—` for documents rather than showing the wrong person.
 - **Espace perso / Espace partagé / Agents:** `FilesystemResourceInfoResult` (the `/fs` DTO)
   only carried `size`, `modified`, `created_by` before this RFC — no separate `created`
   timestamp. Added in `mcp_fs_service.py`'s `_stamp_provenance` (workplan phase H) —
@@ -813,10 +822,17 @@ sibling root's content.
       `showRawToggle` (commit `162dd8cb`), wired on Corpus's preview drawer.
 - [x] Add the team storage quota (existing `TeamStorageResponse`) to the page header,
       top-right, always visible (commit `d9cc6b05`).
-- [ ] Wire `DataTable`'s pagination footer to each tab's server-side offset/limit contract
-      (§6.2), not full-set client pagination. Corpus still uses the pre-existing
-      `ResourcePagination` widget below the table for folders over 50 documents — not
-      DataTable's own footer, which paginates a client-side array.
+- [x] Wire `DataTable`'s pagination footer to Corpus's server-side offset/limit contract
+      (§6.2), not full-set client pagination — **landed 2026-07-28**. `DataTable` gained a
+      `serverPagination` prop (`totalCount`/`offset`/`limit`/`onOffsetChange`/optional
+      `onLimitChange`) alongside the existing client-side `pageSize` mode; the two are
+      mutually exclusive, `serverPagination` wins. The old `ResourcePagination` widget
+      (a separate component below the table) is deleted — Corpus now uses the same
+      always-visible footer as the members table, permanently shown (not conditional on
+      total > page size). `DocumentWorkspace`'s rows-per-page is now dynamic
+      (`loadTagPage`'s `limit` param, default 50) instead of the fixed `PAGE_SIZE`
+      constant. Espace perso / Espace partagé / Agents still not wired (still on the old
+      single-line rows, no DataTable yet on those 3 tabs).
 - [ ] Add a search input wired to `POST /documents/metadata/browse`'s existing `query`
       field for Corpus.
 - [ ] Add a "Trier par" sort control wired to the existing `sort` field for Corpus.
@@ -913,6 +929,16 @@ bulk "exclure de la recherche".
    propagate `display_name` into citations and backfill it onto documents
    ingested before this field existed. Not tracked under a dedicated ID yet —
    raise a new backlog/id-legend entry when that phase is scheduled.
+10. Auteur column data source (raised 2026-07-27): add `Identity.uploaded_by:
+    Optional[str]`, stamped with `user.uid` at ingestion time (`base_input_processor.py`
+    or the ingestion controller, wherever the acting user is already in scope — see
+    `ingestion_controller.py`'s existing `created_by=user.uid` task-creation call for the
+    identity plumbing already available at that call site). Leaves `identity.author`
+    (file's own metadata) and `identity.last_modified_by` (mutation actor) untouched —
+    this is a new, unambiguous field, not a repurposing of either. Pre-existing documents
+    have no `uploaded_by` (nullable, no backfill) — Auteur renders `—` for those, same as
+    today. **Resolved 2026-07-27, developer-confirmed:** implement as its own backend
+    change (RFC-covered here, not deferred) — see FRONT-09.L.
 
 ### 13.11 Workplan additions (extends §13.7)
 
@@ -946,3 +972,18 @@ break existing citations pointing at its `document_uid`.
 Acceptance: selecting rows across a paginated table only affects rows on the
 current page (no "select all N across all pages" ambiguity in this phase);
 bulk delete surfaces per-row failures instead of silently dropping them.
+
+#### FRONT-09.L — Auteur column: `uploaded_by` field (new — decision 10)
+
+- [ ] Add `uploaded_by: Optional[str] = None` to `Identity` (`fred-core`
+      `document_structures.py`), alongside `author`/`last_modified_by`.
+- [ ] Stamp it with `user.uid` at ingestion (wherever the acting user is
+      already available to the ingestion path — see
+      `ingestion_controller.py`'s existing `created_by=user.uid` plumbing).
+- [ ] Regenerate `knowledgeFlowOpenApi.ts`.
+- [ ] Wire the Auteur column in `DocumentWorkspace.tsx` to
+      `identity.uploaded_by ?? "—"` (replaces the temporary `—` placeholder).
+
+Acceptance: a freshly uploaded Corpus document shows the uploader's name/id
+in the Auteur column; a document ingested before this field existed still
+renders `—` (no backfill, no crash).

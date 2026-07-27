@@ -1570,6 +1570,33 @@ items:
       to its pre-FRONT-09 state since nothing uses it anymore. Server-side
       pagination/search/sort for Corpus (§13.4) not started.
 
+      Amended 2026-07-27 (RFC §13.10 decision 10 / §13.11 FRONT-09.L): Auteur
+      column was wired to `identity.author`, confirmed by the developer to be
+      the wrong field (file's own embedded-metadata author, not the Fred
+      uploader). No `uploaded_by` field exists yet — developer confirmed
+      adding it properly (new `Identity.uploaded_by`, stamped at ingestion)
+      rather than approximating with `last_modified_by`. New phase L added,
+      not yet implemented — Auteur renders `—` for documents until it lands.
+      Same pass also fixed DataTable row height (40px, opt-in `rowHeight`
+      prop so other DataTable consumers are unaffected), a checkbox-cell
+      alignment bug (`firstColumnInset`'s padding was landing on the
+      selection-checkbox cell instead of the first content column),
+      DocumentWorkspace column-width rebalancing (Name 3fr→2fr, fixed widths
+      on Taille/Création/Auteur/status so Création never wraps), and icon
+      button color/size consistency with `AgentCard`'s reference pattern
+      (`on-surface-retreat`/`medium`, was `on-surface`/`small`).
+
+      Progress 2026-07-28: FRONT-09.H's last open item landed — `DataTable`
+      gained a `serverPagination` prop, Corpus wired to it (replaces the old
+      `ResourcePagination` widget, deleted), footer now permanently visible
+      and rows-per-page is dynamic. Status chips (StatusChip.tsx) gained
+      icons: a spinner for processing, a slow-pulsing "sync" icon for
+      pending, "error_outline" for failed. New shared `Spinner` atom
+      (extracted from TaskIndicator's inline SVG ring) reused across both.
+      Resources' table now fills available height (flex chain from
+      TeamResourcesPage's `.panel` down through DocumentWorkspace's
+      `.workspace`/`.card` to the table) instead of sizing to content.
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress

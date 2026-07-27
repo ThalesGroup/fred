@@ -1343,11 +1343,6 @@
           "raw": "Raw"
         }
       },
-      "pagination": {
-        "next": "Next page",
-        "page": "page {{page}} / {{pageCount}}",
-        "prev": "Previous page"
-      },
       "status": {
         "failed": "Error",
         "processing": "Processing...",

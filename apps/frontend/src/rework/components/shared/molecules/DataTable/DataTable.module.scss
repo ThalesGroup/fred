@@ -28,7 +28,7 @@
   }
 
   .datatable-cell {
-    height: 3.75rem;
+    height: var(--datatable-row-height, 3.75rem);
   }
 }
 
@@ -38,9 +38,9 @@
   border-bottom: 1px solid var(--surface-container-highest);
   padding: 0 var(--spacing-s);
   min-width: 0;
-  height: 3.5rem;
+  height: var(--datatable-row-height, 3.5rem);
   color: var(--on-surface);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 
   .header-content {
     min-width: 0;
@@ -59,8 +59,28 @@
   background-color: var(--datatable-background-color);
 }
 
-.first-column-inset .datatable-cell:first-child {
+/* The selection checkbox owns its own narrow track — center it there rather
+ * than letting it inherit the row's left-aligned text padding. Left padding
+ * gives every row a consistent inset from the table's own edge. */
+.datatable-cell-select {
+  justify-content: center;
+  padding: 0 var(--spacing-2xs) 0 var(--spacing-xs);
+}
+
+/* The inset belongs to the first real content column. When a selection
+ * checkbox is present it becomes the DOM's first cell, so apply the inset
+ * to whichever cell is first among the non-checkbox ones instead of
+ * literally `:first-child` — otherwise the checkbox itself gets shoved
+ * off-center by padding meant for the Name/label column next to it. */
+.first-column-inset .datatable-cell:first-child:not(.datatable-cell-select) {
   padding-left: var(--spacing-l);
+}
+
+/* Smaller inset than the checkbox-less case above: the checkbox cell already
+ * carries its own left padding, so the content column right after it needs
+ * less extra room to read as visually distinct from the checkbox column. */
+.first-column-inset .datatable-cell-select + .datatable-cell {
+  padding-left: var(--spacing-s);
 }
 
 .header-sort-button {

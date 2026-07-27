@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import Tabs, { type TabItem } from "@shared/molecules/Tabs/Tabs.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
@@ -66,7 +67,7 @@ export default function TeamResourcesPage() {
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
 
   const [activeTab, setActiveTab] = useState<ResourceRootTab>("resources");
-  const [statsOpen, setStatsOpen] = useState(true);
+  const [statsOpen, setStatsOpen] = useState(false);
   // "Espace partagé" only exists for a real team — if the active team turns out to be
   // personal (e.g. navigating here via a stale tab from a different team), fall back
   // rather than leave a tab selected that's about to disappear from the switcher.
@@ -112,7 +113,12 @@ export default function TeamResourcesPage() {
   const kfState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
 
   if (kfState === "loading") {
-    return <div className={styles.loadingState}>{t("rework.resources.loading")}</div>;
+    return (
+      <div className={styles.loadingState}>
+        <Spinner size={20} />
+        {t("rework.resources.loading")}
+      </div>
+    );
   }
   if (kfState === "error") {
     return (
