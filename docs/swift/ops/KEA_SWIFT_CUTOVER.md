@@ -106,9 +106,11 @@ actionable.
 
 Stop the cutover if any of these are true:
 
-- a `MATCHED`/`RELINKED`/`PENDING` classification writes a kea `sub` as a Swift
-  identity anywhere (identity bug, not a normal outcome — `RELINKED` users
-  getting a new `swift_sub` is expected and handled, not a failure);
+- an identity write bypasses username resolution — i.e. a raw, unresolved kea
+  `sub` is persisted somewhere without going through `resolve_user_sub`/
+  `KeaUserResolver` first (a `MATCHED` user's *resolved* `swift_sub`
+  legitimately equals their kea `sub` — that is the expected, correct case,
+  not this);
 - metadata import sees identities, teams, documents, or agent templates it cannot
   validate or map;
 - the target already contains data that violates the fresh-target import policy;

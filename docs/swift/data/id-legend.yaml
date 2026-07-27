@@ -2609,7 +2609,7 @@ items:
 
   - id: MIGR-04
     title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"
-    status: folded
+    status: deferred
     parent: MIGR-00
     owner: Sébastien
     refs:
