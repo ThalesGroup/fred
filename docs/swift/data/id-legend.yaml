@@ -2165,10 +2165,20 @@ items:
     status: open
     owner: Dimitri
     parent: TEAM-01
-    blocked_on: "TEAM-02 and TEAM-03"
     refs:
       rfc: "docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+    notes: >
+      Rewritten 2026-07-26 on top of the shipped models-as-capability system
+      (#2110): the model-guardrail binding in RFC §7 now uses existing
+      kind="model" capability enablement instead of a new TeamPlatformPolicy
+      object, and the runtime contract in §8 is a session-prep
+      ExecutionPreparation snapshot, not a per-turn one. No longer
+      blocked_on TEAM-02 (the specific write-permission pattern it needs —
+      required_permissions=[CAN_UPDATE_RESOURCES] via
+      get_team_by_id_from_service — is already established elsewhere in
+      product/api.py) or TEAM-03 (model_guardrails, its only overlap with
+      this RFC, is superseded — see TEAM-PLATFORM-POLICY-RFC.md header).
 
   - id: TEAM-06
     title: "Prompt-library scope and governance realignment for team configuration"

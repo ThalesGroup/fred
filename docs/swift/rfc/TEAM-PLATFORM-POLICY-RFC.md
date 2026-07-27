@@ -1,10 +1,20 @@
 # RFC — Team Platform Policy
 
-**Status:** Draft for team review  
+**Status:** Draft for team review. **Partially superseded 2026-07-26:**
+`model_guardrails` (§3, §7.1 below) is no longer needed — the models-as-
+capability system shipped in #2110 (`AGENT-CAPABILITY-RFC.md` §8.7) already
+provides per-team/personal-space model enablement via ReBAC `can_use` grants,
+with a shipped UI (`/admin/capabilities?kind=model`) and fail-closed runtime
+enforcement. `TEAM-ROUTING-POLICY-RFC.md` §7 now binds against that
+enablement data directly instead of against this RFC's `model_guardrails`.
+Everything else here — `storage`, `ingestion`, `size`, `deletion_retention`,
+`tool_guardrails` — is unaffected and still fully unbuilt; this note changes
+nothing about them.
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-23  
 **Area:** `control-plane-backend`, `knowledge-flow-backend`, `frontend`  
-**Related:** `FRED-TEAM-CONFIG-RFC.md`
+**Related:** `FRED-TEAM-CONFIG-RFC.md`, `TEAM-ROUTING-POLICY-RFC.md` §7 (model
+guardrail supersession)
 
 ---
 
@@ -60,6 +70,11 @@ Not included in V1:
 
 ## 3. Data model
 
+**`model_guardrails`/`TeamModelGuardrails` below is superseded (2026-07-26,
+see header) by #2110's `kind="model"` capability enablement — do not
+implement it.** Kept in the model here only as the historical record of what
+it replaced; everything else in this class is still the target.
+
 ```python
 class TeamPlatformPolicy(BaseModel):
     team_id: TeamId
@@ -68,7 +83,7 @@ class TeamPlatformPolicy(BaseModel):
     ingestion: TeamIngestionPolicy
     size: TeamSizePolicy
     deletion_retention: UserDeletionRetentionPolicy
-    model_guardrails: TeamModelGuardrails
+    model_guardrails: TeamModelGuardrails  # superseded — see note above
     tool_guardrails: TeamToolGuardrails
 
 
@@ -281,15 +296,18 @@ the violated field.
 
 ## 7. Interaction with existing and future surfaces
 
-### 7.1 Team routing policy
+### 7.1 Team routing policy — superseded 2026-07-26
 
-Every profile referenced by `TeamRoutingPolicy` must belong to
-`model_guardrails.allowed_profile_ids` when that allowlist is non-null.
+~~Every profile referenced by `TeamRoutingPolicy` must belong to
+`model_guardrails.allowed_profile_ids` when that allowlist is non-null.~~
+See `TEAM-ROUTING-POLICY-RFC.md` §7: `TeamRoutingPolicy` now binds directly
+against `kind="model"` capability enablement (#2110) instead. This section is
+historical record only.
 
 ### 7.2 Managed-agent configuration
 
-If a future per-instance model selector exists, it must also be bounded by
-`allowed_profile_ids`.
+If a future per-instance model selector exists, it should be bounded the same
+way — by `can_use` capability enablement, not by `allowed_profile_ids`.
 
 Every selected MCP server ID must belong to `allowed_mcp_server_ids` when that
 allowlist is non-null.
