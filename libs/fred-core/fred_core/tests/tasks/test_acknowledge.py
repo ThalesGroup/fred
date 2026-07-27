@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
+
 from fred_core.common import PostgresStoreConfig
 from fred_core.models.base import Base
 from fred_core.sql import create_async_engine_from_config

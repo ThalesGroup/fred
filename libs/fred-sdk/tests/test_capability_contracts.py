@@ -541,11 +541,12 @@ def test_model_capability_id_is_namespaced_and_stable() -> None:
 
 
 def test_model_capability_id_normalizes_unsafe_characters() -> None:
+    import re
+
     from fred_sdk.contracts.capability.manifest import (
         CAPABILITY_ID_PATTERN,
         model_capability_id,
     )
-    import re
 
     # A provider/model name containing characters OpenFGA forbids in object
     # ids (`:`, `/`) must still produce an admissible id, not propagate them.

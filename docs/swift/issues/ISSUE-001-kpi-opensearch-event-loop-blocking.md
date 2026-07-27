@@ -1,8 +1,22 @@
 # ISSUE-001 - KPI OpenSearch write can block async hot paths
 
-Status: open
+Status: resolved (2026-07-18, issue #2009)
 Owner: TBD
 Target window: Constellation (2.x) runtime/pod hardening window
+
+**Resolution.** `KPIWriter.emit()` still calls `store.index_event(event)`
+inline, but `store` is now a `ResilientSinkStore`
+(`libs/fred-core/fred_core/kpi/kpi_factory.py`) whose `index_event` is a
+non-blocking `queue.put_nowait` — the real OpenSearch HTTP call
+(`opensearch_kpi_store.py`) only runs in a background daemon thread behind a
+circuit breaker (`libs/fred-core/fred_core/common/resilient_sink.py`). The
+generic/audit log store is wrapped the same way
+(`libs/fred-core/fred_core/logs/log_store_factory.py`). See
+`docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §9 ("A KPI/log sink outage
+cannot fail or stall a business request — True today"). `ResilientSinkStore`
+is now the canonical pattern for any new external sink on a hot path — see
+the `fred-performance-reviewer` skill and `docs/CONVENTIONS.md
+§Performance & concurrency`.
 
 ## Problem
 KPI emission is synchronous in the shared writer. When the selected KPI store uses OpenSearch, the HTTP write is performed inline on the caller thread. In async runtime paths this can block the event loop during network round-trips.
