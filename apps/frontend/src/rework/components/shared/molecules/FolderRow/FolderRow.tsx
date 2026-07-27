@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
+import { formatBytes } from "@shared/utils/formatBytes";
 import styles from "./FolderRow.module.css";
 
 /** Counts of the folder's documents that are in a noteworthy state. */
@@ -29,6 +30,9 @@ interface FolderRowProps {
   name: string;
   /** indexed-corpus document count ("N docs"). Omit for a plain folder (e.g. workspace). */
   docCount?: number;
+  /** Total bytes of the folder's documents. Shown only while collapsed (redundant once
+   * open, where each file shows its own size). Omit to hide. */
+  totalSizeBytes?: number | null;
   expanded: boolean;
   onToggle: () => void;
   /** derived from the folder's documents — lets a collapsed folder still signal activity.
@@ -52,6 +56,7 @@ export function FolderRow({
   id,
   name,
   docCount,
+  totalSizeBytes,
   expanded,
   onToggle,
   aggregate,
@@ -59,7 +64,11 @@ export function FolderRow({
   onUpload,
   onDelete,
 }: FolderRowProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Collapsed only: once open, each file shows its own size so the folder total
+  // would just be noise.
+  const sizeLabel =
+    !expanded && totalSizeBytes && totalSizeBytes > 0 ? formatBytes(totalSizeBytes, i18n.language) : null;
 
   return (
     <div className={styles.row}>
@@ -125,6 +134,7 @@ export function FolderRow({
             )}
           </span>
         )}
+        {sizeLabel && <span className={styles.size}>{sizeLabel}</span>}
         {docCount != null && (
           <span className={styles.count}>{t("rework.resources.folder.docCount", { count: docCount })}</span>
         )}

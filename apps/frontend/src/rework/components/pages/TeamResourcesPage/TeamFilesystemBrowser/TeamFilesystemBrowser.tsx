@@ -198,6 +198,7 @@ function FsLevel({ path, depth, canWrite, emptyHintKey, onChanged }: FsLevelProp
               id={childPath}
               name={entry.path}
               fileType={fileExtension(entry.path)}
+              sizeBytes={entry.size}
               provenanceBadge={
                 entry.origin && originLabelKey ? (
                   <OriginBadge origin={entry.origin} label={t(originLabelKey)} />

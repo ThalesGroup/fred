@@ -42,6 +42,14 @@ class BrowseDocumentsByTagRequest(BaseModel):
     limit: int = Field(50, gt=0, le=500)
 
 
+class TagSizesRequest(BaseModel):
+    tag_ids: List[str] = Field(..., description="Library tag identifiers to total")
+
+
+class TagSizesResponse(BaseModel):
+    sizes: Dict[str, int] = Field(..., description="Total document bytes per requested tag id (0 when unknown/empty)")
+
+
 def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, MetadataNotFound):
         return HTTPException(status_code=404, detail=str(e))
@@ -192,6 +200,21 @@ class MetadataController:
                 total,
             )
             return BrowseDocumentsResponse(documents=docs, total=total)
+
+        @router.post(
+            "/documents/metadata/tag-sizes",
+            tags=["Documents"],
+            summary="Total document bytes per library tag",
+            response_model=TagSizesResponse,
+            description=(
+                "Returns the summed original file size (bytes) of all documents in each "
+                "requested library tag. Reliable and independent of pagination — used to "
+                "show a folder's total size while it is collapsed."
+            ),
+        )
+        async def tag_sizes(req: TagSizesRequest, user: KeycloakUser = Depends(get_current_user)):
+            sizes = await self.service.total_size_by_tags(user, req.tag_ids)
+            return TagSizesResponse(sizes=sizes)
 
         # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ===============
         # Labels describe documents (e.g. 'CV', 'DVA') with NO scope/permission

@@ -174,3 +174,8 @@
   min-height: 0;
   overflow-y: auto;
 }
+
+/* Full-bleed body: content (e.g. a PDF surface) manages its own insets. */
+.bodyFlush {
+  padding: 0;
+}

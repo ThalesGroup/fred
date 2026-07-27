@@ -1236,7 +1236,7 @@
     "resources": {
       "workspaceTitle": "Fichiers",
       "roots": {
-        "resources": "Corpus",
+        "resources": "Mes documents",
         "mine": "Mon espace",
         "team": "Espace d'équipe",
         "agents": "Agents",
@@ -1280,8 +1280,7 @@
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
-        "process": "Traiter",
-        "searchable": "Activer/désactiver la recherche"
+        "process": "Traiter"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1316,7 +1315,16 @@
       },
       "loading": "Chargement des ressources...",
       "preview": {
+        "loading": "Chargement…",
+        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
+        "showMarkdown": "Afficher la version Markdown",
+        "showOriginal": "Afficher le document d'origine",
         "title": "Aperçu du document"
+      },
+      "storage": {
+        "aria": "Espace de stockage utilisé",
+        "usedOfTotal": "{{used}} / {{total}}",
+        "used": "{{used}} utilisé"
       },
       "pagination": {
         "next": "Page suivante",
