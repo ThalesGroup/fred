@@ -39,6 +39,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
+    acknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPost: build.mutation<
+      AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiResponse,
+      AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks/${queryArg.taskId}/ack`, method: "POST" }),
+    }),
     searchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPost: build.mutation<
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse,
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg
@@ -944,6 +950,11 @@ export type CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiResponse = /** stat
 export type CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
 };
+export type AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiResponse =
+  /** status 200 Successful Response */ AcknowledgeTaskResponse;
+export type AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiArg = {
+  taskId: string;
+};
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
   /** status 200 Successful Response */ DocumentMetadata[];
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
@@ -1677,6 +1688,8 @@ export type TaskSummary = {
   updated_at: string;
   scheduled_for?: string | null;
   detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
@@ -1690,6 +1703,11 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type AcknowledgeTaskResponse = {
+  task_id: string;
+  acknowledged_at: string;
+  acknowledged_by: string | null;
 };
 export type Identity = {
   /** Original file name incl. extension (display name) */
@@ -2536,6 +2554,7 @@ export const {
   useStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
+  useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
