@@ -1,3 +1,10 @@
+**v2.1.17** — 2026-07-27
+
+- **Summary**
+
+  This intermediary release provides the necessary migration workflows to transforms kea
+  dumps into swift equivalent. This release is intermediary"
+
 **v2.1.16** — 2026-07-27
 
 - **Summary**
