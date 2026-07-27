@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import (
     DuplicateOperationRuleError,
@@ -40,8 +41,6 @@ from fred_core.common import PostgresStoreConfig, TeamId
 from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
 from fred_sdk.contracts.context import TeamOperationRouteRule
-
-from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 
 def _user() -> KeycloakUser:
@@ -62,9 +61,8 @@ def _rule(
 
 
 async def _make_store(tmp_path) -> TeamRoutingPolicyStore:
-    from fred_core.models.base import Base as CoreBase
-
     from control_plane_backend.models.base import Base as ControlPlaneBase
+    from fred_core.models.base import Base as CoreBase
 
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(tmp_path / "routing_policy.sqlite3"))

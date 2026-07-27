@@ -38,7 +38,6 @@ from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
-from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.config.loader import get_loaded_config_file_path
 from control_plane_backend.config.models import (
     Configuration,
@@ -48,6 +47,7 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
