@@ -1796,10 +1796,16 @@ items:
       original plan: B3/B4 (green/cost) had been silently skipped during the
       original pass, implemented now; `storage_by_team`'s platform-wide view
       was missing the §2.4 `can_manage_platform` gate, fixed. Details in
-      `NOTES-OBSERV-02-FOLLOWUPS.md` entries #19-20. `default_on` seeding
-      migration (the B7 deployment hazard, NOTES #15) remains a hard
-      prerequisite before enabling this on any live deployment — not part of
-      this item, tracked separately.
+      `NOTES-OBSERV-02-FOLLOWUPS.md` entries #19-20.
+      2026-07-27 (Dimitri Tombroff): the B7 deployment hazard (NOTES #14/#15,
+      `AGENT-CAPABILITY-RFC.md` §8.7) is resolved by decision, not by writing
+      a seeding migration — `platform_admin` uses the existing generic
+      default-on toggle (already kind-agnostic) to opt a model in
+      platform-wide. No migration ships in v1. The remaining requirement is
+      operational: on any deployment where ReBAC is already active, toggle
+      default-on for the desired model(s) in the same deploy window as B7's
+      enforcement code, or strictly before it — see NOTES #15 for the runbook
+      detail.
 
   - id: OBSERV-03
     title: "Agent tool-call and outbound-call audit hardening (GKE/GCP audit-log integrity)"

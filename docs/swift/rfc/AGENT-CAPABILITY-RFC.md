@@ -1915,17 +1915,17 @@ No field is incompatible; every unused field already has a defined
 zero-value from the `kind="agent"` precedent.
 
 **Admin dashboard: zero new UI.** `CapabilitiesPage.tsx` treats `kind` as a
-pure filter/grouping value in exactly one place
-(`KIND_FILTERS: Array<"tool" | "agent">`, line 50, and the matching
-`useState`) — the tri-state team matrix (`CapabilityTeamMatrixDrawer.tsx`),
-health column, and default-on toggle never branch on `kind`. Adding the
-third kind is: widen `KIND_FILTERS`/its `useState` type to include `"model"`
-(hand-written, not a registry hotspot — safe to edit directly) plus one i18n
-key. The three generated `kind: "tool" | "agent"` unions
-(`controlPlaneOpenApi.ts:1659,2048`, `runtimeOpenApi.ts:863`) widen
-automatically once the backend `Literal` changes and the clients are
-regenerated (`make update-control-plane-api`, `make update-runtime-api`) —
-never hand-edited, per the standing contract rule.
+pure filter/grouping value in exactly one place (`KIND_FILTERS`, and the
+matching `useState`) — the tri-state team matrix
+(`CapabilityTeamMatrixDrawer.tsx`), health column, and default-on toggle
+never branch on `kind`. **Shipped (`5ee4813f`, OBSERV-02 v3 F5):**
+`KIND_FILTERS`/its `useState` type widened to `Array<"tool" | "agent" |
+"model">` (hand-written, not a registry hotspot) plus one i18n key — no other
+frontend code needed a `kind="model"` branch. The three generated `kind`
+unions (`controlPlaneOpenApi.ts`, `runtimeOpenApi.ts`) widened automatically
+once the backend `Literal` changed and the clients were regenerated (`make
+update-control-plane-api`, `make update-runtime-api`) — never hand-edited,
+per the standing contract rule.
 
 **The one genuinely new piece: runtime enforcement.** Every existing kind has
 a live enforcement chokepoint — `kind="tool"` gates tool selection via
@@ -1974,27 +1974,37 @@ query logic into `fred-core`, which both already depend on — is real,
 separate refactor scope against already-shipped, tested control-plane code;
 tracked in `NOTES-OBSERV-02-FOLLOWUPS.md`, not attempted under this branch.
 
-**⚠️ Deployment-sequencing hazard, not yet resolved — blocks enabling ReBAC
-enforcement in any live deployment:** today, no team holds an explicit
-`can_use` grant on any `model__*` capability (nothing seeds one). The moment
-ReBAC is active for a team, `usable_model_capability_ids` returns an EMPTY
-set for it — not "unrestricted" — and every chat turn for that team fails
-closed with `ModelNotUsableError`. **The default-on seeding step below is
-not an optional migration nicety here — it is a hard prerequisite.** It must
-land and run (anchoring every currently-routable model + setting
-`default_on=True`, mirroring how `kind="tool"`/`kind="agent"` were seeded at
-their own CAPAB-01 rollout) in the same deploy as this enforcement code, or
-strictly before it — never after. This is the single most important thing
-for whoever picks up deployment of this piece to get right first.
+**✅ Deployment-sequencing hazard — resolved 2026-07-27 (no migration built):**
+today, no team holds an explicit `can_use` grant on any `model__*` capability
+(nothing auto-seeds one — `team_scope` for `kind="model"` stays `ADMIN_GATED`,
+see the field-mapping table above). The moment ReBAC is active for a team,
+`usable_model_capability_ids` returns an EMPTY set for it — not
+"unrestricted" — and every chat turn for that team fails closed with
+`ModelNotUsableError`. **Resolution: no auto-seeding migration is built for
+v1.** `PUT /admin/capabilities/{id}/default-on` (§8.3/§8.5) already exists,
+is kind-agnostic (`set_capability_default_on`, `enablement.py`, has no `kind`
+branch), and already works unmodified for `kind="model"` entries — the same
+admin action that turns on a `tool`/`agent` capability platform-wide turns on
+a model. That is the intended v1 mechanism: `platform_admin` opts a model IN
+via the existing admin UI/API, nothing is on by default. The operational
+consequence replaces the migration requirement: **on any deployment where
+ReBAC is already active for at least one team, the platform_admin must
+toggle default-on for the desired model(s) (e.g. the mock-openai profile
+used for perf campaigns) in the same deploy window as this enforcement
+code — before, or immediately as, ReBAC enforcement reaches that team** —
+otherwise that team's chat fails closed until the toggle is flipped. This is
+now a deploy-runbook step, not a code gap; tracked in
+`NOTES-OBSERV-02-FOLLOWUPS.md` #14/#15.
 
-**Migration — NOT YET IMPLEMENTED, required before this can go live:**
-none for `models_catalog.yaml` itself (it stays exactly as is, routing-only).
-The required one-time step is anchoring each projected `kind="model"` entry
-to the singleton organization (`ensure_capability_anchor`, reused unchanged)
-and setting `default_on=True` for every currently-routable model — see the
-hazard box above for why this is a hard prerequisite, not an optional
-migration nicety, once the enforcement code below is deployed. Nothing
-disabled on day one; platform_admin opts specific models out afterward.
+**Migration: none, by design.** `models_catalog.yaml` stays exactly as is,
+routing-only. No migration writes `default_on` tuples for `kind="model"`
+entries — `platform_admin` sets them via the generic toggle above, one model
+at a time, same UX as any other capability. This was a deliberate scope cut
+for the first PR (simpler, no backfill code, no migration to test) traded
+against the manual runbook step above; auto-seeding every routable model at
+first registration (mirroring how `kind="tool"`/`kind="agent"` were seeded at
+CAPAB-01 rollout) remains a legitimate future improvement if the manual step
+proves error-prone in practice, but is not required for this to ship safely.
 
 **Status (2026-07-26):** both halves are now implemented and tested —
 offline suites green across fred-sdk, fred-runtime, control-plane-backend:
@@ -2005,13 +2015,16 @@ offline suites green across fred-sdk, fred-runtime, control-plane-backend:
   `BoundRuntimeContext.usable_model_ids`, `RoutedChatModelFactory`'s gate,
   `ModelNotUsableError`.
 
-Two things remain, both required before production rollout, neither started:
-1. **The default-on seeding migration** (hazard box above) — without it,
-   enabling ReBAC for any team breaks all chat for that team.
-2. `CapabilitiesPage.tsx`'s `KIND_FILTERS` widen (frontend) — deferred to
-   the same batch as the rest of this delivery's frontend work (F1-F6);
-   until then, `platform_admin` can see `kind="model"` entries only via the
-   raw `GET /admin/capabilities` API, not the admin UI.
+**2026-07-27 update:** both remaining items are now closed.
+1. ~~The default-on seeding migration~~ — resolved by decision, not code: no
+   migration is built (see above); `platform_admin` uses the existing generic
+   default-on toggle instead, with a mandatory deploy-runbook step covering
+   the same hazard.
+2. `CapabilitiesPage.tsx`'s `KIND_FILTERS` widen (frontend) — shipped
+   (`5ee4813f`, OBSERV-02 v3 F5): `KIND_FILTERS` includes `"model"`, and
+   neither the default-on toggle column nor the team matrix drawer branches
+   on `kind`, so the existing admin UI already covers models with no
+   kind-specific code.
 
 ---
 

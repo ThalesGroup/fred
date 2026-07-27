@@ -166,27 +166,40 @@ for anyone adding a new `/agents/*` admin-catalog-style endpoint later: the
 config object available at request time is `RuntimeConfig`, not
 `AgentPodConfig`, and needs its own field for anything new.
 
-### 14. `kind="model"` enforcement bootstrapping (default_on) — STILL not implemented, now URGENT
+### 14. `kind="model"` enforcement bootstrapping (default_on) — RESOLVED 2026-07-27, no migration built
 Updated after B7 landed: the enforcement chokepoint this item was waiting on
-now exists and is fail-closed. See item #15 — this is no longer a "someday"
-item, it is a **hard blocker on enabling ReBAC for any live deployment**.
+exists and is fail-closed (see #15). Resolved by decision, not by writing the
+migration: `PUT /admin/capabilities/{id}/default-on` (`set_capability_default_on`,
+`enablement.py`) is already kind-agnostic — no `kind` branch anywhere in that
+path — so it already works for `kind="model"` entries exactly as it does for
+`tool`/`agent`, with zero code change. v1 ships with every model OFF by
+default; `platform_admin` opts one in via the same admin UI/API used for any
+other capability. See #15 for the operational consequence this trades in for.
 
 ---
 
 ## Runtime enforcement (B7)
 
-### 15. ⚠️ MOST IMPORTANT ITEM IN THIS FILE — deployment-sequencing hazard
+### 15. ✅ RESOLVED 2026-07-27 — deployment-sequencing hazard, now a runbook step not a code gap
 No team holds an explicit `can_use` grant on any `model__*` capability today
-(nothing seeds one — see #14). The instant ReBAC is active for a team,
+(nothing auto-seeds one — see #14). The instant ReBAC is active for a team,
 `usable_model_capability_ids` returns an EMPTY set for it, and every chat
-turn for that team fails closed with `ModelNotUsableError`. **The
-default-on seeding migration must land and run in the same deploy as B7's
-enforcement code, or strictly before it.** Deploying enforcement without
-seeding first would break all chat, platform-wide, for every team with
-ReBAC active. Documented as a hard prerequisite in
-`AGENT-CAPABILITY-RFC.md` §8.7's hazard box — repeating it here because it
-is exactly the kind of gap that's invisible in code review (both halves are
-individually correct) and only shows up as a production incident.
+turn for that team fails closed with `ModelNotUsableError`. **Decision: no
+default-on seeding migration is built for v1.** Instead, the existing
+generic default-on toggle (#14) is the mechanism, and the hazard becomes an
+explicit **deploy-runbook step**: on any deployment where ReBAC is already
+active for at least one team, `platform_admin` must toggle default-on for
+the desired model(s) (e.g. the mock-openai profile used for perf campaigns)
+in the same deploy window as B7's enforcement code — before, or immediately
+as, enforcement reaches that team. Skipping this step breaks all chat for
+that team until the toggle is flipped by hand through `CapabilitiesPage`
+(now filterable to `kind="model"` — "Frontend F5 — done" above) or the raw
+API. Documented as the
+resolved hazard in `AGENT-CAPABILITY-RFC.md` §8.7 — repeating it here
+because forgetting the runbook step is exactly the kind of gap that's
+invisible in code review and only shows up as a production incident; a
+future auto-seeding migration remains a legitimate improvement if the manual
+step proves error-prone, but is not required for this to ship.
 
 ### 16. `usable_capability_ids` is now duplicated once (control-plane + fred-runtime)
 `fred_runtime/model_routing/authz.py::usable_model_capability_ids` mirrors
