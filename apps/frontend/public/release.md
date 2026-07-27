@@ -1,3 +1,51 @@
+**v2.1.16** — 2026-07-27
+
+- **Summary**
+
+  Every role now gets a usage dashboard — team admins, editors, and analysts can see
+  their team's token usage, storage, and activity, complete with an estimated carbon
+  footprint and optional cost. Failed or cancelled tasks can be dismissed once for
+  everyone, teams can now be made public or private and get a proper banner image, and
+  adding several members at once is a single bulk action. The chat sidebar can group
+  conversations by agent, and the agent creation form has been reorganized into a
+  clearer four-tab layout. Several bugs around team roles, task dismissal, and
+  document-library repair are also fixed.
+
+- **Features**
+
+  - Usage dashboards for every role: team admins, editors, and analysts see their team's token usage, storage, and activity; platform admins get a platform-wide view broken down by team (#2110)
+  - Token usage everywhere now shows an estimated carbon footprint and energy use, plus an optional cost estimate (#2110)
+  - Dismiss a failed or cancelled task once, and it stays dismissed for everyone who can see it — not just your own browser (#2110)
+  - Admins can set a team's default AI model and override it for specific operations (#2118)
+  - Teams can be set to public or private (private teams are hidden from the marketplace and closed to non-members), and joining is now a simple open/invite-only choice (#2121)
+  - Team settings: upload a custom banner image and search the members table by name (#2121)
+  - Add several team members at once with a bulk "Add members" dialog, assigning roles as you go (#2117)
+  - Chat sidebar can group your conversations by agent; tiles now show the agent name and an absolute date/time (#2115)
+  - A new admin page finds and repairs inconsistencies in the document library without deleting anything recoverable (#2112)
+  - Agent creation/editing is reorganized into four tabs (General, Prompts, Tools, Engagement), with a new required "use case" statement (#2105)
+
+- **Improvements**
+
+  - Table pagination now shows a total page count and lets you jump straight to the first or last page (#2109)
+  - Deleting a conversation or revoking a team member's role now asks for confirmation first, matching other destructive actions in the app
+  - Search suggestion menus (e.g. adding a team member) now support full keyboard navigation
+
+- **Bug Fixes**
+
+  - Non-admin users could get a permission error viewing their own usage stats (#2110)
+  - Personal spaces could incorrectly show the collaborative "team usage" sections meant for real teams (#2110)
+  - Dashboard chart hover highlights were hard to see in dark mode (#2110)
+  - A team's configured default AI model and routing rules were silently ignored when chatting — they now actually apply (#2118)
+  - Dismissing a task could be sent to the wrong backend and silently fail; the activity view now combines tasks from every backend that runs them (#2110)
+  - Adding a member with more than one role could silently keep only the highest one, and a role grant could fail without any error shown (#2117)
+  - A conversation's "last active" time in the sidebar could get stuck instead of updating live (#2115)
+  - Tooltips could stay open after clicking away from a button (#2115)
+  - The document-library repair tool could delete documents that were still recoverable — it now only repairs, never deletes automatically (#2106)
+
+- **Deployment note**
+
+  This release includes several additive database migrations (task dismissal, team default-model routing, team visibility) applied automatically on upgrade — no action needed. If you plan to restrict which AI models a team can use, enable each model as default-on first in the admin Capabilities page: until you do, chats in that team will fail with no available model.
+
 **v2.1.15** — 2026-07-24
 
 - **Summary**
