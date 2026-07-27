@@ -635,6 +635,17 @@ class RevectorizeDocument:
             )
 
             if _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=count):
+                # Vectors already exist (that's the whole reason for the skip) but
+                # `output_process` — the only thing that normally calls
+                # `mark_stage_done(VECTORIZED)` — never runs on this path. Without this,
+                # a migrated document stays `NOT_STARTED` in Postgres forever even though
+                # its vectors were correct and untouched (MIGR-07.04).
+                await workflow.execute_activity(
+                    "mark_document_vectorized",
+                    args=[document_uid, user],
+                    schedule_to_close_timeout=timedelta(minutes=5),
+                    retry_policy=RetryPolicy(maximum_attempts=3),
+                )
                 if task_id:
                     await workflow.execute_activity(
                         "emit_ingestion_task_event",

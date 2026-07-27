@@ -318,6 +318,33 @@ async def delete_vectors(document_uid: str) -> None:
 
 
 @activity.defn
+async def mark_document_vectorized(document_uid: str, user: dict) -> None:
+    """Mark VECTORIZED done for a document whose vectors were left untouched.
+
+    Companion to the revectorize workflow's incremental skip
+    (`_wf_should_skip_revectorize`): skipping re-embedding never called
+    `output_process`, so the metadata's `VECTORIZED` stage stayed whatever the
+    kea-import stage reset (`_reset_transported_stages`) left it at —
+    `NOT_STARTED`, even though `get_chunk_count` just proved vectors exist.
+    Best-effort: a document that vanished between the count check and this
+    call is not this activity's problem to raise about.
+    """
+    from fred_core import KeycloakUser
+
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
+
+    keycloak_user = KeycloakUser.model_validate(user)
+    ingestion_service = get_ingestion_service()
+    metadata = await ingestion_service.get_metadata(keycloak_user, document_uid)
+    if metadata is None:
+        activity.logger.warning("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s not found, nothing to mark", document_uid)
+        return
+    metadata.mark_stage_done(ProcessingStage.VECTORIZED)
+    await ingestion_service.save_metadata(keycloak_user, metadata=metadata)
+    activity.logger.info("[SCHEDULER][ACTIVITY][MARK_DOCUMENT_VECTORIZED] %s marked VECTORIZED (vectors pre-existed)", document_uid)
+
+
+@activity.defn
 async def prepare_revectorize_file(document_uid: str, user: dict) -> RevectorizePreparedFile:
     """
     Assemble the `(FileToProcess, DocumentMetadata)` pair `output_process` needs,

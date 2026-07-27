@@ -33,6 +33,8 @@ from fred_core.documents.document_structures import (
     FileInfo,
     Identity,
     Processing,
+    ProcessingStage,
+    ProcessingStatus,
     SourceInfo,
     SourceType,
 )
@@ -43,6 +45,7 @@ from knowledge_flow_backend.features.scheduler.activities import (
     delete_vectors,
     get_chunk_count,
     list_documents_in_scope,
+    mark_document_vectorized,
     prepare_revectorize_file,
 )
 
@@ -217,3 +220,34 @@ def test_prepare_revectorize_file_raises_non_retryable_when_source_tag_missing()
             _run(prepare_revectorize_file("doc-1", _USER))
 
     assert exc_info.value.non_retryable is True
+
+
+# ── mark_document_vectorized (MIGR-07.04) ───────────────────────────────────────
+
+
+def test_mark_document_vectorized_marks_stage_done_and_saves():
+    metadata = _make_metadata("doc-1")
+    metadata.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED)
+    ingestion_service = MagicMock()
+    ingestion_service.get_metadata = AsyncMock(return_value=metadata)
+    ingestion_service.save_metadata = AsyncMock()
+
+    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
+        _run(mark_document_vectorized("doc-1", _USER))
+
+    assert metadata.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.DONE
+    ingestion_service.save_metadata.assert_awaited_once()
+    saved_user, saved_kwargs = ingestion_service.save_metadata.await_args.args, ingestion_service.save_metadata.await_args.kwargs
+    assert saved_user[0].uid == "alice"
+    assert saved_kwargs["metadata"] is metadata
+
+
+def test_mark_document_vectorized_is_a_noop_when_document_missing():
+    ingestion_service = MagicMock()
+    ingestion_service.get_metadata = AsyncMock(return_value=None)
+    ingestion_service.save_metadata = AsyncMock()
+
+    with patch(_PATCH_GET_INGESTION_SERVICE, return_value=ingestion_service):
+        _run(mark_document_vectorized("missing-doc", _USER))  # must not raise
+
+    ingestion_service.save_metadata.assert_not_awaited()

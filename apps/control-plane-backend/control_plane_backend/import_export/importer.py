@@ -263,6 +263,25 @@ class MigrationReport:
     warnings: list[str] = field(default_factory=list)
 
 
+# `MigrationResult.warnings` ends up in a `pg_notify` payload (fred_core.tasks.bus),
+# capped at ~8000 bytes by Postgres — the same failure class that crashed a real
+# 1008-user rehearsal run (2026-07-25, see format_usernames_for_warning above).
+# That fix only bounded the PENDING/RELINKED name lists; a cutover-scale bundle can
+# still accumulate one warning line per skipped agent/resource/prompt, so the
+# aggregate list itself needs the same cap.
+_MAX_WARNING_LINES = 50
+
+
+def _cap_warnings(warnings: list[str]) -> list[str]:
+    if len(warnings) <= _MAX_WARNING_LINES:
+        return list(warnings)
+    shown = warnings[:_MAX_WARNING_LINES]
+    shown.append(
+        f"… (+{len(warnings) - _MAX_WARNING_LINES} more warning(s), see server logs)"
+    )
+    return shown
+
+
 def to_migration_result(report: MigrationReport) -> MigrationResult:
     """Project the internal `MigrationReport` onto the public `MigrationResult`
     contract (AUTHZ-07 Step 3) — a field-for-field mapping, never a re-derivation:
@@ -287,7 +306,7 @@ def to_migration_result(report: MigrationReport) -> MigrationResult:
         tags_skipped=report.tags_skipped,
         docs_imported=report.docs_imported,
         docs_skipped=report.docs_skipped,
-        warnings=list(report.warnings),
+        warnings=_cap_warnings(report.warnings),
     )
 
 
@@ -680,6 +699,19 @@ _STEP_LABELS: dict[str, str] = {
 }
 
 
+# Per-item progress emission (task_service.record -> new session + pg_notify
+# connection each call, see fred_core.tasks.bus.PostgresEventBus.publish)
+# measurably extends the enclosing transaction at a few thousand items — throttle
+# instead of emitting on every single item; the caller must still emit the last
+# index unconditionally so the progress bar reaches 100%.
+_EMIT_EVERY = 25
+
+# OpenFGA tuple writes batched via RebacEngine.add_relations (bounded concurrent
+# gather per chunk) instead of one sequential network round-trip per tuple — a
+# cutover-scale bundle (~2000 users x 52 teams) can carry thousands of tuples.
+_TUPLE_WRITE_CHUNK_SIZE = 20
+
+
 async def _emit(
     task_service: TaskService,
     task_id: str,
@@ -729,21 +761,22 @@ async def _run_phase(
     total = len(items)
     await _emit(task_service, task_id, TaskState.running, step_id, 0, total, 0)
     imported = skipped = 0
-    for item in items:
+    for index, item in enumerate(items, start=1):
         written = await import_fn(item, session)
         if written:
             imported += 1
         else:
             skipped += 1
-        await _emit(
-            task_service,
-            task_id,
-            TaskState.running,
-            step_id,
-            imported + skipped,
-            total,
-            0,
-        )
+        if index % _EMIT_EVERY == 0 or index == total:
+            await _emit(
+                task_service,
+                task_id,
+                TaskState.running,
+                step_id,
+                imported + skipped,
+                total,
+                0,
+            )
     return imported, skipped
 
 
@@ -1104,9 +1137,10 @@ async def _apply_bundle_user_roles(
             report.platform_roles_granted += 1
 
         processed += 1
-        await _emit(
-            task_service, task_id, TaskState.running, "users", processed, total, 0
-        )
+        if processed % _EMIT_EVERY == 0 or processed == total:
+            await _emit(
+                task_service, task_id, TaskState.running, "users", processed, total, 0
+            )
 
 
 async def _run_users_phase(
@@ -1716,11 +1750,19 @@ async def run_import(
             total = len(resolved_relations)
             await _emit(task_service, task_id, TaskState.running, "tuples", 0, total, 0)
             actor_uid = platform_admin.uid if platform_admin else None
-            for i, relation in enumerate(resolved_relations, start=1):
-                await rebac.add_relation(relation, actor_uid=actor_uid)
-                report.tuples_written += 1
+            for start in range(0, total, _TUPLE_WRITE_CHUNK_SIZE):
+                chunk = resolved_relations[start : start + _TUPLE_WRITE_CHUNK_SIZE]
+                await rebac.add_relations(chunk, actor_uid=actor_uid)
+                report.tuples_written += len(chunk)
+                processed = start + len(chunk)
                 await _emit(
-                    task_service, task_id, TaskState.running, "tuples", i, total, 0
+                    task_service,
+                    task_id,
+                    TaskState.running,
+                    "tuples",
+                    processed,
+                    total,
+                    0,
                 )
 
     # ── Phase 4ter: platform roles from the realm export, kea path only ───────

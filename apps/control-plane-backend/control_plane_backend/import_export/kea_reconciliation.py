@@ -46,6 +46,7 @@ Why this exists (design session 2026-07-25):
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -283,6 +284,13 @@ async def resolve_user_sub(
     return resolution.swift_sub
 
 
+# Keycloak Admin API calls per distinct username, bounded so a cutover-scale run
+# (~2000 users) doesn't fire thousands of concurrent requests at once — still fast,
+# since KeaUserResolver caches by username and this pre-pass already deduplicates by
+# kea_sub before resolving.
+_RESOLVE_CONCURRENCY = 15
+
+
 async def resolve_relation_subjects(
     relations: list[Relation],
     username_by_sub: dict[str, str],
@@ -297,13 +305,23 @@ async def resolve_relation_subjects(
     user subject cannot be resolved yet (PENDING) is dropped from the output — not
     written this run — and counted in `report.pending`, so a later re-run picks it up.
     """
+    distinct_kea_subs = list(
+        {str(r.subject.id) for r in relations if r.subject.type == Resource.USER}
+    )
+    resolved: dict[str, str | None] = {}
+    for start in range(0, len(distinct_kea_subs), _RESOLVE_CONCURRENCY):
+        chunk = distinct_kea_subs[start : start + _RESOLVE_CONCURRENCY]
+        results = await asyncio.gather(
+            *(resolve_user_sub(sub, username_by_sub, resolver, report) for sub in chunk)
+        )
+        resolved.update(zip(chunk, results))
+
     out: list[Relation] = []
     for relation in relations:
         if relation.subject.type != Resource.USER:
             out.append(relation)
             continue
-        kea_sub = str(relation.subject.id)
-        swift_sub = await resolve_user_sub(kea_sub, username_by_sub, resolver, report)
+        swift_sub = resolved[str(relation.subject.id)]
         if swift_sub is None:
             continue
         out.append(

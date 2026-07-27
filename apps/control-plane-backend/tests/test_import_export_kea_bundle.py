@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +208,12 @@ class FakeRebac:
         self, relation: Relation, *, actor_uid: str | None = None
     ) -> None:
         self.relations.append(relation)
+
+    async def add_relations(
+        self, relations: Iterable[Relation], *, actor_uid: str | None = None
+    ) -> None:
+        for relation in relations:
+            await self.add_relation(relation, actor_uid=actor_uid)
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
