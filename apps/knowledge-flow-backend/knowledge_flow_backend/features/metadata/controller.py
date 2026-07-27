@@ -174,6 +174,23 @@ class MetadataController:
             except Exception as e:
                 raise handle_exception(e)
 
+        @router.put(
+            "/document/metadata/{document_uid}/title",
+            tags=["Documents"],
+            response_model=None,
+            summary="Rename a document (display title)",
+            description=("Updates the browser-display title for an ingested document. Cosmetic only: citations and vector search keep referencing the original ingested file name."),
+        )
+        async def update_document_metadata_title(
+            document_uid: str,
+            title: str = Body(..., embed=True),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                await self.service.update_document_title(user, document_uid, title, user.uid)
+            except Exception as e:
+                raise handle_exception(e)
+
         @router.post(
             "/documents/metadata/browse",
             tags=["Documents"],

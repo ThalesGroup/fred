@@ -246,6 +246,77 @@ class WorkspaceFilesystem:
                     direct_children[child.path] = child
         return [direct_children[name] for name in sorted(direct_children)]
 
+    async def rename(
+        self,
+        user: KeycloakUser,
+        old_key: str,
+        new_key: str,
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> None:
+        """
+        Rename a file or folder in place (same parent), preserving all descendants.
+
+        Why this exists:
+        - `BaseFilesystem` has no native move primitive across local/MinIO/GCS, and
+          adding one to the protocol plus all three backends is a bigger change than a
+          single workspace rename needs
+        - implemented generically on top of the existing read/write/delete/list
+          primitives, so it works uniformly on every backend with no backend-specific
+          code
+
+        How to use:
+        - pass the old and new keys relative to the scoped namespace; both must share
+          the same parent directory (this is a rename, not an arbitrary cross-folder
+          move)
+        """
+        old_path = self._path(user, old_key, owner_override, root_prefix)
+        new_path = self._path(user, new_key, owner_override, root_prefix)
+        if await self.fs.exists(new_path):
+            raise ValueError(f"A file or folder already exists at {new_key!r}")
+
+        if await self.fs.exists(old_path):
+            data = await self.fs.read(old_path)
+            await self.fs.write(new_path, data)
+            await self.fs.delete(old_path)
+            return
+
+        prefix = old_path if old_path.endswith("/") else f"{old_path}/"
+        descendants = [entry for entry in await self.fs.list(old_path) if entry.path.startswith(prefix) and entry.is_file()]
+        if not descendants:
+            raise FileNotFoundError(old_key)
+        for entry in descendants:
+            relative = entry.path[len(prefix) :]
+            data = await self.fs.read(entry.path)
+            await self.fs.write(f"{new_path}/{relative}", data)
+            await self.fs.delete(entry.path)
+
+    async def list_recursive_files(
+        self,
+        user: KeycloakUser,
+        prefix: str = "",
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> List[FilesystemResourceInfoResult]:
+        """
+        List every file (not directories) under one scoped workspace folder, recursively.
+
+        Why this exists:
+        - usage-stats cards (FRONT-09.I) need every file's size and type, not just the
+          direct-children view `list(...)` exposes
+        - `self.fs.list(...)` already walks recursively under the hood; this skips the
+          direct-child collapsing `list(...)` does, instead of re-walking storage
+
+        How to use:
+        - pass an optional folder prefix inside the scoped namespace
+        """
+        sub = _normalize_key(prefix) if prefix else ""
+        owner = (owner_override or user.uid).strip("/")
+        root = (root_prefix or self.prefix).rstrip("/")
+        full_prefix = _join(root, owner, sub)
+        results = await self.fs.list(full_prefix)
+        return [res for res in results if res.is_file()]
+
     async def exists(
         self,
         user: KeycloakUser,

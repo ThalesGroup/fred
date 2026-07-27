@@ -30,6 +30,8 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
+    ResourceTypeStatsEntry,
+    ResourceTypeStatsResponse,
     ShareTargetResource,
     TagCreate,
     TagMembersResponse,
@@ -118,6 +120,22 @@ class TagController:
                 owner_filter=owner_filter,
                 team_id=team_id,
             )
+
+        @router.get(
+            "/tags/stats",
+            response_model=ResourceTypeStatsResponse,
+            tags=["Tags"],
+            summary="Corpus usage by file type (files-by-type histogram, size-by-type pie chart)",
+        )
+        async def get_corpus_type_stats(
+            team_id: Annotated[
+                Optional[str],
+                Query(description="Team ID, or omit/'personal' for the caller's personal corpus"),
+            ] = None,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ResourceTypeStatsResponse:
+            stats = await self.service.get_corpus_type_stats(user, team_id)
+            return ResourceTypeStatsResponse(entries=[ResourceTypeStatsEntry(bucket=bucket.value, count=count, size_bytes=size) for bucket, (count, size) in stats.items()])
 
         @router.get(
             "/tags/{tag_id}",

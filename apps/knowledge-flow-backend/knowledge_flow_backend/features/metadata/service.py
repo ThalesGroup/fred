@@ -740,6 +740,33 @@ class MetadataService:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
+    async def update_document_title(self, user: KeycloakUser, document_uid: str, title: str, modified_by: str) -> None:
+        """Rename a document in the browser (cosmetic only — does not touch ingestion,
+        vectorization, or citation text, which keep using the original file name)."""
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        if not title or not title.strip():
+            raise InvalidMetadataRequest("Title cannot be empty")
+
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
+
+        try:
+            metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+            if not metadata:
+                raise MetadataNotFound(f"Document '{document_uid}' not found.")
+
+            metadata.identity.title = title.strip()
+            metadata.identity.modified = datetime.now(timezone.utc)
+            metadata.identity.last_modified_by = modified_by
+
+            await self.metadata_store.save_metadata(metadata)
+            logger.info(f"[METADATA] Set title='{title}' for document '{document_uid}' by '{modified_by}'")
+        except MetadataNotFound:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating title for {document_uid}: {e}")
+            raise MetadataUpdateError(f"Failed to update title: {e}")
+
     # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ====================
     # Labels carry NO scope/permission meaning, so there is no ReBAC check on the
     # label itself; only the DOCUMENT's update/read access is enforced (you may

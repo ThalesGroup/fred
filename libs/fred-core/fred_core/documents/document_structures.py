@@ -49,6 +49,46 @@ class FileType(str, Enum):
     OTHER = "other"
 
 
+class FileTypeBucket(str, Enum):
+    """Coarse UI grouping for usage-by-type stats cards (FRONT-09.I): PDF, Texte, PPT,
+    Excel, Autres. Deliberately coarser than `FileType` — the histogram/pie-chart cards
+    are meant to be glanceable, not a full type breakdown."""
+
+    PDF = "pdf"
+    TEXT = "text"
+    PPT = "ppt"
+    EXCEL = "excel"
+    OTHER = "other"
+
+
+_BUCKET_BY_EXTENSION: dict[str, "FileTypeBucket"] = {
+    "pdf": FileTypeBucket.PDF,
+    "docx": FileTypeBucket.TEXT,
+    "doc": FileTypeBucket.TEXT,
+    "odt": FileTypeBucket.TEXT,
+    "txt": FileTypeBucket.TEXT,
+    "md": FileTypeBucket.TEXT,
+    "html": FileTypeBucket.TEXT,
+    "pptx": FileTypeBucket.PPT,
+    "ppt": FileTypeBucket.PPT,
+    "odp": FileTypeBucket.PPT,
+    "xlsx": FileTypeBucket.EXCEL,
+    "xls": FileTypeBucket.EXCEL,
+    "csv": FileTypeBucket.EXCEL,
+    "ods": FileTypeBucket.EXCEL,
+}
+
+
+def file_type_bucket(name_or_extension: str) -> FileTypeBucket:
+    """Map a file name or bare extension to its usage-stats bucket."""
+    ext = (
+        name_or_extension.rsplit(".", 1)[-1].lower()
+        if "." in name_or_extension
+        else name_or_extension.lower()
+    )
+    return _BUCKET_BY_EXTENSION.get(ext, FileTypeBucket.OTHER)
+
+
 class ReportFormat(str, Enum):
     """Reports only ever publish these concrete file types."""
 

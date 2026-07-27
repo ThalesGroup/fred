@@ -654,7 +654,12 @@ Dernière MAJ (date + author), Statut, a preview action, and an actions menu.
   `identity.modified`/`identity.last_modified_by`.
 - **Espace perso / Espace partagé / Agents:** `FilesystemResourceInfoResult` (the `/fs` DTO)
   only carries `size`, `modified`, `created_by` today — no separate `created` timestamp, no
-  `modified_by` distinct from the original uploader. Add both fields (workplan phase H).
+  `modified_by` distinct from the original uploader. Added in `mcp_fs_service.py`'s
+  `_stamp_provenance` (workplan phase H) — **v1 approximation**: local/MinIO/GCS track no
+  creation time distinct from mtime and no per-write actor distinct from the path owner, so
+  `created` mirrors `modified` and `modified_by` mirrors `created_by` until real per-object
+  tracking exists. Documented on the dataclass; not a regression, since no better signal
+  exists today.
 
 ### 13.4 Search + sort
 
@@ -668,15 +673,25 @@ gap needs closing in this same phase.
 ### 13.5 Usage dashboard cards
 
 - **Histogram, files by type:** `shared/molecules/BarChart/BarChart.tsx` already exists
-  (used on `DataHub`/`TeamUsagePage`). Needs one new per-team, per-file-type count
-  aggregate — a small addition grouping on the already-stored file type.
+  (used on `DataHub`/`TeamUsagePage`). Backed by a new `FileTypeBucket` enum
+  (`fred_core.documents.document_structures`, 5 buckets: pdf/text/ppt/excel/other) and
+  `file_type_bucket(name)` mapper, shared by both new stats endpoints below.
 - **Pie chart, size by type + quota remaining:** `shared/molecules/PieChart/PieChart.tsx`
-  already exists. The quota/limit and current total-usage-in-bytes numbers already exist
-  server-side (`knowledge_flow_backend/features/ingestion/ingestion_controller.py:416`
-  `_check_quota_before_upload`; `control_plane_backend/teams/service.py:1203`
-  `max_resources_storage_size`) — but only as one aggregate total, not broken down by file
-  type. Needs a new by-type size aggregate; an extension of the existing quota check, not a
-  new subsystem.
+  already exists. Per-type size now available from the same two endpoints; the existing
+  quota/limit total (`control_plane_backend/teams/service.py:1203`
+  `max_resources_storage_size`) is unchanged and composed client-side alongside the
+  per-type breakdown for the "remaining" slice.
+- **Corpus:** `GET /tags/stats?team_id=...` (`tag_controller.py`) — computed on read by
+  `TagService.get_corpus_type_stats`, unioning `get_document_metadata_in_tag` over every
+  team-authorized library tag, deduped by `document_uid`. Not an incrementally-maintained
+  counter (unlike `_adjust_team_storage`'s running total) — simpler and can't drift, and
+  team library counts are bounded, so an on-read scan stays cheap.
+- **Espace perso / Espace partagé / Agents:** `GET /fs/stats/{path:path}`
+  (`mcp_fs_controller.py`) — recursively lists files under the given writable path via
+  `WorkspaceFilesystem.list_recursive_files` (reuses the same recursive listing
+  `list(...)` already gets from storage, without the direct-children collapsing) and
+  buckets by extension. 400s if pointed at `/corpus` — corpus stats are a distinct
+  aggregate over `DocumentMetadata`, not raw filesystem entries.
 - **Tokens consumed by ingestion, + evolution graph:** **no tracking exists today.**
   `TeamUsagePage` already tracks LLM token usage over time/by-agent/by-model
   (`useUserTokenUsageOverTimeQuery` and siblings), but that is chat/agent inference usage —
@@ -749,13 +764,14 @@ Prompted by the dashboard-v2 mockup review, which adds a "Renommer" row action
   `PUT /tags/{tag_id}` (`tag_controller.py:155`) accepts a `TagUpdate` with
   `name`/`path`, explicitly documented as "Update a tag (can rename/move via
   name/path)". No backend change needed; only frontend wiring.
-- **Corpus d'équipe, document rename:** **not supported.** `PUT
-  /document/metadata/{document_uid}` only toggles `retrievable`
-  (`metadata/controller.py:155`) — there is no display-name field on
-  `DocumentMetadata` distinct from the ingested file name. Needs a new field
-  and a new update path (extend the existing `PUT
-  /document/metadata/{document_uid}` to also accept an optional
-  `display_name`, rather than adding a second endpoint).
+- **Corpus d'équipe, document rename:** **not supported today, but no new
+  field needed.** `Identity.title` (`document_structures.py:87`, "Human-friendly
+  title for UI") already exists and is unused end-to-end — reuse it instead of
+  adding `display_name`. `PUT /document/metadata/{document_uid}` is
+  single-purpose (retrievable toggle, `metadata/controller.py:155`); rather
+  than overload it with a second unrelated query param, add a sibling
+  `PUT /document/metadata/{document_uid}/title` sharing the same
+  `DocumentPermission.UPDATE` check.
 - **Espace perso / Espace partagé / Agents (`/fs`):** **not supported at
   all** — `mcp_fs_controller.py` has no PATCH/PUT/move verb. Needs a new
   endpoint, e.g. `POST /fs/rename/{path:path}` taking a `{new_name}` body,
@@ -811,10 +827,10 @@ bulk "exclure de la recherche".
 #### FRONT-09.J — Rename
 
 - [ ] Wire "Renommer" (folder) to existing `PUT /tags/{tag_id}` for Corpus.
-- [ ] Add `display_name` to `DocumentMetadata` + extend `PUT
-      /document/metadata/{document_uid}` to accept it; wire "Renommer" (file)
-      for Corpus. Cosmetic only (decision 9) — do not touch ingestion,
-      vectorization, or citation code.
+- [ ] Add `PUT /document/metadata/{document_uid}/title`, reusing the existing
+      unused `Identity.title` field; wire "Renommer" (file) for Corpus.
+      Cosmetic only (decision 9) — do not touch ingestion, vectorization, or
+      citation code.
 - [ ] Add `POST /fs/rename/{path:path}` to `mcp_fs_controller.py`; wire
       "Renommer" for Espace perso / Espace partagé / Agents.
 - [ ] Regenerate `knowledgeFlowOpenApi.ts`.
