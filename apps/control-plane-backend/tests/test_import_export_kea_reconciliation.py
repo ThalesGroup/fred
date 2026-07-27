@@ -10,6 +10,7 @@ duplicating them — same underlying `run_import` integration, different angle.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 from control_plane_backend.import_export.kea_reconciliation import (
@@ -21,6 +22,7 @@ from control_plane_backend.import_export.kea_reconciliation import (
     kea_username_by_sub,
     resolve_user_sub,
 )
+from control_plane_backend.users.dependencies import UserServiceDependencies
 from fred_core import RebacReference, Relation, RelationType, Resource
 from tests.test_import_export_kea_bundle import (
     UID_BOB,
@@ -33,6 +35,12 @@ from tests.test_import_export_kea_bundle import (
 )
 
 UID_UNKNOWN = "b3f6a1e2-2222-4444-8888-000000000001"
+
+# `find_user_subs_bulk`/`find_user_sub_by_username` are monkeypatched in every
+# test that uses this, so the real shape of `UserServiceDependencies` never
+# matters — only that `create()` sees a non-`None` value and calls the
+# monkeypatched bulk sweep instead of short-circuiting to `{}`.
+_FAKE_USER_DEPS = cast(UserServiceDependencies, object())
 
 # KEA CUTOVER 2026 — pytest fixtures are NOT inherited across sibling test
 # modules just by importing helpers from them, so this file needs its own copy
@@ -312,7 +320,7 @@ async def test_bulk_snapshot_authoritative_no_individual_calls(
         _fake_find_user_subs_bulk,
     )
 
-    resolver = await KeaUserResolver.create(user_deps=object())
+    resolver = await KeaUserResolver.create(user_deps=_FAKE_USER_DEPS)
     for username in ("kea-user-1", "kea-user-2", "kea-user-3"):
         assert await resolver.find_sub(username) is None
     assert await resolver.find_sub("root-admin") == root_admin_sub
@@ -332,7 +340,7 @@ async def test_username_present_in_bulk_snapshot_resolves_its_sub(
         _fake_find_user_subs_bulk,
     )
 
-    resolver = await KeaUserResolver.create(user_deps=object())
+    resolver = await KeaUserResolver.create(user_deps=_FAKE_USER_DEPS)
     assert await resolver.find_sub("bob") == UID_BOB
     assert await resolver.find_sub("ghost") is None
 
@@ -354,7 +362,7 @@ async def test_remember_resolves_an_identity_created_mid_run(
         _fake_find_user_subs_bulk,
     )
 
-    resolver = await KeaUserResolver.create(user_deps=object())
+    resolver = await KeaUserResolver.create(user_deps=_FAKE_USER_DEPS)
     assert await resolver.find_sub("newuser") is None  # PENDING before creation
 
     resolver.remember("newuser", "brand-new-sub")
@@ -383,7 +391,7 @@ async def test_bulk_sweep_exception_propagates_before_any_write(
     )
 
     with pytest.raises(_KeycloakBulkSweepFailed):
-        await KeaUserResolver.create(user_deps=object())
+        await KeaUserResolver.create(user_deps=_FAKE_USER_DEPS)
 
 
 @pytest.mark.asyncio
@@ -402,7 +410,7 @@ async def test_report_buckets_never_duplicate_the_same_resolution(
         _fake_find_user_subs_bulk,
     )
 
-    resolver = await KeaUserResolver.create(user_deps=object())
+    resolver = await KeaUserResolver.create(user_deps=_FAKE_USER_DEPS)
     report = KeaReconciliationReport()
     username_by_sub = {UID_BOB: "bob", UID_UNKNOWN: "ghost"}
 
