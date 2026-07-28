@@ -16,11 +16,9 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
+import { DocRow } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
-import { DocumentViewer } from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   type DocumentMetadata,
@@ -30,12 +28,16 @@ import {
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
-import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
+import {
+  useDocumentCommands,
+  type DocumentPreviewTarget,
+} from "../../../../../components/documents/common/useDocumentCommands";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
@@ -65,6 +67,20 @@ interface PageState {
 interface DocumentWorkspaceProps {
   teamId: string;
   isPersonalTeam: boolean;
+  /**
+   * Open a document's preview. The workspace no longer owns the preview surface:
+   * the page hosts it as a resizable push-drawer docked to the right so the file
+   * tree reflows beside it (same UX as the in-conversation writable-document pane),
+   * rather than a modal floating over the list.
+   */
+  onPreview: (target: DocumentPreviewTarget) => void;
+  /**
+   * Uid of the document the page's preview drawer currently shows, or null when it
+   * is closed. The workspace needs it because clicking the open document's name
+   * again closes the preview — the row highlight has to be cleared with it, and
+   * only the page knows what's open.
+   */
+  previewUid?: string | null;
 }
 
 /** Imperative handle so the Resources root "+" can drive the corpus add actions. */
@@ -72,6 +88,10 @@ export interface DocumentWorkspaceHandle {
   openUpload: () => void;
   openNewFolder: () => void;
 }
+
+/** Identity of one *row* — see `selectedRowKey`: one document can appear under
+ * several folders, so the folder is part of the key. */
+const rowKeyFor = (tagId: string, documentUid: string) => `${tagId}:${documentUid}`;
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
@@ -83,11 +103,11 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
  * backend — folders lazy-load their first page on expand.
  */
 const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceProps>(function DocumentWorkspace(
-  { teamId, isPersonalTeam },
+  { teamId, isPersonalTeam, onPreview, previewUid = null },
   ref,
 ) {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
@@ -113,7 +133,11 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   }, [tags]);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [tagSizes, setTagSizes] = useState<Record<string, number>>({});
+  // Selection is keyed by folder AND document, not by document alone: the same
+  // file ingested into two libraries is ONE document_uid (knowledge-flow dedups
+  // by content hash) shown as two rows, and a uid-only key lit both up at once.
+  const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null);
   const [selectedFolderFull, setSelectedFolderFull] = useState<string | null>(null);
   const [perTag, setPerTag] = useState<Record<string, PageState>>({});
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
@@ -154,6 +178,46 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
+  const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
+
+  // A stable signature of the document folders: each tag id paired with its doc
+  // count. It changes when a folder is added/removed OR when its document count
+  // changes (upload/delete both go through `refetchTags`), but NOT on every
+  // render — so the size effect below can depend on it without re-firing each
+  // render (a raw `tags` reference is a fresh array every render under RTK's
+  // mock and would loop).
+  const tagSizeKey = useMemo(
+    () =>
+      (tags ?? [])
+        .filter((tag) => !isUserAssetsTag(tag.name, tag.path))
+        .map((tag) => `${tag.id}:${tag.item_ids?.length ?? 0}`)
+        .sort()
+        .join("|"),
+    [tags],
+  );
+
+  // Folder sizes: one aggregate call over every document tag, so a collapsed
+  // folder can show its total without loading (or paginating) its documents.
+  // A failed call leaves the last known sizes in place rather than blanking them.
+  useEffect(() => {
+    const ids = tagSizeKey ? tagSizeKey.split("|").map((part) => part.slice(0, part.lastIndexOf(":"))) : [];
+    if (ids.length === 0) {
+      setTagSizes({});
+      return;
+    }
+    let cancelled = false;
+    fetchTagSizes({ tagSizesRequest: { tag_ids: ids } })
+      .unwrap()
+      .then((res) => {
+        if (!cancelled) setTagSizes(res.sizes ?? {});
+      })
+      .catch(() => {
+        /* keep previous sizes */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tagSizeKey, fetchTagSizes]);
 
   const selectedNode = selectedFolderFull ? findNode(tree, selectedFolderFull) : null;
   const selectedTag = selectedNode?.tagsHere[0] ?? null;
@@ -228,6 +292,28 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
   });
+
+  // Preview is hosted by the page (resizable push-drawer), so the workspace only
+  // gates on readiness — the render strategy needs the preview stage done — and
+  // hands the target up. Mirrors the old `commands.preview` readiness guard.
+  const handlePreview = useCallback(
+    (doc: DocumentMetadata, rowKey: string) => {
+      if (doc.processing?.stages?.preview !== "done") {
+        showInfo?.({
+          summary: t("documentLibrary.previewNotReadySummary"),
+          detail: t("documentLibrary.previewNotReadyDetail"),
+        });
+        return;
+      }
+      // Clicking the open document's name again closes its preview (the page
+      // toggles it shut), so the row highlight has to go with it — a lit row
+      // with no preview open reads as a stale selection. `DocRow`'s name button
+      // fires onSelect *before* onPreview, so this is the write that lands.
+      setSelectedRowKey(previewUid === doc.identity.document_uid ? null : rowKey);
+      onPreview({ documentUid: doc.identity.document_uid, fileName: doc.identity.document_name });
+    },
+    [onPreview, previewUid, showInfo, t],
+  );
 
   // When an ingestion task finishes, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
@@ -346,35 +432,46 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags],
   );
 
-  const moreActionsFor = useCallback(
-    (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => {
-      // Both actions below write to the tag/document (toggle-retrievable, delete),
-      // gated backend-side by CAN_UPDATE_RESOURCES via TagPermission.UPDATE — same
-      // capability as folder creation. Omitting them (rather than showing a
-      // guaranteed-403) also lets DocRow hide the "…" button entirely when the
-      // resulting list is empty.
-      if (!canCreateFolder) return [];
-      return [
-        {
-          id: "searchable",
-          label: t("rework.resources.action.searchable"),
-          onSelect: () => void commands.toggleRetrievable(doc),
-        },
-        {
-          id: "delete",
-          label: t("rework.resources.action.delete"),
-          onSelect: () =>
-            showConfirmationDialog({
-              title: t("rework.resources.confirm.deleteTitle"),
-              message: t("rework.resources.confirm.deleteMessage", {
-                name: doc.identity.title || doc.identity.document_name,
-              }),
-              onConfirm: () => void commands.removeFromLibrary(doc, tag as unknown as TagWithItemsId),
-            }),
-        },
-      ];
+  // Toggling retrievable never changes tag membership or counts, so patch the
+  // one affected row in place instead of reloading the folder page — a full
+  // reload briefly flashes the "Chargement…" hint for a flag flip that doesn't
+  // need it.
+  const toggleSearchableFor = useCallback(
+    async (doc: DocumentMetadata, tagId: string) => {
+      const nextValue = await commands.toggleRetrievable(doc);
+      if (nextValue === undefined) return;
+      setPerTag((prev) => {
+        const page = prev[tagId];
+        if (!page) return prev;
+        return {
+          ...prev,
+          [tagId]: {
+            ...page,
+            docs: page.docs.map((d) =>
+              d.identity.document_uid === doc.identity.document_uid
+                ? { ...d, source: { ...d.source, retrievable: nextValue } }
+                : d,
+            ),
+          },
+        };
+      });
     },
-    [t, commands, showConfirmationDialog, canCreateFolder],
+    [commands],
+  );
+
+  // Both actions below write to the tag/document (toggle-retrievable, delete),
+  // gated backend-side by CAN_UPDATE_RESOURCES via TagPermission.UPDATE — same
+  // capability as folder creation.
+  const confirmDeleteDoc = useCallback(
+    (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]) =>
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteTitle"),
+        message: t("rework.resources.confirm.deleteMessage", {
+          name: doc.identity.title || doc.identity.document_name,
+        }),
+        onConfirm: () => void commands.removeFromLibrary(doc, tag as unknown as TagWithItemsId),
+      }),
+    [t, commands, showConfirmationDialog],
   );
 
   const runningDocIds = useMemo(
@@ -474,6 +571,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
             id={node.full}
             name={node.name}
             docCount={tag?.item_ids?.length ?? 0}
+            totalSizeBytes={tag ? tagSizes[tag.id] : undefined}
             expanded={isExpanded}
             onToggle={() => toggleFolder(node)}
             aggregate={aggregateFor(node)}
@@ -516,12 +614,16 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
                       status={
                         reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status
                       }
-                      selected={selectedDocId === doc.identity.document_uid}
-                      onSelect={() => setSelectedDocId(doc.identity.document_uid)}
-                      onPreview={() => commands.preview(doc)}
+                      sizeBytes={doc.file?.file_size_bytes}
+                      uploadedAt={doc.source?.date_added_to_kb}
+                      selected={selectedRowKey === rowKeyFor(tag.id, doc.identity.document_uid)}
+                      onSelect={() => setSelectedRowKey(rowKeyFor(tag.id, doc.identity.document_uid))}
+                      onPreview={() => handlePreview(doc, rowKeyFor(tag.id, doc.identity.document_uid))}
                       onDownload={() => void commands.download(doc)}
                       onProcess={canCreateFolder ? () => void reprocess(doc, tag.id) : undefined}
-                      moreActions={moreActionsFor(doc, tag)}
+                      searchable={canCreateFolder ? Boolean(doc.source?.retrievable) : undefined}
+                      onToggleSearchable={canCreateFolder ? () => void toggleSearchableFor(doc, tag.id) : undefined}
+                      onDelete={canCreateFolder ? () => confirmDeleteDoc(doc, tag) : undefined}
                     />
                   </div>
                 ))}
@@ -556,16 +658,6 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
         <div className={styles.list}>{topLevel.map((node) => renderNode(node, 0))}</div>
       )}
 
-      <InlineDrawer
-        open={!!commands.previewTarget}
-        onClose={commands.closePreview}
-        title={commands.previewTarget?.fileName ?? t("rework.resources.preview.title")}
-        width="80vw"
-      >
-        {commands.previewTarget && (
-          <DocumentViewer documentUid={commands.previewTarget.documentUid} fileName={commands.previewTarget.fileName} />
-        )}
-      </InlineDrawer>
       <DocumentUploadDrawer
         isOpen={uploadOpen}
         onClose={() => {

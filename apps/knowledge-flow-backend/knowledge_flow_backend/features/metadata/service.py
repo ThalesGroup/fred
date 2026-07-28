@@ -269,6 +269,14 @@ class MetadataService:
         # scanning all authorized documents. We keep store total to preserve pagination hints.
         return filtered, total
 
+    async def total_size_by_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, int]:
+        """Total bytes of the documents in each library tag (folder), reliable and
+        not paginated. Like the `total` count returned by browse, the sum is
+        computed store-side over the whole tag rather than per-document authz
+        filtered — folders the user can browse already expose their doc count.
+        """
+        return await self.metadata_store.total_size_by_tags(tag_ids)
+
     async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
         """
         Return chunk.

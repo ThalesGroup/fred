@@ -613,6 +613,16 @@ the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns
 header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
 to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
 
+**Markdown toggle (2026-07-27).** A `mode` prop (`"original" | "markdown"`, default
+`"original"`) lets a host force the markdown extraction for a format that has a native
+renderer. The corpus preview drawer exposes it as an icon button in the `InlineDrawer`
+header (`headerActions`, left of the close button), gated on `hasNativePreview(fileName)`
+so it only appears for PDFs: `.docx`/`.xlsx`/`.csv` already display their markdown
+extraction, so a toggle there would be inert. Mode resets to `"original"` on every newly
+opened document. When the extraction is missing (endpoint 404s, or empty body), the body
+renders a `preview.markdownUnavailable` notice instead of the former literal
+"Error loading document." string, which read as document content.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"

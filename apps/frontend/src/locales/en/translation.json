@@ -1236,7 +1236,7 @@
     "resources": {
       "workspaceTitle": "Files",
       "roots": {
-        "resources": "Corpus",
+        "resources": "My documents",
         "mine": "My space",
         "team": "Team space",
         "agents": "Agents",
@@ -1280,8 +1280,7 @@
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
         "preview": "Preview",
-        "process": "Process",
-        "searchable": "Toggle searchable"
+        "process": "Process"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
@@ -1316,7 +1315,16 @@
       },
       "loading": "Loading resources...",
       "preview": {
+        "loading": "Loading…",
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "showMarkdown": "Show the Markdown version",
+        "showOriginal": "Show the original document",
         "title": "Document preview"
+      },
+      "storage": {
+        "aria": "Storage space used",
+        "usedOfTotal": "{{used}} / {{total}}",
+        "used": "{{used}} used"
       },
       "pagination": {
         "next": "Next page",

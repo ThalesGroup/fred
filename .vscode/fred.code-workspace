@@ -26,6 +26,9 @@
 		},
 		{
 			"path": "../../fred-deployment-factory"
+		},
+		{
+			"path": "../../fred-agent-evaluator"
 		}
 	],
 	"settings": {
