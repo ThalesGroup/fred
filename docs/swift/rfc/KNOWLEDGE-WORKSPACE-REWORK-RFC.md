@@ -679,6 +679,17 @@ the table entirely), an unlabeled status-chip cell, and one action cell (Preview
   "who uploaded this" exists on `Identity` today. **Decision (developer-confirmed
   2026-07-27):** add it properly — see decision 10 and FRONT-09.L below. Until that field
   ships, the Auteur cell renders `—` for documents rather than showing the wrong person.
+  **Revised 2026-07-28 — `identity.created` was also the wrong field for Création, same
+  root cause as Auteur:** it's the file's own embedded "created" metadata (e.g. a .docx's
+  core property) when a processor extracts one at all — the PDF processor doesn't even
+  try, so `identity.created` is always empty for a PDF (`pdf_markdown_processor.py`'s
+  `extract_file_metadata` only returns title/author/page_count). Unlike Auteur, no new
+  field was needed: `SourceInfo.date_added_to_kb` already exists, is already exposed to
+  the frontend (`knowledgeFlowOpenApi.ts`), and is already stamped correctly — its Pydantic
+  `default_factory` sets it to ingestion time whenever `base_input_processor.py` builds a
+  document's `SourceInfo` without passing one explicitly. Fixed by pointing the Création
+  column at `doc.source.date_added_to_kb` instead of `doc.identity.created` — a frontend-
+  only change, landed 2026-07-28.
 - **Espace perso / Espace partagé / Agents:** `FilesystemResourceInfoResult` (the `/fs` DTO)
   only carried `size`, `modified`, `created_by` before this RFC — no separate `created`
   timestamp. Added in `mcp_fs_service.py`'s `_stamp_provenance` (workplan phase H) —
@@ -975,15 +986,24 @@ bulk delete surfaces per-row failures instead of silently dropping them.
 
 #### FRONT-09.L — Auteur column: `uploaded_by` field (new — decision 10)
 
-- [ ] Add `uploaded_by: Optional[str] = None` to `Identity` (`fred-core`
+- [x] Add `uploaded_by: Optional[str] = None` to `Identity` (`fred-core`
       `document_structures.py`), alongside `author`/`last_modified_by`.
-- [ ] Stamp it with `user.uid` at ingestion (wherever the acting user is
-      already available to the ingestion path — see
-      `ingestion_controller.py`'s existing `created_by=user.uid` plumbing).
-- [ ] Regenerate `knowledgeFlowOpenApi.ts`.
-- [ ] Wire the Auteur column in `DocumentWorkspace.tsx` to
-      `identity.uploaded_by ?? "—"` (replaces the temporary `—` placeholder).
+- [x] Stamp it with `user.uid` at ingestion — landed 2026-07-28 in
+      `ingestion_service.py`'s `extract_metadata`, right after
+      `processor.process_metadata()` returns (that method already receives
+      `user: KeycloakUser`, no new plumbing needed; simpler than the
+      `ingestion_controller.py` `created_by` route originally sketched,
+      since it stamps every upload path — sync, Temporal-deferred, and
+      pull — from one place instead of duplicating it per controller route).
+- [x] Regenerate `knowledgeFlowOpenApi.ts` (`make update-knowledge-flow-api`).
+- [x] Wire the Auteur column in `DocumentWorkspace.tsx`: `uploaded_by` is a
+      uid, resolved to "Prénom Nom" via a batched `useUsersByIdsQuery` (same
+      #2096 pattern as TeamAgentsPage's audit-user resolution) and the
+      shared `userDisplayName()` util (#1952 pattern — full name, else
+      username, else the raw uid). Falls back to `—` for documents ingested
+      before this field existed (no backfill) and for folders (no uploader
+      concept).
 
 Acceptance: a freshly uploaded Corpus document shows the uploader's name/id
 in the Auteur column; a document ingested before this field existed still
-renders `—` (no backfill, no crash).
+renders `—` (no backfill, no crash). Landed 2026-07-28.

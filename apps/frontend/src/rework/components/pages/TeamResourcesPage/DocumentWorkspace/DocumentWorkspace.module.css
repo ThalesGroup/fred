@@ -112,11 +112,23 @@
   min-width: 0;
 }
 
-/* The file/folder icon must keep its natural size no matter how narrow the
- * Name column gets — only the label (below) truncates, never the icon. */
-.nameButton [class*="material-symbols"],
-.nameCell [class*="material-symbols"] {
+/* The file/folder icon's own color wrapper (the <span style={{color}}> in
+ * DocumentWorkspace.tsx): a genuine fixed 18x18 box, not just an 18px
+ * font-size on the glyph itself — width/height + flex-shrink: 0 mean this
+ * can never be crushed or collapsed to 0 by the flex row around it (a
+ * narrow Name column, a long filename) or hidden by overflow elsewhere.
+ * Only the label next to it (below) is allowed to truncate. */
+.rowIcon {
+  display: inline-flex;
   flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.rowIcon [class*="material-symbols"] {
+  font-size: 18px;
 }
 
 .nameCell span {

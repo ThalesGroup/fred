@@ -1597,6 +1597,27 @@ items:
       TeamResourcesPage's `.panel` down through DocumentWorkspace's
       `.workspace`/`.card` to the table) instead of sizing to content.
 
+      Progress 2026-07-28 (later): Création column had the same bug class as
+      Auteur — `identity.created` is the file's own embedded metadata (empty
+      for every PDF, since that processor never extracts one), not when it
+      was added to Fred. Unlike Auteur, no new field was needed:
+      `SourceInfo.date_added_to_kb` already existed, already ingestion-
+      stamped (Pydantic default_factory), and already exposed to the
+      frontend — just never wired to this column. Fixed frontend-only
+      (RFC §13.3 revised 2026-07-28).
+
+      Progress 2026-07-28 (later still): FRONT-09.L landed — `Identity.
+      uploaded_by` added to fred-core, stamped in
+      `ingestion_service.extract_metadata` (every upload path, sync +
+      Temporal-deferred + pull, from one place), `knowledgeFlowOpenApi.ts`
+      regenerated. Auteur column resolves it to a display name via a
+      batched `useUsersByIdsQuery` + the shared `userDisplayName()` util.
+      Pre-existing documents (no `uploaded_by`) and folders render `—`.
+      Backend `make code-quality`/`basedpyright`/bandit green; 39
+      excel_processor/tabular_service test failures confirmed pre-existing
+      and unrelated (reproduced identically via `git stash` on the
+      unmodified tree).
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress

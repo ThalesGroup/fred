@@ -1285,8 +1285,8 @@
       "columns": {
         "name": "Name",
         "size": "Size",
-        "created": "Created",
-        "author": "Author"
+        "created": "Added on",
+        "author": "Added by"
       },
       "action": {
         "addFile": "Add files",

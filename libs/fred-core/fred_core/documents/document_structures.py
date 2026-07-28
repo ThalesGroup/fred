@@ -129,6 +129,16 @@ class Identity(BaseModel):
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
     last_modified_by: Optional[str] = None
+    uploaded_by: Optional[str] = Field(
+        default=None,
+        description=(
+            "Keycloak uid of the Fred user who uploaded this document, stamped once at "
+            "ingestion (ingestion_service.extract_metadata). Distinct from `author` (the "
+            "file's own embedded metadata, e.g. a .docx core property) and "
+            "`last_modified_by` (the acting user on later in-app mutations like rename) — "
+            "neither of those reliably identifies the uploader."
+        ),
+    )
 
     @field_validator("created", "modified")
     @classmethod

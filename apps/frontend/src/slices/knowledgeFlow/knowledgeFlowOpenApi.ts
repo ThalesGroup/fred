@@ -1780,6 +1780,8 @@ export type Identity = {
   created?: string | null;
   modified?: string | null;
   last_modified_by?: string | null;
+  /** Keycloak uid of the Fred user who uploaded this document, stamped once at ingestion (ingestion_service.extract_metadata). Distinct from `author` (the file's own embedded metadata, e.g. a .docx core property) and `last_modified_by` (the acting user on later in-app mutations like rename) — neither of those reliably identifies the uploader. */
+  uploaded_by?: string | null;
 };
 export type SourceType = "push" | "pull";
 export type SourceInfo = {

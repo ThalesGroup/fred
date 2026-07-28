@@ -185,6 +185,10 @@ class IngestionService:
 
         # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+        # Stamped once, here, regardless of file type — not delegated to any
+        # per-processor extract_file_metadata(), which only ever sees the
+        # file's own embedded metadata, never who is uploading it.
+        metadata.identity.uploaded_by = user.uid
         metadata = await self._apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata

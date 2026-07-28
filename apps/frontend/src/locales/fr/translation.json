@@ -1285,8 +1285,8 @@
       "columns": {
         "name": "Nom",
         "size": "Taille",
-        "created": "Création",
-        "author": "Auteur"
+        "created": "Ajouté le",
+        "author": "Ajouté par"
       },
       "action": {
         "addFile": "Ajouter des fichiers",
@@ -1359,7 +1359,7 @@
       "bulkActions": {
         "selectedCount": "{{count}} sélectionné(s)",
         "delete": "Supprimer",
-        "excludeFromSearch": "Exclure de la recherche"
+        "excludeFromSearch": "Exclure"
       },
       "stats": {
         "toggle": "Statistiques",

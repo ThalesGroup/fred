@@ -45,7 +45,8 @@ import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOn
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "../../../../utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
@@ -66,12 +67,31 @@ const DOC_STATUS_POLL_MS = 3000;
 // backend never re-stamps its stages (dead worker, dropped workflow).
 const REPROCESS_OVERRIDE_TTL_MS = 90_000;
 
-const FILE_TYPE_ICON: Record<string, IconType> = {
-  pdf: "picture_as_pdf",
-  pptx: "slideshow",
-  xlsx: "table_chart",
-  csv: "table_chart",
+interface RowIconSpec {
+  type: IconType;
+  color: string;
+  filled?: boolean;
+}
+
+const FOLDER_ICON: RowIconSpec = { type: "folder", color: "var(--folder)", filled: true };
+
+// Mirrors fred-core's FileTypeBucket grouping (PDF / Texte / PPT / Excel /
+// Autres) — PPT isn't its own row-icon color per developer request, so it
+// falls into OTHER_FILE_ICON alongside anything not listed here.
+const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
+  pdf: { type: "picture_as_pdf", color: "var(--error)" },
+  docx: { type: "article", color: "var(--tertiary)" },
+  md: { type: "article", color: "var(--tertiary)" },
+  html: { type: "article", color: "var(--tertiary)" },
+  txt: { type: "article", color: "var(--tertiary)" },
+  xlsx: { type: "table", color: "var(--success)" },
+  csv: { type: "table", color: "var(--success)" },
 };
+const OTHER_FILE_ICON: RowIconSpec = { type: "draft", color: "var(--on-surface-muted)" };
+
+export function fileIconSpec(fileType: string | null | undefined): RowIconSpec {
+  return FILE_TYPE_ICON[fileType ?? ""] ?? OTHER_FILE_ICON;
+}
 
 interface PageState {
   docs: DocumentMetadata[];
@@ -455,6 +475,19 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     return rows.filter((row) => rowLabel(row).toLowerCase().includes(trimmed));
   }, [rows, search]);
 
+  // Batched once for the whole page (not one query per row, same pattern as
+  // TeamAgentsPage's audit-user resolution, #2096) — the Auteur column shows
+  // the uploader's display name, resolved from their uid.
+  const uploaderUids = useMemo(
+    () =>
+      Array.from(
+        new Set((page?.docs ?? []).map((doc) => doc.identity.uploaded_by).filter((uid): uid is string => Boolean(uid))),
+      ),
+    [page?.docs],
+  );
+  const { data: uploaders = [] } = useUsersByIdsQuery({ ids: uploaderUids }, { skip: uploaderUids.length === 0 });
+  const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
+
   const selectedDocs = useMemo(
     () =>
       filteredRows
@@ -536,23 +569,32 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     {
       label: t("rework.resources.columns.name"),
       size: "2fr",
-      cellRenderer: (row) =>
-        row.kind === "folder" ? (
-          <button
-            type="button"
-            className={styles.nameButton}
-            onClick={() => navigateTo(row.node.full)}
-            {...folderDropProps(row.node, canCreateFolder)}
-          >
-            <Icon category="outlined" type="folder" />
-            <span>{row.node.name}</span>
-          </button>
-        ) : (
+      cellRenderer: (row) => {
+        if (row.kind === "folder") {
+          return (
+            <button
+              type="button"
+              className={styles.nameButton}
+              onClick={() => navigateTo(row.node.full)}
+              {...folderDropProps(row.node, canCreateFolder)}
+            >
+              <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
+                <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
+              </span>
+              <span>{row.node.name}</span>
+            </button>
+          );
+        }
+        const spec = fileIconSpec(row.doc.file?.file_type);
+        return (
           <span className={styles.nameCell}>
-            <Icon category="outlined" type={FILE_TYPE_ICON[row.doc.file?.file_type ?? ""] ?? "description"} />
+            <span className={styles.rowIcon} style={{ color: spec.color }}>
+              <Icon category="outlined" type={spec.type} filled={spec.filled} />
+            </span>
             <span>{row.doc.identity.title || row.doc.identity.document_name}</span>
           </span>
-        ),
+        );
+      },
     },
     {
       label: t("rework.resources.columns.size"),
@@ -566,23 +608,33 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
       ),
     },
     {
+      // Documents: source.date_added_to_kb, not identity.created — the
+      // latter is the file's OWN embedded metadata (e.g. a .docx's core
+      // "created" property, or nothing at all for a PDF, since that
+      // processor never extracts one), not when it landed in Fred.
+      // date_added_to_kb is stamped server-side at ingestion (SourceInfo's
+      // Pydantic default_factory, base_input_processor.py) and always set.
       label: t("rework.resources.columns.created"),
       size: "9rem",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
-          {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.identity.created)}
+          {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb)}
         </span>
       ),
     },
     {
-      // `identity.author` is the file's own embedded-metadata author, not
-      // the Fred user who uploaded it — RFC §13.10 decision 10 / FRONT-09.L.
-      // No `uploaded_by` field exists yet, so this renders "—" for every
-      // document until that backend field ships (RFC-tracked, not silently
-      // dropped).
+      // identity.author is the file's own embedded-metadata author, not the
+      // Fred user who uploaded it — RFC §13.10 decision 10 / FRONT-09.L.
+      // uploaded_by (the uid, stamped once at ingestion) is resolved to a
+      // display name via the batched uploaderById lookup above; a document
+      // ingested before this field existed has no uploaded_by and renders
+      // "—", same as a folder (folders have no uploader concept at all).
       label: t("rework.resources.columns.author"),
       size: "9rem",
-      cellRenderer: () => <span className={styles.nowrapCell}>—</span>,
+      cellRenderer: (row) => {
+        const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
+        return <span className={styles.nowrapCell}>{uid ? userDisplayName(uid, uploaderById.get(uid)) : "—"}</span>;
+      },
     },
     {
       label: "",
