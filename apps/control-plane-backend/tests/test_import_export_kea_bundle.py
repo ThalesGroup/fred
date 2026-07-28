@@ -142,11 +142,17 @@ def _kea_bundle(
     return buffer.getvalue()
 
 
+# Default fixture tuning: the doc-search MCP every kea agent fixture carried
+# before capability-selection translation existed. Never mutated by callers.
+_DEFAULT_MCP_SERVERS: list[dict[str, Any]] = [{"id": "mcp-knowledge-flow-mcp-text"}]
+
+
 def _kea_agent(
     agent_id: str,
     *,
     name: str,
-    definition_ref: str = "v2.react.basic",
+    definition_ref: str | None = "v2.react.basic",
+    class_path: str | None = None,
     system_prompt: str | None = None,
     prompt_key: str = "system_prompt_template",
     extra_fields: list[dict[str, Any]] | None = None,
@@ -154,28 +160,38 @@ def _kea_agent(
     description: str = "General-purpose assistant",
     tags: list[str] | None = None,
     agent_type: str = "agent",
+    mcp_servers: list[dict[str, Any]] | None = _DEFAULT_MCP_SERVERS,
 ) -> dict[str, Any]:
+    """Build a kea `agent` row. Pass `class_path` (and leave `definition_ref`
+    unset) to shape a legacy v1 agent, matching `resolve_kea_template`'s
+    definition_ref-first / class_path-fallback precedence. `mcp_servers`
+    defaults to the doc-search MCP every other fixture agent implicitly
+    carried before capability-selection translation existed; pass `[]` or a
+    custom list to exercise other selections, or `None` to omit the key
+    entirely (agent with no kea-side tool-selection signal)."""
     fields: list[dict[str, Any]] = list(extra_fields or [])
     if system_prompt is not None:
         fields.append({"key": prompt_key, "type": "prompt", "default": system_prompt})
-    return {
+    tuning: dict[str, Any] = {
+        "role": role,
+        "description": description,
+        "tags": tags or [],
+        "fields": fields,
+    }
+    if mcp_servers is not None:
+        tuning["mcp_servers"] = mcp_servers
+    payload: dict[str, Any] = {
         "id": agent_id,
         "name": name,
-        "payload_json": {
-            "id": agent_id,
-            "name": name,
-            "type": agent_type,
-            "enabled": True,
-            "definition_ref": definition_ref,
-            "tuning": {
-                "role": role,
-                "description": description,
-                "tags": tags or [],
-                "fields": fields,
-                "mcp_servers": [{"id": "mcp-knowledge-flow-mcp-text"}],
-            },
-        },
+        "type": agent_type,
+        "enabled": True,
+        "tuning": tuning,
     }
+    if definition_ref is not None:
+        payload["definition_ref"] = definition_ref
+    if class_path is not None:
+        payload["class_path"] = class_path
+    return {"id": agent_id, "name": name, "payload_json": payload}
 
 
 def _chat_context(
@@ -423,6 +439,116 @@ async def test_kea_v1_secondary_prompts_warn(tmp_path: Path) -> None:
         assert record is not None
         assert record.tuning.values["prompts.system"] == "rag system prompt"
         assert any("prompts.grade_documents" in w for w in report.warnings)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kea_legacy_basic_react_agent_maps_to_assistant(
+    tmp_path: Path,
+) -> None:
+    """agentic_backend.core.agents.basic_react_agent.BasicReActAgent (legacy v1
+    class_path) must resolve to fred-agents:fred.github.assistant and go
+    through the same import path as v2.react.basic — no GAP, and name,
+    description, prompt, team, and creator are preserved."""
+    engine = await _make_engine(tmp_path, "legacy-basic-react.sqlite3")
+    try:
+        bundle = _kea_bundle(
+            agents=[
+                _kea_agent(
+                    "agent-legacy",
+                    name="OldGenericAgent",
+                    definition_ref=None,
+                    class_path="agentic_backend.core.agents.basic_react_agent.BasicReActAgent",
+                    system_prompt="answer using the finance tools",
+                    role="Finance helper",
+                    description="Legacy generic assistant",
+                    tags=["legacy"],
+                )
+            ],
+            tuples=[
+                {
+                    "user": f"user:{UID_ALICE}",
+                    "relation": "owner",
+                    "object": "agent:agent-legacy",
+                }
+            ],
+            realm={"groups": [], "users": [{"id": UID_ALICE, "username": "alice"}]},
+        )
+        report = await _import(bundle, engine)
+        assert report.agents_imported == 1
+        assert report.agents_gap == 0
+        assert not any("GAP" in w for w in report.warnings)
+
+        record = await AgentInstanceStore(engine).get("agent-legacy")
+        assert record is not None
+        assert record.template_id == "fred-agents:fred.github.assistant"
+        assert record.source_runtime_id == "fred-agents"
+        assert record.source_agent_id == "fred.github.assistant"
+        assert record.display_name == "OldGenericAgent"
+        assert record.description == "Legacy generic assistant"
+        assert str(record.team_id) == f"personal-{UID_ALICE}"
+        assert record.created_by == UID_ALICE
+        assert record.tuning.role == "Finance helper"
+        assert record.tuning.tags == ["legacy"]
+        assert (
+            record.tuning.values["prompts.system"] == "answer using the finance tools"
+        )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kea_mcp_servers_translate_to_selected_capability_ids(
+    tmp_path: Path,
+) -> None:
+    """`payload_json.tuning.mcp_servers` (kea's live tool-selection signal)
+    must land as `tuning.selected_capability_ids` verbatim — a kea agent
+    scoped to one MCP server must not come out of import with its template's
+    full default toolset (Phase 6 `materialize_default_capability_selections`
+    only fills rows still `None`, never touches an explicit list)."""
+    engine = await _make_engine(tmp_path, "mcp-servers.sqlite3")
+    try:
+        bundle = _kea_bundle(
+            agents=[
+                _kea_agent(
+                    "agent-scoped",
+                    name="TabularOnlyAgent",
+                    mcp_servers=[{"id": "mcp-tabular"}],
+                ),
+                _kea_agent(
+                    "agent-no-tools",
+                    name="NoToolsAgent",
+                    mcp_servers=[],
+                ),
+                _kea_agent(
+                    "agent-unset",
+                    name="UnsetToolsAgent",
+                    mcp_servers=None,
+                ),
+            ],
+            tuples=[
+                {
+                    "user": f"user:{UID_ALICE}",
+                    "relation": "owner",
+                    "object": f"agent:{agent_id}",
+                }
+                for agent_id in ("agent-scoped", "agent-no-tools", "agent-unset")
+            ],
+            realm={"groups": [], "users": [{"id": UID_ALICE, "username": "alice"}]},
+        )
+        report = await _import(bundle, engine)
+        assert report.agents_imported == 3
+
+        store = AgentInstanceStore(engine)
+        scoped = await store.get("agent-scoped")
+        no_tools = await store.get("agent-no-tools")
+        unset = await store.get("agent-unset")
+        assert scoped is not None and scoped.tuning.selected_capability_ids == [
+            "mcp-tabular"
+        ]
+        assert no_tools is not None and no_tools.tuning.selected_capability_ids == []
+        assert unset is not None and unset.tuning.selected_capability_ids is None
     finally:
         await engine.dispose()
 

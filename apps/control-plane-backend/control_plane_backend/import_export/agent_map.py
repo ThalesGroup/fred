@@ -35,6 +35,10 @@ KEA_TO_SWIFT_TEMPLATE: dict[str, str] = {
     # Agents users actually create on kea:
     "v2.react.basic": "fred-agents:fred.github.assistant",
     "v2.production.sql_analyst": "fred-agents:fred.github.sql_expert",
+    # Legacy v1 identity for the same generic configurable ReAct agent as
+    # v2.react.basic above (renamed in v2, behavior unchanged) — see
+    # docs/swift/design/AGENT_DESIGN.md's "Generic Tool Agent: BasicReActAgent".
+    "agentic_backend.core.agents.basic_react_agent.BasicReActAgent": "fred-agents:fred.github.assistant",
     # Equivalents available if a real user instance uses them:
     "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot": "fred-agents:fred.github.sentinel",
     "agentic_backend.agents.v1.production.rags.rag_expert.Rico": "fred-agents:fred.github.rag_expert",
@@ -47,6 +51,7 @@ KEA_TO_SWIFT_TEMPLATE: dict[str, str] = {
 IGNORED_KEA_TEMPLATES: frozenset[str] = frozenset(
     {
         "v2.sample.bank_transfer",
+        "v2.sample.slide_maker",
         "v2.deep.corpus_investigator",
         "v2.production.dva_risk_validator.graph",
         "v2.production.dva_risk_validator.qa",
