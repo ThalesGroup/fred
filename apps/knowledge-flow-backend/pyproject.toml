@@ -51,7 +51,6 @@ dependencies = [
   # MarkItDown extras: ensure .docx support is available for the lite DOCX path
   # Note: keep python-docx pinned above; markitdown[docx] will ensure runtime deps
   "markitdown[all]>=0.1.3",
-  "pymupdf>=1.27.2.3",
   "pgvector>=0.2.5",
   "psycopg[binary]>=3.2.1",
   # PyTorch for amd64: CPU-only wheels from pytorch-cpu index
@@ -67,7 +66,10 @@ dependencies = [
   "sqlmodel>=0.0.32",
   "python-magic>=0.4.27",
   "alembic>=1.18.4",
-  "pymupdf4llm>=1.27.2.3",
+  # Apache-2.0/BSD-3-Clause, used by docling's own PDF backend already —
+  # explicit here so the non-AGPL PPTX slide-rasterization path doesn't
+  # depend on a transitive resolution detail. See LICENSE-01.
+  "pypdfium2>=5.0.0",
   # Audio/video ingestion
   "av>=14.0.0",
   "faster-whisper>=1.1.0",
@@ -88,6 +90,15 @@ dev = [
   "pre-commit==4.2.0",
   "bandit==1.8.5",
   "ruff==0.12.0",
+]
+# AGPL-3.0/Artifex-commercial-dual-licensed (LICENSE-01, docs/swift/COPYLEFT-DEPENDENCIES.md).
+# Not installed by default. A deployer who wants pymupdf's speed/quality over the
+# default docling/pypdf path installs this extra explicitly and sets
+# processing.profiles.<profile>.pdf.extractor: pymupdf in config — the AGPL/Artifex
+# licensing implications of that choice are theirs to manage for that deployment.
+pymupdf = [
+  "pymupdf>=1.27.2.3",
+  "pymupdf4llm>=1.27.2.3",
 ]
 
 [build-system]
