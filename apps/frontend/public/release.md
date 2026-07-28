@@ -1,3 +1,12 @@
+**v2.1.18** — 2026-07-28
+
+- **Summary**
+
+  Further work on the Kea-to-Swift migration tooling: platform reset actions
+  are consolidated onto the migration page, a rehearsal reset no longer
+  leaves orphaned permissions behind, and the migration runbook adds a
+  clearer data-handoff checklist.
+
 **v2.1.17** — 2026-07-27
 
 - **Summary**
