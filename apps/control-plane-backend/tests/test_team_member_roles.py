@@ -150,6 +150,18 @@ class _FakeRebac:
             TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION: is_analyst,
         }.get(permission, False)
 
+    async def has_permissions(
+        self, subject, permissions, resource, **kwargs
+    ) -> list[bool]:
+        # #2065 follow-up: `_get_team_permissions_for_user` now issues one
+        # `has_permissions` BatchCheck instead of 14 `has_permission` Checks —
+        # reuse the exact same per-permission logic above rather than
+        # duplicating the dict.
+        return [
+            await self.has_permission(subject, permission, resource, **kwargs)
+            for permission in permissions
+        ]
+
     async def list_relations(
         self,
         *,
@@ -173,6 +185,27 @@ class _FakeRebac:
             for uid, held in self.roles.items()
             for role in held
             if role.value == relation.value
+        ]
+
+    async def list_direct_relations(
+        self, resource, *, subject=None, consistency_token=None
+    ) -> list[Relation]:
+        # #2065 follow-up: `_get_user_roles_in_team`/`_build_team_with_permissions`
+        # now read every direct relation on the one exact team (optionally
+        # scoped server-side to one exact `subject`) in a single call instead
+        # of `list_relations` once per relation type. Scoped to "fredlab"
+        # like every other method on this fake.
+        if resource.type != Resource.TEAM:
+            return []
+        return [
+            Relation(
+                subject=RebacReference(Resource.USER, uid),
+                relation=RelationType(role.value),
+                resource=RebacReference(Resource.TEAM, "fredlab"),
+            )
+            for uid, held in self.roles.items()
+            for role in held
+            if subject is None or subject.id == uid
         ]
 
     async def add_relation(self, relation: Relation, **kwargs: object) -> None:

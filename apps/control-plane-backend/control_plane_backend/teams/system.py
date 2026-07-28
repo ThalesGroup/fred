@@ -74,6 +74,27 @@ async def build_personal_team(
     )
 
 
+def resolve_system_team_id(user: KeycloakUser, team_id: TeamId) -> TeamId | None:
+    """Return the canonical system-team id `team_id` refers to, or `None`.
+
+    Why this function exists:
+    - `teams/system.py` is the canonical owner of reserved-team identity;
+      callers that only need to recognize/canonicalize a system team id (no
+      DTO, no I/O) should not re-implement this match themselves
+
+    How to use it:
+    - call before any Postgres/OpenFGA round trip that would otherwise treat
+      a system team as a collaborative one
+
+    Example:
+    - `resolve_system_team_id(user, TeamId("personal"))` ->
+      `personal-<uid>`
+    """
+    if team_id in (personal_team_id(user.uid), TeamId("personal")):
+        return personal_team_id(user.uid)
+    return None
+
+
 async def get_system_team(
     user: KeycloakUser, team_id: TeamId, personal_max_resources_storage_size: int | None
 ) -> TeamWithPermissions | None:
@@ -94,9 +115,9 @@ async def get_system_team(
     - `team = await get_system_team(user, team_id, personal_limit)`
     """
 
-    if team_id in (personal_team_id(user.uid), TeamId("personal")):
-        return await build_personal_team(user, personal_max_resources_storage_size)
-    return None
+    if resolve_system_team_id(user, team_id) is None:
+        return None
+    return await build_personal_team(user, personal_max_resources_storage_size)
 
 
 async def list_system_teams(

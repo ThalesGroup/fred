@@ -205,6 +205,18 @@ class _FakeTeamRebac:
     ) -> bool:
         return subject.id in self.team_admins.get(str(resource.id), set())
 
+    async def has_permissions(
+        self,
+        subject: RebacReference,
+        permissions: Any,
+        resource: RebacReference,
+        **_kw: Any,
+    ) -> list[bool]:
+        # #2065 follow-up: `_get_team_permissions_for_user` now issues one
+        # `has_permissions` BatchCheck instead of 14 `has_permission` Checks.
+        is_admin = subject.id in self.team_admins.get(str(resource.id), set())
+        return [is_admin for _ in permissions]
+
     async def lookup_subjects(
         self,
         resource: RebacReference,
@@ -252,6 +264,26 @@ class _FakeTeamRebac:
             and str(r.resource.id) == str(resource.id)
             for r in self.team_relations
         )
+
+    # #2065 follow-up: `_get_user_roles_in_team`/`_build_team_with_permissions`
+    # now read every direct relation on one exact team in a single call
+    # instead of one `list_relations`/`has_direct_relation` per relation type —
+    # answer it from the same `team_relations` log the methods above draw from.
+    async def list_direct_relations(
+        self,
+        resource: RebacReference,
+        *,
+        subject: RebacReference | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        if resource.type != Resource.TEAM:
+            return []
+        return [
+            r
+            for r in self.team_relations
+            if str(r.resource.id) == str(resource.id)
+            and (subject is None or r.subject == subject)
+        ]
 
 
 class _SpyNoopRebac(NoopRebacEngine):

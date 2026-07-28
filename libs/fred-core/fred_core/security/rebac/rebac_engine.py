@@ -19,7 +19,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
@@ -824,6 +824,38 @@ class RebacEngine(ABC):
             f"{type(self).__name__} does not support direct relation reads"
         )
 
+    async def list_direct_relations(
+        self,
+        resource: RebacReference,
+        *,
+        subject: RebacReference | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation] | RebacDisabledResult:
+        """Read every relation literally persisted on one exact resource.
+
+        Why this function exists:
+        - a caller projecting several role-shaped facts about one resource
+          (admins, member count, the caller's own roles) from a single team
+          needs one exact `Read` on that object, not a relation-by-relation
+          scan across every team (`list_relations`, unaffected — it stays the
+          bulk, cross-team primitive backing `_list_teams`)
+
+        How to use it:
+        - pass the exact resource; no relation filter is applied server-side,
+          so the caller folds the returned tuples locally
+        - pass `subject` (an exact `RebacReference`, e.g. one user) to narrow
+          server-side to that one subject's relations on this resource — e.g.
+          `_get_user_roles_in_team` transfers O(that user's roles), never
+          O(every member of the team). `subject=None` (the default) returns
+          every relation on the resource, of any subject.
+
+        Not implemented by default; override in engines that can answer an
+        exact-object tuple read (mirrors `has_direct_relation` above).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support direct relation listing"
+        )
+
     async def lookup_user_resources(
         self,
         user: KeycloakUser,
@@ -861,6 +893,59 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> bool:
         """Return `True` when a subject is authorized for an action."""
+
+    async def has_permissions(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[bool]:
+        """Check several permissions for the same subject/resource pair.
+
+        Why this function exists:
+        - a caller projecting a permission list (e.g. `TeamWithPermissions.
+          permissions`) needs one round-trip per permission set, not one
+          `has_permission` per permission — `OpenFgaRebacEngine` overrides
+          this with a native `BatchCheck` call; this default (concurrent
+          `has_permission`s) keeps every other engine and test fake working
+          without implementing a new abstract method.
+
+        How to use it:
+        - pass permissions in the order you want results back in; an empty
+          sequence returns `[]` without calling the engine at all
+
+        `contextual_relations` is materialized once, up front — if a caller
+        passed a generator, iterating it once per concurrent `has_permission`
+        call would exhaust it after the first and starve every other call
+        instead of raising, since `asyncio.gather` schedules them concurrently
+        with no guaranteed order.
+
+        Example:
+        - `allowed = await rebac.has_permissions(subject, list(TeamPermission), team_ref)`
+        """
+        permissions_list = list(permissions)
+        if not permissions_list:
+            return []
+        contextual_relations_seq = (
+            tuple(contextual_relations) if contextual_relations is not None else None
+        )
+        return list(
+            await asyncio.gather(
+                *(
+                    self.has_permission(
+                        subject,
+                        permission,
+                        resource,
+                        contextual_relations=contextual_relations_seq,
+                        consistency_token=consistency_token,
+                    )
+                    for permission in permissions_list
+                )
+            )
+        )
 
     async def _ensure_personal_team_editor(
         self, user: KeycloakUser, resource_type: Resource, resource_id: str

@@ -38,7 +38,7 @@ from control_plane_backend.routing_policy.schemas import (
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
 )
-from control_plane_backend.teams.service import get_team_by_id
+from control_plane_backend.teams.service import require_team_access
 
 
 async def _profile_to_capability_id_map(
@@ -130,9 +130,9 @@ async def get_team_routing_policy(
     `can_read_members`, the same permission Activity's `scope=team` view
     already requires, rather than inventing a new ReBAC relation for this one
     read. Personal-space owners pass through ungated, same as every other
-    system-team read (`get_team_by_id`)."""
+    system-team read (`require_team_access`)."""
 
-    await get_team_by_id(
+    await require_team_access(
         user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
     )
     store = deps.get_team_routing_policy_store()
@@ -159,7 +159,7 @@ async def update_team_routing_policy(
     holds `team_editor` unconditionally, so this is the same code path for
     both (RFC §1)."""
 
-    await get_team_by_id(
+    await require_team_access(
         user, team_id, deps.team_dependencies, [TeamPermission.CAN_UPDATE_RESOURCES]
     )
     await _validate_write(deps, team_id=team_id, request=request)

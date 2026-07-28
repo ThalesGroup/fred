@@ -46,10 +46,7 @@ from control_plane_backend.product.service import (
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
-from control_plane_backend.teams.schemas import (
-    Team,
-    TeamWithPermissions,
-)
+from control_plane_backend.teams.schemas import Team
 from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     JoiningMode,
@@ -573,21 +570,14 @@ def _patch_prompt_store(
     )
 
 
-async def _fake_get_team_by_id(
+async def _fake_require_team_access(
     _user: Any,
     _team_id: Any,
     _deps: Any | None = None,
     required_permissions: Any = None,
     **_kwargs: Any,
-) -> TeamWithPermissions:
-    return TeamWithPermissions(
-        id=TeamId(_team_id),
-        name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
-        member_count=1,
-        joining_mode=JoiningMode.INVITE_ONLY,
-        admins=[],
-        permissions=[],
-    )
+) -> TeamId:
+    return TeamId(_team_id)
 
 
 @pytest.mark.asyncio
@@ -1442,8 +1432,8 @@ async def test_team_runtime_binding_endpoint_resolves_for_member(
     """RUNTIME-07 rev. 2: the team-scoped resolution endpoint returns the runtime
     binding for a team member (ReBAC CAN_READ), replacing the admin-only path (F2)."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([_make_record()])
     app = create_app()
@@ -1467,8 +1457,8 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -1535,8 +1525,8 @@ async def test_prepare_execution_advertises_capability_base_urls(
     capability's ingress-relative router base URL, so the in-session UI calls
     the pod routes directly (no proxy)."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _make_record(
         agent_instance_id="inst-cap",
@@ -1585,25 +1575,15 @@ async def test_agent_instance_mutations_require_can_update_agents(
     on CAN_UPDATE_AGENTS (manager/owner), not CAN_READ — so a plain team member is
     refused in a collaborative team (REBAC.md). We assert each endpoint asks the
     team service for that exact permission."""
-    from control_plane_backend.product.schemas import TeamWithPermissions
     from fred_core import TeamPermission
 
     captured: dict[str, object] = {}
 
     async def _spy(user, team_id, deps=None, required_permissions=None, **_kw):
         captured["perms"] = required_permissions
-        return TeamWithPermissions(
-            id=TeamId(str(team_id)),
-            name=str(team_id),
-            member_count=1,
-            joining_mode=JoiningMode.OPEN,
-            admins=[],
-            permissions=[],
-        )
+        return TeamId(str(team_id))
 
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service", _spy
-    )
+    monkeypatch.setattr("control_plane_backend.product.api.require_team_access", _spy)
     app = create_app()
     _patch_store(monkeypatch, _FakeAgentInstanceStore([]))
 
@@ -1633,8 +1613,8 @@ async def test_prepare_execution_concatenates_attached_context_prompts(
     """Attached prompts resolve in position order and concatenate with '\\n\\n'."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -1702,8 +1682,8 @@ async def test_prepare_execution_resolves_default_prompt_in_request_language(
 
     spec = next(s for s in DEFAULT_PROMPTS if s.category == "conversational")
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -1768,8 +1748,8 @@ async def test_prepare_execution_skips_stale_context_prompt_ids(
     """A deleted/unknown attached id is skipped, not surfaced as an error."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -1839,8 +1819,8 @@ async def test_prepare_execution_resolves_context_prompts_within_caller_scope(
     """
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -1922,8 +1902,8 @@ async def test_prepare_execution_returns_404_for_unknown_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -1944,8 +1924,8 @@ async def test_prepare_execution_returns_409_for_disabled_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [_make_record(agent_instance_id="inst-disabled", enabled=False)]
@@ -1968,8 +1948,8 @@ async def test_prepare_execution_returns_503_when_ingress_prefix_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -2006,8 +1986,8 @@ async def test_prepare_execution_team_mismatch_returns_404(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(
         [
@@ -2046,8 +2026,8 @@ async def test_enroll_agent_instance_creates_db_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -2123,8 +2103,8 @@ async def test_enroll_agent_instance_unreachable_runtime_returns_503(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -2229,8 +2209,8 @@ async def test_patch_team_session_updates_last_activity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     initial = datetime.fromisoformat("2026-04-23T08:00:00+00:00")
     refreshed = datetime.fromisoformat("2026-04-23T08:05:00+00:00")
@@ -2271,8 +2251,8 @@ async def test_patch_team_session_returns_404_for_other_team_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeSessionMetadataStore(
         [
@@ -2304,8 +2284,8 @@ async def test_patch_team_session_returns_404_for_other_user_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeSessionMetadataStore(
         [
@@ -2338,8 +2318,8 @@ async def test_patch_team_session_updates_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeSessionMetadataStore(
         [
@@ -2374,8 +2354,8 @@ async def test_patch_team_session_updates_title_and_activity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     initial = datetime.fromisoformat("2026-04-23T08:00:00+00:00")
     refreshed = datetime.fromisoformat("2026-04-23T08:10:00+00:00")
@@ -2429,8 +2409,8 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
     """
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     _patch_session_store(
         monkeypatch,
@@ -2459,8 +2439,8 @@ async def test_delete_team_session_returns_404_for_other_user_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeSessionMetadataStore(
         [
@@ -2580,8 +2560,8 @@ async def test_delete_team_session_deletes_owned_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeSessionMetadataStore(
         [
@@ -2614,8 +2594,8 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     session_store = _FakeSessionMetadataStore(
         [
@@ -4333,8 +4313,8 @@ async def test_session_attachment_endpoints_round_trip_for_owned_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     session_store = _FakeSessionMetadataStore(
         [
@@ -4382,8 +4362,8 @@ async def test_delete_session_attachment_calls_cleanup_and_removes_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     session_store = _FakeSessionMetadataStore(
         [
@@ -4499,8 +4479,8 @@ async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -4528,8 +4508,8 @@ async def test_enroll_agent_instance_returns_400_for_malformed_template_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -4555,8 +4535,8 @@ async def test_delete_agent_instance_removes_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([_make_record()])
     app = create_app()
@@ -4578,8 +4558,8 @@ async def test_delete_agent_instance_returns_404_when_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -4600,8 +4580,8 @@ async def test_delete_agent_instance_enforces_team_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([_make_record(team_id="other-team")])
     app = create_app()
@@ -5636,8 +5616,8 @@ async def test_enroll_agent_instance_stores_provided_field_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -5688,8 +5668,8 @@ async def test_enroll_agent_instance_silently_drops_unknown_field_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -5739,8 +5719,8 @@ async def test_enroll_agent_instance_rejects_invalid_tuning_value_type_and_range
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -5790,8 +5770,8 @@ async def test_patch_agent_instance_rejects_invalid_tuning_enum_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = AgentInstanceRecord(
         agent_instance_id="instance-validated",
@@ -5827,8 +5807,8 @@ async def test_patch_agent_instance_updates_display_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([_make_record()])
     app = create_app()
@@ -5856,8 +5836,8 @@ async def test_patch_agent_instance_stamps_updated_by(
     """PATCH stamps the acting user's uid into updated_by (#1952)."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _make_record()
     assert record.updated_by is None
@@ -5885,8 +5865,8 @@ async def test_patch_agent_instance_updates_tuning_field_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = AgentInstanceRecord(
         agent_instance_id="instance-fields",
@@ -5961,8 +5941,8 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
     template contract rather than a stale snapshot."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = AgentInstanceRecord(
         agent_instance_id="instance-mcp-refresh",
@@ -6041,8 +6021,8 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore([])
     app = create_app()
@@ -6176,8 +6156,8 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch(_base_url: str, include_non_public: bool = False):
@@ -6229,8 +6209,8 @@ async def test_enrolling_internal_template_is_admin_only(
     `CAN_MANAGE_PLATFORM` like everywhere else, so a bare Keycloak role with no
     OpenFGA `platform_admin` relation is not sufficient."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_internal(_base_url: str, include_non_public: bool = False):
@@ -6323,8 +6303,8 @@ async def test_direct_execution_of_internal_agent_is_refused_for_everyone(
     with include_non_public=False unconditionally. Internal agents are reachable
     only via the managed (enrollment) path. See AGENT-VISIBILITY-RFC §3.1."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     # The hidden agent is only ever returned when include_non_public=True; the
@@ -6385,8 +6365,8 @@ async def test_f2_team_scoped_resolution_is_tenant_isolated(
     (b) the same instance is NOT reachable through a different team's path
         (404 via store.get_for_team), so no cross-tenant binding leaks."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _make_record(agent_instance_id="instance-1", team_id="team-x")
     store = _FakeAgentInstanceStore([record])
@@ -6419,8 +6399,8 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch(_base_url: str, include_non_public: bool = False):
@@ -6491,8 +6471,8 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
     id — see test_capability_selection_1974.py for the generic version."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch(_base_url: str, include_non_public: bool = False):
@@ -6579,8 +6559,8 @@ async def test_patch_agent_instance_can_clear_mcp_config_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _record_with_mcp_search_selected(
         agent_instance_id="instance-mcp-config",
@@ -6627,8 +6607,8 @@ async def test_patch_agent_instance_can_activate_no_mcp_servers_and_prunes_confi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _record_with_mcp_search_selected(
         agent_instance_id="instance-mcp-none",
@@ -6742,8 +6722,8 @@ def _prep_app_for_mcp_instance(
     monkeypatch: pytest.MonkeyPatch, store: "_FakeAgentInstanceStore"
 ):
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -7008,8 +6988,8 @@ async def test_list_prompts_returns_team_scoped_summaries(
     """Prompt list returns team-scoped summaries without the prompt text body."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore(
         [
@@ -7049,8 +7029,8 @@ async def test_create_prompt_persists_summary_and_rejects_duplicate_name(
     """Prompt create stores one team-scoped record and later rejects duplicates."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore([])
     app = create_app()
@@ -7094,8 +7074,8 @@ async def test_get_update_and_delete_prompt_use_team_scope(
     """Prompt detail, replace, and delete operate strictly inside one team scope."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore([_make_prompt_record()])
     app = create_app()
@@ -7134,8 +7114,8 @@ async def test_prompt_library_rejects_invalid_prompt_template_before_write(
     """Prompt CRUD validates template text before any prompt row is written."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore([])
     app = create_app()
@@ -7169,8 +7149,8 @@ async def test_enroll_agent_instance_rejects_unknown_prompt_token(
 ) -> None:
     """Unknown {token} in prompts.system → 422 before any DB write."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -7221,8 +7201,8 @@ async def test_enroll_agent_instance_accepts_valid_prompt_tokens(
 ) -> None:
     """All canonical {tokens} in prompts.system → 201, agent created."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -7274,8 +7254,8 @@ async def test_enroll_agent_instance_accepts_prompt_with_code_braces(
 ) -> None:
     """Curly braces from code snippets (non-simple patterns) are not flagged."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
 
     async def _fake_fetch_runtime_templates(
@@ -7326,8 +7306,8 @@ async def test_patch_agent_instance_rejects_unknown_prompt_token(
 ) -> None:
     """Updating prompts.system with an unknown {token} → 422, record unchanged."""
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = AgentInstanceRecord(
         agent_instance_id="instance-validated",
@@ -7375,8 +7355,8 @@ async def test_prompt_update_increments_version(
     """PUT on an existing prompt auto-increments version in the summary response."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     record = _make_prompt_record()
     record.version = 1
@@ -7408,8 +7388,8 @@ async def test_get_context_prompts_excludes_personal_in_team_space(
     """GET /prompts/context on a team never exposes the caller's personal prompts."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     personal = _make_prompt_record(
         prompt_id="p-personal", team_id=_PERSONAL_TEAM_ID, name="My prompt"
@@ -7443,8 +7423,8 @@ async def test_get_context_prompts_personal_space_returns_personal_scope(
     """GET /prompts/context on the personal team returns the user's prompts as scope=personal."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     personal = _make_prompt_record(
         prompt_id="p-personal", team_id=_PERSONAL_TEAM_ID, name="My prompt"
@@ -7478,8 +7458,8 @@ async def test_promote_prompt_copies_to_target_team(
     """POST /prompts/{id}/promote creates a copy in the target team."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore([_make_prompt_record()])
     app = create_app()
@@ -7513,8 +7493,8 @@ async def test_promote_prompt_returns_409_on_name_conflict(
     """POST /prompts/{id}/promote → 409 when a same-name prompt already exists in target."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     source = _make_prompt_record(
         prompt_id="p-src", team_id="personal", name="Shared name"
@@ -7544,8 +7524,8 @@ async def test_patch_prompt_score_updates_and_returns_summary(
     """PATCH /prompts/{id} sets the quality score and returns the updated summary."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakePromptStore([_make_prompt_record()])
     app = create_app()
@@ -7572,8 +7552,8 @@ def _make_context_session(
     """Build an app + fakes for one owned session and the given library prompts."""
 
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     session_record = SessionMetadataRecord(
         session_id="sess-1",

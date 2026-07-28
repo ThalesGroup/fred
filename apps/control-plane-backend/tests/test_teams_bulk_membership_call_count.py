@@ -29,96 +29,13 @@ from typing import Any, Iterable, cast
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import (
-    RebacDisabledResult,
-    RebacEngine,
-    RebacPermission,
-    RebacReference,
-    Relation,
-    RelationType,
-    Resource,
-)
+from fred_core import RebacReference, Relation, RelationType, Resource
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 
+from _rebac_test_doubles import CountingRebacEngine
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.service import _enrich_teams_with_membership
-
-
-class _CountingRebacEngine(RebacEngine):
-    """In-memory `RebacEngine` that answers `list_relations` from a seeded
-    tuple set and records every call, so tests can assert the call count
-    stays constant as team count grows."""
-
-    def __init__(self, tuples: list[Relation]) -> None:
-        self.tuples = tuples
-        self.list_relations_calls: list[tuple[Resource, RelationType]] = []
-
-    async def _persist_relation(self, relation: Relation) -> str | None:
-        raise AssertionError("no writes expected in this read-path test")
-
-    async def delete_relation(self, relation: Relation) -> str | None:
-        raise AssertionError("no deletes expected in this read-path test")
-
-    async def delete_all_relations_of_reference(
-        self, reference: RebacReference
-    ) -> str | None:
-        return None
-
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
-    async def list_relations(
-        self,
-        *,
-        resource_type: Resource,
-        relation: RelationType,
-        subject_type: Resource | None = None,
-        consistency_token: str | None = None,
-    ) -> list[Relation] | RebacDisabledResult:
-        self.list_relations_calls.append((resource_type, relation))
-        return [
-            rel
-            for rel in self.tuples
-            if rel.resource.type == resource_type
-            and rel.relation == relation
-            and (subject_type is None or rel.subject.type == subject_type)
-        ]
-
-    async def lookup_resources(
-        self,
-        subject: RebacReference,
-        permission: RebacPermission,
-        resource_type: Resource,
-        *,
-        contextual_relations: Iterable[Relation] | None = None,
-        consistency_token: str | None = None,
-    ) -> list[RebacReference]:
-        return []
-
-    async def lookup_subjects(
-        self,
-        resource: RebacReference,
-        relation: RelationType,
-        subject_type: Resource,
-        *,
-        contextual_relations: Iterable[Relation] | None = None,
-        consistency_token: str | None = None,
-    ) -> list[RebacReference]:
-        raise AssertionError(
-            "per-team lookup_subjects must not be called from the bulk path"
-        )
-
-    async def has_permission(
-        self,
-        subject: RebacReference,
-        permission: RebacPermission,
-        resource: RebacReference,
-        *,
-        contextual_relations: Iterable[Relation] | None = None,
-        consistency_token: str | None = None,
-    ) -> bool:
-        return False
 
 
 def _fake_deps() -> TeamServiceDependencies:
@@ -187,7 +104,7 @@ async def test_enrich_teams_with_membership_call_count_is_bounded(
 ) -> None:
     teams_metadata = _teams(team_count)
     team_ids = [str(metadata.id) for metadata in teams_metadata]
-    engine = _CountingRebacEngine(_membership_tuples(team_ids))
+    engine = CountingRebacEngine(membership_relations=_membership_tuples(team_ids))
 
     teams = await _enrich_teams_with_membership(
         engine,

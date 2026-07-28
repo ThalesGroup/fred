@@ -29,6 +29,7 @@ from fred_core import (
 )
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
+from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from sqlalchemy.exc import IntegrityError
 
@@ -70,6 +71,7 @@ from control_plane_backend.teams.schemas import (
 from control_plane_backend.teams.system import (
     get_system_team,
     list_system_teams,
+    resolve_system_team_id,
     to_team_summary,
 )
 from control_plane_backend.users.schemas import UserSummary
@@ -438,7 +440,7 @@ async def create_team(
         raise TeamAlreadyExistsError(request.name) from exc
 
     try:
-        await rebac.add_relations(
+        admin_grant_token = await rebac.add_relations(
             [
                 Relation(
                     subject=RebacReference(Resource.USER, admin_user_id),
@@ -469,22 +471,26 @@ async def create_team(
     # `get_team_by_id` path: the calling platform_admin is not necessarily a
     # team_member of the team they just created (by design, RFC §24.2/§24.7),
     # so a CAN_READ-gated lookup would deny their own creation response.
-    consistency_token = await rebac.ensure_team_organization_relations([team_id])
+    organization_token = await rebac.ensure_team_organization_relations([team_id])
     # TEAM-09: grant marketplace discoverability immediately — don't wait for
     # the lazy backfill in `_list_teams` to reach this brand-new team.
-    await rebac.ensure_team_public_relations([team_id])
-    teams = await _enrich_teams_with_membership(rebac, user, [metadata], deps)
-    permissions = await _get_team_permissions_for_user(
-        rebac, user, team_id, consistency_token
+    public_token = await rebac.ensure_team_public_relations([team_id])
+    # Every write above targets this same brand-new team; use the latest one
+    # that actually happened (OpenFGA has no per-write snapshot token today —
+    # `_persist_relation` always returns the same `HIGHER_CONSISTENCY`
+    # sentinel — so any non-`None` value already means "read this team
+    # strongly"). Without this, the just-written `initial_team_admin_ids`
+    # tuples could race the projection Read below on eventual consistency and
+    # the creator's own response would come back with an empty admins list.
+    consistency_token = next(
+        (
+            token
+            for token in (public_token, organization_token, admin_grant_token)
+            if token is not None
+        ),
+        None,
     )
-    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
-    retention = await _resolve_team_retention_view(team_id, deps)
-    return TeamWithPermissions(
-        **teams[0].model_dump(),
-        permissions=permissions,
-        my_relations=my_relations,
-        retention=retention,
-    )
+    return await _build_team_with_permissions(user, metadata, deps, consistency_token)
 
 
 async def get_team_by_id(
@@ -518,39 +524,51 @@ async def get_team_by_id(
     if system_team is not None:
         return system_team
 
-    rebac = deps.rebac
-
     metadata, consistency_token = await _validate_team_and_check_permission(
         user,
         team_id,
-        rebac,
+        deps.rebac,
         required_permissions or [TeamPermission.CAN_READ],
         deps,
     )
+    return await _build_team_with_permissions(user, metadata, deps, consistency_token)
 
-    teams = await _enrich_teams_with_membership(
-        rebac,
-        user,
-        [metadata],
-        deps,
-    )
-    if not teams:
-        raise TeamNotFoundError(team_id)
 
-    permissions = await _get_team_permissions_for_user(
-        rebac,
+async def require_team_access(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+    required_permissions: list[TeamPermission] | None = None,
+) -> TeamId:
+    """Authorize the caller against one team without projecting `Team` or
+    `TeamWithPermissions`.
+
+    Why this function exists:
+    - most routes call `get_team_by_id` purely to verify access and then only
+      ever read `team.id` back — this is the lightweight guard for those,
+      skipping membership enrichment and the permission/role projection
+
+    How to use it:
+    - call in place of `get_team_by_id` when the route never reads back
+      `admins`, `member_count`, `permissions`, `my_relations`, or `retention`
+    - the returned `TeamId` is canonical (e.g. the `"personal"` alias
+      resolves to `personal-<uid>`) — reassign the caller's `team_id` from it
+
+    Example:
+    - `team_id = await require_team_access(user, team_id, deps, [TeamPermission.CAN_READ])`
+    """
+    system_team_id = resolve_system_team_id(user, team_id)
+    if system_team_id is not None:
+        return system_team_id
+
+    metadata, _ = await _validate_team_and_check_permission(
         user,
         team_id,
-        consistency_token,
+        deps.rebac,
+        required_permissions or [TeamPermission.CAN_READ],
+        deps,
     )
-    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
-    retention = await _resolve_team_retention_view(team_id, deps)
-    return TeamWithPermissions(
-        **teams[0].model_dump(),
-        permissions=permissions,
-        my_relations=my_relations,
-        retention=retention,
-    )
+    return metadata.id
 
 
 async def join_team(
@@ -573,6 +591,17 @@ async def join_team(
     re-checking `joining_mode == OPEN` against the stored value — never the
     client's belief about it.
 
+    Builds the response directly through `_build_team_with_permissions`
+    rather than re-running `get_team_by_id` (a second `ensure_team_
+    organization_relations` + `CAN_READ` Check cycle): the write above just
+    succeeded, and `can_read: team_member or public` (schema.fga) depends on
+    no other relation — a fresh `team_member` tuple already satisfies it
+    unconditionally, on this or any other team, so re-checking it is a
+    redundant round-trip, not an extra safety property. The write's own
+    consistency token is threaded into the projection instead, so the
+    just-granted membership is guaranteed visible there rather than racing
+    eventual consistency.
+
     How to use it:
     - call from the `POST /teams/{team_id}/join` route
 
@@ -586,7 +615,7 @@ async def join_team(
     if metadata.joining_mode != JoiningMode.OPEN:
         raise TeamNotOpenForJoiningError(team_id, metadata.joining_mode)
 
-    await _add_team_member_relation(
+    consistency_token = await _add_team_member_relation(
         deps.rebac, team_id, user.uid, UserTeamRelation.TEAM_MEMBER
     )
 
@@ -594,7 +623,7 @@ async def join_team(
         "User %s self-joined OPEN team %s (%s)", user.uid, team_id, metadata.name
     )
 
-    return await get_team_by_id(user, team_id, deps)
+    return await _build_team_with_permissions(user, metadata, deps, consistency_token)
 
 
 async def update_team(
@@ -658,35 +687,20 @@ async def update_team(
         if "visibility" in patch_data:
             # Sync the ReBAC `public` relation immediately rather than
             # waiting for the next `_list_teams` lazy backfill — mirrors
-            # `create_team`'s own "don't wait" grant.
+            # `create_team`'s own "don't wait" grant. Re-point
+            # `consistency_token` at this write when it actually happened, so
+            # the projection below (which folds `public` into `can_read`)
+            # never races the just-changed visibility on eventual
+            # consistency — the token from the caller's earlier
+            # CAN_UPDATE_INFO check is otherwise stale by the time we get here.
             if metadata.visibility == TeamVisibility.PUBLIC:
-                await rebac.ensure_team_public_relations([team_id])
+                public_token = await rebac.ensure_team_public_relations([team_id])
             else:
-                await rebac.revoke_team_public_relations([team_id])
+                public_token = await rebac.revoke_team_public_relations([team_id])
+            if public_token is not None:
+                consistency_token = public_token
 
-    teams = await _enrich_teams_with_membership(
-        rebac,
-        user,
-        [metadata],
-        deps,
-    )
-    if not teams:
-        raise TeamNotFoundError(team_id)
-
-    permissions = await _get_team_permissions_for_user(
-        rebac,
-        user,
-        team_id,
-        consistency_token,
-    )
-    my_relations = list(await _get_user_roles_in_team(rebac, team_id, user.uid))
-    retention = await _resolve_team_retention_view(team_id, deps)
-    return TeamWithPermissions(
-        **teams[0].model_dump(),
-        permissions=permissions,
-        my_relations=my_relations,
-        retention=retention,
-    )
+    return await _build_team_with_permissions(user, metadata, deps, consistency_token)
 
 
 async def upload_team_banner(
@@ -1270,55 +1284,86 @@ async def _enrich_teams_with_membership(
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
     user_summaries = await deps.get_users_by_ids(all_admin_ids)
+    default_max_storage = deps.configuration.app.default_team_max_resources_storage_size
 
-    teams: list[Team] = []
-    for metadata in teams_metadata:
-        member_ids = team_member_ids_map.get(metadata.id, set())
-        banner_image_url: str | None = None
-        if metadata.banner_object_storage_key:
-            if _is_absolute_url(metadata.banner_object_storage_key):
-                banner_image_url = metadata.banner_object_storage_key
-            else:
-                try:
-                    banner_image_url = content_store.get_presigned_url(
-                        metadata.banner_object_storage_key,
-                        expires=timedelta(hours=1),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to generate presigned URL for team %s banner: %s",
-                        metadata.id,
-                        exc,
-                    )
+    return [
+        _build_team_dto(
+            metadata,
+            admin_ids=team_admin_ids_map.get(metadata.id, set()),
+            member_ids=team_member_ids_map.get(metadata.id, set()),
+            is_member=user.uid in team_member_ids_map.get(metadata.id, set()),
+            admin_summaries=user_summaries,
+            content_store=content_store,
+            default_max_resources_storage_size=default_max_storage,
+        )
+        for metadata in teams_metadata
+    ]
 
-        admins = _dedupe_user_summaries_by_display_key(
-            [
-                user_summaries.get(admin_id) or UserSummary(id=admin_id)
-                for admin_id in team_admin_ids_map.get(metadata.id, set())
-            ]
-        )
-        max_storage = (
-            metadata.max_resources_storage_size
-            if metadata.max_resources_storage_size is not None
-            else deps.configuration.app.default_team_max_resources_storage_size
-        )
-        teams.append(
-            Team(
-                id=metadata.id,
-                name=metadata.name,
-                member_count=len(member_ids),
-                admins=admins,
-                is_member=user.uid in member_ids,
-                description=metadata.description,
-                joining_mode=metadata.joining_mode,
-                visibility=metadata.visibility,
-                banner_image_url=banner_image_url,
-                max_resources_storage_size=max_storage,
-                current_resources_storage_size=metadata.current_resources_storage_size,
-            )
-        )
 
-    return teams
+def _build_team_dto(
+    metadata: TeamMetadata,
+    *,
+    admin_ids: set[str],
+    member_ids: set[str],
+    is_member: bool,
+    admin_summaries: dict[str, UserSummary],
+    content_store: ContentStore,
+    default_max_resources_storage_size: int | None,
+) -> Team:
+    """Render one `Team` DTO from metadata plus already-resolved membership.
+
+    Why this function exists:
+    - the bulk (`_enrich_teams_with_membership`, one exact scan per relation
+      across every team) and single-team (`_build_team_with_permissions`, one
+      exact `Read` on that one team) paths resolve `admin_ids`/`member_ids`
+      completely differently, but render the exact same `Team` shape
+      afterwards — this is that one shared rendering tail
+
+    How to use it:
+    - pass membership sets already resolved for this one team; the only I/O
+      performed here is the banner's presigned URL lookup
+    """
+    banner_image_url: str | None = None
+    if metadata.banner_object_storage_key:
+        if _is_absolute_url(metadata.banner_object_storage_key):
+            banner_image_url = metadata.banner_object_storage_key
+        else:
+            try:
+                banner_image_url = content_store.get_presigned_url(
+                    metadata.banner_object_storage_key,
+                    expires=timedelta(hours=1),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to generate presigned URL for team %s banner: %s",
+                    metadata.id,
+                    exc,
+                )
+
+    admins = _dedupe_user_summaries_by_display_key(
+        [
+            admin_summaries.get(admin_id) or UserSummary(id=admin_id)
+            for admin_id in admin_ids
+        ]
+    )
+    max_storage = (
+        metadata.max_resources_storage_size
+        if metadata.max_resources_storage_size is not None
+        else default_max_resources_storage_size
+    )
+    return Team(
+        id=metadata.id,
+        name=metadata.name,
+        member_count=len(member_ids),
+        admins=admins,
+        is_member=is_member,
+        description=metadata.description,
+        joining_mode=metadata.joining_mode,
+        visibility=metadata.visibility,
+        banner_image_url=banner_image_url,
+        max_resources_storage_size=max_storage,
+        current_resources_storage_size=metadata.current_resources_storage_size,
+    )
 
 
 def _dedupe_user_summaries_by_display_key(
@@ -1361,24 +1406,106 @@ async def _get_team_permissions_for_user(
     team_id: TeamId,
     consistency_token: str | None = None,
 ) -> list[TeamPermission]:
-    permissions_to_check = list(TeamPermission)
+    """Project every `TeamPermission` the caller holds on one team.
 
-    checks = await asyncio.gather(
-        *[
-            rebac.has_permission(
-                RebacReference(Resource.USER, user.uid),
-                permission,
-                RebacReference(Resource.TEAM, team_id),
-                consistency_token=consistency_token,
-            )
-            for permission in permissions_to_check
-        ]
+    Why this function exists:
+    - `TeamWithPermissions.permissions` needs every `TeamPermission` checked
+      at once for the caller — one `has_permissions` BatchCheck round-trip
+      (native OpenFGA `BatchCheck` on `OpenFgaRebacEngine`), not 14 separate
+      `has_permission` Checks
+
+    How to use it:
+    - pass the already-authorized `team_id` and, when available, the
+      consistency token from the caller's own access check
+    """
+    permissions_to_check = list(TeamPermission)
+    allowed = await rebac.has_permissions(
+        RebacReference(Resource.USER, user.uid),
+        permissions_to_check,
+        RebacReference(Resource.TEAM, team_id),
+        consistency_token=consistency_token,
     )
     return [
         permission
-        for permission, has_permission in zip(permissions_to_check, checks)
+        for permission, has_permission in zip(permissions_to_check, allowed)
         if has_permission
     ]
+
+
+async def _build_team_with_permissions(
+    user: KeycloakUser,
+    metadata: TeamMetadata,
+    deps: TeamServiceDependencies,
+    consistency_token: str | None,
+) -> TeamWithPermissions:
+    """Assemble one `TeamWithPermissions` for an already-authorized team.
+
+    Why this function exists:
+    - `create_team`/`get_team_by_id`/`update_team` each run their own access
+      rule (or, for `create_team`, deliberately none — see RFC §24.2/§24.7)
+      and then built the identical projection tail independently; this is
+      that one shared tail. It never re-checks access and carries no
+      route-specific branch — callers must have already authorized the
+      caller for their own route before calling this.
+
+    How to use it:
+    - call with the team's metadata and the consistency token from the
+      caller's own permission check (or `None`, e.g. `create_team`'s
+      bootstrap path)
+
+    One exact `list_direct_relations` Read, the `has_permissions` BatchCheck,
+    and the retention resolution are independent of each other and run
+    concurrently; admin `UserSummary` resolution runs after (it needs the
+    Read's admin ids first). Both the Read and the BatchCheck receive the
+    same `consistency_token` as the caller's own access check, so a relation
+    just written by that same request (e.g. `create_team`'s admin grant,
+    `join_team`'s membership write) is guaranteed visible here rather than
+    racing eventual consistency.
+
+    No `subject` filter is passed to `list_direct_relations`: this needs
+    every role relation on the team (admins, member_count, is_member,
+    my_relations all derive from the full set), not one user's — unlike
+    `_get_user_roles_in_team` below. `_fold_team_role_relations` already
+    discards every non-`Resource.USER` subject (the `organization`/`public`
+    tuples also returned by the same exact Read), so filtering by subject
+    type here would only shrink the response after the fact, not the
+    transfer.
+    """
+    rebac = deps.rebac
+    team_id = metadata.id
+
+    direct_relations, permissions, retention = await asyncio.gather(
+        rebac.list_direct_relations(
+            RebacReference(Resource.TEAM, team_id),
+            consistency_token=consistency_token,
+        ),
+        _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
+        _resolve_team_retention_view(team_id, deps),
+    )
+    roles_by_user = _fold_team_role_relations(direct_relations)
+    admin_ids = {
+        uid
+        for uid, roles in roles_by_user.items()
+        if UserTeamRelation.TEAM_ADMIN in roles
+    }
+    member_ids = set(roles_by_user.keys())
+    admin_summaries = await deps.get_users_by_ids(admin_ids)
+
+    team = _build_team_dto(
+        metadata,
+        admin_ids=admin_ids,
+        member_ids=member_ids,
+        is_member=user.uid in member_ids,
+        admin_summaries=admin_summaries,
+        content_store=deps.get_content_store(),
+        default_max_resources_storage_size=deps.configuration.app.default_team_max_resources_storage_size,
+    )
+    return TeamWithPermissions(
+        **team.model_dump(),
+        permissions=permissions,
+        my_relations=list(roles_by_user.get(user.uid, set())),
+        retention=retention,
+    )
 
 
 async def _get_team_users_by_relation(
@@ -1511,8 +1638,8 @@ async def _add_team_member_relation(
     team_id: TeamId,
     user_id: str,
     relation: UserTeamRelation,
-) -> None:
-    await rebac.add_relation(
+) -> str | None:
+    return await rebac.add_relation(
         Relation(
             subject=RebacReference(Resource.USER, user_id),
             relation=relation.to_relation(),
@@ -1533,6 +1660,56 @@ def _get_administer_permission_for_team_role_relation(
     return TeamPermission.CAN_ADMINISTER_MEMBERS
 
 
+_TEAM_ROLE_RELATIONS = (
+    RelationType.TEAM_ADMIN,
+    RelationType.TEAM_EDITOR,
+    RelationType.TEAM_ANALYST,
+    RelationType.TEAM_MEMBER,
+)
+
+
+def _fold_team_role_relations(
+    relations: list[Relation] | RebacDisabledResult,
+) -> dict[str, set[UserTeamRelation]]:
+    """Fold one team's literally-persisted relations into `{user_id: roles}`.
+
+    Why this function exists:
+    - `_build_team_with_permissions`'s admins/member_count/is_member/
+      my_relations and `_get_user_roles_in_team` both need the exact same
+      derivation from the exact same `list_direct_relations` Read — one pure
+      function instead of two independent parsers that could drift apart
+
+    How to use it:
+    - pass the result of `rebac.list_direct_relations(team_ref)` (with or
+      without a `subject` filter — either way this only ever keeps
+      `Resource.USER` subjects) or the `RebacDisabledResult` it returns when
+      ReBAC is disabled, folded here to `{}` — same "nothing derivable"
+      outcome as before
+    - every key present is a member (the union of all four role relations);
+      `UserTeamRelation.TEAM_ADMIN in roles` marks an admin
+
+    PR #1957 review finding (still load-bearing): `team_member` is a
+    *computed* relation in schema.fga (`[user] or team_admin or team_editor
+    or team_analyst`), but `list_direct_relations` returns only literally
+    persisted tuples (`OpenFgaClient.read`, no userset expansion) — so a
+    direct `team_member` tuple and an elevated role are never conflated here,
+    unlike the old `lookup_subjects(..., TEAM_MEMBER)` scan.
+    """
+    if isinstance(relations, RebacDisabledResult):
+        return {}
+    roles_by_user: dict[str, set[UserTeamRelation]] = {}
+    for rel in relations:
+        if (
+            rel.subject.type != Resource.USER
+            or rel.relation not in _TEAM_ROLE_RELATIONS
+        ):
+            continue
+        roles_by_user.setdefault(rel.subject.id, set()).add(
+            UserTeamRelation(rel.relation.value)
+        )
+    return roles_by_user
+
+
 async def _get_user_roles_in_team(
     rebac: RebacEngine,
     team_id: TeamId,
@@ -1543,40 +1720,24 @@ async def _get_user_roles_in_team(
     `team_admin` and `team_editor` at once, or `team_editor` on top of a base
     `team_member` tuple).
 
-    PR #1957 review finding: `team_member` is a *computed* relation in
-    schema.fga (`[user] or team_admin or team_editor or team_analyst`), so a
-    `lookup_subjects(..., TEAM_MEMBER)` scan returns every elevated-role
-    holder too — it cannot tell a direct base-member tuple apart from one
-    derived purely from an elevated role. Basing TEAM_MEMBER membership on
-    that scan silently drops the base role for anyone who also holds an
-    elevated role, which made `revoke_team_member_role` treat a genuine
-    `member + editor` combination as "editor only" and refuse the
-    editor-to-member demotion as a last-role revoke. `has_direct_relation`
-    reads the literal persisted tuple instead, bypassing the computed
-    rewrite, so the base role is preserved exactly when it was actually
-    granted — never inferred from the computed relation."""
-    admin_ids, editor_ids, analyst_ids, has_direct_member = await asyncio.gather(
-        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
-        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
-        _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
-        rebac.has_direct_relation(
-            RebacReference(Resource.USER, user_id),
-            RelationType.TEAM_MEMBER,
-            RebacReference(Resource.TEAM, team_id),
-        ),
+    How to use it:
+    - call with the team and the target user id; also used by
+      `remove_team_member`/`revoke_team_member_role` to decide which
+      `can_administer_*` permissions the caller must hold
+
+    One exact `list_direct_relations` Read scoped to this one `subject`
+    (`user:<user_id>`), folded by `_fold_team_role_relations` — the transfer
+    is O(this user's own relations on the team), never O(every member), since
+    the exact-subject filter is pushed server-side into the `Read` rather
+    than applied after a full-team transfer. Never `lookup_subjects`
+    (ListUsers), and never inferring a base `team_member` tuple from an
+    elevated role (see that function's docstring).
+    """
+    relations = await rebac.list_direct_relations(
+        RebacReference(Resource.TEAM, team_id),
+        subject=RebacReference(Resource.USER, user_id),
     )
-    roles = {
-        relation
-        for relation, ids in (
-            (UserTeamRelation.TEAM_ADMIN, admin_ids),
-            (UserTeamRelation.TEAM_EDITOR, editor_ids),
-            (UserTeamRelation.TEAM_ANALYST, analyst_ids),
-        )
-        if user_id in ids
-    }
-    if has_direct_member:
-        roles.add(UserTeamRelation.TEAM_MEMBER)
-    return roles
+    return _fold_team_role_relations(relations).get(user_id, set())
 
 
 async def _remove_team_member_relation(

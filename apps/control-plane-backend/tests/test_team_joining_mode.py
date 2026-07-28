@@ -21,6 +21,16 @@ That makes its two safety properties load-bearing and worth locking in with
 tests: it must (1) only ever succeed when the stored `joining_mode` is `OPEN`
 (never trusting the client's belief about it), and (2) only ever grant
 `team_member` to the caller themselves, never another user or another role.
+
+#2065 follow-up: `join_team` builds its response directly through
+`_build_team_with_permissions` instead of re-running `get_team_by_id` (a
+second `ensure_team_organization_relations` Read + `CAN_READ` Check cycle) —
+the write that just succeeded already establishes `can_read` (schema.fga:
+`team_member or public`), so re-checking it is a redundant round-trip, not an
+extra safety property. The budget test below locks that in: exactly the
+`team_member` write, the projection's exact `list_direct_relations` Read, and
+its `has_permissions` BatchCheck — zero extra `list_relations`/`has_permission`
+calls — with the write's own consistency token reaching both reads.
 """
 
 from __future__ import annotations
@@ -38,9 +48,12 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
+    TeamPermission,
 )
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
+
+from _rebac_test_doubles import CountingRebacEngine
 
 pytestmark = pytest.mark.asyncio
 
@@ -66,11 +79,19 @@ def _user(uid: str = "wannabe-member") -> KeycloakUser:
     return KeycloakUser(uid=uid, username=uid, roles=[], email=None)
 
 
-def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
+async def _no_users_by_ids(*_a, **_k) -> dict:
+    return {}
+
+
+def _deps(rebac: object, store: _FakeMetadataStore):
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
     config = MagicMock()
     config.app.personal_max_resources_storage_size = 5368709120
+    config.app.default_team_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
         configuration=config,
         rebac=cast(Any, rebac),
@@ -79,8 +100,8 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
-        get_policy_catalog=cast(Any, object),
-        get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
+        get_policy_catalog=cast(Any, ConversationPolicyCatalog),
+        get_users_by_ids=cast(Any, _no_users_by_ids),
         search_users=cast(Any, lambda *_a, **_k: []),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
@@ -117,10 +138,8 @@ async def test_join_team_raises_not_found_for_unknown_team() -> None:
     assert rebac.added_relations == []
 
 
-async def test_join_team_grants_team_member_to_self_only_when_open(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    rebac = _FakeRebac()
+async def test_join_team_grants_team_member_to_self_only_when_open() -> None:
+    rebac = CountingRebacEngine(org_linked_team_ids={"open-team"})
     store = _FakeMetadataStore(
         {
             "open-team": TeamMetadata(
@@ -128,22 +147,68 @@ async def test_join_team_grants_team_member_to_self_only_when_open(
             )
         }
     )
-    sentinel = object()
 
-    async def _fake_get_team_by_id(user, team_id, deps, required_permissions=None):
-        # join_team must delegate the final read to the standard getter
-        # rather than building its own response shape.
-        return sentinel
+    team = await join_team(_user("alice"), TeamId("open-team"), _deps(rebac, store))
 
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service.get_team_by_id", _fake_get_team_by_id
-    )
-
-    result = await join_team(_user("alice"), TeamId("open-team"), _deps(rebac, store))
-
-    assert result is sentinel
-    assert len(rebac.added_relations) == 1
-    written = rebac.added_relations[0]
+    assert len(rebac.add_relations_calls) == 0  # join_team writes via add_relation
+    written = rebac.direct_relations[-1]
     assert written.subject == RebacReference(Resource.USER, "alice")
     assert written.relation == RelationType.TEAM_MEMBER
     assert written.resource == RebacReference(Resource.TEAM, "open-team")
+
+    # The write already establishes `can_read` (team_member or public) — the
+    # response reflects it immediately, with no extra round trip.
+    assert team.is_member is True
+    from control_plane_backend.teams.schemas import UserTeamRelation
+
+    assert UserTeamRelation.TEAM_MEMBER in team.my_relations
+
+
+async def test_join_team_budget_skips_the_redundant_ensure_org_and_check_cycle() -> (
+    None
+):
+    """The old `join_team` delegated to `get_team_by_id`, which re-runs
+    `ensure_team_organization_relations` (a `list_relations` Read) and a
+    `CAN_READ` `has_permission` Check. Neither is needed: the org edge was
+    already established when the team was created/listed, and a fresh
+    `team_member` write already satisfies `can_read` unconditionally. Budget:
+    just the membership write, the projection's one exact
+    `list_direct_relations` Read, and its `has_permissions` BatchCheck — zero
+    `list_relations`/`has_permission` calls."""
+    rebac = CountingRebacEngine(org_linked_team_ids={"open-team"})
+    store = _FakeMetadataStore(
+        {
+            "open-team": TeamMetadata(
+                id=TeamId("open-team"), name="Open", joining_mode=JoiningMode.OPEN
+            )
+        }
+    )
+
+    await join_team(_user("alice"), TeamId("open-team"), _deps(rebac, store))
+
+    assert rebac.list_relations_calls == []
+    assert rebac.has_permission_calls == []
+    assert len(rebac.list_direct_relations_calls) == 1
+    assert len(rebac.has_permissions_calls) == 1
+
+
+async def test_join_team_propagates_the_write_token_to_the_projection_reads() -> None:
+    """The membership write's own consistency token must reach both the
+    projection's exact Read and its BatchCheck, so the just-granted
+    membership is guaranteed visible there instead of racing eventual
+    consistency."""
+    rebac = CountingRebacEngine(
+        org_linked_team_ids={"open-team"}, granted_permissions=frozenset(TeamPermission)
+    )
+    store = _FakeMetadataStore(
+        {
+            "open-team": TeamMetadata(
+                id=TeamId("open-team"), name="Open", joining_mode=JoiningMode.OPEN
+            )
+        }
+    )
+
+    await join_team(_user("alice"), TeamId("open-team"), _deps(rebac, store))
+
+    assert rebac.list_direct_relations_tokens == ["consistency-token"]
+    assert rebac.has_permissions_tokens == ["consistency-token"]
