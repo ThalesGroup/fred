@@ -450,7 +450,16 @@ async def test_kea_legacy_basic_react_agent_maps_to_assistant(
     """agentic_backend.core.agents.basic_react_agent.BasicReActAgent (legacy v1
     class_path) must resolve to fred-agents:fred.github.assistant and go
     through the same import path as v2.react.basic — no GAP, and name,
-    description, prompt, team, and creator are preserved."""
+    description, prompt, team, creator, and tool selection are preserved.
+
+    The tool-selection assertion matters specifically for this legacy class:
+    kea's `AgentTuning.mcp_servers` (agentic_backend/core/agents/agent_spec.py)
+    is the one shared tool-selection field for both v1 and v2 agents — there is
+    no separate `selected_mcp_server_ids` on the kea side — but nothing here
+    previously proved `_extract_kea_capability_selection` actually reaches it
+    through the legacy `class_path` path rather than defaulting to `None` and
+    silently widening the migrated agent to its template's full default
+    toolset."""
     engine = await _make_engine(tmp_path, "legacy-basic-react.sqlite3")
     try:
         bundle = _kea_bundle(
@@ -494,6 +503,7 @@ async def test_kea_legacy_basic_react_agent_maps_to_assistant(
         assert (
             record.tuning.values["prompts.system"] == "answer using the finance tools"
         )
+        assert record.tuning.selected_capability_ids == ["mcp-knowledge-flow-mcp-text"]
     finally:
         await engine.dispose()
 
