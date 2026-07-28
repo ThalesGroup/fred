@@ -1604,7 +1604,11 @@ against a real kea dump):**
   every tuple-referenced team, named from the bundled `keycloak/realm.json`
   groups; a team referenced only by a stray/stale OpenFGA tuple with no
   matching Keycloak group is dropped outright (`kea_reconciliation.py::drop_orphan_teams`
-  + `drop_orphan_team_relations`), not created with a garbage id-as-name.
+  + `drop_orphan_team_relations`), not created with a garbage id-as-name. The
+  realm-derived plain-membership pass and admin-coverage check run even when
+  `openfga/tuples.json` is empty; an empty tuple export still cannot recover
+  elevated `owner`/`manager` roles and is a cutover stop condition when
+  collaborative teams exist.
 - **Platform roles from the realm export** — a full realm export
   (`users[]` with `realmRoles`) grants `admin → platform_admin`,
   `viewer → platform_observer` (`editor` dropped, warned).
@@ -1614,8 +1618,9 @@ against a real kea dump):**
   only identifier guaranteed shared is the Keycloak **username**. Every kea
   `sub` referenced by a tuple, an agent's `created_by`, a personal tag's
   `owner_id`, or a chat-context's `author` is resolved *live*, per run, to its
-  swift `sub` by username (`KeaUserResolver`, one Admin API call per distinct
-  username). Three outcomes: `matched` (same sub both sides), `relinked`
+  swift `sub` by username (`KeaUserResolver`, one paginated bulk sweep of the
+  target realm per run, followed by in-memory lookups). Three outcomes:
+  `matched` (same sub both sides), `relinked`
   (found under a different swift sub — that sub is used), `pending` (not
   found yet — nothing written for that identity this run, dropped cleanly,
   picked up automatically by a later re-run since every write is idempotent).
@@ -1626,9 +1631,14 @@ against a real kea dump):**
   zero `team_admin` after import is surfaced loudly (`find_admin_less_teams`),
   never silently created ungoverned.
 - **Standalone `realm_file` upload** (§16 above) removes the former blocker
-  (kea's own exporter 403s on `exportClients=true`) — re-exporting the realm
-  directly from Keycloak and uploading it alongside the zip is now the
-  supported cutover path; a fixed kea-side exporter is a nice-to-have only.
+  (kea's own exporter 403s on `exportClients=true`). The production fallback
+  is a read-only Keycloak-Postgres extract containing `groups[].id/name` and
+  `users[].id/username/groups/realmRoles`; `id`/`username` alone is not a
+  complete migration input. The SQL normalizes the legacy `app` client roles
+  and any equivalent realm roles into the importer's `realmRoles` field. The
+  standalone document replaces the realm inside the zip rather than being
+  merged with it. The exact SQL and go/no-go checks are maintained in
+  `ops/KEA_SWIFT_CUTOVER.md`.
 
 **Preview tool (temporary, delete after cutover):** `POST /kea-migration/dry-run`
 (`kea_migration_api.py`, a standalone router) runs the same bundle-open +

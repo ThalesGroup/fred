@@ -976,31 +976,38 @@ async def build_kea_reconciliation_plan(
         resolved_relations = await resolve_relation_subjects(
             transform.relations, kea_username_index, resolver, kea_report
         )
-        already_elevated = {
-            (str(r.subject.id), str(r.resource.id))
-            for r in resolved_relations
-            if r.relation
-            in (
-                RelationType.TEAM_ADMIN,
-                RelationType.TEAM_EDITOR,
-                RelationType.TEAM_ANALYST,
-            )
-        }
-        group_name_to_team_id = {
-            row["name"]: row["id"] for row in team_metadata if row.get("name")
-        }
-        member_relations = await derive_team_member_relations(
-            keycloak_realm,
-            group_name_to_team_id,
-            already_elevated,
-            kea_username_index,
-            resolver,
-            kea_report,
+
+    # Team-member derivation and the admin-coverage check both read the realm
+    # export, not `tuples` — a bundle with real teammetadata/groups but an
+    # empty-or-absent openfga/tuples.json must still run them, or a team gets
+    # created with zero relations and `find_admin_less_teams` never fires to
+    # say so (the exact "silently created ungoverned" case its own docstring
+    # rules out).
+    already_elevated = {
+        (str(r.subject.id), str(r.resource.id))
+        for r in resolved_relations
+        if r.relation
+        in (
+            RelationType.TEAM_ADMIN,
+            RelationType.TEAM_EDITOR,
+            RelationType.TEAM_ANALYST,
         )
-        resolved_relations = resolved_relations + member_relations
-        kea_report.admin_less_teams = find_admin_less_teams(
-            {row["id"] for row in team_metadata}, resolved_relations
-        )
+    }
+    group_name_to_team_id = {
+        row["name"]: row["id"] for row in team_metadata if row.get("name")
+    }
+    member_relations = await derive_team_member_relations(
+        keycloak_realm,
+        group_name_to_team_id,
+        already_elevated,
+        kea_username_index,
+        resolver,
+        kea_report,
+    )
+    resolved_relations = resolved_relations + member_relations
+    kea_report.admin_less_teams = find_admin_less_teams(
+        {row["id"] for row in team_metadata}, resolved_relations
+    )
 
     realm_grants, dropped_editors = _realm_platform_role_grants(keycloak_realm)
     if dropped_editors:

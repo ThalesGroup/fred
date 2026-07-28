@@ -46,17 +46,22 @@ TEAM_ID = "team-fredlab"
 
 
 class FakeRebac:
-    """Records every reference a full teardown asks to wipe."""
+    """Records every reference/type a full teardown asks to wipe."""
 
     def __init__(self) -> None:
         self.enabled = True
         self.wiped_references: list[RebacReference] = []
+        self.wiped_types: list[Resource] = []
 
     async def delete_all_relations_of_reference(
         self, reference: RebacReference
     ) -> str | None:
         self.wiped_references.append(reference)
         return None
+
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        self.wiped_types.append(resource_type)
+        return 0
 
 
 def _user_deps() -> UserServiceDependencies:
@@ -217,21 +222,15 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
         wiped_user_refs = {
             r.id for r in rebac.wiped_references if r.type == Resource.USER
         }
-        wiped_team_refs = {
-            r.id for r in rebac.wiped_references if r.type == Resource.TEAM
-        }
-        wiped_tag_refs = {
-            r.id for r in rebac.wiped_references if r.type == Resource.TAGS
-        }
-        wiped_document_refs = {
-            r.id for r in rebac.wiped_references if r.type == Resource.DOCUMENTS
-        }
         assert wiped_user_refs == {REGULAR_UID_A, REGULAR_UID_B}
         assert ROOT_UID not in wiped_user_refs
         assert CALLER_UID not in wiped_user_refs
-        assert wiped_team_refs == {TEAM_ID}
-        assert wiped_tag_refs == {"tag-1"}
-        assert wiped_document_refs == {"doc-1"}
+
+        # Teams/tags/documents are wiped by type, not by id (self-healing —
+        # see teardown.py's module docstring), so no Postgres-derived id
+        # needs to appear here for the sweep to have happened.
+        assert rebac.wiped_types == [Resource.TEAM, Resource.TAGS, Resource.DOCUMENTS]
+        assert report.team_ids_wiped == 1
 
         counts = await _row_counts(engine)
         assert counts == {
@@ -286,5 +285,50 @@ async def test_run_teardown_is_safe_to_retry_after_partial_prior_run(
             user_deps=_user_deps(),
         )
         assert report_retry.preserved_uids == report.preserved_uids
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_run_teardown_sweeps_tag_and_document_tuples_with_no_postgres_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression guard for the orphan-tuple bug: an OpenFGA store can carry
+    `tag#parent@tag` / `document#parent@tag` tuples whose Postgres `tag`/
+    `metadata` rows are already gone (e.g. wiped by an older, pre-fix build of
+    this function, or by a prior `/reset` cycle). An id-driven sweep derived
+    from Postgres would see zero ids here and never ask OpenFGA to delete
+    anything — this asserts the type-level sweep runs unconditionally instead,
+    regardless of what Postgres currently holds."""
+    engine = await _make_engine(tmp_path, "teardown-no-pg-rows.sqlite3")
+    try:
+        # No TagRow/DocumentMetadataRow seeded — Postgres already has none.
+        session_factory = make_session_factory(engine)
+        async with session_factory() as session, session.begin():
+            session.add(
+                PlatformBootstrapRow(
+                    completed_at=datetime.now(timezone.utc),
+                    completed_by=ROOT_UID,
+                )
+            )
+
+        async def fake_list_users(
+            _current_user: KeycloakUser, _deps: UserServiceDependencies
+        ) -> list[UserSummary]:
+            return [_summary(ROOT_UID), _summary(CALLER_UID)]
+
+        monkeypatch.setattr(teardown_impl, "list_users", fake_list_users)
+
+        caller = KeycloakUser(uid=CALLER_UID, username="operator", roles=[])
+        rebac = FakeRebac()
+        await run_teardown(
+            caller=caller,
+            engine=engine,
+            rebac=cast(Any, rebac),
+            user_deps=_user_deps(),
+        )
+
+        assert Resource.TAGS in rebac.wiped_types
+        assert Resource.DOCUMENTS in rebac.wiped_types
     finally:
         await engine.dispose()

@@ -64,6 +64,10 @@ logger = logging.getLogger(__name__)
 
 RebacOperation = Literal["check", "list_objects", "list_users", "write", "read"]
 
+# OpenFGA server default (`OPENFGA_MAX_TUPLES_PER_WRITE`) — a single write call
+# rejects more tuple operations than this, so a large batch delete must chunk.
+_MAX_TUPLES_PER_WRITE = 100
+
 
 def _rebac_timer(kpi_writer: BaseKPIWriter | None, operation: RebacOperation):
     """One `rebac_operation` dim (check/list_objects/list_users/write/read) —
@@ -205,6 +209,51 @@ class OpenFgaRebacEngine(RebacEngine):
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
         return ConsistencyPreference.HIGHER_CONSISTENCY
+
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        async with _rebac_timer(self._kpi, "write"):
+            type_prefix = f"{resource_type.value}:"
+            to_delete: list[ClientTuple] = []
+
+            client = await self.get_client()
+            body = ReadRequestTupleKey()
+            continuation_token: str | None = None
+
+            while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+                options = self._build_options()
+                if continuation_token:
+                    options["continuation_token"] = continuation_token
+
+                res = await client.read(body, options)
+                continuation_token = res.continuation_token
+
+                # Filter every tuple where the type appears on either side —
+                # e.g. `tag:X#parent@document:Y` is caught by both DOCUMENTS
+                # (object side) and TAGS (user side) sweeps.
+                for tup in res.tuples:
+                    if tup.key.user.startswith(type_prefix) or tup.key.object.startswith(
+                        type_prefix
+                    ):
+                        to_delete.append(
+                            ClientTuple(
+                                user=tup.key.user,
+                                relation=tup.key.relation,
+                                object=tup.key.object,
+                            )
+                        )
+
+            if not to_delete:
+                return 0
+
+            logger.debug(
+                "Deleting %d relations of type %s", len(to_delete), resource_type
+            )
+            options = self._build_options()
+            for i in range(0, len(to_delete), _MAX_TUPLES_PER_WRITE):
+                chunk = to_delete[i : i + _MAX_TUPLES_PER_WRITE]
+                _ = await client.write(ClientWriteRequest(deletes=chunk), options)
+
+        return len(to_delete)
 
     async def list_relations(
         self,

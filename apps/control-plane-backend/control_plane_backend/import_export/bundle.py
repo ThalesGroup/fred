@@ -166,4 +166,48 @@ def open_bundle(data: bytes, external_realm_data: bytes | None = None) -> KBundl
     external_realm = (
         json.loads(external_realm_data) if external_realm_data is not None else None
     )
+    if external_realm is not None:
+        _validate_external_realm(external_realm)
     return KBundle(zf, manifest, external_realm=external_realm)
+
+
+def _validate_external_realm(external_realm: Any) -> None:
+    """Refuse a standalone `realm_file` that is missing its key information,
+    instead of silently degrading (KEA CUTOVER 2026, 2026-07-28).
+
+    A `realm_file` this importer only ever sees because it was hand-built
+    (SQL extraction against the source Keycloak DB, not a real Keycloak
+    export) is exactly the case most exposed to a copy-paste mistake — a
+    forgotten `groups` key or an empty `users` array parses as valid JSON and
+    would otherwise proceed straight into a degraded run (orphan teams
+    silently dropped, every identity PENDING). Fail the whole request instead:
+    zero teams or zero users in a *supplied* realm_file is never intentional
+    for a cutover-scale kea source, so there is nothing to gain by proceeding.
+
+    This does NOT apply to a realm.json carried inside the zip itself (a
+    genuine, official Keycloak partial export legitimately has no `users[]` —
+    see `KBundle.keycloak_realm()` — and that degraded-but-intentional path is
+    unchanged) — only to a `realm_file` supplied independently.
+
+    Never checks for a personal-space team here: kea's shared `personal` team
+    and swift's per-user `personal-{uid}` space are never real Keycloak groups
+    and are never expected in `groups[]` — they self-heal on first use,
+    entirely outside this file's scope.
+    """
+    if not isinstance(external_realm, dict):
+        raise UnsupportedBundleFormatError(
+            "realm_file must be a JSON object with 'groups' and 'users' keys, "
+            f"got {type(external_realm).__name__}"
+        )
+    missing = [
+        key
+        for key in ("groups", "users")
+        if not isinstance(external_realm.get(key), list) or not external_realm[key]
+    ]
+    if missing:
+        raise UnsupportedBundleFormatError(
+            "realm_file is missing required, non-empty key(s): "
+            f"{', '.join(missing)} — refusing to import with incomplete "
+            "identity/team data rather than silently dropping orphan teams "
+            "or leaving every identity PENDING"
+        )
