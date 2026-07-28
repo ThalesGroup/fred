@@ -1,3 +1,24 @@
+**v2.1.19** — 2026-07-28
+
+- **Summary**
+
+  Team resources now show the exact storage size used by each folder, and PDF
+  documents can be toggled between their original view and the extracted
+  markdown text. The Kea-to-Swift migration tooling also gains full agent
+  coverage: every kea-created assistant, including the classic generic-tool
+  agent, now migrates to its Swift equivalent, keeping any tool restriction it
+  had instead of gaining full access to every tool.
+
+- **Features**
+
+  - Team resources: each folder now shows its exact total storage size (#2139)
+  - PDF documents can be toggled between the original file view and the extracted markdown text (#2139)
+
+- **Bug Fixes**
+
+  - Kea-to-Swift migration: the classic generic-tool agent now migrates to its Swift assistant equivalent instead of being skipped (#2138)
+  - Kea-to-Swift migration: a kea agent limited to a specific tool kept that limitation after migration, instead of gaining every tool available to the assistant by default (#2138)
+
 **v2.1.18** — 2026-07-28
 
 - **Summary**
