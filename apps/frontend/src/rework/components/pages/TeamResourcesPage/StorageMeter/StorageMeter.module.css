@@ -1,4 +1,4 @@
-/* Copyright Thales 2025
+/* Copyright Thales 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,28 +13,36 @@
  * limitations under the License.
  */
 
-.viewer {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+.meter {
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  box-sizing: border-box;
-  padding: var(--spacing-2xs);
-  width: 100%;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.track {
+  border-radius: 999px;
+  background: var(--surface-container-highest);
+  width: 8rem;
+  height: 0.375rem;
+  overflow: hidden;
+}
+
+.fill {
+  transition: width 200ms ease;
+  border-radius: 999px;
+  background: var(--primary);
   height: 100%;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
-.error {
-  margin-top: var(--spacing-xl);
-  color: var(--error);
+/* Near-full storage turns the bar amber as an early warning before uploads start failing. */
+.fill[data-warn] {
+  background: var(--warning);
 }
 
-.loading {
+.label {
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-  text-align: center;
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

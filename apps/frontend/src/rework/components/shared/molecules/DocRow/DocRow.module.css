@@ -46,6 +46,47 @@
   white-space: nowrap;
 }
 
+/* Clickable name (opens the preview) — reuses the plain-name layout but reads as
+ * a link on hover so the affordance is discoverable. */
+.nameButton {
+  flex: 1;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font: var(--font-body-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameButton:hover {
+  text-decoration: underline;
+}
+
+/* Muted file-size label — the anchor of the trailing cluster. At rest it's the
+ * only thing shown: the date group collapses to its left and the action group to
+ * its right, so the size reads as the sole trailing detail. */
+.size {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Upload date — sits inside .revealLeft, immediately left of the size. */
+.date {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .trailing {
   display: inline-flex;
   flex-shrink: 0;
@@ -53,10 +94,88 @@
   gap: var(--spacing-xs);
 }
 
-/* Actions are calm at rest and revealed on hover (or when the row is selected).
- * They keep their footprint (opacity, not display) so the status badge never
- * shifts when the row activates. */
-.actions,
+/* Two hover-revealed groups flanking the size: the date to its left, the
+ * preview/download/menu buttons to its right. Both are collapsed to zero width
+ * at rest (so only the size shows) and, on hover/selection, fade + slide into
+ * place converging toward the size — the micro-animation. */
+.revealLeft,
+.revealRight {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition:
+    max-width 360ms ease,
+    opacity 300ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: 0;
+  overflow: hidden;
+}
+
+/* Date enters from the right, sliding leftward into place (position unchanged). */
+.revealLeft {
+  transform: translateX(6px);
+}
+
+.revealRight {
+  transform: translateX(6px);
+}
+
+.row:hover .revealLeft,
+.row:hover .revealRight,
+.row[data-selected] .revealLeft,
+.row[data-selected] .revealRight {
+  transform: translateX(0);
+  opacity: 1;
+  max-width: 200px;
+}
+
+/* Honor reduced-motion: keep the reveal, drop the slide. */
+@media (prefers-reduced-motion: reduce) {
+  .revealLeft,
+  .revealRight {
+    transform: none;
+    transition:
+      max-width 360ms ease,
+      opacity 300ms ease;
+  }
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+/* Pop-in played on the searchable-toggle icon each time it swaps between
+ * visibility / visibility_off (the wrapper is re-keyed on state change so this
+ * remounts and replays). */
+@keyframes searchableToggleIn {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.searchableToggle {
+  display: inline-flex;
+  animation: searchableToggleIn 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchableToggle {
+    animation: none;
+  }
+}
+
+/* The "process" action stays its own hover-revealed element — it isn't part of
+ * the date/buttons group and keeps its footprint (opacity, not display) so
+ * the status badge next to it never shifts. */
 .processAction {
   display: inline-flex;
   align-items: center;
@@ -65,9 +184,7 @@
   transition: opacity 120ms ease;
 }
 
-.row:hover .actions,
 .row:hover .processAction,
-.row[data-selected] .actions,
 .row[data-selected] .processAction {
   opacity: 1;
 }

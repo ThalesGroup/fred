@@ -18,7 +18,8 @@ import logging
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import BigInteger, delete, func, select
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -177,6 +178,43 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         docs = await self.get_all_metadata(filters={}, session=session)
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
+
+    async def total_size_by_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> dict[str, int]:
+        unique = list(dict.fromkeys(tag_ids))
+        if not unique:
+            return {}
+        # SQLite in tests has no array overlap operator — fall back to the
+        # per-tag Python sum in the base class.
+        if not self._is_postgres:
+            return await super().total_size_by_tags(unique, session=session)
+
+        wanted = set(unique)
+        # `file_size_bytes` lives inside the JSONB `doc` blob; extract + cast so
+        # the whole tag's size is summed in one query, no pagination, no per-doc
+        # metadata deserialization.
+        size_expr = func.coalesce(
+            sql_cast(
+                DocumentMetadataRow.doc["file"]["file_size_bytes"].astext, BigInteger
+            ),
+            0,
+        )
+        # Array overlap (`&&`) hits the GIN index, so only documents in one of the
+        # requested tags are scanned; a document may carry several of them.
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        result: dict[str, int] = {tag_id: 0 for tag_id in unique}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(DocumentMetadataRow.tag_ids, size_expr).where(cond)
+                )
+            ).all()
+        for row_tags, size in rows:
+            for tag_id in row_tags or []:
+                if tag_id in wanted:
+                    result[tag_id] += int(size or 0)
+        return result
 
     async def get_all_metadata(
         self, filters: dict, session: AsyncSession | None = None

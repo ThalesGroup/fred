@@ -19,9 +19,10 @@
 // CAN_UPDATE_RESOURCES gate as the row's explicit upload action. The drawer is
 // mocked as a probe so assertions read the exact props it receives.
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatBytes } from "@shared/utils/formatBytes";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -32,23 +33,45 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const probe = vi.hoisted(() => ({
   drawerProps: [] as Record<string, unknown>[],
   canUpdateResources: true,
+  // Documents the mocked browse endpoint returns for an expanded folder. Empty by
+  // default so the drag-and-drop cases below keep their "empty folder" hint.
+  docs: [] as Record<string, unknown>[],
+  // Document uids the workspace asked to preview, in click order.
+  previewCalls: [] as string[],
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+// Selectors are mocked below to be store-free, so running them against no state
+// is enough — and it lets each consumer (workspace, DocRow) get its own answer.
+vi.mock("react-redux", () => ({ useSelector: (selector: (state: unknown) => unknown) => selector(undefined) }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
     isLoading: false,
     refetch: () => {},
   }),
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [vi.fn()],
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [browseTrigger],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  // Stable trigger reference (like RTK's real memoized trigger) — the size effect
+  // lists it in its deps, so a fresh function each render would loop forever.
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [tagSizesTrigger],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [] }));
+
+const tagSizesTrigger = () => ({ unwrap: () => Promise.resolve({ sizes: {} }) });
+// Same stable-reference requirement as `tagSizesTrigger`: `loadTagPage` lists it
+// in its deps, so a fresh function per render would re-fire the load forever.
+const browseTrigger = () => ({
+  unwrap: () => Promise.resolve({ documents: probe.docs, total: probe.docs.length }),
+});
+vi.mock("../../../../features/tasks/taskSlice", () => ({
+  selectActiveTasks: () => [],
+  // Read per row by DocRow: no ingestion in flight in these tests, so the row
+  // falls back to its intrinsic status.
+  selectActiveTaskForTarget: () => () => undefined,
+}));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -89,11 +112,13 @@ let root: Root;
 beforeEach(() => {
   probe.drawerProps.length = 0;
   probe.canUpdateResources = true;
+  probe.docs = [];
+  probe.previewCalls.length = 0;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} onPreview={() => {}} />);
   });
 });
 
@@ -213,7 +238,7 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
   it("does not react to drops without CAN_UPDATE_RESOURCES (same gate as the upload action)", async () => {
     probe.canUpdateResources = false;
     act(() => {
-      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} onPreview={() => {}} />);
     });
 
     await drop(folderToggle("CIR"), filesTransfer([new File(["a"], "a.pdf")]));
@@ -232,3 +257,121 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     expect(props.initialFiles).toBeUndefined();
   });
 });
+
+/** A preview-ready document — `processing.stages.preview` must be "done" or the
+ * workspace answers a name click with a "not ready yet" toast instead. */
+const readyDoc = {
+  identity: { document_uid: "doc-1", document_name: "ticket-jira.csv", title: "" },
+  file: { file_type: "csv", file_size_bytes: 8600 },
+  source: { date_added_to_kb: "2026-07-22T10:00:00Z", retrievable: true },
+  processing: { stages: { preview: "done", vector: "done" } },
+  tags: { tag_ids: ["tag-cir"] },
+};
+
+/** Mirrors TeamResourcesPage: the preview target is page state, and re-opening the
+ * document already shown toggles the drawer shut. */
+function PreviewHost() {
+  const [previewUid, setPreviewUid] = useState<string | null>(null);
+  return (
+    <DocumentWorkspace
+      teamId="team-1"
+      isPersonalTeam={false}
+      previewUid={previewUid}
+      onPreview={(target) => {
+        probe.previewCalls.push(target.documentUid);
+        setPreviewUid((prev) => (prev === target.documentUid ? null : target.documentUid));
+      }}
+    />
+  );
+}
+
+function docNameButton(name: string): HTMLButtonElement {
+  const button = [...container.querySelectorAll("button")].find((b) => b.textContent === name);
+  if (!button) throw new Error(`document row "${name}" not rendered`);
+  return button;
+}
+
+/** A row's plain metadata label (size, date) — non-interactive, so a click on it
+ * only reaches the document through the row's own handler. */
+function metaLabel(text: string): HTMLElement {
+  const span = [...container.querySelectorAll("span")].find((s) => s.textContent === text);
+  if (!span) throw new Error(`row metadata "${text}" not rendered`);
+  return span;
+}
+
+function selectedRowCount(): number {
+  return container.querySelectorAll("[data-selected]").length;
+}
+
+describe("DocumentWorkspace document selection", () => {
+  beforeEach(async () => {
+    probe.docs = [readyDoc];
+    act(() => {
+      root.render(<PreviewHost />);
+    });
+    // Expanding the folder loads its (now non-empty) page.
+    await act(async () => {
+      folderToggle("CIR").click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
+  it("lights the row when its name opens the preview", () => {
+    act(() => {
+      docNameButton("ticket-jira.csv").click();
+    });
+
+    expect(selectedRowCount()).toBe(1);
+  });
+
+  it("drops the highlight when the same name closes the preview again", () => {
+    act(() => {
+      docNameButton("ticket-jira.csv").click();
+    });
+    act(() => {
+      docNameButton("ticket-jira.csv").click();
+    });
+
+    expect(selectedRowCount()).toBe(0);
+    // Opened, then closed — the second click must not have re-opened it.
+    expect(probe.previewCalls).toEqual(["doc-1", "doc-1"]);
+  });
+
+  it("opens the preview from the size label, not only from the name", () => {
+    act(() => {
+      metaLabel(formatBytes(8600, "en")).click();
+    });
+
+    expect(probe.previewCalls).toEqual(["doc-1"]);
+    expect(selectedRowCount()).toBe(1);
+  });
+
+  it("opens the preview from the upload-date label", () => {
+    const dateLabel = new Date("2026-07-22T10:00:00Z").toLocaleDateString("en", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
+    act(() => {
+      metaLabel(dateLabel).click();
+    });
+
+    expect(probe.previewCalls).toEqual(["doc-1"]);
+    expect(selectedRowCount()).toBe(1);
+  });
+
+  it("does not open the preview when a row action is used", () => {
+    act(() => {
+      actionButton("rework.resources.action.download").click();
+    });
+
+    expect(probe.previewCalls).toEqual([]);
+  });
+});
+
+function actionButton(label: string): HTMLButtonElement {
+  const button = [...container.querySelectorAll("button")].find((b) => b.getAttribute("title") === label);
+  if (!button) throw new Error(`row action "${label}" not rendered`);
+  return button;
+}

@@ -23,6 +23,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import Select from "@shared/molecules/Select/Select";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
+import { formatBytes } from "@shared/utils/formatBytes";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
 import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -84,14 +85,6 @@ export function scheduleFile(
         }
       });
   });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function DocumentUploadDrawer({
