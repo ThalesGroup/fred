@@ -231,9 +231,9 @@ class OpenFgaRebacEngine(RebacEngine):
                 # e.g. `tag:X#parent@document:Y` is caught by both DOCUMENTS
                 # (object side) and TAGS (user side) sweeps.
                 for tup in res.tuples:
-                    if tup.key.user.startswith(type_prefix) or tup.key.object.startswith(
+                    if tup.key.user.startswith(
                         type_prefix
-                    ):
+                    ) or tup.key.object.startswith(type_prefix):
                         to_delete.append(
                             ClientTuple(
                                 user=tup.key.user,
