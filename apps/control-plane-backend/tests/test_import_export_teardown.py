@@ -2,10 +2,12 @@
 
 `run_teardown` must: (a) preserve exactly the union of the root-bootstrap
 identity and the calling operator, (b) wipe every OpenFGA tuple touching a
-non-preserved user or any team while never touching Keycloak, (c) wipe the
-five Postgres tables `POST /reset` never touches on its own
-(`team_metadata`, `prompt`) plus the three it already did, and (d) be safe to
-call twice in a row (a retry after a partial prior run must not raise).
+non-preserved user, a team, a tag, or a document while never touching
+Keycloak — no `tag#parent@tag` / `document#parent@tag` tuple survives its own
+Postgres row being wiped, (c) wipe the five Postgres tables `POST /reset`
+never touches on its own (`team_metadata`, `prompt`) plus the three it
+already did, and (d) be safe to call twice in a row (a retry after a partial
+prior run must not raise).
 """
 
 from __future__ import annotations
@@ -218,10 +220,18 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
         wiped_team_refs = {
             r.id for r in rebac.wiped_references if r.type == Resource.TEAM
         }
+        wiped_tag_refs = {
+            r.id for r in rebac.wiped_references if r.type == Resource.TAGS
+        }
+        wiped_document_refs = {
+            r.id for r in rebac.wiped_references if r.type == Resource.DOCUMENTS
+        }
         assert wiped_user_refs == {REGULAR_UID_A, REGULAR_UID_B}
         assert ROOT_UID not in wiped_user_refs
         assert CALLER_UID not in wiped_user_refs
         assert wiped_team_refs == {TEAM_ID}
+        assert wiped_tag_refs == {"tag-1"}
+        assert wiped_document_refs == {"doc-1"}
 
         counts = await _row_counts(engine)
         assert counts == {

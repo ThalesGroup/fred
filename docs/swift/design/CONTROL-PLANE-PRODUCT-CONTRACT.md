@@ -1515,25 +1515,25 @@ facts below are the canonical contract; design deliberation/history stays in
   same endpoint.
 - `POST /reset` — atomic wipe of agents+tags+metadata only (Keycloak/OpenFGA/
   team_metadata/prompts/object store untouched) — the narrow, repeatable
-  export→reset→import dev/test cycle. Permanent, unchanged by `/reset-full`.
-- `POST /reset-full` — full platform teardown to bootstrap-only state, for
-  cutover-day recovery. See §16 above for its shape; ordering: (1) OpenFGA —
-  `delete_all_relations_of_reference` per non-preserved user, then per team;
-  (2) Keycloak — delete every non-preserved user; (3) Postgres, one
-  transaction — `agent_instance`, `tag`, `document_metadata`, `team_metadata`,
-  `prompt`. Preserved identities: `platformbootstrap.completed_by` ∪ the
-  caller. Every step is delete-if-exists/idempotent — a crash mid-run and a
-  retry converge to the same end state. Note: this sweep clears every tuple
-  where a preserved-excluded user or a team is subject/object; it does not
-  separately clear tag/document-scoped tuples (`tag#parent@tag`,
-  `document#parent@tag`) whose own Postgres rows are wiped in step 3 — those
-  become inert orphans in OpenFGA (new random UUIDs on the next import never
-  collide with them), not a live security gap, but worth knowing before
-  assuming OpenFGA is byte-for-byte back to a fresh-bootstrap store.
+  export→reset→import dev/test cycle.
+- `POST /reset-rebac` — full platform teardown to bootstrap-only state, for
+  test/rehearsal cycles and cutover-day recovery (`import_export/teardown.py`,
+  `run_teardown`). Keycloak is never touched — Fred does not own Keycloak
+  identity lifecycle; identity is resolved by username against a live target
+  Keycloak (`docs/swift/ops/KEA_SWIFT_CUTOVER.md`). Ordering: (1) OpenFGA —
+  `delete_all_relations_of_reference` per non-preserved user, then per team,
+  then per tag, then per document (tag/document ids read before step 2 so a
+  `tag#parent@tag` / `document#parent@tag` tuple never survives as an orphan
+  once its own Postgres row is gone); (2) Postgres, one transaction —
+  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`.
+  Preserved identities: `platformbootstrap.completed_by` ∪ the caller. Every
+  step is delete-if-exists/idempotent — a crash mid-run and a retry converge
+  to the same end state. Object storage and vector embeddings are never
+  touched.
 - `GET /stats` — platform overview (teams, members by role, agents, prompts)
   — powers the **Platform data** admin page.
 
-Both `/import` and `/reset-full` (and `/reset`) reject (`409`) while another
+Both `/import` and `/reset-rebac` (and `/reset`) reject (`409`) while another
 `kind="migration"` task is running/pending (`TaskService.list_tasks(kind="migration",
 exclude_terminal=True)`) — a best-effort, non-atomic guard sized for one
 human operator driving cutover by hand, not for concurrent automated callers.
@@ -1773,18 +1773,16 @@ row to `public` on import, same reasoning.
 
 ## 31. Contract Notes — teardown never touches Keycloak, `/reset-full` removed (2026-07-27)
 
-**`POST /import-export/reset-full` is removed.** §27 documented it as a
-three-step sweep (OpenFGA, then Keycloak user deletion, then Postgres) for
-cutover-day recovery. Auditing the kea→swift migration code surfaced that
-Fred should never own Keycloak identity lifecycle: per
-`docs/swift/ops/KEA_SWIFT_CUTOVER.md`, identity is resolved by username
-against a live target Keycloak, never created or destroyed by the migration
-path. `run_teardown` (`import_export/teardown.py`) drops its Keycloak-delete
-step and the `wipe_keycloak` parameter entirely — it now only wipes OpenFGA
-(every tuple touching a non-preserved user or any team) and Postgres
-(`agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`),
-exactly the ordering §27 described minus step (2). Object storage and vector
-embeddings remain untouched, as before.
+**`POST /import-export/reset-full` is removed.** §27 (now updated in place to
+describe the current `/reset-rebac` shape — this section stays a historical
+note on *why* the split disappeared, not a second description of the wipe
+scope) previously documented a three-step sweep (OpenFGA, then Keycloak user
+deletion, then Postgres) for cutover-day recovery. Auditing the kea→swift
+migration code surfaced that Fred should never own Keycloak identity
+lifecycle: per `docs/swift/ops/KEA_SWIFT_CUTOVER.md`, identity is resolved by
+username against a live target Keycloak, never created or destroyed by the
+migration path. `run_teardown` (`import_export/teardown.py`) drops its
+Keycloak-delete step and the `wipe_keycloak` parameter entirely.
 
 **`POST /import-export/reset-rebac` is now the sole teardown action** —
 its behavior is unchanged (it never touched Keycloak), only `/reset-full`

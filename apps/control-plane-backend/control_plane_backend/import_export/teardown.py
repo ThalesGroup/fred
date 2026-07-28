@@ -15,11 +15,11 @@
 """Test-only platform teardown — back to bootstrap-only state, Keycloak untouched.
 
 CONTROL-PLANE-PRODUCT-CONTRACT.md §27. Wipes OpenFGA (every tuple touching a
-non-preserved user or any team) and Postgres (agent_instance, tag,
-document_metadata, team_metadata, prompt) back to the point right after root
-bootstrap. Object storage, vector embeddings, and Keycloak are never touched —
-Fred does not own Keycloak identity lifecycle; identity is resolved by
-username against a live target Keycloak, never created or destroyed by this
+non-preserved user, a team, a tag, or a document) and Postgres (agent_instance,
+tag, document_metadata, team_metadata, prompt) back to the point right after
+root bootstrap. Object storage, vector embeddings, and Keycloak are never
+touched — Fred does not own Keycloak identity lifecycle; identity is resolved
+by username against a live target Keycloak, never created or destroyed by this
 migration tooling (see `docs/swift/ops/KEA_SWIFT_CUTOVER.md`).
 
 Every step is delete-if-exists / idempotent on its own, so a crash mid-`run_teardown`
@@ -90,8 +90,11 @@ async def run_teardown(
     preserved_uids = await resolve_preserved_uids(caller, engine)
     report = TeardownReport(preserved_uids=sorted(preserved_uids))
 
-    # ── 1. OpenFGA — wipe every tuple for every non-preserved user, and every
-    #      tuple referencing any team (role grants, team#organization, …). ──
+    # ── 1. OpenFGA — wipe every tuple for every non-preserved user, every
+    #      team (role grants, team#organization, …), every tag, and every
+    #      document. Tag/document ids are read before the Postgres delete in
+    #      step 2 so a tag#parent@tag / document#parent@tag tuple never
+    #      survives as an orphan once its own Postgres row is gone. ──
     all_users = await list_users(caller, user_deps)
     for summary in all_users:
         if summary.id in preserved_uids:
@@ -105,11 +108,27 @@ async def run_teardown(
         team_ids = list(
             (await session.execute(select(TeamMetadataRow.id))).scalars().all()
         )
+        tag_ids = list((await session.execute(select(TagRow.tag_id))).scalars().all())
+        document_uids = list(
+            (await session.execute(select(DocumentMetadataRow.document_uid)))
+            .scalars()
+            .all()
+        )
+
     for team_id in team_ids:
         await rebac.delete_all_relations_of_reference(
             RebacReference(Resource.TEAM, team_id)
         )
     report.team_ids_wiped = len(team_ids)
+
+    for tag_id in tag_ids:
+        await rebac.delete_all_relations_of_reference(
+            RebacReference(Resource.TAGS, tag_id)
+        )
+    for document_uid in document_uids:
+        await rebac.delete_all_relations_of_reference(
+            RebacReference(Resource.DOCUMENTS, document_uid)
+        )
 
     # ── 2. Postgres, one atomic transaction. ───────────────────────────────
     async with session_factory() as session:
