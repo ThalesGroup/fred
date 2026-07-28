@@ -11,8 +11,8 @@ adopting or deploying it. It intentionally goes into more depth than the
 [README Licensing Note](../../README.md#licensing-note), which only summarizes
 the current state and links here.
 
-Tracked centrally under the `LICENSE` domain in
-[`id-legend.yaml`](data/id-legend.yaml); originated from GitHub issue
+Tracked as `LICENSE-01`/`LICENSE-02`/`LICENSE-03` in the table below;
+originated from GitHub issue
 [#1939](https://github.com/ThalesGroup/fred/issues/1939).
 
 Last updated: 2026-07-09.
@@ -167,8 +167,8 @@ mechanism.
 
 ### Current mitigation: disclosure
 
-Disclosed in this document, the [`id-legend.yaml`](data/id-legend.yaml)
-`LICENSE-03` entry, and the README Licensing Note, alongside `LICENSE-01`/`02`.
+Disclosed in this document's `LICENSE-03` entry above and the README Licensing
+Note, alongside `LICENSE-01`/`02`.
 No code change involved, and none required — this is the same LGPL
 linking-exception bar `LICENSE-02` already clears: unmodified, dynamically
 imported, replaceable, disclosed.

@@ -20,10 +20,15 @@ from typing import Any
 
 import pytest
 from control_plane_backend.agent_instances.store import AgentInstanceStore
-from control_plane_backend.import_export.bundle import open_bundle
+from control_plane_backend.import_export.bundle import (
+    UnsupportedBundleFormatError,
+    open_bundle,
+)
 from control_plane_backend.import_export.importer import (
     MigrationReport,
     run_import,
+)
+from control_plane_backend.import_export.kea_reconciliation import (
     transform_kea_tuples,
 )
 from control_plane_backend.models.base import Base as CPBase
@@ -685,6 +690,51 @@ async def test_known_group_without_name_still_falls_back_to_id(
 
 
 @pytest.mark.asyncio
+async def test_realm_membership_and_admin_warning_run_even_with_no_tuples(
+    tmp_path: Path,
+) -> None:
+    """Realm-derived membership and admin coverage do not depend on tuples.
+
+    A team can exist from a `teammetadata` row + realm group alone, with zero
+    OpenFGA tuples referencing it. The realm membership must still become a
+    `team_member` relation, and `find_admin_less_teams` must still warn that the
+    team has no admin instead of silently creating an ungoverned team.
+    """
+    engine = await _make_engine(tmp_path, "admin-less-no-tuples.sqlite3")
+    try:
+        rebac = FakeRebac()
+        report = await _import(
+            _kea_bundle(
+                teammetadata=[{"id": "team-custom", "description": "Custom team"}],
+                tuples=[],
+                realm={
+                    "groups": [{"id": "team-custom", "name": "fredlab"}],
+                    "users": [
+                        {
+                            "id": UID_BOB,
+                            "username": "bob",
+                            "groups": ["/fredlab"],
+                        }
+                    ],
+                },
+            ),
+            engine,
+            rebac=rebac,
+        )
+        assert (
+            f"user:{UID_BOB}",
+            "team_member",
+            "team:team-custom",
+        ) in {_rel_key(relation) for relation in rebac.relations}
+        assert report.teams_imported == 1
+        assert any(
+            "ZERO team_admin" in w and "team-custom" in w for w in report.warnings
+        )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_realm_file_supplied_externally_is_used_when_zip_has_none(
     tmp_path: Path,
 ) -> None:
@@ -769,6 +819,42 @@ async def test_realm_file_supplied_externally_overrides_zip_realm(
             assert row.name == "from-upload"
     finally:
         await engine.dispose()
+
+
+def test_realm_file_missing_groups_is_rejected_outright() -> None:
+    """KEA CUTOVER 2026 (2026-07-28): a hand-built `realm_file` (SQL extraction
+    against the source Keycloak DB, not a real Keycloak export) missing its
+    `groups` key must fail the whole request, not proceed and silently drop
+    every team as an orphan reference."""
+    with pytest.raises(UnsupportedBundleFormatError, match="groups"):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps(
+                {"users": [{"id": UID_BOB, "username": "bob"}]}
+            ).encode("utf-8"),
+        )
+
+
+def test_realm_file_empty_users_is_rejected_outright() -> None:
+    """Same rule, `users` side: an empty list parses as valid JSON but leaves
+    every kea identity PENDING — refuse rather than proceed blind."""
+    with pytest.raises(UnsupportedBundleFormatError, match="users"):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps(
+                {"groups": [{"id": "team-custom", "name": "fredlab"}], "users": []}
+            ).encode("utf-8"),
+        )
+
+
+def test_realm_file_not_a_json_object_is_rejected_outright() -> None:
+    """A `realm_file` that parses but isn't an object (e.g. a bare list) must
+    fail clearly, not crash later with an opaque AttributeError."""
+    with pytest.raises(UnsupportedBundleFormatError):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps([1, 2, 3]).encode("utf-8"),
+        )
 
 
 @pytest.mark.asyncio

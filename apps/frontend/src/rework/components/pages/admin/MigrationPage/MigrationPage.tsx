@@ -27,9 +27,7 @@ import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import {
   usePlatformStatsQuery,
-  useResetPlatformFullMutation,
   useResetPlatformMutation,
-  useResetPlatformRebacMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { TeamStats } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
@@ -48,14 +46,10 @@ export default function MigrationPage() {
   const [isLaunching, setIsLaunching] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showResetFullConfirm, setShowResetFullConfirm] = useState(false);
-  const [showResetRebacConfirm, setShowResetRebacConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: stats, isFetching: statsLoading, isError: statsError, refetch: refetchStats } = usePlatformStatsQuery();
   const [resetPlatform, { isLoading: isResetting }] = useResetPlatformMutation();
-  const [resetPlatformFull, { isLoading: isResettingFull }] = useResetPlatformFullMutation();
-  const [resetPlatformRebac, { isLoading: isResettingRebac }] = useResetPlatformRebacMutation();
 
   const migrationTasks = useMemo(() => tasks.filter((t) => t.kind === "migration"), [tasks]);
   const activeTasks = migrationTasks.filter(
@@ -98,40 +92,6 @@ export default function MigrationPage() {
       );
     } catch {
       setError(t("rework.tasks.migration.reset.error"));
-    }
-  };
-
-  const handleResetFullConfirmed = async () => {
-    setShowResetFullConfirm(false);
-    setError(null);
-    try {
-      const { task_id } = await resetPlatformFull().unwrap();
-      dispatch(
-        taskRegistered({
-          taskId: task_id,
-          kind: "migration",
-          target: { type: "platform", id: task_id, label: t("rework.tasks.migration.resetFull.taskLabel") },
-        }),
-      );
-    } catch {
-      setError(t("rework.tasks.migration.resetFull.error"));
-    }
-  };
-
-  const handleResetRebacConfirmed = async () => {
-    setShowResetRebacConfirm(false);
-    setError(null);
-    try {
-      const { task_id } = await resetPlatformRebac().unwrap();
-      dispatch(
-        taskRegistered({
-          taskId: task_id,
-          kind: "migration",
-          target: { type: "platform", id: task_id, label: t("rework.tasks.migration.resetRebac.taskLabel") },
-        }),
-      );
-    } catch {
-      setError(t("rework.tasks.migration.resetRebac.error"));
     }
   };
 
@@ -324,31 +284,9 @@ export default function MigrationPage() {
           variant="outlined"
           size="medium"
           onClick={() => setShowResetConfirm(true)}
-          disabled={isResetting || isResettingFull || isResettingRebac}
+          disabled={isResetting}
         >
           {isResetting ? t("rework.tasks.migration.reset.running") : t("rework.tasks.migration.reset.launch")}
-        </Button>
-        <Button
-          color="error"
-          variant="outlined"
-          size="medium"
-          onClick={() => setShowResetRebacConfirm(true)}
-          disabled={isResetting || isResettingFull || isResettingRebac}
-        >
-          {isResettingRebac
-            ? t("rework.tasks.migration.resetRebac.running")
-            : t("rework.tasks.migration.resetRebac.launch")}
-        </Button>
-        <Button
-          color="error"
-          variant="filled"
-          size="medium"
-          onClick={() => setShowResetFullConfirm(true)}
-          disabled={isResetting || isResettingFull || isResettingRebac}
-        >
-          {isResettingFull
-            ? t("rework.tasks.migration.resetFull.running")
-            : t("rework.tasks.migration.resetFull.launch")}
         </Button>
       </div>
 
@@ -361,28 +299,6 @@ export default function MigrationPage() {
         criticalAction
         onConfirm={handleResetConfirmed}
         onCancel={() => setShowResetConfirm(false)}
-      />
-
-      <ConfirmationDialog
-        open={showResetFullConfirm}
-        title={t("rework.tasks.migration.resetFull.confirmTitle")}
-        message={t("rework.tasks.migration.resetFull.confirmMessage")}
-        confirmLabel={t("rework.tasks.migration.resetFull.confirmLabel")}
-        cancelLabel={t("rework.tasks.migration.resetFull.cancelLabel")}
-        criticalAction
-        onConfirm={handleResetFullConfirmed}
-        onCancel={() => setShowResetFullConfirm(false)}
-      />
-
-      <ConfirmationDialog
-        open={showResetRebacConfirm}
-        title={t("rework.tasks.migration.resetRebac.confirmTitle")}
-        message={t("rework.tasks.migration.resetRebac.confirmMessage")}
-        confirmLabel={t("rework.tasks.migration.resetRebac.confirmLabel")}
-        cancelLabel={t("rework.tasks.migration.resetRebac.cancelLabel")}
-        criticalAction
-        onConfirm={handleResetRebacConfirmed}
-        onCancel={() => setShowResetRebacConfirm(false)}
       />
     </div>
   );

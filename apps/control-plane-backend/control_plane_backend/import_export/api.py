@@ -134,10 +134,10 @@ def _get_rebac_engine(request: Request) -> RebacEngine:
 
 
 async def _reject_if_migration_task_active(task_service: TaskService) -> None:
-    """Refuse to start a migration op (import / reset / reset-full) while another one
-    is still running or pending (PLATFORM-IMPORT-RFC.md §9.2) — an import racing a
-    reset-full (or two teardowns) on the same instance is exactly the scenario a
-    cutover-day operator cannot safely reason about.
+    """Refuse to start a migration op (import / reset / reset-rebac) while another
+    one is still running or pending (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) — an
+    import racing a teardown (or two teardowns) on the same instance is exactly
+    the scenario a cutover-day operator cannot safely reason about.
 
     This is a fast-path optimization ONLY — it avoids doing upload/parsing work
     before failing, but it is a plain list-then-check and does not, by itself,
@@ -483,114 +483,25 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         return ResetLaunchResponse(task_id=task_id)
 
     @router.post(
-        "/import-export/reset-full",
-        status_code=202,
-        response_model=ResetLaunchResponse,
-        summary="Full platform teardown — back to bootstrap-only state",
-        description=(
-            "Wipe the entire platform configuration graph — Postgres (agent instances, "
-            "tags, document metadata, team metadata, prompts), every OpenFGA tuple, and "
-            "every Keycloak user — back to the state right after root bootstrap.\n\n"
-            "**Preserved, never touched:** the identity that completed root bootstrap "
-            "(`platformbootstrap.completed_by`) and the identity calling this endpoint. "
-            "Everything else — including the preserved identities' own non-identity data "
-            "— is deleted.\n\n"
-            "Distinct from `POST /reset`, which stays the narrow data-only reset for "
-            "day-to-day export/reset/import test cycles. Use this endpoint only for a "
-            "cutover-day recovery: an import failed partway through and left Keycloak "
-            "users, OpenFGA tuples, or teams behind that `POST /reset` cannot remove.\n\n"
-            "Every step is safe to re-run — if this task itself fails partway through, "
-            "call it again; already-deleted users/tuples/rows are silently skipped.\n\n"
-            "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
-            "**This action is irreversible. Platform admin only.**"
-        ),
-    )
-    async def reset_platform_full(
-        background_tasks: BackgroundTasks,
-        user: Annotated[KeycloakUser, Depends(get_current_user)],
-        task_service: Annotated[TaskService, Depends(_get_task_service)],
-        engine: Annotated[AsyncEngine, Depends(_get_engine)],
-        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
-        user_deps: Annotated[
-            UserServiceDependencies, Depends(get_user_service_dependencies)
-        ],
-    ) -> ResetLaunchResponse:
-        await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        )
-        await _reject_if_migration_task_active(task_service)
-
-        start_response = await _start_migration_task_or_409(
-            task_service, created_by=user.uid
-        )
-        task_id = start_response.task_id
-
-        async def _run() -> None:
-            try:
-                await task_service.record(
-                    MigrationTaskEvent(
-                        task_id=task_id,
-                        state=TaskState.running,
-                        seq=0,
-                        timestamp=datetime.now(timezone.utc),
-                        step="Full teardown en cours…",
-                    )
-                )
-                report = await run_teardown(
-                    caller=user,
-                    engine=engine,
-                    rebac=rebac,
-                    user_deps=user_deps,
-                )
-                summary = (
-                    f"préservés: {', '.join(report.preserved_uids)} — "
-                    f"{report.users_deleted} comptes Keycloak supprimés, "
-                    f"{report.team_ids_wiped} équipes désenchevêtrées (OpenFGA), "
-                    f"{report.agents_deleted} agents, {report.tags_deleted} tags, "
-                    f"{report.documents_deleted} documents, {report.teams_deleted} équipes, "
-                    f"{report.prompts_deleted} prompts supprimés"
-                )
-                if report.users_delete_failed:
-                    summary += (
-                        f" — ÉCHEC suppression Keycloak pour: "
-                        f"{', '.join(report.users_delete_failed)} (relancer reset-full)"
-                    )
-                await task_service.record(
-                    MigrationTaskEvent(
-                        task_id=task_id,
-                        state=TaskState.succeeded,
-                        seq=0,
-                        timestamp=datetime.now(timezone.utc),
-                        step=summary,
-                        progress=1.0,
-                    )
-                )
-                logger.warning(
-                    "[import-export] reset-full by %s: %s", user.uid, summary
-                )
-            except Exception as exc:
-                logger.exception("[import-export] reset-full failed: %s", exc)
-                await task_service.fail_task(task_id, str(exc))
-
-        background_tasks.add_task(_run)
-        return ResetLaunchResponse(task_id=task_id)
-
-    @router.post(
         "/import-export/reset-rebac",
         status_code=202,
         response_model=ResetLaunchResponse,
-        summary="Reset platform data and OpenFGA — keep Keycloak users",
+        summary="Teardown — reset platform data and OpenFGA (test-only, Keycloak untouched)",
         description=(
             "Delete all agent instances, knowledge tags, document metadata, team "
             "metadata, and prompts from Postgres, and wipe every OpenFGA tuple — but "
             "**never touches Keycloak users**. Object-store binaries and vector "
             "embeddings are not touched either.\n\n"
+            "**Preserved, never touched:** the identity that completed root bootstrap "
+            "(`platformbootstrap.completed_by`) and the identity calling this endpoint.\n\n"
             "Distinct from `POST /reset` (Postgres only, keeps OpenFGA — leaves stale "
-            "permission tuples behind across repeated test cycles) and `POST "
-            "/reset-full` (also wipes Keycloak — loses manually-provisioned test "
-            "accounts). Use this one for repeated import rehearsals where you want a "
-            "clean permission graph on every run but need Keycloak accounts (e.g. one "
-            "created to exercise the PENDING→RELINKED reconciliation path) to survive.\n\n"
+            "permission tuples behind across repeated test cycles). Use this one for "
+            "repeated import rehearsals where you want a clean permission graph on "
+            "every run but need Keycloak accounts (e.g. one created to exercise the "
+            "PENDING→RELINKED reconciliation path) to survive. Test/rehearsal tooling "
+            "only — never wipes identity.\n\n"
+            "Every step is safe to re-run — if this task itself fails partway through, "
+            "call it again; already-deleted tuples/rows are silently skipped.\n\n"
             "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
             "**This action is irreversible. Platform admin only.**"
         ),
@@ -623,7 +534,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                         state=TaskState.running,
                         seq=0,
                         timestamp=datetime.now(timezone.utc),
-                        step="Réinitialisation (données + OpenFGA) en cours…",
+                        step="Teardown (données + OpenFGA) en cours…",
                     )
                 )
                 report = await run_teardown(
@@ -631,7 +542,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                     engine=engine,
                     rebac=rebac,
                     user_deps=user_deps,
-                    wipe_keycloak=False,
                 )
                 summary = (
                     f"préservés: {', '.join(report.preserved_uids)} — "

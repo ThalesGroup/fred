@@ -1470,26 +1470,6 @@
           "cancelLabel": "Annuler",
           "error": "Échec de la réinitialisation"
         },
-        "resetFull": {
-          "launch": "Effacement complet",
-          "running": "Effacement…",
-          "taskLabel": "Effacement complet de la plateforme",
-          "confirmTitle": "Effacement complet — tout supprimer sauf l'admin root ?",
-          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, toutes les permissions OpenFGA, et tous les utilisateurs Keycloak. Seules survivent l'identité ayant effectué le bootstrap root et votre propre compte (s'il est différent). Différent de « Réinitialiser la plateforme » ci-dessus — à utiliser uniquement pour récupérer d'un import de bascule qui a échoué.",
-          "confirmLabel": "Tout effacer",
-          "cancelLabel": "Annuler",
-          "error": "Échec de l'effacement complet"
-        },
-        "resetRebac": {
-          "launch": "Reset + OpenFGA",
-          "running": "Réinitialisation…",
-          "taskLabel": "Reset plateforme + OpenFGA",
-          "confirmTitle": "Réinitialiser les données et OpenFGA — garder les utilisateurs Keycloak ?",
-          "confirmMessage": "Supprime définitivement tous les agents, tags, documents, équipes et prompts, ainsi que tous les tuples OpenFGA. Les utilisateurs Keycloak ne sont PAS affectés — à utiliser entre deux essais d'import répétés pour repartir sur des permissions propres sans perdre les comptes de test créés à la main.",
-          "confirmLabel": "Réinitialiser",
-          "cancelLabel": "Annuler",
-          "error": "Échec de la réinitialisation"
-        },
         "stats": {
           "title": "Vue d'ensemble",
           "refresh": "Rafraîchir",

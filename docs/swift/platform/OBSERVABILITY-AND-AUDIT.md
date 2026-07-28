@@ -1,9 +1,9 @@
 # Observability, KPI & Audit Architecture
 
 Audience: architects and security officers (RSSI) reviewing or accepting Fred's logging and
-audit posture. For implementation detail (file/line references, phased commits), see the
-tracking GitHub issue linked from `OBSERV-03` in `docs/swift/data/id-legend.yaml` — this document
-describes the target state and its guarantees, not the diff to get there.
+audit posture. For implementation detail (file/line references, phased commits), see
+[GitHub issue #2009](https://github.com/ThalesGroup/fred/issues/2009) (`OBSERV-03`) — this
+document describes the target state and its guarantees, not the diff to get there.
 
 > Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
 > reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
@@ -59,8 +59,8 @@ only their own teams, an individual user sees only their own consumption. It is 
 OpenSearch and — deliberately — carries full identity (including `user_id`) in that store, because
 without it the per-viewer scoping in the paragraph above could not be enforced.
 
-This stream is specified and owned by a separate design document (`OBSERV-02` in
-`id-legend.yaml`); this document does not modify it. The only fact this document depends on is
+This stream is specified and owned by a separate design document (tracked informally as
+`OBSERV-02`); this document does not modify it. The only fact this document depends on is
 that it exists and must not be broken by changes to Stream 1 or Stream 3.
 
 ## 5. Stream 3 — Security & audit trail

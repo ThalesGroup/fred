@@ -438,6 +438,19 @@ class RebacEngine(ABC):
         - deleting an agent can remove all `owner`, `viewer`, or parent links.
         """
 
+    @abstractmethod
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        """Remove every statement touching any reference of the given type.
+
+        Self-healing sweep, deliberately not id-driven: `delete_all_relations_of_reference`
+        only clears what a caller already knows to ask for. If the Postgres row a caller
+        would otherwise enumerate ids from is already gone (a prior partial reset, a manual
+        edit, drift between the two stores), the corresponding tuples never get asked for
+        and become permanent orphans. This reads the live authorization store itself, so a
+        rehearsal reset (`import_export/teardown.py::run_teardown`) converges to zero
+        tuples of that type regardless of any such history. Returns the number deleted.
+        """
+
     async def add_relations(
         self, relations: Iterable[Relation], *, actor_uid: str | None = None
     ) -> str | None:

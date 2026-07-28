@@ -51,6 +51,9 @@ class NoopRebacEngine(RebacEngine):
     ) -> str | None:
         return None
 
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        return 0
+
     async def list_relations(
         self,
         *,

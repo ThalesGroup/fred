@@ -12,17 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Full platform teardown — back to bootstrap-only state.
+"""Test-only platform teardown — back to bootstrap-only state, Keycloak untouched.
 
-PLATFORM-IMPORT-RFC.md §9.2. Cutover-day counterpart to the narrow `POST
-/reset` (agents+tags+documents only): if a kea import fails partway through,
-this wipes the config graph — Postgres, OpenFGA, Keycloak — back to the point
-right after root bootstrap, so the operator can retry cleanly.
+CONTROL-PLANE-PRODUCT-CONTRACT.md §27. Wipes OpenFGA (every tuple touching a
+non-preserved user, plus every team/tag/document tuple regardless of whether
+a matching Postgres row still exists) and Postgres (agent_instance, tag,
+document_metadata, team_metadata, prompt) back to the point right after root
+bootstrap. Object storage, vector embeddings, and Keycloak are never touched —
+Fred does not own Keycloak identity lifecycle; identity is resolved by
+username against a live target Keycloak, never created or destroyed by this
+migration tooling (see `docs/swift/ops/KEA_SWIFT_CUTOVER.md`).
+
+The team/tag/document sweep is deliberately type-level
+(`delete_all_relations_of_type`), not id-driven from Postgres: an id-driven
+sweep only clears what a caller already knows to ask for, so any tuple that
+went orphan under an *older* build of this function (Postgres row already
+gone, OpenFGA tuple left behind) would never be asked for again and would
+survive every future run. The type-level sweep reads the live OpenFGA store
+itself, so it self-heals that kind of drift instead of only preventing new
+occurrences of it.
 
 Every step is delete-if-exists / idempotent on its own, so a crash mid-`run_teardown`
 and a retry converge to the same end state — no cross-step transaction is needed
 or attempted, the same non-atomicity `run_import` already accepts for its
-Keycloak/OpenFGA phases (see importer.py's module docstring).
+OpenFGA phase (see importer.py's module docstring).
 """
 
 from __future__ import annotations
@@ -35,15 +48,14 @@ from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
 from fred_core.teams.team_metatada_models import TeamMetadataRow
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.prompt_models import PromptRow
 from control_plane_backend.users.dependencies import UserServiceDependencies
-from control_plane_backend.users.schemas import UserNotFoundError
-from control_plane_backend.users.service import delete_user, list_users
+from control_plane_backend.users.service import list_users
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +63,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeardownReport:
     preserved_uids: list[str] = field(default_factory=list)
-    users_deleted: int = 0
-    users_delete_failed: list[str] = field(default_factory=list)
     team_ids_wiped: int = 0
     agents_deleted: int = 0
     tags_deleted: int = 0
@@ -63,7 +73,8 @@ class TeardownReport:
 
 async def resolve_preserved_uids(caller: KeycloakUser, engine: AsyncEngine) -> set[str]:
     """Union of the durable root-bootstrap identity and the calling operator
-    (RFC §9.2) — the only identities a full teardown must never remove.
+    (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) — the only identities teardown
+    must never remove.
     """
     preserved = {caller.uid}
     completed_by = await PlatformBootstrapStore(engine).get_completed_by()
@@ -78,23 +89,21 @@ async def run_teardown(
     engine: AsyncEngine,
     rebac: RebacEngine,
     user_deps: UserServiceDependencies,
-    wipe_keycloak: bool = True,
 ) -> TeardownReport:
-    """Wipe OpenFGA and Postgres unconditionally; wipe Keycloak users only when
-    `wipe_keycloak` is True (the default, full-teardown behavior).
-
-    `wipe_keycloak=False` backs `POST /reset-rebac` (PLATFORM-IMPORT-RFC.md §9.2
-    addendum) — a repeated-rehearsal reset that clears stale OpenFGA tuples and
-    Postgres rows between test cycles without discarding manually-provisioned
-    Keycloak accounts (e.g. a test user created to exercise the PENDING→RELINKED
-    reconciliation path), which the narrow `POST /reset` cannot do (it never
-    touches OpenFGA) and `POST /reset-full` over-does (it also wipes Keycloak).
+    """Wipe OpenFGA and Postgres unconditionally. Keycloak is never touched —
+    backs `POST /reset-rebac` (CONTROL-PLANE-PRODUCT-CONTRACT.md §27), a
+    repeated-rehearsal reset that clears stale OpenFGA tuples and Postgres rows
+    between test cycles without discarding Keycloak accounts (e.g. a test user
+    created to exercise the PENDING→RELINKED reconciliation path), which the
+    narrow `POST /reset` cannot do (it never touches OpenFGA).
     """
     preserved_uids = await resolve_preserved_uids(caller, engine)
     report = TeardownReport(preserved_uids=sorted(preserved_uids))
 
-    # ── 1. OpenFGA — wipe every tuple for every non-preserved user, and every
-    #      tuple referencing any team (role grants, team#organization, …). ──
+    # ── 1. OpenFGA. Users are wiped per-id (preserved_uids must be excluded,
+    #      so a blanket type sweep would be wrong here). Teams/tags/documents
+    #      are wiped by type — see module docstring for why this must not be
+    #      id-driven from Postgres. ──
     all_users = await list_users(caller, user_deps)
     for summary in all_users:
         if summary.id in preserved_uids:
@@ -105,33 +114,15 @@ async def run_teardown(
 
     session_factory = make_session_factory(engine)
     async with session_factory() as session:
-        team_ids = list(
-            (await session.execute(select(TeamMetadataRow.id))).scalars().all()
-        )
-    for team_id in team_ids:
-        await rebac.delete_all_relations_of_reference(
-            RebacReference(Resource.TEAM, team_id)
-        )
-    report.team_ids_wiped = len(team_ids)
+        report.team_ids_wiped = (
+            await session.execute(select(func.count()).select_from(TeamMetadataRow))
+        ).scalar_one()
 
-    # ── 2. Keycloak — delete every non-preserved user (skipped for reset-rebac). ──
-    if wipe_keycloak:
-        for summary in all_users:
-            if summary.id in preserved_uids:
-                continue
-            try:
-                await delete_user(caller, summary.id, user_deps)
-                report.users_deleted += 1
-            except UserNotFoundError:
-                pass  # already gone — a retry after a partial prior run
-            except Exception:
-                logger.exception(
-                    "[import-export] reset-full: failed to delete Keycloak user %s",
-                    summary.id,
-                )
-                report.users_delete_failed.append(summary.id)
+    await rebac.delete_all_relations_of_type(Resource.TEAM)
+    await rebac.delete_all_relations_of_type(Resource.TAGS)
+    await rebac.delete_all_relations_of_type(Resource.DOCUMENTS)
 
-    # ── 3. Postgres, one atomic transaction. ───────────────────────────────
+    # ── 2. Postgres, one atomic transaction. ───────────────────────────────
     async with session_factory() as session:
         async with session.begin():
             agents_result = await session.execute(
@@ -156,14 +147,10 @@ async def run_teardown(
     report.prompts_deleted = getattr(prompts_result, "rowcount", 0)
 
     logger.warning(
-        "[import-export] %s by %s: preserved=%s users_deleted=%d "
-        "users_delete_failed=%s teams_wiped=%d agents=%d tags=%d documents=%d "
-        "teams_rows=%d prompts=%d",
-        "reset-full" if wipe_keycloak else "reset-rebac",
+        "[import-export] reset-rebac by %s: preserved=%s teams_wiped=%d "
+        "agents=%d tags=%d documents=%d teams_rows=%d prompts=%d",
         caller.uid,
         report.preserved_uids,
-        report.users_deleted,
-        report.users_delete_failed,
         report.team_ids_wiped,
         report.agents_deleted,
         report.tags_deleted,

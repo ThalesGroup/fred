@@ -299,8 +299,7 @@ Authorization and scoping:
 Documentation and governance:
 
 - RFCs are concise records of decisions, alternatives, and contract impact.
-- Backlogs and `docs/swift/data/id-legend.yaml` agree when tracked work changes.
-- PMO board mirrors PMO-visible tracking changes.
+- The GitHub issue is closed or updated when tracked work changes.
 - README index points to new durable documentation.
 
 Live validation:

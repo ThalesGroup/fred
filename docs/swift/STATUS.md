@@ -37,10 +37,9 @@ This file does not mirror them — query GitHub directly for the real list.
 > If the `swift-golive` due date above doesn't match the real internal target,
 > the GitHub milestone needs updating — that date, not this file, drives work.
 
-For design/architecture decisions: `docs/swift/rfc/`. For a stable ID tied to
-an RFC or a cross-cutting architecture decision: `docs/swift/data/id-legend.yaml`.
-That registry's scope is intentionally narrow now (see below) — it is not a
-mirror of every GitHub issue.
+For design/architecture decisions: `docs/swift/rfc/`. There is no separate ID
+registry (see "Retired docs" below) — an RFC's own `**Status:**` line tracks
+its design, and the GitHub issue tracks execution.
 
 ---
 
@@ -53,7 +52,7 @@ history in it — that's what closed GitHub issues are for._
 
 ---
 
-## Retired docs (2026-07-16, updated 2026-07-21)
+## Retired docs (2026-07-16, updated 2026-07-21, 2026-07-27)
 
 `docs/swift/backlog/BACKLOG.md` and `docs/swift/WORKPLAN.md` are frozen. They
 tracked one finite migration project and a larger team, both now outdated —
@@ -66,11 +65,13 @@ kept current. Current tracking = GitHub Issues/Milestones + this file. Never
 recreate either file; if you need sprint/PMO-facing status, query GitHub
 directly.
 
-`docs/swift/data/id-legend.yaml` scope narrowed at the same time: register an
-ID only when the work is tied to an RFC or a genuine cross-cutting
-architecture decision — not for every issue. For everything else, the GitHub
-issue itself (title, label, milestone) is the tracking unit; do not duplicate
-it here or in a registry.
+`docs/swift/data/id-legend.yaml` was removed (2026-07-27), for the same reason
+as `PMO-BOARD.md`/`sprint.yaml`: a 2600+ line registry that cost real time to
+read and whose `status` field was repeatedly mistaken for decided architecture
+rather than the RFC snapshot it actually reflected. The GitHub issue itself
+(title, label, milestone) is the tracking unit; the `DOMAIN-NN` shorthand
+(e.g. `MEMORY-01`) can still appear informally in a commit subject or issue
+title, but there is nothing to register it in and nothing to keep in sync.
 
 ---
 

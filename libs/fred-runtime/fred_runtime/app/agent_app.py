@@ -2480,8 +2480,8 @@ def _build_capability_block(
         # one. No production capability declares an active `HitlSpec` today,
         # so refusing here costs nothing real yet; reconciling Graph's own
         # node-level pause/resume with the per-tool HITL gate is real design
-        # work, deferred (id-legend.yaml CAPAB-02). Refusing loudly keeps the
-        # RFC §3.9 "never silently degrade" guarantee intact in the meantime
+        # work, deferred (see AGENT-CAPABILITY-RFC.md §3.9). Refusing loudly
+        # keeps the RFC's "never silently degrade" guarantee intact in the meantime
         # — a capability with `HitlSpec`s that silently ran ungated on Graph
         # would be exactly the kind of governance gap this platform exists to
         # prevent.

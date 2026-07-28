@@ -78,11 +78,6 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: POST
-    path: /control-plane/v1/import-export/reset-full
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: POST
     path: /control-plane/v1/import-export/reset-rebac
     review_status: pending_review
     required_permission: pending_review
