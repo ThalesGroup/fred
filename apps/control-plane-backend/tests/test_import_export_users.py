@@ -219,6 +219,22 @@ class _FakeTeamRebac:
             }
         return set()
 
+    # #2065: `_enrich_teams_with_membership` now bulk-reads team_admin/
+    # team_editor/team_analyst/team_member instead of one lookup_subjects
+    # call per team — answer it from the same relation log lookup_subjects
+    # (above) and has_direct_relation (below) already draw from.
+    async def list_relations(
+        self,
+        *,
+        resource_type: Any,
+        relation: RelationType,
+        subject_type: Any = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        if resource_type == Resource.TEAM:
+            return [r for r in self.team_relations if r.relation == relation]
+        return [r for r in self.org_relations if r.relation == relation]
+
     # `_get_user_roles_in_team` (now also called from `TeamWithPermissions`
     # builders, #2100) reads the literal persisted tuple rather than the
     # computed TEAM_MEMBER relation — mirror that against this fake's own

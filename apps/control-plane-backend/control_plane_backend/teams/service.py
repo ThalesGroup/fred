@@ -344,7 +344,6 @@ async def _list_teams(
     # `team_metadata_store`, not Keycloak root groups.
     all_teams = await deps.get_team_metadata_store().list_all()
     team_ids = [metadata.id for metadata in all_teams]
-    consistency_token = await rebac.ensure_team_organization_relations(team_ids)
     # TEAM-10: marketplace discoverability is gated by `visibility`, not
     # `joining_mode` (which only ever gates the ability to become a
     # member). Both calls are idempotent, so this also lazily
@@ -359,8 +358,14 @@ async def _list_teams(
         for metadata in all_teams
         if metadata.visibility == TeamVisibility.PRIVATE
     ]
-    await rebac.ensure_team_public_relations(public_team_ids)
-    await rebac.revoke_team_public_relations(private_team_ids)
+    # #2065: none of these three depend on each other's result (each does its
+    # own bulk existence-check read since #2065) -- run them concurrently
+    # instead of stacking 3 sequential round-trips.
+    consistency_token, _, _ = await asyncio.gather(
+        rebac.ensure_team_organization_relations(team_ids),
+        rebac.ensure_team_public_relations(public_team_ids),
+        rebac.revoke_team_public_relations(private_team_ids),
+    )
 
     if filter_by_can_read:
         authorized_teams_refs = await rebac.lookup_user_resources(
@@ -1167,6 +1172,79 @@ async def revoke_team_member_role(
     )
 
 
+async def _bulk_team_membership(
+    rebac: RebacEngine,
+    team_ids: list[TeamId],
+) -> tuple[dict[TeamId, set[str]], dict[TeamId, set[str]]]:
+    """Bulk-resolve admins/members for every id in `team_ids`.
+
+    Replaces `2 * len(team_ids)` per-team `lookup_subjects` (`ListUsers`)
+    calls with 4 bulk `list_relations` reads total — #2065, ~198 OpenFGA
+    round-trips down to 4 (each paginated, still O(1) in team count) at the
+    99-team S3NS scale that made `/frontend/bootstrap` take 4-9s.
+
+    `team_member` is a *computed* union relation in schema.fga (`[user] or
+    team_admin or team_editor or team_analyst`) — the old single
+    `lookup_subjects(..., TEAM_MEMBER)` call transparently expanded that
+    union server-side. `list_relations` only returns stored tuples, so the
+    full member set is rebuilt here from the 4 relations that feed the
+    union. `admins` stays exactly the `team_admin` tuples (that relation is
+    `[user]` only, not computed — same semantics as before).
+
+    Note: personal-space team_editor grants (one per user with a personal
+    space, enforced by `_reject_unsanctioned_personal_team_write`) are also
+    stored under `team_editor`, so that one bulk read's *data volume* scales
+    with active-user count, not team count — unlike the other 3. It is still
+    O(1) *round-trips* (a handful of paginated reads), which is what drove
+    the latency this fixes; results outside `team_ids` are filtered out
+    below rather than counted.
+    """
+    team_id_set = set(team_ids)
+    admin_rels, editor_rels, analyst_rels, member_rels = await asyncio.gather(
+        rebac.list_relations(
+            resource_type=Resource.TEAM,
+            relation=RelationType.TEAM_ADMIN,
+            subject_type=Resource.USER,
+        ),
+        rebac.list_relations(
+            resource_type=Resource.TEAM,
+            relation=RelationType.TEAM_EDITOR,
+            subject_type=Resource.USER,
+        ),
+        rebac.list_relations(
+            resource_type=Resource.TEAM,
+            relation=RelationType.TEAM_ANALYST,
+            subject_type=Resource.USER,
+        ),
+        rebac.list_relations(
+            resource_type=Resource.TEAM,
+            relation=RelationType.TEAM_MEMBER,
+            subject_type=Resource.USER,
+        ),
+    )
+
+    admin_ids_map: dict[TeamId, set[str]] = {team_id: set() for team_id in team_ids}
+    member_ids_map: dict[TeamId, set[str]] = {team_id: set() for team_id in team_ids}
+
+    def _fold(
+        rels: list[Relation] | RebacDisabledResult,
+        target: dict[TeamId, set[str]],
+    ) -> None:
+        if isinstance(rels, RebacDisabledResult):
+            return
+        for rel in rels:
+            if rel.resource.id in team_id_set:
+                target[TeamId(rel.resource.id)].add(rel.subject.id)
+
+    _fold(admin_rels, admin_ids_map)
+    _fold(admin_rels, member_ids_map)
+    _fold(editor_rels, member_ids_map)
+    _fold(analyst_rels, member_ids_map)
+    _fold(member_rels, member_ids_map)
+
+    return admin_ids_map, member_ids_map
+
+
 async def _enrich_teams_with_membership(
     rebac: RebacEngine,
     user: KeycloakUser,
@@ -1185,28 +1263,12 @@ async def _enrich_teams_with_membership(
 
     content_store = deps.get_content_store()
     team_ids: list[TeamId] = [metadata.id for metadata in teams_metadata]
-    admin_ids_list, member_ids_list = await asyncio.gather(
-        asyncio.gather(
-            *[
-                _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN)
-                for team_id in team_ids
-            ]
-        ),
-        asyncio.gather(
-            *[
-                _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER)
-                for team_id in team_ids
-            ]
-        ),
+    team_admin_ids_map, team_member_ids_map = await _bulk_team_membership(
+        rebac, team_ids
     )
-
-    team_admin_ids_map = {
-        team_id: admin_ids for team_id, admin_ids in zip(team_ids, admin_ids_list)
-    }
-    team_member_ids_map = {
-        team_id: member_ids for team_id, member_ids in zip(team_ids, member_ids_list)
-    }
-    all_admin_ids: set[str] = set().union(*admin_ids_list) if admin_ids_list else set()
+    all_admin_ids: set[str] = (
+        set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
+    )
     user_summaries = await deps.get_users_by_ids(all_admin_ids)
 
     teams: list[Team] = []

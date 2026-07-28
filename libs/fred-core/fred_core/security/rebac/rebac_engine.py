@@ -479,6 +479,37 @@ class RebacEngine(ABC):
 
         return token
 
+    async def _teams_with_relation(
+        self, *, relation: RelationType, subject: RebacReference
+    ) -> set[str] | None:
+        """Bulk-read every team currently holding `subject -> relation -> team:*`.
+
+        Backs the existence-check `ensure_*`/`revoke_*` team helpers below:
+        called on every team listing (#2065), a per-team `add_relation`/
+        `delete_relation` fan-out re-writes (and, for grants, re-audits) an
+        edge that almost always already has the correct state — one bulk
+        `list_relations` read replaces that fan-out with a single round-trip
+        (paginated) the caller diffs locally.
+
+        Returns `None` when relation listing is disabled (`RebacDisabledResult`)
+        so callers fall back to their prior unconditional write/delete
+        behavior — cheap and side-effect-free on `NoopRebacEngine`, whose
+        `_persist_relation` performs no I/O and whose `enabled=False` already
+        skips the audit call.
+        """
+        existing = await self.list_relations(
+            resource_type=Resource.TEAM,
+            relation=relation,
+            subject_type=subject.type,
+        )
+        if isinstance(existing, RebacDisabledResult):
+            return None
+        return {
+            rel.resource.id
+            for rel in existing
+            if rel.subject.type == subject.type and rel.subject.id == subject.id
+        }
+
     async def ensure_team_organization_relations(
         self,
         team_ids: Iterable[str],
@@ -494,8 +525,12 @@ class RebacEngine(ABC):
         - Before checking team permissions on `team:<id>`, ensure
           `organization:fred -> team:<id>` exists.
 
-        This helper is idempotent and returns the write consistency token when
-        available.
+        Idempotent, and — since #2065 — only writes (and audits) edges that
+        are actually missing: a bulk `_teams_with_relation` read filters out
+        every team that already has the edge, so a steady-state call (the
+        common case once every team has been backfilled once) issues zero
+        writes instead of one per team. Returns the write consistency token
+        when a write actually happened, else `None`.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -508,13 +543,25 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
+        organization = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.ORGANIZATION, subject=organization
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid not in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
         relations = [
             Relation(
-                subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                subject=organization,
                 relation=RelationType.ORGANIZATION,
                 resource=RebacReference(Resource.TEAM, team_id),
             )
-            for team_id in unique_team_ids
+            for team_id in target_team_ids
         ]
         return await self.add_relations(relations)
 
@@ -540,6 +587,9 @@ class RebacEngine(ABC):
         Example:
         - Before returning `GET /teams`, ensure `user:* -> public -> team:<id>`
           exists for every `PUBLIC` team about to be listed.
+
+        Since #2065, only writes edges actually missing (see
+        `_teams_with_relation`) — a steady-state call issues zero writes.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -552,13 +602,25 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
+        wildcard_user = RebacReference(Resource.USER, "*")
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.PUBLIC, subject=wildcard_user
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid not in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
         relations = [
             Relation(
-                subject=RebacReference(Resource.USER, "*"),
+                subject=wildcard_user,
                 relation=RelationType.PUBLIC,
                 resource=RebacReference(Resource.TEAM, team_id),
             )
-            for team_id in unique_team_ids
+            for team_id in target_team_ids
         ]
         return await self.add_relations(relations)
 
@@ -584,6 +646,9 @@ class RebacEngine(ABC):
         `ensure_team_public_relations` for the public subset) and
         immediately on a `visibility` change (`update_team`), matching the
         grant side's own dual call sites.
+
+        Since #2065, only deletes edges actually present (see
+        `_teams_with_relation`) — a steady-state call issues zero deletes.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -596,13 +661,25 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
+        wildcard_user = RebacReference(Resource.USER, "*")
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.PUBLIC, subject=wildcard_user
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
         relations = [
             Relation(
-                subject=RebacReference(Resource.USER, "*"),
+                subject=wildcard_user,
                 relation=RelationType.PUBLIC,
                 resource=RebacReference(Resource.TEAM, team_id),
             )
-            for team_id in unique_team_ids
+            for team_id in target_team_ids
         ]
         return await self.delete_relations(relations)
 

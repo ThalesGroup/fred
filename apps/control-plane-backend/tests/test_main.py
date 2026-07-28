@@ -4945,8 +4945,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             assert key == "teams/team-1/banner-1.png"
             return "https://example.test/banner.png"
 
-    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
-        return set()
+    async def _fake_bulk_team_membership(*_args, **_kwargs):
+        return {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -4955,8 +4955,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         return []
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_team_users_by_relation",
-        _fake_get_team_users_by_relation,
+        "control_plane_backend.teams.service._bulk_team_membership",
+        _fake_bulk_team_membership,
     )
     from unittest.mock import MagicMock
 
@@ -4980,9 +4980,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     )
 
     teams = await _enrich_teams_with_membership(
-        cast(
-            Any, object()
-        ),  # rebac unused due to monkeypatched _get_team_users_by_relation
+        cast(Any, object()),  # rebac unused due to monkeypatched _bulk_team_membership
         user=cast(Any, type("User", (), {"uid": "user-1"})()),
         teams_metadata=[
             TeamMetadata(
@@ -5008,7 +5006,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 ) -> None:
     """Admin dedupe still applies: legacy relations naming a username alongside
     newer relations naming the canonical user id must render as one admin, even
-    though admin ids now resolve purely through `_get_team_users_by_relation`."""
+    though admin ids now resolve purely through `_bulk_team_membership`."""
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_teams_with_membership
 
@@ -5018,8 +5016,9 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
             _ = expires
             raise AssertionError("No banner lookup expected in this test.")
 
-    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
-        return {"user-1", "marc"}
+    async def _fake_bulk_team_membership(*_args, **_kwargs):
+        members = {"user-1", "marc"}
+        return {"team-1": members}, {"team-1": members}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {
@@ -5031,8 +5030,8 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         return []
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_team_users_by_relation",
-        _fake_get_team_users_by_relation,
+        "control_plane_backend.teams.service._bulk_team_membership",
+        _fake_bulk_team_membership,
     )
     from unittest.mock import MagicMock
 

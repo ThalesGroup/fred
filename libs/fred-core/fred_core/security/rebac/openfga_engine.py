@@ -263,15 +263,46 @@ class OpenFgaRebacEngine(RebacEngine):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # No current caller needs a bulk tuple read: every authorization
-        # decision goes through `has_permission`, `lookup_resources`, or
-        # `lookup_subjects` instead, each backed by a persisted OpenFGA tuple
-        # (never Keycloak-derived). Implemented by 2 other engines and
-        # exercised elsewhere; this OpenFGA-backed stub stays a stub until a
-        # real caller needs it.
-        raise NotImplementedError(
-            "OpenFGA relation listing is not implemented as it is not needed"
-        )
+        # Unlike delete_all_relations_of_reference/of_type (which must match
+        # a reference on *either* side of the tuple, across potentially
+        # several types, so they read unfiltered and filter in Python), this
+        # always has a known resource_type + relation — a genuine server-side
+        # Read filter (object type with no id), same as the populated-filter
+        # shape already proven by has_direct_relation below.
+        async with _rebac_timer(self._kpi, "read"):
+            client = await self.get_client()
+            body = ReadRequestTupleKey(
+                relation=relation.value, object=f"{resource_type.value}:"
+            )
+            subject_prefix = f"{subject_type.value}:" if subject_type else None
+
+            results: list[Relation] = []
+            continuation_token: str | None = None
+
+            while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+                options = self._build_options(consistency=consistency_token)
+                if continuation_token:
+                    options["continuation_token"] = continuation_token
+
+                res = await client.read(body, options)
+                continuation_token = res.continuation_token
+
+                for tup in res.tuples:
+                    if subject_prefix and not tup.key.user.startswith(subject_prefix):
+                        continue
+                    results.append(
+                        Relation(
+                            subject=OpenFgaRebacEngine._openfga_id_to_reference(
+                                tup.key.user
+                            ),
+                            relation=RelationType(tup.key.relation),
+                            resource=OpenFgaRebacEngine._openfga_id_to_reference(
+                                tup.key.object
+                            ),
+                        )
+                    )
+
+            return results
 
     async def lookup_resources(
         self,

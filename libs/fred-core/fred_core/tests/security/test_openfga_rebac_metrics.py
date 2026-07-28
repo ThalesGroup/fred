@@ -145,6 +145,98 @@ async def test_has_direct_relation_emits_read_operation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_relations_emits_read_operation() -> None:
+    writer = _RecordingKPIWriter()
+    engine, _ = _make_engine(writer)
+
+    await engine.list_relations(
+        resource_type=Resource.TEAM, relation=RelationType.TEAM_ADMIN
+    )
+
+    assert writer.emitted[0]["dims"]["rebac_operation"] == "read"
+
+
+@pytest.mark.asyncio
+async def test_list_relations_parses_tuples_and_filters_by_subject_type() -> None:
+    """#2065: `list_relations` backs the bulk existence-check/membership reads
+    that replaced per-team `Check`/`ListUsers` fan-out — must parse raw
+    OpenFGA tuples into `Relation`s and drop non-matching subject types
+    (a userset subject like `team:other#member` is not a `user:*`)."""
+    engine, fake_client = _make_engine()
+    fake_client.read_tuples = [
+        SimpleNamespace(
+            key=SimpleNamespace(
+                user="user:alice", relation="team_admin", object="team:fredlab"
+            )
+        ),
+        SimpleNamespace(
+            key=SimpleNamespace(
+                user="team:other#member",
+                relation="team_admin",
+                object="team:fredlab",
+            )
+        ),
+    ]
+
+    relations = await engine.list_relations(
+        resource_type=Resource.TEAM,
+        relation=RelationType.TEAM_ADMIN,
+        subject_type=Resource.USER,
+    )
+
+    assert relations == [
+        Relation(
+            subject=RebacReference(Resource.USER, "alice"),
+            relation=RelationType.TEAM_ADMIN,
+            resource=RebacReference(Resource.TEAM, "fredlab"),
+        )
+    ]
+
+
+class _PaginatingFakeOpenFgaClient(_FakeOpenFgaClient):
+    """Serves `pages` one per call, chaining via `continuation_token`."""
+
+    def __init__(self, pages: list[list[Any]]) -> None:
+        super().__init__()
+        self._pages = pages
+
+    async def read(self, body, options) -> SimpleNamespace:
+        index = int(options.get("continuation_token") or 0)
+        next_index = index + 1
+        token = str(next_index) if next_index < len(self._pages) else ""
+        return SimpleNamespace(tuples=self._pages[index], continuation_token=token)  # nosec B106 — pagination token, not a secret
+
+
+@pytest.mark.asyncio
+async def test_list_relations_paginates_via_continuation_token() -> None:
+    engine, _ = _make_engine()
+    page_1 = [
+        SimpleNamespace(
+            key=SimpleNamespace(
+                user="user:alice", relation="team_admin", object="team:a"
+            )
+        )
+    ]
+    page_2 = [
+        SimpleNamespace(
+            key=SimpleNamespace(user="user:bob", relation="team_admin", object="team:b")
+        )
+    ]
+    engine._cached_client = _PaginatingFakeOpenFgaClient(  # pyright: ignore[reportAttributeAccessIssue]
+        [page_1, page_2]
+    )
+
+    relations = await engine.list_relations(
+        resource_type=Resource.TEAM, relation=RelationType.TEAM_ADMIN
+    )
+
+    assert {(r.subject.id, r.resource.id) for r in relations} == {
+        ("alice", "a"),
+        ("bob", "b"),
+    }
+
+
+@pytest.mark.asyncio
 async def test_openfga_calls_are_silent_without_a_kpi_writer() -> None:
     # kpi_writer=None is the default — must not raise (matches every other
     # KPI-instrumented call site, e.g. persist_* metrics, phase_timer).

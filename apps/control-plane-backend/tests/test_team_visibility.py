@@ -53,6 +53,11 @@ class _FakeRebac:
     async def lookup_subjects(self, *_args, **_kwargs):
         return RebacDisabledResult()
 
+    async def list_relations(self, *_args, **_kwargs):
+        # #2065: `_enrich_teams_with_membership` bulk-reads via list_relations
+        # instead of lookup_subjects per team — same disabled-reads stance.
+        return RebacDisabledResult()
+
 
 class _FakeMetadataStore:
     def __init__(self, teams: list[TeamMetadata]) -> None:

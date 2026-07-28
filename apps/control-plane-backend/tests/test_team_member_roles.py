@@ -150,6 +150,31 @@ class _FakeRebac:
             TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION: is_analyst,
         }.get(permission, False)
 
+    async def list_relations(
+        self,
+        *,
+        resource_type,
+        relation: RelationType,
+        subject_type=None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        # #2065: `_enrich_teams_with_membership` bulk-reads instead of one
+        # `lookup_subjects` per team. Like `lookup_subjects`/`has_direct_relation`
+        # above, this fake is scoped to "the one team these tests use"
+        # ("fredlab" everywhere in this file) and ignores team identity.
+        if resource_type != Resource.TEAM:
+            return []
+        return [
+            Relation(
+                subject=RebacReference(Resource.USER, uid),
+                relation=RelationType(role.value),
+                resource=RebacReference(Resource.TEAM, "fredlab"),
+            )
+            for uid, held in self.roles.items()
+            for role in held
+            if role.value == relation.value
+        ]
+
     async def add_relation(self, relation: Relation, **kwargs: object) -> None:
         uid = relation.subject.id
         self.roles.setdefault(uid, set()).add(UserTeamRelation(relation.relation.value))

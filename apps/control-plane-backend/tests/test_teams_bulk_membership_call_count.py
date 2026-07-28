@@ -1,0 +1,213 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Regression coverage for #2065: `_enrich_teams_with_membership` must issue a
+bounded, constant number of OpenFGA `list_relations` calls regardless of team
+count, not the `2 * len(team_ids)` per-team `ListUsers` fan-out that produced
+4-9s `/frontend/bootstrap` latency at S3NS's 99-team production scale.
+
+No existing test exercised the real fan-out: every prior `_enrich_teams_with_membership`
+test monkeypatches `_get_team_users_by_relation`/`_bulk_team_membership` away
+entirely, so a regression back to per-team calls would pass silently. This
+file wires a real, call-counting `RebacEngine` instead.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, cast
+from unittest.mock import MagicMock
+
+import pytest
+from fred_core import (
+    RebacDisabledResult,
+    RebacEngine,
+    RebacPermission,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+)
+from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamMetadata
+
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.service import _enrich_teams_with_membership
+
+
+class _CountingRebacEngine(RebacEngine):
+    """In-memory `RebacEngine` that answers `list_relations` from a seeded
+    tuple set and records every call, so tests can assert the call count
+    stays constant as team count grows."""
+
+    def __init__(self, tuples: list[Relation]) -> None:
+        self.tuples = tuples
+        self.list_relations_calls: list[tuple[Resource, RelationType]] = []
+
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        raise AssertionError("no writes expected in this read-path test")
+
+    async def delete_relation(self, relation: Relation) -> str | None:
+        raise AssertionError("no deletes expected in this read-path test")
+
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
+        return None
+
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        return 0
+
+    async def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject_type: Resource | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation] | RebacDisabledResult:
+        self.list_relations_calls.append((resource_type, relation))
+        return [
+            rel
+            for rel in self.tuples
+            if rel.resource.type == resource_type
+            and rel.relation == relation
+            and (subject_type is None or rel.subject.type == subject_type)
+        ]
+
+    async def lookup_resources(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        raise AssertionError(
+            "per-team lookup_subjects must not be called from the bulk path"
+        )
+
+    async def has_permission(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> bool:
+        return False
+
+
+def _fake_deps() -> TeamServiceDependencies:
+    mock_config = MagicMock()
+    mock_config.app.default_team_max_resources_storage_size = 5368709120
+    mock_config.app.personal_max_resources_storage_size = 5368709120
+    mock_config.scheduler.enabled = False
+
+    async def _fake_get_users_by_ids(_ids: Iterable[str]) -> dict[str, Any]:
+        return {}
+
+    async def _fake_search_users(_query: str) -> list[Any]:
+        return []
+
+    class _FakeContentStore:
+        def get_presigned_url(self, key: str, expires=None) -> str:
+            raise AssertionError("no banner in this test")
+
+    return TeamServiceDependencies(
+        configuration=mock_config,
+        rebac=cast(Any, object()),
+        scheduler_backend=cast(Any, object()),
+        get_team_metadata_store=cast(Any, object),
+        get_content_store=lambda: cast(Any, _FakeContentStore()),
+        get_session_store=cast(Any, lambda: object()),
+        get_purge_queue_store=cast(Any, lambda: object()),
+        get_policy_catalog=cast(Any, lambda: object()),
+        get_users_by_ids=cast(Any, _fake_get_users_by_ids),
+        search_users=cast(Any, _fake_search_users),
+        run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
+    )
+
+
+def _teams(count: int) -> list[TeamMetadata]:
+    return [
+        TeamMetadata(id=TeamId(f"team-{i}"), name=f"Team {i}") for i in range(count)
+    ]
+
+
+def _membership_tuples(team_ids: list[str]) -> list[Relation]:
+    """One admin + one plain member per team, so admins/member_count are
+    non-trivial (not just "everything empty, trivially bounded")."""
+    tuples: list[Relation] = []
+    for team_id in team_ids:
+        tuples.append(
+            Relation(
+                subject=RebacReference(Resource.USER, f"{team_id}-admin"),
+                relation=RelationType.TEAM_ADMIN,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+        tuples.append(
+            Relation(
+                subject=RebacReference(Resource.USER, f"{team_id}-member"),
+                relation=RelationType.TEAM_MEMBER,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+    return tuples
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("team_count", [3, 50])
+async def test_enrich_teams_with_membership_call_count_is_bounded(
+    team_count: int,
+) -> None:
+    teams_metadata = _teams(team_count)
+    team_ids = [str(metadata.id) for metadata in teams_metadata]
+    engine = _CountingRebacEngine(_membership_tuples(team_ids))
+
+    teams = await _enrich_teams_with_membership(
+        engine,
+        user=cast(Any, type("User", (), {"uid": "someone"})()),
+        teams_metadata=teams_metadata,
+        deps=_fake_deps(),
+    )
+
+    # Exactly 4 list_relations calls (TEAM_ADMIN/EDITOR/ANALYST/TEAM_MEMBER),
+    # independent of team_count -- the property that regressed silently once
+    # already (2 * len(team_ids) ListUsers calls) and must not regress again.
+    assert len(engine.list_relations_calls) == 4
+    assert {relation for _rtype, relation in engine.list_relations_calls} == {
+        RelationType.TEAM_ADMIN,
+        RelationType.TEAM_EDITOR,
+        RelationType.TEAM_ANALYST,
+        RelationType.TEAM_MEMBER,
+    }
+
+    assert len(teams) == team_count
+    for team in teams:
+        assert team.member_count == 2
+        assert {admin.id for admin in team.admins} == {f"{team.id}-admin"}
