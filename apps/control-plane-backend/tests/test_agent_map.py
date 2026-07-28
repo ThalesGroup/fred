@@ -101,6 +101,15 @@ def test_classify_ignores_known_sample() -> None:
     assert result.swift_template_id is None
 
 
+def test_classify_ignores_slide_maker_sample() -> None:
+    """v2.sample.slide_maker lives under agentic_backend's v2 samples/ tree,
+    same as bank_transfer — a built-in demo, not user data."""
+    result = classify_agent(_payload(definition_ref="v2.sample.slide_maker"))
+    assert result.outcome is AgentMapOutcome.IGNORED
+    assert result.kea_template == "v2.sample.slide_maker"
+    assert result.swift_template_id is None
+
+
 def test_classify_reports_unknown_template_as_gap() -> None:
     result = classify_agent(_payload(definition_ref="v2.production.unknown_future"))
     assert result.outcome is AgentMapOutcome.GAP

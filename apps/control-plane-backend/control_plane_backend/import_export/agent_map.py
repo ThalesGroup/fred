@@ -51,6 +51,7 @@ KEA_TO_SWIFT_TEMPLATE: dict[str, str] = {
 IGNORED_KEA_TEMPLATES: frozenset[str] = frozenset(
     {
         "v2.sample.bank_transfer",
+        "v2.sample.slide_maker",
         "v2.deep.corpus_investigator",
         "v2.production.dva_risk_validator.graph",
         "v2.production.dva_risk_validator.qa",

@@ -414,6 +414,38 @@ def _build_agent_creator_index(tuples: list[dict[str, Any]]) -> dict[str, str]:
 _KEA_SYSTEM_PROMPT_KEYS = ("system_prompt_template", "prompts.system")
 
 
+def _extract_kea_capability_selection(tuning_src: dict[str, Any]) -> list[str] | None:
+    """Return the kea agent's active capability ids, or ``None`` if unknown.
+
+    Since #1988, a kea ``MCPServerRef.id`` (`agentic_backend.core.agents.
+    agent_spec.MCPServerRef`) IS the swift capability id verbatim (no ``mcp:``
+    prefix) — no lookup table needed. ``payload_json.tuning.mcp_servers``
+    absent means we have no source signal, so the caller should leave
+    ``selected_capability_ids=None`` (inherit the swift template default).
+    Present (even ``[]``) is the agent's resolved kea-side selection and is
+    returned as an explicit list, ``[]`` included — ``None`` and ``[]`` are
+    different states on the swift side (`ManagedAgentTuning.
+    selected_capability_ids`, config/models.py).
+
+    Deliberately NOT translated (one-shot migration, kea only ever exercised
+    the knowledge-flow-doc-search and tabular MCP servers in practice):
+    per-server `require_tools`/`params` (e.g. document-library scoping), and
+    any builtin/REST-only tool a v1 agent (e.g. Rico) called outside the MCP
+    trio — neither has a swift capability-config equivalent to map to.
+    """
+    mcp_servers = tuning_src.get("mcp_servers")
+    if not isinstance(mcp_servers, list):
+        return None
+    ids: list[str] = []
+    for ref in mcp_servers:
+        if not isinstance(ref, dict):
+            continue
+        server_id = ref.get("id")
+        if isinstance(server_id, str) and server_id.strip() and server_id not in ids:
+            ids.append(server_id)
+    return ids
+
+
 def _extract_kea_prompts(tuning_src: dict[str, Any]) -> tuple[str | None, list[str]]:
     """Return (system prompt text, other customized kea prompt field keys).
 
@@ -1269,7 +1301,11 @@ async def _run_import_body(
                 "equivalent — only the system prompt was migrated"
             )
         tuning = ManagedAgentTuning(
-            role=role, description=description, tags=tag_list, values=values
+            role=role,
+            description=description,
+            tags=tag_list,
+            values=values,
+            selected_capability_ids=_extract_kea_capability_selection(tuning_src),
         )
 
         to_create_agents.append(
