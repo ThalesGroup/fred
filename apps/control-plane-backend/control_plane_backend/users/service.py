@@ -316,9 +316,18 @@ async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
       result as the authoritative snapshot of the target realm for the whole
       run — a username missing from it is unresolved (PENDING), never looked
       up individually
-    - returns `{}` when Keycloak M2M is disabled — callers treat that exactly
-      like a real bulk sweep that found no users, not as "unavailable, fall
-      back to a per-username lookup"
+    - raises `KeycloakM2MUserOperationDisabledError` when Keycloak M2M is
+      disabled — a disabled admin client used to come back as `{}`, the exact
+      same shape as a real bulk sweep that genuinely found zero users, so a
+      cutover-scale kea run with M2M misconfigured silently resolved every
+      single identity to PENDING with nothing in the report pointing at the
+      real cause (KEA CUTOVER 2026, 2026-07-28: caught only by a manual
+      identity spot-check, not by the tooling). Raising here instead reuses
+      the same domain error and HTTP 503 mapping `create_user` already raises
+      for the identical disabled-M2M case (`users/api.py`'s
+      `register_exception_handlers`), and — same as any other bulk-sweep
+      failure below — `KeaUserResolver.create()` is called before the
+      Postgres transaction opens, so this aborts the import before any write
     - a real Keycloak/network failure raises and is left to propagate — never
       swallowed into an empty snapshot
 
@@ -327,8 +336,7 @@ async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
     """
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; cannot bulk-resolve users.")
-        return {}
+        raise KeycloakM2MUserOperationDisabledError()
 
     raw_users = await _fetch_all_users(admin)
     out: dict[str, str] = {}

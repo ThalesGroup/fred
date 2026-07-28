@@ -86,7 +86,11 @@ from control_plane_backend.users.dependencies import (
     KeycloakAdminFactory,
     UserServiceDependencies,
 )
-from control_plane_backend.users.service import find_user_sub_by_username
+from control_plane_backend.users.schemas import KeycloakM2MUserOperationDisabledError
+from control_plane_backend.users.service import (
+    find_user_sub_by_username,
+    find_user_subs_bulk,
+)
 from fred_core import (
     ORGANIZATION_ID,
     AuthorizationError,
@@ -1196,3 +1200,32 @@ async def test_find_user_sub_by_username_never_calls_a_write_method() -> None:
     # above would have failed loudly had a write ever been attempted).
     with pytest.raises(AttributeError):
         await admin.a_create_user({})  # type: ignore[attr-defined]
+
+
+# ── find_user_subs_bulk: unit tests ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_find_user_subs_bulk_resolves_the_whole_directory() -> None:
+    admin = _FakeKeycloakAdmin({"alice": "alice-sub", "bob": "bob-sub"})
+    deps = UserServiceDependencies(
+        configuration=cast(Any, MagicMock()),
+        create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+    )
+
+    assert await find_user_subs_bulk(deps) == {"alice": "alice-sub", "bob": "bob-sub"}
+
+
+@pytest.mark.asyncio
+async def test_find_user_subs_bulk_raises_when_keycloak_disabled() -> None:
+    """KEA CUTOVER 2026, 2026-07-28: a disabled M2M client must raise, not come
+    back as `{}` — `{}` is indistinguishable from a real bulk sweep that
+    genuinely found zero users, which silently resolved every kea identity to
+    PENDING with nothing pointing at the real (misconfiguration) cause."""
+    deps = UserServiceDependencies(
+        configuration=cast(Any, MagicMock()),
+        create_keycloak_admin_client=KeycloackDisabled,
+    )
+
+    with pytest.raises(KeycloakM2MUserOperationDisabledError):
+        await find_user_subs_bulk(deps)

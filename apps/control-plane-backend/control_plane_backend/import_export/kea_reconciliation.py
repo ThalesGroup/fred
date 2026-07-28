@@ -178,17 +178,21 @@ class KeaUserResolver:
     `create()` lists the whole target realm once (`find_user_subs_bulk`, itself a
     single paginated sweep) and builds an in-memory `username -> sub` index —
     the *complete* answer for this run. That snapshot is treated as authoritative
-    even when empty (or when Keycloak M2M is disabled and it comes back `{}`): a
-    username missing from it resolves to `None` (PENDING) immediately, with zero
-    further Keycloak calls. There is deliberately no per-username fallback lookup
-    — one was tried and it silently reintroduced up to ~1900 individual Admin API
-    calls on exactly the production scenario the bulk prefetch exists to avoid,
-    slow enough to blow past the dry-run's HTTP timeout. A username created mid-run
-    by `_provision_bundle_identities` is folded into the same snapshot via
+    even when genuinely empty: a username missing from it resolves to `None`
+    (PENDING) immediately, with zero further Keycloak calls. There is
+    deliberately no per-username fallback lookup — one was tried and it
+    silently reintroduced up to ~1900 individual Admin API calls on exactly the
+    production scenario the bulk prefetch exists to avoid, slow enough to blow
+    past the dry-run's HTTP timeout. A username created mid-run by
+    `_provision_bundle_identities` is folded into the same snapshot via
     `remember()`, so it resolves with zero further I/O too. If the bulk sweep
-    itself raises (a real Keycloak/network error), that exception is left to
-    propagate — `create()` is called before the Postgres transaction opens, so a
-    broken bulk sweep fails the import before anything is written.
+    itself raises — a real Keycloak/network error, or Keycloak M2M being
+    disabled (`find_user_subs_bulk` raises `KeycloakM2MUserOperationDisabledError`
+    rather than returning `{}`, so a misconfigured M2M client can never look
+    identical to a target realm that legitimately has zero matching users) —
+    that exception is left to propagate — `create()` is called before the
+    Postgres transaction opens, so a broken bulk sweep fails the import before
+    anything is written.
     """
 
     def __init__(self, prefetched: dict[str, str] | None = None) -> None:
