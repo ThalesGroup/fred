@@ -1267,6 +1267,11 @@
           "shared_copy": "Shared"
         }
       },
+      "search": {
+        "placeholder": "Search",
+        "ariaLabel": "Search in this folder",
+        "clearAriaLabel": "Clear search"
+      },
       "folders": {
         "templates": "Templates",
         "uploads": "Uploads",
@@ -1286,6 +1291,7 @@
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
+        "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "download": "Download",

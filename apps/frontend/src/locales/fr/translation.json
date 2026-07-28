@@ -1267,6 +1267,11 @@
           "shared_copy": "Partagé"
         }
       },
+      "search": {
+        "placeholder": "Rechercher",
+        "ariaLabel": "Rechercher dans ce dossier",
+        "clearAriaLabel": "Effacer la recherche"
+      },
       "folders": {
         "templates": "Modèles",
         "uploads": "Téléversements",
@@ -1286,6 +1291,7 @@
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
+        "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "download": "Télécharger",

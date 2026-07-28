@@ -15,13 +15,19 @@
 import styles from "./TextInput.module.scss";
 import { ComponentPropsWithRef, useId } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import { ComponentSize } from "@shared/utils/Type.ts";
 
-export interface TextInputProps extends ComponentPropsWithRef<"input"> {
+export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   label?: string;
   explanation?: string;
   error?: string;
   icon?: IconProps;
   compact?: boolean;
+  /** Shrinks the input's own height (shared ComponentSize scale). Omit to
+   *  keep the existing default height — every other TextInput call site is
+   *  unaffected. Shadows the native HTML `size` attribute (character-width
+   *  sizing), which this design system doesn't use. */
+  size?: ComponentSize;
 }
 
 export default function TextInput({
@@ -30,6 +36,7 @@ export default function TextInput({
   error,
   icon,
   compact = false,
+  size,
   maxLength,
   value,
   required,
@@ -43,6 +50,7 @@ export default function TextInput({
     <div
       className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
       data-compact={compact}
+      data-size={size}
     >
       {label && (
         <label className={styles.label} htmlFor={id}>

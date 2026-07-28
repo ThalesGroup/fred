@@ -115,3 +115,29 @@
   color: var(--on-surface-retreat);
   font-size: 1.5rem;
 }
+
+/* Opt-in shrink, default (no data-size) keeps every other TextInput call
+ * site unchanged. "small" here is 2.5rem/40px — deliberately taller than
+ * Button/IconButton/Select's own "small" (2rem/32px), a per-field choice,
+ * not a redefinition of the shared ComponentSize scale. */
+.input[data-size="small"] {
+  input {
+    height: 2.5rem;
+  }
+
+  .icon {
+    height: 2.5rem;
+    font-size: 1.25rem;
+  }
+}
+
+.input[data-size="xs"] {
+  input {
+    height: 1.5rem;
+  }
+
+  .icon {
+    height: 1.5rem;
+    font-size: 1rem;
+  }
+}

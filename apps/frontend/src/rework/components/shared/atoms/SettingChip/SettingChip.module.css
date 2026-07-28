@@ -2,10 +2,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
   cursor: pointer;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-2xl);

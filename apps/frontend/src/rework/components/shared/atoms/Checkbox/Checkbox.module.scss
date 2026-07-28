@@ -52,9 +52,6 @@
   --checkbox-border-color: var(--outline);
   --checkbox-background-color: transparent;
   position: relative;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease;
   border: 2px solid var(--checkbox-border-color);
   border-radius: var(--radius-xs);
   background-color: var(--checkbox-background-color);
@@ -68,7 +65,6 @@
   position: absolute;
   justify-content: center;
   align-items: center;
-  transition: background-color 100ms ease;
   inset: -0.4375rem;
   border-radius: 999px;
   background-color: var(--checkbox-state-layer-background-color, transparent);
@@ -77,9 +73,6 @@
 .mark {
   transform: scale(0.6);
   opacity: 0;
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
   fill: none;
   stroke: var(--on-primary);
   stroke-linecap: round;

@@ -21,9 +21,10 @@
   min-height: 0;
 }
 
-/* One card wraps the breadcrumb/actions toolbar and the table together —
- * overflow: hidden clips DataTable's own corner radius so only this card's
- * corners show, letting the two visually read as a single surface. */
+/* One card wraps the breadcrumb/actions toolbar and the table together. No
+ * overflow: hidden here — the toolbar's icon-button tooltips need to float
+ * outside this box, and clipping the whole card would cut them off. Only
+ * `.tableFill` below clips (and rounds) DataTable's own corners. */
 .card {
   display: flex;
   flex: 1;
@@ -31,18 +32,23 @@
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
   min-height: 0;
-  overflow: hidden;
 }
 
 /* The table is the one flexible region between the fixed-height toolbar
  * above and DataTable's own fixed-height footer below — it grows to fill
  * whatever vertical space the page gives `.card`, down to the page's own
- * bottom padding, instead of just sizing to its rows' content height. */
+ * bottom padding, instead of just sizing to its rows' content height.
+ * overflow: hidden + matching bottom radius clips DataTable's own corner
+ * radius so only this rounding shows, letting table and card read as one
+ * surface — scoped to just this element so it doesn't also clip the
+ * toolbar's tooltips above. */
 .tableFill {
   display: flex;
   flex: 1;
   flex-direction: column;
+  border-radius: 0 0 var(--radius-m) var(--radius-m);
   min-height: 0;
+  overflow: hidden;
 }
 
 .toolbar {
@@ -52,13 +58,33 @@
   align-items: center;
   gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-retreat);
-  padding: var(--spacing-xs) var(--spacing-m);
+  padding: var(--spacing-xs);
+}
+
+.toolbarStart {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .toolbarEnd {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+.search {
+  position: relative;
+  width: 220px;
+}
+
+.searchClear {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-2xs);
+  transform: translateY(-50%);
 }
 
 .nameButton {
@@ -107,8 +133,10 @@
 
 .actionsCell {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-2xs);
+  width: 100%;
 }
 
 /* A folder row targeted by an OS-file drag: same affordance as the upload

@@ -129,7 +129,7 @@ export default function CreateFolderModal({
               <IconButton
                 color="on-surface"
                 variant="icon"
-                size="medium"
+                size="small"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label={t("common.close")}
                 onClick={onClose}

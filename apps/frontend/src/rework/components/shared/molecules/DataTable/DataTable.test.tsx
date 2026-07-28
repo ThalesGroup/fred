@@ -85,6 +85,21 @@ describe("DataTable", () => {
     expect(footer()).toBeNull();
   });
 
+  // Regression: the header used to live inside the same scrolling grid as
+  // the rows (pinned on top via `position: sticky`), so the scrollbar track
+  // spanned the header's own height too. The header is now a structurally
+  // separate grid, sibling to the scrollable row grid, so the header cell
+  // is never a descendant of the scrolling container.
+  it("keeps the header structurally outside the scrollable row container", () => {
+    render(<DataTable columns={columns} data={makeRows(5)} />);
+    const header = container.querySelector('[class*="datatable-header"]');
+    const body = container.querySelector('[class*="datatable-body"]');
+    expect(header).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(body?.contains(header!)).toBe(false);
+    expect(header?.textContent).toBe("Id");
+  });
+
   // Regression: two columns with the same (often empty, e.g. an unlabeled
   // status/actions cell) label used to collide on `key={column.label}` for
   // both header and body cells, which broke reconciliation badly enough to
@@ -244,6 +259,124 @@ describe("DataTable selection", () => {
 
     click(checkboxes()[0]);
     expect(onSelectionChange).toHaveBeenCalledWith(new Set([1, 2, 3]));
+  });
+
+  function rowElements(): HTMLElement[] {
+    return Array.from(container.querySelectorAll('[class*="datatable-row"]'));
+  }
+
+  it("marks a selected row's cells with data-selected, for the primary-tint background", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set([2])}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    expect(rowElements().map((row) => row.hasAttribute("data-selected"))).toEqual([false, true, false]);
+  });
+
+  it("toggles the row when clicking its background, not just its checkbox", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    // A cell's own content (a plain <span>, no interactive element) counts
+    // as "the row's background" for this purpose.
+    click(container.querySelector('[class*="datatable-row"] span'));
+
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("does not double-toggle when the click lands on the checkbox itself", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    click(checkboxes()[1]);
+
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  // Regression: Checkbox's native <input> is visually hidden and wrapped in
+  // a <label> (Checkbox.tsx) — a real click lands on that label (or its
+  // visible box), not the input directly, and the browser then separately
+  // forwards a synthetic click to the input. The row's own click-to-select
+  // handler used to only exclude `input`, so it fired on the first (label)
+  // click while the checkbox's onChange fired on the forwarded one — two
+  // toggles cancelling out, so clicking the checkbox appeared to do nothing.
+  it("toggles exactly once when the click lands on the checkbox's label, not the input", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    // Clicking the label natively forwards a click to its associated input
+    // (real browser behavior, also reproduced here) — the row handler must
+    // not ALSO toggle from the original label click, or the two cancel out.
+    const label = checkboxes()[1].closest("label");
+    click(label);
+
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("does not toggle selection when the click lands on a button inside a cell", () => {
+    const onSelectionChange = vi.fn();
+    const onButtonClick = vi.fn();
+    const columnsWithButton: DataTableColumn<Row>[] = [
+      {
+        label: "Id",
+        cellRenderer: (row) => (
+          <button type="button" onClick={onButtonClick}>
+            {row.id}
+          </button>
+        ),
+      },
+    ];
+    render(
+      <DataTable
+        columns={columnsWithButton}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    click(container.querySelector('[class*="datatable-row"] button'));
+
+    expect(onButtonClick).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
   it("marks the header checkbox indeterminate when only some rows are selected", () => {

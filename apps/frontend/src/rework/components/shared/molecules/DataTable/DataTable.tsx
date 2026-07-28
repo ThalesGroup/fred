@@ -15,10 +15,9 @@
 import styles from "./DataTable.module.scss";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
+import TablePagination from "@shared/molecules/TablePagination/TablePagination.tsx";
 import { OptionModel } from "@models/Option.model.ts";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
@@ -87,6 +86,16 @@ interface DataTableProps<T> {
 
 export interface DataTableColumn<T> {
   label: string;
+  /** A `grid-template-columns` track (e.g. "2fr", "6.5rem"). Avoid `"auto"`
+   *  for a column whose header label and cell content differ meaningfully in
+   *  width (e.g. an empty header over icon-button cells): the header and
+   *  body render as two independent grids (so the header can sit outside
+   *  the scrollable row area), and each grid resolves an `"auto"` track from
+   *  only its own content — the header and body can disagree on that
+   *  column's width, which then shows up as every column after it drifting
+   *  out of alignment (the leftover space lands differently in whichever
+   *  flexible `fr` column absorbs it). Prefer a fixed size sized to the
+   *  cell's actual content instead. */
   size?: string;
   cellRenderer?: (element: T) => React.ReactNode;
   /** Enables click-to-sort on this column's header. */
@@ -232,11 +241,9 @@ export default function DataTable<T>({
         } as React.CSSProperties
       }
     >
-      <div className={styles["datatable-body"]}>
+      <div className={styles["datatable-header"]}>
         {selectable && (
-          <div
-            className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]} ${styles["datatable-cell-select"]}`}
-          >
+          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
             <Checkbox
               checked={allOnPageSelected}
               indeterminate={someOnPageSelected}
@@ -248,7 +255,7 @@ export default function DataTable<T>({
         {columns.map((column, columnIndex) => {
           const isSorted = sortState?.columnLabel === column.label;
           return (
-            <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={columnIndex}>
+            <div className={styles["datatable-cell"]} key={columnIndex}>
               {column.sortable ? (
                 <button
                   type="button"
@@ -270,10 +277,40 @@ export default function DataTable<T>({
             </div>
           );
         })}
+      </div>
+      <div className={styles["datatable-body"]}>
         {pageData.map((line, lineIndex) => {
           const key = rowKey ? rowKey(line) : lineIndex;
+          const isSelected = selectable && (selectedKeys?.has(key) ?? false);
           return (
-            <div className={styles["datatable-row"]} key={key}>
+            <div
+              className={styles["datatable-row"]}
+              key={key}
+              data-selected={isSelected || undefined}
+              onClick={
+                selectable
+                  ? (event) => {
+                      // Clicking an interactive control inside the row (a
+                      // preview button, a folder-name link, the checkbox
+                      // itself) must do its own thing, not also toggle
+                      // selection — only the row's otherwise-inert
+                      // background counts as "select this row". `label`
+                      // matters here specifically for the Checkbox atom: its
+                      // native input is visually hidden and wrapped in a
+                      // <label>, so a real click lands on the label/box, not
+                      // the input directly — the browser then separately
+                      // forwards a synthetic click to the input itself. Not
+                      // excluding `label` here meant this handler fired on
+                      // the first (visible) click AND the checkbox's own
+                      // onChange fired on the forwarded one: two toggles
+                      // that cancel out, looking like the click did nothing.
+                      const target = event.target as HTMLElement;
+                      if (target.closest('button, a, input, label, [role="menuitem"]')) return;
+                      toggleRow(key);
+                    }
+                  : undefined
+              }
+            >
               {selectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
                   <Checkbox
@@ -295,77 +332,29 @@ export default function DataTable<T>({
         })}
       </div>
       {paginationEnabled && (
-        <div className={styles["datatable-footer"]}>
-          <div className={styles["datatable-footer-left"]}>
-            <span className={styles["footer-label"]}>
-              {t("dataTable.pagination.totalItems", {
-                count: serverPagination ? serverPagination.totalCount : data.length,
-              })}
-            </span>
-          </div>
-          <div className={styles["datatable-footer-right"]}>
-            {(!serverPagination || serverPagination.onLimitChange) && (
-              <>
-                <span className={styles["footer-label"]}>{t("dataTable.pagination.itemsPerPage")}</span>
-                <div className={styles["footer-rows-per-page-select"]}>
-                  <Select<number>
-                    size="small"
-                    compact
-                    value={effectiveRowsPerPage}
-                    options={rowsPerPageOptions}
-                    onChange={(value) => {
-                      if (serverPagination?.onLimitChange) {
-                        serverPagination.onLimitChange(value);
-                      } else {
-                        setRowsPerPage(value);
-                        setPage(0);
-                      }
-                    }}
-                  />
-                </div>
-              </>
-            )}
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "first_page" }}
-              aria-label={t("dataTable.pagination.first")}
-              disabled={currentPage <= 0}
-              onClick={() => goToPage(0)}
-            />
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "chevron_left" }}
-              aria-label={t("dataTable.pagination.prev")}
-              disabled={currentPage <= 0}
-              onClick={() => goToPage(currentPage - 1)}
-            />
-            <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-              {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
-            </span>
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "chevron_right" }}
-              aria-label={t("dataTable.pagination.next")}
-              disabled={currentPage >= pageCount - 1}
-              onClick={() => goToPage(currentPage + 1)}
-            />
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="medium"
-              icon={{ category: "outlined", type: "last_page" }}
-              aria-label={t("dataTable.pagination.last")}
-              disabled={currentPage >= pageCount - 1}
-              onClick={() => goToPage(pageCount - 1)}
-            />
-          </div>
-        </div>
+        <TablePagination
+          totalItems={serverPagination ? serverPagination.totalCount : data.length}
+          currentPage={currentPage}
+          pageCount={pageCount}
+          rowsPerPage={effectiveRowsPerPage}
+          rowsPerPageOptions={rowsPerPageOptions}
+          onRowsPerPageChange={
+            !serverPagination || serverPagination.onLimitChange
+              ? (value) => {
+                  if (serverPagination?.onLimitChange) {
+                    serverPagination.onLimitChange(value);
+                  } else {
+                    setRowsPerPage(value);
+                    setPage(0);
+                  }
+                }
+              : undefined
+          }
+          onFirst={() => goToPage(0)}
+          onPrev={() => goToPage(currentPage - 1)}
+          onNext={() => goToPage(currentPage + 1)}
+          onLast={() => goToPage(pageCount - 1)}
+        />
       )}
     </div>
   );

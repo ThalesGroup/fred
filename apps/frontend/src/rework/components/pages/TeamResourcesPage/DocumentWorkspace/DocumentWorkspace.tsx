@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -20,6 +20,8 @@ import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
@@ -92,6 +94,10 @@ function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
 }
 
+function rowLabel(row: Row): string {
+  return row.kind === "folder" ? row.node.name : row.doc.identity.title || row.doc.identity.document_name;
+}
+
 /**
  * Corpus d'équipe tab (RFC §13, Resources dashboard v2): breadcrumb drill-down
  * through one library (tag) level at a time — replaces the pre-FRONT-09.G
@@ -128,6 +134,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
 
   // null => at the Corpus root (the tree's synthetic top node).
   const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
+  // Stack of previously-viewed folders, oldest first — the back button pops
+  // the most recent one. Not "go to parent": if you drilled in from a
+  // search result or a distant breadcrumb click, back returns to wherever
+  // you actually came from, which may not be this folder's parent. Whether
+  // the button itself is shown/enabled tracks currentFolderFull (are we at
+  // the root) instead — navigating to root via the breadcrumb still pushes
+  // here like any other navigation, so this stack alone can't answer that.
+  const [, setNavigationHistory] = useState<(string | null)[]>([]);
   const [perTag, setPerTag] = useState<Record<string, PageState>>({});
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
   const [renameTarget, setRenameTarget] = useState<
@@ -154,6 +168,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Client-side filter over the current folder's already-loaded rows — not
+  // the deferred server-side search from RFC §13.4 (POST .../browse's
+  // `query` field), which would search across the whole library, not just
+  // what's on screen. Same pattern as the team members table's search.
+  const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   // Shared across the whole browser (not per-tag) — matches how the members
   // table's rows-per-page selector is one setting for the whole DataTable.
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
@@ -194,9 +214,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     [currentTag, loadTagPage],
   );
 
-  const navigateTo = useCallback((full: string | null) => {
-    setCurrentFolderFull(full);
-    setSelectedKeys(new Set());
+  const navigateTo = useCallback(
+    (full: string | null) => {
+      setNavigationHistory((prev) => [...prev, currentFolderFull]);
+      setCurrentFolderFull(full);
+      setSelectedKeys(new Set());
+    },
+    [currentFolderFull],
+  );
+
+  const navigateBack = useCallback(() => {
+    setNavigationHistory((prev) => {
+      if (prev.length === 0) return prev;
+      setCurrentFolderFull(prev[prev.length - 1]);
+      setSelectedKeys(new Set());
+      return prev.slice(0, -1);
+    });
   }, []);
 
   // Load the current folder's document page on entry (and once when its tag
@@ -416,12 +449,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     [childFolders, page?.docs],
   );
 
+  const filteredRows = useMemo(() => {
+    const trimmed = search.trim().toLowerCase();
+    if (!trimmed) return rows;
+    return rows.filter((row) => rowLabel(row).toLowerCase().includes(trimmed));
+  }, [rows, search]);
+
   const selectedDocs = useMemo(
     () =>
-      rows
+      filteredRows
         .filter((row): row is Row & { kind: "document" } => row.kind === "document" && selectedKeys.has(rowKey(row)))
         .map((row) => row.doc),
-    [rows, selectedKeys],
+    [filteredRows, selectedKeys],
   );
 
   const bulkDelete = () => {
@@ -557,15 +596,25 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
       },
     },
     {
+      // Fixed, not "auto": DataTable renders the header and body as two
+      // independent grids (RFC-tracked, for the scroll-starts-below-header
+      // behavior), so an "auto" track sizes itself from each grid's OWN
+      // content — the header's empty label vs. the row's two icon buttons —
+      // and the two grids disagree on this column's width. That leftover
+      // space then gets absorbed differently by the flexible Name (2fr)
+      // column in each grid, shifting every column after it out of
+      // alignment. A fixed width both grids agree on avoids the whole
+      // class of drift. Sized for two `size="small"` (2rem) icon buttons +
+      // their gap + the cell's own horizontal padding, plus headroom.
       label: "",
-      size: "auto",
+      size: "6rem",
       cellRenderer: (row) => (
         <span className={styles.actionsCell}>
           {row.kind === "document" && (
             <IconButton
               color="on-surface-retreat"
               variant="icon"
-              size="medium"
+              size="small"
               icon={{ category: "outlined", type: "visibility" }}
               aria-label={t("rework.resources.action.preview")}
               title={t("rework.resources.action.preview")}
@@ -576,7 +625,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
             iconButton={{
               color: "on-surface-retreat",
               variant: "icon",
-              size: "medium",
+              size: "small",
               icon: { category: "outlined", type: "more_vert" },
               "aria-label": t("rework.resources.action.more"),
             }}
@@ -632,7 +681,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     <div className={styles.workspace}>
       <div className={styles.card}>
         <div className={styles.toolbar}>
-          <Breadcrumb segments={breadcrumbSegments} />
+          <span className={styles.toolbarStart}>
+            <Tooltip text={t("rework.resources.action.back")}>
+              <IconButton
+                color="on-surface-retreat"
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "arrow_back" }}
+                aria-label={t("rework.resources.action.back")}
+                disabled={!currentFolderFull}
+                // visibility (not conditional rendering) so the button still
+                // reserves its layout space at the root — the breadcrumb
+                // next to it doesn't shift left when the button disappears/
+                // reappears. visibility: hidden also removes it from hit
+                // testing and the tab order on its own, so a disabled+
+                // invisible button here is inert both visually and
+                // functionally, not just visually.
+                style={!currentFolderFull ? { visibility: "hidden" } : undefined}
+                onClick={navigateBack}
+              />
+            </Tooltip>
+            <Breadcrumb segments={breadcrumbSegments} />
+          </span>
           <span className={styles.toolbarEnd}>
             <BulkActionsBar
               selectedCount={selectedDocs.length}
@@ -641,27 +711,60 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
             />
             {canCreateFolder && (
               <>
-                <IconButton
-                  color="on-surface-retreat"
-                  variant="icon"
-                  size="medium"
-                  icon={{ category: "outlined", type: "create_new_folder" }}
-                  aria-label={t("rework.resources.menu.newFolder")}
-                  title={t("rework.resources.menu.newFolder")}
-                  onClick={() => setCreateOpen(true)}
-                />
-                <IconButton
-                  color="on-surface-retreat"
-                  variant="icon"
-                  size="medium"
-                  icon={{ category: "outlined", type: "upload_file" }}
-                  aria-label={t("rework.resources.action.addFile")}
-                  title={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
-                  disabled={!currentTag}
-                  onClick={() => setUploadOpen(true)}
-                />
+                <Tooltip text={t("rework.resources.menu.newFolder")}>
+                  <IconButton
+                    color="primary"
+                    variant="icon"
+                    size="medium"
+                    icon={{ category: "outlined", type: "create_new_folder" }}
+                    aria-label={t("rework.resources.menu.newFolder")}
+                    onClick={() => setCreateOpen(true)}
+                  />
+                </Tooltip>
+                <Tooltip
+                  text={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
+                >
+                  <IconButton
+                    color="primary"
+                    variant="icon"
+                    size="medium"
+                    icon={{ category: "outlined", type: "upload_file" }}
+                    aria-label={t("rework.resources.action.addFile")}
+                    disabled={!currentTag}
+                    onClick={() => setUploadOpen(true)}
+                  />
+                </Tooltip>
               </>
             )}
+            <span className={styles.search}>
+              <TextInput
+                ref={searchInputRef}
+                compact
+                size="small"
+                icon={{ category: "outlined", type: "search" }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("rework.resources.search.placeholder")}
+                aria-label={t("rework.resources.search.ariaLabel")}
+                style={search ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
+              />
+              {search && (
+                <span className={styles.searchClear}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    color="on-surface-retreat"
+                    variant="icon"
+                    icon={{ category: "outlined", type: "close" }}
+                    aria-label={t("rework.resources.search.clearAriaLabel")}
+                    onClick={() => {
+                      setSearch("");
+                      searchInputRef.current?.focus();
+                    }}
+                  />
+                </span>
+              )}
+            </span>
           </span>
         </div>
 
@@ -678,14 +781,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
           <div className={styles.tableFill}>
             <DataTable<Row>
               columns={columns}
-              data={rows}
+              data={filteredRows}
               rowKey={rowKey}
               rowHeight="2.5rem"
               firstColumnInset
               selectable
               selectedKeys={selectedKeys}
               onSelectionChange={setSelectedKeys}
-              backgroundColor="transparent"
+              backgroundColor="var(--surface-container-high)"
               serverPagination={
                 currentTag
                   ? {
