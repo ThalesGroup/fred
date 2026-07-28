@@ -48,6 +48,52 @@ realm JSON inside the ZIP completely; the two documents are never merged.
 > procedure always uploads a `realm_file`, so that older behavior does not
 > apply here.
 
+## Source-Side Handoff Gate
+
+This is the mandatory handoff checklist for the people extracting identity
+evidence from the source Kea Keycloak database. Its output is always named
+`kea-realm-reconciliation.json`; do not call it `users.json`, because users
+alone are insufficient. The file also carries team identities, memberships,
+and platform roles.
+
+The source-side producer must:
+
+1. freeze source identity and group mutations for the duration of the
+   extraction;
+2. confirm that the source realm is `app` and inspect the schema listed in
+   [Read-Only Postgres Extraction](#read-only-postgres-extraction);
+3. run the reviewed SQL from that section without hand-editing its JSON output;
+4. run every command in [Validate Both Inputs](#validate-both-inputs);
+5. compare the reported group, human-user, membership, and platform-role counts
+   with independently measured source counts;
+6. produce the checksum only after all validations pass:
+
+   ```bash
+   sha256sum kea-realm-reconciliation.json \
+     > kea-realm-reconciliation.json.sha256
+   ```
+
+The handoff consists of exactly:
+
+- `kea-realm-reconciliation.json`, transferred through the approved secure
+  channel;
+- `kea-realm-reconciliation.json.sha256`;
+- the recorded count summary produced by the validation section;
+- confirmation that all duplicate checks printed nothing.
+
+The Swift-side receiver must verify the checksum and rerun the validation
+commands locally before opening the migration page or calling its API:
+
+```bash
+sha256sum --check kea-realm-reconciliation.json.sha256
+```
+
+Do not hand-edit the JSON to repair a failed check. Correct or explicitly adapt
+the source SQL, review the adaptation, and extract again. Do not proceed to
+Swift if the checksum fails, a validation command fails, a duplicate command
+prints anything, a membership names an unknown group, or a source count cannot
+be reconciled.
+
 ## Required Reconciliation JSON — exact field contract
 
 The root object has exactly two keys the importer reads: `groups` and `users`.
@@ -271,20 +317,42 @@ Validate the reconciliation JSON before uploading it:
 
 ```bash
 jq -e '
+  def string_array:
+    type == "array" and all(.[]; type == "string");
+  def normalized_group:
+    if startswith("/") then ltrimstr("/") else . end;
+
+  type == "object" and
+  (keys | sort) == ["groups", "users"] and
   (.groups | type == "array" and length > 0) and
   (.users | type == "array" and length > 0) and
   all(.groups[];
       (.id | type == "string" and length > 0) and
-      (.name | type == "string" and length > 0)) and
+      (.name | type == "string" and length > 0) and
+      (.subGroups | type == "array" and length == 0)) and
   all(.users[];
       (.id | type == "string" and length > 0) and
       (.username | type == "string" and length > 0) and
-      (.groups | type == "array") and
-      (.realmRoles | type == "array"))
+      (.groups | string_array) and
+      (.realmRoles | string_array) and
+      all(.realmRoles[]; IN("admin", "editor", "viewer")) and
+      ((.groups | length) == (.groups | unique | length)) and
+      ((.realmRoles | length) == (.realmRoles | unique | length))) and
+  ([.groups[].id] | length == (unique | length)) and
+  ([.groups[].name] | length == (unique | length)) and
+  ([.users[].id] | length == (unique | length)) and
+  ([.users[].username] | length == (unique | length)) and
+  ([.groups[].name] as $known_groups |
+    all(.users[].groups[]; (normalized_group | IN($known_groups[]))))
 ' kea-realm-reconciliation.json
 ```
 
-Print the source counts:
+The command must exit zero and print `true`. It deliberately rejects unknown
+top-level keys, nested groups, non-string array entries, unknown platform
+roles, duplicate identities, duplicate membership/role entries, and
+memberships whose normalized name is absent from `groups[]`.
+
+Record the source counts:
 
 ```bash
 jq '{
@@ -293,7 +361,8 @@ jq '{
   memberships: ([.users[].groups[]] | length),
   platform_admins: ([.users[] | select(.realmRoles | index("admin"))] | length),
   platform_viewers: ([.users[] | select(.realmRoles | index("viewer"))] | length)
-}' kea-realm-reconciliation.json
+}' kea-realm-reconciliation.json |
+  tee kea-realm-reconciliation.counts.json
 ```
 
 The production order of magnitude is approximately 50 teams and 1900 users.
