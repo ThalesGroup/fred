@@ -146,7 +146,8 @@ def _kea_agent(
     agent_id: str,
     *,
     name: str,
-    definition_ref: str = "v2.react.basic",
+    definition_ref: str | None = "v2.react.basic",
+    class_path: str | None = None,
     system_prompt: str | None = None,
     prompt_key: str = "system_prompt_template",
     extra_fields: list[dict[str, Any]] | None = None,
@@ -155,27 +156,30 @@ def _kea_agent(
     tags: list[str] | None = None,
     agent_type: str = "agent",
 ) -> dict[str, Any]:
+    """Build a kea `agent` row. Pass `class_path` (and leave `definition_ref`
+    unset) to shape a legacy v1 agent, matching `resolve_kea_template`'s
+    definition_ref-first / class_path-fallback precedence."""
     fields: list[dict[str, Any]] = list(extra_fields or [])
     if system_prompt is not None:
         fields.append({"key": prompt_key, "type": "prompt", "default": system_prompt})
-    return {
+    payload: dict[str, Any] = {
         "id": agent_id,
         "name": name,
-        "payload_json": {
-            "id": agent_id,
-            "name": name,
-            "type": agent_type,
-            "enabled": True,
-            "definition_ref": definition_ref,
-            "tuning": {
-                "role": role,
-                "description": description,
-                "tags": tags or [],
-                "fields": fields,
-                "mcp_servers": [{"id": "mcp-knowledge-flow-mcp-text"}],
-            },
+        "type": agent_type,
+        "enabled": True,
+        "tuning": {
+            "role": role,
+            "description": description,
+            "tags": tags or [],
+            "fields": fields,
+            "mcp_servers": [{"id": "mcp-knowledge-flow-mcp-text"}],
         },
     }
+    if definition_ref is not None:
+        payload["definition_ref"] = definition_ref
+    if class_path is not None:
+        payload["class_path"] = class_path
+    return {"id": agent_id, "name": name, "payload_json": payload}
 
 
 def _chat_context(
@@ -423,6 +427,61 @@ async def test_kea_v1_secondary_prompts_warn(tmp_path: Path) -> None:
         assert record is not None
         assert record.tuning.values["prompts.system"] == "rag system prompt"
         assert any("prompts.grade_documents" in w for w in report.warnings)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kea_legacy_basic_react_agent_maps_to_assistant(
+    tmp_path: Path,
+) -> None:
+    """agentic_backend.core.agents.basic_react_agent.BasicReActAgent (legacy v1
+    class_path) must resolve to fred-agents:fred.github.assistant and go
+    through the same import path as v2.react.basic — no GAP, and name,
+    description, prompt, team, and creator are preserved."""
+    engine = await _make_engine(tmp_path, "legacy-basic-react.sqlite3")
+    try:
+        bundle = _kea_bundle(
+            agents=[
+                _kea_agent(
+                    "agent-legacy",
+                    name="OldGenericAgent",
+                    definition_ref=None,
+                    class_path="agentic_backend.core.agents.basic_react_agent.BasicReActAgent",
+                    system_prompt="answer using the finance tools",
+                    role="Finance helper",
+                    description="Legacy generic assistant",
+                    tags=["legacy"],
+                )
+            ],
+            tuples=[
+                {
+                    "user": f"user:{UID_ALICE}",
+                    "relation": "owner",
+                    "object": "agent:agent-legacy",
+                }
+            ],
+            realm={"groups": [], "users": [{"id": UID_ALICE, "username": "alice"}]},
+        )
+        report = await _import(bundle, engine)
+        assert report.agents_imported == 1
+        assert report.agents_gap == 0
+        assert not any("GAP" in w for w in report.warnings)
+
+        record = await AgentInstanceStore(engine).get("agent-legacy")
+        assert record is not None
+        assert record.template_id == "fred-agents:fred.github.assistant"
+        assert record.source_runtime_id == "fred-agents"
+        assert record.source_agent_id == "fred.github.assistant"
+        assert record.display_name == "OldGenericAgent"
+        assert record.description == "Legacy generic assistant"
+        assert str(record.team_id) == f"personal-{UID_ALICE}"
+        assert record.created_by == UID_ALICE
+        assert record.tuning.role == "Finance helper"
+        assert record.tuning.tags == ["legacy"]
+        assert (
+            record.tuning.values["prompts.system"] == "answer using the finance tools"
+        )
     finally:
         await engine.dispose()
 
