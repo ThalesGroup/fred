@@ -1219,6 +1219,14 @@ _TEAM_RELATIONS_CACHE_TTL_SECONDS = 45
 _TEAM_RELATIONS_CACHE: ThreadSafeLRUCache[
     TeamId, tuple[float, list[Relation] | RebacDisabledResult]
 ] = ThreadSafeLRUCache(max_size=2000)
+# PR #2160 review (Codex, P2): a read that starts before a write's
+# invalidation but finishes after it would otherwise re-`set` the pre-write
+# snapshot, silently undoing the invalidation for a full TTL. Tracking the
+# last invalidation time per team lets a read recognize this and skip
+# publishing its (now provably stale) result — see `_get_team_relations_cached`.
+_TEAM_RELATIONS_LAST_INVALIDATED: ThreadSafeLRUCache[TeamId, float] = (
+    ThreadSafeLRUCache(max_size=2000)
+)
 
 
 def invalidate_team_relations_cache(team_id: TeamId) -> None:
@@ -1230,10 +1238,11 @@ def invalidate_team_relations_cache(team_id: TeamId) -> None:
       that team should be visible immediately rather than waiting out the
       TTL, so every relation-mutating call site
       (`_add_team_member_relation`, `_remove_team_member_relation`,
-      `_remove_all_team_member_relations`) calls this right after its write
-      succeeds
+      `_remove_all_team_member_relations`, `_grant_team_role_via_import`)
+      calls this right after its write succeeds
     """
     _TEAM_RELATIONS_CACHE.delete(team_id)
+    _TEAM_RELATIONS_LAST_INVALIDATED.set(team_id, time.time())
 
 
 async def _get_team_relations_cached(
@@ -1253,20 +1262,35 @@ async def _get_team_relations_cached(
       `invalidate_team_relations_cache` so a user's own join/leave/role
       change is reflected without waiting on the TTL. No authorization
       decision is ever served from this cache — `Check` calls stay live.
+
+    PR #2160 review (Codex, P2): between the cache-miss check and the final
+    `.set()` below there's a real `await` — a concurrent write can invalidate
+    this team while this call is in flight, and this call would otherwise
+    re-`set` the pre-write snapshot it already had in hand, undoing that
+    invalidation for a full TTL. `read_started_at` is captured before the
+    `await`; if `invalidate_team_relations_cache` ran for this team at or
+    after that moment, this result is provably stale and is returned to the
+    caller without being published back into the cache — the next call
+    starts clean instead of resurrecting it.
     """
-    now = time.time()
+    read_started_at = time.time()
     cached = _TEAM_RELATIONS_CACHE.get(team_id)
     if cached is not None:
         expires_at, relations = cached
-        if expires_at > now:
+        if expires_at > read_started_at:
             return relations
         _TEAM_RELATIONS_CACHE.delete(team_id)
 
     relations = await rebac.list_direct_relations(
         RebacReference(Resource.TEAM, team_id)
     )
+
+    last_invalidated = _TEAM_RELATIONS_LAST_INVALIDATED.get(team_id)
+    if last_invalidated is not None and last_invalidated >= read_started_at:
+        return relations
+
     _TEAM_RELATIONS_CACHE.set(
-        team_id, (now + _TEAM_RELATIONS_CACHE_TTL_SECONDS, relations)
+        team_id, (read_started_at + _TEAM_RELATIONS_CACHE_TTL_SECONDS, relations)
     )
     return relations
 
