@@ -50,6 +50,13 @@ def _identifiers(team_item: dict) -> set[str]:
     return {str(team_item.get(k)) for k in ("id", "name", "team_id") if team_item.get(k)}
 
 
+# Hard-required since #2107 (CreateAgentInstanceRequest.usage_statement) — every
+# enroll call in this file needs one or FastAPI 422s the request before any
+# authz check runs, masking every permission assertion below with a validation
+# error instead.
+USAGE_STATEMENT = "Validation-suite disposable instance, deleted at teardown."
+
+
 MEMBERS = sorted(u for u, fu in USERS.items() if TEST_TEAM in fu.teams)
 NON_MEMBERS = sorted(u for u, fu in USERS.items() if TEST_TEAM not in fu.teams)
 PLAIN_MEMBERS = sorted(u for u in MEMBERS if not USERS[u].can_enroll_in(TEST_TEAM))
@@ -203,7 +210,7 @@ def enrolled_agent(cp):
     name = f"val-{uuid.uuid4().hex[:8]}"
     created = admin.post(
         f"/teams/{team_id}/agent-instances",
-        json={"template_id": template_id, "display_name": name},
+        json={"template_id": template_id, "display_name": name, "usage_statement": USAGE_STATEMENT},
     )
     assert created.status_code in (200, 201), (
         f"Team operator ({TEAM_OPERATOR_USERNAME}) could not enroll {AGENT_TAG} into {TEST_TEAM!r}: "
@@ -360,7 +367,11 @@ def test_plain_member_cannot_enroll_agent_in_collaborative_team(username: str, c
     team_id, template = _resolve_test_template(operator)
     resp = cp(username).post(
         f"/teams/{team_id}/agent-instances",
-        json={"template_id": template["template_id"], "display_name": f"deny-{uuid.uuid4().hex[:6]}"},
+        json={
+            "template_id": template["template_id"],
+            "display_name": f"deny-{uuid.uuid4().hex[:6]}",
+            "usage_statement": USAGE_STATEMENT,
+        },
     )
     assert resp.status_code in (403, 404), (
         f"{username} unexpectedly enrolled {AGENT_TAG} into {TEST_TEAM}: "
@@ -381,6 +392,7 @@ def test_team_admin_cannot_enroll_agent_without_editor_role(username: str, cp) -
         json={
             "template_id": template["template_id"],
             "display_name": f"deny-admin-{uuid.uuid4().hex[:6]}",
+            "usage_statement": USAGE_STATEMENT,
         },
     )
     instance_id = None
@@ -442,7 +454,7 @@ def test_user_can_enroll_agent_in_their_personal_team(username: str, cp) -> None
     name = f"personal-val-{uuid.uuid4().hex[:6]}"
     created = client.post(
         f"/teams/{personal_id}/agent-instances",
-        json={"template_id": template["template_id"], "display_name": name},
+        json={"template_id": template["template_id"], "display_name": name, "usage_statement": USAGE_STATEMENT},
     )
     assert created.status_code in (200, 201), (
         f"{username} could not enroll {AGENT_TAG} in their personal team: "
