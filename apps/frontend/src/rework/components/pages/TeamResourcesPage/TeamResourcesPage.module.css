@@ -13,24 +13,14 @@
  * limitations under the License.
  */
 
-/* The page is the split row: a padded main column (header + tree) beside the
- * full-height preview drawer. The drawer sits OUTSIDE the padding so, when open,
- * it runs flush to the page's top/right/bottom edges and fills most of the page,
- * leaving the list a sliver on the left. */
 .page {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  color: var(--on-surface);
-}
-
-.main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-m);
   padding: var(--spacing-l);
-  min-width: 0;
+  min-height: 0;
+  color: var(--on-surface);
 }
 
 .header {
@@ -92,10 +82,7 @@
 .tree,
 .panel {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  min-width: 0;
-  overflow-y: auto;
 }
 
 .panel {
