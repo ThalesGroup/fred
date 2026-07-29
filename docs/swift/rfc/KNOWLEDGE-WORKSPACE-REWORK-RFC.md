@@ -1190,3 +1190,24 @@ were restructured to always include it for files regardless of
 `canWrite`/`canCreateFolder` — previously those functions returned `[]`
 entirely for a read-only user, which would otherwise have silently taken
 download away from users who only lost the ability to rename/delete/etc.
+
+**Follow-up (2026-07-30):** a folder row's Taille cell (Corpus only —
+`FilesystemWorkspace`'s folder rows already showed "—" for size, a
+different, untouched behavior) showed a document count
+(`rework.resources.folder.docCount`), not a size, despite the column
+header. Fixed to show the folder's total document size instead, via
+`POST /documents/metadata/tag-sizes` (`metadata/controller.py`) —
+**zero backend change needed**: the endpoint, its `TagSizesRequest`/
+`TagSizesResponse` models, the `MetadataService.total_size_by_tags`
+service method, and its Postgres JSONB-aggregate store implementation
+already existed, docstring-labelled "used to show a folder's total size
+while it is collapsed," but had never been wired to the frontend, nor
+present in `knowledgeFlowOpenApi.ts`'s consuming hooks list until this
+change started using the already-generated
+`useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation`.
+`DocumentWorkspace.tsx` batches one call per folder view for every
+visible child folder's primary tag id (same "batch once per page, not
+per row" pattern as the Auteur column's uploader resolution) and shows
+"—" for a folder whose size hasn't resolved yet. Scope matches the
+doc-count behavior it replaces: each folder's own directly-tagged
+documents only, not a recursive sum over its subfolders' contents.

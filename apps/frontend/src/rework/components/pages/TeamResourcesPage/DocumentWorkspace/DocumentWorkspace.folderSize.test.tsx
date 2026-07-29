@@ -13,13 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the toolbar search field: a client-side filter over the
-// current folder's already-loaded rows (folders + documents), same pattern
-// as the team members table's search — not the deferred server-side search.
+// Coverage: a folder row's "Taille" cell shows the folder's total document
+// size (via POST /documents/metadata/tag-sizes, batched once per folder view),
+// not a document count — "—" while the batch is in flight, the formatted
+// size once it resolves.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatBytes } from "@shared/utils/formatBytes.ts";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,17 +33,20 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
+
+const tagSizes = vi.fn(() => ({ unwrap: async () => ({ sizes: { "tag-cir": 2048, "tag-hr": 0 } }) }));
+
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [
-      { id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] },
+      { id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: ["doc-1", "doc-2"] },
       { id: "tag-hr", name: "HR", path: "", type: "document", item_ids: [] },
     ],
     isLoading: false,
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [vi.fn()],
-  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [tagSizes],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
 }));
@@ -81,14 +86,13 @@ import DocumentWorkspace from "./DocumentWorkspace";
 let container: HTMLDivElement;
 let root: Root;
 
-beforeEach(() => {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
-  act(() => {
-    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
-  });
-});
+function folderRow(name: string): HTMLElement {
+  const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+  if (!button) throw new Error(`"${name}" folder row not rendered`);
+  const row = button.closest('[role="row"], tr, li') ?? button.parentElement?.parentElement;
+  if (!row) throw new Error(`"${name}" row container not found`);
+  return row as HTMLElement;
+}
 
 afterEach(() => {
   act(() => {
@@ -97,46 +101,32 @@ afterEach(() => {
   container.remove();
 });
 
-function folderNames(): string[] {
-  const buttonTexts = [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
-  return ["CIR", "HR"].filter((name) => buttonTexts.some((text) => text.includes(name)));
-}
+describe("DocumentWorkspace folder size column", () => {
+  it("shows '—' before the batched tag-sizes call resolves, then the formatted total size", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
 
-function searchInput(): HTMLInputElement {
-  const input = container.querySelector("input[type=text], input:not([type])") as HTMLInputElement | null;
-  if (!input) throw new Error("search input not rendered");
-  return input;
-}
+    await act(async () => {
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    });
 
-function typeSearch(value: string) {
-  act(() => {
-    const input = searchInput();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
-    setter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-describe("DocumentWorkspace search", () => {
-  it("shows every root folder with no search applied", () => {
-    expect(folderNames()).toEqual(["CIR", "HR"]);
+    expect(tagSizes).toHaveBeenCalledWith({ tagSizesRequest: { tag_ids: ["tag-cir", "tag-hr"] } });
+    expect(folderRow("CIR").textContent).toContain(formatBytes(2048));
   });
 
-  it("filters rows to only those whose name matches the query, case-insensitively", () => {
-    typeSearch("cir");
-    expect(folderNames()).toEqual(["CIR"]);
-  });
+  it("never shows a raw document count in the size cell", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
 
-  it("restores every row once the query is cleared", () => {
-    typeSearch("cir");
-    expect(folderNames()).toEqual(["CIR"]);
+    await act(async () => {
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    });
 
-    typeSearch("");
-    expect(folderNames()).toEqual(["CIR", "HR"]);
-  });
-
-  it("shows nothing when the query matches no row", () => {
-    typeSearch("nonexistent-folder-name");
-    expect(folderNames()).toEqual([]);
+    // tag-hr has no documents and a 0-byte total — must render the formatted
+    // zero size ("0 bytes"), not the old "N docs" label.
+    expect(folderRow("HR").textContent).not.toContain("docs");
+    expect(folderRow("HR").textContent).toContain(formatBytes(0));
   });
 });

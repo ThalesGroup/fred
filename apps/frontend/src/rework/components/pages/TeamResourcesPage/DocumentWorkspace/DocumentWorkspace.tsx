@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -40,6 +40,7 @@ import {
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
@@ -203,6 +204,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
@@ -473,6 +475,41 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     () => [...currentNode.children.values()].sort((a, b) => a.name.localeCompare(b.name)),
     [currentNode],
   );
+
+  // Folder rows show the total size of the documents they directly contain
+  // (same "direct tag, not recursive over subfolders" scope as the doc-count
+  // this replaces) rather than a document count — batched once per folder
+  // view via /documents/metadata/tag-sizes (built for exactly this, see its
+  // controller docstring), not one query per row.
+  const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
+  const folderTagIds = useMemo(
+    () => childFolders.map((node) => node.tagsHere[0]?.id).filter((id): id is string => Boolean(id)),
+    [childFolders],
+  );
+  // Keyed by sorted content, not the array's own identity: `tags` (and so
+  // `childFolders`/`folderTagIds`) can get a fresh reference on a render that
+  // doesn't actually change which folders are shown, and re-issuing the same
+  // batch call on every such render would both waste requests and, since each
+  // resolution replaces `folderSizes` wholesale, loop forever.
+  const folderTagIdsKey = [...folderTagIds].sort().join(",");
+  const fetchedSizesKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (folderTagIds.length === 0 || folderTagIdsKey === fetchedSizesKeyRef.current) return;
+    fetchedSizesKeyRef.current = folderTagIdsKey;
+    (async () => {
+      try {
+        const res = await fetchTagSizes({ tagSizesRequest: { tag_ids: folderTagIds } }).unwrap();
+        setFolderSizes((prev) => ({ ...prev, ...res.sizes }));
+      } catch {
+        // Sizes stay unresolved for these tag ids — the cell keeps showing "—".
+      }
+    })();
+    // folderTagIds itself is intentionally not a dep: folderTagIdsKey already
+    // captures every content change it could cause, and it's recomputed fresh
+    // in this same render anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folderTagIdsKey, fetchTagSizes]);
+
   const rows: Row[] = useMemo(
     () => [
       ...childFolders.map((node): Row => ({ kind: "folder", node })),
@@ -649,13 +686,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     {
       label: t("rework.resources.columns.size"),
       size: "6.5rem",
-      cellRenderer: (row) => (
-        <span className={styles.nowrapCell}>
-          {row.kind === "folder"
-            ? t("rework.resources.folder.docCount", { count: row.node.tagsHere[0]?.item_ids?.length ?? 0 })
-            : formatBytes(row.doc.file?.file_size_bytes ?? 0)}
-        </span>
-      ),
+      cellRenderer: (row) => {
+        if (row.kind === "folder") {
+          const tagId = row.node.tagsHere[0]?.id;
+          const bytes = tagId ? folderSizes[tagId] : undefined;
+          return <span className={styles.nowrapCell}>{bytes === undefined ? "—" : formatBytes(bytes)}</span>;
+        }
+        return <span className={styles.nowrapCell}>{formatBytes(row.doc.file?.file_size_bytes ?? 0)}</span>;
+      },
     },
     {
       // Documents: source.date_added_to_kb, not identity.created — the
