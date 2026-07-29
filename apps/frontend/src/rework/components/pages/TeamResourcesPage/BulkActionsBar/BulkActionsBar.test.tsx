@@ -104,4 +104,82 @@ describe("BulkActionsBar", () => {
     render(<BulkActionsBar selectedCount={5} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
     expect(container.textContent).toContain('rework.resources.bulkActions.selectedCount {"count":5}');
   });
+
+  it("hides Download when onDownload is omitted", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.download"]')).toBeNull();
+  });
+
+  it("shows Download, positioned before Delete, when onDownload is provided", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} onDownload={vi.fn()} />);
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const downloadIndex = buttons.findIndex(
+      (b) => b.getAttribute("aria-label") === "rework.resources.bulkActions.download",
+    );
+    const deleteIndex = buttons.findIndex(
+      (b) => b.getAttribute("aria-label") === "rework.resources.bulkActions.delete",
+    );
+    expect(downloadIndex).toBeGreaterThanOrEqual(0);
+    expect(downloadIndex).toBeLessThan(deleteIndex);
+  });
+
+  it("invokes onDownload without triggering delete/clear", () => {
+    const onDownload = vi.fn();
+    const onDelete = vi.fn();
+    const onClearSelection = vi.fn();
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={onDelete}
+        onClearSelection={onClearSelection}
+        onDownload={onDownload}
+      />,
+    );
+
+    click(container.querySelector('button[aria-label="rework.resources.bulkActions.download"]'));
+
+    expect(onDownload).toHaveBeenCalledOnce();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("shows all four actions when both onExcludeFromSearch and onDownload are provided", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        onExcludeFromSearch={vi.fn()}
+        onDownload={vi.fn()}
+      />,
+    );
+    expect(container.querySelectorAll("button")).toHaveLength(4);
+  });
+
+  it("disables the download button while downloadLoading is true", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        onDownload={vi.fn()}
+        downloadLoading
+      />,
+    );
+
+    const downloadButton = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.download"]',
+    ) as HTMLButtonElement;
+    expect(downloadButton.disabled).toBe(true);
+    expect(downloadButton.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("keeps the download button enabled when downloadLoading is false/omitted", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} onDownload={vi.fn()} />);
+
+    const downloadButton = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.download"]',
+    ) as HTMLButtonElement;
+    expect(downloadButton.disabled).toBe(false);
+  });
 });

@@ -73,6 +73,13 @@
   border-top: 1px solid var(--outline-retreat);
 }
 
+/* Same scoping reasoning as the header/footer borders above — breathing
+ * room around the row list, ResourceExplorer's table only. */
+.tableFill [class*="datatable-body"] {
+  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+}
+
 .toolbarStart {
   display: flex;
   align-items: center;

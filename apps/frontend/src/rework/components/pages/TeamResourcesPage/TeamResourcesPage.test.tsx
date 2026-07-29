@@ -35,6 +35,14 @@ const probe = vi.hoisted(() => ({
   corpusStatsUninitialized: false,
   corpusStatsRefetch: () => {},
   onDocumentsChanged: undefined as (() => void) | undefined,
+  // Existing "tab switcher" coverage below exercises the 4-tab (flag-on)
+  // behavior — defaults true so it keeps passing unmodified. The dedicated
+  // "resource spaces feature flag" describe block below overrides this to
+  // cover the off (shipped default) case.
+  enableAllResourceSpaces: true,
+  // True while useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery
+  // hasn't resolved yet — bootstrap is undefined during that window.
+  bootstrapPending: false,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -44,7 +52,12 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
 vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({ activeTeam: probe.isPersonalTeam ? { id: "team-1" } : { id: "other-team" } }),
+  useFrontendBootstrap: () => ({
+    activeTeam: probe.isPersonalTeam ? { id: "team-1" } : { id: "other-team" },
+    bootstrap: probe.bootstrapPending
+      ? undefined
+      : { feature_flags: { enableAllResourceSpaces: probe.enableAllResourceSpaces } },
+  }),
 }));
 vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
 vi.mock("@shared/utils/teamId.ts", () => ({
@@ -109,6 +122,8 @@ beforeEach(() => {
   probe.corpusStatsUninitialized = false;
   probe.corpusStatsRefetch = vi.fn();
   probe.onDocumentsChanged = undefined;
+  probe.enableAllResourceSpaces = true;
+  probe.bootstrapPending = false;
 });
 
 afterEach(() => {
@@ -164,6 +179,38 @@ describe("TeamResourcesPage tab switcher", () => {
     probe.team = { id: "team-1" };
     render();
     expect(container.textContent).not.toContain("rework.resources.storageQuota");
+  });
+});
+
+// The team isn't yet confident Mon espace/Espace d'équipe/Agents pull their
+// weight — shipped default is Corpus d'équipe only, with the other three
+// gated behind the platform-wide enableAllResourceSpaces flag
+// (configuration.yaml, off by default) so they can be turned back on later
+// without a code change.
+describe("TeamResourcesPage resource spaces feature flag", () => {
+  it("shows only Corpus d'équipe, no tab switcher at all, when the flag is off", () => {
+    probe.enableAllResourceSpaces = false;
+    render();
+
+    expect(tabButtons()).toHaveLength(0);
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="panel-fs"]')).toBeNull();
+    expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
+  });
+
+  it("shows the full 4-tab switcher when the flag is on", () => {
+    probe.enableAllResourceSpaces = true;
+    render();
+
+    expect(tabButtons()).toHaveLength(4);
+  });
+
+  it("treats a not-yet-loaded bootstrap as off (safe default), not a crash", () => {
+    probe.bootstrapPending = true;
+    render();
+
+    expect(tabButtons()).toHaveLength(0);
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
   });
 });
 

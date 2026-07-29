@@ -46,6 +46,7 @@ import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
+import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
@@ -526,6 +527,25 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     setSelectedKeys(new Set());
   };
 
+  // Non-destructive and repeatable — unlike delete/exclude above, the
+  // selection is left as-is afterward (a user may well want to act on the
+  // same rows again right after downloading them).
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const bulkDownload = async () => {
+    setBulkDownloading(true);
+    try {
+      await downloadManyAsZip(
+        selectedDocs.map((doc) => ({
+          filename: doc.identity.document_name || doc.identity.document_uid,
+          fetchBlob: () => commands.fetchBlob(doc),
+        })),
+        "resources.zip",
+      );
+    } finally {
+      setBulkDownloading(false);
+    }
+  };
+
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
     if (!canCreateFolder || !node.tagsHere[0]) return [];
     return [
@@ -545,39 +565,54 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     ];
   };
 
-  const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<"rename" | "searchable" | "process" | "delete">[] => {
-    if (!canCreateFolder) return [];
+  const moreOptionsForDoc = (
+    doc: DocumentMetadata,
+  ): OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] => {
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
     const status = reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
-    return [
-      {
+    const options: OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] = [];
+    if (canCreateFolder) {
+      options.push({
         value: "rename",
         key: "rename",
         label: t("rework.resources.action.rename"),
         icon: { category: "outlined", type: "drive_file_rename_outline" },
-      },
-      {
-        value: "searchable",
-        key: "searchable",
-        label: t("rework.resources.action.searchable"),
-        icon: { category: "outlined", type: "search_off" },
-      },
-      {
-        value: "process",
-        key: "process",
-        label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
-        icon: { category: "outlined", type: "refresh" },
-      },
-      {
-        value: "delete",
-        key: "delete",
-        label: t("rework.resources.action.delete"),
-        icon: { category: "outlined", type: "delete" },
-        destructive: true,
-      },
-    ];
+      });
+    }
+    // Download is read-only — offered regardless of canCreateFolder, unlike
+    // the three mutating actions around it.
+    options.push({
+      value: "download",
+      key: "download",
+      label: t("rework.resources.action.download"),
+      icon: { category: "outlined", type: "download" },
+    });
+    if (canCreateFolder) {
+      options.push(
+        {
+          value: "searchable",
+          key: "searchable",
+          label: t("rework.resources.action.searchable"),
+          icon: { category: "outlined", type: "search_off" },
+        },
+        {
+          value: "process",
+          key: "process",
+          label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
+          icon: { category: "outlined", type: "refresh" },
+        },
+        {
+          value: "delete",
+          key: "delete",
+          label: t("rework.resources.action.delete"),
+          icon: { category: "outlined", type: "delete" },
+          destructive: true,
+        },
+      );
+    }
+    return options;
   };
 
   const columns: DataTableColumn<Row>[] = [
@@ -688,7 +723,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               onClick={() => commands.preview(row.doc)}
             />
           )}
-          <IconButtonMenu<"rename" | "delete" | "searchable" | "process">
+          <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
             iconButton={{
               color: "on-surface-retreat",
               variant: "icon",
@@ -703,6 +738,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 if (value === "delete") confirmDeleteFolder(row.node);
               } else {
                 if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
+                if (value === "download") void commands.download(row.doc);
                 if (value === "searchable") void commands.toggleRetrievable(row.doc);
                 if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
                 if (value === "delete" && currentTag) {
@@ -773,6 +809,8 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               onDelete={bulkDelete}
               onClearSelection={() => setSelectedKeys(new Set())}
               onExcludeFromSearch={bulkExcludeFromSearch}
+              onDownload={() => void bulkDownload()}
+              downloadLoading={bulkDownloading}
             />
           ) : (
             canCreateFolder && (

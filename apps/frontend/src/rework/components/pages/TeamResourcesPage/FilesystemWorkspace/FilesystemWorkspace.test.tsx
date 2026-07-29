@@ -69,6 +69,17 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
 vi.mock("../CreateFolderModal/CreateFolderModal.tsx", () => ({ default: () => null }));
 
+const downloadUtils = vi.hoisted(() => ({
+  downloadAuthed: vi.fn(),
+  downloadManyAsZip: vi.fn(),
+  fetchAuthedBlob: vi.fn(),
+}));
+vi.mock("../../../../../utils/downloadUtils.tsx", () => ({
+  downloadAuthed: downloadUtils.downloadAuthed,
+  downloadManyAsZip: downloadUtils.downloadManyAsZip,
+  fetchAuthedBlob: downloadUtils.fetchAuthedBlob,
+}));
+
 import FilesystemWorkspace from "./FilesystemWorkspace";
 
 let container: HTMLDivElement;
@@ -203,6 +214,118 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
     expect(rowCheckbox().checked).toBe(false);
+  });
+
+  it("zips the selected file(s) when the bulk download button is clicked", () => {
+    downloadUtils.downloadManyAsZip.mockClear();
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    click(container.querySelector('button[aria-label="rework.resources.bulkActions.download"]'));
+
+    expect(downloadUtils.downloadManyAsZip).toHaveBeenCalledOnce();
+    const [files, zipFilename] = downloadUtils.downloadManyAsZip.mock.calls[0];
+    expect(files).toHaveLength(1);
+    expect(files[0].filename).toBe("notes.txt");
+    expect(zipFilename).toBe("resources.zip");
+  });
+
+  it("shows the download button as loading while the zip is being built, then clears it", async () => {
+    let resolveDownload!: () => void;
+    downloadUtils.downloadManyAsZip.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDownload = resolve;
+        }),
+    );
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    const downloadButton = () =>
+      container.querySelector('button[aria-label="rework.resources.bulkActions.download"]') as HTMLButtonElement;
+    click(downloadButton());
+
+    // Still mid-flight — the zip build hasn't resolved yet.
+    expect(downloadButton().disabled).toBe(true);
+    expect(downloadButton().getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => {
+      resolveDownload();
+      await Promise.resolve();
+    });
+
+    expect(downloadButton().disabled).toBe(false);
+    expect(downloadButton().getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("hides the bulk download button when only folders are selected", () => {
+    render({ root: "teams/nb/shared", rootLabel: "Espace d'équipe" });
+
+    act(() => {
+      rowCheckbox().click(); // "CIR", a directory in this fixture
+    });
+
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.download"]')).toBeNull();
+  });
+});
+
+/** Opens a row's "more" menu (portaled into document.body) and clicks the
+ *  item whose label key contains `labelKeySuffix`. Assumes exactly one
+ *  "more" trigger is rendered (the fixtures below have a single row). */
+function clickMoreMenuItem(labelKeySuffix: string) {
+  const moreButton = container.querySelector('button[aria-label="rework.resources.action.more"]');
+  if (!moreButton) throw new Error("more-menu trigger not rendered");
+  click(moreButton);
+
+  const items = [...document.querySelectorAll('[role="presentation"] li, [role="presentation"] button')];
+  const item = items.find((el) => el.textContent?.includes(labelKeySuffix));
+  if (!item) throw new Error(`menu item containing "${labelKeySuffix}" not found`);
+  click(item);
+}
+
+describe("FilesystemWorkspace — per-row download (more menu, just under Renommer)", () => {
+  it("downloads that file when 'Download' is selected from the more menu", () => {
+    downloadUtils.downloadAuthed.mockClear();
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    clickMoreMenuItem("rework.resources.action.download");
+
+    expect(downloadUtils.downloadAuthed).toHaveBeenCalledOnce();
+    expect(downloadUtils.downloadAuthed).toHaveBeenCalledWith(expect.stringContaining("notes.txt"), "notes.txt");
+  });
+
+  it("lists Download right after Rename when canWrite is true", () => {
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", canWrite: true });
+
+    const moreButton = container.querySelector('button[aria-label="rework.resources.action.more"]');
+    click(moreButton);
+
+    const items = [...document.querySelectorAll('[role="presentation"] li')];
+    const labels = items.map((el) => el.textContent ?? "");
+    const renameIndex = labels.findIndex((label) => label.includes("rework.resources.action.rename"));
+    const downloadIndex = labels.findIndex((label) => label.includes("rework.resources.action.download"));
+
+    expect(renameIndex).toBeGreaterThanOrEqual(0);
+    expect(downloadIndex).toBe(renameIndex + 1);
+  });
+
+  it("still offers Download on a read-only file row, even though Rename is hidden (canWrite false)", () => {
+    downloadUtils.downloadAuthed.mockClear();
+    // Reuse the "Mon espace" file fixture but force canWrite=false to prove
+    // download survives even when every mutating action is stripped out.
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", canWrite: false });
+
+    const moreButton = container.querySelector('button[aria-label="rework.resources.action.more"]');
+    click(moreButton);
+    const items = [...document.querySelectorAll('[role="presentation"] li')];
+    const labels = items.map((el) => el.textContent ?? "");
+
+    expect(labels.some((label) => label.includes("rework.resources.action.download"))).toBe(true);
+    expect(labels.some((label) => label.includes("rework.resources.action.rename"))).toBe(false);
   });
 });
 

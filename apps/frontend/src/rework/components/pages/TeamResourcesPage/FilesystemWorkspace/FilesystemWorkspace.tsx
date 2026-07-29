@@ -41,7 +41,7 @@ import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
-import { downloadAuthed } from "../../../../../utils/downloadUtils.tsx";
+import { downloadAuthed, downloadManyAsZip, fetchAuthedBlob } from "../../../../../utils/downloadUtils.tsx";
 import styles from "./FilesystemWorkspace.module.css";
 
 /** Provenance origins we badge on file rows → their i18n label keys. */
@@ -237,6 +237,28 @@ export default function FilesystemWorkspace({
     });
   };
 
+  // Folders are silently skipped (no recursive folder download) — a mixed
+  // folder+file selection still zips just the files. Selection is left
+  // as-is afterward, unlike bulkDelete: non-destructive and repeatable.
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const bulkDownload = async () => {
+    const files = selectedEntries.filter((entry) => entry.type === "file");
+    if (files.length === 0) return;
+    setBulkDownloading(true);
+    try {
+      await downloadManyAsZip(
+        files.map((entry) => ({
+          filename: entry.path,
+          fetchBlob: () =>
+            fetchAuthedBlob(`/knowledge-flow/v1/fs/download/${encodeURI(`${currentPath}/${entry.path}`)}`),
+        })),
+        "resources.zip",
+      );
+    } finally {
+      setBulkDownloading(false);
+    }
+  };
+
   const confirmShare = (entry: FilesystemResourceInfoResult) =>
     showConfirmationDialog({
       title: t("rework.resources.confirm.shareTitle"),
@@ -244,17 +266,29 @@ export default function FilesystemWorkspace({
       onConfirm: () => void copyToShared({ path: encodeURI(`${currentPath}/${entry.path}`) }).unwrap(),
     });
 
-  const moreOptionsForEntry = (entry: FilesystemResourceInfoResult): OptionModel<"rename" | "share" | "delete">[] => {
-    if (!canWrite) return [];
-    const options: OptionModel<"rename" | "share" | "delete">[] = [
-      {
+  const moreOptionsForEntry = (
+    entry: FilesystemResourceInfoResult,
+  ): OptionModel<"rename" | "download" | "share" | "delete">[] => {
+    const options: OptionModel<"rename" | "download" | "share" | "delete">[] = [];
+    if (canWrite) {
+      options.push({
         value: "rename",
         key: "rename",
         label: t("rework.resources.action.rename"),
         icon: { category: "outlined", type: "drive_file_rename_outline" },
-      },
-    ];
-    if (entry.type === "file" && isShareableArea(currentPath)) {
+      });
+    }
+    // Download is read-only — offered regardless of canWrite, unlike the
+    // three mutating actions around it.
+    if (entry.type === "file") {
+      options.push({
+        value: "download",
+        key: "download",
+        label: t("rework.resources.action.download"),
+        icon: { category: "outlined", type: "download" },
+      });
+    }
+    if (canWrite && entry.type === "file" && isShareableArea(currentPath)) {
       options.push({
         value: "share",
         key: "share",
@@ -262,13 +296,15 @@ export default function FilesystemWorkspace({
         icon: { category: "outlined", type: "content_copy" },
       });
     }
-    options.push({
-      value: "delete",
-      key: "delete",
-      label: t("rework.resources.action.delete"),
-      icon: { category: "outlined", type: "delete" },
-      destructive: true,
-    });
+    if (canWrite) {
+      options.push({
+        value: "delete",
+        key: "delete",
+        label: t("rework.resources.action.delete"),
+        icon: { category: "outlined", type: "delete" },
+        destructive: true,
+      });
+    }
     return options;
   };
 
@@ -327,21 +363,10 @@ export default function FilesystemWorkspace({
     },
     {
       label: "",
-      size: "6rem",
+      size: "4rem",
       cellRenderer: (entry) => (
         <span className={styles.actionsCell}>
-          {entry.type === "file" && (
-            <IconButton
-              color="on-surface-retreat"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "download" }}
-              aria-label={t("rework.resources.action.download")}
-              title={t("rework.resources.action.download")}
-              onClick={() => void downloadFsFile(`${currentPath}/${entry.path}`, entry.path)}
-            />
-          )}
-          <IconButtonMenu<"rename" | "share" | "delete">
+          <IconButtonMenu<"rename" | "download" | "share" | "delete">
             iconButton={{
               color: "on-surface-retreat",
               variant: "icon",
@@ -352,6 +377,7 @@ export default function FilesystemWorkspace({
             options={moreOptionsForEntry(entry)}
             onSelect={(value) => {
               if (value === "rename") setRenameTarget(entry);
+              if (value === "download") void downloadFsFile(`${currentPath}/${entry.path}`, entry.path);
               if (value === "share") confirmShare(entry);
               if (value === "delete") confirmDelete(entry);
             }}
@@ -399,6 +425,10 @@ export default function FilesystemWorkspace({
               selectedCount={selectedEntries.length}
               onDelete={bulkDelete}
               onClearSelection={() => setSelectedKeys(new Set())}
+              onDownload={
+                selectedEntries.some((entry) => entry.type === "file") ? () => void bulkDownload() : undefined
+              }
+              downloadLoading={bulkDownloading}
             />
           ) : (
             canWrite && (

@@ -1363,6 +1363,7 @@
         "selectedCount": "Selection: {{count}}",
         "clearSelection": "Clear selection",
         "delete": "Delete",
+        "download": "Download",
         "excludeFromSearch": "Exclude from search"
       },
       "stats": {

@@ -175,17 +175,19 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [showInfo, t],
   );
   const closePreview = useCallback(() => setPreviewTarget(null), []);
+  // Fetch-only, no save — the building block `download` (below) uses, and
+  // that bulk-zip downloads (DocumentWorkspace's BulkActionsBar) need
+  // directly: zipping N documents needs every blob before any of them can
+  // be saved, so it can't go through `download`'s fetch+save-immediately
+  // shape.
+  const fetchBlob = useCallback(
+    (doc: DocumentMetadata) => triggerDownloadBlob({ documentUid: doc.identity.document_uid }).unwrap(),
+    [triggerDownloadBlob],
+  );
   const download = useCallback(
     async (doc: DocumentMetadata) => {
       try {
-        console.log("Downloading document:", doc.identity.document_name);
-        // IMPORTANT: unwrap to get the Blob
-        const blob = await triggerDownloadBlob({
-          documentUid: doc.identity.document_uid,
-        }).unwrap();
-
-        console.log("Blob received?", blob instanceof Blob, blob.type, blob.size);
-
+        const blob = await fetchBlob(doc);
         downloadFile(blob, doc.identity.document_name || doc.identity.document_uid);
       } catch (err: any) {
         showError({
@@ -195,7 +197,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         throw err;
       }
     },
-    [triggerDownloadBlob, showError],
+    [fetchBlob, showError],
   );
   // Corpus folder rename (RFC §13.8) — reuses the existing tag-update path
   // (`PUT /tags/{tag_id}`) already used elsewhere in this hook, no new
@@ -259,5 +261,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     closePreview,
     refresh,
     download,
+    fetchBlob,
   };
 }

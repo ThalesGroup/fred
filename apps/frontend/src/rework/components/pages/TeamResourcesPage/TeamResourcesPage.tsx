@@ -28,6 +28,7 @@ import {
   useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
@@ -47,6 +48,14 @@ type ResourceRootTab = "resources" | "mine" | "team" | "agents";
  * - Mon espace: the user's personal-in-team files (teams/{team}/users/{uid}, via /fs)
  * - Espace d'équipe: the team-shared files (teams/{team}/shared, via /fs)
  * - Agents: per-agent generated files (teams/{team}/agents/{instance}/users/{uid}, via /fs)
+ *
+ * Mon espace/Espace d'équipe/Agents are gated behind the platform-wide
+ * `enableAllResourceSpaces` feature flag (`platform.frontend.feature_flags`
+ * in `configuration.yaml`, default off) — the team isn't yet confident these
+ * three spaces pull their weight next to Corpus d'équipe, so only Corpus is
+ * reachable until the flag is turned on. The other three tabs' code stays
+ * fully in place either way; only their entries in the tab switcher are
+ * conditional.
  */
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
@@ -67,6 +76,8 @@ export default function TeamResourcesPage() {
   const sharedRoot = `teams/${fsTeamId}/shared`;
   const { data: team } = useGetTeamQuery({ teamId });
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
+  const { bootstrap } = useFrontendBootstrap();
+  const enableAllResourceSpaces = bootstrap?.feature_flags?.enableAllResourceSpaces ?? false;
 
   const [activeTab, setActiveTab] = useState<ResourceRootTab>("resources");
   const [statsOpen, setStatsOpen] = useState(false);
@@ -79,9 +90,13 @@ export default function TeamResourcesPage() {
 
   const rootTabs: { value: ResourceRootTab; label: string }[] = [
     { value: "resources", label: t("rework.resources.roots.resources") },
-    { value: "mine", label: t("rework.resources.roots.mine") },
-    ...(isPersonalTeam ? [] : [{ value: "team" as const, label: t("rework.resources.roots.team") }]),
-    { value: "agents", label: t("rework.resources.roots.agents") },
+    ...(enableAllResourceSpaces
+      ? [
+          { value: "mine" as const, label: t("rework.resources.roots.mine") },
+          ...(isPersonalTeam ? [] : [{ value: "team" as const, label: t("rework.resources.roots.team") }]),
+          { value: "agents" as const, label: t("rework.resources.roots.agents") },
+        ]
+      : []),
   ];
   const rootTabItems: ButtonGroupItemProps[] = rootTabs.map((tab) => ({ label: tab.label }));
   const activeTabIndex = rootTabs.findIndex((tab) => tab.value === activeTab);
@@ -180,15 +195,17 @@ export default function TeamResourcesPage() {
         />
       )}
 
-      <ButtonGroup
-        items={rootTabItems}
-        size="xs"
-        color="secondary"
-        variant="tabs"
-        aria-label={t("rework.resources.rootsAria")}
-        selectedIndex={activeTabIndex}
-        onSelectedIndexChange={(index) => setActiveTab(rootTabs[index].value)}
-      />
+      {rootTabs.length > 1 && (
+        <ButtonGroup
+          items={rootTabItems}
+          size="xs"
+          color="secondary"
+          variant="tabs"
+          aria-label={t("rework.resources.rootsAria")}
+          selectedIndex={activeTabIndex}
+          onSelectedIndexChange={(index) => setActiveTab(rootTabs[index].value)}
+        />
+      )}
 
       <div className={styles.panel}>
         {activeTab === "resources" && (

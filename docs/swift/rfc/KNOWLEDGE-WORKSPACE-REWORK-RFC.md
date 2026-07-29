@@ -7,6 +7,12 @@
 table, usage cards; supersedes parts of §4.1/§4.2, see note there)
 **Amended:** 2026-07-27 — Maxime Daragon (§13.8/§13.9 — rename support, bulk actions bar;
 extends the FRONT-09.G/H/I workplan with FRONT-09.J/K)
+**Amended:** 2026-07-29 — Maxime Daragon (§13.12 — Mon espace/Espace d'équipe/Agents
+gated behind a platform-wide feature flag, off by default; Corpus d'équipe only ships
+reachable until the team is confident in the other three)
+**Amended:** 2026-07-29 — Maxime Daragon (§13.13 — row/bulk "Download" action,
+client-side ZIP for multi-select, documented interim state pending a possible
+server-side move)
 **ID:** FRONT-09
 **Issue:** https://github.com/ThalesGroup/fred/issues/2128 (§13.7/§13.11 phases G-K)
 **Backlog:** `docs/swift/backlog/FRONTEND-BACKLOG.md §15`
@@ -1080,3 +1086,107 @@ bulk delete surfaces per-row failures instead of silently dropping them.
 Acceptance: a freshly uploaded Corpus document shows the uploader's name/id
 in the Auteur column; a document ingested before this field existed still
 renders `—` (no backfill, no crash). Landed 2026-07-28.
+
+## 13.12 Amendment (2026-07-29) — Resource spaces gated behind a feature flag
+
+Product decision, not a technical one: the team isn't yet confident Mon
+espace/Espace d'équipe/Agents (the three `/fs`-backed tabs, §13.7 steps 2-3)
+pull their weight next to Corpus d'équipe. Rather than remove the code —
+all three are fully implemented, tested, and landed — the Resources page
+ships with **only Corpus d'équipe reachable**, and the other three sit
+behind a platform-wide, off-by-default feature flag so they can be turned
+back on later without a code change.
+
+- New flag `enableAllResourceSpaces` on `FrontendFeatureFlags`
+  (`control_plane_backend/config/models.py`), default `False`. Served on
+  the existing authenticated bootstrap (`platform.frontend.feature_flags`
+  → `build_frontend_bootstrap`, `product/service.py`) — no new backend
+  wiring, this mechanism already existed (`enableK8Features`/
+  `enableElecWarfare` predate this) and simply gains a third key.
+- Confirmed with the developer: **global to the platform instance**
+  (one `configuration.yaml` value), not a per-team setting — this is a
+  company-wide product-maturity call, not something a given customer
+  toggles for their own team.
+- `TeamResourcesPage.tsx`: `rootTabs` only includes `"mine"`/`"team"`/
+  `"agents"` when `enableAllResourceSpaces` is on; the tab switcher
+  (`ButtonGroup`) itself is hidden entirely when there's nothing to switch
+  between (Corpus d'équipe stays reachable either way — it's never gated).
+  Every other piece of the three tabs — `FilesystemWorkspace`,
+  `AgentsWorkspace`, their tests, their translations, the `mine`/`team`
+  usage-stats queries — is untouched, simply unreachable while the flag is
+  off.
+- Considered and rejected: extending the OTHER candidate mechanism,
+  `apps/frontend/public/config.json` + `isFeatureEnabled()`/`FeatureFlagKey`
+  (`common/config.tsx`) — that one is fully wired frontend-side but dead:
+  the real `config.json` carries no `feature_flags` key today and nothing
+  populates one. `configuration.yaml`'s `FrontendFeatureFlags` is the real,
+  already-populated mechanism.
+
+Issue: https://github.com/ThalesGroup/fred/issues/2165
+
+## 13.13 Amendment (2026-07-29) — Row/bulk "Download" action, client-side ZIP
+
+Neither table had a full download story: `FilesystemWorkspace` had a
+per-row download icon but no multi-select download; `DocumentWorkspace`
+(Corpus) had no download action wired into its row at all (the command
+existed in `useDocumentCommands` but wasn't connected to the table).
+Landed:
+
+- Per-row "Télécharger" `IconButton` added to `DocumentWorkspace`'s
+  actions column, matching `FilesystemWorkspace`'s existing pattern
+  exactly (same icon/size/color). That column is a **fixed** width
+  (deliberately, so the header and body grids agree — see the comment
+  above it), sized for 2 icon buttons; widened `6rem` → `8rem` for the
+  3rd (preview + download + more-menu).
+- New bulk "Télécharger" action in `BulkActionsBar` (new optional
+  `onDownload?: () => void` prop, same "omit to hide" convention as
+  `onExcludeFromSearch`) — one file downloads directly, 2+ files download
+  as a single ZIP. On `FilesystemWorkspace`, a mixed folder+file selection
+  silently zips just the files (no recursive folder download); the button
+  hides entirely when the selection is folders-only.
+- **Explicitly client-side** (developer-confirmed direction): new shared
+  `downloadManyAsZip`/`fetchAuthedBlob` in `apps/frontend/src/utils/downloadUtils.tsx`,
+  built on the `jszip` package (new dependency) — every file's blob fully
+  round-trips through the browser before zipping, no streaming, no backend
+  change. Chosen because every existing download in this app (Corpus'
+  `raw_content` blob query, `/fs/download`) was already a full in-memory
+  fetch, not streamed — client-side zipping is the smaller lift, not a
+  new class of limitation.
+- **Documented interim state, not a closed decision:** if usage shows
+  people regularly bulk-downloading many/large files, this should move to
+  a server-side streaming-zip endpoint instead (client-side means every
+  byte of every selected file transits the browser's memory before the
+  zip is even built). No such endpoint exists anywhere in the codebase
+  today — the only prior art is the unrelated platform config-export zip
+  (`control_plane_backend/import_export/exporter.py`, a DB/config
+  snapshot, not file content). Revisit if this becomes a real pain point;
+  not tracked as a separate GitHub issue while it's still speculative.
+- `useDocumentCommands`'s `download` refactored to share a new `fetchBlob`
+  (fetch without saving) with the bulk path, both exported from the hook.
+
+**Follow-up (2026-07-29, same day):** the "every byte round-trips through
+the browser first" cost above isn't just a future-scaling concern — it's a
+real, immediate UX problem: clicking bulk "Télécharger" gave no feedback
+while the zip was being fetched/built, reading as a dead/unresponsive
+button until the browser's save dialog eventually appeared. Fixed with a
+new `loading?: boolean` prop on the shared `IconButton` atom
+(`shared/atoms/IconButton/IconButton.tsx`) — swaps the icon for a `Spinner`
+sized to match, disables the button, sets `aria-busy`. `BulkActionsBar`
+gained a matching `downloadLoading` prop; both `DocumentWorkspace` and
+`FilesystemWorkspace` now track a `bulkDownloading` state around their
+`await downloadManyAsZip(...)` call (`try`/`finally`). `loading` is a
+generic addition to `IconButton` itself (not Resources-specific) since any
+async icon-button action can reuse it.
+
+**Follow-up (2026-07-29, later same day):** the per-row "Télécharger" icon
+moved from a standalone button into the "more" menu, right under
+"Renommer", on both tables — one action fewer competing for space in the
+fixed-width actions column (reverted `DocumentWorkspace`'s column back to
+`6rem`/2 buttons; `FilesystemWorkspace`'s to `4rem`/1 button, both now just
+preview-or-nothing + the "more" trigger). Read-only-safe: `download` is a
+non-mutating action, so both `moreOptionsForEntry`
+(`FilesystemWorkspace.tsx`) and `moreOptionsForDoc` (`DocumentWorkspace.tsx`)
+were restructured to always include it for files regardless of
+`canWrite`/`canCreateFolder` — previously those functions returned `[]`
+entirely for a read-only user, which would otherwise have silently taken
+download away from users who only lost the ability to rename/delete/etc.

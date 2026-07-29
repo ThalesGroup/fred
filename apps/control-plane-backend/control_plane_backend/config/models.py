@@ -68,6 +68,10 @@ class FrontendFeatureFlags(BaseModel):
 
     enableK8Features: bool = False
     enableElecWarfare: bool = False
+    enableAllResourceSpaces: bool = Field(
+        default=False,
+        description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
+    )
 
 
 class UploadWarning(BaseModel):

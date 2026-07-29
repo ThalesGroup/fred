@@ -26,6 +26,15 @@ interface BulkActionsBarProps {
   /** Corpus-only (RFC §13.9 — "exclure de la recherche" has no meaning for
    *  the other three tabs). Omit to hide the action entirely. */
   onExcludeFromSearch?: () => void;
+  /** One file downloads directly; 2+ download as a single ZIP (RFC §13.13,
+   *  client-side). Omit to hide the action — e.g. a folders-only selection
+   *  on `FilesystemWorkspace`, which has nothing downloadable selected. */
+  onDownload?: () => void;
+  /** True while `onDownload`'s zip is being fetched/built — every file's
+   *  blob has to round-trip through the browser first (RFC §13.13), which
+   *  reads as a dead click without this: swaps the icon for a spinner and
+   *  disables the button instead of leaving it looking unresponsive. */
+  downloadLoading?: boolean;
 }
 
 /**
@@ -39,6 +48,8 @@ export default function BulkActionsBar({
   onDelete,
   onClearSelection,
   onExcludeFromSearch,
+  onDownload,
+  downloadLoading = false,
 }: BulkActionsBarProps) {
   const { t } = useTranslation();
 
@@ -56,6 +67,19 @@ export default function BulkActionsBar({
             icon={{ category: "outlined", type: "search_off" }}
             aria-label={t("rework.resources.bulkActions.excludeFromSearch")}
             onClick={onExcludeFromSearch}
+          />
+        </Tooltip>
+      )}
+      {onDownload && (
+        <Tooltip text={t("rework.resources.bulkActions.download")}>
+          <IconButton
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "download" }}
+            aria-label={t("rework.resources.bulkActions.download")}
+            loading={downloadLoading}
+            onClick={onDownload}
           />
         </Tooltip>
       )}

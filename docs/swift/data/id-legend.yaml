@@ -1685,6 +1685,82 @@ items:
       wrapper. `WorkspaceRoot.tsx`+`.module.css` deleted (no remaining
       callers anywhere). `make code-quality`/`make test` green (775 tests).
 
+      Progress 2026-07-29 (later still, RFC §13.12): product decision, not
+      technical — team not yet confident Mon espace/Espace d'équipe/Agents
+      pull their weight, so the Resources page now ships with only Corpus
+      d'équipe reachable. All three `/fs` tabs stay fully implemented,
+      gated behind a new platform-wide feature flag,
+      `enableAllResourceSpaces` on `FrontendFeatureFlags`
+      (`control_plane_backend/config/models.py`, default `False`,
+      `configuration.yaml`'s `platform.frontend.feature_flags` — the same
+      already-wired, already-served mechanism `enableK8Features`/
+      `enableElecWarfare` use, just a third key added, no new backend
+      wiring). Confirmed global-platform-wide, not per-team.
+      `TeamResourcesPage.tsx`'s `rootTabs` only includes the three `/fs`
+      tabs when the flag is on; the tab switcher itself hides entirely
+      when there's nothing to switch between. Considered and rejected the
+      other candidate flag mechanism (`public/config.json` +
+      `isFeatureEnabled()`/`FeatureFlagKey` in `common/config.tsx`) — fully
+      wired frontend-side but dead, the real `config.json` carries no
+      `feature_flags` key and nothing populates one.
+      `make generate-config-schema` (backend) and
+      `make update-control-plane-api` (frontend, regenerates
+      `controlPlaneOpenApi.ts`'s `FrontendFeatureFlags` type) both run.
+      Backend `make code-quality` + full pytest green (589 tests);
+      frontend `make code-quality` + `make test` green (788 tests). Issue:
+      https://github.com/ThalesGroup/fred/issues/2165.
+
+      Progress 2026-07-29 (later still, RFC §13.13): row/bulk "Download"
+      action landed on both tables. `DocumentWorkspace` gains a per-row
+      download icon (was missing entirely — only `FilesystemWorkspace`
+      had one); both gain a bulk "Download" in `BulkActionsBar` (new
+      optional `onDownload` prop) — one file downloads directly, 2+ zip
+      into one archive. Developer-confirmed direction: client-side zip
+      (new `jszip` dependency, `downloadManyAsZip`/`fetchAuthedBlob` in
+      `utils/downloadUtils.tsx`), no backend endpoint — every existing
+      download here was already a full in-memory browser fetch, not
+      streamed, so this isn't a new class of limitation. Explicitly
+      documented as an interim state in the RFC (§13.13): revisit with a
+      server-side streaming-zip endpoint if usage shows many/large files
+      being bulk-downloaded regularly — not yet actionable, no separate
+      issue filed for it. `useDocumentCommands`'s `download` refactored to
+      share a new `fetchBlob` (fetch without saving) with the bulk path.
+      New tests: `downloadUtils.test.ts` (real `jszip`, verifies actual
+      zip contents including name-collision handling), extended
+      `BulkActionsBar.test.tsx`, one integration case each in
+      `FilesystemWorkspace.test.tsx` and a new
+      `DocumentWorkspace.download.test.tsx`. `make code-quality`/
+      `make test` green.
+
+      Progress 2026-07-29 (later still, same RFC §13.13, follow-up): the
+      bulk "Télécharger" button gave no feedback while its zip was being
+      fetched/built — read as unresponsive. New `loading?: boolean` prop
+      on the shared `IconButton` atom (swaps icon for a sized `Spinner`,
+      disables, sets `aria-busy`) — generic, not Resources-specific, any
+      async icon-button action can reuse it. `BulkActionsBar` gained a
+      matching `downloadLoading` prop; `DocumentWorkspace`/
+      `FilesystemWorkspace` track a `bulkDownloading` state around their
+      `await downloadManyAsZip(...)` (`try`/`finally`). New
+      `IconButton.test.tsx` (4 cases) plus loading-transition cases added
+      to `BulkActionsBar.test.tsx`, `FilesystemWorkspace.test.tsx`,
+      `DocumentWorkspace.download.test.tsx`. `make code-quality`/
+      `make test` green (808 tests).
+
+      Progress 2026-07-29 (later still, same RFC §13.13, follow-up): the
+      per-row "Télécharger" moved from a standalone icon into the "more"
+      menu, right under "Renommer", on both tables. Actions columns
+      shrunk back accordingly (`DocumentWorkspace` `8rem`→`6rem`,
+      `FilesystemWorkspace` `6rem`→`4rem`). Read-only-safe:
+      `moreOptionsForEntry`/`moreOptionsForDoc` previously returned `[]`
+      entirely when the user lacked write access — restructured so
+      `download` (non-mutating) is always offered for files regardless of
+      `canWrite`/`canCreateFolder`, only the mutating entries (rename,
+      share, delete, searchable, process) stay gated. New ordering +
+      read-only-preserved test cases added to `FilesystemWorkspace.test.tsx`
+      and `DocumentWorkspace.download.test.tsx` (open the "more" menu,
+      assert Download directly follows Rename). `make code-quality`/
+      `make test` green (812 tests).
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress
