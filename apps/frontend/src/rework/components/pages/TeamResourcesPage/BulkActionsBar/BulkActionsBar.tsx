@@ -13,12 +13,16 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import styles from "./BulkActionsBar.module.css";
 
 interface BulkActionsBarProps {
   selectedCount: number;
   onDelete: () => void;
+  /** Clears the current row selection — swaps this whole bar back out for
+   *  the create-folder/add-file toolbar. */
+  onClearSelection: () => void;
   /** Corpus-only (RFC §13.9 — "exclure de la recherche" has no meaning for
    *  the other three tabs). Omit to hide the action entirely. */
   onExcludeFromSearch?: () => void;
@@ -30,7 +34,12 @@ interface BulkActionsBarProps {
  * selected (not a separate full-width bar — placement confirmed with the
  * team lead for this page specifically).
  */
-export default function BulkActionsBar({ selectedCount, onDelete, onExcludeFromSearch }: BulkActionsBarProps) {
+export default function BulkActionsBar({
+  selectedCount,
+  onDelete,
+  onClearSelection,
+  onExcludeFromSearch,
+}: BulkActionsBarProps) {
   const { t } = useTranslation();
 
   if (selectedCount === 0) return null;
@@ -39,25 +48,36 @@ export default function BulkActionsBar({ selectedCount, onDelete, onExcludeFromS
     <div className={styles.bar}>
       <span className={styles.count}>{t("rework.resources.bulkActions.selectedCount", { count: selectedCount })}</span>
       {onExcludeFromSearch && (
-        <Button
-          color="on-surface"
+        <Tooltip text={t("rework.resources.bulkActions.excludeFromSearch")}>
+          <IconButton
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "search_off" }}
+            aria-label={t("rework.resources.bulkActions.excludeFromSearch")}
+            onClick={onExcludeFromSearch}
+          />
+        </Tooltip>
+      )}
+      <Tooltip text={t("rework.resources.bulkActions.delete")}>
+        <IconButton
+          color="error"
           variant="outlined"
           size="small"
-          icon={{ category: "outlined", type: "search_off" }}
-          onClick={onExcludeFromSearch}
-        >
-          {t("rework.resources.bulkActions.excludeFromSearch")}
-        </Button>
-      )}
-      <Button
-        color="error"
-        variant="outlined"
-        size="small"
-        icon={{ category: "outlined", type: "delete" }}
-        onClick={onDelete}
-      >
-        {t("rework.resources.bulkActions.delete")}
-      </Button>
+          icon={{ category: "outlined", type: "delete" }}
+          aria-label={t("rework.resources.bulkActions.delete")}
+          onClick={onDelete}
+        />
+      </Tooltip>
+      <Tooltip text={t("rework.resources.bulkActions.clearSelection")}>
+        <IconButton
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label={t("rework.resources.bulkActions.clearSelection")}
+          onClick={onClearSelection}
+        />
+      </Tooltip>
     </div>
   );
 }

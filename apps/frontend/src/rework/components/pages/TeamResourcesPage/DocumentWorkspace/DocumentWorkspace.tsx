@@ -545,8 +545,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     ];
   };
 
-  const moreOptionsForDoc = (): OptionModel<"rename" | "searchable" | "process" | "delete">[] => {
+  const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<"rename" | "searchable" | "process" | "delete">[] => {
     if (!canCreateFolder) return [];
+    // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
+    // document that already succeeded, not a first ingestion. Any other status
+    // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
+    const status = reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
     return [
       {
         value: "rename",
@@ -563,7 +567,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       {
         value: "process",
         key: "process",
-        label: t("rework.resources.action.process"),
+        label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
         icon: { category: "outlined", type: "refresh" },
       },
       {
@@ -692,7 +696,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               icon: { category: "outlined", type: "more_vert" },
               "aria-label": t("rework.resources.action.more"),
             }}
-            options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc()}
+            options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
             onSelect={(value) => {
               if (row.kind === "folder") {
                 if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
@@ -763,13 +767,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
         }}
         toolbarActions={
-          <>
+          selectedDocs.length > 0 ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length}
               onDelete={bulkDelete}
+              onClearSelection={() => setSelectedKeys(new Set())}
               onExcludeFromSearch={bulkExcludeFromSearch}
             />
-            {canCreateFolder && (
+          ) : (
+            canCreateFolder && (
               <>
                 <Tooltip text={t("rework.resources.menu.newFolder")}>
                   <IconButton
@@ -795,8 +801,8 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                   />
                 </Tooltip>
               </>
-            )}
-          </>
+            )
+          )
         }
         loading={tagsLoading}
         loadingMessage={t("rework.resources.loading")}

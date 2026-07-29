@@ -1302,6 +1302,7 @@
         "preview": "Aperçu",
         "process": "Traiter",
         "rename": "Renommer",
+        "reprocess": "Retraiter",
         "searchable": "Exclure de la recherche"
       },
       "confirm": {
@@ -1359,7 +1360,8 @@
       },
       "byAi": "par IA",
       "bulkActions": {
-        "selectedCount": "{{count}} sélectionné(s)",
+        "selectedCount": "Sélection : {{count}}",
+        "clearSelection": "Annuler la sélection",
         "delete": "Supprimer",
         "excludeFromSearch": "Exclure"
       },

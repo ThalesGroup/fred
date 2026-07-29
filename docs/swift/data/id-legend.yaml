@@ -1653,6 +1653,38 @@ items:
       from the old `TeamFilesystemBrowser.test.tsx`'s intent) and
       breadcrumb navigation. Step 3 (Agents) not started.
 
+      Progress 2026-07-29 (later still): Step 3 (Agents) landed — new
+      `AgentsWorkspace.tsx` replaces `AgentFilesystemBrowser.tsx`. Developer
+      corrected the step's plan before implementation: not one
+      `ResourceExplorer` per agent instance (the Step 1 assumption) but a
+      single unified table for the whole Agents tab, whose root is virtual
+      — each agent instance with files renders as a folder row at that
+      root, named after the agent (falling back to "Removed agent" /
+      dedup-suffixed names, ported verbatim from the old component).
+      Clicking a row mounts `FilesystemWorkspace` — reused, not duplicated
+      — on that agent's real filesystem
+      (`teams/{team}/agents/{instance}/users/{uid}`). `FilesystemWorkspace`
+      gained one additive prop, `onNavigateAboveRoot?: () => void`, fired
+      by its back button when already at `root`; omitted by Mon
+      espace/Espace d'équipe, zero behavior change there. Orphaned
+      `AgentFilesystemBrowser.tsx`+`.module.css` and
+      `TeamFilesystemBrowser.tsx`+`.module.css`+`.test.tsx` deleted
+      (`FolderRow`/`DocRow` still used independently by
+      `LibraryTreePlayground.tsx`, not orphaned). New
+      `AgentsWorkspace.test.tsx` (virtual-root listing, removed-agent
+      fallback, empty state, drill-down + `onNavigateAboveRoot` round
+      trip) plus one new `FilesystemWorkspace.test.tsx` case for
+      `onNavigateAboveRoot`. All three steps of the "other three tabs"
+      plan are now complete — every Resources tab is on `ResourceExplorer`.
+      `make code-quality` and `make test` green (775 tests).
+
+      Progress 2026-07-29 (later still): Agents tab's `WorkspaceRoot` header
+      row dropped (icon/title/hint tooltip above the table), matching the
+      same polish already done for Mon espace/Espace d'équipe in Step 2 —
+      `TeamResourcesPage.tsx` renders `AgentsWorkspace` directly, no
+      wrapper. `WorkspaceRoot.tsx`+`.module.css` deleted (no remaining
+      callers anywhere). `make code-quality`/`make test` green (775 tests).
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress

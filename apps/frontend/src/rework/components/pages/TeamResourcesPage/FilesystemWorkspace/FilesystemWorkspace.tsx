@@ -95,21 +95,27 @@ interface FilesystemWorkspaceProps {
   canWrite?: boolean;
   /** i18n key of the hint shown when the root itself has no entries. */
   emptyHintKey?: string;
+  /** Called instead of being a no-op when the user clicks back while already
+   * at `root` — lets a host compose this component as one level of a larger
+   * virtual hierarchy (Agents: the agent list is the level above every
+   * agent's own root). */
+  onNavigateAboveRoot?: () => void;
 }
 
 /**
  * Browse one team-rooted filesystem area (FILES-04) as a breadcrumb-navigated
  * table — the `/fs` counterpart of `DocumentWorkspace`, built on the same
- * `ResourceExplorer` shell (RFC §13.7 FRONT-09.H, step 2 of the "other three
- * tabs" plan). Deliberately does not touch `TeamFilesystemBrowser` (the old
- * always-expanded tree): `AgentFilesystemBrowser` still depends on it as-is
- * until Agents gets its own migration step.
+ * `ResourceExplorer` shell (RFC §13.7 FRONT-09.H). Used directly for "Mon
+ * espace"/"Espace d'équipe" (step 2), and mounted by `AgentsWorkspace` for
+ * one agent at a time once the user picks an agent from its virtual root
+ * (step 3, via `onNavigateAboveRoot`).
  */
 export default function FilesystemWorkspace({
   root,
   rootLabel,
   canWrite = true,
   emptyHintKey,
+  onNavigateAboveRoot,
 }: FilesystemWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
@@ -134,12 +140,17 @@ export default function FilesystemWorkspace({
 
   const navigateBack = useCallback(() => {
     setNavigationHistory((prev) => {
-      if (prev.length === 0) return prev;
+      if (prev.length === 0) {
+        // Nothing to pop — either a true no-op (default), or exit to
+        // whatever virtual level a host composed this component under.
+        onNavigateAboveRoot?.();
+        return prev;
+      }
       setCurrentPath(prev[prev.length - 1]);
       setSelectedKeys(new Set());
       return prev.slice(0, -1);
     });
-  }, []);
+  }, [onNavigateAboveRoot]);
 
   const { data, isLoading, refetch } = useLsQuery({ path: currentPath });
   // `ls`'s response_model isn't generated (LsApiResponse = any) even though
@@ -352,8 +363,8 @@ export default function FilesystemWorkspace({
 
   const breadcrumbSegments = useMemo(() => {
     const relative = currentPath.slice(root.length).replace(/^\//, "");
+    if (!relative) return [{ label: rootLabel, onClick: onNavigateAboveRoot }];
     const segments = [{ label: rootLabel, onClick: () => navigateTo(root) }];
-    if (!relative) return [{ label: rootLabel }];
     const parts = relative.split("/");
     let acc = root;
     parts.forEach((part, i) => {
@@ -364,7 +375,7 @@ export default function FilesystemWorkspace({
       segments.push({ label, onClick: isLast ? undefined : () => navigateTo(stepPath) });
     });
     return segments;
-  }, [currentPath, root, rootLabel, t, navigateTo]);
+  }, [currentPath, root, rootLabel, t, navigateTo, onNavigateAboveRoot]);
 
   return (
     <div className={styles.workspace}>
@@ -372,7 +383,7 @@ export default function FilesystemWorkspace({
         breadcrumb={{
           segments: breadcrumbSegments,
           onBack: navigateBack,
-          canGoBack: currentPath !== root,
+          canGoBack: currentPath !== root || !!onNavigateAboveRoot,
           backLabel: t("rework.resources.action.back"),
         }}
         search={{
@@ -383,9 +394,14 @@ export default function FilesystemWorkspace({
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
         }}
         toolbarActions={
-          <>
-            <BulkActionsBar selectedCount={selectedEntries.length} onDelete={bulkDelete} />
-            {canWrite && (
+          selectedEntries.length > 0 ? (
+            <BulkActionsBar
+              selectedCount={selectedEntries.length}
+              onDelete={bulkDelete}
+              onClearSelection={() => setSelectedKeys(new Set())}
+            />
+          ) : (
+            canWrite && (
               <>
                 <Tooltip text={t("rework.resources.action.newSubfolder")}>
                   <IconButton
@@ -408,8 +424,8 @@ export default function FilesystemWorkspace({
                   />
                 </Tooltip>
               </>
-            )}
-          </>
+            )
+          )
         }
         loading={isLoading}
         loadingMessage={t("rework.resources.loading")}

@@ -1302,6 +1302,7 @@
         "preview": "Preview",
         "process": "Process",
         "rename": "Rename",
+        "reprocess": "Reprocess",
         "searchable": "Exclude from search"
       },
       "confirm": {
@@ -1359,7 +1360,8 @@
       },
       "byAi": "by AI",
       "bulkActions": {
-        "selectedCount": "{{count}} selected",
+        "selectedCount": "Selection: {{count}}",
+        "clearSelection": "Clear selection",
         "delete": "Delete",
         "excludeFromSearch": "Exclude from search"
       },

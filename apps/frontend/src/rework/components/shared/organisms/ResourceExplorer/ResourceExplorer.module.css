@@ -49,8 +49,28 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-xs) 0;
+}
+
+/* The toolbar's own bottom border moves here — DataTable is a shared
+ * molecule (also used outside Resources, e.g. TeamSettingsMembersTable), so
+ * this targets its header by class substring instead of editing
+ * DataTable.module.scss, keeping the border scoped to ResourceExplorer's own
+ * table instead of leaking into every other DataTable consumer. */
+.tableFill [class*="datatable-header"] {
   border-bottom: 1px solid var(--outline-retreat);
-  padding: var(--spacing-xs);
+}
+
+/* Same border, same reasoning, on the pagination footer's top edge — it
+ * ships its own border-top (TablePagination.module.scss) in a different,
+ * dimmer token (--surface-container-highest); this overrides just the color
+ * for ResourceExplorer's table so it matches the header's border above.
+ * `:not([class*="datatable-footer-"])` excludes the footer's own inner
+ * `.datatable-footer-left`/`-right` wrapper divs — CSS modules' scoped names
+ * (`_datatable-footer_<hash>_<line>`) mean the plain substring match would
+ * otherwise also catch `_datatable-footer-left_..._...`. */
+.tableFill [class*="datatable-footer"]:not([class*="datatable-footer-"]) {
+  border-top: 1px solid var(--outline-retreat);
 }
 
 .toolbarStart {

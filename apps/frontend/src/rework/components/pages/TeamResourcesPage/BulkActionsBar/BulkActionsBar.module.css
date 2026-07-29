@@ -6,7 +6,7 @@
 
 .count {
   margin-right: var(--spacing-2xs);
-  color: var(--on-surface-retreat);
+  color: var(--primary);
   font: var(--font-body-medium);
   white-space: nowrap;
 }

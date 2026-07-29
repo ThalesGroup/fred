@@ -57,31 +57,51 @@ function click(el: Element | null) {
 
 describe("BulkActionsBar", () => {
   it("renders nothing when no row is selected", () => {
-    render(<BulkActionsBar selectedCount={0} onDelete={vi.fn()} />);
+    render(<BulkActionsBar selectedCount={0} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("shows only Delete when onExcludeFromSearch is omitted (non-Corpus tabs)", () => {
-    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} />);
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+  it("shows Delete + Clear when onExcludeFromSearch is omitted (non-Corpus tabs)", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
+    expect(container.querySelectorAll("button")).toHaveLength(2);
   });
 
-  it("shows both actions when onExcludeFromSearch is provided (Corpus tab)", () => {
-    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onExcludeFromSearch={vi.fn()} />);
-    expect(container.querySelectorAll("button")).toHaveLength(2);
+  it("shows Exclude + Delete + Clear when onExcludeFromSearch is provided (Corpus tab)", () => {
+    render(
+      <BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} onExcludeFromSearch={vi.fn()} />,
+    );
+    expect(container.querySelectorAll("button")).toHaveLength(3);
   });
 
   it("invokes the right callback for each button", () => {
     const onDelete = vi.fn();
+    const onClearSelection = vi.fn();
     const onExcludeFromSearch = vi.fn();
-    render(<BulkActionsBar selectedCount={3} onDelete={onDelete} onExcludeFromSearch={onExcludeFromSearch} />);
-    const [excludeButton, deleteButton] = Array.from(container.querySelectorAll("button"));
+    render(
+      <BulkActionsBar
+        selectedCount={3}
+        onDelete={onDelete}
+        onClearSelection={onClearSelection}
+        onExcludeFromSearch={onExcludeFromSearch}
+      />,
+    );
+    const [excludeButton, deleteButton, clearButton] = Array.from(container.querySelectorAll("button"));
 
     click(excludeButton);
     expect(onExcludeFromSearch).toHaveBeenCalledOnce();
     expect(onDelete).not.toHaveBeenCalled();
+    expect(onClearSelection).not.toHaveBeenCalled();
 
     click(deleteButton);
     expect(onDelete).toHaveBeenCalledOnce();
+    expect(onClearSelection).not.toHaveBeenCalled();
+
+    click(clearButton);
+    expect(onClearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("shows the 'Selection: N' count label", () => {
+    render(<BulkActionsBar selectedCount={5} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
+    expect(container.textContent).toContain('rework.resources.bulkActions.selectedCount {"count":5}');
   });
 });

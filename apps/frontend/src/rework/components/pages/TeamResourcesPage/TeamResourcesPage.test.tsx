@@ -70,7 +70,7 @@ vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({ default: () => <di
 vi.mock("./FilesystemWorkspace/FilesystemWorkspace.tsx", () => ({
   default: (props: { root: string }) => <div data-testid="panel-fs">{props.root}</div>,
 }));
-vi.mock("./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx", () => ({
+vi.mock("./AgentsWorkspace/AgentsWorkspace.tsx", () => ({
   default: () => <div data-testid="panel-agents" />,
 }));
 vi.mock("./ResourceStatsCards/ResourceStatsCards.tsx", () => ({ default: () => <div data-testid="stats-cards" /> }));

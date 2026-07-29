@@ -820,9 +820,11 @@ sibling root's content.
       regenerate the OpenAPI client (landed, commit `d8639314`).
 - [x] Replace `DocRow`/`FsEntry` single-line rows with `DataTable` (columns: Name, Taille,
       Création, Auteur, an unlabeled status-chip cell, Preview + `⋮` actions — revised
-      2026-07-27, no Dernière MAJ column, no dedicated Statut column) — **Corpus d'équipe
-      only** (commit `e480c027`). Espace perso / Espace partagé / Agents still on the old
-      `TeamFilesystemBrowser`/`AgentFilesystemBrowser` single-line rows — not started.
+      2026-07-27, no Dernière MAJ column, no dedicated Statut column) — landed on all four
+      tabs (Corpus d'équipe: commit `e480c027`; Espace perso / Espace partagé / Agents:
+      the "other three tabs" plan below, complete as of Step 3 2026-07-29).
+      `TeamFilesystemBrowser`/`AgentFilesystemBrowser` and their old single-line rows are
+      deleted.
 - [x] Build the status-chip cell: nothing for `ready`; a Chip (tertiary/warning/error) for
       processing/pending/failed. New small piece, not a `DocStatusBadge` variant
       (`StatusChip.tsx`, commit `162dd8cb`). Wired on Corpus; not yet on the other 3 tabs.
@@ -842,8 +844,10 @@ sibling root's content.
       always-visible footer as the members table, permanently shown (not conditional on
       total > page size). `DocumentWorkspace`'s rows-per-page is now dynamic
       (`loadTagPage`'s `limit` param, default 50) instead of the fixed `PAGE_SIZE`
-      constant. Espace perso / Espace partagé / Agents still not wired (still on the old
-      single-line rows, no DataTable yet on those 3 tabs).
+      constant. Espace perso / Espace partagé / Agents pass neither `pageSize` nor
+      `serverPagination` to `ResourceExplorer` — `DataTable` renders the full unpaginated
+      list for these three tabs (§13.6 decision 6 — documented interim state, no `/fs`
+      server pagination contract yet).
 - [ ] Add a search input wired to `POST /documents/metadata/browse`'s existing `query`
       field for Corpus.
 - [ ] Add a "Trier par" sort control wired to the existing `sort` field for Corpus.
@@ -868,11 +872,13 @@ test files pass unmodified). `ResourceExplorer` has no knowledge of tags/documen
 columns, rows, and every cell's rendering stay 100% caller-supplied, so it carries no
 Corpus-specific assumption that would block reuse. Decided before starting (developer
 confirmation): the other three tabs will adopt breadcrumb drill-down (replacing today's
-always-expanded tree) when their turn comes; `AgentFilesystemBrowser` keeps its own
-root-enumeration loop and mounts one `ResourceExplorer` instance per agent rather than the
-component supporting multiple roots natively; `/fs` gets client-side pagination for now
+always-expanded tree) when their turn comes; `/fs` gets client-side pagination for now
 (no backend contract change). Espace perso / Espace partagé / Agents are **not yet wired**
 onto `ResourceExplorer` — that's the next step(s), done separately.
+**Superseded 2026-07-29 (Step 3):** the original plan for Agents — one
+`ResourceExplorer` instance mounted per agent, each independently expandable — was
+replaced before implementation by a developer correction: a single unified table for the
+whole Agents tab instead (see Step 3 note below).
 
 **Progress 2026-07-29 (Step 2 — Mon espace / Espace d'équipe):** new
 `FilesystemWorkspace.tsx` (`TeamResourcesPage/FilesystemWorkspace/`) brings both
@@ -897,6 +903,34 @@ no remaining callers after that and was deleted. Zero remaining test regressions
 `TeamResourcesPage.test.tsx` mocks updated to the new component; new
 `FilesystemWorkspace.test.tsx` covers write-action gating and breadcrumb
 navigation). Agents (step 3) not started.
+
+**Progress 2026-07-29 (Step 3 — Agents, complete):** new `AgentsWorkspace.tsx`
+(`TeamResourcesPage/AgentsWorkspace/`) replaces `AgentFilesystemBrowser.tsx`, and with it
+the last old always-expanded tree. Per explicit developer correction to the first draft of
+this step's plan, Agents is **one single table**, not N independent per-agent panels: its
+root is virtual (not a real `/fs` path) — each agent instance with files is a folder row
+at that root, named after the agent (falling back to "Removed agent" for an orphaned
+instance id, same dedup-suffix logic `AgentFilesystemBrowser` already had for duplicate
+display names). Clicking a row swaps in `FilesystemWorkspace` — reused as-is, not
+duplicated — pointed at that agent's real filesystem
+(`teams/{team}/agents/{instance}/users/{uid}`, the same shortcut the old code used to
+skip exposing `agents/{id}/users/{uid}` as separate navigable levels). `FilesystemWorkspace`
+gained one additive prop, `onNavigateAboveRoot?: () => void`, called by its back button
+when already at `root` — lets a host compose it as one level of a larger virtual hierarchy;
+zero behavior change for Mon espace/Espace d'équipe, which don't pass it. Cascading
+cleanup: `AgentFilesystemBrowser.tsx`+`.module.css` and `TeamFilesystemBrowser.tsx`+
+`.module.css`+`.test.tsx` deleted (both fully orphaned — `FolderRow`/`DocRow` are not,
+`LibraryTreePlayground.tsx` still imports them independently). `WorkspaceRoot` still wraps
+the Agents tab in `TeamResourcesPage.tsx` (out of scope, unlike the header removal already
+done for Mon espace/Espace d'équipe in Step 2). All three steps of the "other three tabs"
+plan are now landed — every Resources tab is on `ResourceExplorer`.
+
+**Progress 2026-07-29 (later still):** the Agents tab's `WorkspaceRoot` header row
+(icon + title + hint tooltip) is dropped too, same polish already applied to Mon
+espace/Espace d'équipe in Step 2 — `TeamResourcesPage.tsx` now renders `AgentsWorkspace`
+directly with no wrapper. `WorkspaceRoot.tsx`+`.module.css` had no remaining callers
+after that (Corpus and the other two `/fs` tabs had already moved off it) and are
+deleted. Every Resources tab now presents the same header-less card+table look.
 
 #### FRONT-09.I — Usage dashboard cards
 

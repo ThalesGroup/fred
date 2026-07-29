@@ -74,13 +74,19 @@ import FilesystemWorkspace from "./FilesystemWorkspace";
 let container: HTMLDivElement;
 let root: Root;
 
-function render(props: { root: string; rootLabel: string; canWrite?: boolean }) {
+function render(props: { root: string; rootLabel: string; canWrite?: boolean; onNavigateAboveRoot?: () => void }) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root.render(<FilesystemWorkspace {...props} />);
   });
+}
+
+function backButton(): HTMLButtonElement {
+  const button = container.querySelector('button[aria-label="rework.resources.action.back"]');
+  if (!button) throw new Error("back button not rendered");
+  return button as HTMLButtonElement;
 }
 
 afterEach(() => {
@@ -138,5 +144,92 @@ describe("FilesystemWorkspace breadcrumb navigation", () => {
 
     // Back at CIR: its child folder row ("Reports") is visible again.
     expect(() => folderButton("Reports")).not.toThrow();
+  });
+});
+
+describe("FilesystemWorkspace toolbar — bulk actions replace create/upload while selecting", () => {
+  function rowCheckbox(): HTMLInputElement {
+    // [0] is the header's "select all"; [1] is the one data row in this fixture.
+    const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
+    const box = boxes[1];
+    if (!box) throw new Error("row checkbox not rendered");
+    return box as HTMLInputElement;
+  }
+
+  it("hides new-folder/add-file and shows the bulk-delete action once a row is selected", () => {
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.action.newSubfolder"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
+
+    act(() => {
+      rowCheckbox().click();
+    });
+
+    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.action.newSubfolder"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
+  });
+
+  it("restores new-folder/add-file once the selection is cleared", () => {
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
+
+    act(() => {
+      rowCheckbox().click(); // untoggle
+    });
+
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.action.newSubfolder"]')).not.toBeNull();
+  });
+
+  it("clears the selection and restores new-folder/add-file when the bar's own clear button is clicked", () => {
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    const clearButton = container.querySelector('button[aria-label="rework.resources.bulkActions.clearSelection"]');
+    expect(clearButton).not.toBeNull();
+
+    click(clearButton);
+
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+    expect(rowCheckbox().checked).toBe(false);
+  });
+});
+
+describe("FilesystemWorkspace onNavigateAboveRoot", () => {
+  it("is disabled at root when omitted (existing behavior)", () => {
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    expect(backButton().disabled).toBe(true);
+  });
+
+  it("is called by the back button at root when provided", () => {
+    const onNavigateAboveRoot = vi.fn();
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", onNavigateAboveRoot });
+
+    expect(backButton().disabled).toBe(false);
+    click(backButton());
+    expect(onNavigateAboveRoot).toHaveBeenCalledOnce();
+  });
+
+  it("is not called once navigated below root — the back button pops history first", () => {
+    const onNavigateAboveRoot = vi.fn();
+    render({ root: "teams/nb/shared", rootLabel: "Espace d'équipe", onNavigateAboveRoot });
+
+    click(folderButton("CIR"));
+    click(backButton());
+
+    expect(onNavigateAboveRoot).not.toHaveBeenCalled();
+    expect(() => folderButton("CIR")).not.toThrow();
   });
 });

@@ -34,8 +34,7 @@ import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import { formatBytes } from "../../../utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
-import AgentFilesystemBrowser from "./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx";
-import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
+import AgentsWorkspace from "./AgentsWorkspace/AgentsWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
@@ -89,8 +88,9 @@ export default function TeamResourcesPage() {
 
   // Usage-by-type stats (§13.5/13.7 FRONT-09.I) — one query per tab's data source,
   // each skipped unless it's the active tab so switching tabs never fires every query
-  // at once. "Agents" has no single filesystem root (it fans out per agent instance,
-  // see AgentFilesystemBrowser) so it has no stats source yet — RFC §13.5.
+  // at once. "Agents" has no single filesystem root (its table's root is virtual,
+  // fanning out per agent instance — see AgentsWorkspace) so it has no stats source
+  // yet — RFC §13.5.
   const corpusStats = useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery(
     { teamId: fsTeamId },
     { skip: activeTab !== "resources" },
@@ -209,16 +209,7 @@ export default function TeamResourcesPage() {
           />
         )}
 
-        {activeTab === "agents" && (
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "auto_awesome" }}
-            title={t("rework.resources.roots.agents")}
-            hint={t("rework.resources.hints.agents")}
-            collapsible={false}
-          >
-            <AgentFilesystemBrowser fsTeamId={fsTeamId} userId={userId} />
-          </WorkspaceRoot>
-        )}
+        {activeTab === "agents" && <AgentsWorkspace fsTeamId={fsTeamId} userId={userId} />}
       </div>
     </div>
   );
