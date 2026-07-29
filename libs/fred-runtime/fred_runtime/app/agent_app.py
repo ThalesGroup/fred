@@ -955,6 +955,11 @@ class _AgentTemplateSummary(BaseModel):
     # for); this field is the one control-plane reads to resolve what a
     # `selected_capability_ids = None` instance activates (#1980).
     default_capability_ids: list[str] = Field(default_factory=list)
+    # `AgentDefinition.public` (AGENT-VISIBILITY-RFC), carried through so
+    # control-plane can tell an internal harness template (e.g. self-test)
+    # apart from an ordinary one after aggregation — see the CAPAB-01 exemption
+    # in `product/service.py::list_agent_templates`/`enroll_agent_instance`.
+    public: bool = True
 
 
 class _McpCatalogEntry(BaseModel):
@@ -3021,6 +3026,7 @@ def _build_agent_router(
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
+                public=getattr(definition, "public", True),
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)

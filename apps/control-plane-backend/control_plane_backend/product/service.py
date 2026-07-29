@@ -181,6 +181,7 @@ class _RuntimeTemplatePayload:
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
         default_capability_ids: list[str] | None = None,
+        public: bool = True,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -199,6 +200,12 @@ class _RuntimeTemplatePayload:
         # so `_apply_capability_selection` can ReBAC-check the None case instead of
         # skipping it.
         self.default_capability_ids = default_capability_ids or []
+        # `AgentDefinition.public` (AGENT-VISIBILITY-RFC) — an internal harness
+        # template (e.g. self-test) is exempt from the CAPAB-01 admin-grant
+        # check, never surfaced in `/admin/capabilities` for anyone to grant it
+        # in the first place; visibility is already platform_admin-only
+        # (`include_non_public`/`can_see_non_public_templates`).
+        self.public = public
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -251,6 +258,7 @@ class _RuntimeTemplatePayload:
                 for cid in data.get("default_capability_ids", [])
                 if isinstance(cid, str) and cid
             ],
+            public=data.get("public", True),
         )
 
 
@@ -1310,7 +1318,18 @@ async def list_agent_templates(
             template_cap_id = template_capability_id(
                 source.runtime_id, template.template_agent_id
             )
-            if usable_ids is not None and template_cap_id not in usable_ids:
+            # An internal harness template (e.g. self-test, AGENT-VISIBILITY-RFC)
+            # is exempt from the CAPAB-01 admin-grant check: it never surfaces in
+            # `/admin/capabilities` (`_agent_capabilities_for_source` intentionally
+            # excludes non-public templates), so no admin can ever grant it — the
+            # caller already had to be platform_admin to have `include_non_public`
+            # return it here in the first place, which is exactly the access
+            # control a non-public template needs.
+            if (
+                template.public
+                and usable_ids is not None
+                and template_cap_id not in usable_ids
+            ):
                 continue
             templates.append(
                 AgentTemplateSummary(
@@ -2303,7 +2322,13 @@ async def enroll_agent_instance(
     # `template_id` gets exactly the same response as a nonexistent one (RFC
     # §7.2/§10 anti-guessing rule, matching the non-public-template check
     # above).
-    if not await can_use_capability(
+    #
+    # An internal harness template (`template.public is False`, e.g.
+    # self-test) is exempt, same reasoning as `list_agent_templates`: it can
+    # never receive a CAPAB-01 grant (never listed in `/admin/capabilities`),
+    # and the caller already had to be platform_admin for `can_see_non_public_templates`
+    # to have surfaced it above.
+    if template.public and not await can_use_capability(
         deps.team_dependencies.rebac,
         team_id,
         template_capability_id(source_runtime_id, source_agent_id),

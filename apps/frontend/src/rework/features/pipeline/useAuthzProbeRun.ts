@@ -22,6 +22,7 @@ import { isPersonalTeamId } from "../../components/shared/utils/teamId";
 
 interface TeamsResponseItem {
   id: string;
+  is_member?: boolean;
 }
 
 interface TeamWithPermissionsResponse {
@@ -79,7 +80,15 @@ const deps: AuthzProbeDeps = {
     const { status, body } = await authedFetch("/control-plane/v1/teams", token);
     if (status !== 200) throw new Error(`GET /teams: HTTP ${status}`);
     const teams = Array.isArray(body) ? (body as TeamsResponseItem[]) : [];
-    return teams.map((t) => String(t.id)).filter((id) => !isPersonalTeamId(id));
+    // TEAM-10: a PUBLIC team (the default) is listed for marketplace discovery
+    // even for a non-member (`can_read = team_member or public`) — list
+    // presence alone is not membership. Filter to `is_member` so the
+    // foreign-team-isolation check downstream can still find a genuinely
+    // foreign team instead of treating every public team as "owned."
+    return teams
+      .filter((t) => t.is_member)
+      .map((t) => String(t.id))
+      .filter((id) => !isPersonalTeamId(id));
   },
   probeRegistryAccess: async (token) => {
     const { status, body } = await authedFetch("/control-plane/v1/teams/all", token);
