@@ -1581,5 +1581,8 @@
       "title": "Politique de confidentialité",
       "backToApp": "Retourner à l'application"
     }
+  },
+  "migrationBanner": {
+    "message": "À partir de maintenant, les fichiers et les agents que vous créez ne seront pas conservés lors de la bascule vers la nouvelle version."
   }
 }
