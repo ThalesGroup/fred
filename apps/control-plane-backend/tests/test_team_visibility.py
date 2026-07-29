@@ -39,9 +39,6 @@ class _FakeRebac:
         self.granted_team_ids: list[str] = []
         self.revoked_team_ids: list[str] = []
 
-    async def ensure_team_organization_relations(self, _team_ids) -> str | None:
-        return None
-
     async def ensure_team_public_relations(self, team_ids) -> str | None:
         self.granted_team_ids.extend(team_ids)
         return None
@@ -54,8 +51,15 @@ class _FakeRebac:
         return RebacDisabledResult()
 
     async def list_relations(self, *_args, **_kwargs):
-        # #2065: `_enrich_teams_with_membership` bulk-reads via list_relations
-        # instead of lookup_subjects per team — same disabled-reads stance.
+        # Backs `ensure_team_public_relations`/`revoke_team_public_relations`'s
+        # existence-check read (never the organization relation — #2065 removed
+        # that call from `_list_teams` entirely).
+        return RebacDisabledResult()
+
+    async def list_direct_relations(self, *_args, **_kwargs):
+        # #2065: `_bulk_team_membership` now reads one exact object per team
+        # (`list_direct_relations`) instead of bulk `list_relations` — same
+        # disabled-reads stance.
         return RebacDisabledResult()
 
 

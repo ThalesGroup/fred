@@ -110,6 +110,71 @@ def _norm_origin(origin: object) -> str:
     return str(origin).rstrip("/")
 
 
+# Stable advisory-lock key (#2065): serializes concurrent replicas' startup
+# reconciliation of the `organization -> team` structural edge so they don't
+# all issue the same bulk read+write on the same rollout.
+_TEAM_ORGANIZATION_RECONCILE_LOCK_KEY = "team_organization_relations_reconcile"
+
+
+async def _reconcile_team_organization_relations(container) -> None:
+    """Cold-path repair of the `organization -> team` structural edge for
+    every pre-existing collaborative team (#2065), run once per process
+    before the app starts serving requests.
+
+    Per-request paths (`_list_teams`, `require_team_access`, `get_team_by_id`,
+    and the shared `check_user_team_permission(s)_or_raise` helpers) no
+    longer read or repair this edge at all — `teams.service.create_team`
+    establishes it directly for every new team, so the only teams that can
+    still be missing it are ones that existed before that invariant was
+    introduced. This pass closes that gap once, here, instead of leaving it
+    to a per-request self-heal.
+
+    Held under `TeamMetadataStore.advisory_lock` (a Postgres transaction-scoped
+    lock, keyed by `_TEAM_ORGANIZATION_RECONCILE_LOCK_KEY`) so multiple
+    replicas starting at once don't all issue the same bulk OpenFGA read+write
+    — the registry is re-read after acquiring the lock, so a replica that
+    loses the race sees the edges the winner just wrote and reconciles
+    nothing.
+
+    Unlike `_seed_capability_registration_defaults` below (best-effort,
+    catches and logs), this is fail-closed: a ReBAC/OpenFGA outage during
+    startup must stop the pod from ever serving requests against teams this
+    invariant hasn't covered, rather than silently starting anyway. The
+    exception is logged with a team count only — never tuple contents or user
+    identities — and re-raised so the ASGI lifespan aborts startup.
+    """
+    rebac = container.get_rebac_engine()
+    if not rebac.enabled:
+        logger.info(
+            "[team-org-reconcile] ReBAC disabled — skipping (contractually a "
+            "no-op invariant when relationship authorization is off)."
+        )
+        return
+
+    store = container.get_team_metadata_store()
+    async with store.advisory_lock(_TEAM_ORGANIZATION_RECONCILE_LOCK_KEY):
+        team_ids = [str(metadata.id) for metadata in await store.list_all()]
+        if not team_ids:
+            logger.info("[team-org-reconcile] team registry is empty — nothing to do.")
+            return
+        try:
+            await rebac.ensure_team_organization_relations(team_ids)
+        except Exception:
+            logger.exception(
+                "[team-org-reconcile] failed to reconcile the organization "
+                "structural relation for %d team(s) — refusing to start "
+                "(ReBAC is enabled; serving requests now would run against "
+                "teams this invariant may not cover).",
+                len(team_ids),
+            )
+            raise
+    logger.info(
+        "[team-org-reconcile] reconciled the organization structural relation "
+        "for %d team(s).",
+        len(team_ids),
+    )
+
+
 async def _seed_capability_registration_defaults(container) -> None:
     """First-registration default-on seeding at startup (CAPAB-01 / #1980,
     RFC §8.3). Best-effort: an unreachable pod or ReBAC hiccup is logged and
@@ -161,6 +226,7 @@ def create_app() -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         container.start_kpi_tasks()
+        await _reconcile_team_organization_relations(container)
         await _seed_capability_registration_defaults(container)
         try:
             yield

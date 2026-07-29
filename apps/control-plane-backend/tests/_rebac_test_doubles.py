@@ -77,6 +77,7 @@ class CountingRebacEngine(NoopRebacEngine):
         self.direct_relations = list(direct_relations)
         self.membership_relations = list(membership_relations)
         self.list_relations_calls: list[tuple[Resource, RelationType]] = []
+        self.list_relations_subjects: list[RebacReference] = []
         self.list_direct_relations_calls: list[
             tuple[RebacReference, RebacReference | None]
         ] = []
@@ -128,10 +129,16 @@ class CountingRebacEngine(NoopRebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
+        # #2065: real OpenFGA (confirmed live against v1.12.1 and v1.15.1)
+        # rejects this Read shape without an exact `user` — `subject` must
+        # always be given now, never a bare type. Recorded separately so tests can assert the exact subject a
+        # call used (e.g. `organization:fred`, `user:*`) without disturbing
+        # the existing `(resource_type, relation)` call-count assertions.
         self.list_relations_calls.append((resource_type, relation))
+        self.list_relations_subjects.append(subject)
         if resource_type == Resource.TEAM and relation == RelationType.ORGANIZATION:
             return [
                 Relation(
@@ -155,7 +162,7 @@ class CountingRebacEngine(NoopRebacEngine):
             for rel in self.membership_relations
             if rel.resource.type == resource_type
             and rel.relation == relation
-            and (subject_type is None or rel.subject.type == subject_type)
+            and rel.subject == subject
         ]
 
     async def list_direct_relations(

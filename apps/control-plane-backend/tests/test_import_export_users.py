@@ -240,7 +240,7 @@ class _FakeTeamRebac:
         *,
         resource_type: Any,
         relation: RelationType,
-        subject_type: Any = None,
+        subject: Any = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
         if resource_type == Resource.TEAM:

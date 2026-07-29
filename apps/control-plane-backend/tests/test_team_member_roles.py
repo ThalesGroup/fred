@@ -167,7 +167,7 @@ class _FakeRebac:
         *,
         resource_type,
         relation: RelationType,
-        subject_type=None,
+        subject=None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
         # #2065: `_enrich_teams_with_membership` bulk-reads instead of one

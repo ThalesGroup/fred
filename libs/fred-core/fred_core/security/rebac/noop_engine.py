@@ -59,7 +59,7 @@ class NoopRebacEngine(RebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation] | RebacDisabledResult:
         return RebacDisabledResult()

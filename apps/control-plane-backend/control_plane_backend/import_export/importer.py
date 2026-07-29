@@ -1682,6 +1682,33 @@ async def _run_import_body(
                     0,
                 )
 
+    # ── Phase 4bis-2: organization structural relation, every snapshot kind ───
+    # (#2065) `_import_team_metadata` above writes `TeamMetadataRow`s directly
+    # via raw ORM inserts, bypassing `teams.service.create_team` (which now
+    # writes the `organization -> team` structural edge itself) entirely — so
+    # every team present in this bundle's team_metadata table, whether just
+    # inserted or already-existing/skipped, must be (re-)reconciled here.
+    # `ensure_team_organization_relations` is the bulk, idempotent, read-then-
+    # write cold-path primitive (never called from a request path): for a kea
+    # bundle whose phase above already replayed this same edge 1:1 from the
+    # original tuples, this costs one extra bulk Read and zero extra writes;
+    # for a swift-native bundle (which never restores raw OpenFGA tuples at
+    # all), this is what actually establishes the edge, possibly for the
+    # first time. Also serves as the repair path when this import is a
+    # re-run over already-imported (skipped) team rows.
+    team_metadata_ids = [row["id"] for row in raw_team_metadata]
+    if team_metadata_ids:
+        if rebac is None or not rebac.enabled:
+            report.warnings.append(
+                f"{len(team_metadata_ids)} team(s) imported without the "
+                "organization structural relation established — ReBAC "
+                "engine unavailable or disabled. Re-run this import (or the "
+                "control-plane startup reconciliation) with ReBAC enabled "
+                "before cutover."
+            )
+        else:
+            await rebac.ensure_team_organization_relations(team_metadata_ids)
+
     # ── Phase 4ter: platform roles from the realm export, kea path only ───────
     # Kea platform roles are Keycloak realm roles per user — never tuples, so
     # the tuple phase above cannot restore them. They only travel in a FULL

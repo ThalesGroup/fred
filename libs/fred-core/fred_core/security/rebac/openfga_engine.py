@@ -262,23 +262,16 @@ class OpenFgaRebacEngine(RebacEngine):
         body: ReadRequestTupleKey,
         *,
         consistency_token: str | None,
-        subject_prefix: str | None = None,
     ) -> list[Relation]:
         """Paginate one OpenFGA `Read` call and fold every tuple into a `Relation`.
 
-        Shared by `list_relations` (cross-team, relation-scoped, no object id)
-        and `list_direct_relations` (one exact object, no relation filter) —
-        the two Read shapes duplicated pagination, consistency options, and
-        tuple-to-`Relation` conversion before this helper. One
+        Shared by `list_relations` (relation-scoped, object-type-only, exact
+        `user`) and `list_direct_relations` (one exact object, no relation
+        filter) — the two Read shapes duplicated pagination, consistency
+        options, and tuple-to-`Relation` conversion before this helper. One
         `rebac_operation=read` KPI timer wraps the whole paginated scan here,
         so each public method still emits exactly one logical `read`, not one
         per page.
-
-        `subject_prefix` (e.g. `"user:"`) is a client-side filter used only by
-        `list_relations`'s `subject_type` — it narrows by subject *type*
-        without an exact id, so it cannot be pushed into the server-side
-        `Read` filter. `list_direct_relations` narrows by an exact subject
-        instead, expressed server-side via `body.user` — it never needs this.
         """
         async with _rebac_timer(self._kpi, "read"):
             client = await self.get_client()
@@ -294,8 +287,6 @@ class OpenFgaRebacEngine(RebacEngine):
                 continuation_token = res.continuation_token
 
                 for tup in res.tuples:
-                    if subject_prefix and not tup.key.user.startswith(subject_prefix):
-                        continue
                     results.append(
                         Relation(
                             subject=OpenFgaRebacEngine._openfga_id_to_reference(
@@ -315,22 +306,23 @@ class OpenFgaRebacEngine(RebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # Unlike delete_all_relations_of_reference/of_type (which must match
-        # a reference on *either* side of the tuple, across potentially
-        # several types, so they read unfiltered and filter in Python), this
-        # always has a known resource_type + relation — a genuine server-side
-        # Read filter (object type with no id), same as the populated-filter
-        # shape already proven by has_direct_relation below.
+        # OpenFGA (confirmed live against v1.12.1 and v1.15.1) rejects a Read
+        # whose object is type-only (no id) when `user` is also empty: HTTP 400 "the
+        # 'tuple_key' field was provided but the object type field is
+        # required and both the object id and user cannot be empty". An
+        # object-type-only filter must therefore always carry an exact
+        # `user` to anchor it server-side — never a bare subject *type*
+        # (there is no OpenFGA shape for "this relation, any object of this
+        # type, any user").
         body = ReadRequestTupleKey(
-            relation=relation.value, object=f"{resource_type.value}:"
+            relation=relation.value,
+            object=f"{resource_type.value}:",
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
         )
-        subject_prefix = f"{subject_type.value}:" if subject_type else None
-        return await self._read_relations(
-            body, consistency_token=consistency_token, subject_prefix=subject_prefix
-        )
+        return await self._read_relations(body, consistency_token=consistency_token)
 
     async def lookup_resources(
         self,

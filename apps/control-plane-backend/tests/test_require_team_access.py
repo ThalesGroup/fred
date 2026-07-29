@@ -15,9 +15,12 @@
 """#2065 follow-up: `require_team_access` must authorize a team without ever
 projecting `Team`/`TeamWithPermissions` — no membership enrichment, no
 14-permission UI projection, no role resolution. Budget for a collaborative
-team whose `organization -> team` edge already exists: 1 `list_relations`
-(the bulk existence-check `Read`) + 1 `has_permission` `Check` per requested
-permission. A personal space owned by the caller: zero OpenFGA calls.
+team: zero `list_relations` (the `organization -> team` edge is established
+once at team creation and repaired only on cold paths — never read or
+repaired by this per-request path, see `RebacEngine.
+check_user_team_permissions_or_raise`) + 1 `has_permission` `Check` per
+requested permission. A personal space owned by the caller: zero OpenFGA
+calls.
 
 This file wires a real, call-counting `RebacEngine` (same pattern as
 `test_teams_bulk_membership_call_count.py`) rather than mocking
@@ -39,8 +42,6 @@ from control_plane_backend.teams.service import require_team_access
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
-    RelationType,
-    Resource,
     TeamPermission,
 )
 from fred_core.common import TeamId, personal_team_id
@@ -81,7 +82,7 @@ def _deps(
 
 @pytest.mark.asyncio
 async def test_collaborative_team_authorized_returns_canonical_team_id() -> None:
-    """1: existing, authorized collaborative team — 1 Read + 1 Check, no more."""
+    """1: existing, authorized collaborative team — 0 Read + 1 Check, no more."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"},
         granted_permissions={TeamPermission.CAN_READ},
@@ -95,7 +96,7 @@ async def test_collaborative_team_authorized_returns_canonical_team_id() -> None
     )
 
     assert resolved == TeamId("fredlab")
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.ORGANIZATION)]
+    assert engine.list_relations_calls == []
     assert engine.has_permission_calls == [("u", TeamPermission.CAN_READ, "fredlab")]
     assert engine.add_relations_calls == []  # edge already existed: zero writes
     assert engine.lookup_resources_calls == 0
@@ -198,8 +199,9 @@ async def test_multiple_required_permissions_checked_independently() -> None:
     )
 
     assert resolved == TeamId("fredlab")
-    # Exactly 1 Read (batched existence-check) regardless of permission count.
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.ORGANIZATION)]
+    # Zero Read regardless of permission count — the org edge is never
+    # consulted here (#2065).
+    assert engine.list_relations_calls == []
     # Exactly one Check per requested permission — not `len(list(TeamPermission))`.
     assert len(engine.has_permission_calls) == 2
     assert {perm for _uid, perm, _rid in engine.has_permission_calls} == {
@@ -214,7 +216,7 @@ async def test_product_route_no_longer_triggers_full_projection(
 ) -> None:
     """7: a representative product route (`GET /teams/{id}/agent-instances`)
     keeps its functional response while the OpenFGA call budget collapses to
-    1 Read + 1 Check — no membership enrichment, no 14-permission batch, no
+    0 Read + 1 Check — no membership enrichment, no 14-permission batch, no
     role resolution `lookup_subjects` fan-out."""
     from types import SimpleNamespace
 
@@ -240,7 +242,7 @@ async def test_product_route_no_longer_triggers_full_projection(
 
     assert result == expected_instances
     list_instances.assert_awaited_once_with(TeamId("fredlab"), deps)
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.ORGANIZATION)]
+    assert engine.list_relations_calls == []
     assert engine.has_permission_calls == [
         ("u", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")
     ]

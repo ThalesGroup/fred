@@ -12,15 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Regression coverage for #2065: `_enrich_teams_with_membership` must issue a
-bounded, constant number of OpenFGA `list_relations` calls regardless of team
-count, not the `2 * len(team_ids)` per-team `ListUsers` fan-out that produced
-4-9s `/frontend/bootstrap` latency at S3NS's 99-team production scale.
+"""Regression coverage for #2065: `_enrich_teams_with_membership` must resolve
+admins/members without the `2 * len(team_ids)` per-team `ListUsers` fan-out
+that produced 4-9s `/frontend/bootstrap` latency at S3NS's 99-team production
+scale.
 
-No existing test exercised the real fan-out: every prior `_enrich_teams_with_membership`
-test monkeypatches `_get_team_users_by_relation`/`_bulk_team_membership` away
-entirely, so a regression back to per-team calls would pass silently. This
-file wires a real, call-counting `RebacEngine` instead.
+This file originally asserted a *constant* number of bulk `list_relations`
+calls (4, one per team role relation, regardless of team count). That design
+does not work against a real OpenFGA store: confirmed live against OpenFGA
+v1.12.1 and v1.15.1, a `list_relations` Read whose object is type-only (no id) and whose
+`user` is also empty is rejected with HTTP 400 ("the 'tuple_key' field was
+provided but the object type field is required and both the object id and
+user cannot be empty") — there is no exact "any user" subject to anchor
+"every team_admin/editor/analyst/member tuple across every team" on. The
+corrected design (`_bulk_team_membership`) is one exact
+`list_direct_relations(team:<id>)` per team — O(team_count) round-trips, not
+O(1), but each one a valid, already-used Read shape, and still a `Read` (not
+`ListUsers`) per team, i.e. still half the round-trips of the original
+`2 * len(team_ids)` fan-out this replaced.
+
+No prior test exercised either the real fan-out or the real OpenFGA
+constraint: every earlier `_enrich_teams_with_membership` test monkeypatches
+`_get_team_users_by_relation`/`_bulk_team_membership` away entirely, so a
+regression back to `ListUsers` per team — or back to the invalid bulk
+`list_relations` shape — would pass silently. This file wires a real,
+call-counting `RebacEngine` instead.
 """
 
 from __future__ import annotations
@@ -98,12 +114,12 @@ def _membership_tuples(team_ids: list[str]) -> list[Relation]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("team_count", [3, 50])
-async def test_enrich_teams_with_membership_call_count_is_bounded(
+async def test_enrich_teams_with_membership_uses_one_exact_read_per_team(
     team_count: int,
 ) -> None:
     teams_metadata = _teams(team_count)
     team_ids = [str(metadata.id) for metadata in teams_metadata]
-    engine = CountingRebacEngine(membership_relations=_membership_tuples(team_ids))
+    engine = CountingRebacEngine(direct_relations=_membership_tuples(team_ids))
 
     teams = await _enrich_teams_with_membership(
         engine,
@@ -112,16 +128,16 @@ async def test_enrich_teams_with_membership_call_count_is_bounded(
         deps=_fake_deps(),
     )
 
-    # Exactly 4 list_relations calls (TEAM_ADMIN/EDITOR/ANALYST/TEAM_MEMBER),
-    # independent of team_count -- the property that regressed silently once
-    # already (2 * len(team_ids) ListUsers calls) and must not regress again.
-    assert len(engine.list_relations_calls) == 4
-    assert {relation for _rtype, relation in engine.list_relations_calls} == {
-        RelationType.TEAM_ADMIN,
-        RelationType.TEAM_EDITOR,
-        RelationType.TEAM_ANALYST,
-        RelationType.TEAM_MEMBER,
-    }
+    # #2065 correction: never `list_relations` (the shape OpenFGA rejects for
+    # this "any user, many teams" case) — exactly one exact
+    # `list_direct_relations(team:<id>)` per team instead.
+    assert engine.list_relations_calls == []
+    assert len(engine.list_direct_relations_calls) == team_count
+    assert {ref.id for ref, _subject in engine.list_direct_relations_calls} == set(
+        team_ids
+    )
+    assert engine.lookup_subjects_calls == 0
+    assert engine.lookup_resources_calls == 0
 
     assert len(teams) == team_count
     for team in teams:

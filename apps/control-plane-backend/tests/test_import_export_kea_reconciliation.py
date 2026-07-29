@@ -23,7 +23,13 @@ from control_plane_backend.import_export.kea_reconciliation import (
     resolve_user_sub,
 )
 from control_plane_backend.users.dependencies import UserServiceDependencies
-from fred_core import RebacReference, Relation, RelationType, Resource
+from fred_core import (
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    team_organization_relation,
+)
 from tests.test_import_export_kea_bundle import (
     UID_BOB,
     UID_LIAM,
@@ -145,7 +151,11 @@ async def test_unresolvable_user_is_pending_not_failed(tmp_path: Path) -> None:
             engine,
             rebac=rebac,
         )
-        assert rebac.relations == []
+        # #2065: the import's cold-path reconciliation still guarantees the
+        # organization structural edge for T1 (it exists in the reconciled
+        # plan via the realm group) even though its only membership tuple
+        # was dropped as unresolvable.
+        assert rebac.relations == [team_organization_relation("T1")]
         assert report.tuples_written == 0
         assert any("PENDING first login" in w and "ghost" in w for w in report.warnings)
     finally:

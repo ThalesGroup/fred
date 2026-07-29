@@ -13,18 +13,20 @@
 # limitations under the License.
 
 """#2065 follow-up: `TeamWithPermissions` projection for a collaborative team
-must cost exactly 4 logical OpenFGA operations — 1 `list_relations` scan
-(`ensure_team_organization_relations`), 1 `has_permission` Check (the route's
-own access gate), 1 `list_direct_relations` exact Read, and 1 `has_permissions`
-BatchCheck (14 `TeamPermission`s in one call) — never a `ListUsers`/
-`ListObjects` fan-out, and never one-Check-per-permission.
+must cost exactly 3 logical OpenFGA operations — 1 `has_permission` Check
+(the route's own access gate), 1 `list_direct_relations` exact Read, and 1
+`has_permissions` BatchCheck (14 `TeamPermission`s in one call) — never a
+`ListUsers`/`ListObjects` fan-out, never one-Check-per-permission, and never
+the `list_relations` bulk scan `ensure_team_organization_relations` used to
+add: the `organization -> team` edge is established once at team creation
+(`teams.service.create_team`) and repaired only on cold paths (control-plane
+startup, import), never read or repaired by this per-request projection.
 
-4 logical operations is a floor on physical HTTP requests, not a ceiling: the
-`Read`-shaped operations (the `list_relations` scan and the `list_direct_
-relations` exact Read) each paginate, so a large team or a large `organization
--> team` edge set can still cost several HTTP round trips per logical
-operation. "4 logical ops" means 4 distinct OpenFGA RPCs are invoked at most
-once each — never that the whole projection is capped at 4 HTTP requests.
+3 logical operations is a floor on physical HTTP requests, not a ceiling: the
+`list_direct_relations` exact Read paginates, so a very large team can still
+cost several HTTP round trips for that one logical operation. "3 logical ops"
+means 3 distinct OpenFGA RPCs are invoked at most once each — never that the
+whole projection is capped at 3 HTTP requests.
 
 This file wires a real, call-counting `RebacEngine` (same pattern as
 `test_teams_bulk_membership_call_count.py`/`test_require_team_access.py`)
@@ -166,9 +168,10 @@ def _editor_relation(team_id: str, user_id: str) -> Relation:
 
 
 @pytest.mark.asyncio
-async def test_collaborative_team_budget_is_exactly_four_logical_ops() -> None:
-    """1 + 2 + 3 + 4: 1 Read (org-link scan) + 1 Check (access gate) + 1 exact
-    Read (projection) + 1 BatchCheck of 14 — zero ListUsers/ListObjects."""
+async def test_collaborative_team_budget_is_exactly_three_logical_ops() -> None:
+    """1 + 2 + 3: 1 Check (access gate) + 1 exact Read (projection) + 1
+    BatchCheck of 14 — zero ListUsers/ListObjects, and zero `list_relations`
+    (the org-link scan `ensure_team_organization_relations` used to add)."""
     engine = CountingRebacEngine(
         org_linked_team_ids={"fredlab"},
         granted_permissions=_ALL_PERMISSIONS,
@@ -181,7 +184,7 @@ async def test_collaborative_team_budget_is_exactly_four_logical_ops() -> None:
     team = await get_team_by_id(_user("alice"), TeamId("fredlab"), _deps(engine, store))
 
     assert team.id == TeamId("fredlab")
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.ORGANIZATION)]
+    assert engine.list_relations_calls == []
     assert len(engine.has_permission_calls) == 1  # the CAN_READ access gate
     assert engine.has_permission_calls[0][1] == TeamPermission.CAN_READ
     assert len(engine.list_direct_relations_calls) == 1
@@ -353,42 +356,23 @@ async def test_rebac_disabled_preserves_existing_behavior() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("team_count", [3, 50])
-async def test_list_teams_bulk_path_never_uses_the_exact_read(team_count: int) -> None:
-    """12: `_list_teams` must keep its constant bulk-scan shape regardless of
-    team count — never reintroduce a `list_direct_relations` (or ListUsers)
-    call per team."""
+async def test_list_teams_bulk_path_budget(team_count: int) -> None:
+    """12: `_list_teams`'s OpenFGA budget, corrected for the real OpenFGA
+    Read contract (confirmed live against v1.12.1 and v1.15.1, both reject a
+    relation + object-type-only filter with no exact `user` — see
+    `RebacEngine.list_relations`). The bulk
+    organization/public existence-check (`_teams_with_relation`) still costs
+    exactly one `list_relations` call per relation it actually needs to
+    write/revoke — never the organization relation at all (#2065) — but
+    admin/member resolution (`_bulk_team_membership`) can no longer be a
+    constant number of bulk `list_relations` scans: that shape doesn't exist
+    in OpenFGA for "any user" across many teams, so it is now one exact
+    `list_direct_relations(team:<id>)` per team, still zero `lookup_subjects`/
+    `lookup_resources` (ListUsers/ListObjects) fan-out."""
     team_ids = [f"team-{i}" for i in range(team_count)]
-    engine = CountingRebacEngine(org_linked_team_ids=set(team_ids))
-
-    # `_list_teams` also calls `ensure_team_public_relations`/
-    # `revoke_team_public_relations`, which reuse the same bulk existence-check
-    # read (`_teams_with_relation` -> `list_relations`) with different
-    # relation filters — extend the fake's list_relations to answer those too.
-    async def _list_relations_with_public(
-        *, resource_type, relation, subject_type=None, consistency_token=None
-    ):
-        engine.list_relations_calls.append((resource_type, relation))
-        if resource_type == Resource.TEAM and relation == RelationType.ORGANIZATION:
-            return [
-                Relation(
-                    subject=RebacReference(Resource.ORGANIZATION, "fred"),
-                    relation=RelationType.ORGANIZATION,
-                    resource=RebacReference(Resource.TEAM, tid),
-                )
-                for tid in engine.org_linked_team_ids
-            ]
-        if relation in (
-            RelationType.TEAM_ADMIN,
-            RelationType.TEAM_EDITOR,
-            RelationType.TEAM_ANALYST,
-            RelationType.TEAM_MEMBER,
-            RelationType.PUBLIC,
-        ):
-            return []
-        raise AssertionError(f"unexpected list_relations({resource_type}, {relation})")
-
-    engine.list_relations = _list_relations_with_public  # type: ignore[method-assign]
-
+    engine = CountingRebacEngine(
+        org_linked_team_ids=set(team_ids), public_team_ids=set(team_ids)
+    )
     store = _FakeMetadataStore(
         {tid: TeamMetadata(id=TeamId(tid), name=tid) for tid in team_ids}
     )
@@ -398,11 +382,20 @@ async def test_list_teams_bulk_path_never_uses_the_exact_read(team_count: int) -
     )
 
     assert len(teams) == team_count + 1  # + the caller's own personal team
-    assert engine.list_direct_relations_calls == []
     assert engine.lookup_subjects_calls == 0
     assert engine.lookup_resources_calls == 0
-    # 1 org-link + 4 bulk membership scans + 1 public scan, independent of team_count.
-    assert len(engine.list_relations_calls) == 6
+    # Never the organization relation (#2065); exactly the one PUBLIC
+    # existence-check `list_relations` read (all teams already public here,
+    # so it writes nothing; PRIVATE's `revoke_team_public_relations([])` is a
+    # no-op short-circuit and never calls `list_relations` at all).
+    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.PUBLIC)]
+    # One exact `list_direct_relations` per team — bounded by team_count, but
+    # no longer O(1) in round-trips the way the (invalid) bulk-scan design
+    # claimed to be.
+    assert len(engine.list_direct_relations_calls) == team_count
+    assert {ref.id for ref, _subject in engine.list_direct_relations_calls} == set(
+        team_ids
+    )
 
 
 @pytest.mark.asyncio
@@ -493,15 +486,16 @@ async def test_create_get_update_share_the_same_assembler(
 
 
 @pytest.mark.asyncio
-async def test_consistency_token_propagates_to_read_and_batch_check() -> None:
-    """3: when the caller's own access check performs a write (here, the
-    team's `organization -> team` edge does not exist yet — the exact
-    first-touch case `create_team`'s bootstrap and `_list_teams`'s lazy
-    backfill both self-heal), the resulting consistency token must reach both
-    the exact `list_direct_relations` Read and the `has_permissions`
-    BatchCheck — never left at `None`, which would let a relation just
-    written by the same request race eventual consistency instead of being
-    guaranteed visible."""
+async def test_missing_organization_edge_is_never_read_or_repaired() -> None:
+    """3: #2065 removed the self-heal this test used to cover — a team whose
+    `organization -> team` edge doesn't exist yet (e.g. one created before the
+    invariant existed, not yet reached by control-plane startup
+    reconciliation) is no longer detected or repaired by `get_team_by_id`:
+    nothing in schema.fga's computed team permissions reads that edge, so the
+    projection succeeds exactly the same with or without it. Zero
+    `list_relations`, zero writes, and — since the caller's own access check
+    performs no write anymore — both the exact `list_direct_relations` Read
+    and the `has_permissions` BatchCheck receive `None`, not a token."""
     engine = CountingRebacEngine(
         org_linked_team_ids=set(), granted_permissions=_ALL_PERMISSIONS
     )
@@ -509,11 +503,13 @@ async def test_consistency_token_propagates_to_read_and_batch_check() -> None:
         {"fredlab": TeamMetadata(id=TeamId("fredlab"), name="Fredlab")}
     )
 
-    await get_team_by_id(_user("alice"), TeamId("fredlab"), _deps(engine, store))
+    team = await get_team_by_id(_user("alice"), TeamId("fredlab"), _deps(engine, store))
 
-    assert engine.add_relations_calls  # the org edge write actually happened
-    assert engine.list_direct_relations_tokens == ["consistency-token"]
-    assert engine.has_permissions_tokens == ["consistency-token"]
+    assert team.id == TeamId("fredlab")
+    assert engine.list_relations_calls == []
+    assert engine.add_relations_calls == []
+    assert engine.list_direct_relations_tokens == [None]
+    assert engine.has_permissions_tokens == [None]
 
 
 @pytest.mark.asyncio
@@ -545,7 +541,10 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     `initial_team_admin_ids` in `admins`, `member_count`, and the direct
     relations it renders from — proving the write is actually visible to the
     projection's Read, not just that a token value was threaded through
-    unused."""
+    unused. #2065: the same bootstrap write also carries the organization
+    structural edge — written exactly once, with no prior existence-check
+    read — and its token (there being nothing else to prefer it over) is what
+    propagates to the projection's Read and BatchCheck."""
     engine = CountingRebacEngine(
         granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
     )
@@ -562,6 +561,21 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     assert created.member_count == 1
     assert set(created.my_relations) == set()  # the creator isn't a member
     assert _admin_relation(str(created.id), "alice") in engine.direct_relations
+    # The only `list_relations` call left is the (unrelated) TEAM-09 public
+    # existence-check — never an organization existence-check read.
+    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.PUBLIC)]
+    org_relations = [
+        r for r in engine.direct_relations if r.relation == RelationType.ORGANIZATION
+    ]
+    assert org_relations == [
+        Relation(
+            subject=RebacReference(Resource.ORGANIZATION, "fred"),
+            relation=RelationType.ORGANIZATION,
+            resource=_team_ref(str(created.id)),
+        )
+    ]
+    assert engine.list_direct_relations_tokens == ["consistency-token"]
+    assert engine.has_permissions_tokens == ["consistency-token"]
 
 
 @pytest.mark.asyncio

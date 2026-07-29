@@ -58,6 +58,7 @@ class _FakeOpenFgaClient:
 
     def __init__(self) -> None:
         self.read_tuples: list[Any] = []
+        self.read_calls: list[Any] = []
 
     async def check(self, body, options) -> SimpleNamespace:
         return SimpleNamespace(allowed=True)
@@ -72,6 +73,7 @@ class _FakeOpenFgaClient:
         return None
 
     async def read(self, body, options) -> SimpleNamespace:
+        self.read_calls.append(body)
         return SimpleNamespace(tuples=self.read_tuples, continuation_token="")  # nosec B106 — not a secret, an OpenFGA pagination token
 
 
@@ -150,47 +152,86 @@ async def test_list_relations_emits_read_operation() -> None:
     engine, _ = _make_engine(writer)
 
     await engine.list_relations(
-        resource_type=Resource.TEAM, relation=RelationType.TEAM_ADMIN
+        resource_type=Resource.TEAM,
+        relation=RelationType.TEAM_ADMIN,
+        subject=RebacReference(Resource.ORGANIZATION, "fred"),
     )
 
     assert writer.emitted[0]["dims"]["rebac_operation"] == "read"
 
 
 @pytest.mark.asyncio
-async def test_list_relations_parses_tuples_and_filters_by_subject_type() -> None:
-    """#2065: `list_relations` backs the bulk existence-check/membership reads
-    that replaced per-team `Check`/`ListUsers` fan-out — must parse raw
-    OpenFGA tuples into `Relation`s and drop non-matching subject types
-    (a userset subject like `team:other#member` is not a `user:*`)."""
+async def test_list_relations_parses_tuples_into_relations() -> None:
+    """#2065: `list_relations` backs the bulk organization/public
+    existence-check reads (`_teams_with_relation`) — must parse raw OpenFGA
+    tuples into `Relation`s."""
     engine, fake_client = _make_engine()
     fake_client.read_tuples = [
         SimpleNamespace(
             key=SimpleNamespace(
-                user="user:alice", relation="team_admin", object="team:fredlab"
-            )
-        ),
-        SimpleNamespace(
-            key=SimpleNamespace(
-                user="team:other#member",
-                relation="team_admin",
-                object="team:fredlab",
+                user="organization:fred", relation="organization", object="team:fredlab"
             )
         ),
     ]
 
     relations = await engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.TEAM_ADMIN,
-        subject_type=Resource.USER,
+        relation=RelationType.ORGANIZATION,
+        subject=RebacReference(Resource.ORGANIZATION, "fred"),
     )
 
     assert relations == [
         Relation(
-            subject=RebacReference(Resource.USER, "alice"),
-            relation=RelationType.TEAM_ADMIN,
+            subject=RebacReference(Resource.ORGANIZATION, "fred"),
+            relation=RelationType.ORGANIZATION,
             resource=RebacReference(Resource.TEAM, "fredlab"),
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_relations_sends_exact_user_for_organization_subject() -> None:
+    """#2065 regression guard: confirmed live against OpenFGA v1.12.1 and
+    v1.15.1, a Read whose `object` is type-only (no id) and whose `user`
+    is empty is rejected (HTTP 400, "the 'tuple_key' field was provided
+    but the object type field is required and both the object id and
+    user cannot be empty"). The `ReadRequestTupleKey` handed to the SDK
+    client must always carry the exact `user` — never omit it, never
+    send a bare type."""
+    engine, fake_client = _make_engine()
+
+    await engine.list_relations(
+        resource_type=Resource.TEAM,
+        relation=RelationType.ORGANIZATION,
+        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+    )
+
+    assert len(fake_client.read_calls) == 1
+    body = fake_client.read_calls[0]
+    assert body.user == "organization:fred"
+    assert body.relation == "organization"
+    assert body.object == "team:"
+
+
+@pytest.mark.asyncio
+async def test_list_relations_sends_exact_user_for_public_subject() -> None:
+    """Same OpenFGA v1.12.1/v1.15.1 constraint, for the `public` existence-check read
+    (`revoke_team_public_relations`/`ensure_team_public_relations`): the
+    wildcard subject `user:*` is itself the exact tuple user to filter on —
+    it must reach `body.user` unchanged, never be dropped."""
+    engine, fake_client = _make_engine()
+
+    await engine.list_relations(
+        resource_type=Resource.TEAM,
+        relation=RelationType.PUBLIC,
+        subject=RebacReference(Resource.USER, "*"),
+    )
+
+    assert len(fake_client.read_calls) == 1
+    body = fake_client.read_calls[0]
+    assert body.user == "user:*"
+    assert body.relation == "public"
+    assert body.object == "team:"
 
 
 class _PaginatingFakeOpenFgaClient(_FakeOpenFgaClient):
@@ -227,7 +268,9 @@ async def test_list_relations_paginates_via_continuation_token() -> None:
     )
 
     relations = await engine.list_relations(
-        resource_type=Resource.TEAM, relation=RelationType.TEAM_ADMIN
+        resource_type=Resource.TEAM,
+        relation=RelationType.TEAM_ADMIN,
+        subject=RebacReference(Resource.ORGANIZATION, "fred"),
     )
 
     assert {(r.subject.id, r.resource.id) for r in relations} == {

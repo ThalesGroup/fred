@@ -26,6 +26,7 @@ from fred_core import (
     TeamVisibility,
     create_keycloak_admin,
     is_service_agent,
+    team_organization_relation,
 )
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
@@ -345,7 +346,6 @@ async def _list_teams(
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): the registry lives in
     # `team_metadata_store`, not Keycloak root groups.
     all_teams = await deps.get_team_metadata_store().list_all()
-    team_ids = [metadata.id for metadata in all_teams]
     # TEAM-10: marketplace discoverability is gated by `visibility`, not
     # `joining_mode` (which only ever gates the ability to become a
     # member). Both calls are idempotent, so this also lazily
@@ -360,13 +360,22 @@ async def _list_teams(
         for metadata in all_teams
         if metadata.visibility == TeamVisibility.PRIVATE
     ]
-    # #2065: none of these three depend on each other's result (each does its
-    # own bulk existence-check read since #2065) -- run them concurrently
-    # instead of stacking 3 sequential round-trips.
-    consistency_token, _, _ = await asyncio.gather(
-        rebac.ensure_team_organization_relations(team_ids),
+    # #2065: no longer also ensures `organization -> team` here — that
+    # structural edge is established once at team creation and repaired only
+    # on cold paths (control-plane startup, import), never on every listing.
+    # The two remaining calls don't depend on each other's result (each does
+    # its own bulk existence-check read) -- run them concurrently instead of
+    # stacking sequential round-trips, and keep whichever actually wrote
+    # something (both write, at most one per call, so at most one is non-None
+    # in the steady state; if both wrote — a first-ever listing backfilling
+    # both partitions at once — either token is equally valid, OpenFGA has no
+    # per-write snapshot ordering to prefer one over the other).
+    public_token, private_token = await asyncio.gather(
         rebac.ensure_team_public_relations(public_team_ids),
         rebac.revoke_team_public_relations(private_team_ids),
+    )
+    consistency_token = next(
+        (token for token in (public_token, private_token) if token is not None), None
     )
 
     if filter_by_can_read:
@@ -440,20 +449,33 @@ async def create_team(
         raise TeamAlreadyExistsError(request.name) from exc
 
     try:
-        admin_grant_token = await rebac.add_relations(
+        # #2065: the organization structural edge is written directly here,
+        # in the same bootstrap set as the initial team_admin(s) — `team_id`
+        # is freshly generated, so there is no existing edge to check for
+        # (unlike `ensure_team_organization_relations`, the read-then-write
+        # cold-path repair primitive used elsewhere for possibly-pre-existing
+        # teams). Bundling both into one `add_relations` call also means a
+        # failure writing the structural edge rolls back the metadata row
+        # below exactly like an admin-grant failure already did — a team is
+        # never left registered without it.
+        bootstrap_token = await rebac.add_relations(
             [
-                Relation(
-                    subject=RebacReference(Resource.USER, admin_user_id),
-                    relation=RelationType.TEAM_ADMIN,
-                    resource=RebacReference(Resource.TEAM, team_id),
-                )
-                for admin_user_id in request.initial_team_admin_ids
+                team_organization_relation(team_id),
+                *(
+                    Relation(
+                        subject=RebacReference(Resource.USER, admin_user_id),
+                        relation=RelationType.TEAM_ADMIN,
+                        resource=RebacReference(Resource.TEAM, team_id),
+                    )
+                    for admin_user_id in request.initial_team_admin_ids
+                ),
             ],
             actor_uid=user.uid,
         )
     except Exception:
         logger.warning(
-            "Rolling back team %s (%s): failed to bootstrap initial team_admin(s)",
+            "Rolling back team %s (%s): failed to bootstrap the organization "
+            "structural relation or initial team_admin(s)",
             team_id,
             request.name,
         )
@@ -471,11 +493,10 @@ async def create_team(
     # `get_team_by_id` path: the calling platform_admin is not necessarily a
     # team_member of the team they just created (by design, RFC §24.2/§24.7),
     # so a CAN_READ-gated lookup would deny their own creation response.
-    organization_token = await rebac.ensure_team_organization_relations([team_id])
     # TEAM-09: grant marketplace discoverability immediately — don't wait for
     # the lazy backfill in `_list_teams` to reach this brand-new team.
     public_token = await rebac.ensure_team_public_relations([team_id])
-    # Every write above targets this same brand-new team; use the latest one
+    # Both writes above target this same brand-new team; use the latest one
     # that actually happened (OpenFGA has no per-write snapshot token today —
     # `_persist_relation` always returns the same `HIGHER_CONSISTENCY`
     # sentinel — so any non-`None` value already means "read this team
@@ -483,11 +504,7 @@ async def create_team(
     # tuples could race the projection Read below on eventual consistency and
     # the creator's own response would come back with an empty admins list.
     consistency_token = next(
-        (
-            token
-            for token in (public_token, organization_token, admin_grant_token)
-            if token is not None
-        ),
+        (token for token in (public_token, bootstrap_token) if token is not None),
         None,
     )
     return await _build_team_with_permissions(user, metadata, deps, consistency_token)
@@ -1190,71 +1207,50 @@ async def _bulk_team_membership(
     rebac: RebacEngine,
     team_ids: list[TeamId],
 ) -> tuple[dict[TeamId, set[str]], dict[TeamId, set[str]]]:
-    """Bulk-resolve admins/members for every id in `team_ids`.
+    """Resolve admins/members for every id in `team_ids`.
 
-    Replaces `2 * len(team_ids)` per-team `lookup_subjects` (`ListUsers`)
-    calls with 4 bulk `list_relations` reads total — #2065, ~198 OpenFGA
-    round-trips down to 4 (each paginated, still O(1) in team count) at the
-    99-team S3NS scale that made `/frontend/bootstrap` take 4-9s.
+    #2065 correction: the earlier "4 bulk `list_relations` reads total"
+    design does not work against a real OpenFGA store — confirmed live
+    against OpenFGA v1.12.1 and v1.15.1. `list_relations`'s relation +
+    object-type-only (no id) shape requires an exact `user` to anchor the
+    server-side Read
+    (HTTP 400 otherwise: "the 'tuple_key' field was provided but the object
+    type field is required and both the object id and user cannot be
+    empty" — see `RebacEngine.list_relations`'s docstring); there is no
+    single exact "any user" subject to supply for "every team_admin/editor/
+    analyst/member tuple across every team at once" — `subject_type=
+    Resource.USER` was a client-side filter layered over a request OpenFGA
+    itself never accepted.
 
-    `team_member` is a *computed* union relation in schema.fga (`[user] or
-    team_admin or team_editor or team_analyst`) — the old single
-    `lookup_subjects(..., TEAM_MEMBER)` call transparently expanded that
-    union server-side. `list_relations` only returns stored tuples, so the
-    full member set is rebuilt here from the 4 relations that feed the
-    union. `admins` stays exactly the `team_admin` tuples (that relation is
-    `[user]` only, not computed — same semantics as before).
-
-    Note: personal-space team_editor grants (one per user with a personal
-    space, enforced by `_reject_unsanctioned_personal_team_write`) are also
-    stored under `team_editor`, so that one bulk read's *data volume* scales
-    with active-user count, not team count — unlike the other 3. It is still
-    O(1) *round-trips* (a handful of paginated reads), which is what drove
-    the latency this fixes; results outside `team_ids` are filtered out
-    below rather than counted.
+    The correct minimal shape is one exact `list_direct_relations(team:<id>)`
+    Read per team (a fully-specified `object`, the same already-used shape as
+    `_build_team_with_permissions`'s single-team projection) — O(len(team_ids))
+    round-trips (each paginated), replacing the old `2 * len(team_ids))`
+    per-team `lookup_subjects` (`ListUsers`) fan-out with a same-order but
+    cheaper (`Read` vs `ListUsers`) fan-out. `_fold_team_role_relations`
+    (below) is the exact same role-derivation the single-team projection
+    uses, so the two paths can't drift apart.
     """
-    team_id_set = set(team_ids)
-    admin_rels, editor_rels, analyst_rels, member_rels = await asyncio.gather(
-        rebac.list_relations(
-            resource_type=Resource.TEAM,
-            relation=RelationType.TEAM_ADMIN,
-            subject_type=Resource.USER,
-        ),
-        rebac.list_relations(
-            resource_type=Resource.TEAM,
-            relation=RelationType.TEAM_EDITOR,
-            subject_type=Resource.USER,
-        ),
-        rebac.list_relations(
-            resource_type=Resource.TEAM,
-            relation=RelationType.TEAM_ANALYST,
-            subject_type=Resource.USER,
-        ),
-        rebac.list_relations(
-            resource_type=Resource.TEAM,
-            relation=RelationType.TEAM_MEMBER,
-            subject_type=Resource.USER,
-        ),
+    if not team_ids:
+        return {}, {}
+
+    per_team_relations = await asyncio.gather(
+        *(
+            rebac.list_direct_relations(RebacReference(Resource.TEAM, team_id))
+            for team_id in team_ids
+        )
     )
 
-    admin_ids_map: dict[TeamId, set[str]] = {team_id: set() for team_id in team_ids}
-    member_ids_map: dict[TeamId, set[str]] = {team_id: set() for team_id in team_ids}
-
-    def _fold(
-        rels: list[Relation] | RebacDisabledResult,
-        target: dict[TeamId, set[str]],
-    ) -> None:
-        if isinstance(rels, RebacDisabledResult):
-            return
-        for rel in rels:
-            if rel.resource.id in team_id_set:
-                target[TeamId(rel.resource.id)].add(rel.subject.id)
-
-    _fold(admin_rels, admin_ids_map)
-    _fold(admin_rels, member_ids_map)
-    _fold(editor_rels, member_ids_map)
-    _fold(analyst_rels, member_ids_map)
-    _fold(member_rels, member_ids_map)
+    admin_ids_map: dict[TeamId, set[str]] = {}
+    member_ids_map: dict[TeamId, set[str]] = {}
+    for team_id, relations in zip(team_ids, per_team_relations):
+        roles_by_user = _fold_team_role_relations(relations)
+        admin_ids_map[team_id] = {
+            uid
+            for uid, roles in roles_by_user.items()
+            if UserTeamRelation.TEAM_ADMIN in roles
+        }
+        member_ids_map[team_id] = set(roles_by_user.keys())
 
     return admin_ids_map, member_ids_map
 
