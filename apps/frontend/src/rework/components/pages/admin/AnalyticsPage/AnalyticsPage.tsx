@@ -59,35 +59,39 @@ export default function AnalyticsPage() {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange);
 
+  // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
+  // client-side TTL, does not re-fetch on every render" policy
+  // KPI-ANALYTICS-RFC.md §2.6 already documents — every preset below used
+  // `true` instead, which ignored cache age and refetched on every mount.
   const { data, isLoading, isFetching, isError } = useActiveUsersOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
     data: totalData,
     isLoading: totalIsLoading,
     isError: totalIsError,
-  } = useUniqueUsersTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useUniqueUsersTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: sessionsData,
     isLoading: sessionsIsLoading,
     isError: sessionsIsError,
-  } = useSessionsOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useSessionsOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: messagesData,
     isLoading: messagesIsLoading,
     isFetching: messagesIsFetching,
     isError: messagesIsError,
-  } = useMessagesOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useMessagesOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: scopeData,
     isLoading: scopeIsLoading,
     isError: scopeIsError,
-  } = useSessionsByScopeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useSessionsByScopeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   // Add translated labels
   const scopeRows = useMemo(
@@ -108,20 +112,20 @@ export default function AnalyticsPage() {
     isError: topTeamsIsError,
   } = useTopTeamsBySessionsQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
     data: agentsTotalData,
     isLoading: agentsTotalIsLoading,
     isError: agentsTotalIsError,
-  } = useAgentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useAgentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: documentsTotalData,
     isLoading: documentsTotalIsLoading,
     isError: documentsTotalIsError,
-  } = useDocumentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+  } = useDocumentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: topAgentsData,
@@ -130,7 +134,7 @@ export default function AnalyticsPage() {
     isError: topAgentsIsError,
   } = useTopAgentsByConversationsQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
@@ -139,7 +143,7 @@ export default function AnalyticsPage() {
     isError: promptLengthIsError,
   } = useAgentPromptLengthDistributionQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   // Token usage + green/cost (§2.7, F1) — platform-wide (no teamId), same
@@ -152,26 +156,20 @@ export default function AnalyticsPage() {
     isError: tokenUsageOverTimeIsError,
   } = useTokenUsageOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
     data: tokenUsageByAgentData,
     isLoading: tokenUsageByAgentIsLoading,
     isError: tokenUsageByAgentIsError,
-  } = useTokenUsageByAgentQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useTokenUsageByAgentQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   const {
     data: tokenUsageByModelData,
     isLoading: tokenUsageByModelIsLoading,
     isError: tokenUsageByModelIsError,
-  } = useTokenUsageByModelQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useTokenUsageByModelQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
 
   // Admin-only section (§2.4/§2.5) — can_manage_platform, not the weaker
   // can_observe_platform every query above requires. Skipped entirely for a
@@ -185,7 +183,7 @@ export default function AnalyticsPage() {
     isError: storageByTeamIsError,
   } = useStorageByTeamQuery(
     { since: timeRange.since, until: timeRange.until },
-    { skip: !canAdmin, refetchOnMountOrArgChange: true },
+    { skip: !canAdmin, refetchOnMountOrArgChange: 300 },
   );
   const storageByTeamRows = useMemo(
     () =>

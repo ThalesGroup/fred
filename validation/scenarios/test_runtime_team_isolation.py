@@ -50,6 +50,13 @@ def _identifiers(team_item: dict) -> set[str]:
     return {str(team_item.get(k)) for k in ("id", "name", "team_id") if team_item.get(k)}
 
 
+# Hard-required since #2107 (CreateAgentInstanceRequest.usage_statement) — every
+# enroll call in this file needs one or FastAPI 422s the request before any
+# authz check runs, masking every permission assertion below with a validation
+# error instead.
+USAGE_STATEMENT = "Validation-suite disposable instance, deleted at teardown."
+
+
 MEMBERS = sorted(u for u, fu in USERS.items() if TEST_TEAM in fu.teams)
 NON_MEMBERS = sorted(u for u, fu in USERS.items() if TEST_TEAM not in fu.teams)
 PLAIN_MEMBERS = sorted(u for u in MEMBERS if not USERS[u].can_enroll_in(TEST_TEAM))
@@ -115,19 +122,27 @@ def _jwt_sub(token: str) -> str:
 
 @pytest.mark.parametrize("username", sorted(USERS))
 def test_user_sees_exactly_their_teams(username: str, cp, users) -> None:
-    """Check that a user sees exactly their own teams and no other team leaks (ReBAC isolation)."""
+    """Check that a user is a member of exactly their own teams and no other team membership leaks (ReBAC isolation).
+
+    TEAM-10 (2026-07-26) makes team visibility default to PUBLIC, so `/teams`
+    may legitimately list every public collaborative team for marketplace
+    discovery (`can_read = team_member or public`), including teams the caller
+    never joined. The isolation invariant this test proves is membership
+    (`is_member`), not list presence -- see GitHub #2146 cluster C.
+    """
     user = users[username]
     resp = cp(username).get("/teams")
     assert resp.status_code == 200, resp.text
     items = resp.json()
     assert isinstance(items, list), f"unexpected /teams shape: {items!r}"
     collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
-    seen: set[str] = set().union(*[_identifiers(t) for t in collaborative]) if collaborative else set()
+    joined = [t for t in collaborative if t.get("is_member")]
+    seen: set[str] = set().union(*[_identifiers(t) for t in joined]) if joined else set()
     for team in user.teams:
-        assert team in seen, f"{username} should see team {team!r}; got {sorted(seen)}"
-    assert len(collaborative) == len(user.teams), (
-        f"{username}: expected collaborative teams {sorted(user.teams)}, "
-        f"got {[t.get('name') for t in collaborative]}"
+        assert team in seen, f"{username} should be a member of team {team!r}; got {sorted(seen)}"
+    assert len(joined) == len(user.teams), (
+        f"{username}: expected team memberships {sorted(user.teams)}, "
+        f"got {[t.get('name') for t in joined]} (is_member=True teams)"
     )
 
 
@@ -203,7 +218,7 @@ def enrolled_agent(cp):
     name = f"val-{uuid.uuid4().hex[:8]}"
     created = admin.post(
         f"/teams/{team_id}/agent-instances",
-        json={"template_id": template_id, "display_name": name},
+        json={"template_id": template_id, "display_name": name, "usage_statement": USAGE_STATEMENT},
     )
     assert created.status_code in (200, 201), (
         f"Team operator ({TEAM_OPERATOR_USERNAME}) could not enroll {AGENT_TAG} into {TEST_TEAM!r}: "
@@ -360,7 +375,11 @@ def test_plain_member_cannot_enroll_agent_in_collaborative_team(username: str, c
     team_id, template = _resolve_test_template(operator)
     resp = cp(username).post(
         f"/teams/{team_id}/agent-instances",
-        json={"template_id": template["template_id"], "display_name": f"deny-{uuid.uuid4().hex[:6]}"},
+        json={
+            "template_id": template["template_id"],
+            "display_name": f"deny-{uuid.uuid4().hex[:6]}",
+            "usage_statement": USAGE_STATEMENT,
+        },
     )
     assert resp.status_code in (403, 404), (
         f"{username} unexpectedly enrolled {AGENT_TAG} into {TEST_TEAM}: "
@@ -381,6 +400,7 @@ def test_team_admin_cannot_enroll_agent_without_editor_role(username: str, cp) -
         json={
             "template_id": template["template_id"],
             "display_name": f"deny-admin-{uuid.uuid4().hex[:6]}",
+            "usage_statement": USAGE_STATEMENT,
         },
     )
     instance_id = None
@@ -442,7 +462,7 @@ def test_user_can_enroll_agent_in_their_personal_team(username: str, cp) -> None
     name = f"personal-val-{uuid.uuid4().hex[:6]}"
     created = client.post(
         f"/teams/{personal_id}/agent-instances",
-        json={"template_id": template["template_id"], "display_name": name},
+        json={"template_id": template["template_id"], "display_name": name, "usage_statement": USAGE_STATEMENT},
     )
     assert created.status_code in (200, 201), (
         f"{username} could not enroll {AGENT_TAG} in their personal team: "

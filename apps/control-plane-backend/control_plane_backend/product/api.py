@@ -577,7 +577,12 @@ async def get_team_prompts(
     - `GET /control-plane/v1/teams/personal/prompts?lang=fr`
     """
 
-    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     return await list_prompts(team_id, deps, lang=lang)
 
 
@@ -644,7 +649,12 @@ async def get_context_prompts_early(
     - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context?lang=fr``
     """
 
-    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     return await list_context_prompts(user, team_id, deps, lang=lang)
 
 
@@ -674,7 +684,12 @@ async def get_team_prompt(
     - `GET /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     result = await get_prompt(team_id, prompt_id, deps)
     if result is None:
         raise HTTPException(

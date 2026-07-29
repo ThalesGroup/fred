@@ -188,7 +188,10 @@ def create_openai_compat_router(
 
         # F-A: gate this surface with the same pod-side OpenFGA check as
         # /agents/execute. When ReBAC is active, the caller must present a team
-        # (X-Fred-Team-Id) and hold CAN_READ on it; identity is the validated JWT.
+        # (X-Fred-Team-Id) and hold CAN_USE_TEAM_AGENTS on it (team_member-only,
+        # unlike CAN_READ which also admits the public marketplace-discovery
+        # relation — this is real execution, not discovery); identity is the
+        # validated JWT.
         rebac = get_runtime_context().config.rebac_engine
         if authenticated_user is not None and rebac is not None and rebac.enabled:
             if not team_id:
@@ -198,7 +201,7 @@ def create_openai_compat_router(
                 )
             try:
                 await rebac.check_user_team_permission_or_raise(
-                    authenticated_user, TeamPermission.CAN_READ, team_id
+                    authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
                 )
             except AuthorizationError as exc:
                 raise HTTPException(

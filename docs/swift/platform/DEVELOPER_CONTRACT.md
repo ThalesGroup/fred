@@ -14,6 +14,10 @@ Read these files in this order:
 4. [`docs/REBAC.md`](./REBAC.md) for access-control related work
 5. [`docs/CONTRIBUTING.md`](./CONTRIBUTING.md)
 
+This document is code conventions, not a setup guide — for a runnable local stack
+(infra, demo data, and the validation suite), start at
+[`docs/swift/TESTING.md`](../TESTING.md) instead.
+
 ## 2) Platform CLI Convention
 
 **Every Fred backend exposes `make cli`** — the primary tool for validating and operating the service from a terminal.

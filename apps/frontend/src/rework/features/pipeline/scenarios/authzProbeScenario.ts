@@ -135,6 +135,11 @@ export async function authzProbeScenario(
         detail: `team ${teamId}: can_update_resources=${hasPermission}, write HTTP ${status}`,
       };
     },
+    // Optional: "the target belongs to no collaborative team" is a legitimate
+    // state for a platform_admin/platform_observer/identity-only account
+    // (REBAC.md), not a broken precondition — it must not flip the overall
+    // verdict to "failed" on its own.
+    { optional: true },
   );
 
   if (flags) {
@@ -170,5 +175,10 @@ export async function authzProbeScenario(
       }
       return { value: undefined, detail: `team ${foreignTeamId}: HTTP ${status}` };
     },
+    // Optional: "no team exists that the target is not already a member of"
+    // is a legitimate state for an account that belongs to every team in a
+    // small registry (nothing left to test isolation against), not a broken
+    // precondition — must not flip the overall verdict to "failed" on its own.
+    { optional: true },
   );
 }
