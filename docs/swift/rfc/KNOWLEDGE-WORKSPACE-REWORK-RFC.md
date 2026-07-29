@@ -1208,6 +1208,27 @@ change started using the already-generated
 `DocumentWorkspace.tsx` batches one call per folder view for every
 visible child folder's primary tag id (same "batch once per page, not
 per row" pattern as the Auteur column's uploader resolution) and shows
-"—" for a folder whose size hasn't resolved yet. Scope matches the
-doc-count behavior it replaces: each folder's own directly-tagged
-documents only, not a recursive sum over its subfolders' contents.
+"—" for a folder whose size hasn't resolved yet. Scope originally
+matched the doc-count behavior it replaced: each folder's own
+directly-tagged documents only, not a recursive sum over its
+subfolders' contents.
+
+**Follow-up (2026-07-30, same day):** that non-recursive scope produced
+a confusing, developer-reported mismatch against real team data — a
+team's one visible top-level folder showed 17,1 Mo while the team
+storage quota indicator (same page) showed 22,3 Mo for the same corpus.
+Root cause: the folder had an internal subfolder holding the missing
+5,2 Mo, invisible to the folder's own tag-direct total while fully
+counted in the team-wide quota. Fixed by making the folder Taille cell
+recursive: for each visible folder, the batched `tag-sizes` request now
+asks for that folder's tag id **and every descendant subfolder tag id**
+(`collectDescendantTagIds`, `shared/utils/tagTree.ts` — already existed,
+walks the fully-loaded in-memory tag tree, so no extra fetch is needed
+to discover the descendants), and the cell sums the per-tag results
+client-side. No backend change: `total_size_by_tags` already returns an
+independent total per requested tag id, and summing across a folder's
+own id + its descendants' ids is safe from double-counting because a
+document is tagged into exactly the one (leaf) folder it's filed in,
+never simultaneously into an ancestor folder too — confirmed against
+real data (the folder's direct total + its subfolder's direct total
+equalled the team quota exactly, with no overlap).

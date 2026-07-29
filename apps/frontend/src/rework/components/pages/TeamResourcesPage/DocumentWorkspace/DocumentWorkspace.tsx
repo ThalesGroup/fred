@@ -42,7 +42,7 @@ import {
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
+import { buildTree, collectDescendantTagIds, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
@@ -476,15 +476,24 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     [currentNode],
   );
 
-  // Folder rows show the total size of the documents they directly contain
-  // (same "direct tag, not recursive over subfolders" scope as the doc-count
-  // this replaces) rather than a document count — batched once per folder
-  // view via /documents/metadata/tag-sizes (built for exactly this, see its
-  // controller docstring), not one query per row.
+  // Folder rows show the total size of every document the folder contains,
+  // including its subfolders' — a folder tag's own item_ids never cover
+  // nested tags, so this walks the (already fully loaded) in-memory tree via
+  // collectDescendantTagIds, batched once per folder view via
+  // /documents/metadata/tag-sizes for the union of every visible folder's own
+  // + descendant tag ids, not one query per row. Per-tag sums are summed
+  // client-side per folder: safe against double counting because a document
+  // is tagged into exactly one folder (its leaf tag), never simultaneously
+  // into an ancestor folder too — verified against real data (folder total +
+  // subfolder total == the team's whole storage counter, no overlap).
   const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
-  const folderTagIds = useMemo(
-    () => childFolders.map((node) => node.tagsHere[0]?.id).filter((id): id is string => Boolean(id)),
+  const folderDescendantTagIds = useMemo(
+    () => new Map(childFolders.map((node) => [node.full, collectDescendantTagIds(node)])),
     [childFolders],
+  );
+  const folderTagIds = useMemo(
+    () => Array.from(new Set([...folderDescendantTagIds.values()].flat())),
+    [folderDescendantTagIds],
   );
   // Keyed by sorted content, not the array's own identity: `tags` (and so
   // `childFolders`/`folderTagIds`) can get a fresh reference on a render that
@@ -688,8 +697,9 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "6.5rem",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
-          const tagId = row.node.tagsHere[0]?.id;
-          const bytes = tagId ? folderSizes[tagId] : undefined;
+          const ids = folderDescendantTagIds.get(row.node.full) ?? [];
+          const resolved = ids.length > 0 && ids.every((id) => folderSizes[id] !== undefined);
+          const bytes = resolved ? ids.reduce((sum, id) => sum + (folderSizes[id] ?? 0), 0) : undefined;
           return <span className={styles.nowrapCell}>{bytes === undefined ? "—" : formatBytes(bytes)}</span>;
         }
         return <span className={styles.nowrapCell}>{formatBytes(row.doc.file?.file_size_bytes ?? 0)}</span>;

@@ -16,7 +16,12 @@
 // Coverage: a folder row's "Taille" cell shows the folder's total document
 // size (via POST /documents/metadata/tag-sizes, batched once per folder view),
 // not a document count — "—" while the batch is in flight, the formatted
-// size once it resolves.
+// size once it resolves. Recursive over subfolders: a folder tag's own
+// item_ids never cover a nested tag's documents, so a folder containing a
+// subfolder must show their combined total, not just its own direct files
+// (the mismatch a real team's data surfaced: a folder read as its own size
+// while its subfolder's bytes were invisible, even though the team storage
+// quota counted both).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -34,13 +39,25 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
-const tagSizes = vi.fn(() => ({ unwrap: async () => ({ sizes: { "tag-cir": 2048, "tag-hr": 0 } }) }));
+const tagSizes = vi.fn(() => ({
+  unwrap: async () => ({
+    sizes: { "tag-cir": 2048, "tag-hr": 0, "tag-documents": 100, "tag-dossier-112": 50 },
+  }),
+}));
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [
       { id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: ["doc-1", "doc-2"] },
       { id: "tag-hr", name: "HR", path: "", type: "document", item_ids: [] },
+      { id: "tag-documents", name: "Documents", path: "", type: "document", item_ids: ["doc-3"] },
+      {
+        id: "tag-dossier-112",
+        name: "Dossier 112",
+        path: "Documents",
+        type: "document",
+        item_ids: ["doc-4", "doc-5"],
+      },
     ],
     isLoading: false,
     refetch: () => {},
@@ -111,8 +128,24 @@ describe("DocumentWorkspace folder size column", () => {
       root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
     });
 
-    expect(tagSizes).toHaveBeenCalledWith({ tagSizesRequest: { tag_ids: ["tag-cir", "tag-hr"] } });
+    expect(tagSizes).toHaveBeenCalledWith({
+      tagSizesRequest: { tag_ids: ["tag-cir", "tag-documents", "tag-dossier-112", "tag-hr"] },
+    });
     expect(folderRow("CIR").textContent).toContain(formatBytes(2048));
+  });
+
+  it("sums a folder's own size with all of its subfolders', recursively", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    });
+
+    // "Documents" (100 bytes direct) contains "Dossier 112" (50 bytes) — the
+    // row must show their combined 150, not just Documents' own 100.
+    expect(folderRow("Documents").textContent).toContain(formatBytes(150));
   });
 
   it("never shows a raw document count in the size cell", async () => {
