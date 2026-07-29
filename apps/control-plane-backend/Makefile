@@ -54,6 +54,21 @@ build-demo-bundle: ## Zip the checked-in demo provisioning fixture (manifest.jso
 	cd $(DEMO_PROVISIONING_FIXTURE_DIR) && zip -q -X $(abspath $(DEMO_BUNDLE_FILE)) manifest.json users.json
 	@echo "Created: $(DEMO_BUNDLE_FILE)"
 
+LOAD_TEST_DIR ?= target/load_test_provisioning
+LOAD_TEST_BUNDLE_FILE ?= target/load-test-provisioning-bundle.zip
+LOAD_TEST_USERS ?= 3000
+LOAD_TEST_TEAMS ?= 100
+LOAD_TEST_PREFIX ?= user
+
+.PHONY: build-load-test-bundle
+build-load-test-bundle: ## Generate + zip a synthetic N-user/M-team bundle for local OpenFGA scale testing (LOAD_TEST_USERS/LOAD_TEST_TEAMS/LOAD_TEST_PREFIX env vars; not the curated demo fixture). Usernames must already exist in Keycloak, e.g. via fred-deployment-factory's swify-add-user.sh --count
+	@rm -rf $(LOAD_TEST_DIR)
+	$(UV) run python tools/generate_load_test_bundle.py \
+		--users $(LOAD_TEST_USERS) --teams $(LOAD_TEST_TEAMS) --prefix $(LOAD_TEST_PREFIX) --out-dir $(LOAD_TEST_DIR)
+	@rm -f $(LOAD_TEST_BUNDLE_FILE)
+	cd $(LOAD_TEST_DIR) && zip -q -X $(abspath $(LOAD_TEST_BUNDLE_FILE)) manifest.json users.json
+	@echo "Created: $(LOAD_TEST_BUNDLE_FILE)"
+
 .PHONY: create-test-user
 create-test-user: dev ## Create a user in control-plane without manual bearer token copy/paste
 	@set -a; \

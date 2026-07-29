@@ -108,6 +108,7 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
     TagPermission,
     TeamPermission,
+    team_organization_relation,
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import (
@@ -196,6 +197,7 @@ __all__ = [
     "DocumentPermission",
     "TeamPermission",
     "ORGANIZATION_ID",
+    "team_organization_relation",
     "AgentPermission",
     "OrganizationPermission",
     "CapabilityPermission",

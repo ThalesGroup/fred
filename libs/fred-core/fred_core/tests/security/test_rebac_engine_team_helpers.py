@@ -22,6 +22,7 @@ from fred_core.common.team_id import personal_team_id
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     AgentPermission,
+    RebacDisabledResult,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -58,7 +59,7 @@ class _RecordingRebacEngine(RebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
         return []
@@ -147,7 +148,7 @@ class _ContextualRelationsSpyEngine(RebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
         return []
@@ -252,7 +253,12 @@ async def test_ensure_team_organization_relations_creates_unique_edges() -> None
 
 
 @pytest.mark.asyncio
-async def test_check_user_team_permissions_or_raise_reuses_consistency_token() -> None:
+async def test_check_user_team_permissions_or_raise_no_longer_touches_organization_edge() -> (
+    None
+):
+    """#2065: this helper no longer ensures `organization -> team` first —
+    zero writes, zero `list_relations` reads, and no consistency token to
+    propagate (there is nothing written in this call to need one for)."""
     engine = _RecordingRebacEngine()
 
     token = await engine.check_user_team_permissions_or_raise(
@@ -261,13 +267,31 @@ async def test_check_user_team_permissions_or_raise_reuses_consistency_token() -
         permissions=[TeamPermission.CAN_READ, TeamPermission.CAN_UPDATE_RESOURCES],
     )
 
-    assert token is not None
-    assert int(token) == 1
+    assert token is None
+    assert engine.added_relations == []
     assert len(engine.checked_permissions) == 2
     assert engine.checked_permissions == [
-        (TeamPermission.CAN_READ, "team-a", token),
-        (TeamPermission.CAN_UPDATE_RESOURCES, "team-a", token),
+        (TeamPermission.CAN_READ, "team-a", None),
+        (TeamPermission.CAN_UPDATE_RESOURCES, "team-a", None),
     ]
+
+
+@pytest.mark.asyncio
+async def test_check_user_team_permissions_or_raise_is_pure_io_free_when_empty() -> (
+    None
+):
+    """#2065: with zero permissions requested, this must be a pure no-op —
+    not even the organization-edge write the old contract performed
+    unconditionally."""
+    engine = _RecordingRebacEngine()
+
+    token = await engine.check_user_team_permissions_or_raise(
+        user=_user(), team_id="team-a", permissions=[]
+    )
+
+    assert token is None
+    assert engine.added_relations == []
+    assert engine.checked_permissions == []
 
 
 @pytest.mark.asyncio
@@ -280,10 +304,10 @@ async def test_check_user_team_permission_or_raise_single_permission() -> None:
         team_id="team-42",
     )
 
-    assert token is not None
-    assert int(token) == 1
+    assert token is None
+    assert engine.added_relations == []
     assert engine.checked_permissions == [
-        (TeamPermission.CAN_UPDATE_AGENTS, "team-42", token)
+        (TeamPermission.CAN_UPDATE_AGENTS, "team-42", None)
     ]
 
 
@@ -324,7 +348,7 @@ class _PersonalTeamAwareEngine(RebacEngine):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
         return []
@@ -551,3 +575,237 @@ async def test_add_relation_allows_organization_edge_on_personal_team() -> None:
 
     assert len(engine.added_relations) == 1
     assert engine.added_relations[0].relation == RelationType.ORGANIZATION
+
+
+@pytest.mark.asyncio
+async def test_check_user_team_permission_or_raise_never_persists_organization_edge_for_personal_space() -> (
+    None
+):
+    """#2065 / personal-space isolation: the real per-request team-permission
+    check path (`check_user_team_permission_or_raise`) never touches the
+    `organization -> team` structural edge for ANY team, collaborative or
+    personal — it was removed from this hot path entirely, not just guarded
+    against for personal spaces. The only write a personal space's first
+    touch produces is its own `team_editor` self-heal."""
+    engine = _PersonalTeamAwareEngine()
+    user = _user()
+    team_id = personal_team_id(user.uid)
+
+    await engine.check_user_team_permission_or_raise(
+        user, TeamPermission.CAN_READ, team_id
+    )
+
+    assert engine.added_relations == [
+        Relation(
+            subject=RebacReference(Resource.USER, user.uid),
+            relation=RelationType.TEAM_EDITOR,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    ]
+
+
+class _InMemoryCountingRebacEngine(RebacEngine):
+    """Real, filterable `list_relations` against an in-memory tuple set.
+
+    #2065 regression coverage: `_RecordingRebacEngine`/`_PersonalTeamAwareEngine`
+    above both stub `list_relations` to `return []` unconditionally, which
+    can't distinguish "no existing edges" from "existing edges I forgot to
+    return" — it would pass even if `ensure_team_organization_relations`
+    stopped calling `list_relations` at all. This fake actually stores what
+    was written/deleted and answers `list_relations` from that state, so
+    tests can assert the *skip* behavior (no write for an edge that already
+    exists, no delete for one that's already absent), not just the write
+    behavior already covered above.
+
+    `disabled=True` makes `list_relations` return `RebacDisabledResult()`,
+    covering the fallback branch (`_teams_with_relation` returning `None`)
+    that preserves today's unconditional-write behavior for engines (like
+    `NoopRebacEngine`) that don't support bulk listing.
+    """
+
+    def __init__(self, *, disabled: bool = False) -> None:
+        self._disabled = disabled
+        self.tuples: list[Relation] = []
+        self.added_relations: list[Relation] = []
+        self.deleted_relations: list[Relation] = []
+        self.list_relations_call_count = 0
+        self.list_relations_consistency_tokens: list[str | None] = []
+
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        self.added_relations.append(relation)
+        if relation not in self.tuples:
+            self.tuples.append(relation)
+        return str(len(self.added_relations))
+
+    async def delete_relation(self, relation: Relation) -> str | None:
+        self.deleted_relations.append(relation)
+        if relation in self.tuples:
+            self.tuples.remove(relation)
+        return str(len(self.deleted_relations))
+
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
+        return None
+
+    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
+        return 0
+
+    async def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject: RebacReference,
+        consistency_token: str | None = None,
+    ) -> list[Relation] | RebacDisabledResult:
+        self.list_relations_call_count += 1
+        self.list_relations_consistency_tokens.append(consistency_token)
+        if self._disabled:
+            return RebacDisabledResult()
+        return [
+            rel
+            for rel in self.tuples
+            if rel.resource.type == resource_type
+            and rel.relation == relation
+            and rel.subject == subject
+        ]
+
+    async def lookup_resources(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        return []
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        return any(
+            r.subject == subject and r.relation == relation and r.resource == resource
+            for r in self.tuples
+        )
+
+    async def has_permission(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> bool:
+        return any(r.subject == subject and r.resource == resource for r in self.tuples)
+
+
+@pytest.mark.asyncio
+async def test_ensure_team_organization_relations_skips_already_granted_edges() -> None:
+    engine = _InMemoryCountingRebacEngine()
+
+    await engine.ensure_team_organization_relations(["team-a", "team-b"])
+    assert len(engine.added_relations) == 2
+
+    await engine.ensure_team_organization_relations(["team-a", "team-b"])
+    assert len(engine.added_relations) == 2, "steady-state call must write nothing"
+
+    await engine.ensure_team_organization_relations(["team-a", "team-b", "team-c"])
+    assert len(engine.added_relations) == 3, "only the genuinely new team is written"
+    assert engine.added_relations[-1].resource.id == "team-c"
+
+
+@pytest.mark.asyncio
+async def test_ensure_team_organization_relations_writes_everything_when_disabled() -> (
+    None
+):
+    engine = _InMemoryCountingRebacEngine(disabled=True)
+
+    await engine.ensure_team_organization_relations(["team-a", "team-b"])
+    await engine.ensure_team_organization_relations(["team-a", "team-b"])
+
+    assert len(engine.added_relations) == 4, (
+        "an engine that can't bulk-list relations must fall back to "
+        "unconditional writes, unchanged from before #2065"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_team_public_relations_skips_already_granted_edges() -> None:
+    engine = _InMemoryCountingRebacEngine()
+
+    await engine.ensure_team_public_relations(["team-a", "team-b"])
+    assert len(engine.added_relations) == 2
+
+    await engine.ensure_team_public_relations(["team-a", "team-b"])
+    assert len(engine.added_relations) == 2, "steady-state call must write nothing"
+
+
+@pytest.mark.asyncio
+async def test_revoke_team_public_relations_skips_already_absent_edges() -> None:
+    engine = _InMemoryCountingRebacEngine()
+
+    # Nothing granted yet: revoking must not issue a single delete call.
+    await engine.revoke_team_public_relations(["team-a", "team-b"])
+    assert engine.deleted_relations == []
+
+    await engine.ensure_team_public_relations(["team-a", "team-b"])
+    assert len(engine.added_relations) == 2
+
+    # Now both are granted: revoking deletes exactly those, once.
+    await engine.revoke_team_public_relations(["team-a", "team-b"])
+    assert len(engine.deleted_relations) == 2
+
+    # Already revoked: calling again must not re-issue the deletes.
+    await engine.revoke_team_public_relations(["team-a", "team-b"])
+    assert len(engine.deleted_relations) == 2, "steady-state revoke must delete nothing"
+
+
+@pytest.mark.asyncio
+async def test_ensure_and_revoke_team_public_relations_propagate_consistency_token() -> (
+    None
+):
+    """#2145 review: a team flipped public then immediately private again
+    must have `revoke_team_public_relations`'s existence-check read see that
+    just-written `public` grant, or the revoke is wrongly skipped and the
+    team stays publicly readable until a later reconciliation. The
+    direct-mutation caller (`update_team`) asks for that by passing
+    `consistency_token=HIGHER_CONSISTENCY` through to the underlying
+    `list_relations` read; the lazy listing call sites keep the default
+    eventually-consistent read (asserted last, below)."""
+    engine = _InMemoryCountingRebacEngine()
+
+    await engine.ensure_team_public_relations(
+        ["team-a"], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+    )
+    assert (
+        engine.list_relations_consistency_tokens[-1] == RebacEngine.HIGHER_CONSISTENCY
+    )
+
+    await engine.revoke_team_public_relations(
+        ["team-a"], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+    )
+    assert (
+        engine.list_relations_consistency_tokens[-1] == RebacEngine.HIGHER_CONSISTENCY
+    )
+
+    await engine.ensure_team_public_relations(["team-b"])
+    assert engine.list_relations_consistency_tokens[-1] is None

@@ -4,6 +4,8 @@ from types import TracebackType
 from typing import Mapping
 
 from openfga_sdk.client.configuration import ClientConfiguration
+from openfga_sdk.client.models.batch_check_request import ClientBatchCheckRequest
+from openfga_sdk.client.models.batch_check_response import ClientBatchCheckResponse
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
@@ -58,6 +60,11 @@ class OpenFgaClient:
         body: ClientCheckRequest,
         options: Mapping[str, object] | None = ...,
     ) -> CheckResponse: ...
+    async def batch_check(
+        self,
+        body: ClientBatchCheckRequest,
+        options: Mapping[str, object] | None = ...,
+    ) -> ClientBatchCheckResponse: ...
     async def list_objects(
         self,
         body: ClientListObjectsRequest,

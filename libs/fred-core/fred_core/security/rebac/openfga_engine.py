@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import time
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Sequence
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_call_metric import call_metric
@@ -39,6 +39,8 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_core.security.structure import OpenFgaRebacConfig
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
+from openfga_sdk.client.models.batch_check_item import ClientBatchCheckItem
+from openfga_sdk.client.models.batch_check_request import ClientBatchCheckRequest
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
@@ -255,23 +257,72 @@ class OpenFgaRebacEngine(RebacEngine):
 
         return len(to_delete)
 
+    async def _read_relations(
+        self,
+        body: ReadRequestTupleKey,
+        *,
+        consistency_token: str | None,
+    ) -> list[Relation]:
+        """Paginate one OpenFGA `Read` call and fold every tuple into a `Relation`.
+
+        Shared by `list_relations` (relation-scoped, object-type-only, exact
+        `user`) and `list_direct_relations` (one exact object, no relation
+        filter) — the two Read shapes duplicated pagination, consistency
+        options, and tuple-to-`Relation` conversion before this helper. One
+        `rebac_operation=read` KPI timer wraps the whole paginated scan here,
+        so each public method still emits exactly one logical `read`, not one
+        per page.
+        """
+        async with _rebac_timer(self._kpi, "read"):
+            client = await self.get_client()
+            results: list[Relation] = []
+            continuation_token: str | None = None
+
+            while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+                options = self._build_options(consistency=consistency_token)
+                if continuation_token:
+                    options["continuation_token"] = continuation_token
+
+                res = await client.read(body, options)
+                continuation_token = res.continuation_token
+
+                for tup in res.tuples:
+                    results.append(
+                        Relation(
+                            subject=OpenFgaRebacEngine._openfga_id_to_reference(
+                                tup.key.user
+                            ),
+                            relation=RelationType(tup.key.relation),
+                            resource=OpenFgaRebacEngine._openfga_id_to_reference(
+                                tup.key.object
+                            ),
+                        )
+                    )
+
+            return results
+
     async def list_relations(
         self,
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation]:
-        # No current caller needs a bulk tuple read: every authorization
-        # decision goes through `has_permission`, `lookup_resources`, or
-        # `lookup_subjects` instead, each backed by a persisted OpenFGA tuple
-        # (never Keycloak-derived). Implemented by 2 other engines and
-        # exercised elsewhere; this OpenFGA-backed stub stays a stub until a
-        # real caller needs it.
-        raise NotImplementedError(
-            "OpenFGA relation listing is not implemented as it is not needed"
+        # OpenFGA (confirmed live against v1.12.1 and v1.15.1) rejects a Read
+        # whose object is type-only (no id) when `user` is also empty: HTTP 400 "the
+        # 'tuple_key' field was provided but the object type field is
+        # required and both the object id and user cannot be empty". An
+        # object-type-only filter must therefore always carry an exact
+        # `user` to anchor it server-side — never a bare subject *type*
+        # (there is no OpenFGA shape for "this relation, any object of this
+        # type, any user").
+        body = ReadRequestTupleKey(
+            relation=relation.value,
+            object=f"{resource_type.value}:",
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
         )
+        return await self._read_relations(body, consistency_token=consistency_token)
 
     async def lookup_resources(
         self,
@@ -391,6 +442,122 @@ class OpenFgaRebacEngine(RebacEngine):
             response = await client.check(body, options)
 
             return response.allowed
+
+    async def has_permissions(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[bool]:
+        """Check several permissions for one subject/resource pair with one
+        native OpenFGA `BatchCheck` HTTP call (14 permissions fit in a single
+        request — the SDK's default `max_batch_size` is 50).
+
+        Explicit `correlation_id`s (the check's index) are set on every item
+        so the result can be reordered from `response.result` regardless of
+        server-side ordering — `OpenFgaClient.batch_check` folds its results
+        into a plain list via a dict keyed by `correlation_id`, so nothing
+        about input order survives into the response by default.
+
+        A per-check `error`, a missing correlation_id, an unrecognized one, or
+        a duplicate all raise `RuntimeError` — never silently downgraded to
+        `False` or silently dropped/overwritten, so a partial or malformed
+        OpenFGA response cannot be mistaken for "permission denied".
+        """
+        permissions_list = list(permissions)
+        if not permissions_list:
+            return []
+
+        async with _rebac_timer(self._kpi, "check"):
+            client = await self.get_client()
+
+            subject_id = OpenFgaRebacEngine._reference_to_openfga_id(subject)
+            object_id = OpenFgaRebacEngine._reference_to_openfga_id(resource)
+            contextual_tuples = [
+                OpenFgaRebacEngine._relation_to_tuple(rel)
+                for rel in (contextual_relations or [])
+            ] or None
+
+            logger.debug(
+                "BatchCheck %d permissions for subject %s on resource %s",
+                len(permissions_list),
+                subject,
+                resource,
+            )
+
+            checks = [
+                ClientBatchCheckItem(
+                    user=subject_id,
+                    relation=permission.value,
+                    object=object_id,
+                    correlation_id=str(index),
+                    contextual_tuples=contextual_tuples,
+                )
+                for index, permission in enumerate(permissions_list)
+            ]
+
+            options = self._build_options(consistency=consistency_token)
+            response = await client.batch_check(
+                ClientBatchCheckRequest(checks=checks), options
+            )
+
+            expected_ids = {str(index) for index in range(len(permissions_list))}
+            allowed_by_correlation_id: dict[str, bool] = {}
+            for single in response.result:
+                if single.error is not None:
+                    raise RuntimeError(
+                        "OpenFGA BatchCheck returned an error for "
+                        f"correlation_id={single.correlation_id!r}: {single.error}"
+                    )
+                correlation_id = single.correlation_id
+                if correlation_id not in expected_ids:
+                    raise RuntimeError(
+                        "OpenFGA BatchCheck response included an unrecognized "
+                        f"correlation_id={correlation_id!r}"
+                    )
+                if correlation_id in allowed_by_correlation_id:
+                    raise RuntimeError(
+                        "OpenFGA BatchCheck response included a duplicate "
+                        f"correlation_id={correlation_id!r}"
+                    )
+                allowed_by_correlation_id[correlation_id] = single.allowed
+
+            missing = expected_ids - allowed_by_correlation_id.keys()
+            if missing:
+                raise RuntimeError(
+                    f"OpenFGA BatchCheck response missing correlation_id(s): {sorted(missing)}"
+                )
+
+            return [
+                allowed_by_correlation_id[str(index)]
+                for index in range(len(permissions_list))
+            ]
+
+    async def list_direct_relations(
+        self,
+        resource: RebacReference,
+        *,
+        subject: RebacReference | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        # Same exact-object `Read` shape as `has_direct_relation` below, minus
+        # the `relation` filter: every relation literally persisted on this
+        # one resource, unlike `list_relations` (relation-scoped, no object id
+        # — the bulk cross-team scan backing `_list_teams`). `subject`, when
+        # given, is an exact `type:id` pushed into `body.user` so OpenFGA
+        # itself narrows the result set server-side (e.g. one user's roles on
+        # one team, O(that user's relations) transferred) — never a
+        # subject-type prefix filtered client-side after the full transfer.
+        body = ReadRequestTupleKey(
+            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject)
+            if subject
+            else None,
+        )
+        return await self._read_relations(body, consistency_token=consistency_token)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Client and initialization helpers

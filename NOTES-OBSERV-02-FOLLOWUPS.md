@@ -9,14 +9,18 @@ just enough context per entry to write that issue without re-deriving it.
 
 ## Backend — KPI presets
 
-### 1. `documents_total` cannot be team-scoped without new store-layer work
+### 1. ✅ RESOLVED 2026-07-29 — `documents_total` now team-scoped
 `document.created_total`/`document.deleted_total` KPI events DO carry
 `dims.team_id` (knowledge-flow resolves it from the document's first tag
 owner — `features/metadata/service.py:824`), but `PostgresDocumentMetadataStore`
-has no team-scoped count, and a document's team is indirect (via tag
-ownership, not a column). Team-scoping this preset needs a real store method,
-not just a query parameter. Left `team_scopable=False` with a comment in
-`kpi/presets/documents_total.py`.
+had no team-scoped count, and a document's team is indirect (via tag
+ownership, not a column). Fixed by adding
+`PostgresDocumentMetadataStore.count_by_team(team_id)` (fred-core):
+resolves the team's tag ids from `TagRow.owner_id`, then counts documents
+whose `tag_ids` overlap that set (Postgres array `&&`, GIN-indexed; Python
+fallback for SQLite tests). `DOCUMENTS_TOTAL_PRESET.team_scopable` is now
+`True`. No frontend change needed — `TeamUsagePage.tsx` was already sending
+`team_id` and hitting the router's 400.
 
 ### 2. `agent_prompt_length_distribution` — data available, not wired
 `agent.created_total` carries `dims.team_id` (same as `agents_total`), so this

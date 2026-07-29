@@ -33,7 +33,7 @@ from control_plane_backend.import_export.kea_reconciliation import (
 )
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.prompt_models import PromptRow
-from fred_core import Relation, RelationType
+from fred_core import Relation, RelationType, team_organization_relation
 from fred_core.documents.tag_models import TagRow
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
@@ -242,6 +242,16 @@ class FakeRebac:
     ) -> None:
         for relation in relations:
             await self.add_relation(relation, actor_uid=actor_uid)
+
+    async def ensure_team_organization_relations(self, team_ids) -> None:
+        # #2065: the import's cold-path reconciliation guarantees the
+        # organization structural edge for every team in the reconciled
+        # plan, even one the kea tuple dump never carried it for — mirrors
+        # the real `RebacEngine.ensure_team_organization_relations` primitive
+        # closely enough for these tests (unconditional write; this fake
+        # never seeds pre-existing edges to skip).
+        for team_id in team_ids:
+            await self.add_relation(team_organization_relation(str(team_id)))
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
@@ -1129,10 +1139,15 @@ async def test_tuple_phase_writes_transformed_relations(tmp_path: Path) -> None:
             rebac=rebac,
         )
         written = {_rel_key(r) for r in rebac.relations}
+        # #2065: the import's cold-path reconciliation also guarantees the
+        # organization structural edge for every team in the reconciled plan
+        # (T1, synthesized from the realm group) — the original kea tuple
+        # dump above never carried an `organization` tuple for it.
         assert written == {
             (f"user:{UID_BOB}", "team_admin", "team:T1"),
             (f"user:{UID_BOB}", "team_editor", "team:T1"),
             (f"user:{UID_LIAM}", "team_member", "team:T1"),
+            ("organization:fred", "organization", "team:T1"),
         }
         assert report.tuples_written == 3
         assert report.tuples_dropped == 1

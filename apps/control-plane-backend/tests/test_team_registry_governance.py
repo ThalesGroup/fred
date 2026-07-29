@@ -62,12 +62,18 @@ from sqlalchemy.exc import IntegrityError
 class _FakeRebac:
     """Records org-permission checks and relation writes/deletes for assertions."""
 
-    def __init__(self, *, team_admin_ids: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        team_admin_ids: set[str] | None = None,
+        add_relations_raises: Exception | None = None,
+    ) -> None:
         self.permission_checks: list[OrganizationPermission] = []
         self.team_permission_checks: list[tuple[str, tuple[TeamPermission, ...]]] = []
         self.team_admin_ids = team_admin_ids or set()
         self.added_relations: list[Relation] = []
         self.deleted_references: list[RebacReference] = []
+        self._add_relations_raises = add_relations_raises
 
     async def check_user_permission_or_raise(
         self, user, permission, resource_id, **kwargs
@@ -87,6 +93,16 @@ class _FakeRebac:
 
     async def add_relation(self, relation: Relation, **kwargs: object):
         self.added_relations.append(relation)
+        return None
+
+    async def add_relations(self, relations, **kwargs: object):
+        if self._add_relations_raises is not None:
+            raise self._add_relations_raises
+        for relation in relations:
+            self.added_relations.append(relation)
+        return "consistency-token"
+
+    async def ensure_team_public_relations(self, team_ids) -> None:
         return None
 
     async def delete_all_relations_of_reference(self, reference: RebacReference):
@@ -193,6 +209,29 @@ async def test_create_team_translates_db_integrity_error_to_already_exists() -> 
         )
 
     assert store.created == []
+    assert rebac.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_create_team_rolls_back_metadata_when_structural_write_fails() -> None:
+    """#2065: the organization structural edge and the initial team_admin(s)
+    are written in the same `add_relations` call — a failure there (e.g. an
+    OpenFGA outage) must roll back the just-created metadata row exactly like
+    an admin-grant failure already did, never leaving a team registered
+    without its structural invariant."""
+    rebac = _FakeRebac(add_relations_raises=RuntimeError("openfga unavailable"))
+    store = _FakeMetadataStore()
+
+    with pytest.raises(RuntimeError, match="openfga unavailable"):
+        await create_team(
+            _user(),
+            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            _deps(rebac, store),
+        )
+
+    assert await store.get_by_name("swiftpost") is None
+    assert len(store.created) == 1
+    assert store.deleted_ids == [store.created[0][0]]
     assert rebac.added_relations == []
 
 

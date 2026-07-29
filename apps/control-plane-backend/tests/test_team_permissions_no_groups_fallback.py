@@ -50,6 +50,29 @@ class _FakeRebac:
         self.received_contextual_relations.append(contextual_relations)
         return permission in self.granted
 
+    async def has_permissions(
+        self,
+        subject,
+        permissions,
+        resource,
+        *,
+        contextual_relations=None,
+        consistency_token=None,
+    ) -> list[bool]:
+        # #2065 follow-up: `_get_team_permissions_for_user` now issues one
+        # `has_permissions` BatchCheck instead of 14 `has_permission` Checks —
+        # reuse the same persisted-tuple-only logic per permission.
+        return [
+            await self.has_permission(
+                subject,
+                permission,
+                resource,
+                contextual_relations=contextual_relations,
+                consistency_token=consistency_token,
+            )
+            for permission in permissions
+        ]
+
 
 def _user() -> KeycloakUser:
     return KeycloakUser(

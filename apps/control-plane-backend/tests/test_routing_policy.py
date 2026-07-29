@@ -206,17 +206,19 @@ def _model_entry(capability_id: str, profile_ids: list[str]) -> CapabilityCatalo
 @pytest.fixture(autouse=True)
 def _stub_team_lookup(monkeypatch: pytest.MonkeyPatch):
     """Every service test exercises validation/store logic, not
-    `teams.service.get_team_by_id` itself (covered by teams' own suite) — stub
-    it to a no-op that records the requested permission, so assertions can
-    confirm §6's read/write gate without a real team+rebac round trip."""
+    `teams.service.require_team_access` itself (covered by teams' own suite) —
+    stub it to a no-op that records the requested permission, so assertions
+    can confirm §6's read/write gate without a real team+rebac round trip."""
 
     calls: list[list[TeamPermission]] = []
 
-    async def _fake_get_team_by_id(user, team_id, team_deps, required_permissions):
+    async def _fake_require_team_access(user, team_id, team_deps, required_permissions):
         calls.append(required_permissions)
-        return None
+        return team_id
 
-    monkeypatch.setattr(routing_policy_service, "get_team_by_id", _fake_get_team_by_id)
+    monkeypatch.setattr(
+        routing_policy_service, "require_team_access", _fake_require_team_access
+    )
     return calls
 
 

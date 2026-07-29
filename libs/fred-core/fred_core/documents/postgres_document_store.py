@@ -29,6 +29,7 @@ from fred_core.documents.document_store import (
     DocumentMetadataDeserializationError,
 )
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,52 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 select(func.count()).select_from(DocumentMetadataRow)
             )
             return int(result.scalar_one())
+
+    async def count_by_team(
+        self, team_id: str, session: AsyncSession | None = None
+    ) -> int:
+        """Count documents owned by one team.
+
+        A document's team is indirect: `DocumentMetadataRow` has no `team_id`
+        column, only `tag_ids` — a document belongs to a team through the
+        `owner_id` of one of its tags (`TagRow`, same table/engine, no
+        cross-database join needed). `owner_id` is taken verbatim, including
+        personal-space ids (`personal-<uid>`) — the same convention
+        knowledge-flow already uses when stamping `document.created_total`/
+        `document.deleted_total` KPI events with `dims.team_id`
+        (`features/metadata/service.py`), so a document counts for a personal
+        space the same way it counts for a real team. See
+        `NOTES-OBSERV-02-FOLLOWUPS.md` #1.
+        """
+        async with use_session(self._sessions, session) as s:
+            team_tag_ids = (
+                (
+                    await s.execute(
+                        select(TagRow.tag_id).where(TagRow.owner_id == team_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not team_tag_ids:
+                return 0
+
+            if self._is_postgres:
+                cond: ColumnElement[bool] = cast(
+                    ColumnElement[bool],
+                    DocumentMetadataRow.tag_ids.overlap(list(team_tag_ids)),
+                )
+                result = await s.execute(
+                    select(func.count()).select_from(DocumentMetadataRow).where(cond)
+                )
+                return int(result.scalar_one())
+
+            # SQLite (tests): no native array overlap operator — filter in Python.
+            wanted = set(team_tag_ids)
+            rows = (
+                (await s.execute(select(DocumentMetadataRow.tag_ids))).scalars().all()
+            )
+            return sum(1 for tag_ids in rows if wanted.intersection(tag_ids or []))
 
     async def get_metadata_by_uid(
         self, document_uid: str, session: AsyncSession | None = None

@@ -87,9 +87,7 @@ from control_plane_backend.product.service import (
     update_prompt_score,
     update_session_activity,
 )
-from control_plane_backend.teams.service import (
-    get_team_by_id as get_team_by_id_from_service,
-)
+from control_plane_backend.teams.service import require_team_access
 
 router = APIRouter(tags=["Product"])
 ProductDependencies = Annotated[
@@ -184,7 +182,7 @@ async def get_team_agent_templates(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
-    await get_team_by_id_from_service(
+    await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -226,13 +224,13 @@ async def get_team_agent_instances(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-instances`
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_managed_agent_instances(team.id, deps)
+    return await list_managed_agent_instances(team_id, deps)
 
 
 @router.post(
@@ -257,7 +255,8 @@ async def post_team_agent_instance(
       before execution preparation (and therefore SSE execution) can work end-to-end.
 
     What this endpoint does:
-    - Validates team membership via get_team_by_id (Keycloak + OpenFGA).
+    - Validates team access via require_team_access (ReBAC/OpenFGA — Keycloak
+      only authenticates the caller, it is never the team-authorization source).
     - Derives source_runtime_id and source_agent_id from template_id.
     - Creates a new DB-backed ManagedAgentInstance record.
     - Returns the typed managed instance summary with the new agent_instance_id.
@@ -265,7 +264,7 @@ async def post_team_agent_instance(
     Returns 404 if the template_id references an unknown or disabled runtime source.
     Returns 400 if template_id is malformed.
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -274,7 +273,7 @@ async def post_team_agent_instance(
     try:
         return await enroll_agent_instance(
             user=user,
-            team_id=team.id,
+            team_id=team_id,
             request=body,
             deps=deps,
             # Forwarded to the pod's capability validate-config round-trip
@@ -316,7 +315,7 @@ async def patch_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -324,7 +323,7 @@ async def patch_team_agent_instance(
     )
     try:
         result = await update_agent_instance(
-            team_id=team.id,
+            team_id=team_id,
             agent_instance_id=agent_instance_id,
             request=body,
             deps=deps,
@@ -423,7 +422,7 @@ async def post_team_agent_instance_with_assets(
       control-plane is a pure relay and never opens the bytes
     - the JSON route stays unchanged for every save that carries no upload
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -437,7 +436,7 @@ async def post_team_agent_instance_with_assets(
     try:
         return await enroll_agent_instance(
             user=user,
-            team_id=team.id,
+            team_id=team_id,
             request=body,
             deps=deps,
             authorization=http_request.headers.get("Authorization"),
@@ -479,7 +478,7 @@ async def patch_team_agent_instance_with_assets(
     Multipart companion of `PATCH /teams/{team_id}/agent-instances/{id}` (#1903)
     — same relay semantics as the enroll variant; see it for the rationale.
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -492,7 +491,7 @@ async def patch_team_agent_instance_with_assets(
     uploads = await _parse_capability_asset_uploads(asset_slots, asset_files)
     try:
         result = await update_agent_instance(
-            team_id=team.id,
+            team_id=team_id,
             agent_instance_id=agent_instance_id,
             request=body,
             deps=deps,
@@ -530,14 +529,14 @@ async def delete_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
     )
     deleted = await unenroll_agent_instance(
-        team_id=team.id,
+        team_id=team_id,
         agent_instance_id=agent_instance_id,
         deps=deps,
         user=user,
@@ -578,8 +577,8 @@ async def get_team_prompts(
     - `GET /control-plane/v1/teams/personal/prompts?lang=fr`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_prompts(team.id, deps, lang=lang)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    return await list_prompts(team_id, deps, lang=lang)
 
 
 @router.post(
@@ -609,14 +608,14 @@ async def post_team_prompt(
     - `POST /control-plane/v1/teams/personal/prompts`
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
     try:
-        return await create_prompt(user=user, team_id=team.id, request=body, deps=deps)
+        return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
@@ -645,8 +644,8 @@ async def get_context_prompts_early(
     - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context?lang=fr``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_context_prompts(user, team.id, deps, lang=lang)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    return await list_context_prompts(user, team_id, deps, lang=lang)
 
 
 @router.get(
@@ -675,8 +674,8 @@ async def get_team_prompt(
     - `GET /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    result = await get_prompt(team.id, prompt_id, deps)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    result = await get_prompt(team_id, prompt_id, deps)
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -724,13 +723,13 @@ async def post_record_prompt_use(
     - ``POST /control-plane/v1/teams/personal/prompts/default:doc-assist/use``
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    await record_prompt_use(prompt_id, team.id, user, deps)
+    await record_prompt_use(prompt_id, team_id, user, deps)
     return Response(status_code=204)
 
 
@@ -761,14 +760,14 @@ async def put_team_prompt(
     - `PUT /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
     try:
-        result = await update_prompt(team.id, prompt_id, body, deps)
+        result = await update_prompt(team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     if result is None:
@@ -805,13 +804,13 @@ async def delete_team_prompt(
     - `DELETE /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
-    deleted = await delete_prompt(team.id, prompt_id, deps)
+    deleted = await delete_prompt(team_id, prompt_id, deps)
     if not deleted:
         raise HTTPException(
             status_code=404,
@@ -855,20 +854,20 @@ async def post_promote_prompt(
       ``{ "target_team_id": "bid-and-capture" }``
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
-    await get_team_by_id_from_service(
+    await require_team_access(
         user,
         TeamId(body.target_team_id),
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
     try:
-        return await promote_prompt(user, team.id, prompt_id, body, deps)
+        return await promote_prompt(user, team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
@@ -896,13 +895,13 @@ async def patch_team_prompt(
       ``{ "score": 4.5 }``
     """
 
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
     )
-    result = await update_prompt_score(team.id, prompt_id, body, deps)
+    result = await update_prompt_score(team_id, prompt_id, body, deps)
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -950,13 +949,13 @@ async def get_team_agent_instance_runtime(
     async with runtime_stage_timer(
         deps.get_kpi_writer(), "runtime_binding_internal", trace_id=request_id
     ):
-        team = await get_team_by_id_from_service(
+        team_id = await require_team_access(
             user,
             team_id,
             deps.team_dependencies,
             required_permissions=[TeamPermission.CAN_READ],
         )
-        binding = await get_runtime_binding_for_team(agent_instance_id, team.id, deps)
+        binding = await get_runtime_binding_for_team(agent_instance_id, team_id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
@@ -987,11 +986,11 @@ async def post_team_session(
 
     Returns 409 if the session_id already exists.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         return await create_session(
             user=user,
-            team_id=team.id,
+            team_id=team_id,
             request=body,
             deps=deps,
         )
@@ -1023,8 +1022,8 @@ async def get_team_sessions(
     Example:
     - `GET /control-plane/v1/teams/personal/sessions`
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_sessions(team.id, user_id=user.uid, deps=deps)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    return await list_sessions(team_id, user_id=user.uid, deps=deps)
 
 
 @router.get(
@@ -1047,8 +1046,8 @@ async def get_team_session(
 
     Returns 404 when the session does not exist for the given team.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    item = await get_session(team_id=team.id, session_id=session_id, deps=deps)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
     if item is None:
         raise HTTPException(
             status_code=404,
@@ -1083,9 +1082,9 @@ async def patch_team_session(
 
     Returns 404 if the session does not exist for the given team.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     updated = await update_session_activity(
-        team_id=team.id,
+        team_id=team_id,
         session_id=session_id,
         request=body,
         deps=deps,
@@ -1119,10 +1118,10 @@ async def get_team_session_attachments(
       transient composer chips used for the current turn
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         return await list_session_attachments(
-            team_id=team.id,
+            team_id=team_id,
             session_id=session_id,
             user_id=user.uid,
             deps=deps,
@@ -1149,10 +1148,10 @@ async def post_team_session_attachment(
     Persist one conversation attachment after successful upload and fast-ingest.
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         return await create_session_attachment(
-            team_id=team.id,
+            team_id=team_id,
             session_id=session_id,
             user_id=user.uid,
             request=body,
@@ -1183,10 +1182,10 @@ async def delete_team_session_attachment(
     retrieval and future conversation context.
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         await delete_session_attachment(
-            team_id=team.id,
+            team_id=team_id,
             session_id=session_id,
             attachment_id=attachment_id,
             user_id=user.uid,
@@ -1223,10 +1222,10 @@ async def delete_team_session(
     not owned by the caller (ownership is enforced up front, identical to the
     immediate-erase path).
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         await delete_or_defer_session(
-            team_id=team.id,
+            team_id=team_id,
             session_id=session_id,
             user_id=user.uid,
             authorization=request.headers.get("Authorization", ""),
@@ -1254,11 +1253,11 @@ async def post_prepare_runtime_agent_execution(
     Prepare an ingress-safe execution URL and short-lived grant for a direct
     runtime agent target. Used by the evaluation worker.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
         return await prepare_runtime_agent_execution(
             user=user,
-            team_id=team.id,
+            team_id=team_id,
             runtime_id=runtime_id,
             agent_id=agent_id,
             deps=deps,
@@ -1311,7 +1310,7 @@ async def post_prepare_execution(
     capability already required to list this team's agent instances in the
     first place (the natural next step in the same flow).
     """
-    team = await get_team_by_id_from_service(
+    team_id = await require_team_access(
         user,
         team_id,
         deps.team_dependencies,
@@ -1321,7 +1320,7 @@ async def post_prepare_execution(
     try:
         return await prepare_execution(
             user=user,
-            team_id=team.id,
+            team_id=team_id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
             lang=lang,

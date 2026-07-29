@@ -19,7 +19,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
+from typing import ClassVar, Iterable, Sequence
 
 from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
@@ -314,6 +314,23 @@ class Relation:
     resource: RebacReference
 
 
+def team_organization_relation(team_id: str) -> Relation:
+    """Canonical shape of the `organization -> team` structural edge (#2065).
+
+    A module-level pure function, not a method, so it can be imported and
+    called directly (e.g. `teams.service.create_team`'s direct bootstrap
+    write) without requiring every duck-typed `RebacEngine` test double to
+    implement it. `RebacEngine.ensure_team_organization_relations` (the
+    cold-path repair primitive, below) is the only other caller — both go
+    through this one function, so the tuple's shape has a single owner.
+    """
+    return Relation(
+        subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+        relation=RelationType.ORGANIZATION,
+        resource=RebacReference(Resource.TEAM, team_id),
+    )
+
+
 class RebacDisabledResult:
     """
     Marker object returned when relationship authorization is disabled.
@@ -328,6 +345,12 @@ class RebacEngine(ABC):
     This class provides the common business operations ("can Alice update team
     resources?") while each concrete engine (OpenFGA, noop) handles storage.
     """
+
+    # Opaque, engine-agnostic value a caller can pass as `consistency_token` to
+    # force a strongly-consistent read ahead of a write/skip decision — the same
+    # value every write already returns (`_persist_relation`/`delete_relation`),
+    # so callers never need a real prior write to obtain one.
+    HIGHER_CONSISTENCY: ClassVar[str] = "HIGHER_CONSISTENCY"
 
     @property
     def enabled(self) -> bool:
@@ -479,23 +502,81 @@ class RebacEngine(ABC):
 
         return token
 
+    async def _teams_with_relation(
+        self,
+        *,
+        relation: RelationType,
+        subject: RebacReference,
+        consistency_token: str | None = None,
+    ) -> set[str] | None:
+        """Bulk-read every team currently holding `subject -> relation -> team:*`.
+
+        Backs the existence-check `ensure_*`/`revoke_*` team helpers below:
+        called on every team listing (#2065), a per-team `add_relation`/
+        `delete_relation` fan-out re-writes (and, for grants, re-audits) an
+        edge that almost always already has the correct state — one bulk
+        `list_relations` read replaces that fan-out with a single round-trip
+        (paginated) the caller diffs locally.
+
+        `subject` must be exact (`organization:fred` for the organization
+        edge, `user:*` for the public edge) — OpenFGA's Read API rejects a
+        relation + object-type-only filter with no `user` to anchor it (see
+        `list_relations`'s docstring), so there is no "any subject" bulk-read
+        shape here; every caller of this helper already has one exact subject.
+
+        `consistency_token` defaults to the engine's eventually-consistent
+        read — fine for the lazy, bulk, self-healing listing call sites this
+        was built for. A caller on a direct, single-team write path (a
+        visibility toggle, not a bulk backfill) must pass `HIGHER_CONSISTENCY`
+        instead: an eventually-consistent read here can still miss a tuple
+        this same request-chain just wrote moments earlier, causing the
+        caller to wrongly skip a still-required write.
+
+        Returns `None` when relation listing is disabled (`RebacDisabledResult`)
+        so callers fall back to their prior unconditional write/delete
+        behavior — cheap and side-effect-free on `NoopRebacEngine`, whose
+        `_persist_relation` performs no I/O and whose `enabled=False` already
+        skips the audit call.
+        """
+        existing = await self.list_relations(
+            resource_type=Resource.TEAM,
+            relation=relation,
+            subject=subject,
+            consistency_token=consistency_token,
+        )
+        if isinstance(existing, RebacDisabledResult):
+            return None
+        # `list_relations` already filtered server-side on the exact `subject`
+        # — no client-side re-filter needed.
+        return {rel.resource.id for rel in existing}
+
     async def ensure_team_organization_relations(
         self,
         team_ids: Iterable[str],
     ) -> str | None:
-        """Ensure each team is linked to the singleton organization.
+        """Cold-path repair: back-fill the `organization -> team` structural
+        edge for teams that may pre-date it.
 
-        Team checks in Fred always operate in a team context and require
-        deterministic organization/team graph edges for future policy evolution.
-        This helper maintains the persistent relation:
-        ``organization:fred#organization@team:<team_id>``.
+        This is no longer called from any per-request path (#2065) — every
+        collaborative team gets this edge once, directly, at creation
+        (`teams.service.create_team`, via `team_organization_relation`
+        above). The only remaining callers are cold paths that must handle
+        teams created before that invariant existed or outside the ordinary
+        creation flow: control-plane startup reconciliation (once per
+        process, over the full team registry) and platform import (Swift-
+        native and kea bundles). `require_team_access`/`get_team_by_id`/
+        `_list_teams` and the shared `check_user_team_permission(s)_or_raise`
+        helpers below never call this — nothing in schema.fga's computed team
+        permissions reads the persisted edge; capability team-scoping instead
+        uses a separate, never-persisted *contextual* reverse tuple
+        (`RelationType.TEAM`'s docstring above).
 
-        Example:
-        - Before checking team permissions on `team:<id>`, ensure
-          `organization:fred -> team:<id>` exists.
-
-        This helper is idempotent and returns the write consistency token when
-        available.
+        Idempotent, and — since #2065 — only writes (and audits) edges that
+        are actually missing: a bulk `_teams_with_relation` read filters out
+        every team that already has the edge, so a steady-state call (the
+        common case once every team has been backfilled once) issues zero
+        writes instead of one per team. Returns the write consistency token
+        when a write actually happened, else `None`.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -508,19 +589,26 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
-        relations = [
-            Relation(
-                subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-                relation=RelationType.ORGANIZATION,
-                resource=RebacReference(Resource.TEAM, team_id),
-            )
-            for team_id in unique_team_ids
-        ]
+        organization = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.ORGANIZATION, subject=organization
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid not in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
+        relations = [team_organization_relation(team_id) for team_id in target_team_ids]
         return await self.add_relations(relations)
 
     async def ensure_team_public_relations(
         self,
         team_ids: Iterable[str],
+        *,
+        consistency_token: str | None = None,
     ) -> str | None:
         """Ensure each team grants `public` (profile/discovery `can_read`) to
         every user (TEAM-09, RFC FRED-TEAM-CONFIG-RFC.md §5.1.1).
@@ -540,6 +628,12 @@ class RebacEngine(ABC):
         Example:
         - Before returning `GET /teams`, ensure `user:* -> public -> team:<id>`
           exists for every `PUBLIC` team about to be listed.
+
+        Since #2065, only writes edges actually missing (see
+        `_teams_with_relation`) — a steady-state call issues zero writes. Pass
+        `consistency_token=HIGHER_CONSISTENCY` on a direct visibility-toggle
+        call (`update_team`) — the lazy listing call sites can keep the
+        default eventually-consistent read.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -552,19 +646,35 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
+        wildcard_user = RebacReference(Resource.USER, "*")
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.PUBLIC,
+            subject=wildcard_user,
+            consistency_token=consistency_token,
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid not in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
         relations = [
             Relation(
-                subject=RebacReference(Resource.USER, "*"),
+                subject=wildcard_user,
                 relation=RelationType.PUBLIC,
                 resource=RebacReference(Resource.TEAM, team_id),
             )
-            for team_id in unique_team_ids
+            for team_id in target_team_ids
         ]
         return await self.add_relations(relations)
 
     async def revoke_team_public_relations(
         self,
         team_ids: Iterable[str],
+        *,
+        consistency_token: str | None = None,
     ) -> str | None:
         """Revoke `public` from every user for each team — the inverse of
         `ensure_team_public_relations`, for teams whose `TeamVisibility` is
@@ -584,6 +694,16 @@ class RebacEngine(ABC):
         `ensure_team_public_relations` for the public subset) and
         immediately on a `visibility` change (`update_team`), matching the
         grant side's own dual call sites.
+
+        Since #2065, only deletes edges actually present (see
+        `_teams_with_relation`) — a steady-state call issues zero deletes.
+        Pass `consistency_token=HIGHER_CONSISTENCY` on a direct
+        visibility-toggle call: an eventually-consistent existence-check read
+        can still miss a `public` grant this same request just wrote moments
+        earlier (e.g. a team made public then immediately private again),
+        which would wrongly skip the revoke and leave a private team publicly
+        readable until a later reconciliation. The lazy listing call sites
+        can keep the default eventually-consistent read.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -596,13 +716,27 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
+        wildcard_user = RebacReference(Resource.USER, "*")
+        existing_team_ids = await self._teams_with_relation(
+            relation=RelationType.PUBLIC,
+            subject=wildcard_user,
+            consistency_token=consistency_token,
+        )
+        target_team_ids = (
+            unique_team_ids
+            if existing_team_ids is None
+            else [tid for tid in unique_team_ids if tid in existing_team_ids]
+        )
+        if not target_team_ids:
+            return None
+
         relations = [
             Relation(
-                subject=RebacReference(Resource.USER, "*"),
+                subject=wildcard_user,
                 relation=RelationType.PUBLIC,
                 resource=RebacReference(Resource.TEAM, team_id),
             )
-            for team_id in unique_team_ids
+            for team_id in target_team_ids
         ]
         return await self.delete_relations(relations)
 
@@ -659,10 +793,23 @@ class RebacEngine(ABC):
         *,
         resource_type: Resource,
         relation: RelationType,
-        subject_type: Resource | None = None,
+        subject: RebacReference,
         consistency_token: str | None = None,
     ) -> list[Relation] | RebacDisabledResult:
-        """List persisted statements matching the given filters."""
+        """List every persisted tuple with `relation` on any `resource_type`
+        object where `subject` is the exact tuple user.
+
+        `subject` must be exact, not just a type: OpenFGA's Read API rejects a
+        relation + object-type-only (no id) filter that also has no `user` to
+        anchor it — confirmed against live OpenFGA v1.12.1 and v1.15.1 stores, HTTP 400
+        `"the 'tuple_key' field was provided but the object type field is
+        required and both the object id and user cannot be empty"`. There is
+        no OpenFGA query shape for "this relation, across every object of a
+        type, for any user" — a caller that needs that (no single exact
+        subject to anchor on) must fan out per-object instead, e.g. via
+        `list_direct_relations` (see `teams.service._bulk_team_membership`
+        for the #2065 case this replaced).
+        """
 
     async def delete_user_relation(
         self,
@@ -747,6 +894,38 @@ class RebacEngine(ABC):
             f"{type(self).__name__} does not support direct relation reads"
         )
 
+    async def list_direct_relations(
+        self,
+        resource: RebacReference,
+        *,
+        subject: RebacReference | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation] | RebacDisabledResult:
+        """Read every relation literally persisted on one exact resource.
+
+        Why this function exists:
+        - a caller projecting several role-shaped facts about one resource
+          (admins, member count, the caller's own roles) from a single team
+          needs one exact `Read` on that object, not a relation-by-relation
+          scan across every team (`list_relations`, unaffected — it stays the
+          bulk, cross-team primitive backing `_list_teams`)
+
+        How to use it:
+        - pass the exact resource; no relation filter is applied server-side,
+          so the caller folds the returned tuples locally
+        - pass `subject` (an exact `RebacReference`, e.g. one user) to narrow
+          server-side to that one subject's relations on this resource — e.g.
+          `_get_user_roles_in_team` transfers O(that user's roles), never
+          O(every member of the team). `subject=None` (the default) returns
+          every relation on the resource, of any subject.
+
+        Not implemented by default; override in engines that can answer an
+        exact-object tuple read (mirrors `has_direct_relation` above).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support direct relation listing"
+        )
+
     async def lookup_user_resources(
         self,
         user: KeycloakUser,
@@ -784,6 +963,59 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> bool:
         """Return `True` when a subject is authorized for an action."""
+
+    async def has_permissions(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[bool]:
+        """Check several permissions for the same subject/resource pair.
+
+        Why this function exists:
+        - a caller projecting a permission list (e.g. `TeamWithPermissions.
+          permissions`) needs one round-trip per permission set, not one
+          `has_permission` per permission — `OpenFgaRebacEngine` overrides
+          this with a native `BatchCheck` call; this default (concurrent
+          `has_permission`s) keeps every other engine and test fake working
+          without implementing a new abstract method.
+
+        How to use it:
+        - pass permissions in the order you want results back in; an empty
+          sequence returns `[]` without calling the engine at all
+
+        `contextual_relations` is materialized once, up front — if a caller
+        passed a generator, iterating it once per concurrent `has_permission`
+        call would exhaust it after the first and starve every other call
+        instead of raising, since `asyncio.gather` schedules them concurrently
+        with no guaranteed order.
+
+        Example:
+        - `allowed = await rebac.has_permissions(subject, list(TeamPermission), team_ref)`
+        """
+        permissions_list = list(permissions)
+        if not permissions_list:
+            return []
+        contextual_relations_seq = (
+            tuple(contextual_relations) if contextual_relations is not None else None
+        )
+        return list(
+            await asyncio.gather(
+                *(
+                    self.has_permission(
+                        subject,
+                        permission,
+                        resource,
+                        contextual_relations=contextual_relations_seq,
+                        consistency_token=consistency_token,
+                    )
+                    for permission in permissions_list
+                )
+            )
+        )
 
     async def _ensure_personal_team_editor(
         self, user: KeycloakUser, resource_type: Resource, resource_id: str
@@ -895,11 +1127,8 @@ class RebacEngine(ABC):
         permission: TeamPermission,
         team_id: str,
     ) -> str | None:
-        """Check one team permission with the canonical team workflow.
-
-        This helper always ensures the team is linked to the organization
-        before checking permissions.
-        """
+        """Check one team permission — thin wrapper over
+        `check_user_team_permissions_or_raise`."""
         return await self.check_user_team_permissions_or_raise(
             user=user,
             team_id=team_id,
@@ -912,17 +1141,23 @@ class RebacEngine(ABC):
         team_id: str,
         permissions: Iterable[TeamPermission],
     ) -> str | None:
-        """Check team permissions with consistent organization-team bootstrap.
+        """Check one or more team permissions for a user on one team.
 
-        This is the canonical path for team permission checks across services.
-        It ensures ``organization -> team`` exists, propagates the resulting
-        consistency token, and executes all requested checks.
+        The canonical path for team permission checks across every backend
+        (control-plane, knowledge-flow, fred-runtime). Since #2065 this no
+        longer ensures `organization -> team` first: that structural edge is
+        established once, directly, at team creation
+        (`teams.service.create_team`), and repaired only on cold paths
+        (control-plane startup, platform import) via
+        `ensure_team_organization_relations` — never here. Nothing in
+        schema.fga's computed team permissions reads the persisted edge, so a
+        per-request Check never needed it. Returns `None`: with no write in
+        this call, there is no consistency token to propagate. No I/O at all
+        when `permissions` is empty.
         """
-        consistency_token = await self.ensure_team_organization_relations([team_id])
-
         permissions_to_check = list(permissions)
         if not permissions_to_check:
-            return consistency_token
+            return None
 
         await asyncio.gather(
             *(
@@ -930,10 +1165,9 @@ class RebacEngine(ABC):
                     user=user,
                     permission=permission,
                     resource_id=team_id,
-                    consistency_token=consistency_token,
                 )
                 for permission in permissions_to_check
             ),
             return_exceptions=False,
         )
-        return consistency_token
+        return None
