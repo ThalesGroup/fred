@@ -34,12 +34,13 @@ export type FrontendBootstrapState = {
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
  */
 export function useFrontendBootstrap(): FrontendBootstrapState {
-  const { data, isLoading, isFetching, refetch } = useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery(
-    undefined,
-    {
-      refetchOnMountOrArgChange: true,
-    },
-  );
+  // #2148: no longer forces a refetch on every mount — the control-plane
+  // enrichment behind this endpoint does one OpenFGA `Read` plus one
+  // Keycloak lookup per team, and this hook mounts on nearly every page.
+  // RTK Query's own cache (backed by `providesTags`/`invalidatesTags` on
+  // this endpoint and every team mutation, see controlPlaneApiEnhancements.ts)
+  // now keeps this fresh instead.
+  const { data, isLoading, isFetching, refetch } = useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery();
 
   return {
     bootstrap: data,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
@@ -28,7 +29,7 @@ from fred_core import (
     is_service_agent,
     team_organization_relation,
 )
-from fred_core.common import TeamId, is_personal_team_id
+from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
@@ -1214,6 +1215,62 @@ async def revoke_team_member_role(
     )
 
 
+_TEAM_RELATIONS_CACHE_TTL_SECONDS = 45
+_TEAM_RELATIONS_CACHE: ThreadSafeLRUCache[
+    TeamId, tuple[float, list[Relation] | RebacDisabledResult]
+] = ThreadSafeLRUCache(max_size=2000)
+
+
+def invalidate_team_relations_cache(team_id: TeamId) -> None:
+    """Drop the cached `list_direct_relations` result for one team.
+
+    Why this function exists:
+    - `_bulk_team_membership` below caches each team's relations for
+      `_TEAM_RELATIONS_CACHE_TTL_SECONDS` (#2148); a member/admin write for
+      that team should be visible immediately rather than waiting out the
+      TTL, so every relation-mutating call site
+      (`_add_team_member_relation`, `_remove_team_member_relation`,
+      `_remove_all_team_member_relations`) calls this right after its write
+      succeeds
+    """
+    _TEAM_RELATIONS_CACHE.delete(team_id)
+
+
+async def _get_team_relations_cached(
+    rebac: RebacEngine, team_id: TeamId
+) -> list[Relation] | RebacDisabledResult:
+    """Cached `list_direct_relations(team:<team_id>)`, TTL-bounded (#2148).
+
+    Why this function exists:
+    - `_bulk_team_membership` calls this once per team, concurrently; at
+      ~100 teams that's ~100 OpenFGA round-trips on every bootstrap/teams
+      load. A bulk alternative (relation + object-type-only Read) was
+      investigated and confirmed infeasible against real OpenFGA (see the
+      docstring below) — the per-team `Read` is already the minimal call
+      shape, so the remaining lever is call *frequency*, not call *shape*.
+    - short TTL (45s) bounds display staleness (member count, admin list) to
+      a cosmetic window; write paths additionally call
+      `invalidate_team_relations_cache` so a user's own join/leave/role
+      change is reflected without waiting on the TTL. No authorization
+      decision is ever served from this cache — `Check` calls stay live.
+    """
+    now = time.time()
+    cached = _TEAM_RELATIONS_CACHE.get(team_id)
+    if cached is not None:
+        expires_at, relations = cached
+        if expires_at > now:
+            return relations
+        _TEAM_RELATIONS_CACHE.delete(team_id)
+
+    relations = await rebac.list_direct_relations(
+        RebacReference(Resource.TEAM, team_id)
+    )
+    _TEAM_RELATIONS_CACHE.set(
+        team_id, (now + _TEAM_RELATIONS_CACHE_TTL_SECONDS, relations)
+    )
+    return relations
+
+
 async def _bulk_team_membership(
     rebac: RebacEngine,
     team_ids: list[TeamId],
@@ -1231,7 +1288,8 @@ async def _bulk_team_membership(
     single exact "any user" subject to supply for "every team_admin/editor/
     analyst/member tuple across every team at once" — `subject_type=
     Resource.USER` was a client-side filter layered over a request OpenFGA
-    itself never accepted.
+    itself never accepted. (#2148: re-confirmed this also rules out a
+    relation-scoped variant of the same shape — see #2091.)
 
     The correct minimal shape is one exact `list_direct_relations(team:<id>)`
     Read per team (a fully-specified `object`, the same already-used shape as
@@ -1241,15 +1299,17 @@ async def _bulk_team_membership(
     cheaper (`Read` vs `ListUsers`) fan-out. `_fold_team_role_relations`
     (below) is the exact same role-derivation the single-team projection
     uses, so the two paths can't drift apart.
+
+    #2148: each per-team Read now goes through `_get_team_relations_cached`
+    (45s TTL, write-invalidated) instead of calling `rebac` directly, cutting
+    repeat-navigation cost without changing this function's shape or return
+    value.
     """
     if not team_ids:
         return {}, {}
 
     per_team_relations = await asyncio.gather(
-        *(
-            rebac.list_direct_relations(RebacReference(Resource.TEAM, team_id))
-            for team_id in team_ids
-        )
+        *(_get_team_relations_cached(rebac, team_id) for team_id in team_ids)
     )
 
     admin_ids_map: dict[TeamId, set[str]] = {}
@@ -1646,13 +1706,15 @@ async def _add_team_member_relation(
     user_id: str,
     relation: UserTeamRelation,
 ) -> str | None:
-    return await rebac.add_relation(
+    result = await rebac.add_relation(
         Relation(
             subject=RebacReference(Resource.USER, user_id),
             relation=relation.to_relation(),
             resource=RebacReference(Resource.TEAM, team_id),
         )
     )
+    invalidate_team_relations_cache(team_id)
+    return result
 
 
 def _get_administer_permission_for_team_role_relation(
@@ -1766,6 +1828,7 @@ async def _remove_team_member_relation(
             )
         ]
     )
+    invalidate_team_relations_cache(team_id)
 
 
 async def _remove_all_team_member_relations(
@@ -1797,6 +1860,7 @@ async def _remove_all_team_member_relations(
             ),
         ]
     )
+    invalidate_team_relations_cache(team_id)
 
 
 async def _ensure_team_keeps_at_least_one_admin(
