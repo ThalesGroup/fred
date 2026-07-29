@@ -32,7 +32,7 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts"
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
-import { formatBytes } from "../../../utils/formatBytes.ts";
+import { formatBytes } from "@shared/utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
 import AgentsWorkspace from "./AgentsWorkspace/AgentsWorkspace.tsx";

@@ -40,7 +40,9 @@ Every user in the `demo_provisioning` fixture exists to prove one specific, real
 claim about who can see what in the clean Swift model:
 
 - **alice** - `platform_admin` only → proves a platform admin is a platform actor,
-  not an implicit member/admin of every team.
+  not an implicit *member*/admin of every team (a public team may still list her
+  as a non-member entry for marketplace discovery — TEAM-10, GitHub #2146 cluster
+  C — what must never happen is `is_member`/content access).
 - **gabriel** - `platform_observer` only → same isolation proof for the read-only
   platform role.
 - **bob / derek** - `team_editor` fixtures → can work in their assigned teams and
@@ -57,7 +59,9 @@ claim about who can see what in the clean Swift model:
   (AUTHZ-06 cumulative roles, RFC Part 7 §33-39) → proves the cumulative case gets the
   union of every role's capabilities; see `scenarios/test_cumulative_team_roles.py`.
 - **oscar / nina / quinn** - identity-only controls → authenticated users
-  with no OpenFGA grant get no collaborative team data by default.
+  with no OpenFGA grant get no collaborative team *membership* or content by
+  default (public teams may still appear in `/teams` for discovery, `is_member`
+  stays `false` — TEAM-10, GitHub #2146 cluster C).
 
 If you need to add a user later, ask first: *what specific claim does this
 person prove or disprove that no existing user already covers?* If there isn't
@@ -255,7 +259,9 @@ more. Attaching it to a git tag/commit with signed, retained artifacts
 
 ## What it checks
 
-- **Identity + ReBAC membership**: each user sees exactly their teams.
+- **Identity + ReBAC membership**: each user is a *member* (`is_member`) of exactly
+  their own teams (public teams may still be *listed* for discovery without
+  membership — TEAM-10, GitHub #2146 cluster C).
 - **Catalog premise**: the chosen public test agent is visible in the team catalog.
 - **prepare-execution isolation**: a team member can prepare runtime execution; a
   non-member is denied; the response contains no `execution_grant`.

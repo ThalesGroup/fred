@@ -67,6 +67,26 @@ export function isPdfFile(fileName: string | null | undefined): boolean {
 }
 
 /**
+ * Whether a file name has a native (non-markdown) renderer in the document viewer.
+ *
+ * Why this function exists:
+ * - the preview offers a markdown/original toggle, but that toggle is only meaningful
+ *   when the two modes actually differ. A `.docx`/`.csv` has no native renderer — it is
+ *   ALREADY shown as its markdown extraction — so a toggle there would be inert
+ * - keeping the predicate here (rather than re-testing `.pdf` at each host) means a
+ *   future native renderer (docx, images) lights the toggle up everywhere at once
+ *
+ * How to use it:
+ * - pass the document's real file name (with extension); gate the toggle affordance on it
+ *
+ * Example:
+ * - `hasNativePreview("facture.pdf") // true — offer the "view as markdown" button`
+ */
+export function hasNativePreview(fileName: string | null | undefined): boolean {
+  return isPdfFile(fileName);
+}
+
+/**
  * Whether a file name denotes tabular data, for widening its markdown-table preview.
  *
  * Why this function exists:

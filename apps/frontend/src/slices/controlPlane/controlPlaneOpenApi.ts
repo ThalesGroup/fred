@@ -896,11 +896,11 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
     }),
-    resetPlatformFullControlPlaneV1ImportExportResetFullPost: build.mutation<
-      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse,
-      ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg
+    resetPlatformRebacControlPlaneV1ImportExportResetRebacPost: build.mutation<
+      ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse,
+      ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/import-export/reset-full`, method: "POST" }),
+      query: () => ({ url: `/control-plane/v1/import-export/reset-rebac`, method: "POST" }),
     }),
     keaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost: build.mutation<
       KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse,
@@ -1509,9 +1509,9 @@ export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
-export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiResponse =
+export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
-export type ResetPlatformFullControlPlaneV1ImportExportResetFullPostApiArg = void;
+export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg = void;
 export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse =
   /** status 200 Successful Response */ KeaDryRunResponse;
 export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiArg = {
@@ -2821,6 +2821,6 @@ export const {
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
-  useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation,
+  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation,
   useKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostMutation,
 } = injectedRtkApi;

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildDocumentViewerPath, decodeMaybeBase64Utf8, extractH1, isPdfFile } from "./documentViewerUtils";
+import {
+  buildDocumentViewerPath,
+  decodeMaybeBase64Utf8,
+  extractH1,
+  hasNativePreview,
+  isPdfFile,
+} from "./documentViewerUtils";
 
 describe("decodeMaybeBase64Utf8", () => {
   it("decodes base64 UTF-8 content without corrupting non-ASCII text", () => {
@@ -36,6 +42,25 @@ describe("isPdfFile", () => {
     expect(isPdfFile(undefined)).toBe(false);
     expect(isPdfFile(null)).toBe(false);
     expect(isPdfFile("")).toBe(false);
+  });
+});
+
+describe("hasNativePreview", () => {
+  it("is true for a PDF — the only format with a renderer distinct from its markdown extraction", () => {
+    expect(hasNativePreview("facture.pdf")).toBe(true);
+  });
+
+  it("is false for formats already displayed as markdown, so no inert toggle is offered", () => {
+    // A docx/xlsx/csv preview IS the markdown extraction — there is no second
+    // rendering to switch to.
+    expect(hasNativePreview("rapport.docx")).toBe(false);
+    expect(hasNativePreview("agence.xlsx")).toBe(false);
+    expect(hasNativePreview("ticket-jira.csv")).toBe(false);
+  });
+
+  it("is false when the file name is unknown", () => {
+    expect(hasNativePreview(undefined)).toBe(false);
+    expect(hasNativePreview(null)).toBe(false);
   });
 });
 

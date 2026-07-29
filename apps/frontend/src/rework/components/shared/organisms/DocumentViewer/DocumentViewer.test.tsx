@@ -19,7 +19,7 @@
 // newer document's content (and its derived-title callback) via a stale
 // `.then()`. Fixed by tracking a `cancelled` flag in the effect's cleanup.
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,10 +41,12 @@ vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
 // resolution the real bug depended on.
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 const pending = new Map<string, ReturnType<typeof deferred<{ content: string }>>>();
@@ -59,6 +61,18 @@ const fetchPreview = vi.fn((arg: { documentUid: string }) => {
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreview],
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+// The PDF path pulls in react-pdf and a pdf.js worker; the markdown-mode tests
+// only need to observe WHICH renderer was chosen.
+vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
+  PdfStreamingDocumentViewer: ({ documentUid }: { documentUid: string }) => (
+    <p data-testid="pdf">{`pdf:${documentUid}`}</p>
+  ),
 }));
 
 import { DocumentViewer } from "./DocumentViewer";
@@ -117,5 +131,47 @@ describe("DocumentViewer — stale fetch race (out-of-order resolution)", () => 
     // The superseded A response must never have reached the onLoaded callback either
     // — only B's title-derivation call should have fired.
     expect(loadedWith).toEqual(["content-B"]);
+  });
+});
+
+// The preview drawer's markdown toggle: a PDF must be able to show its markdown
+// extraction on demand, and fall back to a readable empty state when the
+// ingestion never produced one (the endpoint 404s).
+describe("DocumentViewer — markdown mode for a natively-rendered file", () => {
+  function render(node: ReactNode) {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(node);
+    });
+  }
+
+  it("renders the PDF viewer for a .pdf when no view is passed (default)", () => {
+    render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" />);
+    expect(container.querySelector('[data-testid="pdf"]')?.textContent).toBe("pdf:doc-pdf");
+  });
+
+  it("renders the markdown extraction for that same .pdf when view is raw", async () => {
+    render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" view="raw" />);
+    expect(container.querySelector('[data-testid="pdf"]')).toBeNull();
+    expect(fetchPreview).toHaveBeenCalledWith({ documentUid: "doc-pdf" });
+
+    await act(async () => {
+      pending.get("doc-pdf")!.resolve({ content: "# Facture" });
+      await pending.get("doc-pdf")!.promise;
+    });
+    expect(container.querySelector('[data-testid="content"]')?.textContent).toBe("# Facture");
+  });
+
+  it("shows an unavailable notice — not document text — when no markdown was generated", async () => {
+    render(<DocumentViewer documentUid="doc-nomd" fileName="facture.pdf" view="raw" />);
+    await act(async () => {
+      pending.get("doc-nomd")!.reject(new Error("404"));
+      await pending.get("doc-nomd")!.promise.catch(() => undefined);
+    });
+
+    expect(container.querySelector('[data-testid="content"]')).toBeNull();
+    expect(container.textContent).toContain("rework.resources.preview.markdownUnavailable");
   });
 });

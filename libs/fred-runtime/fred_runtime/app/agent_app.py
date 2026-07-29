@@ -1358,12 +1358,21 @@ async def _authorize_execution_or_raise(
       the owner's `team_editor` tuple self-heals on first touch inside
       `RebacEngine.check_user_team_permission_or_raise`, and `add_relation`'s
       write-guard refuses any tuple naming a personal team except that one, so
-      the plain `CAN_READ` check below already authorizes the owner and denies
-      everyone else (another user's space, or the bare `"personal"` alias, for
-      which no tuple is ever provisioned) — no special-casing needed here.
-    - otherwise require the caller to hold `CAN_READ` on the requested team — the
-      same relation the control-plane required before it would mint a grant. The
-      team is caller-supplied but safe: OpenFGA only authorizes teams the user
+      the `CAN_USE_TEAM_AGENTS` check below already authorizes the owner
+      (`team_editor` implies `team_member`) and denies everyone else (another
+      user's space, or the bare `"personal"` alias, for which no tuple is
+      ever provisioned) — no special-casing needed here.
+    - otherwise require the caller to hold `CAN_USE_TEAM_AGENTS` on the
+      requested team — `team_member`-only, unlike `CAN_READ` (which also
+      admits the `public` marketplace-discovery relation, TEAM-09/TEAM-10).
+      Execution is real content access, not discovery, so a public-team
+      visitor must not pass here even though they can see the team profile.
+      This used to check `CAN_READ` (the same relation the control-plane
+      required before it would mint a grant) — that predates TEAM-09's
+      `public` relation and was never revisited; `product/api.py`'s
+      `post_prepare_execution` made the identical correction for the same
+      reason (returns prompt content, not just config). The team is
+      caller-supplied but safe: OpenFGA only authorizes teams the user
       actually holds a relation to. Authorization and denial are both audited;
       any OpenFGA denial fails closed (403).
 
@@ -1446,7 +1455,7 @@ async def _authorize_execution_or_raise(
     # since no tuple is ever provisioned for that literal string).
     try:
         await rebac.check_user_team_permission_or_raise(
-            authenticated_user, TeamPermission.CAN_READ, team_id
+            authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
         )
     except AuthorizationError as exc:
         _emit_audit_event(
@@ -2480,8 +2489,8 @@ def _build_capability_block(
         # one. No production capability declares an active `HitlSpec` today,
         # so refusing here costs nothing real yet; reconciling Graph's own
         # node-level pause/resume with the per-tool HITL gate is real design
-        # work, deferred (id-legend.yaml CAPAB-02). Refusing loudly keeps the
-        # RFC §3.9 "never silently degrade" guarantee intact in the meantime
+        # work, deferred (see AGENT-CAPABILITY-RFC.md §3.9). Refusing loudly
+        # keeps the RFC's "never silently degrade" guarantee intact in the meantime
         # — a capability with `HitlSpec`s that silently ran ungated on Graph
         # would be exactly the kind of governance gap this platform exists to
         # prevent.

@@ -23,6 +23,9 @@ interface InlineDrawerResizeSpec {
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
   minWidth?: number;
   maxWidth?: number;
+  /** Viewport-width cap as a fraction (0–1). Default 0.45; raise it for a drawer
+   * meant to take most of the page (e.g. a full-height document preview). */
+  maxViewportFraction?: number;
 }
 
 interface InlineDrawerProps {
@@ -52,6 +55,11 @@ interface InlineDrawerProps {
    * ResizablePaneShell so capability panels keep the same UX.
    */
   resizable?: InlineDrawerResizeSpec;
+  /**
+   * Drop the body's default padding so full-bleed content (a PDF page, an image)
+   * can use the whole width. The content then owns its own insets.
+   */
+  flushBody?: boolean;
 }
 
 export function InlineDrawer({
@@ -63,6 +71,7 @@ export function InlineDrawer({
   background,
   layout = "overlay",
   resizable,
+  flushBody = false,
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
@@ -75,9 +84,11 @@ export function InlineDrawer({
     initialWidth: Number.isFinite(seedWidthPx) ? seedWidthPx : 480,
     minWidth: resizable?.minWidth,
     maxWidth: resizable?.maxWidth,
+    maxViewportFraction: resizable?.maxViewportFraction,
     drawerRef,
   });
   const resizeEnabled = resizable !== undefined && layout === "push";
+  const capVw = (resizable?.maxViewportFraction ?? 0.45) * 100;
   // Push drawers take real layout space from the flex row they sit in — cap
   // at a fraction of the viewport so a wide `width` can't force the sibling
   // main column below a usable size on narrow windows. Overlay
@@ -85,7 +96,7 @@ export function InlineDrawer({
   // width is already clamped to the same 45vw in JS; the CSS min() stays as a
   // guard against window shrinks between renders.)
   const drawerWidth = resizeEnabled
-    ? `min(${resize.width}px, 45vw)`
+    ? `min(${resize.width}px, ${capVw}vw)`
     : layout === "push"
       ? `min(${width}, 45vw)`
       : width;
@@ -160,7 +171,7 @@ export function InlineDrawer({
               />
             </div>
           </div>
-          <div className={styles.body}>{children}</div>
+          <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>
         </div>
       </aside>
     </>

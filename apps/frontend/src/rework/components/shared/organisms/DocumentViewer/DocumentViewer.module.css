@@ -9,7 +9,17 @@
   padding: var(--spacing-xl) var(--spacing-xs);
 }
 
-.loading {
+/* Prose documents (non-tabular): the capped reading column is centred in the
+   host instead of pinned to its left edge — a ~680px measure hugging the left of
+   a near-full-page preview drawer reads as a layout bug. No-op for the
+   `fullWidth` variant, which is already `width: 100%` and centres its own
+   reading track via its grid. */
+.markdownBody > :global(*) {
+  margin-inline: auto;
+}
+
+.loading,
+.unavailable {
   margin: var(--spacing-xl) auto;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

@@ -161,9 +161,10 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         """
         Per-tool-call ReBAC re-check (RUNTIME least-privilege gap, see
         docs/swift audit): `_authorize_execution_or_raise` (agent_app.py)
-        verifies CAN_READ on the turn's team exactly once, at turn start.
-        Every tool call after that — potentially many, in a long ReAct loop —
-        ran unchecked, trusting that one decision for the rest of the turn.
+        verifies CAN_USE_TEAM_AGENTS on the turn's team exactly once, at turn
+        start. Every tool call after that — potentially many, in a long ReAct
+        loop — ran unchecked, trusting that one decision for the rest of the
+        turn.
         This re-runs the same OpenFGA check at the one chokepoint every tool
         call already passes through, so a stale/dropped team membership (or a
         tool call scoped to a different team than the one authorized at turn
@@ -206,7 +207,7 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             return
         await rebac.check_permission_or_raise(
             RebacReference(Resource.USER, user_id),
-            TeamPermission.CAN_READ,
+            TeamPermission.CAN_USE_TEAM_AGENTS,
             RebacReference(Resource.TEAM, team_id),
         )
 

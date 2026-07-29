@@ -14,7 +14,7 @@
 
 """AUTHZ-05 review items 1a/1b: wiring checks for `product/api.py`.
 
-These endpoints call `get_team_by_id_from_service` to gate access. Before this
+These endpoints call `require_team_access` to gate access. Before this
 fix, five prompt mutation endpoints and two agent-listing GETs omitted
 `required_permissions` and silently fell back to `CAN_READ` (`team_member or
 public`), letting any visitor of a public team mutate prompts or enumerate
@@ -43,8 +43,7 @@ def _user() -> KeycloakUser:
     return KeycloakUser(uid="u", username="u", roles=["viewer"], email=None)
 
 
-class _FakeTeam:
-    id = TeamId("bid-and-capture")
+_FAKE_TEAM_ID = TeamId("bid-and-capture")
 
 
 class _FakeRebac:
@@ -135,8 +134,8 @@ async def test_prompt_mutation_endpoints_require_can_update_resources(
 ) -> None:
     """Item 1a: prompt mutation endpoints must require CAN_UPDATE_RESOURCES,
     not silently fall back to CAN_READ (team_member or public)."""
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await call(deps, _user())
@@ -156,8 +155,8 @@ async def test_promote_prompt_requires_can_update_resources_on_target_team(
     permission-checked, so a team_editor could copy a prompt's text into any
     team_id they held no relation to (or that did not exist). Both the source
     and the target team must now be resolved under CAN_UPDATE_RESOURCES."""
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.post_promote_prompt(
@@ -186,8 +185,8 @@ async def test_get_agent_templates_requires_can_use_team_agents(
 ) -> None:
     """Item 1b: listing agent templates must require CAN_USE_TEAM_AGENTS
     (team_member only), not the default CAN_READ (which also admits `public`)."""
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     rebac = _FakeRebac(can_manage_platform=False)
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac)))
@@ -204,8 +203,8 @@ async def test_get_agent_templates_requires_can_use_team_agents(
 async def test_get_agent_instances_requires_can_use_team_agents(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.get_team_agent_instances(TeamId("t"), deps, _user())
@@ -225,8 +224,8 @@ async def test_record_prompt_use_requires_can_use_team_agents(
     it must require CAN_USE_TEAM_AGENTS (team_member only), not silently fall
     back to the default CAN_READ (team_member or public), which let any
     visitor of a public team skew the usage-ranking counter."""
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.post_record_prompt_use(TeamId("t"), "p", deps, _user())
@@ -247,8 +246,8 @@ async def test_prepare_execution_requires_can_use_team_agents(
     (deliberately kept on CAN_READ, config only, no prompt content). Must
     require CAN_USE_TEAM_AGENTS (team_member only), not the default CAN_READ
     (team_member or `public`)."""
-    get_team = AsyncMock(return_value=_FakeTeam())
-    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     fake_request = cast(Any, SimpleNamespace(headers={}))
@@ -270,7 +269,7 @@ async def test_include_non_public_requires_real_openfga_platform_admin(
     `platform_admin`/`platform_observer` (via CAN_MANAGE_PLATFORM), never for a
     bare Keycloak `admin` role."""
     monkeypatch.setattr(
-        product_api, "get_team_by_id_from_service", AsyncMock(return_value=_FakeTeam())
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
     )
     list_templates = AsyncMock(return_value=[])
     monkeypatch.setattr(product_api, "list_agent_templates", list_templates)
@@ -331,7 +330,7 @@ async def test_runtime_binding_correlates_via_x_request_id_header(
     control-plane request it triggers besides timestamp coincidence.
     """
     monkeypatch.setattr(
-        product_api, "get_team_by_id_from_service", AsyncMock(return_value=_FakeTeam())
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
     )
     fake_binding = SimpleNamespace(enabled=True)
     monkeypatch.setattr(
@@ -369,7 +368,7 @@ async def test_runtime_binding_omits_trace_without_the_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        product_api, "get_team_by_id_from_service", AsyncMock(return_value=_FakeTeam())
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
     )
     monkeypatch.setattr(
         product_api,

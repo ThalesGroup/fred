@@ -43,12 +43,14 @@ from fred_core.tasks.models import (
     MigrationDetail,
     MigrationTaskEvent,
     StartMigrationRequest,
+    StartTaskResponse,
     TaskState,
     TaskTarget,
 )
 from fred_core.tasks.service import TaskService
 from pydantic import BaseModel
 from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -132,10 +134,17 @@ def _get_rebac_engine(request: Request) -> RebacEngine:
 
 
 async def _reject_if_migration_task_active(task_service: TaskService) -> None:
-    """Refuse to start a migration op (import / reset / reset-full) while another one
-    is still running or pending (PLATFORM-IMPORT-RFC.md §9.2) — an import racing a
-    reset-full (or two teardowns) on the same instance is exactly the scenario a
-    cutover-day operator cannot safely reason about.
+    """Refuse to start a migration op (import / reset / reset-rebac) while another
+    one is still running or pending (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) — an
+    import racing a teardown (or two teardowns) on the same instance is exactly
+    the scenario a cutover-day operator cannot safely reason about.
+
+    This is a fast-path optimization ONLY — it avoids doing upload/parsing work
+    before failing, but it is a plain list-then-check and does not, by itself,
+    prevent two concurrent callers from both passing it and both starting a
+    task. The actual correctness guarantee is `uq_task_run_single_active_migration`
+    (a DB-level partial unique index, `fred_core.tasks.orm_models.TaskRunRow`),
+    enforced by `_start_migration_task_or_409` below.
     """
     active = await task_service.list_tasks(kind="migration", exclude_terminal=True)
     if active.tasks:
@@ -146,6 +155,51 @@ async def _reject_if_migration_task_active(task_service: TaskService) -> None:
                 f"(task_id={active.tasks[0].task_id}) — wait for it to finish first"
             ),
         )
+
+
+# Must match the index name in `fred_core.tasks.orm_models.TaskRunRow.__table_args__`.
+_MIGRATION_EXCLUSION_INDEX_NAME = "uq_task_run_single_active_migration"
+
+
+def _is_concurrent_migration_violation(exc: IntegrityError) -> bool:
+    """True only when `exc` is the single-active-migration constraint firing.
+
+    Deliberately narrow: an `IntegrityError` from some other, unrelated cause
+    must never be silently downgraded to a friendly 409 — callers re-raise the
+    original exception unchanged when this returns False.
+    """
+    return _MIGRATION_EXCLUSION_INDEX_NAME in str(exc.orig or exc)
+
+
+async def _start_migration_task_or_409(
+    task_service: TaskService,
+    *,
+    created_by: str,
+    target: TaskTarget | None = None,
+) -> StartTaskResponse:
+    """Start a `kind="migration"` task, translating the DB-level exclusion
+    constraint into a 409 when it fires.
+
+    This — not `_reject_if_migration_task_active` above — is what actually
+    guarantees at most one active migration task: two callers can both pass
+    that pre-check and both reach here concurrently, but the partial unique
+    index on `task_run` (`kind='migration'` AND non-terminal state) lets only
+    one insert succeed; the other's `IntegrityError` is translated here.
+    """
+    try:
+        return await task_service.start(
+            StartMigrationRequest(), created_by=created_by, target=target
+        )
+    except IntegrityError as exc:
+        if not _is_concurrent_migration_violation(exc):
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Another migration task is already running or pending — "
+                "wait for it to finish first"
+            ),
+        ) from exc
 
 
 def build_import_export_router(prefix: str = "") -> APIRouter:
@@ -233,10 +287,8 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         import_id = str(uuid.uuid4())
         target = _import_target(import_id, label, file.filename)
 
-        start_response = await task_service.start(
-            StartMigrationRequest(),
-            created_by=user.uid,
-            target=target,
+        start_response = await _start_migration_task_or_409(
+            task_service, created_by=user.uid, target=target
         )
         task_id = start_response.task_id
 
@@ -367,9 +419,8 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         )
         await _reject_if_migration_task_active(task_service)
 
-        start_response = await task_service.start(
-            StartMigrationRequest(),
-            created_by=user.uid,
+        start_response = await _start_migration_task_or_409(
+            task_service, created_by=user.uid
         )
         task_id = start_response.task_id
 
@@ -432,29 +483,30 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         return ResetLaunchResponse(task_id=task_id)
 
     @router.post(
-        "/import-export/reset-full",
+        "/import-export/reset-rebac",
         status_code=202,
         response_model=ResetLaunchResponse,
-        summary="Full platform teardown — back to bootstrap-only state",
+        summary="Teardown — reset platform data and OpenFGA (test-only, Keycloak untouched)",
         description=(
-            "Wipe the entire platform configuration graph — Postgres (agent instances, "
-            "tags, document metadata, team metadata, prompts), every OpenFGA tuple, and "
-            "every Keycloak user — back to the state right after root bootstrap.\n\n"
+            "Delete all agent instances, knowledge tags, document metadata, team "
+            "metadata, and prompts from Postgres, and wipe every OpenFGA tuple — but "
+            "**never touches Keycloak users**. Object-store binaries and vector "
+            "embeddings are not touched either.\n\n"
             "**Preserved, never touched:** the identity that completed root bootstrap "
-            "(`platformbootstrap.completed_by`) and the identity calling this endpoint. "
-            "Everything else — including the preserved identities' own non-identity data "
-            "— is deleted.\n\n"
-            "Distinct from `POST /reset`, which stays the narrow data-only reset for "
-            "day-to-day export/reset/import test cycles. Use this endpoint only for a "
-            "cutover-day recovery: an import failed partway through and left Keycloak "
-            "users, OpenFGA tuples, or teams behind that `POST /reset` cannot remove.\n\n"
+            "(`platformbootstrap.completed_by`) and the identity calling this endpoint.\n\n"
+            "Distinct from `POST /reset` (Postgres only, keeps OpenFGA — leaves stale "
+            "permission tuples behind across repeated test cycles). Use this one for "
+            "repeated import rehearsals where you want a clean permission graph on "
+            "every run but need Keycloak accounts (e.g. one created to exercise the "
+            "PENDING→RELINKED reconciliation path) to survive. Test/rehearsal tooling "
+            "only — never wipes identity.\n\n"
             "Every step is safe to re-run — if this task itself fails partway through, "
-            "call it again; already-deleted users/tuples/rows are silently skipped.\n\n"
+            "call it again; already-deleted tuples/rows are silently skipped.\n\n"
             "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
             "**This action is irreversible. Platform admin only.**"
         ),
     )
-    async def reset_platform_full(
+    async def reset_platform_rebac(
         background_tasks: BackgroundTasks,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         task_service: Annotated[TaskService, Depends(_get_task_service)],
@@ -469,9 +521,8 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         )
         await _reject_if_migration_task_active(task_service)
 
-        start_response = await task_service.start(
-            StartMigrationRequest(),
-            created_by=user.uid,
+        start_response = await _start_migration_task_or_409(
+            task_service, created_by=user.uid
         )
         task_id = start_response.task_id
 
@@ -483,7 +534,7 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                         state=TaskState.running,
                         seq=0,
                         timestamp=datetime.now(timezone.utc),
-                        step="Full teardown en cours…",
+                        step="Teardown (données + OpenFGA) en cours…",
                     )
                 )
                 report = await run_teardown(
@@ -494,17 +545,12 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 )
                 summary = (
                     f"préservés: {', '.join(report.preserved_uids)} — "
-                    f"{report.users_deleted} comptes Keycloak supprimés, "
+                    f"Keycloak conservé, "
                     f"{report.team_ids_wiped} équipes désenchevêtrées (OpenFGA), "
                     f"{report.agents_deleted} agents, {report.tags_deleted} tags, "
                     f"{report.documents_deleted} documents, {report.teams_deleted} équipes, "
                     f"{report.prompts_deleted} prompts supprimés"
                 )
-                if report.users_delete_failed:
-                    summary += (
-                        f" — ÉCHEC suppression Keycloak pour: "
-                        f"{', '.join(report.users_delete_failed)} (relancer reset-full)"
-                    )
                 await task_service.record(
                     MigrationTaskEvent(
                         task_id=task_id,
@@ -516,10 +562,10 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                     )
                 )
                 logger.warning(
-                    "[import-export] reset-full by %s: %s", user.uid, summary
+                    "[import-export] reset-rebac by %s: %s", user.uid, summary
                 )
             except Exception as exc:
-                logger.exception("[import-export] reset-full failed: %s", exc)
+                logger.exception("[import-export] reset-rebac failed: %s", exc)
                 await task_service.fail_task(task_id, str(exc))
 
         background_tasks.add_task(_run)

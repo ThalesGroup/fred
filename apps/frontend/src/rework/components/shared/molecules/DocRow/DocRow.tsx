@@ -20,6 +20,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { DocStatusBadge, type DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
+import { formatBytes } from "@shared/utils/formatBytes";
 import { selectActiveTaskForTarget } from "../../../../features/tasks/taskSlice";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { fileTypeMeta } from "./docFileType.ts";
@@ -42,6 +43,10 @@ interface DocRowProps {
   status?: DocStatus;
   /** 0.0–1.0 base progress when status === "processing" with no task. */
   progress?: number | null;
+  /** Original file size in bytes; rendered as a localized "1.5 MB"/"1,5 Mo" label. Omit to hide. */
+  sizeBytes?: number | null;
+  /** Upload/ingest date (ISO string); revealed on row hover, just left of the size. Omit to hide. */
+  uploadedAt?: string | null;
   selected?: boolean;
   onSelect?: () => void;
   onPreview?: () => void;
@@ -52,6 +57,14 @@ interface DocRowProps {
   moreActions?: DocRowMoreAction[];
   /** optional provenance chip (e.g. OriginBadge) rendered in the trailing area. */
   provenanceBadge?: ReactNode;
+  /** current search-inclusion state (retrievable flag). Omit when the concept doesn't
+   * apply to this row (e.g. a plain filesystem file) — the toggle then renders nothing. */
+  searchable?: boolean;
+  /** flips `searchable`; rendered as an eye/crossed-eye button just left of download,
+   * reflecting the current state and toggling it on click. */
+  onToggleSearchable?: () => void;
+  /** direct delete action, rendered as a trash icon among the row's actions. */
+  onDelete?: () => void;
 }
 
 /**
@@ -65,6 +78,8 @@ export function DocRow({
   fileType,
   status,
   progress = null,
+  sizeBytes = null,
+  uploadedAt = null,
   selected = false,
   onSelect,
   onPreview,
@@ -72,22 +87,64 @@ export function DocRow({
   onProcess,
   moreActions,
   provenanceBadge,
+  searchable,
+  onToggleSearchable,
+  onDelete,
 }: DocRowProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const task = useSelector(selectActiveTaskForTarget("document", id));
   const resolved = resolveStatus(status, progress, task);
   const meta = fileTypeMeta(fileType);
+  const sizeLabel = sizeBytes && sizeBytes > 0 ? formatBytes(sizeBytes, i18n.language) : null;
+  const dateLabel = formatUploadDate(uploadedAt, i18n.language);
+
+  // The whole row is the document's "open" target: the icon, the metadata (date,
+  // size) and the empty space between them read as one clickable line, so any of
+  // them selects AND previews — not just the name. The action buttons inside the
+  // row stop propagation, so they keep their own behaviour. Rows given no
+  // `onPreview` (e.g. a plain filesystem file) still just select.
+  const openRow = () => {
+    onSelect?.();
+    onPreview?.();
+  };
 
   return (
-    <div className={styles.row} data-selected={selected || undefined} onClick={onSelect}>
+    <div className={styles.row} data-selected={selected || undefined} onClick={openRow}>
       <span className={styles.icon} style={{ color: meta.color }} aria-hidden>
         <Icon category="outlined" type={meta.icon} />
       </span>
-      <span className={styles.name} title={name}>
-        {name}
-      </span>
+      {/* No `title` on the name: the row already shows it, and the native tooltip
+          only covered the neighbouring rows on hover. */}
+      {onPreview ? (
+        <button
+          type="button"
+          className={styles.nameButton}
+          onClick={(e) => {
+            // Keeps the row's handler from firing a second time: with a toggling
+            // host (re-clicking the open document closes its preview) a bubbled
+            // duplicate would open and immediately re-close it.
+            e.stopPropagation();
+            openRow();
+          }}
+        >
+          {name}
+        </button>
+      ) : (
+        <span className={styles.name}>{name}</span>
+      )}
 
       <span className={styles.trailing}>
+        {/* Date: collapsed at rest, slides in on the LEFT of the size on hover. */}
+        {dateLabel && (
+          <span className={styles.revealLeft}>
+            <span className={styles.date} title={dateLabel}>
+              {dateLabel}
+            </span>
+          </span>
+        )}
+
+        {sizeLabel && <span className={styles.size}>{sizeLabel}</span>}
+
         {resolved.status === "raw" && onProcess && (
           <span className={styles.processAction}>
             <Button
@@ -107,57 +164,96 @@ export function DocRow({
 
         {provenanceBadge}
 
-        {resolved.status && <DocStatusBadge status={resolved.status} progress={resolved.progress} />}
+        {/* "ready" is the silent, happy path — users only want to see the states
+            that need attention (processing / failed) or action (raw). */}
+        {resolved.status && resolved.status !== "ready" && (
+          <DocStatusBadge status={resolved.status} progress={resolved.progress} />
+        )}
 
-        <span className={styles.actions}>
-          {onPreview && (
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="xs"
-              icon={{ category: "outlined", type: "visibility" }}
-              aria-label={t("rework.resources.action.preview")}
-              title={t("rework.resources.action.preview")}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview();
-              }}
-            />
-          )}
-          {onDownload && (
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="xs"
-              icon={{ category: "outlined", type: "download" }}
-              aria-label={t("rework.resources.action.download")}
-              title={t("rework.resources.action.download")}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownload();
-              }}
-            />
-          )}
-          {moreActions && moreActions.length > 0 && (
-            <span onClick={(e) => e.stopPropagation()}>
-              <IconButtonMenu
-                iconButton={{
-                  color: "on-surface",
-                  variant: "icon",
-                  size: "xs",
-                  icon: { category: "outlined", type: "more_horiz" },
-                  "aria-label": t("rework.resources.action.more"),
-                  title: t("rework.resources.action.more"),
-                }}
-                options={moreActions.map((action) => ({ key: action.id, value: action.id, label: action.label }))}
-                onSelect={(id) => moreActions.find((action) => action.id === id)?.onSelect()}
-              />
+        {/* Searchable toggle / download / delete / menu: collapsed at rest, slide
+            in on the RIGHT of the size on hover. */}
+        {(onDownload ||
+          onDelete ||
+          (typeof searchable === "boolean" && onToggleSearchable) ||
+          (moreActions && moreActions.length > 0)) && (
+          <span className={styles.revealRight}>
+            <span className={styles.actions}>
+              {typeof searchable === "boolean" && onToggleSearchable && (
+                // Keying on the state forces a remount on toggle, so the pop-in
+                // animation below plays every time the icon swaps.
+                <span key={searchable ? "searchable" : "excluded"} className={styles.searchableToggle}>
+                  <IconButton
+                    color="on-surface"
+                    variant="icon"
+                    size="xs"
+                    icon={{ category: "outlined", type: searchable ? "visibility" : "visibility_off" }}
+                    aria-label={searchable ? t("documentLibrary.makeExcluded") : t("documentLibrary.makeSearchable")}
+                    title={searchable ? t("documentLibrary.makeExcluded") : t("documentLibrary.makeSearchable")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleSearchable();
+                    }}
+                  />
+                </span>
+              )}
+              {onDownload && (
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="xs"
+                  icon={{ category: "outlined", type: "download" }}
+                  aria-label={t("rework.resources.action.download")}
+                  title={t("rework.resources.action.download")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownload();
+                  }}
+                />
+              )}
+              {onDelete && (
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="xs"
+                  icon={{ category: "outlined", type: "delete" }}
+                  aria-label={t("rework.resources.action.delete")}
+                  title={t("rework.resources.action.delete")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                />
+              )}
+              {moreActions && moreActions.length > 0 && (
+                <span onClick={(e) => e.stopPropagation()}>
+                  <IconButtonMenu
+                    iconButton={{
+                      color: "on-surface",
+                      variant: "icon",
+                      size: "xs",
+                      icon: { category: "outlined", type: "more_horiz" },
+                      "aria-label": t("rework.resources.action.more"),
+                      title: t("rework.resources.action.more"),
+                    }}
+                    options={moreActions.map((action) => ({ key: action.id, value: action.id, label: action.label }))}
+                    onSelect={(id) => moreActions.find((action) => action.id === id)?.onSelect()}
+                  />
+                </span>
+              )}
             </span>
-          )}
-        </span>
+          </span>
+        )}
       </span>
     </div>
   );
+}
+
+/** Localized short date for the upload timestamp; null for missing/unparseable values. */
+function formatUploadDate(value: string | null | undefined, locale: string): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
 }
 
 /** An active task (running/pending/cancelling) wins over the intrinsic status. */

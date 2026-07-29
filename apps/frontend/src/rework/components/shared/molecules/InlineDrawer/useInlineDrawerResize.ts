@@ -38,6 +38,9 @@ interface UseInlineDrawerResizeOptions {
   initialWidth: number;
   minWidth?: number;
   maxWidth?: number;
+  /** Viewport-width cap as a fraction (0–1). Mirrors the CSS `min(width, Nvw)`
+   * guard so the stored width never diverges from the rendered one. Default 0.45. */
+  maxViewportFraction?: number;
   /** The drawer element — its right edge anchors the width computation. */
   drawerRef: React.RefObject<HTMLElement | null>;
 }
@@ -54,6 +57,7 @@ export function useInlineDrawerResize({
   initialWidth,
   minWidth = 320,
   maxWidth = 900,
+  maxViewportFraction = 0.45,
   drawerRef,
 }: UseInlineDrawerResizeOptions): {
   width: number;
@@ -74,10 +78,10 @@ export function useInlineDrawerResize({
       // this hook runs unconditionally from every InlineDrawer, so it must not
       // assume one exists.
       const viewportWidth = typeof window !== "undefined" ? window.innerWidth : maxWidth;
-      const cap = Math.min(maxWidth, Math.floor(viewportWidth * 0.45));
+      const cap = Math.min(maxWidth, Math.floor(viewportWidth * maxViewportFraction));
       return Math.min(cap, Math.max(minWidth, value));
     },
-    [minWidth, maxWidth],
+    [minWidth, maxWidth, maxViewportFraction],
   );
 
   const onPointerDown = useCallback(

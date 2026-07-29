@@ -57,26 +57,31 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [refetchTags, refetchDocs, fetchAllDocuments],
   );
 
+  // Returns the new retrievable value on success (undefined on failure) so callers
+  // can patch their own local list state directly — no list-wide refetch needed,
+  // since flipping this flag never changes tag membership or document counts.
   const toggleRetrievable = useCallback(
-    async (doc: DocumentMetadata) => {
+    async (doc: DocumentMetadata): Promise<boolean | undefined> => {
+      const nextValue = !doc.source.retrievable;
       try {
         await updateRetrievable({
           documentUid: doc.identity.document_uid,
-          retrievable: !doc.source.retrievable,
+          retrievable: nextValue,
         }).unwrap();
-        await refresh();
         showSuccess?.({
           summary: t("validation.updated"),
-          detail: !doc.source.retrievable ? t("documentTable.nowSearchable") : t("documentTable.nowExcluded"),
+          detail: nextValue ? t("documentTable.nowSearchable") : t("documentTable.nowExcluded"),
         });
+        return nextValue;
       } catch (e: any) {
         showError?.({
           summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to update retrievable flag.",
         });
+        return undefined;
       }
     },
-    [updateRetrievable, refresh, showSuccess, showError, t],
+    [updateRetrievable, showSuccess, showError, t],
   );
 
   const removeFromLibrary = useCallback(

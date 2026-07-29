@@ -76,8 +76,8 @@ risk confirmed; the bridge is strictly additive.
 
 Four rounds of independent review, each verified against the code before fixing, found
 real gaps in the landing above. See `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
-§8.23–§8.26 and `id-legend.yaml`'s `CAPAB-02` entry for the full record. This file is
-not updated further — those and the RFC are now the canonical source.
+§8.23–§8.26 for the full record. This file is not updated further — that and the
+RFC are now the canonical source.
 
 **Round 1 (§8.23):** nothing stopped a Graph agent from *selecting*
 `ppt_filler`/`writable_document` (`middleware()`-only) — it would build without error and

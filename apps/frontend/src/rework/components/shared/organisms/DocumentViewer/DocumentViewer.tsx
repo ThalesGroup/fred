@@ -114,8 +114,14 @@ function MarkdownDocumentBody({
   onLoaded?: (content: string) => void;
   fullWidth?: boolean;
 }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
+  // Set when the markdown extraction cannot be served (404 — the document never
+  // went through a preview-generating pipeline, or the extraction failed). Kept
+  // separate from `content` so it renders as an empty state rather than as
+  // document text the user could mistake for the file's real content.
+  const [unavailable, setUnavailable] = useState(false);
   const [fetchPreview] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery();
 
   useEffect(() => {
@@ -126,17 +132,20 @@ function MarkdownDocumentBody({
     // response can never overwrite the newer document's content or title.
     let cancelled = false;
     setLoading(true);
+    setUnavailable(false);
     fetchPreview({ documentUid })
       .unwrap()
       .then((resp) => {
         if (cancelled) return;
         const decoded = decodeMaybeBase64Utf8(resp?.content ?? "");
         setContent(decoded);
+        setUnavailable(decoded.trim() === "");
         onLoaded?.(decoded);
       })
       .catch(() => {
         if (cancelled) return;
-        setContent("Error loading document.");
+        setContent("");
+        setUnavailable(true);
       })
       .finally(() => {
         if (cancelled) return;
@@ -149,9 +158,23 @@ function MarkdownDocumentBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentUid, fetchPreview]);
 
+  if (loading) {
+    return (
+      <div className={styles.markdownBody}>
+        <p className={styles.loading}>{t("rework.resources.preview.loading")}</p>
+      </div>
+    );
+  }
+  if (unavailable) {
+    return (
+      <div className={styles.markdownBody}>
+        <p className={styles.unavailable}>{t("rework.resources.preview.markdownUnavailable")}</p>
+      </div>
+    );
+  }
   return (
     <div className={styles.markdownBody}>
-      {loading ? <p className={styles.loading}>Loading…</p> : <MarkdownRenderer text={content} fullWidth={fullWidth} />}
+      <MarkdownRenderer text={content} fullWidth={fullWidth} />
     </div>
   );
 }

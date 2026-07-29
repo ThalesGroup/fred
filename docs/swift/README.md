@@ -138,15 +138,10 @@ For engineers building agents with `fred-sdk`.
 
 ---
 
-### `data/` — Machine-readable ID registry
-
-| File                                         | Purpose                                                                                   | Update trigger                                                     |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [`data/id-legend.yaml`](data/id-legend.yaml) | **Canonical ID registry** — every RFC-backed task ID, owner, status, domain, backlog cross-reference | When a new ID is created, a status changes, or a sub-item is added |
-
-The IDs defined in `id-legend.yaml` are the same IDs used in commit messages,
-backlog checkboxes, and STATUS.md. Canonical ID convention: see
-[`../../CLAUDE.md §Task ID Convention`](../../CLAUDE.md).
+There is no machine-readable ID registry — `docs/swift/data/id-legend.yaml`
+was removed (2026-07-27). The `DOMAIN-NN` shorthand can still appear
+informally in commit messages and issue titles; convention: see
+[`../../CLAUDE.md §Task ID convention`](../../CLAUDE.md).
 
 Sprint state, issues, and milestones are **not** tracked in this repo's docs —
 `PMO-BOARD.md` and `data/sprint.yaml` were removed (2026-07-21) because they
@@ -217,7 +212,6 @@ Runbooks and operational guides for the platform.
 | [`AGENT_POD_RUNTIME_PROTOCOL.md`](ops/AGENT_POD_RUNTIME_PROTOCOL.md) | Runtime pod protocol and operational contract |
 | [`DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md)               | Database migration runbook                    |
 | [`KEA_SWIFT_CUTOVER.md`](ops/KEA_SWIFT_CUTOVER.md)                   | Kea to Swift cutover order, topic boundaries, and implementation state |
-| [`KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | Keycloak identity bootstrap prerequisite for the cutover |
 
 ---
 

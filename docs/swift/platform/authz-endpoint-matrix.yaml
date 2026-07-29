@@ -78,7 +78,7 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: POST
-    path: /control-plane/v1/import-export/reset-full
+    path: /control-plane/v1/import-export/reset-rebac
     review_status: pending_review
     required_permission: pending_review
   # KEA CUTOVER 2026 — temporary, remove this entry together with
@@ -603,6 +603,11 @@ operations:
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/documents/metadata/search
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/metadata/tag-sizes
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

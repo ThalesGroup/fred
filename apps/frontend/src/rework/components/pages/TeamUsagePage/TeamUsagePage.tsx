@@ -74,6 +74,10 @@ export default function TeamUsagePage() {
   const isTeamAdmin = capabilities.canUpdateInfo && !isPersonalTeam;
   const isTeamEditor = capabilities.canUpdateResources && !isPersonalTeam;
 
+  // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
+  // client-side TTL, does not re-fetch on every render" policy
+  // KPI-ANALYTICS-RFC.md §2.6 already documents — every preset below used
+  // `true` instead, which ignored cache age and refetched on every mount.
   const {
     data: overTimeData,
     isLoading: overTimeIsLoading,
@@ -81,7 +85,7 @@ export default function TeamUsagePage() {
     isError: overTimeIsError,
   } = useUserTokenUsageOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
@@ -90,7 +94,7 @@ export default function TeamUsagePage() {
     isError: byAgentIsError,
   } = useUserTokenUsageByAgentQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   const {
@@ -99,7 +103,7 @@ export default function TeamUsagePage() {
     isError: byModelIsError,
   } = useUserTokenUsageByModelQuery(
     { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: 300 },
   );
 
   // Team-scoped shared section (§2.5 Page 2) — skipped entirely for anyone
@@ -107,7 +111,7 @@ export default function TeamUsagePage() {
   // because `hasElevatedTeamRole` is this frontend's single source of truth
   // for the distinction.
   const teamArgs = { since: timeRange.since, until: timeRange.until, teamId };
-  const teamQueryOpts = { skip: !elevated || !teamId, refetchOnMountOrArgChange: true };
+  const teamQueryOpts = { skip: !elevated || !teamId, refetchOnMountOrArgChange: 300 };
 
   const { data: teamAgentsTotalData, isLoading: teamAgentsTotalIsLoading } = useAgentsTotalQuery(
     teamArgs,
@@ -163,7 +167,7 @@ export default function TeamUsagePage() {
   // resolved, same gate as every other team-scoped query above.
   const { data: activitySummaryData, isLoading: activitySummaryIsLoading } = useTeamActivitySummaryQuery(teamArgs, {
     skip: !isTeamAdmin || !teamId,
-    refetchOnMountOrArgChange: true,
+    refetchOnMountOrArgChange: 300,
   });
 
   const handleRangeChange = (range: TimeRange) => {

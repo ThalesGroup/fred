@@ -1,7 +1,7 @@
 # RFC OPS-04 — Unified Task Event Stream & Worker-Action Audit
 
 **ID:** OPS-04  
-**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · **rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed** · **rev. 3 (2026-07-25): persisted acknowledgement — proposed, driven by OBSERV-02's role-based dashboard finalization (§2.10)**  
+**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed · rev. 3 (2026-07-25): persisted acknowledgement — proposed, driven by OBSERV-02's role-based dashboard finalization (§2.10) · **rev. 4 (2026-07-27): per-service task persistence, rejects rev. 2's central-ownership/`RemoteTaskClient` design (§2.6/§2.9) — confirmed**  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-04  
 
@@ -39,6 +39,36 @@
 > rule, §2.6) survives a reload instead of being dropped at the list-endpoint boundary. Neither
 > change adds a table, an endpoint, or a parallel model — see `PLATFORM-IMPORT-RFC.md` §11 for
 > the full rationale and the producer-side wiring (`import_export/api.py`).
+
+> **Amendment (2026-07-27) — rev. 4, per-service task persistence, rejects central ownership.**
+> Rev. 2's §2.6/§2.9 (one `task_run`/`task_event_log` pair owned by control-plane, every other
+> backend recording remotely via a `RemoteTaskClient`) was never confirmed — it shipped as
+> "proposed" and was never implemented: `RemoteTaskClient` does not exist anywhere in the
+> codebase, and knowledge-flow's own Alembic chain (`1c9a54674ebf_add_task_run_scheduled_for.py`
+> and siblings) still `ALTER`s `task_run` in place, never `CREATE`s it — it silently rides on
+> control-plane's copy of the table.
+>
+> This was found, not theorised: control-plane-backend and knowledge-flow-backend are wired to
+> the **same physical Postgres database** (`POSTGRES_FRED_DB`, both `docker-compose-postgres.yml`
+> and the GKE Helm secrets), and `TaskRunRow`/`TaskEventLogRow` (`fred_core/tasks/orm_models.py`)
+> carry no per-service discriminator — so every task either backend creates lands in one shared
+> table, and the admin Activity page (§3.4), which queries each backend's `GET /tasks`
+> independently and merges client-side, displayed every task **twice**.
+>
+> **Decision: reject centralisation, adopt per-service isolation instead.** Each backend keeps
+> writing its own `task_run`/`task_event_log` **locally** (no new HTTP recording path, no new
+> service-to-service M2M auth surface, no new single point of failure for every other backend's
+> task visibility) — the same model already proven correct by the `evaluation` backend, which has
+> carried its own dedicated Postgres database since 2026-07-07 and has never shown a duplicate.
+> The fix is infrastructure-only: give knowledge-flow the same dedicated database evaluation
+> already has, scoped **only** to `task_run`/`task_event_log` — knowledge-flow's `tag`/
+> `document_metadata` tables stay in the shared database, because control-plane's platform
+> import/export/reset (`PLATFORM-IMPORT-RFC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27/§31)
+> genuinely needs them in the same atomic transaction as its own `agent_instance`/`team_metadata`/
+> `prompt` rows — task rows never participate in that transaction, so nothing requires them to be
+> co-located. See §2.9 (rewritten), §2.6, §3.4, §5, §6 and §7 below for the corrected design; the
+> superseded rev. 2 text is kept, marked, not deleted. Execution tracked as a `swift ga`
+> GitHub issue (per-service Postgres isolation for knowledge-flow's task tables).
 
 ---
 
@@ -246,7 +276,20 @@ All detail/event/params models live in `fred_core/tasks/models.py`; backends imp
 
 ### 2.6 Persistence — two tables (both mandatory)
 
-**One pair, owned by control-plane** (`fred_swift`) — the single, central home for every task/audit record (rev. 2; see §2.9). The Alembic migrations for `task_run` / `task_event_log` run **only** in control-plane; no other backend creates these tables. (Rev. 1 placed a pair in each backend's database and treated the audit log as a query-time union; rev. 2 centralises — see §2.9 and §7.)
+**One pair per backend, each in that backend's own database** (rev. 4; see §2.9 — corrects rev. 2's
+"one pair, owned by control-plane" design below, which was proposed but never confirmed or
+implemented). Each backend runs its own Alembic migrations for `task_run`/`task_event_log`
+against its own database — control-plane's is the `fred` database it already owns; knowledge-flow
+needs a dedicated database of its own (its `tag`/`document_metadata` tables stay in the shared
+`fred` database for the import/export atomic-transaction reason in §2.9); `evaluation` already has
+one. ~~Rev. 2 text (superseded, kept for history): "owned by control-plane (`fred_swift`) — the
+single, central home for every task/audit record. The Alembic migrations for `task_run` /
+`task_event_log` run only in control-plane; no other backend creates these tables."~~ (Rev. 1
+placed a pair in each backend's database and treated the audit log as a query-time union — the
+right instinct, wrong reason rejected in rev. 2's write-up: rev. 1 wasn't wrong about *where* the
+tables live, only that nothing scoped `GET /tasks` to the calling backend's own rows when two
+backends shared a database. Rev. 4 keeps rev. 1's per-backend tables and fixes the real bug —
+see §2.9.)
 
 `task_run` is the current-state summary (one row per task, updated in place) — answers "current status?" cheaply. `task_event_log` is the append-only journal (one row per event) — the source of truth for replay; without it `Last-Event-ID` is meaningless.
 
@@ -361,50 +404,76 @@ The correction is emitted as a normal `TaskEvent` via `TaskService.record(...)`,
 
 **Principle.** Reconciliation only *reflects the executor's verdict* — it never invents fred-side timeouts or retries. Temporal owns liveness and timeouts; this layer makes the durable task mirror that truth.
 
-### 2.9 Central persistence & remote recording (rev. 2)
+### 2.9 Per-service task persistence (rev. 4, 2026-07-27 — replaces rev. 2's centralisation below)
 
-Rev. 1 gave each backend its own tables and the audit log was a query-time union across databases (federated). Rev. 2 **centralises**: there is exactly one pair of tables, **owned by control-plane** (`fred_swift`), and every other backend records into it remotely. control-plane is the task hub — for persistence *and* for live SSE. This one journal **is** the audit log.
+**Each backend persists its own `task_run`/`task_event_log`, in its own database, and serves its
+own `GET /tasks`/SSE.** No new machinery: this is exactly `TaskStore`/`TaskService` as they exist
+today (`libs/fred-core/fred_core/tasks/store.py`) — the fix is entirely at the infrastructure
+layer, not the application layer. control-plane already correctly owns its copy (the `fred`
+database it was created in). knowledge-flow needs its **own dedicated database**, mirroring the
+one `evaluation` already has: provision `POSTGRES_KNOWLEDGE_FLOW_DB`/`_USER`/`_PASSWORD` the same
+way `86f2c3b` (`fred-deployment-factory`) provisioned `POSTGRES_EVALUATION_DB`, wire a second
+engine in knowledge-flow's `ApplicationContext` (its `metadata_store`/`tag_store`/`resource_store`
+keep using the existing shared engine — only `get_task_service()` moves), and give knowledge-flow's
+Alembic chain a real `CREATE TABLE` for `task_run`/`task_event_log` on that new database (today it
+only carries `ALTER` migrations, because it has always silently ridden on control-plane's copy —
+see the rev. 4 amendment above).
 
-**The seam.** `TaskService` gets a pluggable persistence backend, exactly like `IScheduler` (memory/temporal) and `IEventBus` (memory/postgres) — the same substitution pattern, so this is idiomatic, not new machinery:
+**Why not co-locate knowledge-flow's task tables with its `tag`/`document_metadata` tables in the
+shared database instead of a second dedicated one?** Because nothing requires it: unlike
+`tag`/`document_metadata` (which control-plane's platform import/export/reset genuinely writes in
+the *same atomic transaction* as its own `agent_instance`/`team_metadata`/`prompt` rows — see the
+rev. 4 amendment above), `task_run` writes always go through `TaskService.record(...)` **outside**
+any such transaction, in every producer, today. There is no atomicity requirement pulling task
+rows into the shared database — keeping them there was simply an infrastructure default nobody
+had reconsidered.
 
-| Persistence backend | Used by | Behaviour |
-|---|---|---|
-| `LocalDbTaskStore` | control-plane (API + worker) | writes `task_run` / `task_event_log` directly to `fred_swift` |
-| `RemoteTaskClient` | knowledge-flow API, knowledge-flow worker, evaluator | POSTs task create + events to control-plane's ingest API |
+**The Activity page stays multi-source, by design, not as a stopgap** (corrects §3.4's "Rev. 2:
+single-source" text below): the frontend already queries each backend's own `GET /tasks`
+independently and merges client-side (`TaskActivity.tsx`) — that code was written *assuming*
+per-backend isolation, and needs no change once the isolation is real. `taskBackendFor` in
+`taskKinds.ts` is already the source of truth for which backend a given `kind` belongs to.
 
-Activity code (`ctx.emit(event)`) is identical either way; only the wiring differs. Adding a producer is a config choice, not new code.
+**Rejected alternative — central persistence + `RemoteTaskClient` (rev. 2, proposed 2026-07-07,
+never implemented, formally rejected 2026-07-27).** Kept below for history; do not build this.
 
-**The ingest endpoint.** control-plane exposes an internal recording API:
-
-```
-POST /control-plane/v1/tasks/ingest   Body: TaskEvent (create-or-append)  → 202
-```
-
-authenticated with a **service bearer** — the same client-credentials M2M pattern CTRLP-12 already ships, in the reverse direction (there control-plane calls knowledge-flow/runtime; here knowledge-flow/evaluator call control-plane). The endpoint requires a recognised service principal and owns `team_id`; it never trusts a caller-supplied identity for authz.
-
-**Live SSE stays single-homed.** Because all rows live in control-plane, all task SSE is served from `/control-plane/v1/tasks/{id}/events`. A remote producer pushes an event → control-plane persists it to `task_event_log` and publishes to its `IEventBus` → connected browsers receive it. Knowledge-flow no longer serves task SSE; the ingestion UI subscribes to control-plane. This is what makes the Activity page single-source (§3.4).
-
-**Configuration — knowledge-flow API *and* worker are configured identically.** Both are producers: the worker runs the ingestion activities that emit progress; the API creates the task. They share one config block (and the evaluator uses the same block with its own `client_id`):
-
-```yaml
-# knowledge-flow configuration — applies to the API deployment AND the worker deployment
-tasks:
-  persistence: remote                                  # control-plane owns the tables
-  control_plane_base_url: http://control-plane:8000    # in-cluster service URL
-  service_identity:                                    # client-credentials to authenticate to control-plane
-    client_id: knowledge-flow
-    # client_secret from env/secret; token minted lazily, audienced for control-plane
-```
-
-control-plane itself sets `tasks.persistence: local` and needs none of the remote fields.
-
-**Startup ordering — no chicken-and-egg.** Recording a task is *lazy and failure-soft*, so nothing here creates a boot dependency:
-
-1. **No boot-time dependency.** `RemoteTaskClient` opens no connection at startup; it authenticates and calls control-plane only when the *first task event is recorded*. Knowledge-flow (API and worker) start cleanly while control-plane is still coming up.
-2. **No circular dependency.** control-plane starts without any producer; producers start without control-plane. The only shared *runtime* need is on the recording path — never the boot path. (control-plane→knowledge-flow calls, e.g. erasure fan-out, are likewise request-time, not startup.)
-3. **Runtime failure degrades, never crashes.** If control-plane (or Keycloak) is unreachable when an event is pushed, the client retries with backoff; the ingestion/erasure job itself still runs to completion. Events lost during an outage are backfilled to a terminal state by the reconciliation sweeper (§2.8) — the exact mechanism that already covers "the worker emitted nothing". Live progress may stall during the outage; the durable record still converges.
-4. **No deployment ordering, no init-containers.** Pods may start in any order; liveness/readiness probes are independent. Only control-plane runs the task-table migrations, so there is no cross-backend migration ordering either.
-5. **Keycloak** is the one shared dependency (both backends already require it for normal auth); the service token is minted lazily on first use and cached, so even Keycloak is not a boot gate for tasks.
+> Rev. 2 proposed centralising: exactly one pair of tables, owned by control-plane, with every
+> other backend recording into it remotely over HTTP (a `RemoteTaskClient` POSTing to a new
+> `POST /control-plane/v1/tasks/ingest`, authenticated with a client-credentials service bearer),
+> so that control-plane became the task hub for both persistence and live SSE.
+>
+> **Why this is rejected, not merely "not started":** (1) it puts a synchronous HTTP round-trip
+> and a new M2M auth dependency on the *recording path* of an unrelated backend's hot loop — a
+> single large ingestion job can emit hundreds of progress events; (2) it makes control-plane a
+> single point of failure for every other backend's task visibility, not just its own; (3) it
+> hands control-plane ownership of data that is knowledge-flow's own operational concern (its
+> ingestion pipeline's progress), which is a domain-boundary violation, not a simplification;
+> (4) it requires a new authenticated ingest endpoint, a new service-identity/client-credentials
+> wiring on two more deployments (knowledge-flow API + worker), and removes knowledge-flow's
+> ability to report its own task status if control-plane is degraded — real new failure modes for
+> a problem (accidental table sharing) that infrastructure isolation fixes with zero new code.
+>
+> The startup-ordering argument made for it below (lazy, failure-soft recording) is real, but it
+> only justifies *tolerating* the coupling `RemoteTaskClient` introduces — it was never a reason
+> to introduce that coupling in the first place when per-service isolation avoids it entirely.
+>
+> ~~**The seam.** `TaskService` gets a pluggable persistence backend, exactly like `IScheduler`
+> (memory/temporal) and `IEventBus` (memory/postgres) — the same substitution pattern, so this is
+> idiomatic, not new machinery: `LocalDbTaskStore` (control-plane, writes directly) vs
+> `RemoteTaskClient` (knowledge-flow API/worker, evaluator — POSTs to control-plane's ingest API).
+> Activity code (`ctx.emit(event)`) is identical either way; only the wiring differs.~~ This seam
+> was never built — `TaskStore` has no pluggable-backend abstraction today, despite the RFC text
+> above describing it as already-idiomatic-like-`IScheduler`.
+>
+> ~~**Configuration** — knowledge-flow API and worker would share one config block
+> (`tasks.persistence: remote`, `control_plane_base_url`, a `service_identity` client-credentials
+> block); control-plane would set `tasks.persistence: local`.~~
+>
+> ~~**Startup ordering** — recording would be lazy and failure-soft: no boot-time dependency (the
+> client only connects on the first recorded event), no circular dependency, runtime failures
+> degrade via retry-with-backoff and the existing reconciliation sweeper (§2.8) rather than
+> crashing, and only control-plane would run the task-table migrations so there'd be no
+> cross-backend migration ordering.~~
 
 ### 2.10 Persisted acknowledgement (rev. 3, 2026-07-25)
 
@@ -512,7 +581,14 @@ Task records hold only operational metadata: state, progress, step label, error,
 
 **One page, faceted by kind and state.** The Activity page is a filterable table (kind, state, time window) with three natural groupings reused from the erasure work — **scheduled** (`state=pending`, ordered by `scheduled_for`), **in progress** (`running`/`cancelling`), **history** (terminal, newest first) — plus per-row drill-down to SSE. Erasure rows show their `reason` (Deleted by user / Member removed / Idle expired). The tray is the SSE companion; the Activity page is the durable dashboard (polling + optional drill-down).
 
-**Single-source (rev. 2).** Because control-plane is the central task hub (§2.9), the tray and the Activity page read **one** endpoint — `/control-plane/v1/tasks` — regardless of which backend produced the task. Knowledge-flow ingestion, control-plane migration/erasure/deletion, and evaluator campaigns all land in the same table and stream from the same SSE endpoint, so there is no client-side aggregation across base paths. (Rev. 1 / the former EVAL-02 plan merged multiple producer mounts in the frontend; centralisation removes that complexity — the evaluator's adoption is now simply "record via the `RemoteTaskClient`", §5.)
+**Multi-source, per backend (rev. 4 — corrects the "single-source" text this replaces).** The tray
+and the Activity page query each backend's own `GET /tasks` independently and merge client-side
+(`TaskActivity.tsx`, `taskBackendFor` in `taskKinds.ts` routing each `kind` to its owning backend)
+— this is already implemented and is the permanent design, not a rev.-1 leftover to remove. See
+§2.9 for why: each backend persists its own tasks in its own database, so there is nothing to
+centralise. ~~Rev. 2 text (superseded): "Because control-plane is the central task hub (§2.9), the
+tray and the Activity page read one endpoint — `/control-plane/v1/tasks` — regardless of which
+backend produced the task... there is no client-side aggregation across base paths."~~
 
 ### 3.5 Total coverage — every worker action is a task
 
@@ -536,7 +612,12 @@ The lifecycle-*enforcement* half of the erasure gaps (wiring the enqueue, the id
 
 ### 3.6 Audit retention & immutability
 
-An audit log is worthless if it is short-lived or editable. Rev. 2 sets three rules on the single, central journal (§2.9) — no new store, one home, so retention/immutability/export are configured once rather than N times:
+An audit log is worthless if it is short-lived or editable. Rev. 2 sets three rules; rev. 4 (§2.9)
+applies them **per backend's own journal** rather than one central one — each backend configures
+retention/immutability/export for its own `task_event_log` (there are as many journals as
+backends, not one), which is a small repeat, not the N-fold burden rev. 2 worried about, since
+there are only three backends and the rules themselves (append-only, no pruning, erasure-exempt)
+are identical library defaults in `fred_core.tasks`, not something each backend hand-implements:
 
 - **Append-only.** `task_event_log` is already insert-only (§2.6); rev. 2 makes it contractual: events are never updated or deleted in place. `task_run` remains the mutable current-state summary; the journal is the immutable truth.
 - **Long retention, no silent pruning.** Terminal tasks are a UI *filter* (`scope=user` hides them), never a deletion. Admin scopes return terminal history within an explicit time window (§2.7). There is **no cleanup job** that drops task history; if archival is ever needed it is an explicit, configured, audited policy — not an implicit TTL. (Temporal's own history TTL is irrelevant — it is not the audit store, §7.)
@@ -573,9 +654,9 @@ function useTaskStream(taskId: string | null): {
 
 ## 5. Consumers
 
-- **Ingestion** (`kind = "ingestion"`, knowledge-flow). The `POST /upload-process-documents` NDJSON stream co-emits `task_id` and `document_uid` on the same line (the metadata row is created before the workflow is submitted), making the task linkable to its document row immediately. Ingestion panels consume `useTaskStream`; per-document live progress replaces polling. **Rev. 2:** knowledge-flow (API *and* worker) records through `RemoteTaskClient` to control-plane (§2.9); it no longer owns task tables or serves task SSE — the frontend subscribes to control-plane for ingestion progress.
+- **Ingestion** (`kind = "ingestion"`, knowledge-flow). The `POST /upload-process-documents` NDJSON stream co-emits `task_id` and `document_uid` on the same line (the metadata row is created before the workflow is submitted), making the task linkable to its document row immediately. Ingestion panels consume `useTaskStream`; per-document live progress replaces polling. **Rev. 4 (corrects rev. 2 below):** knowledge-flow (API and worker) keeps owning its `task_run`/`task_event_log` tables and its own task SSE, in its own dedicated database (§2.9) — the frontend's ingestion panels subscribe to knowledge-flow directly, same as today. ~~Rev. 2 text (superseded, never built): "knowledge-flow (API and worker) records through `RemoteTaskClient` to control-plane; it no longer owns task tables or serves task SSE — the frontend subscribes to control-plane for ingestion progress."~~
 - **Migration / platform import** (`kind = "migration"`, control-plane, platform-owner only). The task/event contract supplies durable task registration, replayable SSE, typed `MigrationDetail`, and UI rendering. The current Kea-to-Swift business order is governed by [`KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md); the MIGR-05 backend workflow is governed by [`PLATFORM-IMPORT-RFC.md`](PLATFORM-IMPORT-RFC.md). Keep migration-specific step names in those documents, not in this shared task/event RFC.
-- **Evaluation** (`kind = "evaluation"`, standalone `fred-agent-evaluator`). Campaign progress counters only; target `{ type: "evaluation_campaign", id, label }`; team-scoped and readable by authorized team members (§3.2). Detail per `EvaluationDetail`. **Adoption (folded from EVAL-02):** the evaluator records through `RemoteTaskClient` to control-plane (§2.9) and drops its bespoke `/campaigns/{id}/events` SSE — it does *not* mount its own `/tasks` surface; the frontend reads control-plane (§3.4 single-source). Task `succeeded` ≠ evaluation verdict — the task plane stays distinct from the evaluation-domain plane. See `AGENT-EVALUATION-RFC.md` (EVAL-01) §5.
+- **Evaluation** (`kind = "evaluation"`, standalone `fred-agent-evaluator`). Campaign progress counters only; target `{ type: "evaluation_campaign", id, label }`; team-scoped and readable by authorized team members (§3.2). Detail per `EvaluationDetail`. **Adoption (folded from EVAL-02; rev. 4 corrects the text below):** the evaluator owns its own `task_run`/`task_event_log` in its own already-dedicated database (provisioned 2026-07-07, `fred-deployment-factory` commit `86f2c3b`) and serves its own `/tasks` — the frontend queries it directly (`useListTasksEvaluationV1TasksGetQuery`, §2.9), exactly the pattern rev. 4 extends to knowledge-flow. This is, and was always, correct — the evaluator never needed `RemoteTaskClient` to avoid duplication, because it never shared a database with anyone. Task `succeeded` ≠ evaluation verdict — the task plane stays distinct from the evaluation-domain plane. See `AGENT-EVALUATION-RFC.md` (EVAL-01) §5. ~~Rev. 2 text (superseded, never built): "the evaluator records through `RemoteTaskClient` to control-plane and drops its bespoke `/campaigns/{id}/events` SSE — it does not mount its own `/tasks` surface; the frontend reads control-plane (single-source)."~~
 - **Erasure** (`kind = "erasure"`, control-plane; shipped CTRLP-12). Deferred conversation delete emits a future-dated `erasure` task (`scheduled_for = due_at`), advanced `pending → running → succeeded` by the lifecycle worker; a partial receipt stays `running` for retry, never `failed`. `ErasureDetail` carries `reason` + per-store counts, no content (§3.3). **CTRLP-13** extends the producer so member-removal and idle-expiry enqueues each emit a paired task (§3.5); the enforcement mechanics live in the RGPD RFC, the surfacing here.
 - **Deletion** (`kind = "deletion"`, control-plane; rev. 2). A principal/entity is removed — user-account deletion today (`DeletionDetail.subject = "user_account"`), extensible to team disband later. The task is emitted at the action site (`delete_user`) and may be immediately terminal for a synchronous op; `cascade_scheduled` counts the downstream `erasure` tasks the deletion spawns, giving an auditable "account deleted → N conversations erased" chain. This closes the last coverage gap in §3.5. `PurgeQueueStore` and `LifecycleManagerWorkflow` are unchanged; they gain a task emission, not a rewrite.
 
@@ -584,9 +665,9 @@ function useTaskStream(taskId: string | null): {
 ## 6. Impact on existing code
 
 - **`libs/fred-core`** — add `fred_core/tasks/` (`models.py`, `bus.py`, `scheduler.py`, store/service, reconciliation); incorporate the existing `SchedulerBackend` enum and `TemporalClientProvider`.
-- **`apps/knowledge-flow-backend`** — `BaseScheduler`'s public API is unchanged; its internal asyncio/Temporal dispatch delegates to `IScheduler`. `record_workflow_status` / `record_current_document` activities emit `TaskEvent`; `get_progress()` and `ProcessDocumentsProgressResponse` remain until UI callers move to `useTaskStream`. **Rev. 2:** knowledge-flow (API + worker) records via `RemoteTaskClient` (§2.9) — it **no longer owns `task_run`/`task_event_log` tables or a task SSE endpoint** (rev. 1 added them here; rev. 2 removes that ownership). Configure `tasks.persistence: remote` + `control_plane_base_url` + a client-credentials `service_identity` on both the API and worker deployments.
-- **`apps/control-plane-backend`** — add `tasks/` wiring + `migration/` step activities (using `IScheduler` directly); `PurgeQueueStore` untouched; own the central `task_run` + `task_event_log` migrations and the `POST /tasks/ingest` endpoint (§2.9); serve all task SSE; host the Activity page. Configure `tasks.persistence: local`.
-- **Frozen contracts** — `RUNTIME-EXECUTION-CONTRACT.md` unchanged (task endpoints are product/admin surface). `CONTROL-PLANE-PRODUCT-CONTRACT.md` documents the `/api/v1/tasks*` endpoints (incl. `POST /tasks/ingest`), the `erasure`/`deletion` kinds, and the two central tables.
+- **`apps/knowledge-flow-backend`** — `BaseScheduler`'s public API is unchanged; its internal asyncio/Temporal dispatch delegates to `IScheduler`. `record_workflow_status` / `record_current_document` activities emit `TaskEvent`; `get_progress()` and `ProcessDocumentsProgressResponse` remain until UI callers move to `useTaskStream`. **Rev. 4 (corrects rev. 2 below, tracked as a `swift ga` GitHub issue):** knowledge-flow keeps owning `task_run`/`task_event_log` and its task SSE endpoint (§2.9) — the only change is that they move to a **dedicated Postgres database** of knowledge-flow's own (provisioned like `evaluation`'s, `fred-deployment-factory` commit `86f2c3b`), instead of accidentally sharing control-plane's `fred` database; `ApplicationContext` gains a second engine, used only by `get_task_service()`; `metadata_store`/`tag_store`/`resource_store` are unaffected. ~~Rev. 2 text (superseded, never built): "knowledge-flow (API + worker) records via `RemoteTaskClient` — it no longer owns `task_run`/`task_event_log` tables or a task SSE endpoint. Configure `tasks.persistence: remote` + `control_plane_base_url` + a client-credentials `service_identity` on both the API and worker deployments."~~
+- **`apps/control-plane-backend`** — add `tasks/` wiring + `migration/` step activities (using `IScheduler` directly); `PurgeQueueStore` untouched; own its own `task_run` + `task_event_log` migrations (in the `fred` database it already has); serve its own task SSE; host the Activity page. ~~Rev. 2 text (superseded): "own the central `task_run` + `task_event_log` migrations and the `POST /tasks/ingest` endpoint; serve all task SSE."~~ There is no `POST /tasks/ingest` endpoint under rev. 4 — nothing records remotely.
+- **Frozen contracts** — `RUNTIME-EXECUTION-CONTRACT.md` unchanged (task endpoints are product/admin surface). `CONTROL-PLANE-PRODUCT-CONTRACT.md` documents control-plane's own `/api/v1/tasks*` endpoints and the `erasure`/`deletion` kinds — no `POST /tasks/ingest`, no cross-backend table (rev. 4).
 
 ---
 
@@ -599,4 +680,5 @@ function useTaskStream(taskId: string | null): {
 - **Temporal workflow history as the audit log** — rejected. Temporal history is retention-capped, keyed by workflow-id not by team/user, has no team-scoped authz, and does not cover non-Temporal actions (synchronous user deletion, asyncio ingestion). Temporal is one execution engine behind `IScheduler`; the durable, queryable, content-safe audit substrate is `task_event_log` (§3.6).
 - **A separate dedicated audit-log store/service** — rejected. `task_run` + append-only `task_event_log` already carry state, target, actor (`created_by`), scope (`team_id`), timing, and a per-store receipt, behind one scoped API and one page. A parallel audit store would duplicate all of it and re-open the coverage problem. Audit is a *policy* on the existing journal (§3.6), not new infrastructure.
 - **A per-feature schedule/monitor widget (e.g. erasure schedule in team settings)** — rejected, and actively reversed in rev. 2. Feature-specific surfaces fragment the operator's view and each re-implement scoping/empty-states. One Activity page faceted by `kind` (§3.4) is the invariant.
-- **Federated per-backend task tables** (rev. 1) — rejected in rev. 2. A pair of tables in every backend's DB makes "the audit log" a query-time union across databases, with retention/immutability/export enforced N times and cross-backend queries fanning out. Rev. 2 centralises the tables in control-plane and has producers record remotely (§2.9); this also collapses the frontend to single-source (§3.4). Cost — producers depend on control-plane on the *recording* path — is bounded: recording is lazy and failure-soft, and outages are covered by the existing reconciliation sweeper (§2.8), so there is no startup coupling.
+- **Federated per-backend task tables** (rev. 1) — rev. 2 rejected this in favour of centralisation; **rev. 4 reverses that call and re-adopts it** (§2.9). Rev. 2's stated cost ("the audit log becomes a query-time union across databases, retention/immutability/export enforced N times") turned out smaller in practice than the cost of the alternative: there are exactly three backends, the retention/immutability rules are identical `fred_core.tasks` library defaults rather than hand-implemented per backend (§3.6), and "cross-backend queries fanning out" describes exactly one query — the Activity page, which already does this today and needs no new code. Rev. 1's actual flaw was never "federated tables" — it was that nothing scoped a backend's `GET /tasks` to rows it created when two backends happened to share a database, which is an infrastructure bug, not an argument for centralisation.
+- **Central persistence + `RemoteTaskClient`** (rev. 2, §2.9) — proposed 2026-07-07, **rejected 2026-07-27, never implemented in between.** Adds a synchronous HTTP + M2M-auth dependency to every other backend's task-recording hot path, makes control-plane a single point of failure for task visibility platform-wide, and hands it ownership of another service's operational data. Found to be unnecessary: `evaluation` has run fully isolated (its own dedicated database) since 2026-07-07 and never needed it — the actual bug (control-plane and knowledge-flow accidentally sharing one Postgres database, discovered via duplicate rows on the Activity page) is fixed by giving knowledge-flow the same isolation, at the infrastructure layer only. See the rev. 4 amendment at the top of this document and §2.9.

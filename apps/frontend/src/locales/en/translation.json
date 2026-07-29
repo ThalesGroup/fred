@@ -1350,7 +1350,19 @@
         "tabs": {
           "file": "File",
           "raw": "Raw"
-        }
+        },
+        "loading": "Loading…",
+        "markdownUnavailable": "No Markdown version was generated for this document."
+      },
+      "storage": {
+        "aria": "Storage space used",
+        "usedOfTotal": "{{used}} / {{total}}",
+        "used": "{{used}} used"
+      },
+      "pagination": {
+        "next": "Next page",
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Previous page"
       },
       "status": {
         "failed": "Error",
@@ -1524,16 +1536,6 @@
           "confirmLabel": "Reset",
           "cancelLabel": "Cancel",
           "error": "Reset failed"
-        },
-        "resetFull": {
-          "launch": "Full teardown",
-          "running": "Wiping…",
-          "taskLabel": "Platform full teardown",
-          "confirmTitle": "Full teardown — wipe everything except the root admin?",
-          "confirmMessage": "Permanently deletes every agent, tag, document, team, and prompt, every OpenFGA permission, and every Keycloak user. Only the identity that completed root bootstrap and your own account (if different) survive. This is different from \"Reset platform\" above — use it only to recover from a failed cutover import.",
-          "confirmLabel": "Wipe everything",
-          "cancelLabel": "Cancel",
-          "error": "Full teardown failed"
         },
         "stats": {
           "title": "Overview",

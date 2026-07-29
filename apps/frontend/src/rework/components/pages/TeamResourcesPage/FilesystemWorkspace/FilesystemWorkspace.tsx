@@ -35,7 +35,7 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
-import { formatBytes } from "../../../../utils/formatBytes.ts";
+import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";

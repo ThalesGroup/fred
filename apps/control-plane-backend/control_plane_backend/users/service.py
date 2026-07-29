@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Iterable
 from typing import Optional
 from uuid import UUID
@@ -11,6 +12,7 @@ from fred_core import (
     KeycloackDisabled,
     KeycloakUser,
 )
+from fred_core.common import ThreadSafeLRUCache
 from fred_core.users import GcuVersionsType, UserRow
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakPostError
@@ -27,6 +29,11 @@ from control_plane_backend.users.schemas import (
 logger = logging.getLogger(__name__)
 
 _USER_PAGE_SIZE = 200
+
+_USER_SUMMARY_CACHE_TTL_SECONDS = 300
+_USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
+    ThreadSafeLRUCache(max_size=5000)
+)
 
 
 def _get_keycloak_admin(
@@ -231,6 +238,13 @@ async def get_users_by_ids(
 
     Example:
     - `summaries = await get_users_by_ids(["u-1", "u-2"], deps)`
+
+    #2148: results are cached per user id for `_USER_SUMMARY_CACHE_TTL_SECONDS`
+    (5 minutes) — display names change rarely, and callers like
+    `_enrich_teams_with_membership` invoke this with every distinct team admin
+    id on every bootstrap/teams load, which was an uncached Keycloak Admin
+    REST fan-out. The 404 fallback (`UserSummary(id=...)`) is cached too, so a
+    stale/deleted admin id doesn't re-hit Keycloak on every call either.
     """
     unique_ids = {user_id for user_id in user_ids if user_id}
     if not unique_ids:
@@ -241,16 +255,34 @@ async def get_users_by_ids(
         logger.info("Keycloak admin client not configured; returning fallback users.")
         return {}
 
-    ordered_ids = sorted(unique_ids)
+    now = time.time()
+    summaries: dict[str, UserSummary] = {}
+    ids_to_fetch: list[str] = []
+    for user_id in unique_ids:
+        cached = _USER_SUMMARY_CACHE.get(user_id)
+        if cached is not None:
+            expires_at, summary = cached
+            if expires_at > now:
+                summaries[user_id] = summary
+                continue
+            _USER_SUMMARY_CACHE.delete(user_id)
+        ids_to_fetch.append(user_id)
+
+    if not ids_to_fetch:
+        return summaries
+
+    ordered_ids = sorted(ids_to_fetch)
     coroutines = {user_id: admin.a_get_user(user_id) for user_id in ordered_ids}
     raw_results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
 
-    summaries: dict[str, UserSummary] = {}
+    expires_at = time.time() + _USER_SUMMARY_CACHE_TTL_SECONDS
     for user_id, result in zip(ordered_ids, raw_results):
         if isinstance(result, BaseException):
             if isinstance(result, KeycloakGetError) and result.response_code == 404:
                 logger.debug("User %s not found in Keycloak.", user_id)
-                summaries[user_id] = UserSummary(id=user_id)
+                fallback = UserSummary(id=user_id)
+                summaries[user_id] = fallback
+                _USER_SUMMARY_CACHE.set(user_id, (expires_at, fallback))
                 continue
             raise result
 
@@ -259,9 +291,13 @@ async def get_users_by_ids(
             continue
 
         try:
-            summaries[user_id] = UserSummary.from_raw_user(result)
+            summary = UserSummary.from_raw_user(result)
         except ValueError:
             logger.debug("User %s payload missing identifier: %s", user_id, result)
+            continue
+
+        summaries[user_id] = summary
+        _USER_SUMMARY_CACHE.set(user_id, (expires_at, summary))
 
     return summaries
 
@@ -297,6 +333,60 @@ async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
 
     logger.info("Collected %d users from Keycloak.", len(users))
     return users
+
+
+async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
+    """
+    Resolve every Keycloak username in the realm to its `sub`, in one pass.
+
+    Why this function exists:
+    - the kea->swift migration (`import_export/kea_reconciliation.py`) resolves
+      potentially thousands of distinct usernames per run; one Admin API call
+      per username does not scale to a cutover-size realm (~2000 users). This
+      reuses the same paginated sweep `list_users` already relies on
+      (`_fetch_all_users`) so the whole realm is listed once, then every
+      username resolves against an in-memory dict instead of a network call.
+
+    How to use it:
+    - call once per migration run; the caller (`KeaUserResolver`) treats the
+      result as the authoritative snapshot of the target realm for the whole
+      run — a username missing from it is unresolved (PENDING), never looked
+      up individually
+    - raises `KeycloakM2MUserOperationDisabledError` when Keycloak M2M is
+      disabled — a disabled admin client used to come back as `{}`, the exact
+      same shape as a real bulk sweep that genuinely found zero users, so a
+      cutover-scale kea run with M2M misconfigured silently resolved every
+      single identity to PENDING with nothing in the report pointing at the
+      real cause (KEA CUTOVER 2026, 2026-07-28: caught only by a manual
+      identity spot-check, not by the tooling). Raising here instead reuses
+      the same domain error and HTTP 503 mapping `create_user` already raises
+      for the identical disabled-M2M case (`users/api.py`'s
+      `register_exception_handlers`), and — same as any other bulk-sweep
+      failure below — `KeaUserResolver.create()` is called before the
+      Postgres transaction opens, so this aborts the import before any write
+    - a real Keycloak/network failure raises and is left to propagate — never
+      swallowed into an empty snapshot
+
+    Example:
+    - `subs_by_username = await find_user_subs_bulk(user_deps)`
+    """
+    admin = _get_keycloak_admin(deps)
+    if isinstance(admin, KeycloackDisabled):
+        raise KeycloakM2MUserOperationDisabledError()
+
+    raw_users = await _fetch_all_users(admin)
+    out: dict[str, str] = {}
+    for raw_user in raw_users:
+        username = raw_user.get("username")
+        user_id = raw_user.get("id")
+        if (
+            isinstance(username, str)
+            and username
+            and isinstance(user_id, str)
+            and user_id
+        ):
+            out[username] = user_id
+    return out
 
 
 async def find_user_details_by_id(

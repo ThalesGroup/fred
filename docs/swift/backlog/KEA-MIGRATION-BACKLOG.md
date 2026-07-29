@@ -8,43 +8,70 @@ Set `owner:` in `id-legend.yaml` when a ticket is picked up.
 
 > **Operational source of truth:** [`ops/KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md)
 >
-> **Detailed runbook:** [`ops/MIGRATION-CASTLE-TO-S3NS.html`](../ops/MIGRATION-CASTLE-TO-S3NS.html)
-> (full procedure, organised by the four topics below — §1.1 identity · §1.4 data ·
-> §1.2/§1.3 metadata · §1.5 products). This backlog holds the authoritative topic definitions.
+> This backlog holds the authoritative topic definitions.
 
 ---
 
 ## Migration model — vocabulary & order (READ FIRST — shared language)
 
-Every migration discussion (chat, RFC, standup) uses **exactly these four topics**. They differ
+Every migration discussion (chat, RFC, standup) uses **exactly these three topics**. They differ
 in how they move and who owns them. Do not blur them.
+
+Identity is **not** a separate topic: at the start of a run, target Keycloak holds only the
+root admin, and there is no out-of-band step that pre-seeds it. Identity is resolved by
+**username** inline inside the metadata import (`kea_reconciliation.py`): `kea_sub → username`
+from the bundle, `username → swift_sub` from the live target Keycloak. Three outcomes —
+`MATCHED` (same `sub`), `RELINKED` (different `swift_sub` — that one is used everywhere),
+`PENDING` (username not yet in target Keycloak). A `PENDING` user never blocks the rest of the
+import; everything keyed on their identity is deferred and completed by re-running the same
+import after their first login. No kea `sub` is ever written as a Swift identity. See
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` for the live contract.
 
 | Topic | What it is | How it moves | Owner / tracked as |
 | --- | --- | --- | --- |
-| **identity** | Keycloak realm `app`: **users** (the `sub`) + **groups**. The IDs everything else points at. | Keycloak-native export→import, **out-of-band**, **IDs preserved**, merged into the pre-existing target realm. **Not in the export zip.** | platform/ops — **MIGR-04** |
 | **data** | Raw document **binaries** in MinIO (`*-documents/<document_uid>/input/…`). Irreplaceable. | `mc mirror`, **keys verbatim**, two-hop via the laptop. No key rewriting. | **MIGR-06** |
-| **metadata** | Structured records: Postgres rows (`tag, metadata, resource, mcp-server, teammetadata, users, agent`) **+ OpenFGA tuples**. | The **export `.zip`** → import (this is the import service). | **MIGR-02** (transform) + **MIGR-05** (import service) |
+| **metadata** | Structured records: Postgres rows (`tag, metadata, resource, mcp-server, teammetadata, users, agent`) **+ OpenFGA tuples**. Identity resolution (above) runs inline as part of this phase. | The **export `.zip`** → import (this is the import service). | **MIGR-02** (transform) + **MIGR-05** (import service) |
 | **products** | Derived, **reconstructable-from-data** artifacts: OpenSearch embeddings, processed markdown/media, tabular parquet. | **Not transported** — rebuilt on the target (re-vectorize). | **MIGR-07** |
 
-**Fixed order** (identity must precede everything because metadata tuples reference identity IDs):
+**Fixed order:**
 
 ```
 0. Freeze source (read-only) for a consistent capture
-1. identity   — Keycloak export→import, IDs preserved          (MIGR-04)
-2. data       — mc mirror the buckets, key-for-key             (MIGR-06)
-3. metadata   — export zip → import (Postgres + OpenFGA)       (MIGR-02 + MIGR-05)
-4. products   — re-vectorize on the target                     (MIGR-07)
-5. verify + cutover; keep source as rollback
+1. data       — mc mirror the buckets, key-for-key                          (MIGR-06)
+2. metadata   — export zip → import; identity resolved by username inline  (MIGR-02 + MIGR-05)
+3. products   — re-vectorize on the target                                  (MIGR-07)
+4. verify + cutover; keep source as rollback
+   (PENDING users complete their data on first login + re-running the same import)
 ```
 
 **Two runs, two ID disciplines:**
 - **kea → kea** (castle → s3ns, the **first** run): same schema, same names both ends
-  (DB `fred_kea`, store `kea`, buckets `kea-*`, index `kea-vector-index-mistral`, realm `app`).
+  (DB `fred_kea`, store `kea`, index `kea-vector-index-mistral`, realm `app`).
   **No transformation** — a faithful mirror.
 - **kea → swift** (later): identity & data assumptions hold unchanged; only **names map**
-  (store `kea`→`fred`, buckets `kea-*`→unprefixed, index `kea-…`→`vector-index-mistral`).
+  (store `kea`→`fred`, index `kea-…`→`vector-index-mistral`).
   The **metadata transform** (agent `payload_json`→`agent_instance`, per-user personal teams,
   UUID-only user-tuple filter) is swift-specific — see [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md).
+
+**Correction, 2026-07-27 — bucket naming was wrong above.** The `kea-*`→unprefixed
+bucket-name mapping stated in earlier versions of this section was a **local rehearsal
+artifact** (the docker-compose test stack prefixes its own kea-simulation buckets with
+`kea-` to keep them apart from the swift-simulation ones sharing the same SeaweedFS
+instance), not the real convention. Confirmed today against the actual GCS layout:
+- **kea/castle** (both the old MinIO deployment and the new GCS one — identical):
+  bucket names carry **no prefix at all** — `knowledge-flow-content-documents`,
+  `knowledge-flow-content-objects`, `control-plane-content-objects`, `filesystem`, `app-bucket`.
+- **swift/S3NS**: bucket names carry whatever prefix the Helm chart injects at deploy
+  time — an operator choice, not an application constant. TP-S3NS today uses
+  `prism-swift-` (e.g. `prism-swift-knowledge-flow-documents`,
+  `prism-swift-filesystem`) — the same prefix already used in the integration
+  environment, added by hand in the Helm values.
+
+  Nothing in the application code assumes either naming — MIGR-06 (`mc mirror`) is a
+  pure ops step external to the Fred codebase, so this is a documentation correction,
+  not a code fix. When mapping source→target buckets for a real mirror, read the
+  actual bucket name from each environment's own Helm values/console rather than
+  assuming a fixed prefix pattern on either side.
 
 **Two ID shapes — never conflate:**
 - **`document_uid`** = 32-hex (`3ac3729e2152447081df3717ce338ffe`). **The MinIO folder name.**
@@ -55,37 +82,19 @@ in how they move and who owns them. Do not blur them.
   from the object path.
 
 **Identity sub-facts (settled):**
-- Preserving user `sub` is critical — everything is keyed on it (identity topic, MIGR-04).
+- The Keycloak `sub` is **not** stable across environments and is never assumed preserved.
+  Identity is resolved by username inline in the metadata import — see the model note above.
 - **Migration note — teams are no longer Keycloak groups (2026-07-10).** This section previously
   asserted "a Keycloak group id = the team id" and "membership derives from Keycloak group claims,
   no `user→team` tuples to import." Both are now false for the swift target: AUTHZ-05 review item 9
   (`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6, `platform/REBAC.md`) made a team a
   `team_metadata` row (independently generated id, plus a required `name` column) with membership
   as **explicit** OpenFGA relation tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
-  — no Keycloak group backs it. This was still true for kea itself (chapter 1 of the detailed
-  runbook, kea↔kea, unaffected), and swift's `team_metadata.id` can still reuse a kea team's old
+  — no Keycloak group backs it, and swift's `team_metadata.id` can still reuse a kea team's old
   group-id string (opaque to swift), but the **metadata** topic (MIGR-02/MIGR-05) must now write
-  `user→team` tuples explicitly for every migrated team — see `PLATFORM-IMPORT-RFC.md` §2/§4 and
-  `ops/MIGRATION-CASTLE-TO-S3NS.html` §"Migration model" for the corrected plan. Concrete import
+  `user→team` tuples explicitly for every migrated team — see `PLATFORM-IMPORT-RFC.md` §2/§4 for
+  the corrected plan. Concrete import
   mechanics (source-team enumeration, tuple-writing order) are not yet designed.
-
----
-
-## §0 Platform prerequisite — identity bootstrap (MIGR-04)
-
-Must be completed and verified **before** any application data (Postgres `fred_kea`,
-OpenFGA tuples) is imported into a target environment. Owned by platform/ops.
-
-- [ ] **MIGR-04** — Bootstrap the target (S3NS) Keycloak by exporting on-prem users **with
-  their `id` (UUID)** and importing them so each user's `sub` is preserved across environments.
-  — *Fred keys all ownership and OpenFGA tuples on the Keycloak `sub`; a fresh Keycloak mints
-  new UUIDs and orphans every user. SSO brokering alone preserves nothing.*
-  — owner: platform/ops (Sébastien)
-  — runbook: [`ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`](../ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md)
-  — acceptance: one real user logs into S3NS via SSO and their token `sub` equals their on-prem UUID
-  — note: the application team rehearses the data migration locally with a **single shared
-  Keycloak** (kea + swift), which faithfully models the post-bootstrap state; it does not test
-  the bootstrap itself, which is why this item is owned by platform/ops.
 
 ---
 
@@ -155,23 +164,28 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   partial-export carries no users → `users.json`/bootstrap remains the channel. Ops fallback for
   both: SQL on the Keycloak DB (`keycloak_group`, `user_role_mapping`×`keycloak_role`).
 
-- [x] **MIGR-05.18** — Standalone `realm_file` upload + full teardown (2026-07-24, cutover
-  hardening). `POST /import` gains an optional second multipart field `realm_file` — a Keycloak
-  realm export supplied independently of the zip, taking precedence over the zip's own
-  `keycloak/realm.json` when present. Unblocks cutover regardless of the kea-side `exportClients`
-  403 (§0bis "Open" item below is now a nice-to-have, not a blocker). New `POST /reset-full`
-  (distinct endpoint/button from `/reset`, which keeps its narrow dev/test-cycle scope
-  unchanged): full platform teardown back to bootstrap-only state — OpenFGA
-  (`delete_user_relations` per non-preserved user, `delete_all_relations_of_reference` per team),
-  Keycloak (`delete_user` per non-preserved user), Postgres (`agent_instance`, `tag`,
-  `document_metadata`, `team_metadata`, `prompt` in one transaction). Preserves
-  `platformbootstrap.completed_by` ∪ the calling operator's identity. Migration-task concurrency
-  guard (`/import` and `/reset-full` refuse to start while another migration task is active).
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §9
+- [x] **MIGR-05.18** — Standalone `realm_file` upload + teardown (2026-07-24, cutover
+  hardening; simplified 2026-07-27). `POST /import` gains an optional second multipart field
+  `realm_file` — a Keycloak realm export supplied independently of the zip, taking precedence
+  over the zip's own `keycloak/realm.json` when present. Unblocks cutover regardless of the
+  kea-side `exportClients` 403 (§0bis "Open" item below is now a nice-to-have, not a blocker).
+  `POST /reset-rebac` (distinct endpoint/button from `/reset`, which keeps its narrow
+  dev/test-cycle scope unchanged): test-only teardown back to bootstrap-only state — OpenFGA
+  (`delete_all_relations_of_reference` per non-preserved user, per team), Postgres
+  (`agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt` in one transaction).
+  Preserves `platformbootstrap.completed_by` ∪ the calling operator's identity. **Never touches
+  Keycloak** — Fred does not own Keycloak identity lifecycle (identity is resolved by username
+  against a live target Keycloak, never created/destroyed by this tooling, see
+  `ops/KEA_SWIFT_CUTOVER.md`). `POST /reset-full` (which also deleted Keycloak users) is removed
+  as of 2026-07-27 — it was cutover-day recovery scaffolding that contradicted this design; its
+  UI button moves from the general **Platform data** page into the kea-specific
+  `KeaMigrationPage.tsx` (deleted together with that page after cutover) as the single **Teardown**
+  affordance. Migration-task concurrency guard (`/import` and `/reset-rebac` refuse to start while
+  another migration task is active).
+  — Contract: [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md) §27, §31
 
 - [ ] **MIGR-05.17** — **User-state migration — future task, deliberately out of #1954 (which
-  focuses on teams). NOT MIGR-04's scope**: MIGR-04 only moves identities (Keycloak users, subs
-  preserved, ops-owned). Still unowned on the application side:
+  focuses on teams).** Still unowned on the application side:
   (a) `users.jsonl` (GCU-acceptance rows) is exported but never imported — decide re-prompt
   everyone on swift (current behaviour) vs adding a users-row import phase;
   (b) verify at cutover that platform-role re-provisioning actually happened — it is automatic
@@ -349,7 +363,6 @@ with a written rationale.
 
 | Workstream | Total | Done | Remaining |
 | ---------- | ----- | ---- | --------- |
-| MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
 | MIGR-05 Metadata — platform import service | 17 | 16 | 1 (MIGR-05.17 users, see §0bis) |
 | MIGR-07 Products (re-vectorization) | 4 | 3 | 1 |

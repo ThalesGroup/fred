@@ -1515,25 +1515,25 @@ facts below are the canonical contract; design deliberation/history stays in
   same endpoint.
 - `POST /reset` — atomic wipe of agents+tags+metadata only (Keycloak/OpenFGA/
   team_metadata/prompts/object store untouched) — the narrow, repeatable
-  export→reset→import dev/test cycle. Permanent, unchanged by `/reset-full`.
-- `POST /reset-full` — full platform teardown to bootstrap-only state, for
-  cutover-day recovery. See §16 above for its shape; ordering: (1) OpenFGA —
-  `delete_all_relations_of_reference` per non-preserved user, then per team;
-  (2) Keycloak — delete every non-preserved user; (3) Postgres, one
-  transaction — `agent_instance`, `tag`, `document_metadata`, `team_metadata`,
-  `prompt`. Preserved identities: `platformbootstrap.completed_by` ∪ the
-  caller. Every step is delete-if-exists/idempotent — a crash mid-run and a
-  retry converge to the same end state. Note: this sweep clears every tuple
-  where a preserved-excluded user or a team is subject/object; it does not
-  separately clear tag/document-scoped tuples (`tag#parent@tag`,
-  `document#parent@tag`) whose own Postgres rows are wiped in step 3 — those
-  become inert orphans in OpenFGA (new random UUIDs on the next import never
-  collide with them), not a live security gap, but worth knowing before
-  assuming OpenFGA is byte-for-byte back to a fresh-bootstrap store.
+  export→reset→import dev/test cycle.
+- `POST /reset-rebac` — full platform teardown to bootstrap-only state, for
+  test/rehearsal cycles and cutover-day recovery (`import_export/teardown.py`,
+  `run_teardown`). Keycloak is never touched — Fred does not own Keycloak
+  identity lifecycle; identity is resolved by username against a live target
+  Keycloak (`docs/swift/ops/KEA_SWIFT_CUTOVER.md`). Ordering: (1) OpenFGA —
+  `delete_all_relations_of_reference` per non-preserved user, then per team,
+  then per tag, then per document (tag/document ids read before step 2 so a
+  `tag#parent@tag` / `document#parent@tag` tuple never survives as an orphan
+  once its own Postgres row is gone); (2) Postgres, one transaction —
+  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`.
+  Preserved identities: `platformbootstrap.completed_by` ∪ the caller. Every
+  step is delete-if-exists/idempotent — a crash mid-run and a retry converge
+  to the same end state. Object storage and vector embeddings are never
+  touched.
 - `GET /stats` — platform overview (teams, members by role, agents, prompts)
   — powers the **Platform data** admin page.
 
-Both `/import` and `/reset-full` (and `/reset`) reject (`409`) while another
+Both `/import` and `/reset-rebac` (and `/reset`) reject (`409`) while another
 `kind="migration"` task is running/pending (`TaskService.list_tasks(kind="migration",
 exclude_terminal=True)`) — a best-effort, non-atomic guard sized for one
 human operator driving cutover by hand, not for concurrent automated callers.
@@ -1604,7 +1604,11 @@ against a real kea dump):**
   every tuple-referenced team, named from the bundled `keycloak/realm.json`
   groups; a team referenced only by a stray/stale OpenFGA tuple with no
   matching Keycloak group is dropped outright (`kea_reconciliation.py::drop_orphan_teams`
-  + `drop_orphan_team_relations`), not created with a garbage id-as-name.
+  + `drop_orphan_team_relations`), not created with a garbage id-as-name. The
+  realm-derived plain-membership pass and admin-coverage check run even when
+  `openfga/tuples.json` is empty; an empty tuple export still cannot recover
+  elevated `owner`/`manager` roles and is a cutover stop condition when
+  collaborative teams exist.
 - **Platform roles from the realm export** — a full realm export
   (`users[]` with `realmRoles`) grants `admin → platform_admin`,
   `viewer → platform_observer` (`editor` dropped, warned).
@@ -1614,8 +1618,9 @@ against a real kea dump):**
   only identifier guaranteed shared is the Keycloak **username**. Every kea
   `sub` referenced by a tuple, an agent's `created_by`, a personal tag's
   `owner_id`, or a chat-context's `author` is resolved *live*, per run, to its
-  swift `sub` by username (`KeaUserResolver`, one Admin API call per distinct
-  username). Three outcomes: `matched` (same sub both sides), `relinked`
+  swift `sub` by username (`KeaUserResolver`, one paginated bulk sweep of the
+  target realm per run, followed by in-memory lookups). Three outcomes:
+  `matched` (same sub both sides), `relinked`
   (found under a different swift sub — that sub is used), `pending` (not
   found yet — nothing written for that identity this run, dropped cleanly,
   picked up automatically by a later re-run since every write is idempotent).
@@ -1626,9 +1631,14 @@ against a real kea dump):**
   zero `team_admin` after import is surfaced loudly (`find_admin_less_teams`),
   never silently created ungoverned.
 - **Standalone `realm_file` upload** (§16 above) removes the former blocker
-  (kea's own exporter 403s on `exportClients=true`) — re-exporting the realm
-  directly from Keycloak and uploading it alongside the zip is now the
-  supported cutover path; a fixed kea-side exporter is a nice-to-have only.
+  (kea's own exporter 403s on `exportClients=true`). The production fallback
+  is a read-only Keycloak-Postgres extract containing `groups[].id/name` and
+  `users[].id/username/groups/realmRoles`; `id`/`username` alone is not a
+  complete migration input. The SQL normalizes the legacy `app` client roles
+  and any equivalent realm roles into the importer's `realmRoles` field. The
+  standalone document replaces the realm inside the zip rather than being
+  merged with it. The exact SQL and go/no-go checks are maintained in
+  `ops/KEA_SWIFT_CUTOVER.md`.
 
 **Preview tool (temporary, delete after cutover):** `POST /kea-migration/dry-run`
 (`kea_migration_api.py`, a standalone router) runs the same bundle-open +
@@ -1770,3 +1780,33 @@ team's current unconditional marketplace presence exactly; nothing becomes
 private as a side effect of this rollout. A bundle exported before this
 field existed has no `visibility` key at all; `importer.py` defaults the
 row to `public` on import, same reasoning.
+
+## 31. Contract Notes — teardown never touches Keycloak, `/reset-full` removed (2026-07-27)
+
+**`POST /import-export/reset-full` is removed.** §27 (now updated in place to
+describe the current `/reset-rebac` shape — this section stays a historical
+note on *why* the split disappeared, not a second description of the wipe
+scope) previously documented a three-step sweep (OpenFGA, then Keycloak user
+deletion, then Postgres) for cutover-day recovery. Auditing the kea→swift
+migration code surfaced that Fred should never own Keycloak identity
+lifecycle: per `docs/swift/ops/KEA_SWIFT_CUTOVER.md`, identity is resolved by
+username against a live target Keycloak, never created or destroyed by the
+migration path. `run_teardown` (`import_export/teardown.py`) drops its
+Keycloak-delete step and the `wipe_keycloak` parameter entirely.
+
+**`POST /import-export/reset-rebac` is now the sole teardown action** —
+its behavior is unchanged (it never touched Keycloak), only `/reset-full`
+disappears since it was otherwise identical once Keycloak is out of the
+picture. `POST /reset` (the narrow agents+tags+metadata-only reset) is
+unaffected.
+
+**UI.** The general-purpose **Platform data** admin page (`MigrationPage.tsx`)
+drops both the "Full teardown" and "Reset + OpenFGA" buttons — a
+Keycloak/OpenFGA/Postgres wipe is test/rehearsal tooling, not a
+general-purpose platform feature. A single **Teardown** button (wired to
+`reset-rebac`) moves into the kea-specific `KeaMigrationPage.tsx`, which is
+already scheduled for deletion after the S3NS cutover — this keeps the
+temporary migration-rehearsal affordance temporary too, instead of leaving a
+destructive button permanently on the general admin surface.
+
+`authz-endpoint-matrix.yaml` drops the `/reset-full` row.

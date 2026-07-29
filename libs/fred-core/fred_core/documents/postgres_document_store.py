@@ -18,7 +18,8 @@ import logging
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import BigInteger, delete, func, select
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -28,6 +29,7 @@ from fred_core.documents.document_store import (
     DocumentMetadataDeserializationError,
 )
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,52 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 select(func.count()).select_from(DocumentMetadataRow)
             )
             return int(result.scalar_one())
+
+    async def count_by_team(
+        self, team_id: str, session: AsyncSession | None = None
+    ) -> int:
+        """Count documents owned by one team.
+
+        A document's team is indirect: `DocumentMetadataRow` has no `team_id`
+        column, only `tag_ids` — a document belongs to a team through the
+        `owner_id` of one of its tags (`TagRow`, same table/engine, no
+        cross-database join needed). `owner_id` is taken verbatim, including
+        personal-space ids (`personal-<uid>`) — the same convention
+        knowledge-flow already uses when stamping `document.created_total`/
+        `document.deleted_total` KPI events with `dims.team_id`
+        (`features/metadata/service.py`), so a document counts for a personal
+        space the same way it counts for a real team. See
+        `NOTES-OBSERV-02-FOLLOWUPS.md` #1.
+        """
+        async with use_session(self._sessions, session) as s:
+            team_tag_ids = (
+                (
+                    await s.execute(
+                        select(TagRow.tag_id).where(TagRow.owner_id == team_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not team_tag_ids:
+                return 0
+
+            if self._is_postgres:
+                cond: ColumnElement[bool] = cast(
+                    ColumnElement[bool],
+                    DocumentMetadataRow.tag_ids.overlap(list(team_tag_ids)),
+                )
+                result = await s.execute(
+                    select(func.count()).select_from(DocumentMetadataRow).where(cond)
+                )
+                return int(result.scalar_one())
+
+            # SQLite (tests): no native array overlap operator — filter in Python.
+            wanted = set(team_tag_ids)
+            rows = (
+                (await s.execute(select(DocumentMetadataRow.tag_ids))).scalars().all()
+            )
+            return sum(1 for tag_ids in rows if wanted.intersection(tag_ids or []))
 
     async def get_metadata_by_uid(
         self, document_uid: str, session: AsyncSession | None = None
@@ -177,6 +225,43 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         docs = await self.get_all_metadata(filters={}, session=session)
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
+
+    async def total_size_by_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> dict[str, int]:
+        unique = list(dict.fromkeys(tag_ids))
+        if not unique:
+            return {}
+        # SQLite in tests has no array overlap operator — fall back to the
+        # per-tag Python sum in the base class.
+        if not self._is_postgres:
+            return await super().total_size_by_tags(unique, session=session)
+
+        wanted = set(unique)
+        # `file_size_bytes` lives inside the JSONB `doc` blob; extract + cast so
+        # the whole tag's size is summed in one query, no pagination, no per-doc
+        # metadata deserialization.
+        size_expr = func.coalesce(
+            sql_cast(
+                DocumentMetadataRow.doc["file"]["file_size_bytes"].astext, BigInteger
+            ),
+            0,
+        )
+        # Array overlap (`&&`) hits the GIN index, so only documents in one of the
+        # requested tags are scanned; a document may carry several of them.
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        result: dict[str, int] = {tag_id: 0 for tag_id in unique}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(DocumentMetadataRow.tag_ids, size_expr).where(cond)
+                )
+            ).all()
+        for row_tags, size in rows:
+            for tag_id in row_tags or []:
+                if tag_id in wanted:
+                    result[tag_id] += int(size or 0)
+        return result
 
     async def get_all_metadata(
         self, filters: dict, session: AsyncSession | None = None

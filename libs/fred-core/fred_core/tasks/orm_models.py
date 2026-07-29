@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.sqlite import INTEGER as SQLITE_INTEGER
@@ -46,8 +47,32 @@ class TaskRunRow(Base):
     """Current-state summary for a task. One row per task, updated in place."""
 
     __tablename__ = "task_run"
-    # Index for the reconciliation sweeper, which scans non-terminal tasks by age.
-    __table_args__ = (Index("ix_task_run_state_updated", "state", "updated_at"),)
+    __table_args__ = (
+        # Index for the reconciliation sweeper, which scans non-terminal tasks by age.
+        Index("ix_task_run_state_updated", "state", "updated_at"),
+        # Atomic exclusion for concurrent migration-task launches (import/reset/
+        # reset-full, `import_export/api.py`, all created with kind="migration").
+        # Every row this partial index covers already has kind='migration' (the
+        # predicate says so) — a unique index on `kind` among only those rows
+        # therefore enforces "at most one non-terminal migration-kind row can
+        # exist at any time", without constraining any other task kind
+        # (ingestion/evaluation/erasure/log never appear in the filtered set).
+        # This replaces a check-then-act race (list active tasks, then insert)
+        # with a real DB-level guarantee: two concurrent inserts can't both
+        # succeed, the loser gets an IntegrityError translated to a 409
+        # (`import_export/api.py::_is_concurrent_migration_violation`).
+        Index(
+            "uq_task_run_single_active_migration",
+            "kind",
+            unique=True,
+            sqlite_where=text(
+                "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
+            ),
+            postgresql_where=text(
+                "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
+            ),
+        ),
+    )
 
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

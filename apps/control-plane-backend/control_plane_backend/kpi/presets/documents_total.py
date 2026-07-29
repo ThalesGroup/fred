@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
+from fred_core.common import TeamId
 from fred_core.documents import PostgresDocumentMetadataStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
@@ -33,25 +34,28 @@ _DOCUMENT_METRICS = ["document.created_total", "document.deleted_total"]
 
 
 def _count_events(
-    store: OpenSearchKPIStore, metric_name: str, since: datetime, until: datetime
+    store: OpenSearchKPIStore,
+    metric_name: str,
+    since: datetime,
+    until: datetime,
+    team_id: TeamId | None,
 ) -> int:
-    body: dict[str, Any] = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": since.isoformat(),
-                                "lte": until.isoformat(),
-                            }
-                        }
-                    },
-                    {"term": {"metric.name": metric_name}},
-                ]
+    filters: list[dict[str, Any]] = [
+        {
+            "range": {
+                "@timestamp": {
+                    "gte": since.isoformat(),
+                    "lte": until.isoformat(),
+                }
             }
         },
+        {"term": {"metric.name": metric_name}},
+    ]
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
+    body: dict[str, Any] = {
+        "size": 0,
+        "query": {"bool": {"filter": filters}},
         "aggs": {"total": {"value_count": {"field": "metric.name"}}},
     }
     resp = store.client.search(index=store.index, body=body)
@@ -59,33 +63,35 @@ def _count_events(
 
 
 def _has_any_document_events_before(
-    store: OpenSearchKPIStore, cutoff: datetime
+    store: OpenSearchKPIStore, cutoff: datetime, team_id: TeamId | None
 ) -> bool:
     """Return True if any document lifecycle KPI event was recorded before `cutoff`.
 
     When False, instrumentation had not yet been deployed at that point in time
-    and historical reconstruction is impossible.
+    (platform-wide), or this team simply has no document yet (team-scoped) —
+    either way historical reconstruction is impossible.
     """
+    filters: list[dict[str, Any]] = [
+        {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
+        {"terms": {"metric.name": _DOCUMENT_METRICS}},
+    ]
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": str(team_id)}})
     body: dict[str, Any] = {
         "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
-                    {"terms": {"metric.name": _DOCUMENT_METRICS}},
-                ]
-            }
-        },
+        "query": {"bool": {"filter": filters}},
     }
     resp = store.client.search(index=store.index, body=body)
     return int(resp.get("hits", {}).get("total", {}).get("value", 0)) > 0
 
 
-async def _count_all_documents(request: Request) -> int:
+async def _count_all_documents(request: Request, team_id: TeamId | None) -> int:
     container = get_application_container(request)
     engine = container.get_pg_async_engine()
     store = PostgresDocumentMetadataStore(engine)
-    return await store.count_all()
+    if team_id is None:
+        return await store.count_all()
+    return await store.count_by_team(team_id)
 
 
 async def query_documents_total(
@@ -95,28 +101,27 @@ async def query_documents_total(
     since: datetime,
     until: datetime,
     request: Request,
+    team_id: TeamId | None = None,
 ) -> ScalarWithDeltaResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
-    # Not team_scopable yet: document.created_total/document.deleted_total do
-    # carry dims.team_id (knowledge-flow resolves it from the document's first
-    # tag owner), but PostgresDocumentMetadataStore has no team-scoped count
-    # and a document's team is indirect (via tag ownership, not a column) —
-    # needs real store-layer work, not just parameter threading. Tracked as a
-    # follow-up (KPI-ANALYTICS-RFC.md v3 §2.3), not done in this pass.
     del user
 
     now = datetime.now(tz=timezone.utc)
 
     # If no document lifecycle events exist before `until`, instrumentation was not
     # deployed yet for this period — we cannot reconstruct the historical count.
-    if not _has_any_document_events_before(store, until):
+    if not _has_any_document_events_before(store, until, team_id):
         return ScalarWithDeltaResponse(unavailable=True, since=since, until=until)
 
-    current_count = await _count_all_documents(request)
-    created_in_range = _count_events(store, "document.created_total", since, until)
-    deleted_in_range = _count_events(store, "document.deleted_total", since, until)
-    created_after = _count_events(store, "document.created_total", until, now)
-    deleted_after = _count_events(store, "document.deleted_total", until, now)
+    current_count = await _count_all_documents(request, team_id)
+    created_in_range = _count_events(
+        store, "document.created_total", since, until, team_id
+    )
+    deleted_in_range = _count_events(
+        store, "document.deleted_total", since, until, team_id
+    )
+    created_after = _count_events(store, "document.created_total", until, now, team_id)
+    deleted_after = _count_events(store, "document.deleted_total", until, now, team_id)
 
     count_at_until = current_count - created_after + deleted_after
 
@@ -133,4 +138,7 @@ DOCUMENTS_TOTAL_PRESET = PresetDef(
     response_model=ScalarWithDeltaResponse,
     handler=query_documents_total,
     summary="Total number of uploaded documents and net change over the selected time range",
+    team_scopable=True,  # document.created_total/document.deleted_total carry
+    # dims.team_id; count_by_team resolves the current count via tag
+    # ownership (NOTES-OBSERV-02-FOLLOWUPS.md #1).
 )

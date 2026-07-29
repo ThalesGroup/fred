@@ -19,6 +19,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
+import { formatBytes as formatBytesUnit } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
@@ -32,9 +33,7 @@ interface SessionAttachmentsDrawerProps {
 
 function formatBytes(value?: number): string | null {
   if (!value || value <= 0) return null;
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${Math.round(value / 102.4) / 10} KB`;
-  return `${Math.round(value / (1024 * 102.4)) / 10} MB`;
+  return formatBytesUnit(value);
 }
 
 function formatTimestamp(value?: string): string | null {

@@ -195,6 +195,22 @@ def _wf_should_skip_revectorize(*, mode: Any, force: bool, chunk_count: int) -> 
     return mode == "incremental" and not force and chunk_count > 0
 
 
+def _wf_final_revectorize_state(*, failed: int, total: int) -> tuple[str, str | None]:
+    """
+    Decide `RevectorizeCorpusWorkflow`'s terminal task state from its
+    accumulated per-document `failed`/`total` counts.
+
+    Previously hardcoded to `"succeeded"` regardless of `failed`, silently
+    hiding per-document failures (e.g. a permission rejection on a
+    cross-team document) behind an apparently clean run. Kept as a pure
+    function (no Temporal context needed) so the decision is directly
+    unit-testable, mirroring `_wf_should_skip_revectorize` above.
+    """
+    if failed == 0:
+        return "succeeded", None
+    return "failed", f"{failed} of {total} document(s) failed to re-vectorize"
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
@@ -635,6 +651,17 @@ class RevectorizeDocument:
             )
 
             if _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=count):
+                # Vectors already exist (that's the whole reason for the skip) but
+                # `output_process` — the only thing that normally calls
+                # `mark_stage_done(VECTORIZED)` — never runs on this path. Without this,
+                # a migrated document stays `NOT_STARTED` in Postgres forever even though
+                # its vectors were correct and untouched (MIGR-07.04).
+                await workflow.execute_activity(
+                    "mark_document_vectorized",
+                    args=[document_uid],
+                    schedule_to_close_timeout=timedelta(minutes=5),
+                    retry_policy=RetryPolicy(maximum_attempts=3),
+                )
                 if task_id:
                     await workflow.execute_activity(
                         "emit_ingestion_task_event",
@@ -661,8 +688,14 @@ class RevectorizeDocument:
             file = _wf_get(prepared, "file")
             metadata = _wf_get(prepared, "metadata")
 
+            # Trusted variant: this scope was already authorized once, at the
+            # platform level, before the workflow started
+            # (`corpus_manager_controller._authorize_scope`) — see
+            # `output_process_trusted`'s docstring for why re-checking
+            # per-document/per-tag permissions here would incorrectly reject
+            # a root/platform admin who is not a member of every team.
             await workflow.execute_activity(
-                "output_process",
+                "output_process_trusted",
                 args=[file, metadata, False],
                 schedule_to_close_timeout=timedelta(hours=1),
                 retry_policy=RetryPolicy(maximum_attempts=3),
@@ -745,9 +778,10 @@ class RevectorizeCorpusWorkflow:
                     failed += 1
 
         if task_id:
+            final_state, final_error = _wf_final_revectorize_state(failed=failed, total=total)
             await workflow.execute_activity(
                 "emit_ingestion_task_event",
-                args=[task_id, "succeeded", "done", 1.0, None, processed, total, failed, None, None],
+                args=[task_id, final_state, "done", 1.0, final_error, processed, total, failed, None, None],
                 schedule_to_close_timeout=timedelta(hours=1),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )

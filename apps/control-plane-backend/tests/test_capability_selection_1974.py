@@ -50,7 +50,7 @@ from httpx import ASGITransport, AsyncClient
 from test_capability_enablement_1980 import _FilterRebac
 from test_main import (
     _PERSONAL_TEAM_ID,
-    _fake_get_team_by_id,
+    _fake_require_team_access,
     _FakeAgentInstanceStore,
     _make_record,
     _patch_store,
@@ -123,8 +123,8 @@ def _setup(
     default_capability_ids: list[str] | None = None,
 ):
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
     )
     store = _FakeAgentInstanceStore(records or [])
     app = create_app()

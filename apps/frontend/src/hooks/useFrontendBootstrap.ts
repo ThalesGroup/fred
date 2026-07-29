@@ -34,11 +34,27 @@ export type FrontendBootstrapState = {
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
  */
 export function useFrontendBootstrap(): FrontendBootstrapState {
+  // #2148: no longer forces a refetch on every mount — the control-plane
+  // enrichment behind this endpoint does one OpenFGA `Read` plus one
+  // Keycloak lookup per team, and this hook mounts on nearly every page.
+  // RTK Query's own cache (backed by `providesTags`/`invalidatesTags` on
+  // this endpoint and every team mutation, see controlPlaneApiEnhancements.ts)
+  // keeps this fresh for changes made in this session.
+  //
+  // PR #2160 review (Codex, P1): `TeamSelectionNavbar` keeps this query
+  // permanently subscribed across every route (see `MainLayout.tsx`), so
+  // RTK Query's unused-data eviction never runs, and tags alone only react
+  // to mutations dispatched from this browser's own Redux store — a team
+  // membership or platform role change made from another session/browser
+  // would otherwise stay invisible here for the rest of the login session.
+  // `refetchOnMountOrArgChange: 60` bounds that: any page navigation that
+  // remounts a bootstrap consumer (most pages do) revalidates if the cached
+  // data is older than 60s. Shorter than the KPI presets' 300s TTL because
+  // this drives admin-gating UI (`useUserCapabilities`), not analytics
+  // display — real backend authorization checks are unaffected either way.
   const { data, isLoading, isFetching, refetch } = useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery(
     undefined,
-    {
-      refetchOnMountOrArgChange: true,
-    },
+    { refetchOnMountOrArgChange: 60 },
   );
 
   return {

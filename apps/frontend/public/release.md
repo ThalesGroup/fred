@@ -1,3 +1,62 @@
+**v2.1.20** — 2026-07-29
+
+- **Summary**
+
+  Team pages load dramatically faster for platforms with many teams — what
+  could take several seconds now loads in a fraction of that time. The team
+  usage/activity page no longer fails to load document counts when viewed in
+  team context, and a rare timing issue that could leave a just-hidden team
+  briefly visible to everyone is fixed.
+
+- **Improvements**
+
+  - Pages listing teams (team switcher, team directory) load much faster on platforms with many teams (#2145)
+
+- **Bug Fixes**
+
+  - Team usage dashboard: document counts now load correctly instead of showing "Could not load activity" (#2145)
+
+- **Security**
+
+  - Fixed a timing issue where toggling a team from public to private in quick succession could leave it briefly visible to everyone instead of immediately private (#2145)
+
+**v2.1.19** — 2026-07-28
+
+- **Summary**
+
+  Team resources now show the exact storage size used by each folder, and PDF
+  documents can be toggled between their original view and the extracted
+  markdown text. The Kea-to-Swift migration tooling also gains full agent
+  coverage: every kea-created assistant, including the classic generic-tool
+  agent, now migrates to its Swift equivalent, keeping any tool restriction it
+  had instead of gaining full access to every tool.
+
+- **Features**
+
+  - Team resources: each folder now shows its exact total storage size (#2139)
+  - PDF documents can be toggled between the original file view and the extracted markdown text (#2139)
+
+- **Bug Fixes**
+
+  - Kea-to-Swift migration: the classic generic-tool agent now migrates to its Swift assistant equivalent instead of being skipped (#2138)
+  - Kea-to-Swift migration: a kea agent limited to a specific tool kept that limitation after migration, instead of gaining every tool available to the assistant by default (#2138)
+
+**v2.1.18** — 2026-07-28
+
+- **Summary**
+
+  Further work on the Kea-to-Swift migration tooling: platform reset actions
+  are consolidated onto the migration page, a rehearsal reset no longer
+  leaves orphaned permissions behind, and the migration runbook adds a
+  clearer data-handoff checklist.
+
+**v2.1.17** — 2026-07-27
+
+- **Summary**
+
+  This intermediary release provides the necessary migration workflows to transform kea
+  dumps into swift equivalent. This release is intermediary.
+
 **v2.1.16** — 2026-07-27
 
 - **Summary**

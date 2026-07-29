@@ -71,9 +71,9 @@ class PlatformBootstrapStore:
     async def get_completed_by(self) -> str | None:
         """The `sub` of whoever completed root bootstrap, or None if it never ran.
 
-        Read-only counterpart to `is_completed()`. Used by the full-teardown
-        flow (PLATFORM-IMPORT-RFC.md §9.2) to identify the one identity that
-        must survive a `POST /reset-full` regardless of who calls it.
+        Read-only counterpart to `is_completed()`. Used by the teardown flow
+        (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) to identify the one identity
+        that must survive a `POST /reset-rebac` regardless of who calls it.
         """
         async with self._sessions() as s:
             row = await s.get(PlatformBootstrapRow, SINGLETON_ID)

@@ -15,6 +15,24 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneRoutingPolicy",
   ],
   endpoints: {
+    // #2148: bootstrap's `available_teams`/`active_team` are the same team
+    // rows `listTeams`/`getTeam` expose — tag them the same way so every
+    // existing team mutation (join, add/remove member, grant/revoke role,
+    // create/update) invalidates bootstrap's cache entry too, now that
+    // bootstrap no longer forces a refetch on every mount.
+    getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...(result.available_teams ?? []).map((team) => ({
+                type: "ControlPlaneTeam" as const,
+                id: team.id,
+              })),
+              { type: "ControlPlaneTeam" as const, id: result.active_team.id },
+              { type: "ControlPlaneTeam" as const, id: "LIST" },
+            ]
+          : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
     // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
@@ -219,7 +237,7 @@ export const {
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
-  useResetPlatformFullControlPlaneV1ImportExportResetFullPostMutation: useResetPlatformFullMutation,
+  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:

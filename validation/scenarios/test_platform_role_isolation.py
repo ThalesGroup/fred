@@ -69,23 +69,38 @@ def test_platform_role_alone_grants_no_team_data(username: str, fredlab_id, cp) 
 
 @pytest.mark.parametrize("username", PLATFORM_ONLY_USERS)
 def test_platform_role_alone_sees_no_collaborative_team(username: str, cp) -> None:
-    """{username} holds only a platform role and sees zero collaborative teams."""
+    """{username} holds only a platform role and is a member of zero collaborative teams.
+
+    TEAM-10 (2026-07-26) makes team visibility default to PUBLIC, so a public
+    collaborative team may legitimately appear in `/teams` for marketplace
+    discovery (`can_read = team_member or public`) without the caller holding
+    any relation on it. The isolation claim this test proves is membership
+    (`is_member`), not list presence -- see GitHub #2146 cluster C.
+    """
     items = cp(username).get("/teams").json()
     collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
-    assert not collaborative, (
-        f"{username} unexpectedly sees collaborative teams: "
-        f"{[t.get('name') for t in collaborative]!r}"
+    joined = [t for t in collaborative if t.get("is_member")]
+    assert not joined, (
+        f"{username} unexpectedly holds membership in collaborative teams: "
+        f"{[t.get('name') for t in joined]!r} (a platform role must never grant "
+        f"team membership, even if the team is publicly listed)"
     )
 
 
 @pytest.mark.parametrize("username", IDENTITY_ONLY_USERS)
 def test_identity_only_user_sees_no_collaborative_team(username: str, cp) -> None:
-    """{username} has no role at all and sees zero collaborative teams."""
+    """{username} has no role at all and is a member of zero collaborative teams.
+
+    See `test_platform_role_alone_sees_no_collaborative_team` above: public-team
+    list presence is expected (TEAM-10 discovery), membership is what must stay
+    empty (GitHub #2146 cluster C).
+    """
     items = cp(username).get("/teams").json()
     collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
-    assert not collaborative, (
-        f"{username} unexpectedly sees collaborative teams: "
-        f"{[t.get('name') for t in collaborative]!r}"
+    joined = [t for t in collaborative if t.get("is_member")]
+    assert not joined, (
+        f"{username} unexpectedly holds membership in collaborative teams: "
+        f"{[t.get('name') for t in joined]!r}"
     )
 
 

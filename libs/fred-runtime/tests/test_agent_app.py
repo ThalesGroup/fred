@@ -2333,9 +2333,9 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
     CAPAB-02 stopgap: `GraphRuntime` never consults `CapabilityAgentBlock.hitl`
     (`invoke_runtime_tool` calls the tool directly) — a capability declaring a
     `HitlSpec` approval gate would silently run ungated on a Graph agent. Full
-    Graph HITL enforcement is deferred (id-legend.yaml CAPAB-02); until then,
-    selecting such a capability on a Graph agent must fail loudly, not run
-    unapproved.
+    Graph HITL enforcement is deferred (see AGENT-CAPABILITY-RFC.md §3.9);
+    until then, selecting such a capability on a Graph agent must fail loudly,
+    not run unapproved.
 
     Example:
     - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent -q`
@@ -2631,7 +2631,7 @@ _ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
 async def test_authorize_allows_when_user_holds_team_relation(
     monkeypatch, minimal_config
 ) -> None:
-    """An enabled engine that grants CAN_READ lets the request proceed."""
+    """An enabled engine that grants CAN_USE_TEAM_AGENTS lets the request proceed."""
     engine = _FakeRebacEngine(enabled=True, deny=False)
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
@@ -2640,7 +2640,7 @@ async def test_authorize_allows_when_user_holds_team_relation(
         _managed_request(), _ALICE, container
     )
 
-    assert engine.calls == [("alice", TeamPermission.CAN_READ, "fredlab")]
+    assert engine.calls == [("alice", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")]
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
     assert events[-1]["audit_event"] == "rebac_authorized"
@@ -2807,10 +2807,11 @@ async def test_authorize_allows_personal_space_owner_via_rebac_check(
     monkeypatch, minimal_config
 ) -> None:
     """A human caller acting on their own canonical personal_team_id is authorized
-    through the plain `CAN_READ` team check — no special-casing here (AUTHZ-08,
-    supersedes AUTHZ-05 item 8b). In the real system this succeeds because
-    `RebacEngine.check_user_team_permission_or_raise` self-heals the owner's own
-    `team_editor` tuple on first touch; this test only proves agent_app.py no
+    through the plain `CAN_USE_TEAM_AGENTS` team check — no special-casing here
+    (AUTHZ-08, supersedes AUTHZ-05 item 8b). In the real system this succeeds
+    because `RebacEngine.check_user_team_permission_or_raise` self-heals the
+    owner's own `team_editor` tuple on first touch (which implies `team_member`,
+    which `CAN_USE_TEAM_AGENTS` requires); this test only proves agent_app.py no
     longer short-circuits before the check, i.e. the engine IS consulted."""
     engine = _FakeRebacEngine(enabled=True, deny=False)  # models the self-healed tuple
     _wire_engine(monkeypatch, engine)
@@ -2821,7 +2822,7 @@ async def test_authorize_allows_personal_space_owner_via_rebac_check(
     )
 
     assert engine.calls == [
-        ("alice", TeamPermission.CAN_READ, personal_team_id(_ALICE.uid))
+        ("alice", TeamPermission.CAN_USE_TEAM_AGENTS, personal_team_id(_ALICE.uid))
     ]
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
@@ -2833,10 +2834,11 @@ async def test_authorize_allows_personal_space_owner_via_rebac_check(
 async def test_authorize_denies_other_users_personal_space_via_rebac_check(
     monkeypatch, minimal_config
 ) -> None:
-    """Alice requesting Bob's personal space is denied — via the plain `CAN_READ`
-    team check, not a local identity guard. In the real system no tuple is ever
-    provisioned for Alice on Bob's space (self-heal only ever grants the space's
-    own owner), and `RebacEngine.add_relation`'s write-guard refuses any other
+    """Alice requesting Bob's personal space is denied — via the plain
+    `CAN_USE_TEAM_AGENTS` team check, not a local identity guard. In the real
+    system no tuple is ever provisioned for Alice on Bob's space (self-heal
+    only ever grants the space's own owner), and `RebacEngine.add_relation`'s
+    write-guard refuses any other
     shape naming a personal team (AUTHZ-08) — that invariant is proven in
     fred-core's own test suite, not here. This test only proves agent_app.py
     defers to the check rather than special-casing the outcome."""
@@ -2851,7 +2853,7 @@ async def test_authorize_denies_other_users_personal_space_via_rebac_check(
 
     assert exc.value.status_code == 403
     assert engine.calls == [
-        ("alice", TeamPermission.CAN_READ, personal_team_id(_BOB.uid))
+        ("alice", TeamPermission.CAN_USE_TEAM_AGENTS, personal_team_id(_BOB.uid))
     ]
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
@@ -2876,7 +2878,7 @@ async def test_authorize_denies_bare_personal_alias(
         )
 
     assert exc.value.status_code == 403
-    assert engine.calls == [("alice", TeamPermission.CAN_READ, "personal")]
+    assert engine.calls == [("alice", TeamPermission.CAN_USE_TEAM_AGENTS, "personal")]
 
 
 # ---------------------------------------------------------------------------

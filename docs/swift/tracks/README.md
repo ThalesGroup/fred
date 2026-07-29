@@ -70,10 +70,11 @@ Cross-track dependencies or constraints.
 
 ## Rules for track manifests
 
-1. One file per track, named `<ID>-<slug>.md`. Use the canonical ID from `id-legend.yaml`.
+1. One file per track, named `<ID>-<slug>.md`. `<ID>` is an informal `DOMAIN-NN`
+   label (see `../../CLAUDE.md §Task ID convention`) — there is no registry to
+   look it up in, pick one that isn't already used by another track file.
 2. Maximum 80 lines per manifest.
-3. Every ID referenced must exist in `docs/swift/data/id-legend.yaml`. Do not invent IDs.
-4. The RFC link must point to an actual file in `docs/swift/rfc/`. If none, say "none — mechanical".
-5. The backlog link must point to an actual section in a backlog file under `docs/swift/backlog/`.
-6. Do not duplicate spec content — link to the RFC and backlog instead.
-7. Status must match `id-legend.yaml`. Update both files together.
+3. The RFC link must point to an actual file in `docs/swift/rfc/`. If none, say "none — mechanical".
+4. The backlog link must point to an actual section in a backlog file under `docs/swift/backlog/`.
+5. Do not duplicate spec content — link to the RFC and backlog instead.
+6. Status lives only in this file's own `Status` field and the linked GitHub issue — keep them in sync.

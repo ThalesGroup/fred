@@ -42,7 +42,10 @@ vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
 // a fresh closure here on every render (as a plain `() => [...]` factory
 // would give) makes MarkdownDocumentBody's fetch effect (dependent on this
 // function's identity) refire every render, looping forever.
-const fetchPreviewMock = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({ content: "" }) })));
+// Non-empty: an empty-but-successful response is treated as "unavailable"
+// (DocumentViewer.tsx's MarkdownDocumentBody), same as a 404 — a stub of ""
+// would take that branch instead of rendering MarkdownRenderer.
+const fetchPreviewMock = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({ content: "stub" }) })));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreviewMock],
 }));

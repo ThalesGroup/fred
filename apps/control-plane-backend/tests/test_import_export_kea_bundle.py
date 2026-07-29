@@ -13,24 +13,35 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 from control_plane_backend.agent_instances.store import AgentInstanceStore
-from control_plane_backend.import_export.bundle import open_bundle
+from control_plane_backend.import_export.bundle import (
+    UnsupportedBundleFormatError,
+    open_bundle,
+)
 from control_plane_backend.import_export.importer import (
     MigrationReport,
     run_import,
+)
+from control_plane_backend.import_export.kea_reconciliation import (
     transform_kea_tuples,
 )
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.prompt_models import PromptRow
-from fred_core import Relation, RelationType
+from fred_core import Relation, RelationType, team_organization_relation
 from fred_core.documents.tag_models import TagRow
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
-from fred_core.tasks.models import StartMigrationRequest
+from fred_core.tasks.models import (
+    MigrationTaskEvent,
+    StartMigrationRequest,
+    TaskState,
+)
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
@@ -47,26 +58,28 @@ TEAM_FREDLAB = "05186d87-139d-4adb-8d6a-95d61d7afdb4"
 # tests exercising PENDING/RELINKED override `_stub_username_resolution` (see
 # `test_kea_reconciliation.py`) instead of using this default.
 _PLAN_A_USERNAME_TO_SUB = {"bob": UID_BOB, "liam": UID_LIAM, "alice": UID_ALICE}
-# Non-None sentinel: `KeaUserResolver` only ever checks `is not None` before
-# calling `find_user_sub_by_username`, which is monkeypatched below — the real
+# Non-None sentinel: `KeaUserResolver.create` only ever checks `is not None`
+# before calling `find_user_subs_bulk`, monkeypatched below — the real
 # `UserServiceDependencies`/Keycloak Admin client is never exercised in this file.
 _FAKE_USER_DEPS = object()
 
 
 @pytest.fixture(autouse=True)
 def _stub_username_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """KEA CUTOVER 2026 — simulate Keycloak S3NS username lookups without a
+    """KEA CUTOVER 2026 — simulate a Keycloak S3NS bulk realm listing without a
     live Keycloak. Default: `_PLAN_A_USERNAME_TO_SUB` (kea sub == swift sub for
-    known test users); anyone else resolves to PENDING (not found)."""
+    known test users); anyone else is absent from the snapshot and resolves to
+    PENDING (not found) — `KeaUserResolver` treats a successful bulk snapshot as
+    authoritative and never falls back to a per-username lookup (see
+    `kea_reconciliation.py`).
+    """
 
-    async def _fake_find_user_sub_by_username(
-        username: str, _deps: object
-    ) -> str | None:
-        return _PLAN_A_USERNAME_TO_SUB.get(username)
+    async def _fake_find_user_subs_bulk(_deps: object) -> dict[str, str]:
+        return dict(_PLAN_A_USERNAME_TO_SUB)
 
     monkeypatch.setattr(
-        "control_plane_backend.import_export.kea_reconciliation.find_user_sub_by_username",
-        _fake_find_user_sub_by_username,
+        "control_plane_backend.import_export.kea_reconciliation.find_user_subs_bulk",
+        _fake_find_user_subs_bulk,
     )
 
 
@@ -129,11 +142,17 @@ def _kea_bundle(
     return buffer.getvalue()
 
 
+# Default fixture tuning: the doc-search MCP every kea agent fixture carried
+# before capability-selection translation existed. Never mutated by callers.
+_DEFAULT_MCP_SERVERS: list[dict[str, Any]] = [{"id": "mcp-knowledge-flow-mcp-text"}]
+
+
 def _kea_agent(
     agent_id: str,
     *,
     name: str,
-    definition_ref: str = "v2.react.basic",
+    definition_ref: str | None = "v2.react.basic",
+    class_path: str | None = None,
     system_prompt: str | None = None,
     prompt_key: str = "system_prompt_template",
     extra_fields: list[dict[str, Any]] | None = None,
@@ -141,28 +160,38 @@ def _kea_agent(
     description: str = "General-purpose assistant",
     tags: list[str] | None = None,
     agent_type: str = "agent",
+    mcp_servers: list[dict[str, Any]] | None = _DEFAULT_MCP_SERVERS,
 ) -> dict[str, Any]:
+    """Build a kea `agent` row. Pass `class_path` (and leave `definition_ref`
+    unset) to shape a legacy v1 agent, matching `resolve_kea_template`'s
+    definition_ref-first / class_path-fallback precedence. `mcp_servers`
+    defaults to the doc-search MCP every other fixture agent implicitly
+    carried before capability-selection translation existed; pass `[]` or a
+    custom list to exercise other selections, or `None` to omit the key
+    entirely (agent with no kea-side tool-selection signal)."""
     fields: list[dict[str, Any]] = list(extra_fields or [])
     if system_prompt is not None:
         fields.append({"key": prompt_key, "type": "prompt", "default": system_prompt})
-    return {
+    tuning: dict[str, Any] = {
+        "role": role,
+        "description": description,
+        "tags": tags or [],
+        "fields": fields,
+    }
+    if mcp_servers is not None:
+        tuning["mcp_servers"] = mcp_servers
+    payload: dict[str, Any] = {
         "id": agent_id,
         "name": name,
-        "payload_json": {
-            "id": agent_id,
-            "name": name,
-            "type": agent_type,
-            "enabled": True,
-            "definition_ref": definition_ref,
-            "tuning": {
-                "role": role,
-                "description": description,
-                "tags": tags or [],
-                "fields": fields,
-                "mcp_servers": [{"id": "mcp-knowledge-flow-mcp-text"}],
-            },
-        },
+        "type": agent_type,
+        "enabled": True,
+        "tuning": tuning,
     }
+    if definition_ref is not None:
+        payload["definition_ref"] = definition_ref
+    if class_path is not None:
+        payload["class_path"] = class_path
+    return {"id": agent_id, "name": name, "payload_json": payload}
 
 
 def _chat_context(
@@ -208,6 +237,22 @@ class FakeRebac:
     ) -> None:
         self.relations.append(relation)
 
+    async def add_relations(
+        self, relations: Iterable[Relation], *, actor_uid: str | None = None
+    ) -> None:
+        for relation in relations:
+            await self.add_relation(relation, actor_uid=actor_uid)
+
+    async def ensure_team_organization_relations(self, team_ids) -> None:
+        # #2065: the import's cold-path reconciliation guarantees the
+        # organization structural edge for every team in the reconciled
+        # plan, even one the kea tuple dump never carried it for — mirrors
+        # the real `RebacEngine.ensure_team_organization_relations` primitive
+        # closely enough for these tests (unconditional write; this fake
+        # never seeds pre-existing edges to skip).
+        for team_id in team_ids:
+            await self.add_relation(team_organization_relation(str(team_id)))
+
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     # prompt_models is already imported above (PromptRow) — only agent_instance_models
@@ -242,7 +287,7 @@ async def _import(
             engine=tasks_engine, backend=SchedulerBackend.MEMORY
         )
         start = await task_service.start(StartMigrationRequest(), created_by="tester")
-        return await run_import(
+        report = await run_import(
             bundle=open_bundle(bundle_bytes, external_realm_data=external_realm_data),
             import_id="imp-kea",
             task_id=start.task_id,
@@ -252,6 +297,22 @@ async def _import(
             rebac=rebac,  # type: ignore[arg-type]
             user_deps=_FAKE_USER_DEPS,  # type: ignore[arg-type]
         )
+        # Mirror `import_export/api.py`'s real background-task wrapper, which
+        # always marks the task terminal after `run_import` returns —
+        # required since `uq_task_run_single_active_migration` (Area 2) now
+        # enforces at most one non-terminal `kind="migration"` row per
+        # `tasks_engine`, and several tests in this file call `_import` more
+        # than once against the same `engine` (and therefore the same
+        # deterministic `.tasks` sqlite file) to prove idempotency.
+        await task_service.record(
+            MigrationTaskEvent(
+                task_id=start.task_id,
+                state=TaskState.succeeded,
+                seq=0,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        return report
     finally:
         await tasks_engine.dispose()
 
@@ -388,6 +449,126 @@ async def test_kea_v1_secondary_prompts_warn(tmp_path: Path) -> None:
         assert record is not None
         assert record.tuning.values["prompts.system"] == "rag system prompt"
         assert any("prompts.grade_documents" in w for w in report.warnings)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kea_legacy_basic_react_agent_maps_to_assistant(
+    tmp_path: Path,
+) -> None:
+    """agentic_backend.core.agents.basic_react_agent.BasicReActAgent (legacy v1
+    class_path) must resolve to fred-agents:fred.github.assistant and go
+    through the same import path as v2.react.basic — no GAP, and name,
+    description, prompt, team, creator, and tool selection are preserved.
+
+    The tool-selection assertion matters specifically for this legacy class:
+    kea's `AgentTuning.mcp_servers` (agentic_backend/core/agents/agent_spec.py)
+    is the one shared tool-selection field for both v1 and v2 agents — there is
+    no separate `selected_mcp_server_ids` on the kea side — but nothing here
+    previously proved `_extract_kea_capability_selection` actually reaches it
+    through the legacy `class_path` path rather than defaulting to `None` and
+    silently widening the migrated agent to its template's full default
+    toolset."""
+    engine = await _make_engine(tmp_path, "legacy-basic-react.sqlite3")
+    try:
+        bundle = _kea_bundle(
+            agents=[
+                _kea_agent(
+                    "agent-legacy",
+                    name="OldGenericAgent",
+                    definition_ref=None,
+                    class_path="agentic_backend.core.agents.basic_react_agent.BasicReActAgent",
+                    system_prompt="answer using the finance tools",
+                    role="Finance helper",
+                    description="Legacy generic assistant",
+                    tags=["legacy"],
+                )
+            ],
+            tuples=[
+                {
+                    "user": f"user:{UID_ALICE}",
+                    "relation": "owner",
+                    "object": "agent:agent-legacy",
+                }
+            ],
+            realm={"groups": [], "users": [{"id": UID_ALICE, "username": "alice"}]},
+        )
+        report = await _import(bundle, engine)
+        assert report.agents_imported == 1
+        assert report.agents_gap == 0
+        assert not any("GAP" in w for w in report.warnings)
+
+        record = await AgentInstanceStore(engine).get("agent-legacy")
+        assert record is not None
+        assert record.template_id == "fred-agents:fred.github.assistant"
+        assert record.source_runtime_id == "fred-agents"
+        assert record.source_agent_id == "fred.github.assistant"
+        assert record.display_name == "OldGenericAgent"
+        assert record.description == "Legacy generic assistant"
+        assert str(record.team_id) == f"personal-{UID_ALICE}"
+        assert record.created_by == UID_ALICE
+        assert record.tuning.role == "Finance helper"
+        assert record.tuning.tags == ["legacy"]
+        assert (
+            record.tuning.values["prompts.system"] == "answer using the finance tools"
+        )
+        assert record.tuning.selected_capability_ids == ["mcp-knowledge-flow-mcp-text"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_kea_mcp_servers_translate_to_selected_capability_ids(
+    tmp_path: Path,
+) -> None:
+    """`payload_json.tuning.mcp_servers` (kea's live tool-selection signal)
+    must land as `tuning.selected_capability_ids` verbatim — a kea agent
+    scoped to one MCP server must not come out of import with its template's
+    full default toolset (Phase 6 `materialize_default_capability_selections`
+    only fills rows still `None`, never touches an explicit list)."""
+    engine = await _make_engine(tmp_path, "mcp-servers.sqlite3")
+    try:
+        bundle = _kea_bundle(
+            agents=[
+                _kea_agent(
+                    "agent-scoped",
+                    name="TabularOnlyAgent",
+                    mcp_servers=[{"id": "mcp-tabular"}],
+                ),
+                _kea_agent(
+                    "agent-no-tools",
+                    name="NoToolsAgent",
+                    mcp_servers=[],
+                ),
+                _kea_agent(
+                    "agent-unset",
+                    name="UnsetToolsAgent",
+                    mcp_servers=None,
+                ),
+            ],
+            tuples=[
+                {
+                    "user": f"user:{UID_ALICE}",
+                    "relation": "owner",
+                    "object": f"agent:{agent_id}",
+                }
+                for agent_id in ("agent-scoped", "agent-no-tools", "agent-unset")
+            ],
+            realm={"groups": [], "users": [{"id": UID_ALICE, "username": "alice"}]},
+        )
+        report = await _import(bundle, engine)
+        assert report.agents_imported == 3
+
+        store = AgentInstanceStore(engine)
+        scoped = await store.get("agent-scoped")
+        no_tools = await store.get("agent-no-tools")
+        unset = await store.get("agent-unset")
+        assert scoped is not None and scoped.tuning.selected_capability_ids == [
+            "mcp-tabular"
+        ]
+        assert no_tools is not None and no_tools.tuning.selected_capability_ids == []
+        assert unset is not None and unset.tuning.selected_capability_ids is None
     finally:
         await engine.dispose()
 
@@ -655,6 +836,51 @@ async def test_known_group_without_name_still_falls_back_to_id(
 
 
 @pytest.mark.asyncio
+async def test_realm_membership_and_admin_warning_run_even_with_no_tuples(
+    tmp_path: Path,
+) -> None:
+    """Realm-derived membership and admin coverage do not depend on tuples.
+
+    A team can exist from a `teammetadata` row + realm group alone, with zero
+    OpenFGA tuples referencing it. The realm membership must still become a
+    `team_member` relation, and `find_admin_less_teams` must still warn that the
+    team has no admin instead of silently creating an ungoverned team.
+    """
+    engine = await _make_engine(tmp_path, "admin-less-no-tuples.sqlite3")
+    try:
+        rebac = FakeRebac()
+        report = await _import(
+            _kea_bundle(
+                teammetadata=[{"id": "team-custom", "description": "Custom team"}],
+                tuples=[],
+                realm={
+                    "groups": [{"id": "team-custom", "name": "fredlab"}],
+                    "users": [
+                        {
+                            "id": UID_BOB,
+                            "username": "bob",
+                            "groups": ["/fredlab"],
+                        }
+                    ],
+                },
+            ),
+            engine,
+            rebac=rebac,
+        )
+        assert (
+            f"user:{UID_BOB}",
+            "team_member",
+            "team:team-custom",
+        ) in {_rel_key(relation) for relation in rebac.relations}
+        assert report.teams_imported == 1
+        assert any(
+            "ZERO team_admin" in w and "team-custom" in w for w in report.warnings
+        )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_realm_file_supplied_externally_is_used_when_zip_has_none(
     tmp_path: Path,
 ) -> None:
@@ -739,6 +965,42 @@ async def test_realm_file_supplied_externally_overrides_zip_realm(
             assert row.name == "from-upload"
     finally:
         await engine.dispose()
+
+
+def test_realm_file_missing_groups_is_rejected_outright() -> None:
+    """KEA CUTOVER 2026 (2026-07-28): a hand-built `realm_file` (SQL extraction
+    against the source Keycloak DB, not a real Keycloak export) missing its
+    `groups` key must fail the whole request, not proceed and silently drop
+    every team as an orphan reference."""
+    with pytest.raises(UnsupportedBundleFormatError, match="groups"):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps(
+                {"users": [{"id": UID_BOB, "username": "bob"}]}
+            ).encode("utf-8"),
+        )
+
+
+def test_realm_file_empty_users_is_rejected_outright() -> None:
+    """Same rule, `users` side: an empty list parses as valid JSON but leaves
+    every kea identity PENDING — refuse rather than proceed blind."""
+    with pytest.raises(UnsupportedBundleFormatError, match="users"):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps(
+                {"groups": [{"id": "team-custom", "name": "fredlab"}], "users": []}
+            ).encode("utf-8"),
+        )
+
+
+def test_realm_file_not_a_json_object_is_rejected_outright() -> None:
+    """A `realm_file` that parses but isn't an object (e.g. a bare list) must
+    fail clearly, not crash later with an opaque AttributeError."""
+    with pytest.raises(UnsupportedBundleFormatError):
+        open_bundle(
+            _kea_bundle(),
+            external_realm_data=json.dumps([1, 2, 3]).encode("utf-8"),
+        )
 
 
 @pytest.mark.asyncio
@@ -877,10 +1139,15 @@ async def test_tuple_phase_writes_transformed_relations(tmp_path: Path) -> None:
             rebac=rebac,
         )
         written = {_rel_key(r) for r in rebac.relations}
+        # #2065: the import's cold-path reconciliation also guarantees the
+        # organization structural edge for every team in the reconciled plan
+        # (T1, synthesized from the realm group) — the original kea tuple
+        # dump above never carried an `organization` tuple for it.
         assert written == {
             (f"user:{UID_BOB}", "team_admin", "team:T1"),
             (f"user:{UID_BOB}", "team_editor", "team:T1"),
             (f"user:{UID_LIAM}", "team_member", "team:T1"),
+            ("organization:fred", "organization", "team:T1"),
         }
         assert report.tuples_written == 3
         assert report.tuples_dropped == 1

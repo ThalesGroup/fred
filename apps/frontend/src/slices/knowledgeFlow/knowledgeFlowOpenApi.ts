@@ -99,6 +99,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.browseDocumentsByTagRequest,
       }),
     }),
+    tagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPost: build.mutation<
+      TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse,
+      TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/tag-sizes`,
+        method: "POST",
+        body: queryArg.tagSizesRequest,
+      }),
+    }),
     addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
@@ -1021,6 +1031,11 @@ export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiRes
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
   browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
 };
+export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse =
+  /** status 200 Successful Response */ TagSizesResponse;
+export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg = {
+  tagSizesRequest: TagSizesRequest;
+};
 export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
 export type AddDocumentLabelApiArg = {
   documentUid: string;
@@ -1900,6 +1915,16 @@ export type BrowseDocumentsByTagRequest = {
   offset?: number;
   limit?: number;
 };
+export type TagSizesResponse = {
+  /** Total document bytes per requested tag id (0 when unknown/empty) */
+  sizes: {
+    [key: string]: number;
+  };
+};
+export type TagSizesRequest = {
+  /** Library tag identifiers to total */
+  tag_ids: string[];
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -2646,6 +2671,7 @@ export const {
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
   useAddDocumentLabelMutation,
   useRemoveDocumentLabelMutation,
   useListDocumentLabelsQuery,

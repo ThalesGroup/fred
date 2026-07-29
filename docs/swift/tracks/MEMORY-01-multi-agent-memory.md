@@ -43,7 +43,7 @@ Recommended branch order: F.1 → F.2 → F.3 → F.4.
 
 ## Notes
 
-- The four F-branches must land on `swift` before MEMORY-01 is fully closed in `id-legend.yaml`.
+- The four F-branches must land on `swift` before this track's `Status` above moves to fully closed.
 - MEMORY-03 and MEMORY-04 are a convergence pair: together they remove the last dual
   execution-seam paths introduced during the memory implementation.
 - PROMPT-07 (token cost KPI) is a separate track that depends on MEMORY-01 hardening being done

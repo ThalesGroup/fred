@@ -27,7 +27,14 @@ type Props = {
 // `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
-const PDF_SCALE = 0.8;
+// Render pages at the full available width (minus a small scrollbar gutter) so
+// the document exploits the whole preview surface — the drawer already provides
+// the surrounding chrome/margins.
+const PDF_SCALE = 1.0;
+// Debounce (ms) for width-driven re-layout. A drag on the preview's resize
+// handle fires the ResizeObserver every frame; re-rendering every page of a
+// long PDF that often locks the UI. Coalesce to one reflow once the drag settles.
+const RESIZE_DEBOUNCE_MS = 150;
 
 // Header-less by design: the two hosting contexts (DocumentViewerPage's own
 // top bar, InlineDrawer's own title+close) already provide chrome, so this
@@ -102,14 +109,28 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
   useEffect(() => {
     if (!contentRef.current) return;
     const el = contentRef.current;
+    const computeWidth = () => Math.floor(Math.max(320, Math.floor(el.clientWidth - 16)) * PDF_SCALE);
+    // Seed synchronously so the first paint is already at the right width.
+    setPageWidth(computeWidth());
+    // Debounced re-layout: while the user drags the preview wider/narrower the
+    // observer fires continuously — only apply the new width (and re-render the
+    // pages once) after the drag has paused. Skip a no-op update so an observer
+    // tick that didn't actually change the width can't churn the page list.
+    let timer: number | null = null;
     const ro = new ResizeObserver(() => {
-      const base = Math.max(320, Math.floor(el.clientWidth - 24));
-      setPageWidth(Math.floor(base * PDF_SCALE));
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setPageWidth((prev) => {
+          const next = computeWidth();
+          return next === prev ? prev : next;
+        });
+      }, RESIZE_DEBOUNCE_MS);
     });
     ro.observe(el);
-    const base = Math.max(320, Math.floor(el.clientWidth - 24));
-    setPageWidth(Math.floor(base * PDF_SCALE));
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, []);
 
   const pdfUrl = useMemo(() => {
@@ -141,6 +162,23 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
     setReloadKey((k) => k + 1); // remount Document to reset PDF.js
   }, [documentUid]);
 
+  // Rebuild the page list only when the count or the (debounced) width changes,
+  // so unrelated state updates (loading flags, worker churn) don't re-render
+  // every page of a long document.
+  const pages = useMemo(
+    () =>
+      Array.from({ length: numPages ?? 0 }, (_, i) => (
+        <Page
+          key={`page_${i + 1}`}
+          pageNumber={i + 1}
+          width={pageWidth}
+          renderAnnotationLayer
+          renderTextLayer={false} // faster by default
+        />
+      )),
+    [numPages, pageWidth],
+  );
+
   return (
     <div ref={contentRef} className={styles.viewer}>
       {!isLoading && loadError && <p className={styles.error}>{loadError}</p>}
@@ -154,15 +192,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
           loading={<p className={styles.loading}>Loading…</p>}
           error={<p className={styles.error}>Failed to load PDF document.</p>}
         >
-          {Array.from({ length: numPages ?? 0 }, (_, i) => (
-            <Page
-              key={`page_${i + 1}`}
-              pageNumber={i + 1}
-              width={pageWidth}
-              renderAnnotationLayer
-              renderTextLayer={false} // faster by default
-            />
-          ))}
+          {pages}
         </Document>
       )}
 

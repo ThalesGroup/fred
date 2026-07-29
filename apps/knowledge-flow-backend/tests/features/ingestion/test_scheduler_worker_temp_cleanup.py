@@ -7,7 +7,7 @@ import pytest
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.features.scheduler.activities import output_process
+from knowledge_flow_backend.features.scheduler.activities import output_process, output_process_trusted
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -200,3 +200,89 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     assert result is metadata
     assert tracked_dir.exited is True
     assert not tracked_dir.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_output_process_and_trusted_variant_call_the_right_save_metadata(tmp_path, monkeypatch):
+    """MIGR-07 CSV/cross-team fix, regression guard for the activity split:
+
+    `output_process` (normal per-document ingestion, used by the `OutputProcess`
+    workflow) must always persist through the permission-checked
+    `save_metadata` — never the trusted variant, or a caller with no ReBAC
+    grant on the document's tags could silently write it anyway.
+    `output_process_trusted` (corpus-revectorize migration path only) must
+    always go through `save_metadata_trusted` — never the checked one, or the
+    whole point of the trusted path (letting a root/platform admin
+    revectorize documents outside their own teams) breaks again.
+    """
+    metadata = _FakeMetadata(document_uid="doc-output", document_name="sample.csv")
+    user = _user()
+    file = FileToProcess(
+        source_tag="fred",
+        tags=[],
+        display_name="sample.csv",
+        document_uid="doc-output",
+        profile=IngestionProcessingProfile.medium,
+        processed_by=user,
+    )
+
+    class _FakeService:
+        def __init__(self) -> None:
+            self.checked_calls = 0
+            self.trusted_calls = 0
+
+        async def save_metadata(self, user, metadata) -> None:
+            self.checked_calls += 1
+
+        async def save_metadata_trusted(self, user, metadata) -> None:
+            self.trusted_calls += 1
+
+        def get_local_copy(self, user, metadata, working_dir) -> pathlib.Path:
+            input_dir = working_dir / "input"
+            input_dir.mkdir(parents=True, exist_ok=True)
+            (input_dir / metadata.document_name).write_text("city,amount\nParis,10\n", encoding="utf-8")
+            return working_dir
+
+        def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
+            return metadata
+
+    fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
+    checked_service = _FakeService()
+    trusted_service = _FakeService()
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.application_context.ApplicationContext.get_instance",
+        lambda: fake_app_context,
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.emit_temporal_activity_result_kpis",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.activity.logger",
+        logging.getLogger("test-output-process-trusted"),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
+        lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-checked"),
+    )
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
+        lambda: checked_service,
+    )
+    await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+    assert checked_service.checked_calls > 0
+    assert checked_service.trusted_calls == 0
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
+        lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-trusted"),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
+        lambda: trusted_service,
+    )
+    await output_process_trusted(file=file, metadata=metadata, accept_memory_storage=True)
+    assert trusted_service.trusted_calls > 0
+    assert trusted_service.checked_calls == 0

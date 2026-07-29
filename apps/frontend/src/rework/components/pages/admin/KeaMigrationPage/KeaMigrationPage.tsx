@@ -25,10 +25,16 @@
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import Button from "@shared/atoms/Button/Button.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { personalTeamId } from "@shared/utils/teamId";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import type { KeaDryRunResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useCorpusRevectorizeMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useResetPlatformRebacMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./KeaMigrationPage.module.css";
 
 function FileField({
@@ -92,6 +98,11 @@ export default function KeaMigrationPage() {
   const [error, setError] = useState<string | null>(null);
   const [applyResult, setApplyResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sourceTag, setSourceTag] = useState("");
+  const [revectorizeCorpus, { isLoading: isRevectorizing }] = useCorpusRevectorizeMutation();
+  const [revectorizeResult, setRevectorizeResult] = useState<string | null>(null);
+  const [resetPlatformRebac, { isLoading: isTearingDown }] = useResetPlatformRebacMutation();
+  const [showTeardownConfirm, setShowTeardownConfirm] = useState(false);
 
   const canRun = file !== null && !isDryRunning && !isApplying;
 
@@ -139,6 +150,58 @@ export default function KeaMigrationPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setIsApplying(false);
+    }
+  };
+
+  const handleRevectorize = async () => {
+    if (!sourceTag.trim()) return;
+    setError(null);
+    setRevectorizeResult(null);
+    const userId = KeyCloakService.GetUserId();
+    if (!userId) {
+      setError("Impossible de déterminer l'utilisateur connecté.");
+      return;
+    }
+    try {
+      const { task_id } = await revectorizeCorpus({
+        revectorizeCorpusRequestV1: {
+          scope: { source_tag: sourceTag },
+          // Fixé au réglage sûr validé pendant la répétition de bascule Kea :
+          // incremental + no force ne touche que les documents sans aucun chunk
+          // vectoriel existant (voir mark_document_vectorized / MIGR-07.04) — jamais
+          // un ré-embedding silencieux de tout le corpus. Volontairement pas exposé.
+          options: { mode: "incremental", force: false },
+          team_id: personalTeamId(userId),
+        },
+      }).unwrap();
+      dispatch(
+        taskRegistered({
+          taskId: task_id,
+          kind: "ingestion",
+          target: { type: "corpus-revectorize", id: task_id, label: `Rebuild embeddings · ${sourceTag}` },
+        }),
+      );
+      setRevectorizeResult(`Reconstruction lancée — task ${task_id}. Suivre la progression sur /admin/migration.`);
+      setSourceTag("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleTeardownConfirmed = async () => {
+    setShowTeardownConfirm(false);
+    setError(null);
+    try {
+      const { task_id } = await resetPlatformRebac().unwrap();
+      dispatch(
+        taskRegistered({
+          taskId: task_id,
+          kind: "migration",
+          target: { type: "platform", id: task_id, label: "Teardown plateforme" },
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -242,6 +305,68 @@ export default function KeaMigrationPage() {
           )}
         </div>
       )}
+
+      <div className={styles.report}>
+        <span className={styles.reportTitle}>Étape 3 : reconstruire les embeddings</span>
+        <p className={styles.intro}>
+          Rattache les vecteurs déjà présents (ou reconstruit ceux qui manquent) pour les documents dont les métadonnées
+          viennent d&apos;être restaurées par l&apos;import — à lancer après l&apos;import réel et le premier login des
+          utilisateurs concernés. Le tag à saisir est celui utilisé côté Kea au moment de l&apos;ingestion des documents
+          (le défaut applicatif pour un upload manuel est <code>fred</code>).
+        </p>
+        <div className={styles.uploadRow}>
+          <TextInput
+            label="Source tag"
+            value={sourceTag}
+            onChange={(e) => setSourceTag(e.target.value)}
+            placeholder="ex. fred"
+            disabled={isRevectorizing}
+          />
+        </div>
+        <div className={styles.actions}>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            onClick={() => void handleRevectorize()}
+            disabled={!sourceTag.trim() || isRevectorizing}
+          >
+            {isRevectorizing ? "Lancement…" : "Reconstruire les embeddings"}
+          </Button>
+        </div>
+        {revectorizeResult && <div className={styles.success}>{revectorizeResult}</div>}
+      </div>
+
+      <div className={styles.report}>
+        <span className={styles.reportTitle}>Teardown (tests uniquement)</span>
+        <p className={`${styles.intro} ${styles.dangerLine}`}>
+          Supprime équipes, agents, prompts, tags et documents (Postgres) ainsi que tous les tuples OpenFGA —
+          l&apos;admin root et ton propre compte sont préservés. Les comptes Keycloak, OpenSearch et S3 ne sont jamais
+          touchés. À utiliser uniquement pour repartir sur une base propre entre deux répétitions d&apos;import.
+        </p>
+        <div className={styles.actions}>
+          <Button
+            color="error"
+            variant="outlined"
+            size="medium"
+            onClick={() => setShowTeardownConfirm(true)}
+            disabled={isTearingDown}
+          >
+            {isTearingDown ? "Teardown en cours…" : "Teardown"}
+          </Button>
+        </div>
+      </div>
+
+      <ConfirmationDialog
+        open={showTeardownConfirm}
+        title="Teardown — supprimer équipes, agents et OpenFGA ?"
+        message="Supprime définitivement les agents, tags, documents, équipes et prompts (Postgres), ainsi que tous les tuples OpenFGA. Les comptes Keycloak, OpenSearch et S3 ne sont pas affectés. Action irréversible."
+        confirmLabel="Teardown"
+        cancelLabel="Annuler"
+        criticalAction
+        onConfirm={handleTeardownConfirmed}
+        onCancel={() => setShowTeardownConfirm(false)}
+      />
     </div>
   );
 }

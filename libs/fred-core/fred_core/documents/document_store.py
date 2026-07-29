@@ -96,6 +96,24 @@ class BaseDocumentMetadataStore:
         total = len(all_docs)
         return all_docs[offset : offset + limit], total
 
+    async def total_size_by_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> dict[str, int]:
+        """Sum of ``file.file_size_bytes`` across every document in each given tag.
+
+        Deliberately NOT paginated — the folder-size UI needs an exact total
+        regardless of how many documents a folder holds. This default loops per
+        tag via ``get_metadata_in_tag``; SQL-backed stores should override with a
+        single aggregate query (see ``PostgresDocumentMetadataStore``).
+        """
+        result: dict[str, int] = {}
+        for tag_id in tag_ids:
+            docs = await self.get_metadata_in_tag(tag_id, session=session)
+            result[tag_id] = sum(
+                (d.file.file_size_bytes or 0) for d in docs if d.file is not None
+            )
+        return result
+
     @abstractmethod
     async def list_by_source_tag(
         self, source_tag: str, session: AsyncSession | None = None

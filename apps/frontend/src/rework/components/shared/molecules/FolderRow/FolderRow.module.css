@@ -101,6 +101,15 @@
   white-space: nowrap;
 }
 
+/* Folder total size — shown only while collapsed. Deliberately not bold: it's a
+ * secondary detail, unlike the doc count which reads as label-medium. */
+.size {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .aggregate {
   display: inline-flex;
   align-items: center;

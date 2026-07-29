@@ -1,6 +1,6 @@
 # TURN-07 — expired-token recovery blocks the event loop with synchronous Keycloak HTTP
 
-- **GitHub issue:** dedicated issue not yet created
+- **GitHub issue:** [#2125](https://github.com/ThalesGroup/fred/issues/2125)
 - **Priority:** P1
 - **Verdict:** confirmed
 - **Owner:** unassigned
@@ -49,6 +49,8 @@ call in an unbounded thread pool.
 
 - **2026-07-26:** recorded P1 confirmed. A ten-second timeout bounds the remote
   call but does not prevent event-loop blocking.
+- **2026-07-27:** tracking issue [#2125](https://github.com/ThalesGroup/fred/issues/2125)
+  created, targeting `swift-golive`. Not yet implemented.
 
 ## Resolution evidence
 
