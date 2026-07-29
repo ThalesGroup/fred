@@ -29,13 +29,12 @@ from typing import Any, Iterable, cast
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import RebacReference, Relation, RelationType, Resource
-from fred_core.common import TeamId
-from fred_core.teams.metadata_store import TeamMetadata
-
 from _rebac_test_doubles import CountingRebacEngine
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.service import _enrich_teams_with_membership
+from fred_core import RebacReference, Relation, RelationType, Resource
+from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamMetadata
 
 
 def _fake_deps() -> TeamServiceDependencies:

@@ -32,6 +32,10 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from _rebac_test_doubles import CountingRebacEngine, assert_no_openfga_calls
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.schemas import TeamNotFoundError
+from control_plane_backend.teams.service import require_team_access
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -41,11 +45,6 @@ from fred_core import (
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.teams.metadata_store import TeamMetadata
-
-from _rebac_test_doubles import CountingRebacEngine, assert_no_openfga_calls
-from control_plane_backend.teams.dependencies import TeamServiceDependencies
-from control_plane_backend.teams.schemas import TeamNotFoundError
-from control_plane_backend.teams.service import require_team_access
 
 
 class _FakeMetadataStore:

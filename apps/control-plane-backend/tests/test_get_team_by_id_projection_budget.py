@@ -39,6 +39,19 @@ from typing import Any, Iterable, cast
 from unittest.mock import MagicMock
 
 import pytest
+from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.scheduler.policies.policy_models import (
+    ConversationPolicyCatalog,
+)
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.schemas import CreateTeamRequest, UserTeamRelation
+from control_plane_backend.teams.service import (
+    _list_teams,
+    create_team,
+    get_team_by_id,
+    update_team,
+)
+from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -53,20 +66,6 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.teams.metadata_store import TeamMetadata
-
-from _rebac_test_doubles import CountingRebacEngine
-from control_plane_backend.scheduler.policies.policy_models import (
-    ConversationPolicyCatalog,
-)
-from control_plane_backend.teams.dependencies import TeamServiceDependencies
-from control_plane_backend.teams.schemas import CreateTeamRequest, UserTeamRelation
-from control_plane_backend.teams.service import (
-    _list_teams,
-    create_team,
-    get_team_by_id,
-    update_team,
-)
-from control_plane_backend.users.schemas import UserSummary
 
 _ALL_PERMISSIONS = frozenset(TeamPermission)
 

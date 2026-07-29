@@ -39,6 +39,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from _rebac_test_doubles import CountingRebacEngine
 from control_plane_backend.teams.schemas import TeamNotOpenForJoiningError
 from control_plane_backend.teams.service import join_team
 from fred_core import (
@@ -52,8 +53,6 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
-
-from _rebac_test_doubles import CountingRebacEngine
 
 pytestmark = pytest.mark.asyncio
 
