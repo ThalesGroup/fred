@@ -121,30 +121,6 @@
   text-align: left;
 }
 
-.nameHeaderCell {
-  transform: translateX(-4px);
-}
-
-.targetHeaderCell {
-  transform: translateX(-38px);
-}
-
-.stateHeaderCell {
-  transform: translateX(-68px);
-}
-
-.verdictHeaderCell {
-  transform: translateX(-104px);
-}
-
-.progressHeaderCell {
-  transform: translateX(-140px);
-}
-
-.scoresHeaderCell {
-  transform: translateX(-176px);
-}
-
 .bodyRow {
   position: relative;
   cursor: pointer;

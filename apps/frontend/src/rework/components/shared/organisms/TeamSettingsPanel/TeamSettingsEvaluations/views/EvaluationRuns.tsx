@@ -195,6 +195,16 @@ export default function EvaluationRuns({
     { evaluationId, sort, offset, limit: RUNS_PAGE_SIZE },
     { skip: !evaluationId, pollingInterval: 10_000 },
   );
+
+  // Deleting the last row of a non-first page (or any other drop in `total`, e.g.
+  // a concurrent delete from another tab) can leave `offset` pointing past the new
+  // last page — snap back so the table never renders an empty page while later
+  // pages still hold data.
+  useEffect(() => {
+    if (!data) return;
+    const maxOffset = Math.max(0, Math.ceil(data.total / RUNS_PAGE_SIZE) - 1) * RUNS_PAGE_SIZE;
+    if (offset > maxOffset) setOffset(maxOffset);
+  }, [data, offset]);
   const { data: managedInstances = [] } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId },
     { skip: !teamId },
