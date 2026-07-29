@@ -153,7 +153,10 @@ from control_plane_backend.teams.schemas import (
     TeamAlreadyExistsError,
     UserTeamRelation,
 )
-from control_plane_backend.teams.service import create_team
+from control_plane_backend.teams.service import (
+    create_team,
+    invalidate_team_relations_cache,
+)
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import CreateUserRequest
 from control_plane_backend.users.service import create_user
@@ -750,6 +753,14 @@ async def _grant_team_role_via_import(
         ),
         actor_uid=actor_uid,
     )
+    # PR #2160 review: this writes a team_member relation directly (see the
+    # docstring above for why it can't route through the ordinary
+    # `teams.service` write path) but must still invalidate
+    # `_TEAM_RELATIONS_CACHE` (#2148) the same as every other team-relation
+    # write — otherwise a bundle import reports success while `/teams` and
+    # `/frontend/bootstrap` keep serving the pre-import membership for up to
+    # the cache's 45s TTL.
+    invalidate_team_relations_cache(team_id)
 
 
 async def _provision_bundle_identities(

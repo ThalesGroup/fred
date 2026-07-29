@@ -41,12 +41,15 @@ call-counting `RebacEngine` instead.
 
 from __future__ import annotations
 
+import time as time_module
 from typing import Any, Iterable, cast
 from unittest.mock import MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.teams import service as teams_service
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _enrich_teams_with_membership
 from fred_core import RebacReference, Relation, RelationType, Resource
 from fred_core.common import TeamId
@@ -143,3 +146,87 @@ async def test_enrich_teams_with_membership_uses_one_exact_read_per_team(
     for team in teams:
         assert team.member_count == 2
         assert {admin.id for admin in team.admins} == {f"{team.id}-admin"}
+
+
+@pytest.mark.asyncio
+async def test_bulk_team_membership_serves_repeat_calls_from_cache() -> None:
+    """#2148: within the 45s TTL, a second call for the same teams must not
+    re-hit OpenFGA — this is the whole point of caching the per-team
+    `list_direct_relations` Read that's still O(team_count)."""
+    teams_metadata = _teams(5)
+    team_ids = [str(metadata.id) for metadata in teams_metadata]
+    engine = CountingRebacEngine(direct_relations=_membership_tuples(team_ids))
+    user = cast(Any, type("User", (), {"uid": "someone"})())
+
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 5
+
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 5, (
+        "second call within the TTL window must be served entirely from cache"
+    )
+
+
+@pytest.mark.asyncio
+async def test_bulk_team_membership_refetches_after_ttl_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teams_metadata = _teams(3)
+    team_ids = [str(metadata.id) for metadata in teams_metadata]
+    engine = CountingRebacEngine(direct_relations=_membership_tuples(team_ids))
+    user = cast(Any, type("User", (), {"uid": "someone"})())
+
+    fake_now = 1_000_000.0
+    monkeypatch.setattr(time_module, "time", lambda: fake_now)
+
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 3
+
+    # still within the 45s TTL: cache hit, no new calls
+    fake_now += teams_service._TEAM_RELATIONS_CACHE_TTL_SECONDS - 1
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 3
+
+    # past the TTL: every team must be re-read
+    fake_now += 2
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 6
+
+
+@pytest.mark.asyncio
+async def test_team_relations_cache_invalidated_on_membership_write() -> None:
+    """#2148: a member/admin write for one team must be visible on the very
+    next read, not wait out the TTL — `_add_team_member_relation`,
+    `_remove_team_member_relation`, and `_remove_all_team_member_relations`
+    all call `invalidate_team_relations_cache` right after their write."""
+    teams_metadata = _teams(2)
+    team_ids = [str(metadata.id) for metadata in teams_metadata]
+    engine = CountingRebacEngine(direct_relations=_membership_tuples(team_ids))
+    user = cast(Any, type("User", (), {"uid": "someone"})())
+
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 2
+
+    await teams_service._add_team_member_relation(
+        engine, TeamId(team_ids[0]), "new-member", UserTeamRelation.TEAM_MEMBER
+    )
+
+    # only team_ids[0]'s cache entry was invalidated — a fresh read for it,
+    # team_ids[1] still served from cache.
+    await _enrich_teams_with_membership(
+        engine, user=user, teams_metadata=teams_metadata, deps=_fake_deps()
+    )
+    assert len(engine.list_direct_relations_calls) == 3
+    assert engine.list_direct_relations_calls[-1][0].id == team_ids[0]
