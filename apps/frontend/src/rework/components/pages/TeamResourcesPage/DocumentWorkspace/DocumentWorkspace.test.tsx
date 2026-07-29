@@ -223,3 +223,18 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     expect(props.initialFiles).toBeUndefined();
   });
 });
+
+describe("DocumentWorkspace stats refresh", () => {
+  it("notifies onDocumentsChanged when the upload drawer completes", () => {
+    const onDocumentsChanged = vi.fn();
+    act(() => {
+      root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} onDocumentsChanged={onDocumentsChanged} />);
+    });
+
+    act(() => {
+      (lastDrawerProps().onUploadComplete as () => void)();
+    });
+
+    expect(onDocumentsChanged).toHaveBeenCalled();
+  });
+});

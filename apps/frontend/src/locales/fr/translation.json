@@ -477,7 +477,7 @@
     "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
     "uploadAndProcess": "Importer et traiter",
     "uploadDestination": "Les fichiers seront ajoutés à",
     "uploadDrawerTitle": "Ajouter un document",
@@ -1241,6 +1241,7 @@
       "workspaceTitle": "Fichiers",
       "pageTitle": "Ressources de l'équipe",
       "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",
+      "rootsAria": "Espaces de ressources",
       "storageQuota": "Stockage",
       "roots": {
         "resources": "Corpus d'équipe",
@@ -1344,6 +1345,7 @@
       "loading": "Chargement des ressources...",
       "preview": {
         "title": "Aperçu du document",
+        "tabsAria": "Mode d'affichage",
         "tabs": {
           "file": "Fichier",
           "raw": "Raw"
@@ -1368,7 +1370,8 @@
           "valueLabel": "Fichiers"
         },
         "sizeByType": {
-          "title": "Taille totale par type de fichier"
+          "title": "Taille totale par type de fichier",
+          "tooltipTitle": "Répartition"
         },
         "bucket": {
           "pdf": "PDF",

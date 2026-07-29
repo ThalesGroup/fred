@@ -17,7 +17,7 @@
 
 /* ── Drawer shell ──────────────────────────────────────────────────────── */
 .drawer {
-  background: var(--surface-container);
+  background: var(--drawer-background, var(--surface-container));
 }
 
 /* Overlay (default): floats over content, the rest is dimmed by .backdrop. */

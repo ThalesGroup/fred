@@ -477,7 +477,7 @@
     "storageQuotaExceededMessage": "Adding these files will exceed the maximum storage capacity allowed for this team.",
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
-    "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
     "uploadDrawerTitle": "Upload a document",
@@ -1241,6 +1241,7 @@
       "workspaceTitle": "Files",
       "pageTitle": "Team resources",
       "pageSubtitle": "Manage local resources, manually added to the team",
+      "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
         "resources": "Team corpus",
@@ -1344,6 +1345,7 @@
       "loading": "Loading resources...",
       "preview": {
         "title": "Document preview",
+        "tabsAria": "Display mode",
         "tabs": {
           "file": "File",
           "raw": "Raw"
@@ -1368,7 +1370,8 @@
           "valueLabel": "Files"
         },
         "sizeByType": {
-          "title": "Size by type"
+          "title": "Size by type",
+          "tooltipTitle": "Breakdown"
         },
         "bucket": {
           "pdf": "PDF",

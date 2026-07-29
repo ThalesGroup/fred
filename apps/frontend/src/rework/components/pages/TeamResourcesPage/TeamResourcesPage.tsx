@@ -19,7 +19,8 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
-import Tabs, { type TabItem } from "@shared/molecules/Tabs/Tabs.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import {
@@ -55,7 +56,14 @@ export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
   const { activeTeam } = useFrontendBootstrap();
-  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
+  // isPersonalTeamId alone is authoritative (handles both the bare "personal"
+  // alias and the canonical "personal-<uid>" id — see its own doc comment).
+  // An earlier `|| teamId === activeTeam?.id` fallback dates from before real
+  // multi-team support existed, when "active team" and "personal space" were
+  // the same concept — it silently misclassified any real team as personal
+  // whenever you viewed the Resources page for your currently active team,
+  // hiding "Espace partagé" for a legitimate team.
+  const isPersonalTeam = isPersonalTeamId(teamId);
   const userId = KeyCloakService.GetUserId() ?? "";
   const teamName = activeTeam?.name ?? teamId;
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
@@ -75,12 +83,14 @@ export default function TeamResourcesPage() {
     if (isPersonalTeam && activeTab === "team") setActiveTab("resources");
   }, [isPersonalTeam, activeTab]);
 
-  const rootTabs: TabItem<ResourceRootTab>[] = [
+  const rootTabs: { value: ResourceRootTab; label: string }[] = [
     { value: "resources", label: t("rework.resources.roots.resources") },
     { value: "mine", label: t("rework.resources.roots.mine") },
     ...(isPersonalTeam ? [] : [{ value: "team" as const, label: t("rework.resources.roots.team") }]),
     { value: "agents", label: t("rework.resources.roots.agents") },
   ];
+  const rootTabItems: ButtonGroupItemProps[] = rootTabs.map((tab) => ({ label: tab.label }));
+  const activeTabIndex = rootTabs.findIndex((tab) => tab.value === activeTab);
 
   // Usage-by-type stats (§13.5/13.7 FRONT-09.I) — one query per tab's data source,
   // each skipped unless it's the active tab so switching tabs never fires every query
@@ -175,10 +185,24 @@ export default function TeamResourcesPage() {
         />
       )}
 
-      <Tabs<ResourceRootTab> tabs={rootTabs} value={activeTab} onChange={setActiveTab} />
+      <ButtonGroup
+        items={rootTabItems}
+        size="xs"
+        color="secondary"
+        variant="tabs"
+        aria-label={t("rework.resources.rootsAria")}
+        selectedIndex={activeTabIndex}
+        onSelectedIndexChange={(index) => setActiveTab(rootTabs[index].value)}
+      />
 
       <div className={styles.panel}>
-        {activeTab === "resources" && <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />}
+        {activeTab === "resources" && (
+          <DocumentWorkspace
+            teamId={teamId}
+            isPersonalTeam={isPersonalTeam}
+            onDocumentsChanged={() => void corpusStats.refetch()}
+          />
+        )}
 
         {activeTab === "mine" && (
           <WorkspaceRoot

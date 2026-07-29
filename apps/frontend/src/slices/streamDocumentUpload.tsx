@@ -68,6 +68,12 @@ export async function streamUploadOrProcessDocument(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
+  // A progress line reporting this file's own failure (e.g. an unsupported
+  // extension raised during "upload preparation", before any task_id ever
+  // existed) carries no task_id, so the task_id-keyed loop below never sees
+  // it — it would otherwise be silently dropped and the caller would resolve
+  // as if nothing happened, with no toast, no tray entry, nothing.
+  let failureMessage: string | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -88,11 +94,21 @@ export async function streamUploadOrProcessDocument(
           };
           tasks.push(task);
           onTaskDiscovered?.(task);
+        } else if (event.status === "failed" || event.status === "error") {
+          failureMessage =
+            typeof event.error === "string" && event.error ? event.error : `Failed to process ${file.name}`;
         }
       } catch {
         // non-JSON line — ignore
       }
     }
+  }
+
+  // A failure after a task_id was already discovered is reported by that
+  // task in the tray/Activity instead (see scheduleFile's onBackgroundError
+  // comment) — only throw here for a failure that preempted every task.
+  if (tasks.length === 0 && failureMessage) {
+    throw new Error(failureMessage);
   }
 
   return tasks;

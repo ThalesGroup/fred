@@ -153,10 +153,8 @@ describe("fileIconSpec", () => {
     expect(fileIconSpec(fileType)).toEqual({ type: "table", color: "var(--success)" });
   });
 
-  // Not called out as its own row-icon color by the developer — falls back
-  // to Autres, same as any other unlisted type.
-  it("maps pptx to the Autres fallback, not its own color", () => {
-    expect(fileIconSpec("pptx")).toEqual({ type: "draft", color: "var(--on-surface-muted)" });
+  it.each(["ppt", "pptx"])("maps %s (PowerPoint) to slideshow in warning", (fileType) => {
+    expect(fileIconSpec(fileType)).toEqual({ type: "slideshow", color: "var(--warning)" });
   });
 
   it("falls back to draft in on-surface-muted for unknown or missing file types", () => {

@@ -17,6 +17,11 @@
 
 .section[data-compact] .title {
   font: var(--font-label-small);
+  /* Stats-card-only override — the base .title below is all-caps for the
+     roomier, non-compact BarChart usages (AnalyticsPage, TeamUsagePage); the
+     compact stat tiles (Resources page) want normal sentence case instead. */
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .header {

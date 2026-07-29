@@ -181,4 +181,26 @@ describe("DocumentWorkspace back navigation", () => {
     // — hidden must track "are we at the root", not "is there history".
     expect(backButtonIsHidden()).toBe(true);
   });
+
+  // Regression: breadcrumbSegments built its intermediate segments' onClick
+  // by closing over a single `let acc` mutated across the whole forEach —
+  // every segment's closure shared that one binding, so by the time any of
+  // them actually fired (a later click), `acc` held whatever the loop left
+  // it at (the deepest path), not the segment that was clicked. Clicking a
+  // non-root, non-last crumb was a silent no-op: it "navigated" to the
+  // folder you were already in.
+  it("navigates to an intermediate breadcrumb segment (parent), not just root or the current folder", () => {
+    click(folderButton("CIR"));
+    click(folderButton("Reports")); // now two levels deep, inside Reports
+
+    // "CIR" here can only be the breadcrumb's own segment: Reports has no
+    // child folders, so no CIR folder row exists at this depth.
+    click(folderButton("CIR"));
+
+    // Back at CIR: its child folder row ("Reports") is visible again.
+    // Under the bug, the click was a no-op (stayed inside Reports, whose
+    // only "CIR"/"Reports"-matching button is the breadcrumb's own CIR
+    // crumb — never a "Reports" row).
+    expect(visibleFolderNames()).toEqual(["Reports"]);
+  });
 });

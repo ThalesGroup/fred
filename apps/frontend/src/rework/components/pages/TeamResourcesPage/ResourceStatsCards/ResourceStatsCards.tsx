@@ -70,6 +70,7 @@ export default function ResourceStatsCards({ entries, isLoading, isError }: Reso
       />
       <SizeByTypeBar
         title={t("rework.resources.stats.sizeByType.title")}
+        tooltipTitle={t("rework.resources.stats.sizeByType.tooltipTitle")}
         segments={sizeSegments}
         isLoading={isLoading}
         isError={isError}

@@ -1,9 +1,12 @@
 /* The markdown body spans the host's full width so wide tables (CSV/Excel
    extracts) can use all available space. Running text keeps a comfortable
    reading measure via the MarkdownRenderer `fullWidth` per-block cap, so only
-   tables and other wide blocks actually fill the width. */
+   tables and other wide blocks actually fill the width. Side padding is kept
+   small: the host drawer's own `.body` already contributes its own padding
+   around this — stacking a second, wide side margin on top of that just
+   wastes width the drawer doesn't have to spare (FRONT-09 feedback). */
 .markdownBody {
-  padding: var(--spacing-xl) var(--spacing-l);
+  padding: var(--spacing-xl) var(--spacing-xs);
 }
 
 .loading {
@@ -13,20 +16,6 @@
   text-align: center;
 }
 
-.viewerWithToggle {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-.viewerTabs {
-  flex-shrink: 0;
-  padding: 0 var(--spacing-l);
-}
-
 .viewerBody {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  height: 100%;
 }

@@ -33,6 +33,8 @@ interface InlineDrawerProps {
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
+  background?: string;
   /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
@@ -58,6 +60,7 @@ export function InlineDrawer({
   title,
   headerActions,
   width = "480px",
+  background,
   layout = "overlay",
   resizable,
   children,
@@ -124,7 +127,12 @@ export function InlineDrawer({
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         aria-hidden={!open}
         aria-labelledby={titleId}
-        style={{ "--drawer-width": drawerWidth } as React.CSSProperties}
+        style={
+          {
+            "--drawer-width": drawerWidth,
+            ...(background ? { "--drawer-background": background } : {}),
+          } as React.CSSProperties
+        }
       >
         {resizeEnabled && (
           <div

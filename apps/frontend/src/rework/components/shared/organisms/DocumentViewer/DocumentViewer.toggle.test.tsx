@@ -13,9 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the FRONT-09.H "Fichier"/"Raw" toggle: a PDF renders natively
-// by default (unchanged behavior for existing callers) and only shows the
-// toggle when a host explicitly opts in via showRawToggle.
+// Coverage for the FRONT-09.H "Fichier"/"Raw" toggle. The toggle itself
+// (DocumentViewerModeToggle) is rendered by the host, not by DocumentViewer —
+// the corpus preview drawer places it in its own header, left of the close
+// button, instead of stealing a row from the document body. DocumentViewer
+// only picks content per the controlled `view` prop.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -36,13 +38,16 @@ vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
 vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
   PdfStreamingDocumentViewer: () => <div data-testid="pdf-view" />,
 }));
+// A real RTK Query lazy-query trigger is a stable function across renders —
+// a fresh closure here on every render (as a plain `() => [...]` factory
+// would give) makes MarkdownDocumentBody's fetch effect (dependent on this
+// function's identity) refire every render, looping forever.
+const fetchPreviewMock = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({ content: "" }) })));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [
-    () => ({ unwrap: () => Promise.resolve({ content: "" }) }),
-  ],
+  useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreviewMock],
 }));
 
-import { DocumentViewer } from "./DocumentViewer.tsx";
+import { DocumentViewer, DocumentViewerModeToggle } from "./DocumentViewer.tsx";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -69,30 +74,60 @@ function click(el: Element | null) {
   });
 }
 
-describe("DocumentViewer Fichier/Raw toggle", () => {
-  it("renders the PDF natively with no toggle when showRawToggle is omitted (existing callers)", () => {
+/** MarkdownDocumentBody fetches its content asynchronously (starts in a
+ * "Loading…" state) — flush that microtask before asserting on the markdown
+ * view. */
+async function flush() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+describe("DocumentViewer Fichier/Raw content", () => {
+  it("renders the PDF natively with no toggle when view is omitted (existing callers)", () => {
     render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" />);
     expect(container.querySelector('[data-testid="pdf-view"]')).not.toBeNull();
     expect(container.querySelector('[role="tablist"]')).toBeNull();
   });
 
-  it("shows the toggle for a PDF when showRawToggle is set, defaulting to the file view", () => {
-    render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" showRawToggle />);
-    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+  it('renders the native PDF for view="file", with no toggle of its own', () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" view="file" />);
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
     expect(container.querySelector('[data-testid="pdf-view"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="markdown-view"]')).toBeNull();
   });
 
-  it("switches away from the native PDF render when Raw is clicked", () => {
-    render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" showRawToggle />);
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    click(tabs[1]); // "Raw"
+  it('renders the markdown extraction for view="raw"', async () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" view="raw" />);
+    await flush();
     expect(container.querySelector('[data-testid="pdf-view"]')).toBeNull();
+    expect(container.querySelector('[data-testid="markdown-view"]')).not.toBeNull();
   });
 
-  it("never shows the toggle for a non-PDF file — there is nothing to switch to", () => {
-    render(<DocumentViewer documentUid="doc-1" fileName="report.docx" showRawToggle />);
+  it("ignores `view` for a non-PDF file — there is nothing to switch to", async () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="report.docx" view="raw" />);
+    await flush();
     expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(container.querySelector('[data-testid="pdf-view"]')).toBeNull();
+    expect(container.querySelector('[data-testid="markdown-view"]')).not.toBeNull();
+  });
+});
+
+describe("DocumentViewerModeToggle", () => {
+  it("reports the clicked mode via onChange", () => {
+    const onChange = vi.fn();
+    render(<DocumentViewerModeToggle view="file" onChange={onChange} />);
+
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    expect(tabs).toHaveLength(2);
+    click(tabs[1]); // "Raw"
+
+    expect(onChange).toHaveBeenCalledWith("raw");
+  });
+
+  it("marks the current view's tab as selected", () => {
+    render(<DocumentViewerModeToggle view="raw" onChange={() => {}} />);
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    expect(tabs[0].getAttribute("aria-selected")).toBe("false");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
   });
 });

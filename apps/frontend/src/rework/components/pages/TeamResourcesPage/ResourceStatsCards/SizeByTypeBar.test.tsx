@@ -57,7 +57,16 @@ const segments = [
 
 describe("SizeByTypeBar", () => {
   it("only lists non-zero segments in the legend", () => {
-    render(<SizeByTypeBar title="Size" segments={segments} isLoading={false} isError={false} formatValue={String} />);
+    render(
+      <SizeByTypeBar
+        title="Size"
+        tooltipTitle="Breakdown"
+        segments={segments}
+        isLoading={false}
+        isError={false}
+        formatValue={String}
+      />,
+    );
     const items = Array.from(container.querySelectorAll("li")).map((li) => li.textContent);
     expect(items).toEqual(["PDF", "PPT"]);
   });
@@ -66,6 +75,7 @@ describe("SizeByTypeBar", () => {
     render(
       <SizeByTypeBar
         title="Size"
+        tooltipTitle="Breakdown"
         segments={segments.map((s) => ({ ...s, value: 0 }))}
         isLoading={false}
         isError={false}
@@ -78,7 +88,16 @@ describe("SizeByTypeBar", () => {
   });
 
   it("shows the error state", () => {
-    render(<SizeByTypeBar title="Size" segments={[]} isLoading={false} isError formatValue={String} />);
+    render(
+      <SizeByTypeBar
+        title="Size"
+        tooltipTitle="Breakdown"
+        segments={[]}
+        isLoading={false}
+        isError
+        formatValue={String}
+      />,
+    );
     expect(container.textContent).toContain("common.loadingError");
   });
 });

@@ -27,7 +27,11 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import type { OptionModel } from "@models/Option.model.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
-import { DocumentViewer } from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
+import {
+  DocumentViewer,
+  DocumentViewerModeToggle,
+  type ViewMode,
+} from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
@@ -50,6 +54,7 @@ import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "../../../../utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
+import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
@@ -76,8 +81,9 @@ interface RowIconSpec {
 const FOLDER_ICON: RowIconSpec = { type: "folder", color: "var(--folder)", filled: true };
 
 // Mirrors fred-core's FileTypeBucket grouping (PDF / Texte / PPT / Excel /
-// Autres) — PPT isn't its own row-icon color per developer request, so it
-// falls into OTHER_FILE_ICON alongside anything not listed here.
+// Autres). PPT uses --warning (mustard/orange) since that's the closest
+// existing semantic token to PowerPoint's own brand color and no other
+// bucket claims it yet — pdf=error, word/texte=tertiary, excel/csv=success.
 const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
   pdf: { type: "picture_as_pdf", color: "var(--error)" },
   docx: { type: "article", color: "var(--tertiary)" },
@@ -86,6 +92,8 @@ const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
   txt: { type: "article", color: "var(--tertiary)" },
   xlsx: { type: "table", color: "var(--success)" },
   csv: { type: "table", color: "var(--success)" },
+  ppt: { type: "slideshow", color: "var(--warning)" },
+  pptx: { type: "slideshow", color: "var(--warning)" },
 };
 const OTHER_FILE_ICON: RowIconSpec = { type: "draft", color: "var(--on-surface-muted)" };
 
@@ -103,6 +111,11 @@ interface PageState {
 interface DocumentWorkspaceProps {
   teamId: string;
   isPersonalTeam: boolean;
+  /** Notified after any action that adds or removes a document (upload,
+   * single/bulk removal, folder deletion) — lets the parent page's storage
+   * stats cards (file count/size by type) refresh without owning any of
+   * this workspace's own mutation plumbing. */
+  onDocumentsChanged?: () => void;
 }
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
@@ -114,8 +127,22 @@ function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
 }
 
+// identity.title (decision 9, RFC §13.8: cosmetic in-app rename) never carries
+// an extension — it's either a plain user-typed label, or, for a never-renamed
+// document, the file's own embedded "title" metadata property (e.g. a pptx's
+// core Title, commonly auto-filled by PowerPoint from the template/first
+// slide and never including ".pptx"). identity.document_name always does
+// ("Original file name incl. extension"), so it's the source of truth for the
+// extension regardless of which label wins for display.
+function documentDisplayName(doc: DocumentMetadata): string {
+  const label = doc.identity.title || doc.identity.document_name;
+  const dot = doc.identity.document_name.lastIndexOf(".");
+  const extension = dot > 0 ? doc.identity.document_name.slice(dot) : "";
+  return extension && !label.toLowerCase().endsWith(extension.toLowerCase()) ? `${label}${extension}` : label;
+}
+
 function rowLabel(row: Row): string {
-  return row.kind === "folder" ? row.node.name : row.doc.identity.title || row.doc.identity.document_name;
+  return row.kind === "folder" ? row.node.name : documentDisplayName(row.doc);
 }
 
 /**
@@ -125,7 +152,7 @@ function rowLabel(row: Row): string {
  * children (subfolders + documents). Heavy listing stays on the backend:
  * folders lazy-load their first document page on entry.
  */
-function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
+function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -138,7 +165,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
   const {
     data: tags,
     isLoading: tagsLoading,
-    refetch: refetchTags,
+    refetch: refetchTagsQuery,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: "document",
     ownerFilter,
@@ -146,6 +173,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     limit: 10000,
     offset: 0,
   });
+  // Every add/delete path in this workspace (upload, single/bulk removal,
+  // folder deletion, a newly-registered ingestion task) already calls
+  // refetchTags() to refresh the folder tree — piggyback the stats refresh
+  // on that same signal instead of threading it through each call site.
+  const refetchTags = useCallback(() => {
+    onDocumentsChanged?.();
+    return refetchTagsQuery();
+  }, [refetchTagsQuery, onDocumentsChanged]);
 
   const tree = useMemo(() => {
     const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
@@ -308,6 +343,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
   });
+  // The Fichier/Raw toggle lives in the preview drawer's own header (next to
+  // its close button), not inside DocumentViewer's body — so this workspace,
+  // not the viewer, owns which mode is showing. Reset to "file" on every new
+  // target so a previous document's "Raw" choice doesn't leak into the next.
+  const [previewView, setPreviewView] = useState<ViewMode>("file");
+  useEffect(() => {
+    setPreviewView("file");
+  }, [commands.previewTarget?.documentUid]);
 
   // When an ingestion task finishes, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
@@ -591,7 +634,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
             <span className={styles.rowIcon} style={{ color: spec.color }}>
               <Icon category="outlined" type={spec.type} filled={spec.filled} />
             </span>
-            <span>{row.doc.identity.title || row.doc.identity.document_name}</span>
+            <span>{documentDisplayName(row.doc)}</span>
           </span>
         );
       },
@@ -694,7 +737,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
                   showConfirmationDialog({
                     title: t("rework.resources.confirm.deleteTitle"),
                     message: t("rework.resources.confirm.deleteMessage", {
-                      name: row.doc.identity.title || row.doc.identity.document_name,
+                      name: documentDisplayName(row.doc),
                     }),
                     onConfirm: () => void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
                   });
@@ -715,8 +758,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
     let acc = "";
     parts.forEach((part, i) => {
       acc = acc ? `${acc}/${part}` : part;
+      // Snapshot this iteration's path: every segment's onClick otherwise
+      // closes over the same mutable `acc` binding, so by the time any of
+      // them actually fires (a later click), they'd all navigate to
+      // whatever `acc` was left at after the loop finished — the deepest
+      // folder — instead of the segment that was actually clicked.
+      const stepPath = acc;
       const isLast = i === parts.length - 1;
-      segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(acc) });
+      segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
     });
     return segments;
   }, [currentFolderFull, t, navigateTo]);
@@ -862,12 +911,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
         onClose={commands.closePreview}
         title={commands.previewTarget?.fileName ?? t("rework.resources.preview.title")}
         width="80vw"
+        background="var(--surface-container-high)"
+        headerActions={
+          isPdfFile(commands.previewTarget?.fileName) ? (
+            <DocumentViewerModeToggle view={previewView} onChange={setPreviewView} />
+          ) : undefined
+        }
       >
         {commands.previewTarget && (
           <DocumentViewer
             documentUid={commands.previewTarget.documentUid}
             fileName={commands.previewTarget.fileName}
-            showRawToggle
+            view={previewView}
           />
         )}
       </InlineDrawer>
@@ -898,11 +953,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
         <RenameModal
           open={!!renameTarget}
           onClose={() => setRenameTarget(null)}
-          initialName={
-            renameTarget.kind === "folder"
-              ? renameTarget.node.name
-              : renameTarget.doc.identity.title || renameTarget.doc.identity.document_name
-          }
+          initialName={renameTarget.kind === "folder" ? renameTarget.node.name : documentDisplayName(renameTarget.doc)}
           onSubmit={async (newName) => {
             if (renameTarget.kind === "folder") {
               const tag = renameTarget.node.tagsHere[0];

@@ -6,7 +6,12 @@
   background: var(--surface-container-high);
   padding: var(--spacing-s);
   height: 120px;
-  overflow: hidden;
+  /* Not hidden: Recharts' hover Tooltip is a plain absolutely-positioned DOM
+     node inside this box, not an SVG element — overflow:hidden here would
+     clip it against the card's fixed 120px height. The legend below already
+     self-clips (its own overflow:hidden) so nothing relies on this one for
+     the resting (non-hover) layout. */
+  overflow: visible;
 }
 
 .header {
@@ -19,8 +24,6 @@
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .state {
@@ -34,7 +37,21 @@
 }
 
 .barWrapper {
-  flex-shrink: 0;
+  /* Grows to take the space left over between the title and the legend, then
+     centers its fixed 22px-tall bar within that space (rather than the bar
+     sitting flush under the title, which is what plain flex-column stacking
+     would otherwise do). */
+  display: flex;
+  flex: 1;
+  align-items: center;
+  /* Recharts' ResponsiveContainer measures its own box via ResizeObserver —
+     that box is `width: 100%` of this element, so this element needs an
+     explicit width of its own. Relying on flexbox stretch alone (the
+     default cross-axis behavior in this column flex `.section`) is not
+     enough: the child's own width:100% div can end up racing the stretch
+     calculation on first paint and gets stuck reporting the browser's
+     initial (unstretched) measurement instead of the real container width. */
+  width: 100%;
 }
 
 .legend {
