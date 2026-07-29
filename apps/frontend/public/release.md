@@ -1,3 +1,25 @@
+**v2.1.20** — 2026-07-29
+
+- **Summary**
+
+  Team pages load dramatically faster for platforms with many teams — what
+  could take several seconds now loads in a fraction of that time. The team
+  usage/activity page no longer fails to load document counts when viewed in
+  team context, and a rare timing issue that could leave a just-hidden team
+  briefly visible to everyone is fixed.
+
+- **Improvements**
+
+  - Pages listing teams (team switcher, team directory) load much faster on platforms with many teams (#2145)
+
+- **Bug Fixes**
+
+  - Team usage dashboard: document counts now load correctly instead of showing "Could not load activity" (#2145)
+
+- **Security**
+
+  - Fixed a timing issue where toggling a team from public to private in quick succession could leave it briefly visible to everyone instead of immediately private (#2145)
+
 **v2.1.19** — 2026-07-28
 
 - **Summary**
