@@ -63,6 +63,13 @@ import { deriveDocStatus } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 import styles from "./DocumentWorkspace.module.css";
 
+// Hidden 2026-07-30, developer request: undecided whether "Traiter"/"Retraiter"
+// stays in the product — flip back to true to restore it. The underlying
+// reprocess plumbing (the `reprocess` callback, `reprocessOverrides` pinning,
+// the status-poll effect) is untouched, only the row's "more" menu entry
+// pointing at it is hidden.
+const SHOW_REPROCESS_ACTION = false;
+
 const DEFAULT_PAGE_SIZE = 50;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
@@ -566,10 +573,49 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
   };
 
-  const bulkExcludeFromSearch = () => {
-    // Only flip docs that are currently searchable — toggling an already-excluded
-    // one would re-include it, the opposite of "exclude from search".
-    for (const doc of selectedDocs) if (doc.source.retrievable) void commands.toggleRetrievable(doc);
+  // "exclude" when every selected doc is currently searchable, "include" when
+  // every one is already excluded, undefined (button hidden, per BulkActionsBar's
+  // "omit to hide" convention) on a mixed selection — there's no single
+  // unambiguous action to offer for a set of files in both states at once.
+  const searchToggleMode = useMemo<"exclude" | "include" | undefined>(() => {
+    if (selectedDocs.length === 0) return undefined;
+    const excludedCount = selectedDocs.filter((doc) => doc.source.retrievable === false).length;
+    if (excludedCount === 0) return "exclude";
+    if (excludedCount === selectedDocs.length) return "include";
+    return undefined;
+  }, [selectedDocs]);
+
+  // toggleRetrievable only calls the backend — it never touches `perTag`, so
+  // without this the row's icon/menu label (both derived straight from
+  // `row.doc.source.retrievable`) stay stale until the folder is reloaded.
+  // Patches every loaded page that happens to hold this doc (not just the
+  // current tag's), matching the hook's own "no list-wide refetch needed"
+  // contract: flipping this flag never changes tag membership or counts.
+  const patchDocRetrievable = (documentUid: string, retrievable: boolean) => {
+    setPerTag((prev) => {
+      const next: typeof prev = {};
+      for (const [tagId, page] of Object.entries(prev)) {
+        next[tagId] = {
+          ...page,
+          docs: page.docs.map((d) =>
+            d.identity.document_uid === documentUid ? { ...d, source: { ...d.source, retrievable } } : d,
+          ),
+        };
+      }
+      return next;
+    });
+  };
+
+  const toggleSearchable = async (doc: DocumentMetadata) => {
+    const next = await commands.toggleRetrievable(doc);
+    if (next !== undefined) patchDocRetrievable(doc.identity.document_uid, next);
+  };
+
+  const bulkToggleSearchable = async () => {
+    // searchToggleMode being defined guarantees the selection is uniform (all
+    // searchable or all excluded), so toggling every doc unconditionally moves
+    // them all the same direction.
+    await Promise.all(selectedDocs.map((doc) => toggleSearchable(doc)));
     setSelectedKeys(new Set());
   };
 
@@ -636,19 +682,26 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       icon: { category: "outlined", type: "download" },
     });
     if (canCreateFolder) {
+      const excludedFromSearch = doc.source.retrievable === false;
       options.push(
         {
           value: "searchable",
           key: "searchable",
-          label: t("rework.resources.action.searchable"),
-          icon: { category: "outlined", type: "search_off" },
+          label: t(
+            excludedFromSearch ? "rework.resources.action.includeInSearch" : "rework.resources.action.searchable",
+          ),
+          icon: { category: "outlined", type: excludedFromSearch ? "search" : "search_off" },
         },
-        {
-          value: "process",
-          key: "process",
-          label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
-          icon: { category: "outlined", type: "refresh" },
-        },
+        ...(SHOW_REPROCESS_ACTION
+          ? [
+              {
+                value: "process" as const,
+                key: "process",
+                label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
+                icon: { category: "outlined" as const, type: "refresh" as const },
+              },
+            ]
+          : []),
         {
           value: "delete",
           key: "delete",
@@ -749,27 +802,37 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       // Fixed, not "auto": DataTable renders the header and body as two
       // independent grids (RFC-tracked, for the scroll-starts-below-header
       // behavior), so an "auto" track sizes itself from each grid's OWN
-      // content — the header's empty label vs. the row's two icon buttons —
-      // and the two grids disagree on this column's width. That leftover
-      // space then gets absorbed differently by the flexible Name (2fr)
-      // column in each grid, shifting every column after it out of
-      // alignment. A fixed width both grids agree on avoids the whole
-      // class of drift. Sized for two `size="small"` (2rem) icon buttons +
-      // their gap + the cell's own horizontal padding, plus headroom.
+      // content — the header's empty label vs. the row's icon buttons — and
+      // the two grids disagree on this column's width. That leftover space
+      // then gets absorbed differently by the flexible Name (2fr) column in
+      // each grid, shifting every column after it out of alignment. A fixed
+      // width both grids agree on avoids the whole class of drift. Sized for
+      // up to three 2rem elements (the excluded-from-search indicator +
+      // preview + the "more" trigger, the indicator only present on an
+      // excluded document) + their gaps + the cell's own horizontal padding,
+      // plus headroom.
       label: "",
-      size: "6rem",
+      size: "8rem",
       cellRenderer: (row) => (
         <span className={styles.actionsCell}>
+          {row.kind === "document" && row.doc.source.retrievable === false && (
+            <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
+              <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
+                <Icon category="outlined" type="search_off" />
+              </span>
+            </Tooltip>
+          )}
           {row.kind === "document" && (
-            <IconButton
-              color="on-surface-retreat"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "visibility" }}
-              aria-label={t("rework.resources.action.preview")}
-              title={t("rework.resources.action.preview")}
-              onClick={() => commands.preview(row.doc)}
-            />
+            <Tooltip text={t("rework.resources.action.preview")}>
+              <IconButton
+                color="on-surface-retreat"
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "visibility" }}
+                aria-label={t("rework.resources.action.preview")}
+                onClick={() => commands.preview(row.doc)}
+              />
+            </Tooltip>
           )}
           <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
             iconButton={{
@@ -787,7 +850,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               } else {
                 if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                 if (value === "download") void commands.download(row.doc);
-                if (value === "searchable") void commands.toggleRetrievable(row.doc);
+                if (value === "searchable") void toggleSearchable(row.doc);
                 if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
                 if (value === "delete" && currentTag) {
                   showConfirmationDialog({
@@ -856,7 +919,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               selectedCount={selectedDocs.length}
               onDelete={bulkDelete}
               onClearSelection={() => setSelectedKeys(new Set())}
-              onExcludeFromSearch={bulkExcludeFromSearch}
+              searchToggle={searchToggleMode ? { mode: searchToggleMode, onClick: bulkToggleSearchable } : undefined}
               onDownload={() => void bulkDownload()}
               downloadLoading={bulkDownloading}
             />

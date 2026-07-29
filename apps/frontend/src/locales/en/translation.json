@@ -1296,6 +1296,7 @@
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "download": "Download",
+        "includeInSearch": "Include in search",
         "more": "More actions",
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
@@ -1365,6 +1366,7 @@
         "prev": "Previous page"
       },
       "status": {
+        "excludedFromSearch": "Excluded from search",
         "failed": "Error",
         "processing": "Processing...",
         "raw": "Pending",
@@ -1376,7 +1378,8 @@
         "clearSelection": "Clear selection",
         "delete": "Delete",
         "download": "Download",
-        "excludeFromSearch": "Exclude from search"
+        "excludeFromSearch": "Exclude from search",
+        "includeInSearch": "Include in search"
       },
       "stats": {
         "toggle": "Statistics",

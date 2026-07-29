@@ -13,12 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the row "more" menu's process/reprocess label: a document that
-// has already been ingested (deriveDocStatus === "ready") must offer
-// "Reprocess", not "Process" — the same action (POST /process-documents) is
-// re-running an already-successful pipeline, not a first ingestion, and the
-// two must read differently or a user reasonably assumes "Process" means the
-// file was never ingested.
+// Coverage: a document excluded from search (source.retrievable === false)
+// shows an error-colored indicator icon at the end of its row, just left of
+// the Preview icon button — visible only for that state, not for a
+// retrievable (or not-yet-stamped) document.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,11 +33,11 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
-const doc = (uid: string, name: string, stages: Record<string, string>) => ({
+const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
-  processing: { stages },
+  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable },
+  processing: { stages: { raw: "done", vector: "done" } },
   tags: { tag_ids: ["tag-cir"] },
 });
 
@@ -52,8 +50,12 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     () => ({
       unwrap: async () => ({
-        documents: [doc("uid-ready", "Ready doc", { raw: "done", vector: "done" }), doc("uid-raw", "Raw doc", {})],
-        total: 2,
+        documents: [
+          doc("uid-excluded", "Excluded doc", false),
+          doc("uid-included", "Included doc", true),
+          doc("uid-unset", "Unset doc", undefined),
+        ],
+        total: 3,
       }),
     }),
   ],
@@ -105,7 +107,6 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  // Navigate into "CIR" — its documents only load once it's the current folder.
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
@@ -118,44 +119,32 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
-  document.querySelectorAll('[role="presentation"]').forEach((el) => el.remove());
 });
 
-function moreButtons(): HTMLButtonElement[] {
-  return [...container.querySelectorAll('button[aria-label="rework.resources.action.more"]')] as HTMLButtonElement[];
+function rowFor(name: string): HTMLElement {
+  const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
+  if (!nameCell) throw new Error(`row for "${name}" not found`);
+  const row = nameCell.closest('[class*="datatable-row"]');
+  if (!row) throw new Error(`row container for "${name}" not found`);
+  return row as HTMLElement;
 }
 
-/** The menu portals into document.body, outside `container`. */
-function openMenuAndReadProcessLabel(button: HTMLButtonElement): string {
-  act(() => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  });
-  const items = [
-    ...document.querySelectorAll(
-      '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
-    ),
-  ];
-  const item = items.find(
-    (el) =>
-      el.textContent?.includes("rework.resources.action.reprocess") ||
-      el.textContent?.includes("rework.resources.action.process"),
-  );
-  if (!item) throw new Error("process/reprocess menu item not found");
-  return item.textContent ?? "";
-}
-
-// Skipped 2026-07-30: the "Traiter"/"Retraiter" menu entry is hidden behind
-// SHOW_REPROCESS_ACTION (DocumentWorkspace.tsx) pending a keep/remove call —
-// re-enable this suite in lockstep with that flag, don't delete it.
-describe.skip("DocumentWorkspace row menu — process/reprocess label", () => {
-  it("shows 'Reprocess' for an already-ingested (ready) document", () => {
-    // Row order matches the mocked `documents` array: ready doc first.
-    const label = openMenuAndReadProcessLabel(moreButtons()[0]);
-    expect(label.endsWith("rework.resources.action.reprocess")).toBe(true);
+describe("DocumentWorkspace — excluded-from-search row indicator", () => {
+  it("shows the indicator icon for a document excluded from search", () => {
+    expect(
+      rowFor("Excluded doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
+    ).not.toBeNull();
   });
 
-  it("keeps 'Process' for a document not yet ingested", () => {
-    const label = openMenuAndReadProcessLabel(moreButtons()[1]);
-    expect(label.endsWith("rework.resources.action.process")).toBe(true);
+  it("hides the indicator for a retrievable document", () => {
+    expect(
+      rowFor("Included doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
+    ).toBeNull();
+  });
+
+  it("hides the indicator when retrievable has never been stamped (undefined, not explicitly false)", () => {
+    expect(
+      rowFor("Unset doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
+    ).toBeNull();
   });
 });

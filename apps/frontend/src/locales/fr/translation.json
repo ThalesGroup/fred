@@ -1296,6 +1296,7 @@
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "download": "Télécharger",
+        "includeInSearch": "Inclure à la recherche",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
@@ -1365,6 +1366,7 @@
         "prev": "Page précédente"
       },
       "status": {
+        "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
         "processing": "Traitement...",
         "raw": "En attente",
@@ -1376,7 +1378,8 @@
         "clearSelection": "Annuler la sélection",
         "delete": "Supprimer",
         "download": "Télécharger",
-        "excludeFromSearch": "Exclure"
+        "excludeFromSearch": "Exclure de la recherche",
+        "includeInSearch": "Inclure à la recherche"
       },
       "stats": {
         "toggle": "Statistiques",

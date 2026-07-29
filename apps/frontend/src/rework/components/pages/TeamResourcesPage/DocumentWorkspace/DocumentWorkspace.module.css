@@ -85,6 +85,18 @@
   width: 100%;
 }
 
+/* Purely presentational (not a button): same 2rem/1.25rem footprint as the
+ * adjacent small IconButtons so the row's icons stay vertically aligned. */
+.excludedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--error);
+  font-size: 1.25rem;
+}
+
 /* A folder row targeted by an OS-file drag: same affordance as the upload
  * drawer's dropzone (primary dashed outline + tint) so "drop here" reads
  * instantly. Outline (not border) keeps row layout untouched. */

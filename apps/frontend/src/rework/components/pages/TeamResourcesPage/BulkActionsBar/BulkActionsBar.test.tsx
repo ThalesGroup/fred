@@ -61,34 +61,55 @@ describe("BulkActionsBar", () => {
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("shows Delete + Clear when onExcludeFromSearch is omitted (non-Corpus tabs)", () => {
+  it("shows Delete + Clear when searchToggle is omitted (non-Corpus tabs, or a mixed selection)", () => {
     render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
     expect(container.querySelectorAll("button")).toHaveLength(2);
   });
 
-  it("shows Exclude + Delete + Clear when onExcludeFromSearch is provided (Corpus tab)", () => {
+  it("shows Exclude + Delete + Clear when searchToggle mode is 'exclude' (Corpus tab, all-searchable selection)", () => {
     render(
-      <BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} onExcludeFromSearch={vi.fn()} />,
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        searchToggle={{ mode: "exclude", onClick: vi.fn() }}
+      />,
     );
     expect(container.querySelectorAll("button")).toHaveLength(3);
+    expect(
+      container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]'),
+    ).not.toBeNull();
+  });
+
+  it("shows an Include button, not Exclude, when searchToggle mode is 'include' (all-excluded selection)", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        searchToggle={{ mode: "include", onClick: vi.fn() }}
+      />,
+    );
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]')).toBeNull();
   });
 
   it("invokes the right callback for each button", () => {
     const onDelete = vi.fn();
     const onClearSelection = vi.fn();
-    const onExcludeFromSearch = vi.fn();
+    const onSearchToggle = vi.fn();
     render(
       <BulkActionsBar
         selectedCount={3}
         onDelete={onDelete}
         onClearSelection={onClearSelection}
-        onExcludeFromSearch={onExcludeFromSearch}
+        searchToggle={{ mode: "exclude", onClick: onSearchToggle }}
       />,
     );
     const [excludeButton, deleteButton, clearButton] = Array.from(container.querySelectorAll("button"));
 
     click(excludeButton);
-    expect(onExcludeFromSearch).toHaveBeenCalledOnce();
+    expect(onSearchToggle).toHaveBeenCalledOnce();
     expect(onDelete).not.toHaveBeenCalled();
     expect(onClearSelection).not.toHaveBeenCalled();
 
@@ -143,13 +164,13 @@ describe("BulkActionsBar", () => {
     expect(onClearSelection).not.toHaveBeenCalled();
   });
 
-  it("shows all four actions when both onExcludeFromSearch and onDownload are provided", () => {
+  it("shows all four actions when both searchToggle and onDownload are provided", () => {
     render(
       <BulkActionsBar
         selectedCount={2}
         onDelete={vi.fn()}
         onClearSelection={vi.fn()}
-        onExcludeFromSearch={vi.fn()}
+        searchToggle={{ mode: "exclude", onClick: vi.fn() }}
         onDownload={vi.fn()}
       />,
     );

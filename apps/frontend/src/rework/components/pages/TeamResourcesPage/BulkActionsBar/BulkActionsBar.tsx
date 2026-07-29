@@ -24,8 +24,12 @@ interface BulkActionsBarProps {
    *  the create-folder/add-file toolbar. */
   onClearSelection: () => void;
   /** Corpus-only (RFC §13.9 — "exclure de la recherche" has no meaning for
-   *  the other three tabs). Omit to hide the action entirely. */
-  onExcludeFromSearch?: () => void;
+   *  the other three tabs). `mode` picks the button's direction: "exclude"
+   *  when every selected doc is currently searchable, "include" when every
+   *  one is already excluded. Omit to hide the action entirely — including
+   *  on a mixed selection (some excluded, some not), where there's no single
+   *  unambiguous direction to offer. */
+  searchToggle?: { mode: "exclude" | "include"; onClick: () => void };
   /** One file downloads directly; 2+ download as a single ZIP (RFC §13.13,
    *  client-side). Omit to hide the action — e.g. a folders-only selection
    *  on `FilesystemWorkspace`, which has nothing downloadable selected. */
@@ -47,7 +51,7 @@ export default function BulkActionsBar({
   selectedCount,
   onDelete,
   onClearSelection,
-  onExcludeFromSearch,
+  searchToggle,
   onDownload,
   downloadLoading = false,
 }: BulkActionsBarProps) {
@@ -58,18 +62,25 @@ export default function BulkActionsBar({
   return (
     <div className={styles.bar}>
       <span className={styles.count}>{t("rework.resources.bulkActions.selectedCount", { count: selectedCount })}</span>
-      {onExcludeFromSearch && (
-        <Tooltip text={t("rework.resources.bulkActions.excludeFromSearch")}>
-          <IconButton
-            color="on-surface"
-            variant="outlined"
-            size="small"
-            icon={{ category: "outlined", type: "search_off" }}
-            aria-label={t("rework.resources.bulkActions.excludeFromSearch")}
-            onClick={onExcludeFromSearch}
-          />
-        </Tooltip>
-      )}
+      {searchToggle &&
+        (() => {
+          const key =
+            searchToggle.mode === "exclude"
+              ? "rework.resources.bulkActions.excludeFromSearch"
+              : "rework.resources.bulkActions.includeInSearch";
+          return (
+            <Tooltip text={t(key)}>
+              <IconButton
+                color="on-surface"
+                variant="outlined"
+                size="small"
+                icon={{ category: "outlined", type: searchToggle.mode === "exclude" ? "search_off" : "search" }}
+                aria-label={t(key)}
+                onClick={searchToggle.onClick}
+              />
+            </Tooltip>
+          );
+        })()}
       {onDownload && (
         <Tooltip text={t("rework.resources.bulkActions.download")}>
           <IconButton
