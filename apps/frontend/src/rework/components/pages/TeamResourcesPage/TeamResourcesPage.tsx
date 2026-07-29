@@ -195,7 +195,19 @@ export default function TeamResourcesPage() {
           <DocumentWorkspace
             teamId={teamId}
             isPersonalTeam={isPersonalTeam}
-            onDocumentsChanged={() => void corpusStats.refetch()}
+            // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
+            // catch-up fire on mount for any task target already in the
+            // store — in the same commit where activeTab just switched to
+            // "resources", DocumentWorkspace (child) mounts and can run this
+            // effect before corpusStats' own subscribing effect (parent)
+            // has dispatched its initial fetch, since React flushes child
+            // effects before parent effects. Calling .refetch() on a query
+            // that was never started throws and takes down the whole app.
+            // Safe to just skip in that case — the query's own mount fetch
+            // is already about to run.
+            onDocumentsChanged={() => {
+              if (!corpusStats.isUninitialized) void corpusStats.refetch();
+            }}
           />
         )}
 

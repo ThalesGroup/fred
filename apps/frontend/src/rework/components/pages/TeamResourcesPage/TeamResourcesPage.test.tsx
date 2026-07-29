@@ -32,6 +32,9 @@ const probe = vi.hoisted(() => ({
   team: { id: "team-1", max_resources_storage_size: 5_368_709_120, current_resources_storage_size: 4_509_715_660 } as
     | Record<string, unknown>
     | undefined,
+  corpusStatsUninitialized: false,
+  corpusStatsRefetch: () => {},
+  onDocumentsChanged: undefined as (() => void) | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -63,10 +66,17 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     data: { entries: [] },
     isLoading: false,
     isError: false,
+    isUninitialized: probe.corpusStatsUninitialized,
+    refetch: probe.corpusStatsRefetch,
   }),
   useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery: () => ({ data: { entries: [] }, isLoading: false, isError: false }),
 }));
-vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({ default: () => <div data-testid="panel-resources" /> }));
+vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
+  default: (props: { onDocumentsChanged?: () => void }) => {
+    probe.onDocumentsChanged = props.onDocumentsChanged;
+    return <div data-testid="panel-resources" />;
+  },
+}));
 vi.mock("./FilesystemWorkspace/FilesystemWorkspace.tsx", () => ({
   default: (props: { root: string }) => <div data-testid="panel-fs">{props.root}</div>,
 }));
@@ -96,6 +106,9 @@ beforeEach(() => {
     max_resources_storage_size: 5_368_709_120,
     current_resources_storage_size: 4_509_715_660,
   };
+  probe.corpusStatsUninitialized = false;
+  probe.corpusStatsRefetch = vi.fn();
+  probe.onDocumentsChanged = undefined;
 });
 
 afterEach(() => {
@@ -151,6 +164,34 @@ describe("TeamResourcesPage tab switcher", () => {
     probe.team = { id: "team-1" };
     render();
     expect(container.textContent).not.toContain("rework.resources.storageQuota");
+  });
+});
+
+// Regression: DocumentWorkspace's useNotifyOnNewTaskTarget does a catch-up
+// fire on mount for any task target already in the store. In the same
+// commit where activeTab just switched to "resources", DocumentWorkspace
+// (child) mounts and can run that effect before corpusStats' own
+// subscribing effect (parent) has dispatched its first fetch — React
+// flushes child effects before parent effects. Calling RTK Query's
+// `.refetch()` on a query that was never started throws ("Cannot refetch a
+// query that has not been started yet") and previously took down the whole
+// app. onDocumentsChanged must no-op instead of calling refetch() while
+// corpusStats is still uninitialized.
+describe("TeamResourcesPage onDocumentsChanged — corpusStats refetch guard", () => {
+  it("does not call refetch while corpusStats has not started yet", () => {
+    probe.corpusStatsUninitialized = true;
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.corpusStatsRefetch).not.toHaveBeenCalled();
+  });
+
+  it("calls refetch once corpusStats has started", () => {
+    probe.corpusStatsUninitialized = false;
+    render();
+
+    probe.onDocumentsChanged?.();
+    expect(probe.corpusStatsRefetch).toHaveBeenCalledOnce();
   });
 });
 
