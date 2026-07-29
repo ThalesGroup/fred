@@ -35,6 +35,7 @@ import { FieldBlock, StatusPill, operationalToTaskState, scoreTone, verdictTone 
 import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
+  useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
   useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation,
@@ -195,6 +196,17 @@ export default function EvaluationRuns({
     { evaluationId, sort, offset, limit: RUNS_PAGE_SIZE },
     { skip: !evaluationId, pollingInterval: 10_000 },
   );
+  // Dashboard KPIs must reflect every run of the evaluation, not just the current
+  // page — a dedicated aggregate query, independent of offset/limit.
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery(
+    { evaluationId },
+    { skip: !evaluationId, pollingInterval: 10_000 },
+  );
 
   // Deleting the last row of a non-first page (or any other drop in `total`, e.g.
   // a concurrent delete from another tab) can leave `offset` pointing past the new
@@ -219,6 +231,7 @@ export default function EvaluationRuns({
       showSuccess({ summary: t("rework.evaluation.runs.deleteSuccess") });
       setDeleteTarget(null);
       refetch();
+      refetchSummary();
     } catch {
       showError({ summary: t("rework.evaluation.runs.deleteError") });
     }
@@ -230,14 +243,10 @@ export default function EvaluationRuns({
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / RUNS_PAGE_SIZE));
   const currentPage = Math.floor(offset / RUNS_PAGE_SIZE) + 1;
-  const running = runs.filter((run) => run.operational_state === "running").length;
-  // operationalToTaskState is the canonical mapper (it also treats "succeeded"
-  // as terminal-success, matching the backend's own documented either/or) —
-  // reuse it instead of comparing the raw string, so this count can't silently
-  // drop to 0 if the backend ever reports "succeeded" instead of "completed".
-  const completed = runs.filter((run) => operationalToTaskState(run.operational_state) === "succeeded").length;
-  const totalCases = runs.reduce((sum, run) => sum + run.completed_cases, 0);
-  const criticalErrors = runs.reduce((sum, run) => sum + run.execution_error_cases, 0);
+  const running = summary?.running_count ?? 0;
+  const completed = summary?.completed_count ?? 0;
+  const totalCases = summary?.total_cases_completed ?? 0;
+  const criticalErrors = summary?.critical_error_cases ?? 0;
   const agentNameByInstanceId = buildAgentLabels(managedInstances);
   const sortOptions: OptionModel<RunSortValue>[] = [
     { value: "created_at:desc", key: "newest", label: t("rework.evaluation.controls.sort.newest") },
@@ -313,26 +322,26 @@ export default function EvaluationRuns({
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.active")}
           value={running}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.completed")}
           value={completed}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.casesEvaluated")}
           value={totalCases}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.criticalFailures")}
           value={criticalErrors}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
       </div>
 

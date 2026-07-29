@@ -33,6 +33,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGet: build.query<
+      GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiResponse,
+      GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/evaluations/${queryArg.evaluationId}/runs/summary` }),
+    }),
     getRunEvaluationV1RunsRunIdGet: build.query<
       GetRunEvaluationV1RunsRunIdGetApiResponse,
       GetRunEvaluationV1RunsRunIdGetApiArg
@@ -189,6 +195,11 @@ export type ListRunsEvaluationV1EvaluationsEvaluationIdRunsGetApiArg = {
   limit?: number;
   /** Sort as 'field:direction' (created_at, verdict, operational_state), e.g. 'created_at:desc'. */
   sort?: string | null;
+};
+export type GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiResponse =
+  /** status 200 Successful Response */ EvaluationRunSummaryResponse;
+export type GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiArg = {
+  evaluationId: string;
 };
 export type GetRunEvaluationV1RunsRunIdGetApiResponse = /** status 200 Successful Response */ EvaluationRun;
 export type GetRunEvaluationV1RunsRunIdGetApiArg = {
@@ -388,6 +399,13 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type EvaluationRunSummaryResponse = {
+  total_runs: number;
+  running_count: number;
+  completed_count: number;
+  total_cases_completed: number;
+  critical_error_cases: number;
 };
 export type EvaluationMetricResultResponse = {
   name: string;
@@ -616,6 +634,8 @@ export const {
   useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation,
   useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
   useLazyListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
+  useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
+  useLazyGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
   useGetRunEvaluationV1RunsRunIdGetQuery,
   useLazyGetRunEvaluationV1RunsRunIdGetQuery,
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
