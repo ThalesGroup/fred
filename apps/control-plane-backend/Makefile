@@ -44,6 +44,84 @@ bootstrap-token: ## Create the local root-bootstrap secret (AUTHZ-07). Never ove
 		{ echo "Failed to create $(BOOTSTRAP_TOKEN_FILE)" >&2; rm -f $(BOOTSTRAP_TOKEN_FILE).tmp; exit 1; }; \
 	fi
 
+BOOTSTRAP_USER ?=
+BOOTSTRAP_PASSWORD ?=
+KEYCLOAK_REGISTER_URL ?= http://localhost:8080/realms/app/account
+
+.PHONY: bootstrap-local
+bootstrap-local: bootstrap-token ## One command for LOCAL-DEVELOPMENT.md steps 1-3 (usage: make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>). Pauses once for the one step that must stay manual: Keycloak self-registration (Fred never creates accounts in Keycloak, on purpose -- see docs/swift/platform/REBAC.md).
+	@if [ -z "$(BOOTSTRAP_USER)" ] || [ -z "$(BOOTSTRAP_PASSWORD)" ]; then \
+		echo "❌ Usage: make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>"; \
+		exit 1; \
+	fi
+	@if [ -t 0 ]; then \
+		echo "ℹ️  Fred never creates Keycloak accounts itself (Keycloak authenticates, Fred/OpenFGA authorizes)."; \
+		echo "   Register yourself now at: $(KEYCLOAK_REGISTER_URL)  (username: $(BOOTSTRAP_USER))"; \
+		read -p "   Press Enter once you've registered... " _unused; \
+	fi
+	@TOKEN_RESPONSE=$$(curl -sS -X POST "$(KEYCLOAK_REALM_URL)/protocol/openid-connect/token" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "grant_type=password" \
+		-d "client_id=$(KEYCLOAK_APP_CLIENT_ID)" \
+		-d "username=$(BOOTSTRAP_USER)" \
+		-d "password=$(BOOTSTRAP_PASSWORD)" \
+	); \
+	TOKEN=$$(printf '%s' "$$TOKEN_RESPONSE" \
+		| sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+		| head -n 1); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "❌ Could not log in as $(BOOTSTRAP_USER) -- did you finish registering at $(KEYCLOAK_REGISTER_URL)?"; \
+		echo "   Re-run: make bootstrap-local BOOTSTRAP_USER=$(BOOTSTRAP_USER) BOOTSTRAP_PASSWORD=..."; \
+		exit 1; \
+	fi; \
+	RESPONSE=$$(curl -sS -w '\n%{http_code}' -X POST "$(CONTROL_PLANE_BASE_URL)/bootstrap/platform-admin" \
+		-H "Authorization: Bearer $$TOKEN" -H "Content-Type: application/json" \
+		-d "{\"token\": \"$$(cat $(BOOTSTRAP_TOKEN_FILE))\"}"); \
+	HTTP_CODE=$$(printf '%s' "$$RESPONSE" | tail -n1); \
+	BODY=$$(printf '%s' "$$RESPONSE" | sed '$$d'); \
+	if [ "$$HTTP_CODE" = "409" ]; then \
+		echo "✓ $(BOOTSTRAP_USER) is already platform_admin (one-shot bootstrap already used)."; \
+	elif [ "$$HTTP_CODE" != "200" ] && [ "$$HTTP_CODE" != "201" ]; then \
+		echo "❌ Bootstrap call failed (HTTP $$HTTP_CODE): $$BODY"; \
+		exit 1; \
+	else \
+		echo "✓ $(BOOTSTRAP_USER) is now platform_admin."; \
+	fi
+
+.PHONY: activate-all-capabilities
+activate-all-capabilities: ## Set every catalog capability (tools + agent templates) to platform-wide default_on -- same effect as Admin > Capabilities > select all (usage: make activate-all-capabilities BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>, must already be platform_admin)
+	@if [ -z "$(BOOTSTRAP_USER)" ] || [ -z "$(BOOTSTRAP_PASSWORD)" ]; then \
+		echo "❌ Usage: make activate-all-capabilities BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>"; \
+		exit 1; \
+	fi
+	@TOKEN_RESPONSE=$$(curl -sS -X POST "$(KEYCLOAK_REALM_URL)/protocol/openid-connect/token" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "grant_type=password" \
+		-d "client_id=$(KEYCLOAK_APP_CLIENT_ID)" \
+		-d "username=$(BOOTSTRAP_USER)" \
+		-d "password=$(BOOTSTRAP_PASSWORD)" \
+	); \
+	TOKEN=$$(printf '%s' "$$TOKEN_RESPONSE" \
+		| sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+		| head -n 1); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "❌ Could not log in as $(BOOTSTRAP_USER)."; \
+		exit 1; \
+	fi; \
+	CAP_IDS=$$(curl -sS "$(CONTROL_PLANE_BASE_URL)/admin/capabilities" -H "Authorization: Bearer $$TOKEN" \
+		| $(UV) run python -c 'import sys,json; print("\n".join(i["id"] for i in json.load(sys.stdin)["items"]))'); \
+	if [ -z "$$CAP_IDS" ]; then \
+		echo "❌ No capabilities returned -- is fred-agents reachable? (check its terminal from 'make run')"; \
+		exit 1; \
+	fi; \
+	for id in $$CAP_IDS; do \
+		echo "default-on: $$id"; \
+		curl -sS -X PUT "$(CONTROL_PLANE_BASE_URL)/admin/capabilities/$$id/default-on" \
+			-H "Authorization: Bearer $$TOKEN" -H "Content-Type: application/json" \
+			-d '{"default_on": true}' >/dev/null; \
+	done; \
+	echo "✓ $$(printf '%s\n' "$$CAP_IDS" | wc -l | tr -d ' ') capabilities set to default_on. A capability with required team settings may refuse (409) -- grant it to one demo team explicitly instead, see LOCAL-DEVELOPMENT.md."
+
 DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
 DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
 
@@ -61,7 +139,7 @@ LOAD_TEST_TEAMS ?= 100
 LOAD_TEST_PREFIX ?= user
 
 .PHONY: build-load-test-bundle
-build-load-test-bundle: ## Generate + zip a synthetic N-user/M-team bundle for local OpenFGA scale testing (LOAD_TEST_USERS/LOAD_TEST_TEAMS/LOAD_TEST_PREFIX env vars; not the curated demo fixture). Usernames must already exist in Keycloak, e.g. via fred-deployment-factory's swify-add-user.sh --count
+build-load-test-bundle: ## Generate + zip a synthetic N-user/M-team bundle for local OpenFGA scale testing (LOAD_TEST_USERS/LOAD_TEST_TEAMS/LOAD_TEST_PREFIX env vars; not the curated demo fixture). Usernames must already exist in Keycloak, e.g. via fred-deployment-factory's keycloak-add-user.sh --count
 	@rm -rf $(LOAD_TEST_DIR)
 	$(UV) run python tools/generate_load_test_bundle.py \
 		--users $(LOAD_TEST_USERS) --teams $(LOAD_TEST_TEAMS) --prefix $(LOAD_TEST_PREFIX) --out-dir $(LOAD_TEST_DIR)
