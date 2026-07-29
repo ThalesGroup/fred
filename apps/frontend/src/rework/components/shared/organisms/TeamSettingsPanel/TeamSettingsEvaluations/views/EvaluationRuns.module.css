@@ -92,8 +92,8 @@
     minmax(0, 0.9fr)
     minmax(0, 0.95fr)
     max-content;
-  align-items: center;
   column-gap: var(--spacing-s);
+  align-items: center;
   padding: var(--spacing-s) var(--spacing-xs);
 }
 
@@ -103,12 +103,12 @@
 
 .headerRow {
   border-bottom: 1px solid var(--outline-variant);
+  padding-right: var(--spacing-xs);
+  padding-left: var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-small-emphasized);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding-left: var(--spacing-xs);
-  padding-right: var(--spacing-xs);
 }
 
 .nameHeaderCell,

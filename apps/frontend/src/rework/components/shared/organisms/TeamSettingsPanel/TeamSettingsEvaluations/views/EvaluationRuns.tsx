@@ -356,7 +356,7 @@ export default function EvaluationRuns({
             const isRunning = run.operational_state === "running";
             const targetDisplayName =
               run.target.kind === "managed_instance"
-                ? agentNameByInstanceId.get(run.target.agent_instance_id) ?? t("rework.evaluation.runs.targetManaged")
+                ? (agentNameByInstanceId.get(run.target.agent_instance_id) ?? t("rework.evaluation.runs.targetManaged"))
                 : run.target.agent_id;
             const targetId =
               run.target.kind === "managed_instance" ? run.target.agent_instance_id.slice(0, 8) : run.target.agent_id;

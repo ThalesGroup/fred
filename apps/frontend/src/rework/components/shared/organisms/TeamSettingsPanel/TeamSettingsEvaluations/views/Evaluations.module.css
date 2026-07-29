@@ -57,9 +57,9 @@
 }
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--spacing-m);
-  flex-wrap: wrap;
 }
 .toolbarSearch {
   flex: 1;
@@ -67,8 +67,8 @@
 }
 .pagination {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--spacing-m);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
