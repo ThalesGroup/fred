@@ -629,6 +629,7 @@ class _InMemoryCountingRebacEngine(RebacEngine):
         self.added_relations: list[Relation] = []
         self.deleted_relations: list[Relation] = []
         self.list_relations_call_count = 0
+        self.list_relations_consistency_tokens: list[str | None] = []
 
     async def _persist_relation(self, relation: Relation) -> str | None:
         self.added_relations.append(relation)
@@ -659,6 +660,7 @@ class _InMemoryCountingRebacEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> list[Relation] | RebacDisabledResult:
         self.list_relations_call_count += 1
+        self.list_relations_consistency_tokens.append(consistency_token)
         if self._disabled:
             return RebacDisabledResult()
         return [
@@ -775,3 +777,35 @@ async def test_revoke_team_public_relations_skips_already_absent_edges() -> None
     # Already revoked: calling again must not re-issue the deletes.
     await engine.revoke_team_public_relations(["team-a", "team-b"])
     assert len(engine.deleted_relations) == 2, "steady-state revoke must delete nothing"
+
+
+@pytest.mark.asyncio
+async def test_ensure_and_revoke_team_public_relations_propagate_consistency_token() -> (
+    None
+):
+    """#2145 review: a team flipped public then immediately private again
+    must have `revoke_team_public_relations`'s existence-check read see that
+    just-written `public` grant, or the revoke is wrongly skipped and the
+    team stays publicly readable until a later reconciliation. The
+    direct-mutation caller (`update_team`) asks for that by passing
+    `consistency_token=HIGHER_CONSISTENCY` through to the underlying
+    `list_relations` read; the lazy listing call sites keep the default
+    eventually-consistent read (asserted last, below)."""
+    engine = _InMemoryCountingRebacEngine()
+
+    await engine.ensure_team_public_relations(
+        ["team-a"], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+    )
+    assert (
+        engine.list_relations_consistency_tokens[-1] == RebacEngine.HIGHER_CONSISTENCY
+    )
+
+    await engine.revoke_team_public_relations(
+        ["team-a"], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+    )
+    assert (
+        engine.list_relations_consistency_tokens[-1] == RebacEngine.HIGHER_CONSISTENCY
+    )
+
+    await engine.ensure_team_public_relations(["team-b"])
+    assert engine.list_relations_consistency_tokens[-1] is None

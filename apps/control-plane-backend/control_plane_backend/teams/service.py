@@ -710,10 +710,21 @@ async def update_team(
             # never races the just-changed visibility on eventual
             # consistency — the token from the caller's earlier
             # CAN_UPDATE_INFO check is otherwise stale by the time we get here.
+            #
+            # `consistency_token=HIGHER_CONSISTENCY` on the ensure/revoke call
+            # itself (not just the projection below) matters just as much: a
+            # team flipped public then immediately private again must have
+            # its existence-check read see that just-written `public` grant,
+            # or the revoke is wrongly skipped and the team stays publicly
+            # readable until a later reconciliation (#2145 review).
             if metadata.visibility == TeamVisibility.PUBLIC:
-                public_token = await rebac.ensure_team_public_relations([team_id])
+                public_token = await rebac.ensure_team_public_relations(
+                    [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+                )
             else:
-                public_token = await rebac.revoke_team_public_relations([team_id])
+                public_token = await rebac.revoke_team_public_relations(
+                    [team_id], consistency_token=RebacEngine.HIGHER_CONSISTENCY
+                )
             if public_token is not None:
                 consistency_token = public_token
 

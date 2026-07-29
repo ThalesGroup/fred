@@ -19,7 +19,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Sequence
+from typing import ClassVar, Iterable, Sequence
 
 from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
@@ -346,6 +346,12 @@ class RebacEngine(ABC):
     resources?") while each concrete engine (OpenFGA, noop) handles storage.
     """
 
+    # Opaque, engine-agnostic value a caller can pass as `consistency_token` to
+    # force a strongly-consistent read ahead of a write/skip decision — the same
+    # value every write already returns (`_persist_relation`/`delete_relation`),
+    # so callers never need a real prior write to obtain one.
+    HIGHER_CONSISTENCY: ClassVar[str] = "HIGHER_CONSISTENCY"
+
     @property
     def enabled(self) -> bool:
         """Tell whether relationship authorization checks are active."""
@@ -497,7 +503,11 @@ class RebacEngine(ABC):
         return token
 
     async def _teams_with_relation(
-        self, *, relation: RelationType, subject: RebacReference
+        self,
+        *,
+        relation: RelationType,
+        subject: RebacReference,
+        consistency_token: str | None = None,
     ) -> set[str] | None:
         """Bulk-read every team currently holding `subject -> relation -> team:*`.
 
@@ -514,6 +524,14 @@ class RebacEngine(ABC):
         `list_relations`'s docstring), so there is no "any subject" bulk-read
         shape here; every caller of this helper already has one exact subject.
 
+        `consistency_token` defaults to the engine's eventually-consistent
+        read — fine for the lazy, bulk, self-healing listing call sites this
+        was built for. A caller on a direct, single-team write path (a
+        visibility toggle, not a bulk backfill) must pass `HIGHER_CONSISTENCY`
+        instead: an eventually-consistent read here can still miss a tuple
+        this same request-chain just wrote moments earlier, causing the
+        caller to wrongly skip a still-required write.
+
         Returns `None` when relation listing is disabled (`RebacDisabledResult`)
         so callers fall back to their prior unconditional write/delete
         behavior — cheap and side-effect-free on `NoopRebacEngine`, whose
@@ -524,6 +542,7 @@ class RebacEngine(ABC):
             resource_type=Resource.TEAM,
             relation=relation,
             subject=subject,
+            consistency_token=consistency_token,
         )
         if isinstance(existing, RebacDisabledResult):
             return None
@@ -588,6 +607,8 @@ class RebacEngine(ABC):
     async def ensure_team_public_relations(
         self,
         team_ids: Iterable[str],
+        *,
+        consistency_token: str | None = None,
     ) -> str | None:
         """Ensure each team grants `public` (profile/discovery `can_read`) to
         every user (TEAM-09, RFC FRED-TEAM-CONFIG-RFC.md §5.1.1).
@@ -609,7 +630,10 @@ class RebacEngine(ABC):
           exists for every `PUBLIC` team about to be listed.
 
         Since #2065, only writes edges actually missing (see
-        `_teams_with_relation`) — a steady-state call issues zero writes.
+        `_teams_with_relation`) — a steady-state call issues zero writes. Pass
+        `consistency_token=HIGHER_CONSISTENCY` on a direct visibility-toggle
+        call (`update_team`) — the lazy listing call sites can keep the
+        default eventually-consistent read.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -624,7 +648,9 @@ class RebacEngine(ABC):
 
         wildcard_user = RebacReference(Resource.USER, "*")
         existing_team_ids = await self._teams_with_relation(
-            relation=RelationType.PUBLIC, subject=wildcard_user
+            relation=RelationType.PUBLIC,
+            subject=wildcard_user,
+            consistency_token=consistency_token,
         )
         target_team_ids = (
             unique_team_ids
@@ -647,6 +673,8 @@ class RebacEngine(ABC):
     async def revoke_team_public_relations(
         self,
         team_ids: Iterable[str],
+        *,
+        consistency_token: str | None = None,
     ) -> str | None:
         """Revoke `public` from every user for each team — the inverse of
         `ensure_team_public_relations`, for teams whose `TeamVisibility` is
@@ -669,6 +697,13 @@ class RebacEngine(ABC):
 
         Since #2065, only deletes edges actually present (see
         `_teams_with_relation`) — a steady-state call issues zero deletes.
+        Pass `consistency_token=HIGHER_CONSISTENCY` on a direct
+        visibility-toggle call: an eventually-consistent existence-check read
+        can still miss a `public` grant this same request just wrote moments
+        earlier (e.g. a team made public then immediately private again),
+        which would wrongly skip the revoke and leave a private team publicly
+        readable until a later reconciliation. The lazy listing call sites
+        can keep the default eventually-consistent read.
         """
         unique_team_ids: list[str] = []
         seen: set[str] = set()
@@ -683,7 +718,9 @@ class RebacEngine(ABC):
 
         wildcard_user = RebacReference(Resource.USER, "*")
         existing_team_ids = await self._teams_with_relation(
-            relation=RelationType.PUBLIC, subject=wildcard_user
+            relation=RelationType.PUBLIC,
+            subject=wildcard_user,
+            consistency_token=consistency_token,
         )
         target_team_ids = (
             unique_team_ids

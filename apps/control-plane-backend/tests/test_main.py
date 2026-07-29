@@ -4751,11 +4751,15 @@ class _FakeVisibilityRebac(NoopRebacEngine):
         self.granted_team_ids: list[list[str]] = []
         self.revoked_team_ids: list[list[str]] = []
 
-    async def ensure_team_public_relations(self, team_ids) -> str | None:
+    async def ensure_team_public_relations(
+        self, team_ids, *, consistency_token: str | None = None
+    ) -> str | None:
         self.granted_team_ids.append(list(team_ids))
         return None
 
-    async def revoke_team_public_relations(self, team_ids) -> str | None:
+    async def revoke_team_public_relations(
+        self, team_ids, *, consistency_token: str | None = None
+    ) -> str | None:
         self.revoked_team_ids.append(list(team_ids))
         return None
 
