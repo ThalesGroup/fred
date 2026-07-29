@@ -1618,6 +1618,41 @@ items:
       and unrelated (reproduced identically via `git stash` on the
       unmodified tree).
 
+      Progress 2026-07-29: FRONT-09.H's card+toolbar+table shell extracted
+      from `DocumentWorkspace.tsx` into a new generic `ResourceExplorer<T>`
+      (`shared/organisms/ResourceExplorer/`), Corpus rewired onto it —
+      zero visible regression (all 3 pre-existing DocumentWorkspace test
+      files pass unmodified), 8 new tests for the generic component itself.
+      This is Step 1 of a developer-confirmed 3-step plan to bring the
+      same rich table to Espace perso / Espace partagé / Agents: those
+      three tabs will move to breadcrumb drill-down (replacing their
+      current always-expanded tree), `AgentFilesystemBrowser` keeps its
+      own root-enumeration loop and mounts one `ResourceExplorer` per
+      agent instance, `/fs` gets client-side pagination for now (no
+      backend contract change yet). Steps 2 (Mon espace/Espace d'équipe)
+      and 3 (Agents) not started.
+
+      Progress 2026-07-29 (later): Step 2 landed — new
+      `FilesystemWorkspace.tsx` brings Mon espace/Espace d'équipe onto
+      `ResourceExplorer` with breadcrumb drill-down. `TeamFilesystemBrowser.tsx`
+      (old always-expanded tree) untouched — `AgentFilesystemBrowser` still
+      depends on it (`baseDepth`) until Agents' own step 3. Also landed,
+      developer-confirmed: rename wired (`POST /fs/rename/{path}`, endpoint
+      already existed unused), client-side search, multi-select + bulk
+      delete. Uses the real generated `FilesystemResourceInfoResult` type
+      directly instead of a third hand-typed `FsEntry` duplicate (`ls`'s
+      `response_model` gap — `LsApiResponse = any` — cast at the query
+      boundary, not fixed backend-side). `fileIconSpec` extracted from
+      `DocumentWorkspace.tsx` into shared `rework/utils/fileIconSpec.ts`,
+      used by both — file-type icon colors now consistent across every
+      Resources tab. `FsRootAddMenu` (root-only "+", wrong for a
+      breadcrumb-navigated view) dropped from `WorkspaceRoot`'s `action`
+      slot for these two tabs and deleted (no remaining callers).
+      `TeamResourcesPage.test.tsx` mocks updated; new
+      `FilesystemWorkspace.test.tsx` covers write-action gating (ported
+      from the old `TeamFilesystemBrowser.test.tsx`'s intent) and
+      breadcrumb navigation. Step 3 (Agents) not started.
+
   - id: FRONT-13
     title: "Unified document viewer — native PDF rendering + AI assistant side panel"
     status: in_progress

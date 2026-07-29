@@ -46,11 +46,10 @@
   min-width: 0;
 }
 
-/* The file/folder icon's own color wrapper (the <span style={{color}}> in
- * DocumentWorkspace.tsx): a genuine fixed 18x18 box, not just an 18px
- * font-size on the glyph itself — width/height + flex-shrink: 0 mean this
- * can never be crushed or collapsed to 0 by the flex row around it (a
- * narrow Name column, a long filename) or hidden by overflow elsewhere.
+/* The file/folder icon's own color wrapper: a genuine fixed 18x18 box, not
+ * just an 18px font-size on the glyph itself — width/height + flex-shrink: 0
+ * mean this can never be crushed or collapsed to 0 by the flex row around it
+ * (a narrow Name column, a long filename) or hidden by overflow elsewhere.
  * Only the label next to it (below) is allowed to truncate. */
 .rowIcon {
   display: inline-flex;
@@ -71,7 +70,7 @@
   white-space: nowrap;
 }
 
-/* Taille/Création/Auteur: always readable on one line, never squeezed
+/* Taille/Créé le/Ajouté par: always readable on one line, never squeezed
  * to a second line under a fixed-width column. */
 .nowrapCell {
   white-space: nowrap;
@@ -83,13 +82,4 @@
   align-items: center;
   gap: var(--spacing-2xs);
   width: 100%;
-}
-
-/* A folder row targeted by an OS-file drag: same affordance as the upload
- * drawer's dropzone (primary dashed outline + tint) so "drop here" reads
- * instantly. Outline (not border) keeps row layout untouched. */
-.nameButton[data-drag-over] {
-  outline: 1.5px dashed var(--primary);
-  outline-offset: -1.5px;
-  background: color-mix(in srgb, var(--primary) 6%, transparent);
 }

@@ -1,0 +1,101 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* One card wraps the breadcrumb/actions toolbar and the table together. No
+ * overflow: hidden here — the toolbar's icon-button tooltips need to float
+ * outside this box, and clipping the whole card would cut them off. Only
+ * `.tableFill` below clips (and rounds) DataTable's own corners. */
+.card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  min-height: 0;
+}
+
+/* The table is the one flexible region between the fixed-height toolbar
+ * above and DataTable's own fixed-height footer below — it grows to fill
+ * whatever vertical space the host gives `.card`, down to the host's own
+ * bottom padding, instead of just sizing to its rows' content height.
+ * overflow: hidden + matching bottom radius clips DataTable's own corner
+ * radius so only this rounding shows, letting table and card read as one
+ * surface — scoped to just this element so it doesn't also clip the
+ * toolbar's tooltips above. */
+.tableFill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-retreat);
+  padding: var(--spacing-xs);
+}
+
+.toolbarStart {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.toolbarEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.search {
+  position: relative;
+  width: 220px;
+}
+
+.searchClear {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-2xs);
+  transform: translateY(-50%);
+}
+
+/* Fills the same region the table would occupy (flex: 1, down to the card's
+ * own bottom edge) instead of sizing to its own content height and leaving
+ * the rest of the card's height blank below it — an empty/loading folder
+ * should still read as a full-height panel, not a collapsed strip. */
+.hint {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  padding: var(--spacing-l) var(--spacing-m);
+  min-height: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.loadingHint {
+  gap: var(--spacing-2xs);
+}

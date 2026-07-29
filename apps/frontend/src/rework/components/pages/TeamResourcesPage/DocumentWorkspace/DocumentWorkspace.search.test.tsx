@@ -75,7 +75,7 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({ InlineDrawer: () => null }));
 
-import DocumentWorkspace, { fileIconSpec } from "./DocumentWorkspace";
+import DocumentWorkspace from "./DocumentWorkspace";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -137,29 +137,5 @@ describe("DocumentWorkspace search", () => {
   it("shows nothing when the query matches no row", () => {
     typeSearch("nonexistent-folder-name");
     expect(folderNames()).toEqual([]);
-  });
-});
-
-describe("fileIconSpec", () => {
-  it("maps pdf to picture_as_pdf in error", () => {
-    expect(fileIconSpec("pdf")).toEqual({ type: "picture_as_pdf", color: "var(--error)" });
-  });
-
-  it.each(["docx", "md", "html", "txt"])("maps %s (Word/Texte) to article in tertiary", (fileType) => {
-    expect(fileIconSpec(fileType)).toEqual({ type: "article", color: "var(--tertiary)" });
-  });
-
-  it.each(["xlsx", "csv"])("maps %s (Excel/CSV) to table in success", (fileType) => {
-    expect(fileIconSpec(fileType)).toEqual({ type: "table", color: "var(--success)" });
-  });
-
-  it.each(["ppt", "pptx"])("maps %s (PowerPoint) to slideshow in warning", (fileType) => {
-    expect(fileIconSpec(fileType)).toEqual({ type: "slideshow", color: "var(--warning)" });
-  });
-
-  it("falls back to draft in on-surface-muted for unknown or missing file types", () => {
-    expect(fileIconSpec("other")).toEqual({ type: "draft", color: "var(--on-surface-muted)" });
-    expect(fileIconSpec(undefined)).toEqual({ type: "draft", color: "var(--on-surface-muted)" });
-    expect(fileIconSpec(null)).toEqual({ type: "draft", color: "var(--on-surface-muted)" });
   });
 });

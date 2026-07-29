@@ -22,7 +22,6 @@ import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery,
@@ -34,11 +33,9 @@ import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import { formatBytes } from "../../../utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
-import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
+import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
 import AgentFilesystemBrowser from "./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
-import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
-import FsRootAddMenu from "./FsRootAddMenu/FsRootAddMenu.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
@@ -55,7 +52,6 @@ type ResourceRootTab = "resources" | "mine" | "team" | "agents";
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
-  const { activeTeam } = useFrontendBootstrap();
   // isPersonalTeamId alone is authoritative (handles both the bare "personal"
   // alias and the canonical "personal-<uid>" id — see its own doc comment).
   // An earlier `|| teamId === activeTeam?.id` fallback dates from before real
@@ -65,7 +61,6 @@ export default function TeamResourcesPage() {
   // hiding "Espace partagé" for a legitimate team.
   const isPersonalTeam = isPersonalTeamId(teamId);
   const userId = KeyCloakService.GetUserId() ?? "";
-  const teamName = activeTeam?.name ?? teamId;
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
   // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
   const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
@@ -204,39 +199,14 @@ export default function TeamResourcesPage() {
           />
         )}
 
-        {activeTab === "mine" && (
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "person" }}
-            title={t("rework.resources.roots.mine")}
-            hint={t("rework.resources.hints.mine")}
-            collapsible={false}
-            meta={
-              <FsRootMeta
-                root={userRoot}
-                nature={
-                  isPersonalTeam
-                    ? t("rework.resources.roots.privatePersonal")
-                    : t("rework.resources.roots.private", { team: teamName })
-                }
-              />
-            }
-            action={<FsRootAddMenu root={userRoot} />}
-          >
-            <TeamFilesystemBrowser root={userRoot} />
-          </WorkspaceRoot>
-        )}
+        {activeTab === "mine" && <FilesystemWorkspace root={userRoot} rootLabel={t("rework.resources.roots.mine")} />}
 
         {activeTab === "team" && !isPersonalTeam && (
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "groups" }}
-            title={t("rework.resources.roots.team")}
-            hint={t("rework.resources.hints.team")}
-            collapsible={false}
-            meta={<FsRootMeta root={sharedRoot} />}
-            action={canCreateFolder ? <FsRootAddMenu root={sharedRoot} /> : undefined}
-          >
-            <TeamFilesystemBrowser root={sharedRoot} canWrite={canCreateFolder} />
-          </WorkspaceRoot>
+          <FilesystemWorkspace
+            root={sharedRoot}
+            rootLabel={t("rework.resources.roots.team")}
+            canWrite={canCreateFolder}
+          />
         )}
 
         {activeTab === "agents" && (

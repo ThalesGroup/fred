@@ -67,14 +67,12 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery: () => ({ data: { entries: [] }, isLoading: false, isError: false }),
 }));
 vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({ default: () => <div data-testid="panel-resources" /> }));
-vi.mock("./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx", () => ({
+vi.mock("./FilesystemWorkspace/FilesystemWorkspace.tsx", () => ({
   default: (props: { root: string }) => <div data-testid="panel-fs">{props.root}</div>,
 }));
 vi.mock("./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx", () => ({
   default: () => <div data-testid="panel-agents" />,
 }));
-vi.mock("./FsRootMeta/FsRootMeta.tsx", () => ({ default: () => null }));
-vi.mock("./FsRootAddMenu/FsRootAddMenu.tsx", () => ({ default: () => null }));
 vi.mock("./ResourceStatsCards/ResourceStatsCards.tsx", () => ({ default: () => <div data-testid="stats-cards" /> }));
 
 import TeamResourcesPage from "./TeamResourcesPage.tsx";

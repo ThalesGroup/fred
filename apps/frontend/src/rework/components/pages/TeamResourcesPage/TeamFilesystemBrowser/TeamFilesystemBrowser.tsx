@@ -105,7 +105,13 @@ interface TeamFilesystemBrowserProps {
  * Browse one team-rooted filesystem area (FILES-04) as a collapsible tree, using the same
  * `FolderRow` / `DocRow` molecules as the indexed corpus so both look and behave identically.
  * Folders expand in place; each folder carries upload + new-folder actions; files carry
- * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
+ * download + delete.
+ *
+ * Kept as-is (not migrated to `ResourceExplorer`/`DataTable`) because
+ * `AgentFilesystemBrowser` still depends on this exact always-expanded-tree
+ * shape (`baseDepth`) — "Mon espace"/"Espace d'équipe" moved to the new
+ * `FilesystemWorkspace` (RFC §13.7 FRONT-09.H, step 2); Agents is a separate,
+ * not-yet-started migration step.
  */
 export default function TeamFilesystemBrowser({
   root,

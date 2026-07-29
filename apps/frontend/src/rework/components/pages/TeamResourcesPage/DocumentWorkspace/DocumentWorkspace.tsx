@@ -12,20 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
+import type { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import type { IconType } from "@shared/utils/Type.ts";
 import type { OptionModel } from "@models/Option.model.ts";
+import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import {
   DocumentViewer,
@@ -71,35 +69,6 @@ const DOC_STATUS_POLL_MS = 3000;
 // How long a just-reprocessed row stays pinned to "processing" when the
 // backend never re-stamps its stages (dead worker, dropped workflow).
 const REPROCESS_OVERRIDE_TTL_MS = 90_000;
-
-interface RowIconSpec {
-  type: IconType;
-  color: string;
-  filled?: boolean;
-}
-
-const FOLDER_ICON: RowIconSpec = { type: "folder", color: "var(--folder)", filled: true };
-
-// Mirrors fred-core's FileTypeBucket grouping (PDF / Texte / PPT / Excel /
-// Autres). PPT uses --warning (mustard/orange) since that's the closest
-// existing semantic token to PowerPoint's own brand color and no other
-// bucket claims it yet — pdf=error, word/texte=tertiary, excel/csv=success.
-const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
-  pdf: { type: "picture_as_pdf", color: "var(--error)" },
-  docx: { type: "article", color: "var(--tertiary)" },
-  md: { type: "article", color: "var(--tertiary)" },
-  html: { type: "article", color: "var(--tertiary)" },
-  txt: { type: "article", color: "var(--tertiary)" },
-  xlsx: { type: "table", color: "var(--success)" },
-  csv: { type: "table", color: "var(--success)" },
-  ppt: { type: "slideshow", color: "var(--warning)" },
-  pptx: { type: "slideshow", color: "var(--warning)" },
-};
-const OTHER_FILE_ICON: RowIconSpec = { type: "draft", color: "var(--on-surface-muted)" };
-
-export function fileIconSpec(fileType: string | null | undefined): RowIconSpec {
-  return FILE_TYPE_ICON[fileType ?? ""] ?? OTHER_FILE_ICON;
-}
 
 interface PageState {
   docs: DocumentMetadata[];
@@ -228,7 +197,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // `query` field), which would search across the whole library, not just
   // what's on screen. Same pattern as the team members table's search.
   const [search, setSearch] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
   // Shared across the whole browser (not per-tag) — matches how the members
   // table's rows-per-page selector is one setting for the whole DataTable.
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
@@ -780,31 +748,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
 
   return (
     <div className={styles.workspace}>
-      <div className={styles.card}>
-        <div className={styles.toolbar}>
-          <span className={styles.toolbarStart}>
-            <Tooltip text={t("rework.resources.action.back")}>
-              <IconButton
-                color="on-surface-retreat"
-                variant="icon"
-                size="medium"
-                icon={{ category: "outlined", type: "arrow_back" }}
-                aria-label={t("rework.resources.action.back")}
-                disabled={!currentFolderFull}
-                // visibility (not conditional rendering) so the button still
-                // reserves its layout space at the root — the breadcrumb
-                // next to it doesn't shift left when the button disappears/
-                // reappears. visibility: hidden also removes it from hit
-                // testing and the tab order on its own, so a disabled+
-                // invisible button here is inert both visually and
-                // functionally, not just visually.
-                style={!currentFolderFull ? { visibility: "hidden" } : undefined}
-                onClick={navigateBack}
-              />
-            </Tooltip>
-            <Breadcrumb segments={breadcrumbSegments} />
-          </span>
-          <span className={styles.toolbarEnd}>
+      <ResourceExplorer<Row>
+        breadcrumb={{
+          segments: breadcrumbSegments,
+          onBack: navigateBack,
+          canGoBack: !!currentFolderFull,
+          backLabel: t("rework.resources.action.back"),
+        }}
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: t("rework.resources.search.placeholder"),
+          ariaLabel: t("rework.resources.search.ariaLabel"),
+          clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
+        }}
+        toolbarActions={
+          <>
             <BulkActionsBar
               selectedCount={selectedDocs.length}
               onDelete={bulkDelete}
@@ -837,74 +796,31 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 </Tooltip>
               </>
             )}
-            <span className={styles.search}>
-              <TextInput
-                ref={searchInputRef}
-                compact
-                size="small"
-                icon={{ category: "outlined", type: "search" }}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("rework.resources.search.placeholder")}
-                aria-label={t("rework.resources.search.ariaLabel")}
-                style={search ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
-              />
-              {search && (
-                <span className={styles.searchClear}>
-                  <IconButton
-                    type="button"
-                    size="small"
-                    color="on-surface-retreat"
-                    variant="icon"
-                    icon={{ category: "outlined", type: "close" }}
-                    aria-label={t("rework.resources.search.clearAriaLabel")}
-                    onClick={() => {
-                      setSearch("");
-                      searchInputRef.current?.focus();
-                    }}
-                  />
-                </span>
-              )}
-            </span>
-          </span>
-        </div>
-
-        {tagsLoading ? (
-          <div className={`${styles.hint} ${styles.loadingHint}`}>
-            <Spinner size={16} />
-            {t("rework.resources.loading")}
-          </div>
-        ) : isEmpty ? (
-          <div className={styles.hint}>
-            {currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")}
-          </div>
-        ) : (
-          <div className={styles.tableFill}>
-            <DataTable<Row>
-              columns={columns}
-              data={filteredRows}
-              rowKey={rowKey}
-              rowHeight="2.5rem"
-              firstColumnInset
-              selectable
-              selectedKeys={selectedKeys}
-              onSelectionChange={setSelectedKeys}
-              backgroundColor="var(--surface-container-high)"
-              serverPagination={
-                currentTag
-                  ? {
-                      totalCount: page?.total ?? 0,
-                      offset: page?.offset ?? 0,
-                      limit: rowsPerPage,
-                      onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
-                      onLimitChange: handleRowsPerPageChange,
-                    }
-                  : undefined
+          </>
+        }
+        loading={tagsLoading}
+        loadingMessage={t("rework.resources.loading")}
+        empty={isEmpty}
+        emptyMessage={
+          currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")
+        }
+        columns={columns}
+        rows={filteredRows}
+        rowKey={rowKey}
+        selectedKeys={selectedKeys}
+        onSelectedKeysChange={setSelectedKeys}
+        serverPagination={
+          currentTag
+            ? {
+                totalCount: page?.total ?? 0,
+                offset: page?.offset ?? 0,
+                limit: rowsPerPage,
+                onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
+                onLimitChange: handleRowsPerPageChange,
               }
-            />
-          </div>
-        )}
-      </div>
+            : undefined
+        }
+      />
 
       <InlineDrawer
         open={!!commands.previewTarget}

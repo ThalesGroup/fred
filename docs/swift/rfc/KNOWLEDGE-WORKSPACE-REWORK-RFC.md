@@ -859,6 +859,45 @@ Acceptance: all four tabs show the same column set with real data, no `limit=100
 fetches; search/sort round-trip through the backend for Corpus; the other three tabs at
 minimum keep working with client-side sort as a documented interim state (§13.6 decision 6).
 
+**Progress 2026-07-29 (Step 1 of the "other three tabs" plan):** the card+toolbar+table
+shell — back button, breadcrumb, caller-supplied toolbar actions, an optional search box,
+loading/empty states, `DataTable` — is extracted from `DocumentWorkspace.tsx` into a new
+generic `ResourceExplorer<T>` (`shared/organisms/ResourceExplorer/`), and Corpus rewired
+onto it with zero visible/behavioral regression (all 3 pre-existing `DocumentWorkspace`
+test files pass unmodified). `ResourceExplorer` has no knowledge of tags/documents/`/fs` —
+columns, rows, and every cell's rendering stay 100% caller-supplied, so it carries no
+Corpus-specific assumption that would block reuse. Decided before starting (developer
+confirmation): the other three tabs will adopt breadcrumb drill-down (replacing today's
+always-expanded tree) when their turn comes; `AgentFilesystemBrowser` keeps its own
+root-enumeration loop and mounts one `ResourceExplorer` instance per agent rather than the
+component supporting multiple roots natively; `/fs` gets client-side pagination for now
+(no backend contract change). Espace perso / Espace partagé / Agents are **not yet wired**
+onto `ResourceExplorer` — that's the next step(s), done separately.
+
+**Progress 2026-07-29 (Step 2 — Mon espace / Espace d'équipe):** new
+`FilesystemWorkspace.tsx` (`TeamResourcesPage/FilesystemWorkspace/`) brings both
+tabs onto `ResourceExplorer` with breadcrumb drill-down, replacing the old
+always-expanded `TeamFilesystemBrowser` tree for these two tabs specifically.
+`TeamFilesystemBrowser.tsx` itself is untouched — `AgentFilesystemBrowser` still
+depends on its always-expanded-tree shape (`baseDepth`) until Agents gets its
+own migration step. Beyond the table swap, developer-confirmed additions: rename
+wired (`POST /fs/rename/{path}`, already existed but unused; `RenameModal` reused
+as-is), a client-side search box, and multi-select + bulk delete (`BulkActionsBar`
+reused as-is, `onExcludeFromSearch` simply omitted — Corpus-only concept). Uses
+the real generated `FilesystemResourceInfoResult` type directly (no third
+hand-typed `FsEntry` duplicate) — `ls`'s `response_model` gap (`LsApiResponse =
+any`) is cast at the query boundary, not fixed backend-side this step. File-type
+icon logic (`fileIconSpec`) extracted from `DocumentWorkspace.tsx` into a shared
+`rework/utils/fileIconSpec.ts`, imported by both, so file-type colors now match
+across every Resources tab. `WorkspaceRoot`'s root-only "+" (`FsRootAddMenu`) is
+dropped for these two tabs — `FilesystemWorkspace` owns its own current-folder-
+aware upload/new-folder toolbar instead (mirroring Corpus); `FsRootAddMenu` had
+no remaining callers after that and was deleted. Zero remaining test regressions
+(`TeamFilesystemBrowser.test.tsx` untouched, still covers Agents' engine;
+`TeamResourcesPage.test.tsx` mocks updated to the new component; new
+`FilesystemWorkspace.test.tsx` covers write-action gating and breadcrumb
+navigation). Agents (step 3) not started.
+
 #### FRONT-09.I — Usage dashboard cards
 
 - [x] Add a per-team, per-file-type count aggregate (files-by-type histogram) — `GET
