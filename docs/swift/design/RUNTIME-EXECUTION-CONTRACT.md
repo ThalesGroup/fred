@@ -62,6 +62,23 @@ is the current authority for implemented runtime behavior.
 > instead of re-deriving a stricter one. Regular users are unaffected — the
 > least-privilege re-check still runs for every non-service-agent call.
 
+> ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
+> TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
+> user via the `public` marketplace-discovery relation on `PUBLIC`-visibility
+> teams (the default for every team). Every pod-side authorization check that
+> gates real content or execution — not just team-profile discovery — must
+> therefore use `TeamPermission.CAN_USE_TEAM_AGENTS` (`team_member`-only)
+> instead. This was true at turn start (`_authorize_execution_or_raise`,
+> §2.2/§2.4) but not at three sibling checks, all now fixed: the per-tool-call
+> reverify (`ToolObservabilityMiddleware._reverify_team_authorization`), the
+> OpenAI-compatible `/v1/chat/completions` surface
+> (`openai_compat_router.py`), and the control-plane's own prompt-library
+> reads (`product/api.py`, `control-plane-backend`). Every other reference to
+> `CAN_READ` below and in §8's dated history predates this fix and should be
+> read as `CAN_USE_TEAM_AGENTS` for anything that returns real content or
+> executes an agent; `CAN_READ` alone remains correct only for team-profile
+> discovery (e.g. `get_team_agent_instance_runtime`, config-only). See §8.28.
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.
@@ -128,8 +145,8 @@ Browser / CLI                control-plane              fred-runtime pod
 
 The managed path is the only one authorized for production frontend calls. The
 agent pod authenticates the Keycloak JWT and authorizes the request itself:
-OpenFGA `CAN_READ` for regular collaborative-team users, exact intrinsic
-ownership for a personal space, or the scoped service-agent rule.
+OpenFGA `CAN_USE_TEAM_AGENTS` for regular collaborative-team users, exact
+intrinsic ownership for a personal space, or the scoped service-agent rule.
 `control-plane` resolves which
 runtime pod serves which agent instance (via `prepare-execution`) but issues no
 capability and never proxies the SSE stream. The runtime currently performs an
@@ -247,7 +264,7 @@ credential the pod must trust.
 2. **Session ownership** — an existing `session_id` must belong to the caller
    (conversations are private per owner; blocks intra-team session hijacking).
 3. **Team authorization** — a regular collaborative-team caller must hold
-   OpenFGA `CAN_READ`; a personal-space caller must present the exact canonical
+   OpenFGA `CAN_USE_TEAM_AGENTS`; a personal-space caller must present the exact canonical
    `personal-<uid>` derived from the JWT; the scoped service-agent rule is the
    only other bypass. Denial fails closed (403). Under the `c3` profile a direct
    `agent_id` is forbidden entirely.
@@ -273,7 +290,7 @@ per-finding acceptance criteria live in
 |---:|---|---|
 | 1 | `POST /agents/execute/stream` | Validate request and Keycloak identity; normalize trusted runtime context |
 | 2 | Session/checkpoint access | Verify resumed checkpoint ownership when applicable; for an existing session, verify existence and owner in PostgreSQL |
-| 3 | Pod execution authorization | For a regular collaborative-team user, require OpenFGA `CAN_READ`; personal ownership and the scoped service-agent rule keep their documented behavior |
+| 3 | Pod execution authorization | For a regular collaborative-team user, require OpenFGA `CAN_USE_TEAM_AGENTS`; personal ownership and the scoped service-agent rule keep their documented behavior |
 | 4 | Managed runtime binding | Call the control-plane internal binding endpoint, authorize the team there, read the instance and team capability settings, then cross-check the resolved owner team |
 | 5 | Model authorization | Resolve usable model capabilities with a team-scoped OpenFGA lookup before model routing |
 | 6 | Runtime activation | Build request context/services/capabilities, activate MCP tools, construct the selected ReAct/Deep/Graph runtime and executor |
@@ -381,7 +398,9 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   audience strictly (`verify_aud=True`), and each pod validates `aud == its own
   client_id` (per-agent audience — anti-confused-deputy, decision D5c).
 - **Authorization** — for a collaborative team, the pod runs a per-request
-  OpenFGA check that the caller holds `CAN_READ` on
+  OpenFGA check that the caller holds `CAN_USE_TEAM_AGENTS` (`team_member`-only —
+  unlike `CAN_READ`, which also admits the `public` marketplace-discovery
+  relation; see the 2026-07-29 callout above) on
   `runtime_context.team_id`. A canonical personal space
   (`personal-<authenticated uid>`) uses intrinsic ownership by exact identity
   comparison, and the evaluation worker's `service_agent` identity uses the
@@ -671,7 +690,7 @@ responsibilities:
 Fred code IS responsible for:
 
 - Endpoint protection (Keycloak RBAC, OpenFGA REBAC)
-- Team-scoped managed agent authorization (pod-side OpenFGA `CAN_READ` on `runtime_context.team_id`)
+- Team-scoped managed agent authorization (pod-side OpenFGA `CAN_USE_TEAM_AGENTS` on `runtime_context.team_id`)
 - Runtime execution contracts (this module)
 - History and checkpoint access validation
 - Managed execution semantics (`agent_instance_id` resolution via control-plane)
@@ -1705,6 +1724,50 @@ told the model how to behave after a tool failure. This is prompt-only:
 whether `summarize_document`/`list_document_tree` should raise instead of
 returning error text as a normal result is a separate, larger structural
 fix (tracked in a follow-up issue linked from #2073), not addressed here.
+
+---
+
+### 8.28 ✅ Pod-side execution/content checks moved off public-discovery `CAN_READ` (issue #2146, PR #2147, 2026-07-29)
+
+**Supersedes the `CAN_READ`/`can_read` wording in §8.9–§8.11 and the earlier
+top-of-document callouts** — accurate for their own dates, superseded now.
+
+**What changed.** TEAM-09/TEAM-10 (`FRED-TEAM-CONFIG-RFC.md` §5.1.1/§5.1.2)
+deliberately widened `TeamPermission.CAN_READ` to include any authenticated
+user via the `public` marketplace-discovery relation, granted unconditionally
+on every `PUBLIC`-visibility team (the default for every team). The OpenFGA
+model (`schema.fga`) already anticipated this and kept `can_use_team_agents`
+strictly `team_member`-only, but three pod-side/runtime call sites written
+before that split still checked the wide `CAN_READ`, so a non-member visiting
+a public team could execute its agents or read tool-call context, not just
+see that the team exists:
+
+1. `_authorize_execution_or_raise` (agent_app.py, §2.2/§2.4) — turn-start
+   managed-execution authorization.
+2. `ToolObservabilityMiddleware._reverify_team_authorization`
+   (`tool_observability.py`, §8.9-era per-tool-call reverify) — re-checked
+   the same wide permission on every tool call after turn start.
+3. The OpenAI-compatible `/v1/chat/completions` surface
+   (`openai_compat_router.py`) — a separate gate duplicating (1) rather than
+   funneling through it, so it carried the same gap independently.
+
+All three now require `TeamPermission.CAN_USE_TEAM_AGENTS`. The equivalent
+control-plane-side leak (prompt-library content reachable via the same
+over-wide default) was fixed in the same PR in
+`control_plane_backend/product/api.py` (`get_team_prompts`,
+`get_context_prompts_early`, `get_team_prompt`), mirroring the precedent
+`post_prepare_execution` in the same file had already set.
+
+**Not changed by this fix**: `get_team_agent_instance_runtime` stays on
+`CAN_READ` deliberately — it returns instance config only, never prompt
+content, so public-discovery visibility is the correct (and intended) gate
+for it. `product/teams/service.py`'s `_list_teams` (`GET /teams`) also stays
+on `CAN_READ` — whether every public team should appear in a non-member's
+team list is an open product question, not folded into this fix.
+
+**Verification.** `make validation-report` against a live local stack: 190
+passed/35 failed/0 error before, 205 passed/20 failed/0 error after — the
+remaining 20 are exclusively the `GET /teams` open question above.
 
 ---
 
