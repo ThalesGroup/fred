@@ -80,7 +80,15 @@ bootstrap-local: bootstrap-token ## One command for LOCAL-DEVELOPMENT.md steps 1
 	HTTP_CODE=$$(printf '%s' "$$RESPONSE" | tail -n1); \
 	BODY=$$(printf '%s' "$$RESPONSE" | sed '$$d'); \
 	if [ "$$HTTP_CODE" = "409" ]; then \
-		echo "✓ $(BOOTSTRAP_USER) is already platform_admin (one-shot bootstrap already used)."; \
+		IS_ADMIN=$$(curl -sS "$(CONTROL_PLANE_BASE_URL)/frontend/bootstrap" -H "Authorization: Bearer $$TOKEN" \
+			| $(UV) run python -c 'import sys,json; print(bool(json.load(sys.stdin).get("permissions",{}).get("is_platform_admin")))' 2>/dev/null); \
+		if [ "$$IS_ADMIN" = "True" ]; then \
+			echo "✓ $(BOOTSTRAP_USER) is already platform_admin (one-shot bootstrap already used)."; \
+		else \
+			echo "❌ The one-shot bootstrap was already consumed by a DIFFERENT account -- $(BOOTSTRAP_USER) is NOT platform_admin."; \
+			echo "   Ask whoever ran it first, or use their account for the rest of this walkthrough."; \
+			exit 1; \
+		fi; \
 	elif [ "$$HTTP_CODE" != "200" ] && [ "$$HTTP_CODE" != "201" ]; then \
 		echo "❌ Bootstrap call failed (HTTP $$HTTP_CODE): $$BODY"; \
 		exit 1; \
@@ -114,13 +122,25 @@ activate-all-capabilities: ## Set every catalog capability (tools + agent templa
 		echo "❌ No capabilities returned -- is fred-agents reachable? (check its terminal from 'make run')"; \
 		exit 1; \
 	fi; \
+	FAILED=""; \
 	for id in $$CAP_IDS; do \
-		echo "default-on: $$id"; \
-		curl -sS -X PUT "$(CONTROL_PLANE_BASE_URL)/admin/capabilities/$$id/default-on" \
+		STATUS=$$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$(CONTROL_PLANE_BASE_URL)/admin/capabilities/$$id/default-on" \
 			-H "Authorization: Bearer $$TOKEN" -H "Content-Type: application/json" \
-			-d '{"default_on": true}' >/dev/null; \
+			-d '{"default_on": true}'); \
+		if [ "$$STATUS" = "200" ] || [ "$$STATUS" = "201" ]; then \
+			echo "default-on: $$id"; \
+		elif [ "$$STATUS" = "409" ]; then \
+			echo "skipped (needs team-specific settings): $$id"; \
+		else \
+			echo "❌ default-on FAILED (HTTP $$STATUS): $$id"; \
+			FAILED="$$FAILED $$id"; \
+		fi; \
 	done; \
-	echo "✓ $$(printf '%s\n' "$$CAP_IDS" | wc -l | tr -d ' ') capabilities set to default_on. A capability with required team settings may refuse (409) -- grant it to one demo team explicitly instead, see LOCAL-DEVELOPMENT.md."
+	if [ -n "$$FAILED" ]; then \
+		echo "❌ $$(echo $$FAILED | wc -w | tr -d ' ') capabilit(y/ies) failed unexpectedly -- is $(BOOTSTRAP_USER) still platform_admin?"; \
+		exit 1; \
+	fi; \
+	echo "✓ $$(printf '%s\n' "$$CAP_IDS" | wc -l | tr -d ' ') capabilities processed. Any \"skipped\" above needs a value only a team can supply -- grant it to one demo team explicitly instead, see LOCAL-DEVELOPMENT.md."
 
 DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
 DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
