@@ -122,19 +122,27 @@ def _jwt_sub(token: str) -> str:
 
 @pytest.mark.parametrize("username", sorted(USERS))
 def test_user_sees_exactly_their_teams(username: str, cp, users) -> None:
-    """Check that a user sees exactly their own teams and no other team leaks (ReBAC isolation)."""
+    """Check that a user is a member of exactly their own teams and no other team membership leaks (ReBAC isolation).
+
+    TEAM-10 (2026-07-26) makes team visibility default to PUBLIC, so `/teams`
+    may legitimately list every public collaborative team for marketplace
+    discovery (`can_read = team_member or public`), including teams the caller
+    never joined. The isolation invariant this test proves is membership
+    (`is_member`), not list presence -- see GitHub #2146 cluster C.
+    """
     user = users[username]
     resp = cp(username).get("/teams")
     assert resp.status_code == 200, resp.text
     items = resp.json()
     assert isinstance(items, list), f"unexpected /teams shape: {items!r}"
     collaborative = [t for t in items if not str(t.get("id", "")).startswith("personal-")]
-    seen: set[str] = set().union(*[_identifiers(t) for t in collaborative]) if collaborative else set()
+    joined = [t for t in collaborative if t.get("is_member")]
+    seen: set[str] = set().union(*[_identifiers(t) for t in joined]) if joined else set()
     for team in user.teams:
-        assert team in seen, f"{username} should see team {team!r}; got {sorted(seen)}"
-    assert len(collaborative) == len(user.teams), (
-        f"{username}: expected collaborative teams {sorted(user.teams)}, "
-        f"got {[t.get('name') for t in collaborative]}"
+        assert team in seen, f"{username} should be a member of team {team!r}; got {sorted(seen)}"
+    assert len(joined) == len(user.teams), (
+        f"{username}: expected team memberships {sorted(user.teams)}, "
+        f"got {[t.get('name') for t in joined]} (is_member=True teams)"
     )
 
 

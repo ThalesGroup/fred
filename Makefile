@@ -1,6 +1,8 @@
 CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
+RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
+ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
 
 .DEFAULT_GOAL := help
 
@@ -71,6 +73,49 @@ test: ## Run non-integration test suites in all submodules and print coverage su
 validation-report: ## Run the live cross-app validation suite (requires infra + running apps - see validation/README.md)
 	$(MAKE) -C validation validation-report
 
+##@ Setup
+
+.PHONY: setup-env
+setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
+	@set -e; \
+	for dir in $(ENV_APPS); do \
+		if [ ! -f "$$dir/config/.env" ]; then \
+			cp "$$dir/config/.env.template" "$$dir/config/.env"; \
+			echo "************ Created $$dir/config/.env from template ************"; \
+		else \
+			echo "************ $$dir/config/.env already exists, leaving it untouched ************"; \
+		fi; \
+	done
+	@# fred-deployment-factory's docker-compose fixes these to the same value everywhere
+	@# (Postgres/OpenSearch/OpenFGA/MinIO passwords, every Keycloak client secret) -- only
+	@# ever fills a placeholder that's still literally empty, never overwrites a real value.
+	@for dir in $(ENV_APPS); do \
+		f="$$dir/config/.env"; \
+		[ -f "$$f" ] || continue; \
+		for key in FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD OPENFGA_API_TOKEN MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
+			if grep -q "^$$key=\"\"" "$$f" 2>/dev/null; then \
+				sed -i "s/^$$key=\"\"/$$key=\"Azerty123_\"/" "$$f"; \
+			fi; \
+		done; \
+	done
+	@# knowledge-flow-backend's own .env.template still defaults CONFIG_FILE to configuration.yaml
+	@# (doc drift vs. the other two apps) -- only fix it if it's still exactly that stale
+	@# template default, never touch a value a developer deliberately set to something else.
+	@if [ -f apps/knowledge-flow-backend/config/.env ] && grep -qE '^CONFIG_FILE="?\./config/configuration\.yaml"?$$' apps/knowledge-flow-backend/config/.env; then \
+		sed -i 's|^CONFIG_FILE=.*|CONFIG_FILE="./config/configuration_prod.yaml"|' apps/knowledge-flow-backend/config/.env; \
+		echo "************ Fixed knowledge-flow-backend CONFIG_FILE to configuration_prod.yaml ************"; \
+	fi
+	@# Prompt once (not per app) for a model provider key, only if neither fred-agents app
+	@# already has one -- skipped entirely in a non-interactive shell (no stdin to read).
+	@if [ -t 0 ] && ! grep -qE '^(OPENAI_API_KEY|ANTHROPIC_API_KEY)="[^"]+"' apps/fred-agents/config/.env 2>/dev/null; then \
+		read -p "Enter an OpenAI API key for local dev (blank to skip, add it later yourself): " api_key; \
+		if [ -n "$$api_key" ]; then \
+			sed -i "s/^OPENAI_API_KEY=\"\"/OPENAI_API_KEY=\"$$api_key\"/" apps/fred-agents/config/.env; \
+			[ -f apps/knowledge-flow-backend/config/.env ] && sed -i "s/^OPENAI_API_KEY=\"\"/OPENAI_API_KEY=\"$$api_key\"/" apps/knowledge-flow-backend/config/.env; \
+		fi; \
+	fi
+	@echo "✓ setup-env done. Review apps/*/config/.env yourself for anything beyond local docker-compose defaults (Azure, proxy, Prometheus, ...)."
+
 ##@ Run
 
 .PHONY: run-frontend
@@ -88,6 +133,15 @@ run-knowledge-flow: ## Run knowledge-flow backend API only
 .PHONY: run-control-plane
 run-control-plane: ## Run control-plane backend API only
 	$(MAKE) -C apps/control-plane-backend run
+
+.PHONY: run
+run: ## Start control-plane, fred-agents, knowledge-flow, and frontend together in one terminal (Ctrl+C stops all four)
+	@set -e; \
+	for dir in $(RUN_DIRS); do \
+		echo "************ Starting $$dir ************"; \
+		$(MAKE) -C $$dir run & \
+	done; \
+	wait
 
 .PHONY: dev
 dev:  ## Start development environment in all submodules

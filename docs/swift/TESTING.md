@@ -93,38 +93,32 @@ Three API components are always needed. A fourth — the knowledge-flow
 you try to upload/ingest a document from the UI, it will hang or fail with no
 obvious cause. **If your manual pass touches documents at all, start it.**
 
-Back in your `fred` checkout, each app needs a local `.env` copied from its
-template:
+Back in your `fred` checkout, once (idempotent, safe to re-run):
 
 ```bash
-cp apps/control-plane-backend/config/.env.template apps/control-plane-backend/config/.env
-cp apps/fred-agents/config/.env.template apps/fred-agents/config/.env
-cp apps/knowledge-flow-backend/config/.env.template apps/knowledge-flow-backend/config/.env
+make setup-env
 ```
 
-Open each of the three `.env` files and check `CONFIG_FILE`: it must point at
-`configuration_prod.yaml`, not `configuration.yaml` — that's the profile
-wired to real Keycloak/OpenFGA/Postgres/OpenSearch instead of local
-stand-ins. `control-plane-backend` and `fred-agents` already default to it;
-**`knowledge-flow-backend`'s template does not** — change that one line by
-hand:
-
-```
-CONFIG_FILE="./config/configuration_prod.yaml"
-```
-
-Every secret placeholder left blank in the three `.env` files (Keycloak
-client secrets, `OPENFGA_API_TOKEN`, Postgres/OpenSearch/MinIO passwords) is
+Creates each app's `.env` from its template, points `CONFIG_FILE` at
+`configuration_prod.yaml` in all three (`knowledge-flow-backend`'s own
+template still defaults to `configuration.yaml` — that's the one drift
+`setup-env` corrects for you), fills every blank secret placeholder (Keycloak
+client secrets, `OPENFGA_API_TOKEN`, Postgres/OpenSearch/MinIO passwords) with
 the same fixed local value `fred-deployment-factory` seeds everywhere in this
-setup: `Azerty123_`. Fill each one in with that.
+setup (`Azerty123_`), and prompts once for a model provider API key. Never
+overwrites a value already set.
 
-Then, in three separate terminals, from the `fred` repo root:
+Then, one terminal, from the `fred` repo root:
 
 ```bash
-make run-control-plane
-make run-fred-agents
-make run-knowledge-flow
+make run
 ```
+
+Starts `control-plane-backend`, `fred-agents`, `knowledge-flow-backend`, and
+the frontend together — `Ctrl+C` stops all four. Prefer to watch one app's
+log in isolation while debugging it? `make run-control-plane`,
+`make run-fred-agents`, `make run-knowledge-flow` (each also exists
+standalone, one terminal per app).
 
 **✅ What tells you this worked:**
 
@@ -178,16 +172,21 @@ step is required, not optional. Full detail/troubleshooting lives in
 `fred-deployment-factory`'s [`docs/LOCAL-DEVELOPMENT.md`](https://github.com/ThalesGroup/fred-deployment-factory/blob/swift/docs/LOCAL-DEVELOPMENT.md)
 ("Full bootstrap walkthrough", steps 3–4) — this is the condensed version.
 
-In a new terminal, from the `fred` repo root:
-
-```bash
-cd apps/control-plane-backend
-make bootstrap-token    # writes target/bootstrap-token; never overwrites, never printed by the app
-```
-
 Self-register a throwaway user through **Keycloak's own** registration
 screen (no Fred frontend needed yet): open
-`http://localhost:8080/realms/app/account` → "Register". Then:
+`http://localhost:8080/realms/app/account` → "Register". Then, in a new
+terminal, from `apps/control-plane-backend`:
+
+```bash
+make bootstrap-local BOOTSTRAP_USER=<your-username> BOOTSTRAP_PASSWORD=<your-password>
+```
+
+Runs `bootstrap-token` (writes `target/bootstrap-token`; never overwrites,
+never printed by the app) and the Keycloak-login-then-bootstrap dance in one
+command — one-shot and permanent, a second run reports "already
+platform_admin" instead of erroring. That throwaway user is now
+`platform_admin`; use it to import the demo dataset, which creates the *real*
+named demo identities (`alice`, `bob`, `marc`, …) validation expects:
 
 ```bash
 TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
@@ -195,17 +194,6 @@ TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
   -d username=<your-username> -d password=<your-password> \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 
-curl -s -X POST http://localhost:8222/control-plane/v1/bootstrap/platform-admin \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"token\": \"$(cat target/bootstrap-token)\"}"
-```
-
-One-shot and permanent — a second call, ever, returns `409`. That throwaway
-user is now `platform_admin`; use it to import the demo dataset, which creates
-the *real* named demo identities (`alice`, `bob`, `marc`, …) validation
-expects:
-
-```bash
 make build-demo-bundle    # zips tests/fixtures/import_export/demo_provisioning/ → target/demo-provisioning-bundle.zip
 
 curl -s -X POST http://localhost:8222/control-plane/v1/import-export/import \
@@ -231,32 +219,27 @@ Every tool (MCP server) and every agent template is admin-gated by default,
 platform-wide. Step 3 only provisions identities/teams/roles — it grants no
 team access to any tool or agent, so right now every demo team has an empty
 toolbox. `alice` (the demo bundle's `platform_admin`, password `Azerty123_`,
-matching `validation/factory_config.py`'s `PASSWORD` default) grants it, the
-same way the throwaway bootstrap user did above — get her a token, then flip
-every capability to platform-wide `default_on`:
+matching `validation/factory_config.py`'s `PASSWORD` default) grants it — from
+`apps/control-plane-backend`:
 
 ```bash
-ALICE_TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=app \
-  -d username=alice -d password=Azerty123_ \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-
-CAP_IDS=$(curl -s http://localhost:8222/control-plane/v1/admin/capabilities \
-  -H "Authorization: Bearer $ALICE_TOKEN" \
-  | python3 -c 'import sys,json; print("\n".join(i["id"] for i in json.load(sys.stdin)["items"]))')
-
-for id in $CAP_IDS; do
-  curl -s -X PUT "http://localhost:8222/control-plane/v1/admin/capabilities/$id/default-on" \
-    -H "Authorization: Bearer $ALICE_TOKEN" -H "Content-Type: application/json" \
-    -d '{"default_on": true}'
-done
+make activate-all-capabilities BOOTSTRAP_USER=alice BOOTSTRAP_PASSWORD=Azerty123_
 ```
+
+Flips every capability (tools + agent templates) to platform-wide
+`default_on` — same effect as **Admin → Capabilities → select all** in the
+UI once the frontend is up. A capability with *required* team settings
+refuses (`409`) — expected, it needs a value only a team can supply; grant it
+to one demo team explicitly instead if you need it.
 
 **✅ What tells you this worked:**
 
 ```bash
+TOKEN=$(curl -s http://localhost:8080/realms/app/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=app -d username=alice -d password=Azerty123_ \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 curl -s http://localhost:8222/control-plane/v1/teams/<a-team-id>/agent-templates \
-  -H "Authorization: Bearer $ALICE_TOKEN" | python3 -m json.tool
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
 Should be a non-empty list. An empty list here is exactly what makes

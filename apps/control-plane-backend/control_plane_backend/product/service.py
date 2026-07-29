@@ -608,6 +608,19 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
     return f"{AGENT_CAPABILITY_NAMESPACE_PREFIX}{runtime_id}__{agent_id}"
 
 
+# Internal harness templates that CAPAB-01's admin-grant check (`can_use`) can
+# never gate: `_agent_capabilities_for_source` deliberately excludes non-public
+# templates from `/admin/capabilities` (AGENT-VISIBILITY-RFC), so no admin can
+# ever grant one — visibility (`include_non_public`/`can_see_non_public_templates`,
+# already platform_admin-only) is the real access control for these. Deliberately
+# an explicit `template_agent_id` allowlist, NOT "any `public=False` template":
+# `public=False` is pod-local metadata with its own, independent meaning
+# (AGENT-VISIBILITY-RFC §8, "public=True does NOT mean platform-approved" — the
+# converse holds too) and other non-public templates (e.g. a future internal/
+# review-pending agent) must still go through ordinary CAPAB-01 admission.
+_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset({"fred.github.self_test"})
+
+
 async def _agent_capabilities_for_source(
     base_url: str, runtime_id: str
 ) -> list[CapabilityCatalogEntry] | None:
@@ -1310,7 +1323,12 @@ async def list_agent_templates(
             template_cap_id = template_capability_id(
                 source.runtime_id, template.template_agent_id
             )
-            if usable_ids is not None and template_cap_id not in usable_ids:
+            if (
+                template.template_agent_id
+                not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+                and usable_ids is not None
+                and template_cap_id not in usable_ids
+            ):
                 continue
             templates.append(
                 AgentTemplateSummary(
@@ -2303,10 +2321,18 @@ async def enroll_agent_instance(
     # `template_id` gets exactly the same response as a nonexistent one (RFC
     # §7.2/§10 anti-guessing rule, matching the non-public-template check
     # above).
-    if not await can_use_capability(
-        deps.team_dependencies.rebac,
-        team_id,
-        template_capability_id(source_runtime_id, source_agent_id),
+    #
+    # An explicitly allowlisted internal harness template (e.g. self-test) is
+    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
+    # above (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`) — never any
+    # `public=False` template, which has its own, independent meaning.
+    if (
+        source_agent_id not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+        and not await can_use_capability(
+            deps.team_dependencies.rebac,
+            team_id,
+            template_capability_id(source_runtime_id, source_agent_id),
+        )
     ):
         raise EnrollmentError(
             f"Template {request.template_id!r} was not found on runtime source "
