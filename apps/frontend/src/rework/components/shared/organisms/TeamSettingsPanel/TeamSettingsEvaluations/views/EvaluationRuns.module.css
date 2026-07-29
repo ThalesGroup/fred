@@ -60,6 +60,17 @@
   flex: 1 1 180px;
 }
 
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.toolbarSpacer {
+  flex: 1 1 auto;
+}
+
 /* ── Grid table ──────────────────────────────────────────────────────────── */
 
 .table {
@@ -73,10 +84,21 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1.6fr 1fr auto auto 160px 180px auto;
+  grid-template-columns:
+    minmax(0, 0.78fr)
+    minmax(0, 0.9fr)
+    minmax(0, 0.62fr)
+    minmax(0, 0.72fr)
+    minmax(0, 0.9fr)
+    minmax(0, 0.95fr)
+    max-content;
   align-items: center;
-  gap: var(--spacing-m);
-  padding: var(--spacing-s) var(--spacing-m);
+  column-gap: var(--spacing-s);
+  padding: var(--spacing-s) var(--spacing-xs);
+}
+
+.row > * {
+  min-width: 0;
 }
 
 .headerRow {
@@ -85,14 +107,53 @@
   font: var(--font-label-small-emphasized);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  padding-left: var(--spacing-xs);
+  padding-right: var(--spacing-xs);
+}
+
+.nameHeaderCell,
+.targetHeaderCell,
+.stateHeaderCell,
+.verdictHeaderCell,
+.progressHeaderCell,
+.scoresHeaderCell,
+.actionsHeaderCell {
+  text-align: left;
+}
+
+.nameHeaderCell {
+  transform: translateX(-4px);
+}
+
+.targetHeaderCell {
+  transform: translateX(-38px);
+}
+
+.stateHeaderCell {
+  transform: translateX(-68px);
+}
+
+.verdictHeaderCell {
+  transform: translateX(-104px);
+}
+
+.progressHeaderCell {
+  transform: translateX(-140px);
+}
+
+.scoresHeaderCell {
+  transform: translateX(-176px);
 }
 
 .bodyRow {
   position: relative;
   cursor: pointer;
-  border-top: 1px solid var(--outline-variant);
   color: var(--on-surface);
   font: var(--font-body-medium);
+}
+
+.bodyRow + .bodyRow {
+  border-top: 1px solid var(--outline-variant);
 }
 
 .bodyRow:hover {
@@ -130,6 +191,18 @@
   gap: var(--spacing-xs);
 }
 
+.targetCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.targetName {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
 .name {
   color: var(--on-surface);
   font: var(--font-body-medium-emphasized);
@@ -146,11 +219,17 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  /* Grid items default to min-width: auto, letting long content (e.g. a
-     long judge_profile_id like "MISTRAL-SMALL") blow past this column's
-     180px track and spill into the actions column next to it. Allow the
-     item to shrink to its track so the pill below can ellipsis instead. */
   min-width: 0;
+}
+
+.stateCell,
+.verdictCell {
+  display: flex;
+  align-items: center;
+}
+
+.stateCell {
+  padding-left: var(--spacing-m);
 }
 
 .scoreLine {
@@ -172,13 +251,49 @@
 
 .actionsCell {
   display: flex;
-  flex-shrink: 0;
   justify-content: flex-end;
-  gap: var(--spacing-xs);
-  /* Grid equivalent of flex-shrink: 0 — never let this column collapse
-     below the Detail/Delete buttons' natural width, whatever the sibling
-     scoresCell column does. */
+  gap: var(--spacing-s);
   min-width: max-content;
+}
+
+.actionsHeaderCell {
+  left: 0;
+  justify-self: end;
+}
+
+.nameHeaderCell,
+.nameCell {
+  grid-column: 1;
+}
+
+.targetHeaderCell,
+.targetCell {
+  grid-column: 2;
+}
+
+.stateHeaderCell,
+.stateCell {
+  grid-column: 3;
+}
+
+.verdictHeaderCell,
+.verdictCell {
+  grid-column: 4;
+}
+
+.progressHeaderCell,
+.progressCell {
+  grid-column: 5;
+}
+
+.scoresHeaderCell,
+.scoresCell {
+  grid-column: 6;
+}
+
+.actionsHeaderCell,
+.actionsCell {
+  grid-column: 7;
 }
 
 .muted {
@@ -277,5 +392,14 @@
 .caseLink {
   align-self: flex-end;
   color: var(--primary);
+  font: var(--font-label-medium);
+}
+
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-s);
+  color: var(--on-surface-retreat);
   font: var(--font-label-medium);
 }

@@ -16,9 +16,13 @@
 // AGENT-EVALUATION §8.5). An Evaluation is the versioned, reusable case set;
 // opening one shows its Runs. Creating one never starts a run.
 
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import TextInput from "@shared/atoms/TextInput/TextInput";
+import Select from "@shared/molecules/Select/Select";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import type { OptionModel } from "@models/Option.model.ts";
 import { StatusPill } from "./EvaluationShared";
 import { useListEvaluationsQuery } from "../../../../../../../slices/evaluation/evaluationApiEnhancements";
 import styles from "./Evaluations.module.css";
@@ -29,12 +33,47 @@ interface EvaluationsProps {
   onOpenEvaluation: (evaluationId: string, name: string) => void;
 }
 
+// One page holds enough to scan without scrolling forever; the server enforces its
+// own ceiling (limit ≤ 200), so this stays well within it.
+const PAGE_SIZE = 25;
+
+type SortValue = "created_at:desc" | "created_at:asc" | "name:asc";
+
 export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation }: EvaluationsProps) {
   const { t } = useTranslation();
 
-  const { data, isLoading, isError } = useListEvaluationsQuery({ teamId }, { skip: !teamId });
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sort, setSort] = useState<SortValue>("created_at:desc");
+  const [offset, setOffset] = useState(0);
+
+  // Debounce the search box so each keystroke doesn't fire a request.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // Any change to the filter or sort invalidates the current page offset —
+  // otherwise you could land on "page 5" of a result set that now has one page.
+  useEffect(() => {
+    setOffset(0);
+  }, [debouncedSearch, sort]);
+
+  const { data, isLoading, isError, isFetching } = useListEvaluationsQuery(
+    { teamId, q: debouncedSearch || undefined, sort, offset, limit: PAGE_SIZE },
+    { skip: !teamId },
+  );
 
   const evaluations = data?.evaluations ?? [];
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+
+  const sortOptions: OptionModel<SortValue>[] = [
+    { value: "created_at:desc", key: "newest", label: t("rework.evaluation.controls.sort.newest") },
+    { value: "created_at:asc", key: "oldest", label: t("rework.evaluation.controls.sort.oldest") },
+    { value: "name:asc", key: "name", label: t("rework.evaluation.controls.sort.name") },
+  ];
 
   if (isError) {
     return (
@@ -59,6 +98,24 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
         <Button color="primary" variant="filled" size="medium" onClick={onNewEvaluation}>
           {t("rework.evaluation.evaluations.new")}
         </Button>
+      </div>
+
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarSearch}>
+          <TextInput
+            icon={{ category: "outlined", type: "search" }}
+            placeholder={t("rework.evaluation.controls.searchEvaluations")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select<SortValue>
+          size="medium"
+          options={sortOptions}
+          value={sort}
+          onChange={(value) => setSort(value)}
+          label={t("rework.evaluation.controls.sortLabel")}
+        />
       </div>
 
       {isLoading && <p className={styles.muted}>{t("common.loading")}</p>}
@@ -111,6 +168,30 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {!isLoading && total > PAGE_SIZE && (
+        <div className={styles.pagination}>
+          <span>{t("rework.evaluation.controls.page", { current: currentPage, total: pageCount })}</span>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            disabled={offset === 0 || isFetching}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
+            {t("rework.evaluation.controls.prev")}
+          </Button>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            disabled={currentPage >= pageCount || isFetching}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
+            {t("rework.evaluation.controls.next")}
+          </Button>
         </div>
       )}
     </div>

@@ -1952,7 +1952,8 @@
         "campaignInfo": "Informations de l'exécution",
         "meta": {
           "dataset": "Évaluation",
-          "profile": "Profil de scoring",
+          "author": "Auteur",
+          "profile": "Profil de vérifications structurelles",
           "judge": "Juge",
           "team": "Identifiant d'évaluation",
           "created": "Créée le",
@@ -1971,6 +1972,10 @@
         "caseTitle": "Détail du cas",
         "copyJson": "Copier en JSON",
         "copied": "Copié",
+        "downloadJson": "Télécharger le JSON",
+        "downloadRun": "Télécharger le JSON",
+        "downloading": "Préparation…",
+        "downloadError": "Échec du téléchargement",
         "latency": "Latence",
         "input": "Entrée",
         "expected": "Sortie attendue",
@@ -1982,6 +1987,18 @@
         "skipped": "ignoré",
         "passed": "réussi",
         "failed": "échoué"
+      },
+      "controls": {
+        "searchEvaluations": "Rechercher par nom…",
+        "sortLabel": "Trier",
+        "sort": {
+          "newest": "Plus récentes d'abord",
+          "oldest": "Plus anciennes d'abord",
+          "name": "Nom (A–Z)"
+        },
+        "page": "Page {{current}} sur {{total}}",
+        "prev": "Précédent",
+        "next": "Suivant"
       },
       "evaluations": {
         "title": "Évaluations",
@@ -2037,6 +2054,7 @@
         "viewFullDetail": "Voir le détail complet →",
         "metricsCount": "{{count}} métriques",
         "targetInstance": "Instance · {{id}}",
+        "targetManaged": "Instance gérée",
         "detail": "Détail",
         "deleteTitle": "Supprimer l'exécution",
         "deleteSuccess": "Exécution supprimée",
@@ -2058,12 +2076,12 @@
           "criticalFailures": "Échecs critiques"
         },
         "col": {
-          "run": "Exécution / ID",
-          "target": "Cible",
-          "state": "État",
+          "run": "Run",
+          "target": "Agent",
+          "state": "Statut",
           "verdict": "Verdict",
-          "progress": "Progression",
-          "scores": "Profil / juge"
+          "progress": "Fait",
+          "judge": "Juge"
         }
       },
       "runCreate": {
