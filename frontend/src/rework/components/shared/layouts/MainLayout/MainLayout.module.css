@@ -9,6 +9,16 @@
   overflow: visible;
 }
 
+/* Positioning context for overlays (e.g. the migration banner) so they cover
+   the page content only, never the sidebar. */
+.contentArea {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
 .content {
   width: 100%;
   overflow: auto;

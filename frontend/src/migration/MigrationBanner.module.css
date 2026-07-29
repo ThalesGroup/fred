@@ -1,0 +1,52 @@
+/* KEA MIGRATION (throwaway) — overlay banner, see MigrationBanner.tsx */
+
+.banner {
+  display: flex;
+  position: absolute;
+  top: var(--spacing-m);
+  right: var(--spacing-xl);
+  left: var(--spacing-xl);
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+  z-index: 1100;
+  animation: slide-in 200ms ease-out;
+  margin: 0 auto;
+  box-shadow: var(--shadow-s);
+  border-radius: var(--radius-s);
+  background-color: var(--red-40);
+  padding: var(--spacing-s) var(--spacing-s) var(--spacing-s) var(--spacing-m);
+  max-width: 1100px;
+}
+
+.message {
+  margin: 0;
+  color: var(--red-99);
+  font: var(--font-body-medium-emphasized);
+}
+
+/* IconButton sets --main-color on the button itself via [data-color], so the
+   override has to target the button too — inheriting from .banner would lose. */
+.banner button {
+  --main-color: var(--red-99);
+  --state-on-surface-hover: rgb(255 255 255 / 20%);
+  --state-on-surface-pressed: rgb(255 255 255 / 30%);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+}
