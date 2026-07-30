@@ -136,9 +136,17 @@ class BaseDocumentMetadataStore:
     @abstractmethod
     async def delete_metadata(
         self, document_uid: str, session: AsyncSession | None = None
-    ) -> None:
+    ) -> bool:
         """
         Delete a metadata entry by its UID.
+
+        Returns True when *this* call removed the row, False when the row was
+        already gone. Implementations MUST make that determination atomically
+        (a single conditional DELETE, not a read followed by a delete): callers
+        use the result to decide whether to apply a side effect that must happen
+        exactly once, such as releasing the document's storage quota. A
+        read-then-delete lets two concurrent callers both observe the row and
+        both report success, releasing the same bytes twice (#2149).
 
         :raises ValueError: if 'document_uid' is missing.
         """

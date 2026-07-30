@@ -44,4 +44,11 @@ class BaseUserStore(ABC):
         delta: int,
         session: AsyncSession | None = None,
     ) -> None:
-        pass
+        """Adjust a user's recorded personal storage usage by `delta` bytes.
+
+        `delta` is negative when storage is released (a document was permanently
+        deleted). Implementations MUST NOT persist a negative usage: clamp at 0
+        and log, because usage is a byte count and `check_quota` reads this value
+        as the sole enforcement input — a negative usage silently grants free
+        quota (#2149).
+        """

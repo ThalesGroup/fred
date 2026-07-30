@@ -12,17 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
 from fred_core.users.user_models import GcuVersionsType, UserRow
 
 from .base_user_store import BaseUserStore
+
+logger = logging.getLogger(__name__)
 
 _user_store: BaseUserStore | None = None
 
@@ -86,17 +90,69 @@ class PostgresUserStore(BaseUserStore):
         delta: int,
         session: AsyncSession | None = None,
     ) -> None:
-        """Increment current storage size of a user by a delta (can be negative)."""
+        """Increment current storage size of a user by a delta (can be negative).
+
+        The result is clamped at 0: personal usage is a byte count, so a negative
+        value is always accounting drift rather than a real state, and letting it
+        go negative would hand the user free quota. The clamp logs a warning so the
+        drift stays visible instead of being silently absorbed (#2149).
+
+        The update is a single atomic `UPDATE ... SET col = col + :delta`, not a
+        read-modify-write: personal-space releases fan out concurrently the same
+        way team releases do, and loading the row then writing back an absolute
+        value lost decrements under concurrency (#2149 review finding).
+        """
         async with use_session(self._sessions, session) as s:
-            user = await s.get(UserRow, user_id)
-            if user is not None:
-                current = user.current_resources_storage_size or 0
-                user.current_resources_storage_size = current + delta
-            else:
-                user = UserRow(
-                    id=user_id,
-                    gcuVersionAccepted=None,
-                    gcuAcceptedAt=None,
-                    current_resources_storage_size=delta,
+            # CASE, not GREATEST/MAX — see the note in TeamMetadataStore; the same
+            # portability constraint applies here.
+            new_value = func.coalesce(UserRow.current_resources_storage_size, 0) + delta
+            result = await s.execute(
+                update(UserRow)
+                .where(UserRow.id == user_id)
+                .values(
+                    current_resources_storage_size=case(
+                        (new_value < 0, 0), else_=new_value
+                    )
                 )
-                s.add(user)
+                .returning(UserRow.current_resources_storage_size)
+            )
+            updated = result.scalar_one_or_none()
+            if updated is not None:
+                if delta < 0 and updated == 0:
+                    logger.warning(
+                        "Storage accounting for user '%s' reached 0 (delta=%d); if this was a clamp, usage had drifted",
+                        user_id,
+                        delta,
+                    )
+                return
+
+            # No row yet. Insert one, but treat a concurrent insert as the normal
+            # case rather than an error: two releases for the same unseen user race
+            # here, and the loser must fold its delta into the winner's row instead
+            # of failing the delete that triggered it.
+            if delta < 0:
+                logger.warning(
+                    "Storage release for unknown user '%s' (delta=%d); recording 0 rather than a negative usage",
+                    user_id,
+                    delta,
+                )
+            try:
+                async with s.begin_nested():
+                    s.add(
+                        UserRow(
+                            id=user_id,
+                            gcuVersionAccepted=None,
+                            gcuAcceptedAt=None,
+                            current_resources_storage_size=max(0, delta),
+                        )
+                    )
+            except IntegrityError:
+                await s.execute(
+                    update(UserRow)
+                    .where(UserRow.id == user_id)
+                    .values(
+                        current_resources_storage_size=case(
+                            (new_value < 0, 0), else_=new_value
+                        )
+                    )
+                )

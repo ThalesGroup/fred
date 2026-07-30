@@ -208,8 +208,8 @@ class _TrackingMetadataStore(BaseMetadataStore):
     async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         await self._delegate.save_metadata(metadata, session=session)
 
-    async def delete_metadata(self, document_uid: str, session=None) -> None:
-        await self._delegate.delete_metadata(document_uid, session=session)
+    async def delete_metadata(self, document_uid: str, session=None) -> bool:
+        return await self._delegate.delete_metadata(document_uid, session=session)
 
     async def clear(self, session=None) -> None:
         await self._delegate.clear(session=session)

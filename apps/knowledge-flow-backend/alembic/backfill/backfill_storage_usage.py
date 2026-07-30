@@ -104,6 +104,9 @@ async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tu
     # Cache tags and team metadata existence to avoid duplicate queries
     tag_cache = {}
     team_existence_cache = {}
+    sentinel_tags: set[str] = set()
+    skipped_untagged = 0
+    skipped_untagged_bytes = 0
 
     for row in rows:
         doc = row.doc or {}
@@ -114,10 +117,24 @@ async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tu
 
         tag_ids = row.tag_ids or []
         if not tag_ids:
-            # Document has no tags, fallback to author
-            author = row.author or doc.get("identity", {}).get("author")
-            if author:
-                user_doc_sizes[author] = user_doc_sizes.get(author, 0) + doc_size
+            # Untagged documents are deliberately NOT counted.
+            #
+            # This branch used to read `row.author`, which raised AttributeError on
+            # the first untagged row — `DocumentMetadataRow` has no such column, so
+            # the whole reconciliation aborted for any deployment holding even one
+            # untagged document (#2149 review).
+            #
+            # It is not enough to read the author out of `doc` instead: that value
+            # comes from the file's own embedded metadata (a PDF's /Author), so it
+            # is caller-controlled and must never attribute quota. More
+            # fundamentally, an untagged document has no ReBAC parent, so nobody —
+            # not even its uploader — can delete it; charging it here would create
+            # usage that no route can ever release. The live accounting does not
+            # charge these documents either, so skipping keeps this script and the
+            # runtime in agreement. Making untagged documents impossible to
+            # create in the first place is tracked in docs/swift/issues/.
+            skipped_untagged += 1
+            skipped_untagged_bytes += doc_size
             continue
 
         # Each document can be tagged. We adjust storage for the tag owner.
@@ -135,12 +152,23 @@ async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tu
 
             owner_id = tag_row.owner_id
             if owner_id == "personal":
-                # Fallback to the author of the document
-                author = row.author or doc.get("identity", {}).get("author")
-                if author:
-                    owner_id = author
-                else:
-                    continue
+                # Second instance of the same defect: `row.author` does not exist
+                # on the model, so this crashed on any tag carrying the legacy
+                # "personal" sentinel. Falling back to the document's embedded
+                # author is not the fix either — it is caller-controlled and must
+                # never attribute quota (#2149 review). A tag created through
+                # `TagService.create_tag_for_user` stores the owner's uid, never
+                # this sentinel, so reaching here means legacy or imported data
+                # whose real owner cannot be determined. Skip it loudly rather
+                # than charging the wrong account.
+                # This script has no acting user, so it cannot resolve the sentinel
+                # the way the runtime does — `_resolve_storage_deltas` maps
+                # `owner_id == "personal"` to the *acting* user and charges them.
+                # Skipping while still writing an ABSOLUTE counter below would
+                # erase usage the runtime charged, manufacturing free quota. Refuse
+                # to run instead, and name the tags so they can be repaired.
+                sentinel_tags.add(tag_id)
+                continue
 
             # 2. Check ReBAC owner (teams)
             team_ids = []
@@ -177,6 +205,24 @@ async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tu
                     user_doc_sizes[real_user_id] = user_doc_sizes.get(real_user_id, 0) + doc_size
                 else:
                     user_doc_sizes[owner_id] = user_doc_sizes.get(owner_id, 0) + doc_size
+
+    if sentinel_tags:
+        raise RuntimeError(
+            "Cannot compute storage usage: "
+            f"{len(sentinel_tags)} tag(s) carry the legacy 'personal' owner sentinel "
+            f"({', '.join(sorted(sentinel_tags))}). This script has no acting user, so it cannot "
+            "attribute their documents the way the runtime does, and it writes absolute counters — "
+            "proceeding would erase usage the runtime already charged. Repair those tags to carry a "
+            "real owner id (TagService stores the owner's uid) and re-run. Refusing rather than "
+            "writing a wrong value."
+        )
+
+    if skipped_untagged:
+        logger.warning(
+            "Skipped %d untagged document(s) totalling %d bytes: they have no ReBAC parent and no deletable route, so charging them would create unreleasable usage.",
+            skipped_untagged,
+            skipped_untagged_bytes,
+        )
 
     return user_doc_sizes, team_doc_sizes
 

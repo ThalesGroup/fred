@@ -80,9 +80,10 @@ class _FakeMetadataStore:
         self.docs[metadata.document_uid] = metadata
         self.saved.append(metadata.document_uid)
 
-    async def delete_metadata(self, document_uid: str) -> None:
-        self.docs.pop(document_uid, None)
+    async def delete_metadata(self, document_uid: str) -> bool:
+        removed = self.docs.pop(document_uid, None) is not None
         self.deleted.append(document_uid)
+        return removed
 
 
 class _FakeContentStore:

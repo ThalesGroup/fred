@@ -125,7 +125,14 @@ class Identity(BaseModel):
         ge=0,
     )
     title: Optional[str] = Field(None, description="Human-friendly title for UI")
-    author: Optional[str] = None
+    author: Optional[str] = Field(
+        default=None,
+        description=(
+            "DESCRIPTIVE only — extracted from the file's own embedded metadata "
+            "(e.g. a PDF's /Author), so it is caller-supplied and untrusted. Never "
+            "use it to identify an account or to attribute storage quota."
+        ),
+    )
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
     last_modified_by: Optional[str] = None
@@ -210,9 +217,13 @@ class SourceInfo(BaseModel):
 class FileInfo(BaseModel):
     file_type: FileType = FileType.OTHER
     mime_type: Optional[str] = None
-    file_size_bytes: Optional[int] = None
-    page_count: Optional[int] = None  # PDFs/slides
-    row_count: Optional[int] = None  # tables/csv
+    # ge=0: storage accounting charges +size on save and -size on delete, so a
+    # negative size makes deleting a document *increase* recorded usage and mint
+    # free quota. Import preserves raw document JSON, so this is the boundary
+    # where an out-of-band value has to be rejected (#2149 review finding).
+    file_size_bytes: Optional[int] = Field(default=None, ge=0)
+    page_count: Optional[int] = Field(default=None, ge=0)  # PDFs/slides
+    row_count: Optional[int] = Field(default=None, ge=0)  # tables/csv
     sha256: Optional[str] = None
     md5: Optional[str] = None
     language: Optional[str] = None  # ISO code like 'fr', 'en'

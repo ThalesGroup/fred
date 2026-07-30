@@ -1807,6 +1807,7 @@ export type Identity = {
   version?: number;
   /** Human-friendly title for UI */
   title?: string | null;
+  /** DESCRIPTIVE only — extracted from the file's own embedded metadata (e.g. a PDF's /Author), so it is caller-supplied and untrusted. Never use it to identify an account or to attribute storage quota. */
   author?: string | null;
   created?: string | null;
   modified?: string | null;

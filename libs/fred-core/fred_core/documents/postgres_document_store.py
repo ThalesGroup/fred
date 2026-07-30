@@ -18,7 +18,7 @@ import logging
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import BigInteger, delete, func, select
+from sqlalchemy import BigInteger, CursorResult, delete, func, select
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -291,12 +291,27 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
 
     async def delete_metadata(
         self, document_uid: str, session: AsyncSession | None = None
-    ) -> None:
+    ) -> bool:
+        """Delete one metadata row, reporting whether this call removed it.
+
+        A single conditional DELETE rather than `get` + `delete`: the row carries
+        no `version_id_col`, so two concurrent callers could both load it and both
+        "succeed", and each would then release the document's storage quota — the
+        same bytes credited twice (#2149). Exactly one caller can observe
+        `rowcount == 1`, so exactly one releases.
+        """
         async with use_session(self._sessions, session) as s:
-            row = await s.get(DocumentMetadataRow, document_uid)
-            if row is None:
-                raise ValueError(f"No document found with UID {document_uid}")
-            await s.delete(row)
+            # cast: AsyncSession.execute is typed as returning Result, but a DML
+            # statement always yields a CursorResult, which is what carries rowcount.
+            result = cast(
+                CursorResult[Any],
+                await s.execute(
+                    delete(DocumentMetadataRow).where(
+                        DocumentMetadataRow.document_uid == document_uid
+                    )
+                ),
+            )
+            return result.rowcount > 0
 
     async def clear(self, session: AsyncSession | None = None) -> None:
         async with use_session(self._sessions, session) as s:

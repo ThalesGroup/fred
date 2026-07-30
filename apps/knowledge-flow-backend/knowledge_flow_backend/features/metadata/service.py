@@ -16,8 +16,22 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from uuid import UUID
 
-from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore
+from fred_core import (
+    ORGANIZATION_ID,
+    DocumentPermission,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacDisabledResult,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    TagPermission,
+    TeamMetadataStore,
+    get_user_store,
+)
 from fred_core.common.team_id import TeamId
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
@@ -28,7 +42,9 @@ from fred_core.documents.document_structures import (
     ProcessingStage,
     ProcessingStatus,
 )
+from fred_core.sql.async_session import make_session_factory
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import (
@@ -502,16 +518,31 @@ class MetadataService:
             # Avoid duplicate tags
             tag_ids = metadata.tags.tag_ids or []
             if new_tag_id not in tag_ids:
+                previous_tag_ids = set(tag_ids)
                 tag_ids.append(new_tag_id)
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
-                await self.metadata_store.save_metadata(metadata)
+                # Save the tag and move the charge to the newly owning team/user in
+                # ONE transaction. Without the charge the document is free for its
+                # new owner and deleting it later decrements a counter that was
+                # never charged; doing it in a second transaction let the tag land
+                # while the charge silently failed (#2149 review findings).
+                await self._save_and_move_storage(metadata, old_tags=previous_tag_ids, new_tags=set(tag_ids), user=user)
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{user.uid}'")
             else:
-                logger.info(f"[METADATA] Tag '{new_tag_id}' already present on document '{metadata.document_name}' — no change.")
+                # The tag is already on the document, but the ReBAC parent write
+                # may not have happened: it runs after the metadata+quota
+                # transaction commits, so an OpenFGA failure leaves the tag stored
+                # with no relation, and this branch is where the client's retry
+                # lands. Short-circuiting here made that state permanent — the
+                # document stayed inaccessible and charged, with no way to repair
+                # it (#2149 review finding). The write is idempotent, so redoing
+                # it costs nothing and makes a retry actually converge.
+                logger.info(f"[METADATA] Tag '{new_tag_id}' already present on document '{metadata.document_name}' — reasserting its ReBAC parent.")
+                await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
@@ -524,6 +555,11 @@ class MetadataService:
             if not metadata.tags or not metadata.tags.tag_ids or tag_id_to_remove not in metadata.tags.tag_ids:
                 logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
                 return
+
+            # Snapshot the tags before mutating them: if this removal deletes the
+            # document, storage ownership has to be resolved from the tags it had,
+            # and the branch below leaves `tag_ids` empty.
+            original_tag_ids = set(metadata.tags.tag_ids)
 
             # Remove tag
             new_ids = [t for t in metadata.tags.tag_ids if t != tag_id_to_remove]
@@ -567,7 +603,12 @@ class MetadataService:
                     except Exception as e:
                         logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
 
-                await self.metadata_store.delete_metadata(metadata.document_uid)
+                # Delete and release in one transaction: only the caller whose
+                # conditional DELETE matched a row releases (so a concurrent
+                # remover cannot credit the same bytes), and the counters commit
+                # with the delete rather than in a transaction that can fail
+                # separately and strand the bytes.
+                await self._delete_and_release(metadata, tag_ids=original_tag_ids, user_id=user.uid)
                 try:
                     from fred_core.kpi import KPIActor
 
@@ -592,7 +633,12 @@ class MetadataService:
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
-                await self.metadata_store.save_metadata(metadata)
+                # Save and release the tag owner that no longer holds this document,
+                # in ONE transaction. Without the release a document shared across
+                # two libraries left the losing team charged forever; in a separate
+                # transaction the tag could move while the release failed silently
+                # (#2149 review findings).
+                await self._save_and_move_storage(metadata, old_tags=original_tag_ids, new_tags=set(new_ids), user=user)
                 logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{user.uid}'")
 
             await self._remove_tag_as_parent_in_rebac(tag_id_to_remove, metadata.document_uid)
@@ -694,11 +740,11 @@ class MetadataService:
                         exc,
                     )
 
-            await self.metadata_store.delete_metadata(metadata.document_uid)
+            deleted_tag_ids = set(metadata.tags.tag_ids or []) if metadata.tags else set()
+            await self._delete_and_release(metadata, tag_ids=deleted_tag_ids, user_id=user.uid)
 
-            if metadata.tags and metadata.tags.tag_ids:
-                for tag_id in metadata.tags.tag_ids:
-                    await self._remove_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+            for tag_id in deleted_tag_ids:
+                await self._remove_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
         except MetadataNotFound:
             raise
         except Exception as exc:
@@ -1053,6 +1099,105 @@ class MetadataService:
                 exc,
             )
 
+    async def _save_and_move_storage(
+        self,
+        metadata: DocumentMetadata,
+        *,
+        old_tags: set[str],
+        new_tags: set[str],
+        user: KeycloakUser,
+    ) -> None:
+        """
+        Persist a document's new tag set and move its storage between owners,
+        atomically.
+
+        Why this exists:
+        - the tags decide *who* is charged, so changing them without accounting
+          left a document shared into a second library never charged to it, a
+          document removed from a library charged to it forever, and — once the
+          delete-time release existed — a delete crediting a team that never paid
+        - saving and adjusting in two transactions was not enough: the tag change
+          committed first, and `_adjust_team_storage` swallows its own errors, so a
+          failed counter update left the tag moved and the charge behind with no
+          signal. Both now commit together or not at all (#2149 review findings)
+
+        How to use:
+        - call with the tag sets from before and after the change; the size is
+          unchanged, so only ownership moves
+        - ReBAC parent writes stay OUTSIDE this transaction: OpenFGA is a separate
+          system that cannot join it, and holding a DB transaction across a network
+          call is what deadlocked the connection pool on the delete path
+        """
+        size = metadata.file.file_size_bytes or 0 if metadata.file else 0
+        if not size or old_tags == new_tags:
+            await self.metadata_store.save_metadata(metadata)
+            return
+
+        # Resolve before opening the transaction — resolution reads the tag store
+        # and calls ReBAC, and holding a pooled connection while asking for another
+        # exhausts the pool under a concurrent fan-out.
+        team_deltas, user_deltas = await self._resolve_storage_deltas(
+            old_size=size,
+            new_size=size,
+            old_tags=old_tags,
+            new_tags=new_tags,
+            user_id=user.uid,
+        )
+
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        sessions = make_session_factory(engine)
+        async with sessions() as s:
+            async with s.begin():
+                await self.metadata_store.save_metadata(metadata, session=s)
+                await self._apply_storage_deltas(team_deltas, user_deltas, session=s)
+
+    async def _delete_and_release(
+        self,
+        metadata: DocumentMetadata,
+        *,
+        tag_ids: set[str],
+        user_id: str,
+    ) -> None:
+        """
+        Remove a document's metadata row and release its storage, atomically.
+
+        Why this exists:
+        - the two are one operation, not two. Splitting them let a concurrent
+          deleter release bytes it did not remove, and let a counter failure
+          strand bytes whose document was already gone — neither recoverable
+          once the row is deleted (#2149 review findings)
+        - the conditional DELETE is the exactly-once gate: only the caller whose
+          statement matched a row releases, and its row lock is held until the
+          counters commit alongside it
+
+        How to use:
+        - call with the tags the document had *before* any removal mutated them
+        - deltas are resolved before the transaction opens, so no DB transaction
+          is held across the ReBAC lookups ownership resolution performs
+        """
+        # Resolve BEFORE opening the transaction. Resolution reads the tag store
+        # and calls ReBAC, so doing it inside would hold one pooled connection
+        # while asking for another; a concurrent delete fan-out then exhausts the
+        # pool, and because accounting errors used to be swallowed the metadata
+        # delete still committed — releasing nothing and recreating the very
+        # phantom-quota drift this fix exists to remove (#2149).
+        team_deltas, user_deltas = await self._resolve_storage_deltas(
+            old_size=metadata.file.file_size_bytes or 0 if metadata.file else 0,
+            new_size=0,
+            old_tags=tag_ids,
+            new_tags=set(),
+            user_id=user_id,
+        )
+
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        sessions = make_session_factory(engine)
+        # Failures propagate: the transaction rolls back, so the row survives and
+        # can be deleted again, rather than vanishing with its quota still charged.
+        async with sessions() as s:
+            async with s.begin():
+                if await self.metadata_store.delete_metadata(metadata.document_uid, session=s):
+                    await self._apply_storage_deltas(team_deltas, user_deltas, session=s)
+
     async def _adjust_team_storage(
         self,
         *,
@@ -1061,103 +1206,193 @@ class MetadataService:
         old_tags: set[str],
         new_tags: set[str],
         user_id: str | None = None,
+        session: AsyncSession | None = None,
     ) -> None:
         """
         Compare old and new document properties (tags and size) and apply deltas
         to the storage sizes of the associated teams or users (personal spaces).
+
+        Resolution and application are separate: this method does both, for
+        callers holding no transaction of their own. A caller that already has
+        one MUST instead call `_resolve_storage_deltas` first and pass the result
+        to `_apply_storage_deltas` inside its transaction — resolving while a
+        transaction is open borrows a second pooled connection for the tag
+        lookup, and a concurrent fan-out then exhausts the pool and deadlocks
+        (`QueuePool limit of size 2 reached`, observed deleting a 10-document
+        library against a live stack).
         """
         try:
-            all_tags = old_tags | new_tags
-            if not all_tags:
-                return
+            team_deltas, user_deltas = await self._resolve_storage_deltas(
+                old_size=old_size,
+                new_size=new_size,
+                old_tags=old_tags,
+                new_tags=new_tags,
+                user_id=user_id,
+            )
+            await self._apply_storage_deltas(team_deltas, user_deltas, session=session)
+        except Exception:
+            logger.exception(
+                "Failed to update team or user storage size (old_size=%d, new_size=%d, old_tags=%s, new_tags=%s)",
+                old_size,
+                new_size,
+                sorted(old_tags),
+                sorted(new_tags),
+            )
 
-            tag_store = ApplicationContext.get_instance().get_tag_store()
-            team_deltas = {}
-            user_deltas = {}
+    async def _resolve_storage_deltas(
+        self,
+        *,
+        old_size: int,
+        new_size: int,
+        old_tags: set[str],
+        new_tags: set[str],
+        user_id: str | None = None,
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        """
+        Work out which team and personal counters move, and by how much.
 
-            for tag_id in all_tags:
-                tag = await tag_store.get_tag_by_id(tag_id)
-                if not tag or not tag.owner_id:
-                    continue
+        Why this exists:
+        - resolving ownership reads the tag store and calls ReBAC, each needing
+          its own connection. Doing that while the caller's transaction is open
+          holds one pooled connection while asking for another, so a concurrent
+          delete fan-out exhausts the pool and every removal times out. Resolve
+          first, then open the transaction.
 
-                owner_id = tag.owner_id
-                if owner_id == "personal" and user_id:
-                    owner_id = str(user_id)
+        How to use:
+        - call before starting a transaction, then hand both dicts to
+          `_apply_storage_deltas` inside it
 
-                team_ids = []
+        Returns `(team_deltas, user_deltas)`, each mapping an owner id to a byte
+        delta; both empty when nothing moves.
+        """
+        team_deltas: dict[str, int] = {}
+        user_deltas: dict[str, int] = {}
+
+        all_tags = old_tags | new_tags
+        if not all_tags:
+            # An untagged document is deliberately NOT accounted for here.
+            # It has no ReBAC parent (permissions derive from a tag), so its
+            # own uploader cannot read, tag or delete it — charging it would
+            # consume quota that no route can ever release. Giving untagged
+            # documents a real personal owner needs an authorization-model
+            # change and is tracked separately (#2150 + RFC).
+            return team_deltas, user_deltas
+
+        tag_store = ApplicationContext.get_instance().get_tag_store()
+
+        for tag_id in all_tags:
+            tag = await tag_store.get_tag_by_id(tag_id)
+            if not tag or not tag.owner_id:
+                continue
+
+            owner_id = tag.owner_id
+            if owner_id == "personal" and user_id:
+                owner_id = str(user_id)
+
+            team_ids = []
+            try:
+                from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+
+                subjects = await self.rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
+                if not isinstance(subjects, RebacDisabledResult) and subjects:
+                    for sub in subjects:
+                        if sub.id != "personal" and not sub.id.startswith("personal-"):
+                            team_ids.append(sub.id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                    tag.id,
+                    exc,
+                )
+
+            if not team_ids and not owner_id.startswith("personal-"):
                 try:
-                    from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-
-                    subjects = await self.rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
-                    if not isinstance(subjects, RebacDisabledResult) and subjects:
-                        for sub in subjects:
-                            if sub.id != "personal" and not sub.id.startswith("personal-"):
-                                team_ids.append(sub.id)
+                    engine = ApplicationContext.get_instance().get_pg_async_engine()
+                    store = TeamMetadataStore(engine)
+                    meta = await store.get_by_team_id(TeamId(owner_id))
+                    if meta is not None:
+                        team_ids.append(owner_id)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                        "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
                         tag.id,
                         exc,
                     )
 
-                if not team_ids and not owner_id.startswith("personal-"):
-                    try:
-                        engine = ApplicationContext.get_instance().get_pg_async_engine()
-                        store = TeamMetadataStore(engine)
-                        meta = await store.get_by_team_id(TeamId(owner_id))
-                        if meta is not None:
-                            team_ids.append(owner_id)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
-                            tag.id,
-                            exc,
-                        )
+            is_old = tag_id in old_tags
+            is_new = tag_id in new_tags
 
-                is_old = tag_id in old_tags
-                is_new = tag_id in new_tags
+            if is_new and not is_old:
+                delta = new_size
+            elif is_new and is_old:
+                delta = new_size - old_size
+            else:  # is_old and not is_new
+                delta = -old_size
 
-                if is_new and not is_old:
-                    delta = new_size
-                elif is_new and is_old:
-                    delta = new_size - old_size
-                else:  # is_old and not is_new
-                    delta = -old_size
+            if team_ids:
+                for team_id in team_ids:
+                    team_deltas[team_id] = team_deltas.get(team_id, 0) + delta
+            else:
+                resolved_user_id = owner_id
+                if resolved_user_id.startswith("personal-"):
+                    resolved_user_id = resolved_user_id[len("personal-") :]
+                user_deltas[resolved_user_id] = user_deltas.get(resolved_user_id, 0) + delta
 
-                if team_ids:
-                    for team_id in team_ids:
-                        team_deltas[team_id] = team_deltas.get(team_id, 0) + delta
-                else:
-                    resolved_user_id = owner_id
-                    if resolved_user_id.startswith("personal-"):
-                        resolved_user_id = resolved_user_id[len("personal-") :]
-                    user_deltas[resolved_user_id] = user_deltas.get(resolved_user_id, 0) + delta
+        return team_deltas, user_deltas
 
-            if team_deltas:
-                engine = ApplicationContext.get_instance().get_pg_async_engine()
-                store = TeamMetadataStore(engine)
-                for team_id, delta in team_deltas.items():
-                    if delta != 0:
-                        await store.increment_current_storage_size(TeamId(team_id), delta)
+    async def _apply_storage_deltas(
+        self,
+        team_deltas: dict[str, int],
+        user_deltas: dict[str, int],
+        *,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """
+        Apply already-resolved storage deltas to team and personal counters.
 
-            if user_deltas:
-                from uuid import UUID
+        Why this exists:
+        - every counter a single document touches must move together or not at
+          all. Applying them one transaction at a time meant a failure partway
+          through left team A decremented and team B still charged, with the
+          metadata row already gone and no way to reconstruct the remainder
+          (#2149 review finding)
+        - ownership resolution calls ReBAC over the network, so it stays in
+          `_adjust_team_storage` and only these writes run inside the caller's
+          transaction — a DB transaction is never held open across OpenFGA
 
-                from fred_core import get_user_store
+        How to use:
+        - pass the caller's `session` so the counters commit atomically with the
+          metadata delete that triggered them; omit it for a standalone
+          adjustment, which then gets its own transaction
+        """
+        if not team_deltas and not user_deltas:
+            return
 
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        team_store = TeamMetadataStore(engine)
+        user_store = get_user_store()
+
+        async def _apply(s: AsyncSession) -> None:
+            for team_id, delta in team_deltas.items():
+                if delta != 0:
+                    await team_store.increment_current_storage_size(TeamId(team_id), delta, session=s)
+            for user_id_str, delta in user_deltas.items():
+                if delta == 0:
+                    continue
                 try:
-                    user_store = get_user_store()
-                    for user_id_str, delta in user_deltas.items():
-                        if delta != 0:
-                            try:
-                                user_uuid = UUID(user_id_str)
-                                await user_store.increment_current_storage_size(user_uuid, delta)
-                            except ValueError:
-                                logger.warning(f"Invalid user_id format during storage adjustment: '{user_id_str}'")
-                except Exception as ue:
-                    logger.warning(f"Failed to increment user personal space storage: {ue}")
-        except Exception:
-            logger.exception("Failed to update team or user storage size")
+                    user_uuid = UUID(user_id_str)
+                except ValueError:
+                    logger.warning("Invalid user_id format during storage adjustment: '%s'", user_id_str)
+                    continue
+                await user_store.increment_current_storage_size(user_uuid, delta, session=s)
+
+        if session is not None:
+            await _apply(session)
+            return
+        sessions = make_session_factory(engine)
+        async with sessions() as s:
+            async with s.begin():
+                await _apply(s)
 
     async def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """

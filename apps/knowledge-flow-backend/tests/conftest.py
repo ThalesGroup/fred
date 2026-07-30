@@ -105,8 +105,9 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
     async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         self._items[metadata.document_uid] = metadata.model_copy(deep=True)
 
-    async def delete_metadata(self, document_uid: str, session=None) -> None:
-        self._items.pop(document_uid, None)
+    async def delete_metadata(self, document_uid: str, session=None) -> bool:
+        # Mirrors the store contract: True only when this call removed the row.
+        return self._items.pop(document_uid, None) is not None
 
     async def clear(self, session=None) -> None:
         self._items.clear()
