@@ -14,7 +14,9 @@
 
 # tests/test_pdf_processor.py
 
+import asyncio
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,7 +24,10 @@ import pytest
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from dotenv import load_dotenv
+from temporalio import activity
+from temporalio.testing import ActivityEnvironment
 
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
@@ -31,6 +36,7 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_mar
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import (
     ImageTranscription,
 )
+from knowledge_flow_backend.features.scheduler.activity_utils import to_thread_with_heartbeat
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
 load_dotenv(dotenv_path)
@@ -245,6 +251,87 @@ def test_pdf_processor_builds_extractor_only_once_per_config(monkeypatch: pytest
         assert Path(result["md_file"]).exists()
 
     assert build_calls == [("docling", 2)]
+
+
+def test_activity_in_activity_survives_to_thread_with_heartbeat():
+    """`_extract_md` runs inside a Temporal activity but off the activity's own
+    coroutine, via `to_thread_with_heartbeat` (asyncio.to_thread). `_pdf_kpi_timer`
+    depends on `activity.in_activity()` still reporting True on that worker thread —
+    confirm it empirically rather than assuming asyncio.to_thread propagates the
+    Temporal contextvar, since a silent False would make the KPI calls no-op."""
+    env = ActivityEnvironment()
+
+    def check_in_activity() -> bool:
+        return activity.in_activity()
+
+    async def activity_body() -> bool:
+        return await to_thread_with_heartbeat(check_in_activity)
+
+    assert asyncio.run(env.run(activity_body)) is True
+
+
+class _FakeKpiWriter:
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    def timer(self, name, *, dims=None, unit="ms", labels=None, actor=None):
+        self.calls.append((name, dict(dims or {})))
+        return nullcontext()
+
+
+class _FakeAppContext:
+    def __init__(self, writer):
+        self._writer = writer
+
+    def get_kpi_writer(self):
+        return self._writer
+
+
+def test_pdf_kpi_timer_emits_when_in_activity_context(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor):
+    env = ActivityEnvironment()
+    fake_writer = _FakeKpiWriter()
+    monkeypatch.setattr(ApplicationContext, "get_instance", classmethod(lambda cls: _FakeAppContext(fake_writer)))
+
+    def call_timer() -> bool:
+        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_description_latency_ms", {"runtime_stage": "image_description", "model_name": "fake-vision"}):
+            pass
+        return True
+
+    async def activity_body() -> bool:
+        return await to_thread_with_heartbeat(call_timer)
+
+    assert asyncio.run(env.run(activity_body)) is True
+    assert fake_writer.calls == [("knowledge_flow.pdf.image_description_latency_ms", {"runtime_stage": "image_description", "model_name": "fake-vision"})]
+
+
+def test_pdf_kpi_timer_noops_outside_activity_context(processor: PdfMarkdownProcessor):
+    """Outside a Temporal activity (e.g. `procbench` or a plain unit test), the timer
+    must no-op without ever touching ApplicationContext — which may not be initialized."""
+    with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"runtime_stage": "image_loop", "file_type": "pdf"}):
+        pass
+
+
+def test_pdf_kpi_timer_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, caplog: pytest.LogCaptureFixture):
+    """KPI emission must never raise into the ingestion path, even if the KPI writer
+    itself is unavailable or broken."""
+    env = ActivityEnvironment()
+
+    def boom(cls):
+        raise RuntimeError("kpi backend unavailable")
+
+    monkeypatch.setattr(ApplicationContext, "get_instance", classmethod(boom))
+
+    def call_timer() -> bool:
+        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"runtime_stage": "image_loop", "file_type": "pdf"}):
+            pass
+        return True
+
+    async def activity_body() -> bool:
+        return await to_thread_with_heartbeat(call_timer)
+
+    with caplog.at_level("WARNING"):
+        assert asyncio.run(env.run(activity_body)) is True
+    assert any("Failed to start timer" in record.message for record in caplog.records)
 
 
 @pytest.mark.integration
