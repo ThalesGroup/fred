@@ -15,45 +15,93 @@
 
 .workspace {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
+  min-height: 0;
 }
 
-.toolbar {
+.nameButton {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  text-align: left;
 }
 
-/* No card: the list breathes full-width, separated by light rules (filets). */
-.list {
+.nameButton:hover {
+  color: var(--primary);
+}
+
+.nameCell {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
-/* Each row is full-width so its rule spans edge to edge; indentation is applied
- * inside via padding-left, which never insets the border. The filet sits on TOP
- * of each row (suppressed on the very first) so it only ever separates two rows
- * — the last row never draws a line that would double the section border below. */
-.row {
-  border-top: 1px solid var(--outline-retreat);
+/* The file/folder icon's own color wrapper (the <span style={{color}}> in
+ * DocumentWorkspace.tsx): a genuine fixed 18x18 box, not just an 18px
+ * font-size on the glyph itself — width/height + flex-shrink: 0 mean this
+ * can never be crushed or collapsed to 0 by the flex row around it (a
+ * narrow Name column, a long filename) or hidden by overflow elsewhere.
+ * Only the label next to it (below) is allowed to truncate. */
+.rowIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
 }
 
-.list > div:first-child > .row:first-child {
-  border-top: none;
+.rowIcon [class*="material-symbols"] {
+  font-size: 18px;
 }
 
-/* A folder subtree (row + expanded contents) targeted by an OS-file drag: same
- * affordance as the upload drawer's dropzone (primary dashed outline + tint) so
- * "drop here" reads instantly. Outline (not border) keeps row layout untouched. */
-.list [data-drag-over] {
+.nameCell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Taille/Création/Auteur: always readable on one line, never squeezed
+ * to a second line under a fixed-width column. */
+.nowrapCell {
+  white-space: nowrap;
+}
+
+.actionsCell {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  width: 100%;
+}
+
+/* Purely presentational (not a button): same 2rem/1.25rem footprint as the
+ * adjacent small IconButtons so the row's icons stay vertically aligned. */
+.excludedIcon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--error);
+  font-size: 1.25rem;
+}
+
+/* A folder row targeted by an OS-file drag: same affordance as the upload
+ * drawer's dropzone (primary dashed outline + tint) so "drop here" reads
+ * instantly. Outline (not border) keeps row layout untouched. */
+.nameButton[data-drag-over] {
   outline: 1.5px dashed var(--primary);
   outline-offset: -1.5px;
   background: color-mix(in srgb, var(--primary) 6%, transparent);
-}
-
-.hint {
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  color: var(--on-surface-muted);
-  font: var(--font-body-small);
 }

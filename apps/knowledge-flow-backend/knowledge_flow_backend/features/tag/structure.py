@@ -157,5 +157,18 @@ class TagMembersResponse(BaseModel):
     users: list[TagMemberUser] = Field(default_factory=list)
 
 
+class ResourceTypeStatsEntry(BaseModel):
+    """One file-type bucket's count and total size, for the Resources dashboard usage
+    cards (FRONT-09.I)."""
+
+    bucket: str
+    count: int
+    size_bytes: int
+
+
+class ResourceTypeStatsResponse(BaseModel):
+    entries: list[ResourceTypeStatsEntry] = Field(default_factory=list)
+
+
 class MissingTeamIdError(Exception):
     """Raised when owner_filter is 'team' but no team_id is provided."""

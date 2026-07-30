@@ -67,7 +67,7 @@ def build_users(
                 "email": f"{username}@app.com",
                 "first_name": username[0].upper() + username[1:],
                 "last_name": "Swify",
-                "password": "Azerty123_",  # pragma: allowlist secret
+                "password": "Azerty123_",  # pragma: allowlist secret — synthetic load-test fixture, not a real credential
                 "teams": sorted(assignments[username].keys()),
                 "team_roles": {
                     role: sorted(names) for role, names in team_roles.items()

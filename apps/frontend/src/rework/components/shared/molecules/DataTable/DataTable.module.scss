@@ -10,6 +10,38 @@
   overflow: hidden;
 }
 
+/* Its own grid, structurally outside `.datatable-body`'s scroll area — so the
+ * scrollbar (and whatever scrolls under it) starts right below the header
+ * row instead of the header just floating on top via `position: sticky`.
+ *
+ * `overflow-y: scroll` here is deliberate even though this element never
+ * has anything to scroll: it reserves the exact same scrollbar gutter width
+ * the browser also reserves on `.datatable-body` below, so both grids
+ * compute their columns against an identical effective width. A guessed
+ * fixed value (e.g. padding-right: 4px) drifts from the real OS/browser
+ * scrollbar width and reintroduces the header/row column misalignment this
+ * is meant to prevent — matching mechanisms is the only way that can't
+ * drift. The track/thumb are made transparent since there's nothing to
+ * actually scroll here. */
+.datatable-header {
+  display: grid;
+  grid-template-columns: var(--grid-layout);
+  flex-shrink: 0;
+  background-color: var(--datatable-background-color);
+  padding-top: 0.25rem;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track,
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+}
+
 .datatable-body {
   display: grid;
   grid-template-columns: var(--grid-layout);
@@ -17,7 +49,26 @@
   flex: 1;
   align-content: start;
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  /* Always reserve the vertical scrollbar's space, even when content
+   * doesn't overflow yet — keeps the column grid the same width as
+   * `.datatable-header`'s regardless of row count, instead of only
+   * shrinking once a scrollbar actually appears. */
+  overflow-y: scroll;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: var(--outline-retreat);
+  }
 }
 
 .datatable-row {
@@ -27,8 +78,19 @@
     background-color: var(--state-on-surface-hover);
   }
 
+  /* Selected takes precedence over hover — a primary tint at the same 16%
+   * opacity used elsewhere in the design system for a "selected" state
+   * (e.g. --state-secondary-selected), not the surface-neutral hover tint. */
+  &[data-selected] .datatable-cell {
+    background-color: var(--state-primary-selected);
+  }
+
+  &[data-selected]:hover .datatable-cell {
+    background-color: var(--state-primary-selected);
+  }
+
   .datatable-cell {
-    height: 3.75rem;
+    height: var(--datatable-row-height, 3.75rem);
   }
 }
 
@@ -38,9 +100,9 @@
   border-bottom: 1px solid var(--surface-container-highest);
   padding: 0 var(--spacing-s);
   min-width: 0;
-  height: 3.5rem;
+  height: var(--datatable-row-height, 3.5rem);
   color: var(--on-surface);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 
   .header-content {
     min-width: 0;
@@ -52,58 +114,70 @@
   }
 }
 
-.datatable-cell-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background-color: var(--datatable-background-color);
+/* The selection checkbox owns its own narrow track — center it there rather
+ * than letting it inherit the row's left-aligned text padding. Left padding
+ * gives every row a consistent inset from the table's own edge. */
+.datatable-cell-select {
+  justify-content: center;
+  padding: 0 var(--spacing-2xs) 0 var(--spacing-m);
 }
 
-.first-column-inset .datatable-cell:first-child {
+/* The inset belongs to the first real content column. When a selection
+ * checkbox is present it becomes the DOM's first cell, so apply the inset
+ * to whichever cell is first among the non-checkbox ones instead of
+ * literally `:first-child` — otherwise the checkbox itself gets shoved
+ * off-center by padding meant for the Name/label column next to it. */
+.first-column-inset .datatable-cell:first-child:not(.datatable-cell-select) {
   padding-left: var(--spacing-l);
 }
 
-.datatable-footer {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid var(--surface-container-highest);
-  background-color: var(--datatable-background-color);
-  height: 3.75rem;
+/* Smaller inset than the checkbox-less case above: the checkbox cell already
+ * carries its own left padding, so the content column right after it needs
+ * less extra room to read as visually distinct from the checkbox column. */
+.first-column-inset .datatable-cell-select + .datatable-cell {
+  padding-left: var(--spacing-s);
 }
 
-.datatable-footer-left {
+.header-sort-button {
   display: flex;
   align-items: center;
-  padding-left: var(--spacing-m);
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+
+  .header-content {
+    color: var(--on-surface-retreat);
+  }
+
+  &:hover .header-content {
+    color: var(--on-surface);
+  }
+
+  &[data-active] .header-content {
+    color: var(--primary);
+  }
 }
 
-.datatable-footer-right {
+.sort-icon {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding-right: var(--spacing-m);
+  opacity: 0;
+  color: var(--primary);
+  font-size: 1.125rem;
+
+  &[data-visible] {
+    opacity: 1;
+  }
 }
 
-.footer-label {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-  white-space: nowrap;
+.header-sort-button:hover .sort-icon {
+  opacity: 0.6;
 }
 
-/* Fixed width (not just min-width) so the neighbouring nav buttons don't
- * shift horizontally as either page number's digit count changes. Wide
- * enough for "Page 100 sur 100" (the longest of the two locales) plus
- * tabular-nums so digit glyphs themselves don't vary in width. */
-.footer-page-label {
-  width: 7rem;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-/* Extra breathing room on top of the footer's own gap, so the rows-per-page
- * picker doesn't read as glued to the "Items per page" label/nav buttons. */
-.footer-rows-per-page-select {
-  margin-right: var(--spacing-xs);
+.header-sort-button:hover .sort-icon[data-visible] {
+  opacity: 1;
 }

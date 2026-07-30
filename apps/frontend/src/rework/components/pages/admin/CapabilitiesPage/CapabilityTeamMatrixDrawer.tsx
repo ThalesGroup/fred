@@ -21,6 +21,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -329,7 +330,8 @@ export function CapabilityTeamMatrixDrawer({
           <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
 
           {status === "loading" && (
-            <p className={styles.hint} role="status">
+            <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
+              <Spinner size={16} decorative />
               {t("rework.admin.capabilities.matrix.teamsLoading")}
             </p>
           )}

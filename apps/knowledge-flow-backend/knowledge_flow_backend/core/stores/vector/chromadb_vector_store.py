@@ -313,6 +313,45 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             )
             raise
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' metadata field for all chunks of a document without
+        deleting vectors or re-embedding. Used after a document rename.
+        """
+        try:
+            logger.info(
+                "[SEARCH] Updating document_name for all chunks of document_uid=%s in collection '%s'",
+                document_uid,
+                self.collection_name,
+            )
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["metadatas"])
+            ids: List[str] = got.get("ids") or []
+            metadatas: List[Mapping[str, Any]] = got.get("metadatas") or []
+            if not ids:
+                logger.info("[SEARCH] No chunks found for document_uid=%s when updating document_name.", document_uid)
+                return
+
+            new_metadatas: List[Dict[str, Any]] = []
+            for meta in metadatas:
+                m: Dict[str, Any] = dict(meta or {})
+                m["document_name"] = document_name
+                new_metadatas.append(m)
+
+            self._collection.update(ids=ids, metadatas=new_metadatas)  # type: ignore[arg-type]
+            logger.info(
+                "[SEARCH] Updated document_name on %d chunks for document_uid=%s in collection '%s'",
+                len(ids),
+                document_uid,
+                self.collection_name,
+            )
+        except Exception:
+            logger.exception(
+                "[SEARCH] Failed to update document_name for document_uid=%s in collection '%s'",
+                document_uid,
+                self.collection_name,
+            )
+            raise
+
     # -------- Introspection / Diagnostics --------
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """

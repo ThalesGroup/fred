@@ -17,7 +17,7 @@ import mimetypes
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import AuthorizationError, FilesystemResourceInfoResult, KeycloakUser, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.download_token import (
@@ -31,6 +31,7 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     absolute_virtual_path,
     normalize_virtual_path,
 )
+from knowledge_flow_backend.features.tag.structure import ResourceTypeStatsEntry, ResourceTypeStatsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -303,3 +304,29 @@ class McpFilesystemController:
                 return await self.service.mkdir(user, path)
             except Exception as e:
                 return self._handle_exception(e, "Mkdir")
+
+        @router.post(
+            "/fs/rename/{path:path}",
+            tags=["Filesystem"],
+            summary="Rename a file or folder in place",
+            operation_id="rename",
+            response_model=FilesystemResourceInfoResult,
+        )
+        async def rename(path: str, new_name: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.rename(user, path, new_name)
+            except Exception as e:
+                return self._handle_exception(e, "Rename")
+
+        @router.get(
+            "/fs/stats/{path:path}",
+            tags=["Filesystem"],
+            summary="Usage by file type, recursively, under one writable path",
+            response_model=ResourceTypeStatsResponse,
+        )
+        async def type_stats(path: str, user: KeycloakUser = Depends(get_current_user)):
+            try:
+                stats = await self.service.type_stats(user, path)
+                return ResourceTypeStatsResponse(entries=[ResourceTypeStatsEntry(bucket=bucket.value, count=count, size_bytes=size) for bucket, (count, size) in stats.items()])
+            except Exception as e:
+                return self._handle_exception(e, "TypeStats")

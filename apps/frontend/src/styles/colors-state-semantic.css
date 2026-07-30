@@ -13,6 +13,12 @@
   --state-surface-main-selected: color-mix(in srgb, var(--surface-main), transparent 84%);
   --state-surface-main-disabled: color-mix(in srgb, var(--surface-main), transparent 90%);
 
+  /* Tint of --primary itself (not --on-primary) — for an element whose own
+     background/border stays neutral and only gets a primary-tinted overlay
+     to signal state (e.g. a selected table row), not one filled solid with
+     --primary. */
+  --state-primary-selected: color-mix(in srgb, var(--primary), transparent 84%);
+
   --state-on-primary-hover: color-mix(in srgb, var(--on-primary), transparent 92%);
   --state-on-primary-pressed: color-mix(in srgb, var(--on-primary), transparent 88%);
   --state-on-primary-focused: color-mix(in srgb, var(--on-primary), transparent 84%);

@@ -22,6 +22,7 @@ from uuid import uuid4
 from fred_core import (
     ORGANIZATION_ID,
     AuthorizationError,
+    FileTypeBucket,
     KeycloakUser,
     OrganizationPermission,
     RebacDisabledResult,
@@ -31,6 +32,7 @@ from fred_core import (
     Resource,
     TagPermission,
     TeamPermission,
+    file_type_bucket,
     is_service_agent,
 )
 from fred_core.common import OwnerFilter
@@ -153,6 +155,37 @@ class TagService:
         if isinstance(tag_ids, RebacDisabledResult):
             return {t.id for t in await self._tag_store.list_all_tags()}
         return tag_ids
+
+    async def get_corpus_type_stats(self, user: KeycloakUser, team_id: Optional[str]) -> dict[FileTypeBucket, tuple[int, int]]:
+        """
+        Aggregate ingested-document counts and total size per `FileTypeBucket` across
+        every library (tag) the user can read in one team's corpus (FRONT-09.I usage
+        cards).
+
+        Why this exists:
+        - the histogram/pie-chart cards need a per-team, per-type breakdown that no
+          endpoint returns today; the running per-team storage counter
+          (`_adjust_team_storage`) only tracks one running total, not a breakdown
+        - computed on read rather than incrementally maintained: simpler, can't drift,
+          and team libraries are bounded in size, so an on-read scan stays cheap
+
+        How to use:
+        - pass the team id (or None/"personal" for the caller's personal corpus)
+        """
+        tag_ids = await self.list_authorized_tags_ids(user, None, team_id)
+        seen_uids: set[str] = set()
+        totals: dict[FileTypeBucket, list[int]] = {}
+        for tag_id in tag_ids:
+            docs = await self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
+            for doc in docs:
+                if doc.document_uid in seen_uids:
+                    continue
+                seen_uids.add(doc.document_uid)
+                bucket = file_type_bucket(doc.document_name)
+                entry = totals.setdefault(bucket, [0, 0])
+                entry[0] += 1
+                entry[1] += doc.file.file_size_bytes or 0
+        return {bucket: (count, size) for bucket, (count, size) in totals.items()}
 
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         if is_service_agent(user):

@@ -15,13 +15,23 @@
 import styles from "./TextInput.module.scss";
 import { ComponentPropsWithRef, useId } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import { ComponentSize } from "@shared/utils/Type.ts";
 
-export interface TextInputProps extends ComponentPropsWithRef<"input"> {
+export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   label?: string;
   explanation?: string;
   error?: string;
   icon?: IconProps;
+  /** Fixed, non-editable text shown right after the input's own text (e.g. a
+   *  locked file extension). Purely presentational — callers own splitting
+   *  the editable value from this suffix and recombining them on submit. */
+  suffix?: string;
   compact?: boolean;
+  /** Shrinks the input's own height (shared ComponentSize scale). Omit to
+   *  keep the existing default height — every other TextInput call site is
+   *  unaffected. Shadows the native HTML `size` attribute (character-width
+   *  sizing), which this design system doesn't use. */
+  size?: ComponentSize;
 }
 
 export default function TextInput({
@@ -29,7 +39,9 @@ export default function TextInput({
   explanation,
   error,
   icon,
+  suffix,
   compact = false,
+  size,
   maxLength,
   value,
   required,
@@ -43,26 +55,30 @@ export default function TextInput({
     <div
       className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
       data-compact={compact}
+      data-size={size}
     >
       {label && (
         <label className={styles.label} htmlFor={id}>
           {required ? `${label} *` : label}
         </label>
       )}
-      {icon && (
-        <span className={styles.icon}>
-          <Icon {...icon} />
-        </span>
-      )}
-      <input
-        id={id}
-        type={"text"}
-        value={value}
-        maxLength={maxLength}
-        required={required}
-        autoComplete="off"
-        {...props}
-      />
+      <div className={styles.field}>
+        {icon && (
+          <span className={styles.icon}>
+            <Icon {...icon} />
+          </span>
+        )}
+        <input
+          id={id}
+          type={"text"}
+          value={value}
+          maxLength={maxLength}
+          required={required}
+          autoComplete="off"
+          {...props}
+        />
+        {suffix && <span className={styles.suffix}>{suffix}</span>}
+      </div>
       <span className={styles.information}>
         <span className={styles.hint}>{error || explanation || null}</span>
         <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>

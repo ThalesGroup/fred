@@ -944,6 +944,57 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' metadata field for all chunks of a document without
+        deleting vectors or re-embedding. Used after a document rename.
+        """
+        try:
+            script = {
+                "source": "ctx._source.metadata.document_name = params.value",
+                "lang": "painless",
+                "params": {"value": document_name},
+            }
+            body = {
+                "script": script,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+            }
+            resp = self._client.update_by_query(
+                index=self._index,
+                body=body,
+                params={"refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            failures = resp.get("failures") or []
+            if failures:
+                # update_by_query does not raise on a per-document script failure (e.g. a
+                # version conflict) — it reports it here instead, so a caller that only
+                # checked for a raised exception would call this a silent success.
+                logger.error(
+                    "[VECTOR][OPENSEARCH] document_name update_by_query reported %s failure(s) for document_uid=%s: %s",
+                    len(failures),
+                    document_uid,
+                    failures,
+                )
+            elif updated == 0:
+                # This is only called for a document known to be vectorized (see
+                # rename_document's ProcessingStage.VECTORIZED guard), so matching zero
+                # chunks here is unexpected — the rename didn't reach the vector index,
+                # and the caller's best-effort try/except means nothing else will surface it.
+                logger.error(
+                    "[VECTOR][OPENSEARCH] document_name update matched 0 vector chunks for document_uid=%s — rename not reflected in search results.",
+                    document_uid,
+                )
+            else:
+                logger.info(
+                    "[VECTOR][OPENSEARCH] updated document_name on %s vector chunks for document_uid=%s.",
+                    updated,
+                    document_uid,
+                )
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
+            raise RuntimeError("Failed to update document_name in OpenSearch.")
+
     # ---------- Diagnostics / Introspection ----------
 
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:

@@ -13,37 +13,63 @@
  * limitations under the License.
  */
 
-/* The page is the split row: a padded main column (header + tree) beside the
- * full-height preview drawer. The drawer sits OUTSIDE the padding so, when open,
- * it runs flush to the page's top/right/bottom edges and fills most of the page,
- * leaving the list a sliver on the left. */
 .page {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  color: var(--on-surface);
-}
-
-.main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-m);
   padding: var(--spacing-l);
-  min-width: 0;
+  min-height: 0;
+  color: var(--on-surface);
 }
 
 .header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-s);
 }
 
 .title {
   margin: 0;
-  font: var(--font-headline-small);
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.headerEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.quota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 12rem;
+}
+
+.quotaLabelRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+  font: var(--font-body-medium);
+}
+
+.quotaLabel {
+  color: var(--on-surface);
+}
+
+.quotaValue {
+  color: var(--on-surface-retreat);
+  font-variant-numeric: tabular-nums;
 }
 
 .content {
@@ -53,23 +79,15 @@
   min-height: 0;
 }
 
-.tree {
+.tree,
+.panel {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  min-width: 0;
-  overflow-y: auto;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--secondary-container);
-  padding: 0.125rem 0.5rem;
-  color: var(--on-secondary-container);
-  font-size: 0.75rem;
-  white-space: nowrap;
+.panel {
+  flex: 1;
+  min-height: 0;
 }
 
 .loadingState {
@@ -77,6 +95,7 @@
   flex: 1;
   justify-content: center;
   align-items: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-xl);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

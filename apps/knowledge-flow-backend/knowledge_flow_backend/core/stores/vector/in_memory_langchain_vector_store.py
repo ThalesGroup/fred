@@ -258,6 +258,26 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ Failed to update retrievable flag for document_uid=%s in in-memory store", document_uid)
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Dev-only: update document_name on existing in-memory chunks without deleting them.
+        """
+        try:
+            updated = 0
+            for rec in self.vectorstore.store.values():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") == document_uid:
+                    md["document_name"] = document_name
+                    rec["metadata"] = md
+                    updated += 1
+            logger.info(
+                "✅ Updated document_name on %d in-memory chunks for document_uid=%s",
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception("❌ Failed to update document_name for document_uid=%s in in-memory store", document_uid)
+
     # ---- BaseVectorStore: ANN ----
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

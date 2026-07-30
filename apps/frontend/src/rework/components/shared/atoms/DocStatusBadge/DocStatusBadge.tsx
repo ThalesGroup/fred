@@ -24,12 +24,12 @@ import styles from "./DocStatusBadge.module.css";
  */
 export type DocStatus = "ready" | "processing" | "failed" | "raw";
 
-/** status → CSS color token. Same family as the task system (taskLabels.STATE_COLOR). */
+/** status → CSS color token, per the Resources dashboard v2 spec (RFC §13). */
 const STATUS_COLOR: Record<DocStatus, string> = {
   ready: "var(--success)",
-  processing: "var(--info)",
+  processing: "var(--tertiary)",
   failed: "var(--error)",
-  raw: "var(--on-surface-retreat)",
+  raw: "var(--warning)",
 };
 
 const RING_RADIUS = 6;

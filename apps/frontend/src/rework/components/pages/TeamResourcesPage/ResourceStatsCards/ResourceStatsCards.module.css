@@ -1,0 +1,31 @@
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+}
+
+.grid > * {
+  flex: 1 1 0;
+  min-width: 0;
+  /* % on a flex item resolves against the flex container's own content box
+     (unlike a CSS Grid cell, which is per-track) — so this is genuinely 33%
+     of the page's width, not 33% of whatever share the card would otherwise
+     get. */
+  max-width: 33%;
+}
+
+.grid > *:first-child {
+  /* 30% narrower than the other cards' 33% cap (33% * 0.7 ≈ 23%). */
+  max-width: 23%;
+}
+
+.grid > *:nth-child(2) {
+  /* 25% narrower than the base 33% cap (33% * 0.75 = 24.75%). */
+  max-width: 24.75%;
+}
+
+@media (max-width: 700px) {
+  .grid > * {
+    max-width: 100%;
+  }
+}

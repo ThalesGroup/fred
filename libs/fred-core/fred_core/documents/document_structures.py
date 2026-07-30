@@ -49,6 +49,46 @@ class FileType(str, Enum):
     OTHER = "other"
 
 
+class FileTypeBucket(str, Enum):
+    """Coarse UI grouping for usage-by-type stats cards (FRONT-09.I): PDF, Texte, PPT,
+    Excel, Autres. Deliberately coarser than `FileType` — the histogram/pie-chart cards
+    are meant to be glanceable, not a full type breakdown."""
+
+    PDF = "pdf"
+    TEXT = "text"
+    PPT = "ppt"
+    EXCEL = "excel"
+    OTHER = "other"
+
+
+_BUCKET_BY_EXTENSION: dict[str, "FileTypeBucket"] = {
+    "pdf": FileTypeBucket.PDF,
+    "docx": FileTypeBucket.TEXT,
+    "doc": FileTypeBucket.TEXT,
+    "odt": FileTypeBucket.TEXT,
+    "txt": FileTypeBucket.TEXT,
+    "md": FileTypeBucket.TEXT,
+    "html": FileTypeBucket.TEXT,
+    "pptx": FileTypeBucket.PPT,
+    "ppt": FileTypeBucket.PPT,
+    "odp": FileTypeBucket.PPT,
+    "xlsx": FileTypeBucket.EXCEL,
+    "xls": FileTypeBucket.EXCEL,
+    "csv": FileTypeBucket.EXCEL,
+    "ods": FileTypeBucket.EXCEL,
+}
+
+
+def file_type_bucket(name_or_extension: str) -> FileTypeBucket:
+    """Map a file name or bare extension to its usage-stats bucket."""
+    ext = (
+        name_or_extension.rsplit(".", 1)[-1].lower()
+        if "." in name_or_extension
+        else name_or_extension.lower()
+    )
+    return _BUCKET_BY_EXTENSION.get(ext, FileTypeBucket.OTHER)
+
+
 class ReportFormat(str, Enum):
     """Reports only ever publish these concrete file types."""
 
@@ -89,6 +129,16 @@ class Identity(BaseModel):
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
     last_modified_by: Optional[str] = None
+    uploaded_by: Optional[str] = Field(
+        default=None,
+        description=(
+            "Keycloak uid of the Fred user who uploaded this document, stamped once at "
+            "ingestion (ingestion_service.extract_metadata). Distinct from `author` (the "
+            "file's own embedded metadata, e.g. a .docx core property) and "
+            "`last_modified_by` (the acting user on later in-app mutations like rename) — "
+            "neither of those reliably identifies the uploader."
+        ),
+    )
 
     @field_validator("created", "modified")
     @classmethod

@@ -96,9 +96,15 @@ class FakeOpenSearchClient:
     ) -> None:
         self.indices = FakeIndices(index_name=index_name, index_body=index_body)
         self.search_pipeline = FakeSearchPipeline(exists=pipeline_exists)
+        self.update_by_query_calls: list[tuple[str, dict]] = []
+        self.update_by_query_response: dict = {"updated": 1}
 
     def close(self) -> None:
         return None
+
+    def update_by_query(self, *, index: str, body: dict, params: dict | None = None) -> dict:
+        self.update_by_query_calls.append((index, deepcopy(body)))
+        return self.update_by_query_response
 
 
 def test_opensearch_vector_store_creates_missing_index(monkeypatch):
@@ -164,6 +170,56 @@ def test_opensearch_vector_store_rejects_incompatible_dimension(monkeypatch):
             username="admin",
             password=TEST_OPENSEARCH_PASSWORD,
         )
+
+
+def _make_store_for_existing_index(monkeypatch, fake_client: FakeOpenSearchClient) -> ovs.OpenSearchVectorStoreAdapter:
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+    return ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=4),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+    )
+
+
+def test_set_document_name_logs_error_when_no_chunks_matched(monkeypatch, caplog):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.update_by_query_response = {"updated": 0}
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    with caplog.at_level("ERROR"):
+        store.set_document_name(document_uid="doc-1", document_name="new-name.pdf")
+
+    assert any("matched 0 vector chunks" in r.message for r in caplog.records)
+
+
+def test_set_document_name_logs_error_on_reported_failures(monkeypatch, caplog):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.update_by_query_response = {"updated": 2, "failures": [{"cause": "version_conflict"}]}
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    with caplog.at_level("ERROR"):
+        store.set_document_name(document_uid="doc-1", document_name="new-name.pdf")
+
+    assert any("reported 1 failure" in r.message for r in caplog.records)
+
+
+def test_set_document_name_does_not_log_error_on_full_success(monkeypatch, caplog):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.update_by_query_response = {"updated": 3}
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    with caplog.at_level("INFO"):
+        store.set_document_name(document_uid="doc-1", document_name="new-name.pdf")
+
+    assert not any(r.levelname == "ERROR" for r in caplog.records)
+    assert any("updated document_name on 3 vector chunks" in r.message for r in caplog.records)
 
 
 def test_application_context_opensearch_factory_does_not_call_validate_index_or_fail(

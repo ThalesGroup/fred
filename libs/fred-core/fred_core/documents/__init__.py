@@ -23,6 +23,7 @@ from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,
+    FileTypeBucket,
     Identity,
     Processing,
     ProcessingGraph,
@@ -36,6 +37,7 @@ from fred_core.documents.document_structures import (
     SourceInfo,
     SourceType,
     Tagging,
+    file_type_bucket,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.documents.tag_models import TagRow
@@ -47,6 +49,7 @@ __all__ = [
     "DocumentMetadata",
     "FileInfo",
     "FileType",
+    "FileTypeBucket",
     "Identity",
     "Processing",
     "ProcessingGraph",
@@ -60,6 +63,7 @@ __all__ = [
     "SourceInfo",
     "SourceType",
     "Tagging",
+    "file_type_bucket",
     # Store
     "BaseDocumentMetadataStore",
     "DocumentMetadataDeserializationError",

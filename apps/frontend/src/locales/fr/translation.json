@@ -396,6 +396,10 @@
       "pageNumber": "Page {{page}} sur {{pageCount}}",
       "prev": "Page précédente",
       "totalItems": "{{count}} éléments"
+    },
+    "selection": {
+      "selectAllOnPage": "Sélectionner toutes les lignes de cette page",
+      "selectRow": "Sélectionner la ligne"
     }
   },
   "dialogs": {
@@ -473,7 +477,7 @@
     "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
     "uploadAndProcess": "Importer et traiter",
     "uploadDestination": "Les fichiers seront ajoutés à",
     "uploadDrawerTitle": "Ajouter un document",
@@ -1235,8 +1239,12 @@
     },
     "resources": {
       "workspaceTitle": "Fichiers",
+      "pageTitle": "Ressources de l'équipe",
+      "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",
+      "rootsAria": "Espaces de ressources",
+      "storageQuota": "Stockage",
       "roots": {
-        "resources": "Mes documents",
+        "resources": "Corpus d'équipe",
         "mine": "Mon espace",
         "team": "Espace d'équipe",
         "agents": "Agents",
@@ -1260,6 +1268,11 @@
           "shared_copy": "Partagé"
         }
       },
+      "search": {
+        "placeholder": "Rechercher",
+        "ariaLabel": "Rechercher dans ce dossier",
+        "clearAriaLabel": "Effacer la recherche"
+      },
       "folders": {
         "templates": "Modèles",
         "uploads": "Téléversements",
@@ -1270,20 +1283,32 @@
         "addFile": "Ajouter un fichier",
         "newFolder": "Nouveau dossier"
       },
+      "columns": {
+        "name": "Nom",
+        "size": "Taille",
+        "created": "Ajouté le",
+        "author": "Ajouté par"
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
+        "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "download": "Télécharger",
+        "includeInSearch": "Inclure à la recherche",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
-        "process": "Traiter"
+        "process": "Traiter",
+        "rename": "Renommer",
+        "reprocess": "Retraiter",
+        "searchable": "Exclure de la recherche"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
+        "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
@@ -1313,13 +1338,22 @@
         "namePlaceholder": "ex. Rapports 2026",
         "title": "Nouveau dossier"
       },
+      "renameModal": {
+        "title": "Renommer",
+        "nameLabel": "Nom",
+        "save": "Enregistrer",
+        "error": "Impossible de renommer"
+      },
       "loading": "Chargement des ressources...",
       "preview": {
+        "title": "Aperçu du document",
+        "tabsAria": "Mode d'affichage",
+        "tabs": {
+          "file": "Fichier",
+          "raw": "Raw"
+        },
         "loading": "Chargement…",
-        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
-        "showMarkdown": "Afficher la version Markdown",
-        "showOriginal": "Afficher le document d'origine",
-        "title": "Aperçu du document"
+        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document."
       },
       "storage": {
         "aria": "Espace de stockage utilisé",
@@ -1332,15 +1366,43 @@
         "prev": "Page précédente"
       },
       "status": {
-        "failed": "Échec",
-        "processing": "Traitement",
-        "raw": "Brut",
+        "excludedFromSearch": "Exclu de la recherche",
+        "failed": "Erreur",
+        "processing": "Traitement...",
+        "raw": "En attente",
         "ready": "Prêt"
+      },
+      "bulkActions": {
+        "selectedCount": "Sélection : {{count}}",
+        "clearSelection": "Annuler la sélection",
+        "delete": "Supprimer",
+        "download": "Télécharger",
+        "excludeFromSearch": "Exclure de la recherche",
+        "includeInSearch": "Inclure à la recherche"
+      },
+      "stats": {
+        "toggle": "Statistiques",
+        "filesByType": {
+          "title": "Nombre de fichiers par type",
+          "valueLabel": "Fichiers"
+        },
+        "sizeByType": {
+          "title": "Taille totale par type de fichier",
+          "tooltipTitle": "Répartition"
+        },
+        "bucket": {
+          "pdf": "PDF",
+          "text": "Texte",
+          "ppt": "PPT",
+          "excel": "Excel",
+          "other": "Autres"
+        }
       },
       "title": "Ressources",
       "toast": {
         "deleteFolderError": "Impossible de supprimer le dossier",
         "deleteFolderSuccess": "Dossier supprimé",
+        "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
       }

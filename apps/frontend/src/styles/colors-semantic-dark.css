@@ -38,6 +38,10 @@
   --on-warning: var(--core-mustard-10);
   --warning-container: var(--core-mustard-30);
   --on-warning-container: var(--core-mustard-95);
+  /* Pale yellow "folder" accent (file explorer row icons) — deliberately a
+     fixed pale step in both themes, not warning's own light/dark swap, so
+     folder icons read the same soft yellow regardless of theme. */
+  --folder: var(--core-mustard-80);
   --outline: var(--core-cold-grey-60);
   --outline-variant: var(--core-cold-grey-40);
   --outline-retreat: var(--core-cold-grey-30);

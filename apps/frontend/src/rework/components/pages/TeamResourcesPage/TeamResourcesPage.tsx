@@ -12,30 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
-import { DocumentViewer, type DocumentViewerMode } from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
-import type { DocumentPreviewTarget } from "../../../../components/documents/common/useDocumentCommands";
-import { hasNativePreview } from "@rework/utils/documentViewerUtils.ts";
+import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
-import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery,
+  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery,
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
-import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
-import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
-import AgentFilesystemBrowser from "./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx";
-import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
-import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
-import FsRootAddMenu from "./FsRootAddMenu/FsRootAddMenu.tsx";
-import { StorageMeter } from "./StorageMeter/StorageMeter.tsx";
+import { formatBytes } from "@shared/utils/formatBytes.ts";
+import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
+import AgentsWorkspace from "./AgentsWorkspace/AgentsWorkspace.tsx";
+import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
 import styles from "./TeamResourcesPage.module.css";
+
+type ResourceRootTab = "resources" | "mine" | "team" | "agents";
 
 /**
  * Official rework workspace page (FILES-04). A single tree with four differentiated roots:
@@ -44,34 +48,81 @@ import styles from "./TeamResourcesPage.module.css";
  * - Mon espace: the user's personal-in-team files (teams/{team}/users/{uid}, via /fs)
  * - Espace d'équipe: the team-shared files (teams/{team}/shared, via /fs)
  * - Agents: per-agent generated files (teams/{team}/agents/{instance}/users/{uid}, via /fs)
+ *
+ * Mon espace/Espace d'équipe/Agents are gated behind the platform-wide
+ * `enableAllResourceSpaces` feature flag (`platform.frontend.feature_flags`
+ * in `configuration.yaml`, default off) — the team isn't yet confident these
+ * three spaces pull their weight next to Corpus d'équipe, so only Corpus is
+ * reachable until the flag is turned on. The other three tabs' code stays
+ * fully in place either way; only their entries in the tab switcher are
+ * conditional.
  */
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
-  const { activeTeam } = useFrontendBootstrap();
-  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
+  // isPersonalTeamId alone is authoritative (handles both the bare "personal"
+  // alias and the canonical "personal-<uid>" id — see its own doc comment).
+  // An earlier `|| teamId === activeTeam?.id` fallback dates from before real
+  // multi-team support existed, when "active team" and "personal space" were
+  // the same concept — it silently misclassified any real team as personal
+  // whenever you viewed the Resources page for your currently active team,
+  // hiding "Espace partagé" for a legitimate team.
+  const isPersonalTeam = isPersonalTeamId(teamId);
   const userId = KeyCloakService.GetUserId() ?? "";
-  const teamName = activeTeam?.name ?? teamId;
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
   // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
   const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
   const userRoot = `teams/${fsTeamId}/users/${userId}`;
   const sharedRoot = `teams/${fsTeamId}/shared`;
-  const corpusRef = useRef<DocumentWorkspaceHandle>(null);
-  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
-  // Which rendering the preview shows. Reset to "original" on every newly opened
-  // document (below) so a PDF never inherits the previous file's markdown mode.
-  const [previewMode, setPreviewMode] = useState<DocumentViewerMode>("original");
-  // The toggle is only offered where the two renderings actually differ — i.e.
-  // formats with a native renderer (PDF today). A .docx/.xlsx/.csv is ALREADY
-  // displayed as its markdown extraction, so a button there would be inert.
-  const canToggleMarkdown = hasNativePreview(previewTarget?.fileName);
   const { data: team } = useGetTeamQuery({ teamId });
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
-  const storageUsed = team?.current_resources_storage_size;
-  // Seed the preview at ~70% of the viewport so it opens near-full-page; the
-  // drag handle (capped at 92vw below) lets the user trade width with the list.
-  const previewSeedWidth = `${typeof window !== "undefined" ? Math.round(window.innerWidth * 0.7) : 960}px`;
+  const { bootstrap } = useFrontendBootstrap();
+  const enableAllResourceSpaces = bootstrap?.feature_flags?.enableAllResourceSpaces ?? false;
+
+  const [activeTab, setActiveTab] = useState<ResourceRootTab>("resources");
+  const [statsOpen, setStatsOpen] = useState(false);
+  // "Espace partagé" only exists for a real team — if the active team turns out to be
+  // personal (e.g. navigating here via a stale tab from a different team), fall back
+  // rather than leave a tab selected that's about to disappear from the switcher.
+  useEffect(() => {
+    if (isPersonalTeam && activeTab === "team") setActiveTab("resources");
+  }, [isPersonalTeam, activeTab]);
+
+  const rootTabs: { value: ResourceRootTab; label: string }[] = [
+    { value: "resources", label: t("rework.resources.roots.resources") },
+    ...(enableAllResourceSpaces
+      ? [
+          { value: "mine" as const, label: t("rework.resources.roots.mine") },
+          ...(isPersonalTeam ? [] : [{ value: "team" as const, label: t("rework.resources.roots.team") }]),
+          { value: "agents" as const, label: t("rework.resources.roots.agents") },
+        ]
+      : []),
+  ];
+  const rootTabItems: ButtonGroupItemProps[] = rootTabs.map((tab) => ({ label: tab.label }));
+  const activeTabIndex = rootTabs.findIndex((tab) => tab.value === activeTab);
+
+  // Usage-by-type stats (§13.5/13.7 FRONT-09.I) — one query per tab's data source,
+  // each skipped unless it's the active tab so switching tabs never fires every query
+  // at once. "Agents" has no single filesystem root (its table's root is virtual,
+  // fanning out per agent instance — see AgentsWorkspace) so it has no stats source
+  // yet — RFC §13.5.
+  const corpusStats = useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery(
+    { teamId: fsTeamId },
+    { skip: activeTab !== "resources" },
+  );
+  const mineStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery({ path: userRoot }, { skip: activeTab !== "mine" });
+  const teamStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery(
+    { path: sharedRoot },
+    { skip: activeTab !== "team" },
+  );
+  const activeStats =
+    activeTab === "resources"
+      ? corpusStats
+      : activeTab === "mine"
+        ? mineStats
+        : activeTab === "team"
+          ? teamStats
+          : null;
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -82,7 +133,12 @@ export default function TeamResourcesPage() {
   const kfState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
 
   if (kfState === "loading") {
-    return <div className={styles.loadingState}>{t("rework.resources.loading")}</div>;
+    return (
+      <div className={styles.loadingState}>
+        <Spinner size={20} />
+        {t("rework.resources.loading")}
+      </div>
+    );
   }
   if (kfState === "error") {
     return (
@@ -95,138 +151,95 @@ export default function TeamResourcesPage() {
     );
   }
 
+  const hasQuota = team?.max_resources_storage_size != null;
+
   return (
     <div className={styles.page}>
-      <div className={styles.main}>
-        <header className={styles.header}>
-          <h1 className={styles.title}>{t("rework.resources.workspaceTitle")}</h1>
-          {storageUsed != null && <StorageMeter used={storageUsed} max={team?.max_resources_storage_size} />}
-        </header>
-
-        <div className={styles.tree}>
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "database" }}
-            title={t("rework.resources.roots.resources")}
-            hint={t("rework.resources.hints.resources")}
-            meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
-            defaultOpen
-            action={
-              canCreateFolder ? (
-                <IconButton
-                  color="on-surface"
-                  variant="outlined"
-                  size="xs"
-                  icon={{ category: "outlined", type: "create_new_folder" }}
-                  aria-label={t("rework.resources.menu.newFolder")}
-                  title={t("rework.resources.menu.newFolder")}
-                  onClick={() => corpusRef.current?.openNewFolder()}
-                />
-              ) : undefined
-            }
-          >
-            <DocumentWorkspace
-              ref={corpusRef}
-              teamId={teamId}
-              isPersonalTeam={isPersonalTeam}
-              // Re-selecting the document that's already open toggles the preview
-              // shut (clicking its name a second time closes it); `previewUid`
-              // tells the workspace which row that is, so it can drop the
-              // highlight at the same time.
-              previewUid={previewTarget?.documentUid ?? null}
-              onPreview={(target) => {
-                setPreviewMode("original");
-                setPreviewTarget((prev) => (prev?.documentUid === target.documentUid ? null : target));
-              }}
-            />
-          </WorkspaceRoot>
-
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "person" }}
-            title={t("rework.resources.roots.mine")}
-            hint={t("rework.resources.hints.mine")}
-            meta={
-              <FsRootMeta
-                root={userRoot}
-                nature={
-                  isPersonalTeam
-                    ? t("rework.resources.roots.privatePersonal")
-                    : t("rework.resources.roots.private", { team: teamName })
-                }
-              />
-            }
-            action={<FsRootAddMenu root={userRoot} />}
-          >
-            <TeamFilesystemBrowser root={userRoot} />
-          </WorkspaceRoot>
-
-          {!isPersonalTeam && (
-            <WorkspaceRoot
-              icon={{ category: "outlined", type: "groups" }}
-              title={t("rework.resources.roots.team")}
-              hint={t("rework.resources.hints.team")}
-              meta={<FsRootMeta root={sharedRoot} />}
-              action={canCreateFolder ? <FsRootAddMenu root={sharedRoot} /> : undefined}
-            >
-              <TeamFilesystemBrowser root={sharedRoot} canWrite={canCreateFolder} />
-            </WorkspaceRoot>
-          )}
-
-          <WorkspaceRoot
-            icon={{ category: "outlined", type: "auto_awesome" }}
-            title={t("rework.resources.roots.agents")}
-            hint={t("rework.resources.hints.agents")}
-          >
-            <AgentFilesystemBrowser fsTeamId={fsTeamId} userId={userId} />
-          </WorkspaceRoot>
+      <header className={styles.header}>
+        <div>
+          <h1 className={styles.title}>{t("rework.resources.pageTitle")}</h1>
+          <p className={styles.subtitle}>{t("rework.resources.pageSubtitle")}</p>
         </div>
-      </div>
+        <div className={styles.headerEnd}>
+          <SettingChip
+            label={t("rework.resources.stats.toggle")}
+            icon={{ category: "outlined", type: "bar_chart" }}
+            open={statsOpen}
+            activeColor="secondary"
+            onClick={() => setStatsOpen((value) => !value)}
+          />
+          {hasQuota && (
+            <div className={styles.quota}>
+              <div className={styles.quotaLabelRow}>
+                <span className={styles.quotaLabel}>{t("rework.resources.storageQuota")}</span>
+                <span className={styles.quotaValue}>
+                  {formatBytes(team!.current_resources_storage_size ?? 0)} /{" "}
+                  {formatBytes(team!.max_resources_storage_size!)}
+                </span>
+              </div>
+              <ProgressBar
+                theme="primary"
+                current={team!.current_resources_storage_size ?? 0}
+                max={team!.max_resources_storage_size!}
+              />
+            </div>
+          )}
+        </div>
+      </header>
 
-      {/* Preview is a full-height push-drawer flush with the page's right/top/
-          bottom edges (it sits outside the padded main column), so it fills
-          almost the whole page while the list keeps a sliver on the left. Same
-          resizable UX as the in-conversation writable-document pane. */}
-      <InlineDrawer
-        open={previewTarget !== null}
-        onClose={() => setPreviewTarget(null)}
-        title={previewTarget?.fileName ?? t("rework.resources.preview.title")}
-        headerActions={
-          canToggleMarkdown ? (
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{
-                category: "outlined",
-                type: previewMode === "markdown" ? "picture_as_pdf" : "description",
-              }}
-              aria-label={t(
-                previewMode === "markdown"
-                  ? "rework.resources.preview.showOriginal"
-                  : "rework.resources.preview.showMarkdown",
-              )}
-              title={t(
-                previewMode === "markdown"
-                  ? "rework.resources.preview.showOriginal"
-                  : "rework.resources.preview.showMarkdown",
-              )}
-              aria-pressed={previewMode === "markdown"}
-              onClick={() => setPreviewMode((prev) => (prev === "markdown" ? "original" : "markdown"))}
-            />
-          ) : undefined
-        }
-        layout="push"
-        width={previewSeedWidth}
-        resizable={{ persistKey: "resources-document-preview", maxWidth: 4000, maxViewportFraction: 0.92 }}
-        flushBody
-      >
-        {previewTarget && (
-          <DocumentViewer
-            documentUid={previewTarget.documentUid}
-            fileName={previewTarget.fileName}
-            mode={previewMode}
+      {statsOpen && activeTab !== "agents" && (
+        <ResourceStatsCards
+          entries={activeStats?.data?.entries}
+          isLoading={activeStats?.isLoading ?? false}
+          isError={activeStats?.isError ?? false}
+        />
+      )}
+
+      {rootTabs.length > 1 && (
+        <ButtonGroup
+          items={rootTabItems}
+          size="xs"
+          color="secondary"
+          variant="tabs"
+          aria-label={t("rework.resources.rootsAria")}
+          selectedIndex={activeTabIndex}
+          onSelectedIndexChange={(index) => setActiveTab(rootTabs[index].value)}
+        />
+      )}
+
+      <div className={styles.panel}>
+        {activeTab === "resources" && (
+          <DocumentWorkspace
+            teamId={teamId}
+            isPersonalTeam={isPersonalTeam}
+            // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
+            // catch-up fire on mount for any task target already in the
+            // store — in the same commit where activeTab just switched to
+            // "resources", DocumentWorkspace (child) mounts and can run this
+            // effect before corpusStats' own subscribing effect (parent)
+            // has dispatched its initial fetch, since React flushes child
+            // effects before parent effects. Calling .refetch() on a query
+            // that was never started throws and takes down the whole app.
+            // Safe to just skip in that case — the query's own mount fetch
+            // is already about to run.
+            onDocumentsChanged={() => {
+              if (!corpusStats.isUninitialized) void corpusStats.refetch();
+            }}
           />
         )}
-      </InlineDrawer>
+
+        {activeTab === "mine" && <FilesystemWorkspace root={userRoot} rootLabel={t("rework.resources.roots.mine")} />}
+
+        {activeTab === "team" && !isPersonalTeam && (
+          <FilesystemWorkspace
+            root={sharedRoot}
+            rootLabel={t("rework.resources.roots.team")}
+            canWrite={canCreateFolder}
+          />
+        )}
+
+        {activeTab === "agents" && <AgentsWorkspace fsTeamId={fsTeamId} userId={userId} />}
+      </div>
     </div>
   );
 }
