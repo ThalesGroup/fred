@@ -14,7 +14,11 @@
  * no hidden/visible state to toggle here. */
 .tooltip-content {
   position: fixed;
-  z-index: 10;
+  // Above every other body-level portal in this codebase (Select: 1400,
+  // "above modals/drawers (1300)") — now that this renders on document.body
+  // via a portal, its old locally-scoped z-index: 10 would otherwise put it
+  // behind a Dialog/Drawer/Select if a Tooltip trigger ever sits inside one.
+  z-index: 1500;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
