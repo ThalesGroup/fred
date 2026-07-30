@@ -73,6 +73,16 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
+  // Hover and keyboard-focus are tracked independently, OR'd into `visible` —
+  // not collapsed into one boolean — because either can outlast the other:
+  // clicking a trigger while hovering it, then moving the mouse away, must
+  // not hide the tooltip while focus remains (and symmetrically for blur
+  // while still hovered). The old CSS `:hover, :has(:focus-visible)` gave
+  // this OR semantics for free; a single show/hide toggle driven by either
+  // leave event loses it.
+  const [isHovering, setIsHovering] = useState(false);
+  const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
+  const visible = isHovering || isKeyboardFocused;
   const [triggerRect, setTriggerRect] = useState<TriggerRect | null>(null);
   const [contentStyle, setContentStyle] = useState<CSSProperties | undefined>(undefined);
 
@@ -90,20 +100,26 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
     setTriggerRect({ top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width });
   }, []);
 
-  const handleMouseEnter = useCallback(() => updateTriggerRect(), [updateTriggerRect]);
+  const handleMouseEnter = useCallback(() => setIsHovering(true), []);
+  const handleMouseLeave = useCallback(() => setIsHovering(false), []);
   // A plain `onFocus` also fires for the lingering focus a mouse click leaves
   // behind on the trigger (e.g. clicking the preview/more icon buttons), which
   // would pop the tooltip open and pin it there until something else steals
   // focus. Gating on keyboard modality restricts this to real Tab navigation,
   // matching the hover trigger's intent.
   const handleFocus = useCallback(() => {
-    if (!lastFocusWasKeyboard) return;
-    updateTriggerRect();
-  }, [updateTriggerRect]);
-  const hide = useCallback(() => {
-    setTriggerRect(null);
-    setContentStyle(undefined);
+    if (lastFocusWasKeyboard) setIsKeyboardFocused(true);
   }, []);
+  const handleBlur = useCallback(() => setIsKeyboardFocused(false), []);
+
+  useEffect(() => {
+    if (visible) {
+      updateTriggerRect();
+    } else {
+      setTriggerRect(null);
+      setContentStyle(undefined);
+    }
+  }, [visible, updateTriggerRect]);
 
   // A visible tooltip tracks the trigger's position through scroll/resize —
   // without this, scrolling the table while hovering leaves it stranded.
@@ -157,9 +173,9 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
       ref={wrapperRef}
       className={styles["tooltip-wrapper"]}
       onMouseEnter={handleMouseEnter}
-      onMouseLeave={hide}
+      onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
-      onBlur={hide}
+      onBlur={handleBlur}
     >
       {child}
       {triggerRect &&

@@ -121,4 +121,40 @@ describe("Tooltip", () => {
     });
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
+
+  it("keeps the tooltip visible on mouse leave while keyboard focus remains", () => {
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+      trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    act(() => {
+      trigger.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
+  it("keeps the tooltip visible on blur while still hovered", () => {
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+      trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    act(() => {
+      trigger.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
 });
