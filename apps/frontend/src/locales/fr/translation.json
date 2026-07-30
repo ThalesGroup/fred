@@ -1403,6 +1403,7 @@
       "toast": {
         "deleteFolderError": "Impossible de supprimer le dossier",
         "deleteFolderSuccess": "Dossier supprimé",
+        "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
       }

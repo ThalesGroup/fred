@@ -82,7 +82,8 @@ vi.mock("../../../../../utils/downloadUtils.tsx", () => ({
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
+const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => ({ data: [] }),
@@ -106,6 +107,8 @@ beforeEach(async () => {
   commands.download.mockClear();
   commands.fetchBlob.mockClear();
   downloadUtils.downloadManyAsZip.mockClear();
+  toast.showError.mockClear();
+  toast.showSuccess.mockClear();
 
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -218,6 +221,26 @@ describe("DocumentWorkspace — bulk download", () => {
       await Promise.resolve();
     });
 
+    expect(bulkDownloadButton().disabled).toBe(false);
+    expect(bulkDownloadButton().getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("shows an error toast and clears the loading state when the zip download fails", async () => {
+    downloadUtils.downloadManyAsZip.mockRejectedValueOnce(new Error("network down"));
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    const bulkDownloadButton = () =>
+      container.querySelector('button[aria-label="rework.resources.bulkActions.download"]') as HTMLButtonElement;
+    click(bulkDownloadButton());
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toast.showError).toHaveBeenCalledOnce();
     expect(bulkDownloadButton().disabled).toBe(false);
     expect(bulkDownloadButton().getAttribute("aria-busy")).toBe("false");
   });

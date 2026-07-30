@@ -1403,6 +1403,7 @@
       "toast": {
         "deleteFolderError": "Could not delete the folder",
         "deleteFolderSuccess": "Folder deleted",
+        "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
         "processStarted": "Processing started"
       }

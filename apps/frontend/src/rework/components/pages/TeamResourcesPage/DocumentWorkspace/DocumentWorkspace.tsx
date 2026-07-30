@@ -639,6 +639,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         })),
         "resources.zip",
       );
+    } catch (e: unknown) {
+      showError?.({
+        summary: t("validation.error"),
+        detail: (e as { data?: { detail?: string } })?.data?.detail || t("rework.resources.toast.downloadError"),
+      });
     } finally {
       setBulkDownloading(false);
     }
