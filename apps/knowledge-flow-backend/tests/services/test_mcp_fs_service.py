@@ -3,9 +3,9 @@ import logging
 import pytest
 from fred_core import (
     AuthorizationError,
-    FileTypeBucket,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
+    FileTypeBucket,
     KeycloakUser,
 )
 from fred_core.security.models import Resource

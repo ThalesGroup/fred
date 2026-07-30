@@ -20,8 +20,8 @@ from typing import List
 
 from fred_core import (
     AuthorizationError,
-    FileTypeBucket,
     FilesystemResourceInfoResult,
+    FileTypeBucket,
     KeycloakUser,
     file_type_bucket,
 )

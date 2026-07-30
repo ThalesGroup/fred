@@ -89,8 +89,8 @@
  * adjacent small IconButtons so the row's icons stay vertically aligned. */
 .excludedIcon {
   display: inline-flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   width: 2rem;
   height: 2rem;
   color: var(--error);

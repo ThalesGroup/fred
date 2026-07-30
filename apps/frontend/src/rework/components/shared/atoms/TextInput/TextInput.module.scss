@@ -139,9 +139,9 @@
   right: var(--spacing-s);
   align-items: center;
   height: 3rem;
+  pointer-events: none;
   color: var(--on-surface-retreat);
   font: var(--font-body-large);
-  pointer-events: none;
 }
 
 /* Opt-in shrink, default (no data-size) keeps every other TextInput call
