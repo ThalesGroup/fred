@@ -25,6 +25,7 @@ from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 import pypdf
+from fred_core.kpi import Dims
 from markitdown import MarkItDown
 from pypdf.errors import PdfReadError
 from temporalio import activity
@@ -170,7 +171,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     self._extractor_cache[cache_key] = extractor
         return extractor
 
-    def _pdf_kpi_timer(self, name: str, dims: dict[str, str]) -> AbstractContextManager:
+    def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
         """Guarded KPI timer for the per-image OCR/VLM path.
 
         `_extract_md` runs inside a Temporal activity but off the activity's own
@@ -211,10 +212,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         profile_cfg = processing.get_profile_config(active_profile)
 
         vision_model_name = "unknown"
-        if profile_cfg.process_images and get_configuration().vision_model:
-            image_describer = build_image_describer(get_configuration().vision_model)
+        vision_model = get_configuration().vision_model
+        if profile_cfg.process_images and vision_model:
+            image_describer = build_image_describer(vision_model)
             use_image_describer = True
-            vision_model_name = get_configuration().vision_model.name or "unknown"
+            vision_model_name = vision_model.name or "unknown"
         if profile_cfg.pdf.do_ocr:
             use_ocr = True
 
