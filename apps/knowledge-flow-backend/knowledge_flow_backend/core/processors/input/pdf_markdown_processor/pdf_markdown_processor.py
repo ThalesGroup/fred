@@ -19,11 +19,16 @@ import logging
 import re
 import shutil
 import tempfile
+import threading
+import time
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 import pypdf
+from fred_core.kpi import Dims
 from markitdown import MarkItDown
 from pypdf.errors import PdfReadError
+from temporalio import activity
 
 from knowledge_flow_backend.application_context import get_configuration
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
@@ -62,6 +67,15 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     DESCRIPTION = "PDF-to-Markdown converter"
     BASE_FOLDER = "/tmp"
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Keyed by (extractor_name, docling_num_threads): this processor instance
+        # is itself a shared singleton (application_context.get_input_processor_instance)
+        # called from concurrent Temporal activity threads, so each distinct
+        # extractor config is built once and reused rather than rebuilt per document.
+        self._extractor_cache: dict[tuple[str, int], BasePdfExtractor] = {}
+        self._extractor_cache_lock = threading.Lock()
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -137,6 +151,50 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return DoclingPdfExtractor(num_threads=docling_num_threads)
         return extractor_cls()
 
+    def _get_extractor(self, extractor_name: str, docling_num_threads: int) -> BasePdfExtractor:
+        """Build the extractor once per (name, num_threads) and reuse it.
+
+        Matters most for 'docling': each instance owns a DocumentConverter that
+        loads OCR/layout/picture-classification models on first use, so rebuilding
+        it per document (as `_build_extractor` alone would) reloads that whole
+        pipeline on every file, on every one of the worker's concurrent activity
+        threads. Keyed rather than a single slot because a profile switch (or a
+        differently-configured profile) can request a different docling_num_threads.
+        """
+        cache_key = (extractor_name, docling_num_threads)
+        extractor = self._extractor_cache.get(cache_key)
+        if extractor is None:
+            with self._extractor_cache_lock:
+                extractor = self._extractor_cache.get(cache_key)
+                if extractor is None:
+                    extractor = self._build_extractor(extractor_name, docling_num_threads)
+                    self._extractor_cache[cache_key] = extractor
+        return extractor
+
+    def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
+        """Guarded KPI timer for the per-image OCR/VLM path.
+
+        `_extract_md` runs inside a Temporal activity but off the activity's own
+        coroutine (see `to_thread_with_heartbeat`), so `activity.in_activity()` must
+        be checked before touching the KPI writer. Mirrors the gating in
+        `features/scheduler/kpi_utils.py`'s `emit_temporal_activity_result_kpis`:
+        KPI setup failures are logged and swallowed, never raised into the
+        ingestion path. No-ops (returns a null context) outside an activity or on
+        setup failure.
+        """
+        if not activity.in_activity():
+            return nullcontext()
+        try:
+            from knowledge_flow_backend.application_context import ApplicationContext
+            from knowledge_flow_backend.features.scheduler.kpi_utils import build_temporal_activity_kpi_actor
+
+            kpi = ApplicationContext.get_instance().get_kpi_writer()
+            actor = build_temporal_activity_kpi_actor()
+            return kpi.timer(name, dims=dims, actor=actor)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[PROCESSOR][PDF][KPI] Failed to start timer %s: %s", name, exc)
+            return nullcontext()
+
     def _extract_md(self, file_path: Path, work_dir: str):
         """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown.
 
@@ -153,9 +211,12 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         active_profile = processing.normalize_profile(current_profile)
         profile_cfg = processing.get_profile_config(active_profile)
 
-        if profile_cfg.process_images and get_configuration().vision_model:
-            image_describer = build_image_describer(get_configuration().vision_model)
+        vision_model_name = "unknown"
+        vision_model = get_configuration().vision_model
+        if profile_cfg.process_images and vision_model:
+            image_describer = build_image_describer(vision_model)
             use_image_describer = True
+            vision_model_name = vision_model.name or "unknown"
         if profile_cfg.pdf.do_ocr:
             use_ocr = True
 
@@ -167,20 +228,38 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             use_image_describer,
         )
 
-        extractor = self._build_extractor(extractor_name, profile_cfg.pdf.docling_num_threads)
+        extractor = self._get_extractor(extractor_name, profile_cfg.pdf.docling_num_threads)
+        extract_start = time.perf_counter()
         try:
             md_text, images_transcription = extractor.extract(file_path, work_dir)
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
+        logger.info(
+            "[PROCESSOR][PDF] extraction complete | elapsed_s=%.2f | chars=%d | images=%d",
+            time.perf_counter() - extract_start,
+            len(md_text),
+            len(images_transcription),
+        )
 
         if images_transcription and use_ocr:
-            ocr_model = PaddleOCRmodel()
-            ocr_results = self._use_ocr(ocr_model, images_transcription)
-            for image_transcription, ocr_result in zip(images_transcription, ocr_results):
-                if use_image_describer:
-                    image_transcription.transcription = self._use_image_describer(image_describer, image_transcription, ocr_result)
-                else:
-                    image_transcription.transcription = " ".join(ocr_result["rec_texts"])
+            logger.info("[PROCESSOR][PDF] image OCR/VLM loop starting | images=%d", len(images_transcription))
+            loop_start = time.perf_counter()
+            with self._pdf_kpi_timer(
+                "knowledge_flow.pdf.image_loop_latency_ms",
+                {"pdf_stage": "image_loop", "file_type": "pdf"},
+            ):
+                ocr_model = PaddleOCRmodel()
+                ocr_results = self._use_ocr(ocr_model, images_transcription)
+                for image_transcription, ocr_result in zip(images_transcription, ocr_results):
+                    if use_image_describer:
+                        with self._pdf_kpi_timer(
+                            "knowledge_flow.pdf.image_description_latency_ms",
+                            {"pdf_stage": "image_description", "model_name": vision_model_name},
+                        ):
+                            image_transcription.transcription = self._use_image_describer(image_describer, image_transcription, ocr_result)
+                    else:
+                        image_transcription.transcription = " ".join(ocr_result["rec_texts"])
+            logger.info("[PROCESSOR][PDF] image OCR/VLM loop finished | elapsed_s=%.2f", time.perf_counter() - loop_start)
 
         for image_transcription in images_transcription:
             md_text = re.sub(r"!\[.*?\]\(" + re.escape(str(image_transcription.image_path)) + r"\)", image_transcription.transcription, md_text)

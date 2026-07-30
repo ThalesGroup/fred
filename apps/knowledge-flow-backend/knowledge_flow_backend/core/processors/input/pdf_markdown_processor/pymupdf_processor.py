@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 from typing import List
 
+import fitz
 import pymupdf4llm
 
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
@@ -28,15 +29,25 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.i
 
 class PyMuPdfExtractor(BasePdfExtractor):
     def extract(self, file_path: Path, work_dir: str) -> tuple[str, List[ImageTranscription]]:
-        """Extract Markdown using pymupdf4llm with page-wise extraction and normalization."""
-        pages = pymupdf4llm.to_markdown(
-            file_path,
-            write_images=True,
-            image_path=work_dir,
-            header=False,
-            footer=False,
-            page_chunks=True,
-        )
+        """Extract Markdown using pymupdf4llm with page-wise extraction and normalization.
+
+        Opens the fitz.Document ourselves (instead of letting pymupdf4llm open it from
+        the path) so we can guarantee it's closed: pymupdf4llm.to_markdown() never closes
+        a document it opens internally, which leaks native MuPDF memory (pages, xref
+        table, decoded images/fonts) per processed file.
+        """
+        doc = fitz.open(file_path)
+        try:
+            pages = pymupdf4llm.to_markdown(
+                doc,
+                write_images=True,
+                image_path=work_dir,
+                header=False,
+                footer=False,
+                page_chunks=True,
+            )
+        finally:
+            doc.close()
 
         cleaned_pages = []
         for p in pages:

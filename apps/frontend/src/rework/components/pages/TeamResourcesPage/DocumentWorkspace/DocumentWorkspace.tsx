@@ -58,6 +58,7 @@ import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
+import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
 import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
@@ -196,6 +197,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [reprocessOverrides, setReprocessOverrides] = useState<Record<string, { snapshot: string; deadline: number }>>(
     {},
   );
+  // A just-reprocessed doc must read as "processing" even though its stale
+  // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
+  // above. Centralized here since every status-driven cell (menu label,
+  // StatusChip, excluded-from-search gating) needs the same override applied.
+  const getDocStatus = (doc: DocumentMetadata): DocStatus =>
+    reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -307,12 +314,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // badge flips to Ready/Failed without a manual refresh.
   useEffect(() => {
     const pendingTagIds = Object.entries(perTag)
-      .filter(([, page]) =>
-        page.docs.some(
-          (doc) =>
-            deriveDocStatus(doc).status === "processing" || reprocessOverrides[doc.identity.document_uid] !== undefined,
-        ),
-      )
+      .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
       .map(([tagId]) => tagId);
     if (pendingTagIds.length === 0) return;
     const interval = setInterval(() => {
@@ -556,7 +558,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       ),
     [page?.docs],
   );
-  const { data: uploaders = [] } = useUsersByIdsQuery({ ids: uploaderUids }, { skip: uploaderUids.length === 0 });
+  const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
+    { ids: uploaderUids },
+    { skip: uploaderUids.length === 0 },
+  );
   const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
 
   const selectedDocs = useMemo(
@@ -681,7 +686,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
-    const status = reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
+    const status = getDocStatus(doc);
     const options: OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] = [];
     if (canCreateFolder) {
       options.push({
@@ -815,7 +820,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "9rem",
       cellRenderer: (row) => {
         const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
-        return <span className={styles.nowrapCell}>{uid ? userDisplayName(uid, uploaderById.get(uid)) : "—"}</span>;
+        if (!uid) return <span className={styles.nowrapCell}>—</span>;
+        const summary = uploaderById.get(uid);
+        // A doc just uploaded this session adds a brand-new uid to
+        // uploaderUids above, which re-keys the batched query and starts a
+        // fresh fetch — until it resolves, `summary` is genuinely absent yet,
+        // not "no such user". Falling through to userDisplayName's raw-uid
+        // fallback here would flash the uploader's UUID for that window
+        // instead of their name; "—" that self-corrects on the next render
+        // reads as loading rather than as broken data.
+        if (!summary && isFetchingUploaders) return <span className={styles.nowrapCell}>—</span>;
+        return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
       },
     },
     {
@@ -823,10 +838,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "6rem",
       cellRenderer: (row) => {
         if (row.kind !== "document") return null;
-        const status = reprocessOverrides[row.doc.identity.document_uid]
-          ? "processing"
-          : deriveDocStatus(row.doc).status;
-        return <StatusChip status={status} />;
+        return <StatusChip status={getDocStatus(row.doc)} />;
       },
     },
     {
@@ -844,59 +856,70 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       // plus headroom.
       label: "",
       size: "8rem",
-      cellRenderer: (row) => (
-        <span className={styles.actionsCell}>
-          {row.kind === "document" && row.doc.source.retrievable === false && !isTabularOnlyDoc(row.doc) && (
-            <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
-              <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
-                <Icon category="outlined" type="search_off" />
-              </span>
-            </Tooltip>
-          )}
-          {row.kind === "document" && (
-            <Tooltip text={t("rework.resources.action.preview")}>
-              <IconButton
-                color="on-surface-retreat"
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "visibility" }}
-                aria-label={t("rework.resources.action.preview")}
-                onClick={() => commands.preview(row.doc)}
-              />
-            </Tooltip>
-          )}
-          <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
-            iconButton={{
-              color: "on-surface-retreat",
-              variant: "icon",
-              size: "small",
-              icon: { category: "outlined", type: "more_vert" },
-              "aria-label": t("rework.resources.action.more"),
-            }}
-            options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
-            onSelect={(value) => {
-              if (row.kind === "folder") {
-                if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                if (value === "delete") confirmDeleteFolder(row.node);
-              } else {
-                if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
-                if (value === "download") void commands.download(row.doc);
-                if (value === "searchable") void toggleSearchable(row.doc);
-                if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
-                if (value === "delete" && currentTag) {
-                  showConfirmationDialog({
-                    title: t("rework.resources.confirm.deleteTitle"),
-                    message: t("rework.resources.confirm.deleteMessage", {
-                      name: documentDisplayName(row.doc),
-                    }),
-                    onConfirm: () => void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
-                  });
+      cellRenderer: (row) => {
+        // retrievable stays false for the entire ingestion window (it only
+        // flips true once vectorization completes), not just for a deliberate
+        // exclusion — gate on `ready` too, or this icon flags every
+        // still-processing document as "excluded from search".
+        const status = row.kind === "document" && getDocStatus(row.doc);
+        return (
+          <span className={styles.actionsCell}>
+            {row.kind === "document" &&
+              status === "ready" &&
+              row.doc.source.retrievable === false &&
+              !isTabularOnlyDoc(row.doc) && (
+                <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
+                  <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
+                    <Icon category="outlined" type="search_off" />
+                  </span>
+                </Tooltip>
+              )}
+            {row.kind === "document" && (
+              <Tooltip text={t("rework.resources.action.preview")}>
+                <IconButton
+                  color="on-surface-retreat"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "visibility" }}
+                  aria-label={t("rework.resources.action.preview")}
+                  onClick={() => commands.preview(row.doc)}
+                />
+              </Tooltip>
+            )}
+            <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
+              iconButton={{
+                color: "on-surface-retreat",
+                variant: "icon",
+                size: "small",
+                icon: { category: "outlined", type: "more_vert" },
+                "aria-label": t("rework.resources.action.more"),
+              }}
+              options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
+              onSelect={(value) => {
+                if (row.kind === "folder") {
+                  if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
+                  if (value === "delete") confirmDeleteFolder(row.node);
+                } else {
+                  if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
+                  if (value === "download") void commands.download(row.doc);
+                  if (value === "searchable") void toggleSearchable(row.doc);
+                  if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
+                  if (value === "delete" && currentTag) {
+                    showConfirmationDialog({
+                      title: t("rework.resources.confirm.deleteTitle"),
+                      message: t("rework.resources.confirm.deleteMessage", {
+                        name: documentDisplayName(row.doc),
+                      }),
+                      onConfirm: () =>
+                        void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
+                    });
+                  }
                 }
-              }
-            }}
-          />
-        </span>
-      ),
+              }}
+            />
+          </span>
+        );
+      },
     },
   ];
 

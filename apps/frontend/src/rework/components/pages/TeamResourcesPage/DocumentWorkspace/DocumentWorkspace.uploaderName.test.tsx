@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage: a document excluded from search (source.retrievable === false)
-// shows an error-colored indicator icon at the end of its row, just left of
-// the Preview icon button — visible only for that state, not for a
-// retrievable (or not-yet-stamped) document. Also covers a tabular dataset
-// (CSV/XLSX, only the `sql` stage ever completes): `retrievable` stays false
-// there by design (RAG-DATASET-DISCOVERY-RFC.md, no vector chunks emitted
-// unless dataset pointer chunks are enabled), so the indicator must stay
-// hidden — it isn't a real exclusion for that content type.
+// Coverage: the "Ajouté par" column resolves a document's uploaded_by uid to
+// a display name via a batched lookup keyed by every uid currently in view.
+// A freshly-uploaded document adds a brand-new uid to that key set, which
+// starts a fresh fetch — while it's in flight the uid has no entry in the
+// resolved map yet, but that's "not resolved yet", not "no such user". The
+// column must show a neutral placeholder during that window, not the raw
+// uid (the regression this covers: the uploader's UUID briefly flashed in
+// place of their name for a just-uploaded doc).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,31 +37,11 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
-const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
+const doc = (uid: string, name: string, uploadedBy: string | null) => ({
+  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: uploadedBy },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable },
+  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: true },
   processing: { stages: { raw: "done", vector: "done" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
-
-const tabularDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
-  file: { file_type: "xlsx", file_size_bytes: 2048 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", sql: "done" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
-
-// `retrievable` is stamped false at registration and only flips true once
-// vectorization completes (base_input_processor.py / vectorization_processor.py)
-// — so a still-processing document also has retrievable === false, without
-// anyone having excluded it.
-const processingDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
-  file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", vector: "in_progress" } },
   tags: { tag_ids: ["tag-cir"] },
 });
 
@@ -74,14 +54,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     () => ({
       unwrap: async () => ({
-        documents: [
-          doc("uid-excluded", "Excluded doc", false),
-          doc("uid-included", "Included doc", true),
-          doc("uid-unset", "Unset doc", undefined),
-          tabularDoc("uid-tabular", "Tabular doc"),
-          processingDoc("uid-processing", "Processing doc"),
-        ],
-        total: 5,
+        documents: [doc("uid-fresh", "Fresh upload", "c2f1ce79-b102-48a8-9d80-e825de4ff93d")],
+        total: 1,
       }),
     }),
   ],
@@ -106,9 +80,17 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
+
+// Mutable per-test: mimics the batched uploader-lookup RTK Query hook mid-fetch
+// vs. settled, without needing a real store/network layer.
+let uploadersQueryResult: { data: { id: string; first_name?: string; last_name?: string }[]; isFetching: boolean } = {
+  data: [],
+  isFetching: true,
+};
+
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
-  useUsersByIdsQuery: () => ({ data: [] }),
+  useUsersByIdsQuery: () => uploadersQueryResult,
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canUpdateResources: true }),
@@ -125,27 +107,16 @@ import DocumentWorkspace from "./DocumentWorkspace";
 let container: HTMLDivElement;
 let root: Root;
 
-beforeEach(async () => {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
+async function renderIntoCirFolder() {
   await act(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
-
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
     cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
-});
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
-  container.remove();
-});
+}
 
 function rowFor(name: string): HTMLElement {
   const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
@@ -155,34 +126,42 @@ function rowFor(name: string): HTMLElement {
   return row as HTMLElement;
 }
 
-describe("DocumentWorkspace — excluded-from-search row indicator", () => {
-  it("shows the indicator icon for a document excluded from search", () => {
-    expect(
-      rowFor("Excluded doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).not.toBeNull();
+beforeEach(() => {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => {
+    root.unmount();
+  });
+  container.remove();
+});
+
+describe("DocumentWorkspace — uploader name column", () => {
+  it("shows a placeholder, not the raw uid, while the uploader lookup is still in flight", async () => {
+    uploadersQueryResult = { data: [], isFetching: true };
+    await renderIntoCirFolder();
+    const cell = rowFor("Fresh upload.pdf").textContent ?? "";
+    expect(cell).not.toContain("c2f1ce79-b102-48a8-9d80-e825de4ff93d");
   });
 
-  it("hides the indicator for a retrievable document", () => {
-    expect(
-      rowFor("Included doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
+  it("resolves to the display name once the uploader lookup settles", async () => {
+    uploadersQueryResult = {
+      data: [{ id: "c2f1ce79-b102-48a8-9d80-e825de4ff93d", first_name: "Arthur", last_name: "Adam" }],
+      isFetching: false,
+    };
+    await renderIntoCirFolder();
+    const cell = rowFor("Fresh upload.pdf").textContent ?? "";
+    expect(cell).toContain("Arthur Adam");
+    expect(cell).not.toContain("c2f1ce79-b102-48a8-9d80-e825de4ff93d");
   });
 
-  it("hides the indicator when retrievable has never been stamped (undefined, not explicitly false)", () => {
-    expect(
-      rowFor("Unset doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator for a tabular dataset even though retrievable is false", () => {
-    expect(
-      rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator while the document is still processing, even though retrievable is false", () => {
-    expect(
-      rowFor("Processing doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
+  it("falls back to the raw uid once the lookup has settled and genuinely found no match", async () => {
+    uploadersQueryResult = { data: [], isFetching: false };
+    await renderIntoCirFolder();
+    const cell = rowFor("Fresh upload.pdf").textContent ?? "";
+    expect(cell).toContain("c2f1ce79-b102-48a8-9d80-e825de4ff93d");
   });
 });
