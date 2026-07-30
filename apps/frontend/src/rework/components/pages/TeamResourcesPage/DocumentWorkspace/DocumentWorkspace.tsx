@@ -844,59 +844,72 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       // plus headroom.
       label: "",
       size: "8rem",
-      cellRenderer: (row) => (
-        <span className={styles.actionsCell}>
-          {row.kind === "document" && row.doc.source.retrievable === false && !isTabularOnlyDoc(row.doc) && (
-            <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
-              <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
-                <Icon category="outlined" type="search_off" />
-              </span>
-            </Tooltip>
-          )}
-          {row.kind === "document" && (
-            <Tooltip text={t("rework.resources.action.preview")}>
-              <IconButton
-                color="on-surface-retreat"
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "visibility" }}
-                aria-label={t("rework.resources.action.preview")}
-                onClick={() => commands.preview(row.doc)}
-              />
-            </Tooltip>
-          )}
-          <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
-            iconButton={{
-              color: "on-surface-retreat",
-              variant: "icon",
-              size: "small",
-              icon: { category: "outlined", type: "more_vert" },
-              "aria-label": t("rework.resources.action.more"),
-            }}
-            options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
-            onSelect={(value) => {
-              if (row.kind === "folder") {
-                if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                if (value === "delete") confirmDeleteFolder(row.node);
-              } else {
-                if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
-                if (value === "download") void commands.download(row.doc);
-                if (value === "searchable") void toggleSearchable(row.doc);
-                if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
-                if (value === "delete" && currentTag) {
-                  showConfirmationDialog({
-                    title: t("rework.resources.confirm.deleteTitle"),
-                    message: t("rework.resources.confirm.deleteMessage", {
-                      name: documentDisplayName(row.doc),
-                    }),
-                    onConfirm: () => void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
-                  });
+      cellRenderer: (row) => {
+        // retrievable stays false for the entire ingestion window (it only
+        // flips true once vectorization completes), not just for a deliberate
+        // exclusion — gate on `ready` too, or this icon flags every
+        // still-processing document as "excluded from search".
+        const status =
+          row.kind === "document" &&
+          (reprocessOverrides[row.doc.identity.document_uid] ? "processing" : deriveDocStatus(row.doc).status);
+        return (
+          <span className={styles.actionsCell}>
+            {row.kind === "document" &&
+              status === "ready" &&
+              row.doc.source.retrievable === false &&
+              !isTabularOnlyDoc(row.doc) && (
+                <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
+                  <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
+                    <Icon category="outlined" type="search_off" />
+                  </span>
+                </Tooltip>
+              )}
+            {row.kind === "document" && (
+              <Tooltip text={t("rework.resources.action.preview")}>
+                <IconButton
+                  color="on-surface-retreat"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "visibility" }}
+                  aria-label={t("rework.resources.action.preview")}
+                  onClick={() => commands.preview(row.doc)}
+                />
+              </Tooltip>
+            )}
+            <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
+              iconButton={{
+                color: "on-surface-retreat",
+                variant: "icon",
+                size: "small",
+                icon: { category: "outlined", type: "more_vert" },
+                "aria-label": t("rework.resources.action.more"),
+              }}
+              options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
+              onSelect={(value) => {
+                if (row.kind === "folder") {
+                  if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
+                  if (value === "delete") confirmDeleteFolder(row.node);
+                } else {
+                  if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
+                  if (value === "download") void commands.download(row.doc);
+                  if (value === "searchable") void toggleSearchable(row.doc);
+                  if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
+                  if (value === "delete" && currentTag) {
+                    showConfirmationDialog({
+                      title: t("rework.resources.confirm.deleteTitle"),
+                      message: t("rework.resources.confirm.deleteMessage", {
+                        name: documentDisplayName(row.doc),
+                      }),
+                      onConfirm: () =>
+                        void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
+                    });
+                  }
                 }
-              }
-            }}
-          />
-        </span>
-      ),
+              }}
+            />
+          </span>
+        );
+      },
     },
   ];
 

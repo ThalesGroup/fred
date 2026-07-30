@@ -53,6 +53,18 @@ const tabularDoc = (uid: string, name: string) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
+// `retrievable` is stamped false at registration and only flips true once
+// vectorization completes (base_input_processor.py / vectorization_processor.py)
+// — so a still-processing document also has retrievable === false, without
+// anyone having excluded it.
+const processingDoc = (uid: string, name: string) => ({
+  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
+  file: { file_type: "pdf", file_size_bytes: 1024 },
+  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
+  processing: { stages: { raw: "done", vector: "in_progress" } },
+  tags: { tag_ids: ["tag-cir"] },
+});
+
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
@@ -67,8 +79,9 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
           doc("uid-included", "Included doc", true),
           doc("uid-unset", "Unset doc", undefined),
           tabularDoc("uid-tabular", "Tabular doc"),
+          processingDoc("uid-processing", "Processing doc"),
         ],
-        total: 4,
+        total: 5,
       }),
     }),
   ],
@@ -164,6 +177,12 @@ describe("DocumentWorkspace — excluded-from-search row indicator", () => {
   it("hides the indicator for a tabular dataset even though retrievable is false", () => {
     expect(
       rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
+    ).toBeNull();
+  });
+
+  it("hides the indicator while the document is still processing, even though retrievable is false", () => {
+    expect(
+      rowFor("Processing doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
     ).toBeNull();
   });
 });
