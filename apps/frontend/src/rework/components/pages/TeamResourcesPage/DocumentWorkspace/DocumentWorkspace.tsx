@@ -556,7 +556,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       ),
     [page?.docs],
   );
-  const { data: uploaders = [] } = useUsersByIdsQuery({ ids: uploaderUids }, { skip: uploaderUids.length === 0 });
+  const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
+    { ids: uploaderUids },
+    { skip: uploaderUids.length === 0 },
+  );
   const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
 
   const selectedDocs = useMemo(
@@ -815,7 +818,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "9rem",
       cellRenderer: (row) => {
         const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
-        return <span className={styles.nowrapCell}>{uid ? userDisplayName(uid, uploaderById.get(uid)) : "—"}</span>;
+        if (!uid) return <span className={styles.nowrapCell}>—</span>;
+        const summary = uploaderById.get(uid);
+        // A doc just uploaded this session adds a brand-new uid to
+        // uploaderUids above, which re-keys the batched query and starts a
+        // fresh fetch — until it resolves, `summary` is genuinely absent yet,
+        // not "no such user". Falling through to userDisplayName's raw-uid
+        // fallback here would flash the uploader's UUID for that window
+        // instead of their name; "—" that self-corrects on the next render
+        // reads as loading rather than as broken data.
+        if (!summary && isFetchingUploaders) return <span className={styles.nowrapCell}>—</span>;
+        return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
       },
     },
     {
