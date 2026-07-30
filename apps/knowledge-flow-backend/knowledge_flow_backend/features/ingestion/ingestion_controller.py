@@ -414,9 +414,20 @@ class IngestionController:
         return team_ids, user_ids
 
     async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
-        if not tags:
-            return
+        """Reject an upload that would exceed the owning team's or user's quota.
 
+        A tagless upload is checked against the uploader's personal quota, not
+        exempt: `tags` defaults to `[]`, so returning early here let any caller
+        bypass quota entirely by omitting tags (#2150).
+
+        This is defence in depth rather than a live hole. The workspace disables
+        its upload control unless the current node has a library
+        (`DocumentWorkspace.tsx`, `disabled={!currentTag}`), so the UI cannot
+        produce a tagless upload; the guard covers the API default and any future
+        caller. Untagged documents are also not charged anywhere — they have no
+        ReBAC parent, so nothing can reach or delete one, and quota charged to it
+        could never be released.
+        """
         total_upload_size = 0
         for f in files:
             file_size = getattr(f, "size", None)
@@ -431,6 +442,10 @@ class IngestionController:
             return
 
         team_ids, user_ids = await self._resolve_tag_owners(tags, user)
+        if not team_ids and not user_ids:
+            # Tagless (or entirely unresolvable) upload: it occupies the
+            # uploader's personal space, so check it against that quota.
+            user_ids = {user.uid}
 
         cfg = ApplicationContext.get_instance().get_config()
 
@@ -455,12 +470,20 @@ class IngestionController:
 
             user_store = get_user_store()
             for user_id_str in user_ids:
+                # Fail CLOSED: treating an unreadable counter as 0 turned any
+                # transient store error into a full quota bypass — a user at
+                # 90/100 could upload anything during a blip (#2150 review).
                 try:
                     user_uuid = UUID(user_id_str)
+                except ValueError:
+                    logger.warning("Cannot check personal quota for malformed user id '%s'; rejecting upload", user_id_str)
+                    raise HTTPException(status_code=400, detail="Cannot resolve the storage owner for this upload.")
+                try:
                     user_row = await user_store.find_user_by_id(user_uuid)
-                    current = user_row.current_resources_storage_size or 0 if user_row else 0
-                except (ValueError, Exception):  # noqa: BLE001
-                    current = 0
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Could not read personal storage usage for '%s'; rejecting upload: %s", user_id_str, exc)
+                    raise HTTPException(status_code=503, detail="Storage quota cannot be verified right now; please retry.")
+                current = user_row.current_resources_storage_size or 0 if user_row else 0
 
                 if current + total_upload_size > personal_limit:
                     limit_str = f"{personal_limit} bytes"
