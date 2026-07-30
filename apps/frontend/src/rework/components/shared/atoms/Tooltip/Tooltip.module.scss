@@ -3,16 +3,18 @@
   position: relative;
 }
 
+/* Rendered in a portal on document.body (Tooltip.tsx) so it can pop above
+ * its trigger without being clipped by an ancestor's `overflow: hidden` /
+ * `scroll` (e.g. DataTable's scroll body) — `position: fixed` plus the
+ * top/left/transform set inline per-instance from the trigger's own
+ * viewport rect is what makes that escape possible; a `position: absolute`
+ * tooltip would still be clipped by the nearest scrolling ancestor even
+ * once moved to body in the DOM. Mount/unmount now drives visibility
+ * (Tooltip.tsx only portals this element while hovered/focused), so there's
+ * no hidden/visible state to toggle here. */
 .tooltip-content {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  visibility: hidden;
-  opacity: 0;
+  position: fixed;
   z-index: 10;
-  transition: opacity 100ms ease;
-  margin: 0 0 var(--spacing-2xs) 0;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
@@ -22,12 +24,6 @@
   color: var(--on-surface);
   font: var(--font-label-large);
   white-space: nowrap;
-}
-
-.tooltip-wrapper:hover .tooltip-content,
-.tooltip-wrapper:has(:focus-visible) .tooltip-content {
-  visibility: visible;
-  opacity: 1;
 }
 
 /* Rich content (e.g. a multi-row info panel) sizes to its own content instead
