@@ -35,19 +35,29 @@ def _file(path: str, size: int = 1) -> FilesystemResourceInfoResult:
 
 
 class _FakeFilesystem:
+    """Mirrors the real backends' key ambiguity: `exists()` is true for a file OR a
+    directory (empty or not) alike — only `stat()` (via `directory_paths`, or a
+    prefix match against `list_results`) tells them apart, same as MinIO/GCS's own
+    prefix-listing fallback and local's `Path.is_file()`/`is_dir()`."""
+
     def __init__(self) -> None:
         self.existing_paths: set[str] = set()
+        self.directory_paths: set[str] = set()
         self.mkdir_calls: list[str] = []
         self.write_calls: list[tuple[str, bytes | str]] = []
         self.list_results: list[FilesystemResourceInfoResult] = []
         self.grep_results: list[str] = []
 
+    def _has_descendants(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(entry.path.startswith(prefix) for entry in self.list_results)
+
     async def exists(self, path: str) -> bool:
-        return path in self.existing_paths
+        return path in self.existing_paths or path in self.directory_paths or self._has_descendants(path)
 
     async def mkdir(self, path: str) -> None:
         self.mkdir_calls.append(path)
-        self.existing_paths.add(path)
+        self.directory_paths.add(path)
 
     async def write(self, path: str, data: bytes | str) -> None:
         self.write_calls.append((path, data))
@@ -62,7 +72,11 @@ class _FakeFilesystem:
         self.deleted_path = path
 
     async def stat(self, path: str) -> FilesystemResourceInfoResult:
-        return _file(path, size=42)
+        if path in self.existing_paths:
+            return _file(path, size=42)
+        if path in self.directory_paths or self._has_descendants(path):
+            return FilesystemResourceInfoResult(path=path, size=None, type=FilesystemResourceInfo.DIRECTORY, modified=None)
+        raise FileNotFoundError(path)
 
     async def list(self, prefix: str) -> list[FilesystemResourceInfoResult]:
         self.list_prefix = prefix
@@ -179,6 +193,18 @@ async def test_rename_raises_when_source_does_not_exist():
 
     with pytest.raises(FileNotFoundError):
         await workspace.rename(_user(), "missing", "renamed")
+
+
+@pytest.mark.asyncio
+async def test_rename_preserves_an_empty_folder():
+    fs = _FakeFilesystem()
+    fs.directory_paths.add("users/u-1/empty")
+    workspace = WorkspaceFilesystem(fs)
+
+    await workspace.rename(_user(), "empty", "renamed-empty")
+
+    assert fs.mkdir_calls == ["users/u-1/renamed-empty"]
+    assert fs.deleted_path == "users/u-1/empty"
 
 
 @pytest.mark.asyncio
