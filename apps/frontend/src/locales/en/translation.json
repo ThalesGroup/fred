@@ -1952,7 +1952,8 @@
         "campaignInfo": "Run information",
         "meta": {
           "dataset": "Evaluation",
-          "profile": "Scoring profile",
+          "author": "Author",
+          "profile": "Structural-check profile",
           "judge": "Judge",
           "team": "Evaluation ID",
           "created": "Created",
@@ -1971,6 +1972,10 @@
         "caseTitle": "Case detail",
         "copyJson": "Copy JSON",
         "copied": "Copied",
+        "downloadJson": "Download JSON",
+        "downloadRun": "Download JSON",
+        "downloading": "Preparing…",
+        "downloadError": "Download failed",
         "latency": "Latency",
         "input": "Input",
         "expected": "Expected output",
@@ -1982,6 +1987,18 @@
         "skipped": "skipped",
         "passed": "passed",
         "failed": "failed"
+      },
+      "controls": {
+        "searchEvaluations": "Search by name…",
+        "sortLabel": "Sort",
+        "sort": {
+          "newest": "Newest first",
+          "oldest": "Oldest first",
+          "name": "Name (A–Z)"
+        },
+        "page": "Page {{current}} of {{total}}",
+        "prev": "Previous",
+        "next": "Next"
       },
       "evaluations": {
         "title": "Evaluations",
@@ -2037,6 +2054,7 @@
         "viewFullDetail": "View full detail →",
         "metricsCount": "{{count}} metrics",
         "targetInstance": "Instance · {{id}}",
+        "targetManaged": "Managed instance",
         "detail": "Detail",
         "deleteTitle": "Delete run",
         "deleteSuccess": "Run deleted",
@@ -2058,12 +2076,12 @@
           "criticalFailures": "Critical failures"
         },
         "col": {
-          "run": "Run / ID",
-          "target": "Target",
-          "state": "State",
+          "run": "Run",
+          "target": "Agent",
+          "state": "Status",
           "verdict": "Verdict",
-          "progress": "Progress",
-          "scores": "Profile / judge"
+          "progress": "Done",
+          "judge": "Judge"
         }
       },
       "runCreate": {

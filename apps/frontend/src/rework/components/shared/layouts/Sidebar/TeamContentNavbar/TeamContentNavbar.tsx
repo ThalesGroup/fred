@@ -43,8 +43,21 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 export default function TeamContentNavbar() {
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
+
+  // "Back" from a focused view (settings / usage) should return to wherever the
+  // user came from, not always dump them on the agents page. React Router marks
+  // the first history entry of a session with key "default"; navigating back from
+  // there would leave the app, so fall back to the team's agents view then.
+  const handleBack = () => {
+    if (location.key === "default") {
+      navigate(`/team/${teamId}/agents`);
+    } else {
+      navigate(-1);
+    }
+  };
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateAgents, canUpdateInfo } = capabilities;
@@ -234,7 +247,7 @@ export default function TeamContentNavbar() {
                 color={"primary"}
                 variant={"text"}
                 size={"medium"}
-                onClick={() => navigate(`/team/${teamId}/agents`)}
+                onClick={handleBack}
                 icon={{ category: "outlined", type: "arrow_back", filled: true }}
               >
                 {t("rework.back")}
@@ -253,7 +266,7 @@ export default function TeamContentNavbar() {
               color={"primary"}
               variant={"text"}
               size={"medium"}
-              onClick={() => navigate(`/team/${teamId}/agents`)}
+              onClick={handleBack}
               icon={{ category: "outlined", type: "arrow_back", filled: true }}
             >
               {t("rework.back")}

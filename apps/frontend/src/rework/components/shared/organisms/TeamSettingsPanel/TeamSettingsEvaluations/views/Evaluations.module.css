@@ -55,6 +55,24 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-m);
+}
+.toolbarSearch {
+  flex: 1;
+  min-width: 220px;
+}
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
 
 .bodyRow {
   cursor: pointer;
