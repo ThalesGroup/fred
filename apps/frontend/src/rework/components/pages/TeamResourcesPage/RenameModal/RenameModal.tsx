@@ -77,8 +77,8 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
       await onSubmit(trimmed + (lockedSuffix ?? ""));
       onClose();
     } catch {
-      // Every onSubmit caller (renameTag/renameDocument/renameDocumentTitle)
-      // already shows its own, more specific error toast before rethrowing —
+      // Every onSubmit caller (renameTag/renameDocument/the /fs rename) already
+      // shows its own, more specific error toast before rethrowing —
       // a second generic one here was a duplicate. Keep the modal open (no
       // onClose()) so the user can retry with the toast's detail in view.
     } finally {
