@@ -1,3 +1,40 @@
+**v2.1.21** — 2026-07-30
+
+- **Summary**
+
+  A permission gap that let a non-member of a public team view its prompt
+  library and run its agents is fixed — team content and execution now
+  correctly require membership. Signing in and switching teams is noticeably
+  faster on larger platforms. The evaluation runs page now supports search,
+  sort, and pagination at scale, lets you export results as versioned JSON,
+  and shows who started each run; its dashboard counts and pager no longer
+  show stale or empty results once an evaluation has many runs.
+
+- **Features**
+
+  - Evaluation run results can be exported as versioned JSON — a single case or a full run report — for archiving or further analysis (#2162)
+  - The evaluation runs table shows who started each run (#2162)
+
+- **Improvements**
+
+  - Evaluation and evaluation-runs lists support search, sorting, and pagination, so large evaluation histories stay fast and scannable (#2162)
+  - Settings pages' Back button now returns to where you came from, instead of always going to Agents (#2162)
+  - Signing in and loading team pages is noticeably faster on platforms with many teams, and team role changes made elsewhere show up promptly instead of waiting out a cache (#2160)
+
+- **Bug Fixes**
+
+  - Evaluation run dashboard counts (active/completed/cases/critical failures) could be wrong once an evaluation had more runs than fit on one page (#2162)
+  - Deleting the last run on a runs page could leave the pager empty until the next reload (#2162)
+  - The built-in self-test agent could fail to provision with a "template not found" error (#2164)
+
+- **Security**
+
+  - Fixed a permission gap where a non-member of a public team could read its prompt library and execute its agents just because the team was publicly discoverable — both now correctly require team membership (#2147)
+
+- **Deployment note**
+
+  - The evaluation-run KPI fix depends on the separately-deployed `fred-agent-evaluator` backend also being upgraded (its new runs-summary endpoint, merged in fred-agent/fred-agent-evaluator#46). No other action needed — all changes are additive.
+
 **v2.1.20** — 2026-07-29
 
 - **Summary**

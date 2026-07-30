@@ -24,7 +24,20 @@ const injectedRtkApi = api.injectEndpoints({
       ListRunsEvaluationV1EvaluationsEvaluationIdRunsGetApiResponse,
       ListRunsEvaluationV1EvaluationsEvaluationIdRunsGetApiArg
     >({
-      query: (queryArg) => ({ url: `/evaluation/v1/evaluations/${queryArg.evaluationId}/runs` }),
+      query: (queryArg) => ({
+        url: `/evaluation/v1/evaluations/${queryArg.evaluationId}/runs`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          sort: queryArg.sort,
+        },
+      }),
+    }),
+    getRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGet: build.query<
+      GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiResponse,
+      GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/evaluations/${queryArg.evaluationId}/runs/summary` }),
     }),
     getRunEvaluationV1RunsRunIdGet: build.query<
       GetRunEvaluationV1RunsRunIdGetApiResponse,
@@ -110,6 +123,10 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/evaluation/v1/evaluations`,
         params: {
           team_id: queryArg.teamId,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          sort: queryArg.sort,
+          q: queryArg.q,
         },
       }),
     }),
@@ -171,8 +188,17 @@ export type StartRunEvaluationV1EvaluationsEvaluationIdRunsPostApiArg = {
   startRunRequest: StartRunRequest;
 };
 export type ListRunsEvaluationV1EvaluationsEvaluationIdRunsGetApiResponse =
-  /** status 200 Successful Response */ EvaluationRun[];
+  /** status 200 Successful Response */ EvaluationRunListResponse;
 export type ListRunsEvaluationV1EvaluationsEvaluationIdRunsGetApiArg = {
+  evaluationId: string;
+  offset?: number;
+  limit?: number;
+  /** Sort as 'field:direction' (created_at, verdict, operational_state), e.g. 'created_at:desc'. */
+  sort?: string | null;
+};
+export type GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiResponse =
+  /** status 200 Successful Response */ EvaluationRunSummaryResponse;
+export type GetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetApiArg = {
   evaluationId: string;
 };
 export type GetRunEvaluationV1RunsRunIdGetApiResponse = /** status 200 Successful Response */ EvaluationRun;
@@ -233,6 +259,12 @@ export type ListEvaluationsEvaluationV1EvaluationsGetApiResponse =
   /** status 200 Successful Response */ EvaluationListResponse;
 export type ListEvaluationsEvaluationV1EvaluationsGetApiArg = {
   teamId: string;
+  offset?: number;
+  limit?: number;
+  /** Sort as 'field:direction' (created_at, name, version), e.g. 'created_at:desc'. */
+  sort?: string | null;
+  /** Case-insensitive search on the evaluation name. */
+  q?: string | null;
 };
 export type DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiResponse = unknown;
 export type DeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteApiArg = {
@@ -334,6 +366,7 @@ export type EvaluationRun = {
   run_id: string;
   evaluation_id: string;
   task_id: string | null;
+  created_by: string;
   target: ManagedInstanceTarget | RuntimeAgentTarget;
   profile: string;
   judge_profile_id: string;
@@ -353,6 +386,10 @@ export type EvaluationRun = {
   started_at: string | null;
   completed_at: string | null;
 };
+export type EvaluationRunListResponse = {
+  runs: EvaluationRun[];
+  total: number;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -362,6 +399,13 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type EvaluationRunSummaryResponse = {
+  total_runs: number;
+  running_count: number;
+  completed_count: number;
+  total_cases_completed: number;
+  critical_error_cases: number;
 };
 export type EvaluationMetricResultResponse = {
   name: string;
@@ -590,6 +634,8 @@ export const {
   useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation,
   useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
   useLazyListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
+  useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
+  useLazyGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
   useGetRunEvaluationV1RunsRunIdGetQuery,
   useLazyGetRunEvaluationV1RunsRunIdGetQuery,
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,

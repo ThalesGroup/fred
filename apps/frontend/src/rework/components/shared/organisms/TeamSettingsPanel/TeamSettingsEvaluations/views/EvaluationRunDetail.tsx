@@ -37,6 +37,7 @@ import {
   useCancelRunEvaluationV1RunsRunIdCancelPostMutation,
   useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation,
   useGetRunEvaluationV1RunsRunIdGetQuery,
+  useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery,
   useGetTelemetryEvaluationV1TelemetryGetQuery,
   useGetTelemetrySessionEvaluationV1TelemetrySessionRunIdGetQuery,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
@@ -45,6 +46,9 @@ import {
   type EvaluationRun,
   type RunAnalysisResult,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
+import { useUsersByIdsQuery } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { userDisplayName } from "../../../../../../core/utils/userDisplayName";
+import { downloadCaseJson, downloadRunReportJson } from "./evaluationExport";
 import styles from "./EvaluationRunDetail.module.css";
 
 // ── Helpers (pure logic — no UI framework) ──────────────────────────────────
@@ -162,6 +166,7 @@ export default function EvaluationRunDetail({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RunAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Whether the run is still active. Starts false — we don't know the state
   // until the first fetch resolves — then tracks run.operational_state. Used
@@ -185,6 +190,10 @@ export default function EvaluationRunDetail({
 
   const [cancelRun, { isLoading: isCancelling }] = useCancelRunEvaluationV1RunsRunIdCancelPostMutation();
   const [analyzeRun, { isLoading: isAnalyzing }] = useAnalyzeRunEvaluationV1RunsRunIdAnalyzePostMutation();
+  const [fetchRunReport, { isFetching: isDownloadingRun }] = useLazyGetRunReportEvaluationV1RunsRunIdReportGetQuery();
+
+  const authorUids = run?.created_by ? [run.created_by] : [];
+  const { data: authorUsers = [] } = useUsersByIdsQuery({ ids: authorUids }, { skip: authorUids.length === 0 });
 
   const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
   // Unlike `run`/`cases` above, this poll had no isLive gate — it kept hitting
@@ -245,6 +254,20 @@ export default function EvaluationRunDetail({
     }
   };
 
+  // Run-level export: the backend report is already a self-contained, versioned
+  // record (evaluation + all cases + metric_averages + cached analysis), so it is
+  // fetched on demand and saved as-is rather than reassembled from the loaded page.
+  const handleDownloadRun = async () => {
+    setDownloadError(null);
+    try {
+      const report = await fetchRunReport({ runId }).unwrap();
+      downloadRunReportJson(report);
+    } catch (e) {
+      const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
+      setDownloadError(typeof detail === "string" ? detail : t("rework.evaluation.detail.downloadError"));
+    }
+  };
+
   if (runLoading) {
     return <div className={styles.centered}>{t("rework.evaluation.detail.loading")}</div>;
   }
@@ -265,13 +288,17 @@ export default function EvaluationRunDetail({
   const globalScore = metricEntries.length
     ? Math.round((metricEntries.reduce((sum, [, avg]) => sum + avg, 0) / metricEntries.length) * 100)
     : null;
+  const authorSummary = run.created_by ? authorUsers.find((user) => user.id === run.created_by) : undefined;
+  const authorLabel = run.created_by ? userDisplayName(run.created_by, authorSummary) : "—";
 
   const metadata: { label: string; value: string }[] = [
     {
       label: t("rework.evaluation.detail.meta.dataset"),
       value: `${run.snapshot.evaluation_name} v${run.snapshot.evaluation_version}`,
     },
-    { label: t("rework.evaluation.detail.meta.profile"), value: run.profile },
+    // Show a human display name when the control-plane user lookup can resolve
+    // it; otherwise fall back to the raw uid so the audit information is never lost.
+    { label: t("rework.evaluation.detail.meta.author"), value: authorLabel },
     { label: t("rework.evaluation.detail.meta.judge"), value: run.judge_profile_id },
     { label: t("rework.evaluation.detail.meta.team"), value: run.evaluation_id },
     { label: t("rework.evaluation.detail.meta.created"), value: formatDate(run.created_at) },
@@ -309,6 +336,16 @@ export default function EvaluationRunDetail({
               {isAnalyzing ? t("rework.evaluation.detail.analyzing") : t("rework.evaluation.detail.analyze")}
             </Button>
           )}
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="medium"
+            disabled={isDownloadingRun}
+            icon={{ category: "outlined", type: "download" }}
+            onClick={handleDownloadRun}
+          >
+            {isDownloadingRun ? t("rework.evaluation.detail.downloading") : t("rework.evaluation.detail.downloadRun")}
+          </Button>
           {/* `telemetry.enabled` is a static config flag (tracer == "langfuse"),
               not a live reachability check — a deployment can have it set
               without ever actually running Langfuse. Only show this action
@@ -333,6 +370,7 @@ export default function EvaluationRunDetail({
       </div>
 
       {cancelError && <div className={styles.errorBanner}>{cancelError}</div>}
+      {downloadError && <div className={styles.errorBanner}>{downloadError}</div>}
 
       {/* Hero state row — canonical task state + domain verdict (two distinct planes). */}
       <div className={styles.heroRow}>
@@ -563,6 +601,14 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
           icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
           aria-label={copied ? t("rework.evaluation.detail.copied") : t("rework.evaluation.detail.copyJson")}
           onClick={handleCopy}
+        />
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "download" }}
+          aria-label={t("rework.evaluation.detail.downloadJson")}
+          onClick={() => downloadCaseJson(caseData)}
         />
       </div>
 

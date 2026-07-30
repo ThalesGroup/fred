@@ -17,12 +17,14 @@
 // row here, which is exactly what makes two Runs comparable: they differ only by
 // the target/config each froze in its RunSnapshot.
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { IndicatorDot } from "@shared/atoms/IndicatorDot/IndicatorDot";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
+import Select from "@shared/molecules/Select/Select";
+import type { OptionModel } from "@models/Option.model.ts";
 import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -30,8 +32,10 @@ import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { FieldBlock, StatusPill, operationalToTaskState, scoreTone, verdictTone } from "./EvaluationShared";
+import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useDeleteRunEvaluationV1RunsRunIdDeleteMutation,
+  useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery,
   useListRunCasesEvaluationV1RunsRunIdCasesGetQuery,
   useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery,
   useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation,
@@ -39,6 +43,12 @@ import {
   type EvaluationRun,
 } from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationRuns.module.css";
+
+// Server-side page size for the runs table. The backend caps limit at 200; this
+// stays well under it and keeps the table scannable at scale.
+const RUNS_PAGE_SIZE = 25;
+
+type RunSortValue = "created_at:desc" | "created_at:asc";
 
 interface EvaluationRunsProps {
   teamId: string;
@@ -49,13 +59,20 @@ interface EvaluationRunsProps {
   onOpenRun: (runId: string, selectedCaseId?: string) => void;
 }
 
-function targetLabel(target: EvaluationRun["target"], t: (k: string, o?: Record<string, unknown>) => string): string {
-  if (target.kind === "managed_instance") {
-    return t("rework.evaluation.runs.targetInstance", {
-      id: target.agent_instance_id.slice(0, 8),
-    });
+function buildAgentLabels(instances: Array<{ agent_instance_id: string; display_name: string }>): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const instance of instances) {
+    counts.set(instance.display_name, (counts.get(instance.display_name) ?? 0) + 1);
   }
-  return target.agent_id;
+  return new Map(
+    instances.map((instance) => {
+      const duplicated = (counts.get(instance.display_name) ?? 0) > 1;
+      const label = duplicated
+        ? `${instance.display_name} · ${instance.agent_instance_id.slice(0, 6)}`
+        : instance.display_name;
+      return [instance.agent_instance_id, label];
+    }),
+  );
 }
 
 // ── Case drawer ────────────────────────────────────────────────────────────
@@ -168,9 +185,41 @@ export default function EvaluationRuns({
   // flag, so relaunching one row doesn't disable every other row's Rerun button.
   const [reruningRunId, setReruningRunId] = useState<string | null>(null);
 
-  const { data, isLoading, isError, refetch } = useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery(
+  const [sort, setSort] = useState<RunSortValue>("created_at:desc");
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [sort]);
+
+  const { data, isLoading, isError, isFetching, refetch } = useListRunsEvaluationV1EvaluationsEvaluationIdRunsGetQuery(
+    { evaluationId, sort, offset, limit: RUNS_PAGE_SIZE },
+    { skip: !evaluationId, pollingInterval: 10_000 },
+  );
+  // Dashboard KPIs must reflect every run of the evaluation, not just the current
+  // page — a dedicated aggregate query, independent of offset/limit.
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useGetRunsSummaryEvaluationV1EvaluationsEvaluationIdRunsSummaryGetQuery(
     { evaluationId },
     { skip: !evaluationId, pollingInterval: 10_000 },
+  );
+
+  // Deleting the last row of a non-first page (or any other drop in `total`, e.g.
+  // a concurrent delete from another tab) can leave `offset` pointing past the new
+  // last page — snap back so the table never renders an empty page while later
+  // pages still hold data.
+  useEffect(() => {
+    if (!data) return;
+    const maxOffset = Math.max(0, Math.ceil(data.total / RUNS_PAGE_SIZE) - 1) * RUNS_PAGE_SIZE;
+    if (offset > maxOffset) setOffset(maxOffset);
+  }, [data, offset]);
+  const { data: managedInstances = [] } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
+    { teamId },
+    { skip: !teamId },
   );
   const [deleteRun, { isLoading: isDeleting }] = useDeleteRunEvaluationV1RunsRunIdDeleteMutation();
   const [startRun] = useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation();
@@ -182,30 +231,27 @@ export default function EvaluationRuns({
       showSuccess({ summary: t("rework.evaluation.runs.deleteSuccess") });
       setDeleteTarget(null);
       refetch();
+      refetchSummary();
     } catch {
       showError({ summary: t("rework.evaluation.runs.deleteError") });
     }
   };
 
-  const runs = data ?? [];
-  const running = runs.filter((run) => run.operational_state === "running").length;
-  // operationalToTaskState is the canonical mapper (it also treats "succeeded"
-  // as terminal-success, matching the backend's own documented either/or) —
-  // reuse it instead of comparing the raw string, so this count can't silently
-  // drop to 0 if the backend ever reports "succeeded" instead of "completed".
-  const completed = runs.filter((run) => operationalToTaskState(run.operational_state) === "succeeded").length;
-  const totalCases = runs.reduce((sum, run) => sum + run.completed_cases, 0);
-  const criticalErrors = runs.reduce((sum, run) => sum + run.execution_error_cases, 0);
-
-  // Most recent run, sorted defensively — do not assume the API already
-  // orders by recency. Only a "managed_instance" target can be one-click
-  // rerun (see StartRunRequest); anything else falls back to "New run…".
-  const mostRecentRun = useMemo(
-    () => [...runs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null,
-    [runs],
-  );
-  const rerunManagedTarget = mostRecentRun?.target.kind === "managed_instance" ? mostRecentRun.target : null;
-  const rerunTargetLabel = mostRecentRun ? targetLabel(mostRecentRun.target, t) : "";
+  // The list endpoint is now paginated: it returns { runs, total } rather than a
+  // bare array. `total` is the full server-side count (not this page's length).
+  const runs = data?.runs ?? [];
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / RUNS_PAGE_SIZE));
+  const currentPage = Math.floor(offset / RUNS_PAGE_SIZE) + 1;
+  const running = summary?.running_count ?? 0;
+  const completed = summary?.completed_count ?? 0;
+  const totalCases = summary?.total_cases_completed ?? 0;
+  const criticalErrors = summary?.critical_error_cases ?? 0;
+  const agentNameByInstanceId = buildAgentLabels(managedInstances);
+  const sortOptions: OptionModel<RunSortValue>[] = [
+    { value: "created_at:desc", key: "newest", label: t("rework.evaluation.controls.sort.newest") },
+    { value: "created_at:asc", key: "oldest", label: t("rework.evaluation.controls.sort.oldest") },
+  ];
 
   // Reruns any given run of this evaluation — not just the most recent one. Reuses
   // that run's own target and exact metric selection ("New run…" but without having
@@ -263,31 +309,12 @@ export default function EvaluationRuns({
         </div>
         <div className={styles.headerActionsColumn}>
           <div className={styles.headerActions}>
+            {/* Rerun lives per-row in the runs table (each run can be relaunched
+                with its own target and metrics); the header only offers "New run". */}
             <Button color="on-surface" variant="outlined" size="medium" onClick={onNewRun}>
               {t("rework.evaluation.runs.newRun")}
             </Button>
-            {rerunManagedTarget && mostRecentRun && (
-              <Button
-                color="primary"
-                variant="filled"
-                size="medium"
-                disabled={reruningRunId === mostRecentRun.run_id}
-                onClick={() => handleRerunRun(mostRecentRun)}
-              >
-                {reruningRunId === mostRecentRun.run_id
-                  ? t("rework.evaluation.runCreate.starting")
-                  : t("rework.evaluation.runs.rerun", { target: rerunTargetLabel })}
-              </Button>
-            )}
           </div>
-          {rerunManagedTarget && (
-            <p className={styles.rerunHint}>
-              {t("rework.evaluation.runs.rerunHint", {
-                target: rerunTargetLabel,
-                model: rerunManagedTarget.agent_instance_id,
-              })}
-            </p>
-          )}
         </div>
       </div>
 
@@ -295,26 +322,37 @@ export default function EvaluationRuns({
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.active")}
           value={running}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.completed")}
           value={completed}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.casesEvaluated")}
           value={totalCases}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
         />
         <KpiStatCard
           label={t("rework.evaluation.runs.kpi.criticalFailures")}
           value={criticalErrors}
-          isLoading={isLoading}
-          isError={isError}
+          isLoading={isSummaryLoading}
+          isError={isSummaryError}
+        />
+      </div>
+
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarSpacer} />
+        <Select<RunSortValue>
+          size="medium"
+          options={sortOptions}
+          value={sort}
+          onChange={(value) => setSort(value)}
+          label={t("rework.evaluation.controls.sortLabel")}
         />
       </div>
 
@@ -325,17 +363,22 @@ export default function EvaluationRuns({
       {!isLoading && runs.length > 0 && (
         <div className={styles.table} role="table">
           <div className={`${styles.row} ${styles.headerRow}`} role="row">
-            <span>{t("rework.evaluation.runs.col.run")}</span>
-            <span>{t("rework.evaluation.runs.col.target")}</span>
-            <span>{t("rework.evaluation.runs.col.state")}</span>
-            <span>{t("rework.evaluation.runs.col.verdict")}</span>
-            <span>{t("rework.evaluation.runs.col.progress")}</span>
-            <span>{t("rework.evaluation.runs.col.scores")}</span>
-            <span />
+            <div className={styles.nameHeaderCell}>{t("rework.evaluation.runs.col.run")}</div>
+            <div className={styles.targetHeaderCell}>{t("rework.evaluation.runs.col.target")}</div>
+            <div className={styles.stateHeaderCell}>{t("rework.evaluation.runs.col.state")}</div>
+            <div className={styles.verdictHeaderCell}>{t("rework.evaluation.runs.col.verdict")}</div>
+            <div className={styles.progressHeaderCell}>{t("rework.evaluation.runs.col.progress")}</div>
+            <div className={styles.scoresHeaderCell}>{t("rework.evaluation.runs.col.judge")}</div>
+            <div className={styles.actionsHeaderCell} />
           </div>
-
           {runs.map((run) => {
             const isRunning = run.operational_state === "running";
+            const targetDisplayName =
+              run.target.kind === "managed_instance"
+                ? (agentNameByInstanceId.get(run.target.agent_instance_id) ?? t("rework.evaluation.runs.targetManaged"))
+                : run.target.agent_id;
+            const targetId =
+              run.target.kind === "managed_instance" ? run.target.agent_instance_id.slice(0, 8) : run.target.agent_id;
             return (
               <div
                 key={run.run_id}
@@ -356,13 +399,16 @@ export default function EvaluationRuns({
                     <div className={styles.mono}>{run.run_id.slice(0, 12)}</div>
                   </div>
                 </div>
-                <span className={styles.mono}>{targetLabel(run.target, t)}</span>
-                <span>
+                <div className={styles.targetCell}>
+                  <span className={styles.targetName}>{targetDisplayName}</span>
+                  <span className={styles.mono}>{targetId}</span>
+                </div>
+                <div className={styles.stateCell}>
                   <TaskStateBadge state={operationalToTaskState(run.operational_state)} />
-                </span>
-                <span>
+                </div>
+                <div className={styles.verdictCell}>
                   <StatusPill label={run.verdict} tone={verdictTone(run.verdict)} />
-                </span>
+                </div>
                 <div className={styles.progressCell}>
                   <span className={styles.muted}>
                     {run.completed_cases} / {run.total_cases}
@@ -370,10 +416,7 @@ export default function EvaluationRuns({
                   <ProgressBar theme="secondary" current={run.completed_cases} max={run.total_cases || 1} />
                 </div>
                 <div className={styles.scoresCell}>
-                  <div className={styles.scoreLine}>
-                    <span className={styles.muted}>{run.profile}</span>
-                    <StatusPill label={run.judge_profile_id} tone={scoreTone(run.verdict === "passed" ? 100 : 50)} />
-                  </div>
+                  <StatusPill label={run.judge_profile_id} tone={scoreTone(run.verdict === "passed" ? 100 : 50)} />
                 </div>
                 <div className={styles.actionsCell} onClick={(e) => e.stopPropagation()}>
                   <Button color="on-surface" variant="outlined" size="small" onClick={() => onOpenRun(run.run_id)}>
@@ -405,6 +448,30 @@ export default function EvaluationRuns({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!isLoading && total > RUNS_PAGE_SIZE && (
+        <div className={styles.pagination}>
+          <span>{t("rework.evaluation.controls.page", { current: currentPage, total: pageCount })}</span>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            disabled={offset === 0 || isFetching}
+            onClick={() => setOffset(Math.max(0, offset - RUNS_PAGE_SIZE))}
+          >
+            {t("rework.evaluation.controls.prev")}
+          </Button>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            disabled={currentPage >= pageCount || isFetching}
+            onClick={() => setOffset(offset + RUNS_PAGE_SIZE)}
+          >
+            {t("rework.evaluation.controls.next")}
+          </Button>
         </div>
       )}
 
