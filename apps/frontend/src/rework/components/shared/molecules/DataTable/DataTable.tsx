@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
@@ -182,10 +182,22 @@ export default function DataTable<T>({
   // Clamped rather than reset-on-change: if a row is removed and the current
   // page no longer exists, fall back to the new last page instead of jumping
   // the user back to page 1. Server-side pagination has no local `page` state
-  // to clamp — the offset is the caller's source of truth.
+  // to clamp — the offset is the caller's source of truth, so the effect
+  // below snaps it back through `onOffsetChange` instead (e.g. deleting every
+  // row on a later page must not leave the caller re-fetching a stale,
+  // now-out-of-range offset forever).
   const currentPage = serverPagination
     ? Math.floor(serverPagination.offset / serverPagination.limit)
     : Math.min(page, pageCount - 1);
+
+  useEffect(() => {
+    if (!serverPagination) return;
+    const maxOffset =
+      Math.max(0, Math.ceil(serverPagination.totalCount / serverPagination.limit) - 1) * serverPagination.limit;
+    if (serverPagination.offset > maxOffset) {
+      serverPagination.onOffsetChange(maxOffset);
+    }
+  }, [serverPagination]);
   // Server-paginated `data` already IS the current page's rows (the caller
   // fetched exactly that window) — slicing it again here would drop rows.
   const pageData =

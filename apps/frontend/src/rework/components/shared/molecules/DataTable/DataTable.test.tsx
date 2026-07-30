@@ -496,4 +496,28 @@ describe("DataTable server pagination", () => {
     expect(next.hasAttribute("disabled")).toBe(false);
     expect(last.hasAttribute("disabled")).toBe(false);
   });
+
+  it("clamps offset back to the last valid page once totalCount drops below it (e.g. deleting every row on a later page)", () => {
+    const onOffsetChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        serverPagination={{ totalCount: 5, offset: 20, limit: 10, onOffsetChange }}
+      />,
+    );
+    expect(onOffsetChange).toHaveBeenCalledWith(0);
+  });
+
+  it("does not touch the offset while it is still within range", () => {
+    const onOffsetChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={currentPageRows}
+        serverPagination={{ totalCount: 100, offset: 20, limit: 10, onOffsetChange }}
+      />,
+    );
+    expect(onOffsetChange).not.toHaveBeenCalled();
+  });
 });
