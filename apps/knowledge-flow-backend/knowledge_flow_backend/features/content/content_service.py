@@ -249,9 +249,12 @@ class ContentService:
             raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
 
     async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:
-        # Access control gate (keeps semantics consistent)
-        await self.get_document_metadata(user, document_uid)
+        metadata = await self.get_document_metadata(user, document_uid)
         meta = self.content_store.get_file_metadata(document_uid)
+        # The DB record is authoritative for the display name (it reflects a
+        # rename); the content store's own file_name is just whatever the blob
+        # was originally uploaded as and never changes.
+        meta.file_name = metadata.document_name
         if not meta.content_type:
             import mimetypes
 

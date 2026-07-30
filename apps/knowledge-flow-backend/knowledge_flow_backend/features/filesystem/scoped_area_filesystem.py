@@ -365,6 +365,50 @@ class ScopedAreaFilesystem:
             root_prefix=target.root_prefix,
         )
 
+    async def list_recursive_files_area(
+        self,
+        user: KeycloakUser,
+        segments: tuple[str, ...],
+    ) -> List[FilesystemResourceInfoResult]:
+        """List every file (not directories), recursively, under one `/teams` subtree.
+
+        Used by the usage-stats cards (FRONT-09.I) — a full recursive listing, unlike
+        `list_area`'s direct-children-only `ls` contract.
+        """
+        target = await self._resolve_target(user, segments, want_write=False)
+        return await self.scoped_storage.list_recursive_files(
+            user,
+            target.subpath,
+            owner_override=target.owner_override,
+            root_prefix=target.root_prefix,
+        )
+
+    async def rename_area(
+        self,
+        user: KeycloakUser,
+        segments: tuple[str, ...],
+        new_name: str,
+    ) -> FilesystemResourceInfoResult:
+        """Rename one file or folder in place (same parent) inside the `/teams` area."""
+        if "/" in new_name or not new_name.strip():
+            raise ValueError("New name must be a single path segment")
+        target = await self._resolve_target(user, segments, want_write=True)
+        parent, _, _old_name = target.subpath.rpartition("/")
+        new_subpath = f"{parent}/{new_name}" if parent else new_name
+        await self.scoped_storage.rename(
+            user,
+            target.subpath,
+            new_subpath,
+            owner_override=target.owner_override,
+            root_prefix=target.root_prefix,
+        )
+        return await self.scoped_storage.stat(
+            user,
+            new_subpath,
+            owner_override=target.owner_override,
+            root_prefix=target.root_prefix,
+        )
+
     async def grep_area(
         self,
         user: KeycloakUser,

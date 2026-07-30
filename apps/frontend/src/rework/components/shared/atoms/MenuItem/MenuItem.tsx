@@ -61,7 +61,23 @@ function MenuItem({
       data-disabled={disabled}
       data-destructive={destructive}
       tabIndex={focused ? 0 : -1}
-      onClick={disabled ? undefined : onClick}
+      onClick={
+        disabled
+          ? undefined
+          : (e) => {
+              // Menus (IconButtonMenu, Select, Autocomplete...) portal their
+              // popover to document.body, but React bubbles synthetic events
+              // through the *React* tree, not the DOM tree — so without this,
+              // a click here still reaches whatever ancestor React component
+              // rendered the trigger (e.g. a DataTable row's own onClick,
+              // which can't detect it via target.closest() since the portal
+              // isn't a DOM descendant of that row). An item click is a
+              // complete, self-contained action; it should never also
+              // trigger an unrelated ancestor's click handler.
+              e.stopPropagation();
+              onClick?.(e);
+            }
+      }
     >
       <div className={styles["state-layer"]}>
         {icon && (

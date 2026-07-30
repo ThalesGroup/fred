@@ -20,6 +20,8 @@ import {
   DocumentMetadata,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
+  useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
+  useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
@@ -44,6 +46,9 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
+  const [updateDocumentTitle] =
+    useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation();
+  const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
@@ -177,17 +182,19 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [showInfo, t],
   );
   const closePreview = useCallback(() => setPreviewTarget(null), []);
+  // Fetch-only, no save — the building block `download` (below) uses, and
+  // that bulk-zip downloads (DocumentWorkspace's BulkActionsBar) need
+  // directly: zipping N documents needs every blob before any of them can
+  // be saved, so it can't go through `download`'s fetch+save-immediately
+  // shape.
+  const fetchBlob = useCallback(
+    (doc: DocumentMetadata) => triggerDownloadBlob({ documentUid: doc.identity.document_uid }).unwrap(),
+    [triggerDownloadBlob],
+  );
   const download = useCallback(
     async (doc: DocumentMetadata) => {
       try {
-        console.log("Downloading document:", doc.identity.document_name);
-        // IMPORTANT: unwrap to get the Blob
-        const blob = await triggerDownloadBlob({
-          documentUid: doc.identity.document_uid,
-        }).unwrap();
-
-        console.log("Blob received?", blob instanceof Blob, blob.type, blob.size);
-
+        const blob = await fetchBlob(doc);
         downloadFile(blob, doc.identity.document_name || doc.identity.document_uid);
       } catch (err: any) {
         showError({
@@ -197,16 +204,94 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         throw err;
       }
     },
-    [triggerDownloadBlob, showError],
+    [fetchBlob, showError],
   );
+  // Corpus folder rename (RFC §13.8) — reuses the existing tag-update path
+  // (`PUT /tags/{tag_id}`) already used elsewhere in this hook, no new
+  // endpoint. `refresh` re-derives the tag tree so the renamed node's new
+  // path/name shows up without a manual reload.
+  const renameTag = useCallback(
+    async (tag: TagWithItemsId, newName: string) => {
+      try {
+        await updateTag({
+          tagId: tag.id,
+          tagUpdate: {
+            name: newName,
+            path: tag.path,
+            description: tag.description,
+            type: tag.type,
+            item_ids: tag.item_ids,
+          },
+        }).unwrap();
+        await refresh();
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: e?.data?.detail || e?.message || "Failed to rename folder.",
+        });
+        throw e;
+      }
+    },
+    [updateTag, refresh, showError, t],
+  );
+
+  // Corpus document rename (RFC §13.8) — cosmetic only (decision 9): sets
+  // `identity.title`, browser-display only. Citations and vector search keep
+  // referencing the original ingested file name.
+  const renameDocumentTitle = useCallback(
+    async (doc: DocumentMetadata, newTitle: string) => {
+      try {
+        await updateDocumentTitle({
+          documentUid: doc.identity.document_uid,
+          bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: { title: newTitle },
+        }).unwrap();
+        await refresh();
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: e?.data?.detail || e?.message || "Failed to rename document.",
+        });
+        throw e;
+      }
+    },
+    [updateDocumentTitle, refresh, showError, t],
+  );
+
+  // Corpus document rename (DOCUMENT-RENAME-RFC.md) — real rename: changes the
+  // actual `identity.document_name`, propagated (best-effort) to the vector
+  // index and the content-store filename lookup. Supersedes the cosmetic
+  // `renameDocumentTitle` above for the Corpus "Renommer" action.
+  const renameDocument = useCallback(
+    async (doc: DocumentMetadata, newName: string) => {
+      try {
+        await renameDocumentMutation({
+          documentUid: doc.identity.document_uid,
+          bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: { name: newName },
+        }).unwrap();
+        await refresh();
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: e?.data?.detail || e?.message || "Failed to rename document.",
+        });
+        throw e;
+      }
+    },
+    [renameDocumentMutation, refresh, showError, t],
+  );
+
   return {
     toggleRetrievable,
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
+    renameTag,
+    renameDocumentTitle,
+    renameDocument,
     preview,
     previewTarget,
     closePreview,
     refresh,
     download,
+    fetchBlob,
   };
 }

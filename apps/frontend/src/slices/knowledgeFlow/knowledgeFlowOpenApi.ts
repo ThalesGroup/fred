@@ -79,6 +79,26 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    updateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: build.mutation<
+      UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiResponse,
+      UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}/title`,
+        method: "PUT",
+        body: queryArg.bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut,
+      }),
+    }),
+    renameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: build.mutation<
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse,
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}/name`,
+        method: "PUT",
+        body: queryArg.bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut,
+      }),
+    }),
     browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
@@ -280,6 +300,17 @@ const injectedRtkApi = api.injectEndpoints({
       CreateTagKnowledgeFlowV1TagsPostApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags`, method: "POST", body: queryArg.tagCreate }),
+    }),
+    getCorpusTypeStatsKnowledgeFlowV1TagsStatsGet: build.query<
+      GetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetApiResponse,
+      GetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/stats`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     getTagKnowledgeFlowV1TagsTagIdGet: build.query<
       GetTagKnowledgeFlowV1TagsTagIdGetApiResponse,
@@ -538,6 +569,19 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     mkdir: build.mutation<MkdirApiResponse, MkdirApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
+    }),
+    rename: build.mutation<RenameApiResponse, RenameApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/rename/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.bodyRename,
+      }),
+    }),
+    typeStatsKnowledgeFlowV1FsStatsPathGet: build.query<
+      TypeStatsKnowledgeFlowV1FsStatsPathGetApiResponse,
+      TypeStatsKnowledgeFlowV1FsStatsPathGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stats/${queryArg.path}` }),
     }),
     corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
       query: (queryArg) => ({
@@ -986,6 +1030,18 @@ export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocu
   documentUid: string;
   retrievable: boolean;
 };
+export type UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiResponse =
+  /** status 200 Successful Response */ any;
+export type UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiArg = {
+  documentUid: string;
+  bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut;
+};
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse =
+  /** status 200 Successful Response */ DocumentMetadata;
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg = {
+  documentUid: string;
+  bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut;
+};
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
   /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
@@ -1123,6 +1179,12 @@ export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
 export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 201 Successful Response */ TagWithItemsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
   tagCreate: TagCreate;
+};
+export type GetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetApiResponse =
+  /** status 200 Successful Response */ ResourceTypeStatsResponse;
+export type GetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetApiArg = {
+  /** Team ID, or omit/'personal' for the caller's personal corpus */
+  teamId?: string | null;
 };
 export type GetTagKnowledgeFlowV1TagsTagIdGetApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type GetTagKnowledgeFlowV1TagsTagIdGetApiArg = {
@@ -1293,6 +1355,16 @@ export type GrepApiArg = {
 };
 export type MkdirApiResponse = /** status 200 Successful Response */ any;
 export type MkdirApiArg = {
+  path: string;
+};
+export type RenameApiResponse = /** status 200 Successful Response */ FilesystemResourceInfoResult;
+export type RenameApiArg = {
+  path: string;
+  bodyRename: BodyRename;
+};
+export type TypeStatsKnowledgeFlowV1FsStatsPathGetApiResponse =
+  /** status 200 Successful Response */ ResourceTypeStatsResponse;
+export type TypeStatsKnowledgeFlowV1FsStatsPathGetApiArg = {
   path: string;
 };
 export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
@@ -1739,6 +1811,8 @@ export type Identity = {
   created?: string | null;
   modified?: string | null;
   last_modified_by?: string | null;
+  /** Keycloak uid of the Fred user who uploaded this document, stamped once at ingestion (ingestion_service.extract_metadata). Distinct from `author` (the file's own embedded metadata, e.g. a .docx core property) and `last_modified_by` (the acting user on later in-app mutations like rename) — neither of those reliably identifies the uploader. */
+  uploaded_by?: string | null;
 };
 export type SourceType = "push" | "pull";
 export type SourceInfo = {
@@ -1843,6 +1917,12 @@ export type ProcessingGraphEdge = {
 export type ProcessingGraph = {
   nodes: ProcessingGraphNode[];
   edges: ProcessingGraphEdge[];
+};
+export type BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut = {
+  title: string;
+};
+export type BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut = {
+  name: string;
 };
 export type BrowseDocumentsResponse = {
   total: number;
@@ -1962,6 +2042,14 @@ export type TagCreate = {
   description?: string | null;
   type: TagType;
   team_id?: string | null;
+};
+export type ResourceTypeStatsEntry = {
+  bucket: string;
+  count: number;
+  size_bytes: number;
+};
+export type ResourceTypeStatsResponse = {
+  entries?: ResourceTypeStatsEntry[];
 };
 export type TagUpdate = {
   name: string;
@@ -2256,6 +2344,20 @@ export type EditFileRequest = {
   old_string: string;
   new_string: string;
   replace_all?: boolean;
+};
+export type FilesystemResourceInfoResult = {
+  path: string;
+  size: number | null;
+  type: "file" | "directory";
+  modified: string | null;
+  origin?: string | null;
+  producer?: string | null;
+  created_by?: string | null;
+  created?: string | null;
+  modified_by?: string | null;
+};
+export type BodyRename = {
+  new_name: string;
 };
 export type ToolSpecV1 = {
   name: string;
@@ -2586,6 +2688,8 @@ export const {
   useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
+  useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
+  useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
   useAddDocumentLabelMutation,
@@ -2623,6 +2727,8 @@ export const {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
+  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery,
+  useLazyGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
@@ -2673,6 +2779,9 @@ export const {
   useGrepQuery,
   useLazyGrepQuery,
   useMkdirMutation,
+  useRenameMutation,
+  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery,
+  useLazyTypeStatsKnowledgeFlowV1FsStatsPathGetQuery,
   useCorpusCapabilitiesQuery,
   useLazyCorpusCapabilitiesQuery,
   useCorpusBuildTocMutation,

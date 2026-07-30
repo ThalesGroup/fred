@@ -1717,6 +1717,8 @@ export type GrantTeamMemberRoleRequest = {
 export type FrontendFeatureFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
+  /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
+  enableAllResourceSpaces?: boolean;
 };
 export type PermissionSummary = {
   /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */

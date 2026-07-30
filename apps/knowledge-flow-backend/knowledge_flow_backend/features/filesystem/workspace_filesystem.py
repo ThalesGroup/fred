@@ -246,6 +246,95 @@ class WorkspaceFilesystem:
                     direct_children[child.path] = child
         return [direct_children[name] for name in sorted(direct_children)]
 
+    async def rename(
+        self,
+        user: KeycloakUser,
+        old_key: str,
+        new_key: str,
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> None:
+        """
+        Rename a file or folder in place (same parent), preserving all descendants.
+
+        Why this exists:
+        - `BaseFilesystem` has no native move primitive across local/MinIO/GCS, and
+          adding one to the protocol plus all three backends is a bigger change than a
+          single workspace rename needs
+        - implemented generically on top of the existing read/write/delete/list
+          primitives, so it works uniformly on every backend with no backend-specific
+          code
+
+        How to use:
+        - pass the old and new keys relative to the scoped namespace; both must share
+          the same parent directory (this is a rename, not an arbitrary cross-folder
+          move)
+
+        `exists()` alone cannot tell a file from a directory: on MinIO/GCS it also
+        returns True for a directory prefix (empty or not), and on local storage
+        `Path.exists()` is equally true for both — so the old `if await
+        self.fs.exists(old_path)` check here used to mistake any existing directory
+        for a file and crash trying to `read()` it. `stat()` is the one primitive that
+        actually reports the type, so it (not `exists()`) decides the branch.
+        """
+        old_path = self._path(user, old_key, owner_override, root_prefix)
+        new_path = self._path(user, new_key, owner_override, root_prefix)
+        if await self.fs.exists(new_path):
+            raise ValueError(f"A file or folder already exists at {new_key!r}")
+
+        if not await self.fs.exists(old_path):
+            raise FileNotFoundError(old_key)
+
+        info = await self.fs.stat(old_path)
+        if info.type == FilesystemResourceInfo.FILE:
+            data = await self.fs.read(old_path)
+            await self.fs.write(new_path, data)
+            await self.fs.delete(old_path)
+            return
+
+        # Directory rename, possibly empty: move every file descendant, then always
+        # remove whatever's left of the old directory. On backends that represent an
+        # empty directory as a marker object, that marker is neither a descendant
+        # file nor distinguishable from "no such path" on its own — recreating an
+        # empty `new_path` is what makes the directory survive the rename instead of
+        # silently vanishing (the previous code raised FileNotFoundError here).
+        prefix = old_path if old_path.endswith("/") else f"{old_path}/"
+        descendants = [entry for entry in await self.fs.list(old_path) if entry.path.startswith(prefix) and entry.is_file()]
+        for entry in descendants:
+            relative = entry.path[len(prefix) :]
+            data = await self.fs.read(entry.path)
+            await self.fs.write(f"{new_path}/{relative}", data)
+            await self.fs.delete(entry.path)
+        if not descendants:
+            await self.fs.mkdir(new_path)
+        await self.fs.delete(old_path)
+
+    async def list_recursive_files(
+        self,
+        user: KeycloakUser,
+        prefix: str = "",
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> List[FilesystemResourceInfoResult]:
+        """
+        List every file (not directories) under one scoped workspace folder, recursively.
+
+        Why this exists:
+        - usage-stats cards (FRONT-09.I) need every file's size and type, not just the
+          direct-children view `list(...)` exposes
+        - `self.fs.list(...)` already walks recursively under the hood; this skips the
+          direct-child collapsing `list(...)` does, instead of re-walking storage
+
+        How to use:
+        - pass an optional folder prefix inside the scoped namespace
+        """
+        sub = _normalize_key(prefix) if prefix else ""
+        owner = (owner_override or user.uid).strip("/")
+        root = (root_prefix or self.prefix).rstrip("/")
+        full_prefix = _join(root, owner, sub)
+        results = await self.fs.list(full_prefix)
+        return [res for res in results if res.is_file()]
+
     async def exists(
         self,
         user: KeycloakUser,

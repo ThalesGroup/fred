@@ -20,11 +20,20 @@ export interface SettingChipProps extends Omit<ComponentPropsWithoutRef<"button"
   label: string;
   open?: boolean;
   icon?: IconProps;
+  /** Accent used for the open/active state. Default "primary" — existing callers unaffected. */
+  activeColor?: "primary" | "secondary";
 }
 
-export function SettingChip({ label, open = false, icon, ...props }: SettingChipProps) {
+export function SettingChip({ label, open = false, icon, activeColor = "primary", ...props }: SettingChipProps) {
   return (
-    <button type="button" className={styles.chip} data-open={open} aria-expanded={open} {...props}>
+    <button
+      type="button"
+      className={styles.chip}
+      data-open={open}
+      data-active-color={activeColor}
+      aria-expanded={open}
+      {...props}
+    >
       {icon && (
         <span className={styles.icon}>
           <Icon {...icon} />

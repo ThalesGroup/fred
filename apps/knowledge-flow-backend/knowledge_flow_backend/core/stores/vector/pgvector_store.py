@@ -269,6 +269,39 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 document_uid,
             )
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' metadata field for all chunks of a document without
+        deleting vectors or re-embedding. Used after a document rename.
+        """
+        try:
+            with self._engine.begin() as conn:
+                res = conn.execute(
+                    text(
+                        """
+                        UPDATE langchain_pg_embedding e
+                        SET cmetadata = jsonb_set(e.cmetadata, '{document_name}', to_jsonb(:new_name::text))
+                        FROM langchain_pg_collection c
+                        WHERE e.collection_id = c.uuid
+                          AND c.name = :collection
+                          AND e.cmetadata ->> 'document_uid' = :doc_uid
+                        """
+                    ),
+                    {"collection": self.collection_name, "doc_uid": document_uid, "new_name": document_name},
+                )
+                updated = res.rowcount or 0
+                logger.info(
+                    "[VECTOR][PGVECTOR] updated document_name on %d chunk(s) for document_uid=%s collection=%s",
+                    updated,
+                    document_uid,
+                    self.collection_name,
+                )
+        except Exception:
+            logger.exception(
+                "[VECTOR][PGVECTOR] failed to update document_name for document_uid=%s",
+                document_uid,
+            )
+
     def get_document_chunk_count(self, *, document_uid: str) -> int:
         """
         Optional helper for admin UI: count chunks for a document in pgvector.

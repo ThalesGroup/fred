@@ -1,6 +1,6 @@
 # RFC: Knowledge Flow — Rename a Document
 
-**Status:** Proposed
+**Status:** Implemented (2026-07-30) — see §7 for how each open decision was resolved and §6 for the as-built route (differs from the originally-proposed path).
 **Author:** Dimitri Tombroff
 **Date:** 2026-06-29
 **ID:** DOC-RENAME
@@ -101,51 +101,103 @@ the *"name (1)"* suffix. A rename must stay consistent with that machinery:
 
 ---
 
-## 6. API surface
+## 6. API surface (as built — 2026-07-30)
 
 One additive endpoint on the existing `MetadataController` (`features/metadata/`),
-mirroring the DOC-TAGS routes:
+next to the sibling `retrievable`/`title` routes it was modeled on:
 
-- **`PATCH /documents/{document_uid}/name`** — body `{ "name": "<new display name>" }`
+- **`PUT /document/metadata/{document_uid}/name`** — body `{ "name": "<new display name>" }`
   - `operation_id: rename_document`, tag `["Documents"]`.
-  - Returns the updated `DocumentMetadata` (or at least the new `Identity`).
+  - Returns the updated `DocumentMetadata`.
   - Service method `rename_document(user, document_uid, new_name, modified_by)` —
-    checks the document's **UPDATE access** (same gate as label edits), normalises
-    the name, applies the collision policy (§5), writes `document_name` +
-    `modified` + `last_modified_by`.
-- **Generated client:** regenerate the control-plane / knowledge-flow API client
-  in the same change (CLAUDE.md "Backend ↔ frontend contract" rule) — no
-  hand-written UI type.
+    checks the document's **UPDATE access** (same gate as label edits), applies
+    the extension guard (§4) and collision policy (§5), writes `document_name`,
+    clears `title`, and stamps `modified` + `last_modified_by`.
+- **Generated client:** regenerated in the same change (`make update-knowledge-flow-api`,
+  CLAUDE.md "Backend ↔ frontend contract" rule) — no hand-written UI type.
 
-> Method choice: `PATCH` (partial update of one field) over `PUT` (full
-> replacement). Open to `PUT /documents/{uid}/identity` if the team prefers a
-> single identity-edit endpoint that also covers `title` — see §7.
-
----
-
-## 7. Decisions to settle
-
-1. **Field scope** — rename writes `document_name` only, or also `title`
-   (human-friendly UI title)? Should we instead expose one *"edit identity"*
-   endpoint covering `document_name` + `title` together?
-2. **Extension** — may a rename change the file extension? (Default **no**, §4.)
-3. **Collision policy** — 409 reject vs auto-suffix `name (1)` (§5). Default
-   **409 reject**.
-4. **Access** — confirm rename is gated by the document's existing **UPDATE
-   access**, with **no** ReBAC/permission-tag involvement (mirrors DOC-TAGS).
-5. **Agent/MCP exposure** — is rename also an agent tool, or human-only? Default
-   **human-only** in v1 (rename is a deliberate, low-frequency act; an agent
-   renaming documents at scale is hard to undo). Revisit per the DOC-TAGS §12
-   pattern if a use case appears.
+> **Deviation from the original proposal:** this RFC originally proposed
+> `PATCH /documents/{document_uid}/name` (partial update of one field). The
+> as-built route is `PUT /document/metadata/{document_uid}/name` instead —
+> singular `/document/metadata/...` with `PUT` is this controller's actual,
+> already-established convention for every sibling single-field identity edit
+> (`retrievable`, `title`), so the implementation followed that convention
+> over the RFC's original text rather than introducing a second naming
+> pattern into the same controller.
 
 ---
 
-## 8. UI surface (FRONT-09)
+## 7. Decisions (resolved 2026-07-30, as implemented)
 
-Unblocks the deferred FRONTEND-BACKLOG.md note: in the Knowledge Workspace
-resource browser / detail drawer, a **Rename** action on a document opens an
-inline edit, calls `PATCH /documents/{uid}/name`, and refreshes the active
-folder/page (the same refresh path already used after upload/delete/reprocess).
+1. **Field scope — resolved: `document_name`, and rename clears `title`.**
+   Not two independently-editable fields: the frontend's `documentDisplayName()`
+   (`DocumentWorkspace.tsx`) renders `title || document_name` — if a rename left
+   a stale cosmetic `title` in place, it would keep masking the new
+   `document_name` forever, defeating the point of a *real* rename. So
+   `rename_document` writes `document_name` and unconditionally sets
+   `title = None`. The older cosmetic-only `update_document_title` endpoint
+   (RFC §13.8 in KNOWLEDGE-WORKSPACE-REWORK-RFC.md, decision 9) is **not**
+   removed — `title` remains a legitimate independent field for any future
+   surface that only wants a display override — but the Corpus "Renommer"
+   action now calls `rename_document`, not `update_document_title`.
+2. **Extension — resolved: no**, as originally defaulted (§4). A rename whose
+   new name has a different extension than the current one is rejected with
+   400 (`InvalidMetadataRequest`).
+3. **Collision policy — resolved: 409 reject**, as originally defaulted (§5).
+   Checked against every sibling document sharing any of the renamed
+   document's tags (`get_document_metadata_in_tag`), by exact `document_name`
+   match.
+4. **Access — resolved: `DocumentPermission.UPDATE`**, as originally defaulted
+   — same gate as `update_document_retrievable`/label edits, no new ReBAC.
+5. **Agent/MCP exposure — resolved: human-only in v1**, as originally
+   defaulted. No new agent tool was added.
+6. **`canonical_name`/`version` staleness — new decision, not in the original
+   proposal, resolved: left untouched in v1.** These fields drive a real,
+   UI-facing "draft version" system (`ingestion_service.py`'s
+   `_apply_versioning`, surfaced by `DocumentVersionChip.tsx`) — at ingestion,
+   `document_name == canonical_name` always holds for `version == 0`. A rename
+   changes `document_name` but not `canonical_name`, so a later upload whose
+   name matches the renamed document's *old* name will still collide against
+   its now-stale `canonical_name` and get auto-versioned unexpectedly. Scoped
+   out of v1 as a narrow, recoverable, non-corrupting edge case — fixing it
+   would mean deciding whether a rename detaches the document from its
+   version family entirely, which is a separate product question from "make
+   the file name actually change everywhere." Revisit if this surfaces in
+   practice.
+
+---
+
+## 8. UI surface (FRONT-09, as built)
+
+Unblocks the deferred FRONTEND-BACKLOG.md note: in `DocumentWorkspace.tsx`'s
+row "more" menu, **Renommer** opens `RenameModal` (generic, also used for
+folder rename), calls `useDocumentCommands.renameDocument` →
+`rename_document`, and the hook's own `refresh()` reloads the active
+folder/page (the same refresh path already used after upload/delete/reprocess)
+— no bespoke local-state patch was needed, unlike the `retrievable` toggle.
+
+### 8.1 Vector-index and content-store propagation (beyond the original proposal)
+
+The original decision (§1) says storage/vectors are uid-keyed so renaming
+"touches neither the object-storage layout nor the vector index" — true for
+the **embedding and chunk text**, which never change. It understated one
+thing: each chunk also carries `document_name` as a flat **metadata** field
+(`vectorization_utils.py`), independent of the embedding itself, and that
+field does go stale on a rename unless explicitly patched. As built:
+
+- `BaseVectorStore.set_document_name(*, document_uid, document_name)` — a new
+  optional-capability method (same shape as the pre-existing
+  `set_document_retrievable`), implemented for all 5 configured backends
+  (OpenSearch, Chroma, InMemory, pgvector, ClickHouse). Called best-effort
+  from `rename_document` (never fails the request — the Postgres write is
+  authoritative) only when the document has reached `ProcessingStage.VECTORIZED`.
+- **Content-store filename fix**, unrelated to vectors but in the same "old
+  name shouldn't survive a rename" spirit: `ContentService.get_file_metadata`
+  used to resolve the file name from the stored blob's own name on disk/MinIO
+  (never updated by a rename) instead of the DB record — this backs the
+  in-app preview/stream endpoint's `Content-Disposition` header. Fixed to read
+  the DB's `identity.document_name`, matching what the download endpoint
+  already did correctly.
 
 ---
 
@@ -153,8 +205,10 @@ folder/page (the same refresh path already used after upload/delete/reprocess).
 
 - A user can rename a document they can edit; the new name shows everywhere the
   document is listed, **with no re-ingestion and no re-embedding**.
-- `document_uid`, object-storage keys, vector chunks, and existing
-  citations/links are **unchanged** after a rename (verified by test).
+- `document_uid`, object-storage keys, embeddings, and existing
+  citations/links are **unchanged** after a rename (verified by test) —
+  vector chunk **metadata**'s `document_name` field is the one exception,
+  updated best-effort per §8.1.
 - Renaming respects the collision policy (§5) and updates the audit fields
   (`modified`, `last_modified_by`).
 - The generated frontend API client is regenerated in the same change; no

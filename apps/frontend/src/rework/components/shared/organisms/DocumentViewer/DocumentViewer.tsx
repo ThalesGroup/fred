@@ -15,30 +15,34 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { PdfStreamingDocumentViewer } from "../../../../../common/PdfStreamingDocumentViewer";
 import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { decodeMaybeBase64Utf8, isPdfFile, isTabularFile } from "../../../../utils/documentViewerUtils";
 import styles from "./DocumentViewer.module.css";
 
-/**
- * Which rendering of the document to show.
- * - `"original"` (default): the native renderer when the format has one (PDF), else markdown.
- * - `"markdown"`: the ingestion's markdown extraction, even for a format with a native
- *   renderer — what the "view as markdown" toggle in the preview drawer selects.
- */
-export type DocumentViewerMode = "original" | "markdown";
+export type ViewMode = "file" | "raw";
+
+const VIEW_TABS: ViewMode[] = ["file", "raw"];
 
 interface DocumentViewerProps {
   documentUid: string;
   /** Real file name incl. extension — decides the render strategy (§2.1, FRONT-13). Falls
    * back to markdown rendering when absent, matching the pre-FRONT-13 behavior. */
   fileName?: string | null;
-  /** Rendering to show. Defaults to `"original"` — hosts without a toggle keep the
-   * pre-existing extension-driven behavior untouched. */
-  mode?: DocumentViewerMode;
   /** Called once markdown content loads successfully — lets a host derive a title
    * fallback (e.g. the first H1) without duplicating the fetch. Never called for PDFs. */
   onMarkdownLoaded?: (content: string) => void;
+  /** Renders the given mode's content instead of picking one strategy
+   *  automatically — the corpus workspace preview drawer pairs this with a
+   *  `DocumentViewerModeToggle` rendered in its own header (left of the
+   *  close button), so the toggle isn't fighting the document for vertical
+   *  space inside this "chrome-less" body. Ignored for non-PDF files: every
+   *  other format already renders nothing but its markdown extraction, so
+   *  there is nothing to toggle to. Omit to keep the pre-FRONT-09 single-
+   *  strategy behavior (`DocumentViewerPage`). */
+  view?: ViewMode;
 }
 
 /**
@@ -50,12 +54,54 @@ interface DocumentViewerProps {
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
-export function DocumentViewer({ documentUid, fileName, mode = "original", onMarkdownLoaded }: DocumentViewerProps) {
-  if (mode === "original" && isPdfFile(fileName)) {
+export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
+  const isPdf = isPdfFile(fileName);
+
+  if (!isPdf) {
+    return (
+      <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+    );
+  }
+
+  if (!view) {
     return <PdfStreamingDocumentViewer documentUid={documentUid} />;
   }
+
   return (
-    <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+    <div className={styles.viewerBody}>
+      {view === "file" ? (
+        <PdfStreamingDocumentViewer documentUid={documentUid} />
+      ) : (
+        <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The "Fichier"/"Raw" mode toggle for `DocumentViewer`'s `view` prop —
+ * rendered separately (not inside `DocumentViewer` itself) so a host can
+ * place it in its own header, e.g. `InlineDrawer`'s `headerActions` (left of
+ * the close button), instead of stealing a row of vertical space from the
+ * document body.
+ */
+export function DocumentViewerModeToggle({ view, onChange }: { view: ViewMode; onChange: (view: ViewMode) => void }) {
+  const { t } = useTranslation();
+  const viewTabItems: ButtonGroupItemProps[] = [
+    { label: t("rework.resources.preview.tabs.file") },
+    { label: t("rework.resources.preview.tabs.raw") },
+  ];
+
+  return (
+    <ButtonGroup
+      items={viewTabItems}
+      size="xs"
+      color="secondary"
+      variant="tabs"
+      aria-label={t("rework.resources.preview.tabsAria")}
+      selectedIndex={VIEW_TABS.indexOf(view)}
+      onSelectedIndexChange={(index) => onChange(VIEW_TABS[index])}
+    />
   );
 }
 

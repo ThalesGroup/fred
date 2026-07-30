@@ -89,10 +89,16 @@ class FilesystemResourceInfoResult:
     modified: datetime | None
     # Optional, server-stamped provenance (FILES-04 G4). Populated by the product
     # layer (Knowledge Flow) from the virtual path; storage backends leave these
-    # None. `modified` doubles as creation time in v1 (no in-place edits).
+    # None.
     origin: str | None = None
     producer: str | None = None
     created_by: str | None = None
+    # v1 approximations (FRONT-09.H): storage backends (local/MinIO/GCS) don't
+    # track a creation time distinct from last-modified, or a per-write actor
+    # distinct from the path owner, so `created` mirrors `modified` and
+    # `modified_by` mirrors `created_by` until real per-object tracking exists.
+    created: datetime | None = None
+    modified_by: str | None = None
 
     def is_file(self) -> bool:
         """Return True if this is a file."""

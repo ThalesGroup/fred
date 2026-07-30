@@ -14,6 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
@@ -238,7 +239,12 @@ export default function PromptsPage() {
   }
 
   if (promptsQueryState === "loading") {
-    return <div className={styles.loadingState}>{t("rework.teams.prompts.loading")}</div>;
+    return (
+      <div className={styles.loadingState}>
+        <Spinner size={20} />
+        {t("rework.teams.prompts.loading")}
+      </div>
+    );
   }
 
   if (promptsQueryState === "error") {

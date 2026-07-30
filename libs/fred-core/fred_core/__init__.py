@@ -25,6 +25,7 @@ from fred_core.documents import (
     DocumentMetadataRow,
     FileInfo,
     FileType,
+    FileTypeBucket,
     Identity,
     PostgresDocumentMetadataStore,
     Processing,
@@ -39,6 +40,7 @@ from fred_core.documents import (
     SourceInfo,
     SourceType,
     Tagging,
+    file_type_bucket,
 )
 from fred_core.filesystem.gcs_filesystem import GcsFilesystem
 from fred_core.filesystem.local_filesystem import LocalFilesystem
@@ -236,6 +238,7 @@ __all__ = [
     "DocumentMetadataRow",
     "FileInfo",
     "FileType",
+    "FileTypeBucket",
     "Identity",
     "PostgresDocumentMetadataStore",
     "Processing",
@@ -250,4 +253,5 @@ __all__ = [
     "SourceInfo",
     "SourceType",
     "Tagging",
+    "file_type_bucket",
 ]

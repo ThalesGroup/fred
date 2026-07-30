@@ -21,7 +21,9 @@ from typing import List
 from fred_core import (
     AuthorizationError,
     FilesystemResourceInfoResult,
+    FileTypeBucket,
     KeycloakUser,
+    file_type_bucket,
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -448,11 +450,16 @@ class McpFilesystemService:
         """
         if not entry.is_file():
             return
+        # `created`/`modified_by` are v1 approximations (FRONT-09.H): the storage
+        # backends carry no creation time distinct from mtime, and no per-write actor
+        # distinct from the path owner — see FilesystemResourceInfoResult's docstring.
+        entry.created = entry.modified
         provenance = derive_provenance(virtual_path)
         if provenance is not None:
             entry.origin = provenance.origin
             entry.producer = provenance.producer
             entry.created_by = provenance.created_by
+            entry.modified_by = provenance.created_by
 
     async def stat(self, user: KeycloakUser, path: str) -> FilesystemResourceInfoResult:
         """
@@ -654,6 +661,63 @@ class McpFilesystemService:
             raise
         except Exception:
             logger.exception("Failed to delete %s", path)
+            raise
+
+    async def type_stats(self, user: KeycloakUser, path: str) -> dict[FileTypeBucket, tuple[int, int]]:
+        """
+        Aggregate file counts and total size per `FileTypeBucket`, recursively, under one
+        visible writable path (Espace perso / Espace partagé / Agents usage cards,
+        FRONT-09.I). Corpus stats are served separately by `GET /tags/stats`, which
+        aggregates ingested `DocumentMetadata` rather than raw filesystem entries.
+
+        Example:
+        - `await type_stats(user, "/team/team-1/shared")`
+        """
+
+        try:
+            resolved = resolve_virtual_path(path)
+            if resolved.area in (VirtualArea.ROOT, VirtualArea.CORPUS):
+                raise PermissionError("Use GET /tags/stats for corpus usage stats")
+            entries = await self.scoped_areas.list_recursive_files_area(user, resolved.segments)
+            totals: dict[FileTypeBucket, list[int]] = {}
+            for entry in entries:
+                bucket = file_type_bucket(entry.path)
+                bucket_totals = totals.setdefault(bucket, [0, 0])
+                bucket_totals[0] += 1
+                bucket_totals[1] += entry.size or 0
+            return {bucket: (count, size) for bucket, (count, size) in totals.items()}
+        except AuthorizationError:
+            raise
+        except Exception:
+            logger.exception("Failed to compute type stats for %s", path)
+            raise
+
+    async def rename(self, user: KeycloakUser, path: str, new_name: str) -> FilesystemResourceInfoResult:
+        """
+        Rename one visible virtual file or folder in place (same parent).
+
+        Why this exists:
+        - writable areas share one public rename contract
+        - corpus stays read-only even though it is part of the same visible tree
+
+        How to use:
+        - pass one visible writable path plus the new leaf name (no slashes)
+
+        Example:
+        - `await rename(user, "/workspace/notes.md", "meeting-notes.md")`
+        """
+
+        try:
+            resolved = resolve_virtual_path(path)
+            if resolved.area == VirtualArea.ROOT:
+                raise PermissionError("Cannot rename root")
+            if resolved.area == VirtualArea.CORPUS:
+                raise PermissionError("Corpus area is read-only")
+            return await self.scoped_areas.rename_area(user, resolved.segments, new_name)
+        except AuthorizationError:
+            raise
+        except Exception:
+            logger.exception("Failed to rename %s", path)
             raise
 
     async def grep(self, user: KeycloakUser, pattern: str, prefix: str = "") -> List[str]:

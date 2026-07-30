@@ -147,13 +147,13 @@ describe("DocumentViewer — markdown mode for a natively-rendered file", () => 
     });
   }
 
-  it("renders the PDF viewer for a .pdf in the default (original) mode", () => {
+  it("renders the PDF viewer for a .pdf when no view is passed (default)", () => {
     render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" />);
     expect(container.querySelector('[data-testid="pdf"]')?.textContent).toBe("pdf:doc-pdf");
   });
 
-  it("renders the markdown extraction for that same .pdf when mode is markdown", async () => {
-    render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" mode="markdown" />);
+  it("renders the markdown extraction for that same .pdf when view is raw", async () => {
+    render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" view="raw" />);
     expect(container.querySelector('[data-testid="pdf"]')).toBeNull();
     expect(fetchPreview).toHaveBeenCalledWith({ documentUid: "doc-pdf" });
 
@@ -165,7 +165,7 @@ describe("DocumentViewer — markdown mode for a natively-rendered file", () => 
   });
 
   it("shows an unavailable notice — not document text — when no markdown was generated", async () => {
-    render(<DocumentViewer documentUid="doc-nomd" fileName="facture.pdf" mode="markdown" />);
+    render(<DocumentViewer documentUid="doc-nomd" fileName="facture.pdf" view="raw" />);
     await act(async () => {
       pending.get("doc-nomd")!.reject(new Error("404"));
       await pending.get("doc-nomd")!.promise.catch(() => undefined);

@@ -249,9 +249,11 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 > `deriveDocStatus` unit-tested) on `/documents/metadata/browse`, with upload
 > drawer, new-folder drawer, download, preview, delete, toggle-searchable, and
 > reprocess wired. **Deferred:** search/sort + tree-summary counts + `next_offset`
-> (need FRONT-09.B backend); document **rename** (no backend endpoint); detail
-> drawer (FRONT-09.E). **Needs live verification:** upload + reprocess paths
-> against a running knowledge-flow backend.
+> (need FRONT-09.B backend); detail drawer (FRONT-09.E). **Needs live
+> verification:** upload + reprocess paths against a running knowledge-flow
+> backend. Document **rename** shipped 2026-07-30 — real filename rename
+> (`PUT /document/metadata/{uid}/name`), not just the display-only title edit
+> this snapshot predates; see `DOCUMENT-RENAME-RFC.md`.
 
 ### Scope
 
@@ -309,7 +311,7 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 #### FRONT-09.D — Mutations And Task Refresh
 
 - [x] Wire upload through the existing rework drawer/task pattern. _(`DocumentUploadDrawer`.)_
-- [x] Refresh the active folder/page after upload, delete, or reprocess. _(Move/rename deferred.)_
+- [x] Refresh the active folder/page after upload, delete, or reprocess. _(Rename now uses this same path, shipped 2026-07-30 — see `DOCUMENT-RENAME-RFC.md`; move stays deferred.)_
 - [ ] Preserve selection and scroll position when safe.
 - [x] Surface task progress without polling the whole library tree.
       _(`DocRow` reads `selectActiveTaskForTarget`.)_

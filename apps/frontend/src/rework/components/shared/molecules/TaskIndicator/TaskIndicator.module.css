@@ -59,18 +59,6 @@
   }
 }
 
-/* Indeterminate ring for running + progress=null */
-.spinningRing {
-  transform-origin: center;
-  animation: spin 0.75s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* State label — plain colored text, no background pill */
 .label {
   font: var(--font-label-small);

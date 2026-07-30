@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { Toast, ToastContainer } from "./Toast";
 import type { ToastData, ToastSeverity } from "./Toast";
 
@@ -44,12 +44,19 @@ interface ToastState extends ToastData {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastState[]>([]);
+  // Date.now() alone isn't unique enough here: two toasts pushed within the
+  // same millisecond (e.g. a failing action whose command and caller both
+  // show a toast) got the same id, so React saw duplicate keys. A per-toast
+  // counter guarantees uniqueness regardless of how close two pushes land.
+  const nextId = useRef(0);
 
   const push = useCallback((severity: ToastSeverity, input: ToastInput, defaultDuration: number | null) => {
     const duration = input.duration !== undefined ? input.duration : defaultDuration;
+    nextId.current += 1;
+    const id = nextId.current;
     setToasts((prev) => [
       ...prev,
-      { id: Date.now(), severity, summary: input.summary, detail: input.detail, duration, exiting: false },
+      { id, severity, summary: input.summary, detail: input.detail, duration, exiting: false },
     ]);
   }, []);
 

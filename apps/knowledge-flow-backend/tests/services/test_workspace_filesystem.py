@@ -35,19 +35,29 @@ def _file(path: str, size: int = 1) -> FilesystemResourceInfoResult:
 
 
 class _FakeFilesystem:
+    """Mirrors the real backends' key ambiguity: `exists()` is true for a file OR a
+    directory (empty or not) alike — only `stat()` (via `directory_paths`, or a
+    prefix match against `list_results`) tells them apart, same as MinIO/GCS's own
+    prefix-listing fallback and local's `Path.is_file()`/`is_dir()`."""
+
     def __init__(self) -> None:
         self.existing_paths: set[str] = set()
+        self.directory_paths: set[str] = set()
         self.mkdir_calls: list[str] = []
         self.write_calls: list[tuple[str, bytes | str]] = []
         self.list_results: list[FilesystemResourceInfoResult] = []
         self.grep_results: list[str] = []
 
+    def _has_descendants(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(entry.path.startswith(prefix) for entry in self.list_results)
+
     async def exists(self, path: str) -> bool:
-        return path in self.existing_paths
+        return path in self.existing_paths or path in self.directory_paths or self._has_descendants(path)
 
     async def mkdir(self, path: str) -> None:
         self.mkdir_calls.append(path)
-        self.existing_paths.add(path)
+        self.directory_paths.add(path)
 
     async def write(self, path: str, data: bytes | str) -> None:
         self.write_calls.append((path, data))
@@ -62,7 +72,11 @@ class _FakeFilesystem:
         self.deleted_path = path
 
     async def stat(self, path: str) -> FilesystemResourceInfoResult:
-        return _file(path, size=42)
+        if path in self.existing_paths:
+            return _file(path, size=42)
+        if path in self.directory_paths or self._has_descendants(path):
+            return FilesystemResourceInfoResult(path=path, size=None, type=FilesystemResourceInfo.DIRECTORY, modified=None)
+        raise FileNotFoundError(path)
 
     async def list(self, prefix: str) -> list[FilesystemResourceInfoResult]:
         self.list_prefix = prefix
@@ -130,3 +144,81 @@ async def test_grep_returns_namespace_relative_paths():
 
     assert fs.grep_call == ("summary", "users/u-1/reports")
     assert matches == ["reports/summary.md", "reports/archive/q1.md"]
+
+
+@pytest.mark.asyncio
+async def test_rename_moves_a_single_file():
+    fs = _FakeFilesystem()
+    fs.existing_paths.add("users/u-1/notes.txt")
+    workspace = WorkspaceFilesystem(fs)
+
+    await workspace.rename(_user(), "notes.txt", "meeting-notes.txt")
+
+    assert fs.write_calls == [("users/u-1/meeting-notes.txt", b"bytes:users/u-1/notes.txt")]
+    assert fs.deleted_path == "users/u-1/notes.txt"
+
+
+@pytest.mark.asyncio
+async def test_rename_rejects_when_destination_already_exists():
+    fs = _FakeFilesystem()
+    fs.existing_paths.add("users/u-1/notes.txt")
+    fs.existing_paths.add("users/u-1/final.txt")
+    workspace = WorkspaceFilesystem(fs)
+
+    with pytest.raises(ValueError, match="already exists"):
+        await workspace.rename(_user(), "notes.txt", "final.txt")
+
+
+@pytest.mark.asyncio
+async def test_rename_moves_every_descendant_of_a_folder():
+    fs = _FakeFilesystem()
+    fs.list_results = [
+        _file("users/u-1/reports/summary.md"),
+        _file("users/u-1/reports/archive/q1.md"),
+    ]
+    workspace = WorkspaceFilesystem(fs)
+
+    await workspace.rename(_user(), "reports", "reports-2026")
+
+    assert set(fs.write_calls) == {
+        ("users/u-1/reports-2026/summary.md", b"bytes:users/u-1/reports/summary.md"),
+        ("users/u-1/reports-2026/archive/q1.md", b"bytes:users/u-1/reports/archive/q1.md"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_rename_raises_when_source_does_not_exist():
+    fs = _FakeFilesystem()
+    workspace = WorkspaceFilesystem(fs)
+
+    with pytest.raises(FileNotFoundError):
+        await workspace.rename(_user(), "missing", "renamed")
+
+
+@pytest.mark.asyncio
+async def test_rename_preserves_an_empty_folder():
+    fs = _FakeFilesystem()
+    fs.directory_paths.add("users/u-1/empty")
+    workspace = WorkspaceFilesystem(fs)
+
+    await workspace.rename(_user(), "empty", "renamed-empty")
+
+    assert fs.mkdir_calls == ["users/u-1/renamed-empty"]
+    assert fs.deleted_path == "users/u-1/empty"
+
+
+@pytest.mark.asyncio
+async def test_list_recursive_files_skips_directories_outside_prefix():
+    fs = _FakeFilesystem()
+    fs.list_results = [
+        _file("users/u-1/reports/summary.md"),
+        _file("users/u-1/reports/archive/q1.md"),
+    ]
+    workspace = WorkspaceFilesystem(fs)
+
+    entries = await workspace.list_recursive_files(_user(), "reports")
+
+    assert {e.path for e in entries} == {
+        "users/u-1/reports/summary.md",
+        "users/u-1/reports/archive/q1.md",
+    }

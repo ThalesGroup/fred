@@ -88,6 +88,42 @@ describe("streamUploadOrProcessDocument", () => {
     expect(tasks).toEqual([]);
     expect(discovered).toEqual([]);
   });
+
+  it("rejects with the backend's error when the file fails before any task_id exists", async () => {
+    // Real case: an unsupported extension (e.g. .json) raises during "upload
+    // preparation" — the backend reports a "failed" progress line with no
+    // task_id at all, since no task is ever created for it.
+    stubFetch([
+      JSON.stringify({
+        step: "upload preparation",
+        status: "failed",
+        filename: "data.json",
+        error: "No input processor configured for extension '.json' in pipeline 'profile-fast'",
+      }),
+    ]);
+
+    await expect(streamUploadOrProcessDocument(new File(["x"], "data.json"), "process", {})).rejects.toThrow(
+      "No input processor configured for extension '.json' in pipeline 'profile-fast'",
+    );
+  });
+
+  it("does not reject on a later failure once a task_id was already discovered", async () => {
+    // The tray/Activity SSE feed for that task_id is the source of truth once
+    // a task exists — re-throwing here would double-report the same failure.
+    stubFetch([
+      JSON.stringify({ step: "prep", status: "success", filename: "a.pdf", document_uid: "doc-1", task_id: "t-1" }),
+      JSON.stringify({
+        step: "queued",
+        status: "failed",
+        filename: "a.pdf",
+        error: "scheduling error",
+        task_id: "t-1",
+      }),
+    ]);
+
+    const tasks = await streamUploadOrProcessDocument(new File(["x"], "a.pdf"), "process", {});
+    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1" }]);
+  });
 });
 
 describe("multipart filename pinning", () => {

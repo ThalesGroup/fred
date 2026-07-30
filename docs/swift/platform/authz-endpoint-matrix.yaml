@@ -576,6 +576,16 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/document/metadata/{document_uid}/title
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/document/metadata/{document_uid}/name
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/documents/audit
     review_status: pending_review
@@ -726,6 +736,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/fs/rename/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/share/{path:path}
     review_status: pending_review
@@ -733,6 +748,11 @@ operations:
   - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/stat/{path:path}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fs/stats/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1018,6 +1038,11 @@ operations:
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/tags/rebac/backfill
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tags/stats
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

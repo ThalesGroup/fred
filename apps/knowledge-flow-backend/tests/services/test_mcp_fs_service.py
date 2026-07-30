@@ -5,6 +5,7 @@ from fred_core import (
     AuthorizationError,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
+    FileTypeBucket,
     KeycloakUser,
 )
 from fred_core.security.models import Resource
@@ -86,6 +87,18 @@ class _ScopedAreaStub:
 
     async def mkdir_area(self, *args, **kwargs):
         self.calls.append(("mkdir_area", args, kwargs))
+
+    async def rename_area(self, *args, **kwargs):
+        self.calls.append(("rename_area", args, kwargs))
+        return _file("renamed.txt")
+
+    async def list_recursive_files_area(self, *args, **kwargs):
+        self.calls.append(("list_recursive_files_area", args, kwargs))
+        return [
+            FilesystemResourceInfoResult(path="a.pdf", size=100, type=FilesystemResourceInfo.FILE, modified=None),
+            FilesystemResourceInfoResult(path="b.pdf", size=50, type=FilesystemResourceInfo.FILE, modified=None),
+            FilesystemResourceInfoResult(path="c.xlsx", size=10, type=FilesystemResourceInfo.FILE, modified=None),
+        ]
 
 
 class _CorpusAreaStub:
@@ -498,3 +511,50 @@ async def test_edit_file_rewrites_content_and_returns_occurrence_count(app_conte
 
     assert result == {"path": "/teams/acme/shared/note.md", "occurrences": 1}
     assert captured[0][1:] == ("/teams/acme/shared/note.md", "final content")
+
+
+@pytest.mark.asyncio
+async def test_rename_routes_teams_path_to_scoped_area(app_context):
+    service, scoped_areas, _corpus_area = _service()
+
+    result = await service.rename(_user(), "/teams/acme/shared/notes.txt", "meeting-notes.txt")
+
+    assert result.path == "renamed.txt"
+    call_name, args, kwargs = scoped_areas.calls[-1]
+    assert call_name == "rename_area"
+    assert args == (_user(), ("acme", "shared", "notes.txt"), "meeting-notes.txt")
+    assert kwargs == {}
+
+
+@pytest.mark.asyncio
+async def test_rename_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+        await service.rename(_user(), "/corpus/CIR/report.md", "final.md")
+
+
+@pytest.mark.asyncio
+async def test_rename_rejects_root(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Cannot rename root"):
+        await service.rename(_user(), "/", "anything")
+
+
+@pytest.mark.asyncio
+async def test_type_stats_buckets_files_by_extension_and_sums_size(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    stats = await service.type_stats(_user(), "/teams/acme/shared")
+
+    assert stats[FileTypeBucket.PDF] == (2, 150)
+    assert stats[FileTypeBucket.EXCEL] == (1, 10)
+
+
+@pytest.mark.asyncio
+async def test_type_stats_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Use GET /tags/stats"):
+        await service.type_stats(_user(), "/corpus/CIR")

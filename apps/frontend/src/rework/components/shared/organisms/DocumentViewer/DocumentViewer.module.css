@@ -1,9 +1,12 @@
 /* The markdown body spans the host's full width so wide tables (CSV/Excel
    extracts) can use all available space. Running text keeps a comfortable
    reading measure via the MarkdownRenderer `fullWidth` per-block cap, so only
-   tables and other wide blocks actually fill the width. */
+   tables and other wide blocks actually fill the width. Side padding is kept
+   small: the host drawer's own `.body` already contributes its own padding
+   around this — stacking a second, wide side margin on top of that just
+   wastes width the drawer doesn't have to spare (FRONT-09 feedback). */
 .markdownBody {
-  padding: var(--spacing-xl) var(--spacing-l);
+  padding: var(--spacing-xl) var(--spacing-xs);
 }
 
 /* Prose documents (non-tabular): the capped reading column is centred in the
@@ -21,4 +24,8 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   text-align: center;
+}
+
+.viewerBody {
+  height: 100%;
 }

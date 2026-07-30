@@ -20,6 +20,15 @@ let isSecurityEnabled = false;
 // single-flight so concurrent calls don’t trigger multiple refreshes
 let refreshInFlight: Promise<boolean> | null = null;
 
+// keycloak-js's updateToken() has no built-in timeout — a dropped connection
+// or unresponsive Keycloak leaves it pending forever. Since `refreshInFlight`
+// is a shared singleton, every other in-flight or future request awaits that
+// same never-settling promise, wedging every authenticated call in the app
+// (dynamicBaseQuery awaits ensureFreshToken before every fetch). Bound it so
+// a hung refresh fails fast instead, falling through to the existing 401 ->
+// retry -> logout recovery path in dynamicBaseQuery.tsx.
+const TOKEN_REFRESH_TIMEOUT_MS = 8_000;
+
 // ---------- Insecure-mode dev token support ----------
 // Fred rationale: even when security is off, the frontend + backend contracts
 // still expect an Authorization: Bearer <token>. We mint a local, JWT-shaped
@@ -211,15 +220,22 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
   // If a refresh is already running, await it
   if (refreshInFlight) return refreshInFlight;
 
-  // Use KC.updateToken (it refreshes only if needed)
-  refreshInFlight = keycloakInstance
-    .updateToken(minValidity)
-    .then((refreshed) => {
+  // Use KC.updateToken (it refreshes only if needed), raced against a timeout
+  // so a hung refresh resolves to "failed" instead of blocking forever.
+  refreshInFlight = Promise.race([
+    keycloakInstance.updateToken(minValidity).then((refreshed) => {
       if (refreshed) {
         localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
       }
       return true;
-    })
+    }),
+    new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        console.warn("[Keycloak] token refresh timed out after", TOKEN_REFRESH_TIMEOUT_MS, "ms");
+        resolve(false);
+      }, TOKEN_REFRESH_TIMEOUT_MS);
+    }),
+  ])
     .catch((err) => {
       console.warn("[Keycloak] token refresh failed:", err);
       return false;

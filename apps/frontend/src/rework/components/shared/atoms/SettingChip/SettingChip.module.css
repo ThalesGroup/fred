@@ -2,10 +2,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
   cursor: pointer;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-2xl);
@@ -25,6 +21,11 @@
   border-color: var(--primary);
   background: var(--state-on-surface-hover);
   color: var(--primary);
+}
+
+.chip[data-open="true"][data-active-color="secondary"] {
+  border-color: var(--secondary);
+  color: var(--secondary);
 }
 
 .chip:focus-visible {
