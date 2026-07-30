@@ -1372,7 +1372,6 @@
         "raw": "En attente",
         "ready": "Prêt"
       },
-      "byAi": "par IA",
       "bulkActions": {
         "selectedCount": "Sélection : {{count}}",
         "clearSelection": "Annuler la sélection",

@@ -836,7 +836,10 @@ sibling root's content.
       (`StatusChip.tsx`, commit `162dd8cb`). Wired on Corpus; not yet on the other 3 tabs.
 - [x] Build the "by AI" chip cell from `origin === "agent_generated"` (`ByAiChip.tsx`,
       commit `162dd8cb`) — Corpus rows never show it (no agent-generated concept there
-      today). Not yet wired anywhere, since it only applies to the 3 tabs not started.
+      today). Superseded once the other 3 tabs actually landed (Step 2/3): their rows
+      show provenance via the more general `OriginBadge` atom (uploaded/agent_generated/
+      shared_copy/ingested/system), not this narrower single-purpose chip. `ByAiChip.tsx`
+      was never wired anywhere and has been deleted as dead code.
 - [x] Collapse the row's two preview icons into one: `DocumentViewer` gained
       `showRawToggle` (commit `162dd8cb`), wired on Corpus's preview drawer.
 - [x] Add the team storage quota (existing `TeamStorageResponse`) to the page header,

@@ -1372,7 +1372,6 @@
         "raw": "Pending",
         "ready": "Ready"
       },
-      "byAi": "by AI",
       "bulkActions": {
         "selectedCount": "Selection: {{count}}",
         "clearSelection": "Clear selection",
