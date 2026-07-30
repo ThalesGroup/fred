@@ -23,7 +23,15 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.utils import log_exception
-from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
+from knowledge_flow_backend.features.metadata.service import (
+    DocumentNameCollisionError,
+    InvalidMetadataRequest,
+    MetadataNotFound,
+    MetadataService,
+    MetadataUpdateError,
+    StoreAuditFixResponse,
+    StoreAuditReport,
+)
 
 
 class BrowseDocumentsResponse(BaseModel):
@@ -55,6 +63,8 @@ def handle_exception(e: Exception) -> HTTPException | Exception:
         return HTTPException(status_code=404, detail=str(e))
     elif isinstance(e, InvalidMetadataRequest):
         return HTTPException(status_code=400, detail=str(e))
+    elif isinstance(e, DocumentNameCollisionError):
+        return HTTPException(status_code=409, detail=str(e))
     elif isinstance(e, MetadataUpdateError):
         return e  # Will be handled by generic_exception_handler as 500
 
@@ -196,6 +206,31 @@ class MetadataController:
         ):
             try:
                 await self.service.update_document_title(user, document_uid, title, user.uid)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.put(
+            "/document/metadata/{document_uid}/name",
+            tags=["Documents"],
+            response_model=DocumentMetadata,
+            response_model_exclude_none=True,
+            summary="Rename a document (real file name)",
+            description=(
+                "Updates the document's actual file name (`identity.document_name`), not just its "
+                "display title. Propagates to the vector index's copy of the name on each chunk "
+                "(best-effort — never fails the request) and to the content-store filename lookup. "
+                "Does not change `document_uid`, storage keys, or embeddings, and does not touch "
+                "existing chat/session citations, which keep referencing the name at the time they "
+                "were created. The extension cannot be changed by a rename."
+            ),
+        )
+        async def rename_document(
+            document_uid: str,
+            name: str = Body(..., embed=True),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                return await self.service.rename_document(user, document_uid, name, user.uid)
             except Exception as e:
                 raise handle_exception(e)
 

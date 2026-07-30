@@ -22,6 +22,10 @@ export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "si
   explanation?: string;
   error?: string;
   icon?: IconProps;
+  /** Fixed, non-editable text shown right after the input's own text (e.g. a
+   *  locked file extension). Purely presentational — callers own splitting
+   *  the editable value from this suffix and recombining them on submit. */
+  suffix?: string;
   compact?: boolean;
   /** Shrinks the input's own height (shared ComponentSize scale). Omit to
    *  keep the existing default height — every other TextInput call site is
@@ -35,6 +39,7 @@ export default function TextInput({
   explanation,
   error,
   icon,
+  suffix,
   compact = false,
   size,
   maxLength,
@@ -57,20 +62,23 @@ export default function TextInput({
           {required ? `${label} *` : label}
         </label>
       )}
-      {icon && (
-        <span className={styles.icon}>
-          <Icon {...icon} />
-        </span>
-      )}
-      <input
-        id={id}
-        type={"text"}
-        value={value}
-        maxLength={maxLength}
-        required={required}
-        autoComplete="off"
-        {...props}
-      />
+      <div className={styles.field}>
+        {icon && (
+          <span className={styles.icon}>
+            <Icon {...icon} />
+          </span>
+        )}
+        <input
+          id={id}
+          type={"text"}
+          value={value}
+          maxLength={maxLength}
+          required={required}
+          autoComplete="off"
+          {...props}
+        />
+        {suffix && <span className={styles.suffix}>{suffix}</span>}
+      </div>
       <span className={styles.information}>
         <span className={styles.hint}>{error || explanation || null}</span>
         <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>

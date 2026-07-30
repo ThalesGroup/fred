@@ -21,6 +21,7 @@ import {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
+  useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
@@ -47,6 +48,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [updateDocumentTitle] =
     useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation();
+  const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
@@ -255,12 +257,36 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [updateDocumentTitle, refresh, showError, t],
   );
 
+  // Corpus document rename (DOCUMENT-RENAME-RFC.md) — real rename: changes the
+  // actual `identity.document_name`, propagated (best-effort) to the vector
+  // index and the content-store filename lookup. Supersedes the cosmetic
+  // `renameDocumentTitle` above for the Corpus "Renommer" action.
+  const renameDocument = useCallback(
+    async (doc: DocumentMetadata, newName: string) => {
+      try {
+        await renameDocumentMutation({
+          documentUid: doc.identity.document_uid,
+          bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: { name: newName },
+        }).unwrap();
+        await refresh();
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: e?.data?.detail || e?.message || "Failed to rename document.",
+        });
+        throw e;
+      }
+    },
+    [renameDocumentMutation, refresh, showError, t],
+  );
+
   return {
     toggleRetrievable,
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
     renameTag,
     renameDocumentTitle,
+    renameDocument,
     preview,
     previewTarget,
     closePreview,

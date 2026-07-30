@@ -77,6 +77,14 @@ class BaseVectorStore(ABC):
         """
         raise NotImplementedError("This vector store does not support retrievable toggling.")
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:  # pragma: no cover - optional capability
+        """
+        Optional capability: update the 'document_name' metadata field for all chunks
+        of a document without deleting vectors or re-embedding. Concrete stores that
+        support this should override. Called (best-effort) after a document rename.
+        """
+        raise NotImplementedError("This vector store does not support renaming.")
+
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """Optional capability: fetch raw vector data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw vectors.")

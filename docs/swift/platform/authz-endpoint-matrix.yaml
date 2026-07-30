@@ -576,6 +576,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/document/metadata/{document_uid}/name
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/documents/audit
     review_status: pending_review

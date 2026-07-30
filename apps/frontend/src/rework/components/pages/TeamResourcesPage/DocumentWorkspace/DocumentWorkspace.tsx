@@ -112,10 +112,16 @@ function rowKey(row: Row): string {
 // slide and never including ".pptx"). identity.document_name always does
 // ("Original file name incl. extension"), so it's the source of truth for the
 // extension regardless of which label wins for display.
+// Matches the backend's own extension check (Path(name).suffix) in
+// rename_document — a rename may never change it (DOCUMENT-RENAME-RFC.md §4).
+function documentExtension(doc: DocumentMetadata): string {
+  const dot = doc.identity.document_name.lastIndexOf(".");
+  return dot > 0 ? doc.identity.document_name.slice(dot) : "";
+}
+
 function documentDisplayName(doc: DocumentMetadata): string {
   const label = doc.identity.title || doc.identity.document_name;
-  const dot = doc.identity.document_name.lastIndexOf(".");
-  const extension = dot > 0 ? doc.identity.document_name.slice(dot) : "";
+  const extension = documentExtension(doc);
   return extension && !label.toLowerCase().endsWith(extension.toLowerCase()) ? `${label}${extension}` : label;
 }
 
@@ -1025,12 +1031,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           open={!!renameTarget}
           onClose={() => setRenameTarget(null)}
           initialName={renameTarget.kind === "folder" ? renameTarget.node.name : documentDisplayName(renameTarget.doc)}
+          lockedSuffix={renameTarget.kind === "document" ? documentExtension(renameTarget.doc) : undefined}
           onSubmit={async (newName) => {
             if (renameTarget.kind === "folder") {
               const tag = renameTarget.node.tagsHere[0];
               if (tag) await commands.renameTag(tag as unknown as TagWithItemsId, newName);
             } else {
-              await commands.renameDocumentTitle(renameTarget.doc, newName);
+              await commands.renameDocument(renameTarget.doc, newName);
             }
           }}
         />

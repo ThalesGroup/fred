@@ -468,6 +468,43 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             )
             raise RuntimeError("Failed to update retrievable flag in ClickHouse.")
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' field for all chunks of a document without deleting
+        vectors or re-embedding. Unlike `retrievable`, `document_name` is not a promoted
+        column here — it only lives inside the JSON-encoded `metadata` column — so this
+        reads each chunk's metadata, patches it in Python, and writes it back one mutation
+        per chunk (acceptable: rename is a deliberate, low-frequency act, and per-document
+        chunk counts are bounded).
+        """
+        try:
+            t = self._orm_table
+            stmt = select(t.c.chunk_uid, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid)
+            with Session(self._engine, future=True) as session:
+                rows = session.execute(stmt).all()
+
+            updated = 0
+            for chunk_uid, metadata_raw, retrievable in rows:
+                md = self._decode_metadata(metadata_raw, retrievable)
+                md["document_name"] = document_name
+                self._command(
+                    f"ALTER TABLE {self._table_ref} UPDATE metadata = {{value:String}} WHERE chunk_uid = {{chunk_uid:String}} SETTINGS mutations_sync = 1",
+                    {"value": json.dumps(md, ensure_ascii=True), "chunk_uid": chunk_uid},
+                )
+                updated += 1
+
+            logger.info(
+                "[VECTOR][CLICKHOUSE] updated document_name on %d chunk(s) for document_uid=%s.",
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception(
+                "[VECTOR][CLICKHOUSE] failed to update document_name for document_uid=%s.",
+                document_uid,
+            )
+            raise RuntimeError("Failed to update document_name in ClickHouse.")
+
     def _decode_metadata(self, metadata_raw: Any, retrievable: Optional[int]) -> Dict[str, Any]:
         md: Dict[str, Any]
         if isinstance(metadata_raw, dict):

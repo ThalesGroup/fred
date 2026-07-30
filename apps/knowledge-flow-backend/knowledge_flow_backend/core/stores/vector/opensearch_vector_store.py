@@ -944,6 +944,36 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' metadata field for all chunks of a document without
+        deleting vectors or re-embedding. Used after a document rename.
+        """
+        try:
+            script = {
+                "source": "ctx._source.metadata.document_name = params.value",
+                "lang": "painless",
+                "params": {"value": document_name},
+            }
+            body = {
+                "script": script,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+            }
+            resp = self._client.update_by_query(
+                index=self._index,
+                body=body,
+                params={"refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            logger.info(
+                "[VECTOR][OPENSEARCH] updated document_name on %s vector chunks for document_uid=%s.",
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
+            raise RuntimeError("Failed to update document_name in OpenSearch.")
+
     # ---------- Diagnostics / Introspection ----------
 
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:

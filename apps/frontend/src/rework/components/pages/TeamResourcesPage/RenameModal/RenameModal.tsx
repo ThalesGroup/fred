@@ -18,7 +18,6 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import styles from "./RenameModal.module.css";
 
 interface RenameModalProps {
@@ -26,24 +25,36 @@ interface RenameModalProps {
   onClose: () => void;
   initialName: string;
   onSubmit: (name: string) => Promise<void>;
+  /** A file extension (e.g. ".pdf") that must not change — only the part of
+   *  `initialName` before it is editable; it's shown as a fixed suffix and
+   *  silently re-appended on submit. Omit for renames with no fixed
+   *  extension (folders, tags). A rename that changes the extension is
+   *  rejected server-side (DOCUMENT-RENAME-RFC.md §4) — locking it here
+   *  avoids the user ever hitting that error. */
+  lockedSuffix?: string;
 }
 
 /**
  * Single-field "new name" dialog reused for every rename action across the
  * Resources tabs (Corpus folders/documents, Espace perso/partagé/Agents
  * files) — one modal, callers supply the initial name and a submit handler
- * that hits whichever rename endpoint applies (tag PUT, document title PUT,
+ * that hits whichever rename endpoint applies (tag PUT, document name PUT,
  * or `/fs/rename`).
  */
-export default function RenameModal({ open, onClose, initialName, onSubmit }: RenameModalProps) {
+export default function RenameModal({ open, onClose, initialName, onSubmit, lockedSuffix }: RenameModalProps) {
   const { t } = useTranslation();
-  const { showError } = useToast();
-  const [name, setName] = useState(initialName);
+  const initialBase =
+    lockedSuffix && initialName.endsWith(lockedSuffix) ? initialName.slice(0, -lockedSuffix.length) : initialName;
+  const [name, setName] = useState(initialBase);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setName(initialName);
-  }, [open, initialName]);
+    if (open) setName(initialBase);
+    // initialBase is derived from initialName/lockedSuffix every render —
+    // depending on open/initialName/lockedSuffix (not initialBase itself)
+    // avoids re-running this effect on every render for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialName, lockedSuffix]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,19 +68,19 @@ export default function RenameModal({ open, onClose, initialName, onSubmit }: Re
   if (!open) return null;
 
   const trimmed = name.trim();
-  const unchanged = trimmed === initialName.trim();
+  const unchanged = trimmed === initialBase.trim();
 
   const submit = async () => {
     if (!trimmed || isSaving || unchanged) return;
     setIsSaving(true);
     try {
-      await onSubmit(trimmed);
+      await onSubmit(trimmed + (lockedSuffix ?? ""));
       onClose();
-    } catch (e: unknown) {
-      showError?.({
-        summary: t("validation.error"),
-        detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.renameModal.error"),
-      });
+    } catch {
+      // Every onSubmit caller (renameTag/renameDocument/renameDocumentTitle)
+      // already shows its own, more specific error toast before rethrowing —
+      // a second generic one here was a duplicate. Keep the modal open (no
+      // onClose()) so the user can retry with the toast's detail in view.
     } finally {
       setIsSaving(false);
     }
@@ -104,6 +115,7 @@ export default function RenameModal({ open, onClose, initialName, onSubmit }: Re
               autoFocus
               label={t("rework.resources.renameModal.nameLabel")}
               value={name}
+              suffix={lockedSuffix}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void submit();

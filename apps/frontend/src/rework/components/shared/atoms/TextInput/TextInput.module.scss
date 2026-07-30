@@ -1,17 +1,25 @@
 .input {
   display: flex;
-  position: relative;
   flex-direction: column;
   gap: var(--spacing-2xs);
   width: 100%;
 
-  &:has(.icon) {
-    input {
+  .field {
+    display: flex;
+    position: relative;
+
+    &:has(.icon) input {
       padding-left: calc(var(--spacing-s) + 1.5rem + var(--spacing-xs));
+    }
+
+    &:has(.suffix) input {
+      padding-right: var(--spacing-2xl);
     }
   }
 
   input {
+    flex: 1;
+    min-width: 0;
     --input-outline: transparent;
     --input-border: var(--outline-retreat);
     outline: 2px solid var(--input-outline);
@@ -109,11 +117,31 @@
 .icon {
   display: flex;
   position: absolute;
+  top: 0;
+  left: 0;
   align-items: center;
   padding-left: var(--spacing-s);
   height: 3rem;
   color: var(--on-surface-retreat);
   font-size: 1.5rem;
+}
+
+/* Anchored to the input's right edge rather than immediately after the typed
+ * text (which would need measuring the text's rendered width) — the same
+ * trade-off most "fixed unit/suffix" inputs make. pointer-events: none so a
+ * click here still focuses the input underneath. top/right explicit (not
+ * relying on static-position fallback) so it stays pinned to .field — which
+ * wraps only the input, not the label/hint rows above and below it. */
+.suffix {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: var(--spacing-s);
+  align-items: center;
+  height: 3rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-large);
+  pointer-events: none;
 }
 
 /* Opt-in shrink, default (no data-size) keeps every other TextInput call
@@ -129,6 +157,10 @@
     height: 2.5rem;
     font-size: 1.25rem;
   }
+
+  .suffix {
+    height: 2.5rem;
+  }
 }
 
 .input[data-size="xs"] {
@@ -139,5 +171,9 @@
   .icon {
     height: 1.5rem;
     font-size: 1rem;
+  }
+
+  .suffix {
+    height: 1.5rem;
   }
 }

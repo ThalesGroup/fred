@@ -89,6 +89,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut,
       }),
     }),
+    renameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: build.mutation<
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse,
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}/name`,
+        method: "PUT",
+        body: queryArg.bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut,
+      }),
+    }),
     browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
@@ -1026,6 +1036,12 @@ export type UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUi
   documentUid: string;
   bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut;
 };
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse =
+  /** status 200 Successful Response */ DocumentMetadata;
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg = {
+  documentUid: string;
+  bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut;
+};
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
   /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
@@ -1905,6 +1921,9 @@ export type ProcessingGraph = {
 export type BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut = {
   title: string;
 };
+export type BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut = {
+  name: string;
+};
 export type BrowseDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
@@ -2670,6 +2689,7 @@ export const {
   useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
+  useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
   useAddDocumentLabelMutation,

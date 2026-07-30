@@ -14,6 +14,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore
@@ -58,6 +59,10 @@ class MetadataUpdateError(Exception):
 
 
 class InvalidMetadataRequest(Exception):
+    pass
+
+
+class DocumentNameCollisionError(Exception):
     pass
 
 
@@ -743,10 +748,89 @@ class MetadataService:
                         )
             except Exception as ve:
                 logger.warning(f"[VECTOR] Could not reflect retrievable toggle in vector index for '{document_uid}': {ve}")
-
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+
+    async def rename_document(self, user: KeycloakUser, document_uid: str, new_name: str, modified_by: str) -> DocumentMetadata:
+        """Real rename: changes `identity.document_name` (the actual file name),
+        not just the cosmetic `identity.title` `update_document_title` edits.
+        `document_uid`, storage keys, and embeddings never change (DOCUMENT-RENAME-RFC.md
+        §4) — only the display name, everywhere it's stored as metadata: Postgres and,
+        best-effort, the vector index's copy of it on each chunk. Existing chat/session
+        citations are historical snapshots and are intentionally left untouched.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        new_name = new_name.strip()
+        if not new_name:
+            raise InvalidMetadataRequest("New name cannot be empty")
+
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
+
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+        if not metadata:
+            raise MetadataNotFound(f"Document '{document_uid}' not found.")
+
+        old_name = metadata.identity.document_name
+        if new_name == old_name:
+            return metadata
+
+        # A rename may not change the extension — it reflects the ingested content
+        # type; changing it here would mislead downstream readers without
+        # re-processing the file (DOCUMENT-RENAME-RFC.md §4/§7 decision 2).
+        old_ext = Path(old_name).suffix.lower()
+        new_ext = Path(new_name).suffix.lower()
+        if new_ext != old_ext:
+            raise InvalidMetadataRequest(f"Renaming cannot change the file extension ('{old_ext}' -> '{new_ext}').")
+
+        # Reject a name already used by a sibling in any of this document's own
+        # folders/tags — a deliberate, user-driven rename should keep the user in
+        # control of the final name rather than silently auto-suffixing
+        # (DOCUMENT-RENAME-RFC.md §5/§7 decision 3). Fetched concurrently: each
+        # tag's sibling list is independent of the others, no ordering dependency.
+        siblings_by_tag = await asyncio.gather(*(self.get_document_metadata_in_tag(user, tag_id) for tag_id in metadata.tags.tag_ids))
+        for siblings in siblings_by_tag:
+            if any(d.identity.document_uid != document_uid and d.identity.document_name == new_name for d in siblings):
+                raise DocumentNameCollisionError(f"A document named '{new_name}' already exists in this folder.")
+
+        # `title` is a cosmetic override (`update_document_title`) that, per
+        # documentDisplayName()'s "title || document_name" fallback in the
+        # frontend, would otherwise keep masking the new name forever — a real
+        # rename supersedes it.
+        metadata.identity.document_name = new_name
+        metadata.identity.title = None
+        metadata.identity.modified = datetime.now(timezone.utc)
+        metadata.identity.last_modified_by = modified_by
+
+        await self.metadata_store.save_metadata(metadata)
+        logger.info(f"[METADATA] Renamed document '{document_uid}' from '{old_name}' to '{new_name}' by '{modified_by}'")
+
+        # Best-effort vector sync, same shape as update_document_retrievable above:
+        # the Postgres write is authoritative and already succeeded; a vector store
+        # that can't (or doesn't need to) reflect the change never fails the request.
+        # Offloaded to a thread: every concrete store's set_document_name is a
+        # synchronous, blocking client call (opensearchpy/chromadb/clickhouse_connect/
+        # a sync SQLAlchemy engine) — the ClickHouse implementation in particular
+        # issues one blocking round-trip per chunk, not one for the whole document,
+        # so this can run for a while on documents with many chunks and must not
+        # stall the event loop for unrelated concurrent requests to this backend.
+        try:
+            if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                if self.vector_store is None:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                try:
+                    await asyncio.to_thread(self.vector_store.set_document_name, document_uid=document_uid, document_name=new_name)
+                    logger.info("[VECTOR] Updated document_name in vector index for document '%s'.", document_uid)
+                except NotImplementedError:
+                    logger.info(
+                        "[VECTOR] Vector store does not support renaming; vectors unchanged for document '%s'.",
+                        document_uid,
+                    )
+        except Exception as ve:
+            logger.warning(f"[VECTOR] Could not reflect rename in vector index for '{document_uid}': {ve}")
+
+        return metadata
 
     async def update_document_title(self, user: KeycloakUser, document_uid: str, title: str, modified_by: str) -> None:
         """Rename a document in the browser (cosmetic only — does not touch ingestion,
