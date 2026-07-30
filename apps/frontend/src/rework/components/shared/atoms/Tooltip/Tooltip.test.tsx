@@ -88,9 +88,11 @@ describe("Tooltip", () => {
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
 
-  it("shows the tooltip on focus and links it via aria-describedby", () => {
+  it("shows the tooltip on keyboard focus (Tab navigation) and links it via aria-describedby", () => {
     const trigger = renderTooltip();
     act(() => {
+      // Real Tab navigation always fires a keydown before the resulting focus.
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
       trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     });
     const tooltip = document.querySelector('[role="tooltip"]');
@@ -101,11 +103,21 @@ describe("Tooltip", () => {
   it("hides the tooltip on blur", () => {
     const trigger = renderTooltip();
     act(() => {
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
       trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     });
     expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
     act(() => {
       trigger.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
+  it("does not show the tooltip for the lingering focus a mouse click leaves behind", () => {
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     });
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
