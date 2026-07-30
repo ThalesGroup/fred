@@ -19,6 +19,7 @@ import logging
 import re
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
 import pypdf
@@ -62,6 +63,15 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     DESCRIPTION = "PDF-to-Markdown converter"
     BASE_FOLDER = "/tmp"
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Keyed by (extractor_name, docling_num_threads): this processor instance
+        # is itself a shared singleton (application_context.get_input_processor_instance)
+        # called from concurrent Temporal activity threads, so each distinct
+        # extractor config is built once and reused rather than rebuilt per document.
+        self._extractor_cache: dict[tuple[str, int], BasePdfExtractor] = {}
+        self._extractor_cache_lock = threading.Lock()
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -137,6 +147,26 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return DoclingPdfExtractor(num_threads=docling_num_threads)
         return extractor_cls()
 
+    def _get_extractor(self, extractor_name: str, docling_num_threads: int) -> BasePdfExtractor:
+        """Build the extractor once per (name, num_threads) and reuse it.
+
+        Matters most for 'docling': each instance owns a DocumentConverter that
+        loads OCR/layout/picture-classification models on first use, so rebuilding
+        it per document (as `_build_extractor` alone would) reloads that whole
+        pipeline on every file, on every one of the worker's concurrent activity
+        threads. Keyed rather than a single slot because a profile switch (or a
+        differently-configured profile) can request a different docling_num_threads.
+        """
+        cache_key = (extractor_name, docling_num_threads)
+        extractor = self._extractor_cache.get(cache_key)
+        if extractor is None:
+            with self._extractor_cache_lock:
+                extractor = self._extractor_cache.get(cache_key)
+                if extractor is None:
+                    extractor = self._build_extractor(extractor_name, docling_num_threads)
+                    self._extractor_cache[cache_key] = extractor
+        return extractor
+
     def _extract_md(self, file_path: Path, work_dir: str):
         """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown.
 
@@ -167,7 +197,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             use_image_describer,
         )
 
-        extractor = self._build_extractor(extractor_name, profile_cfg.pdf.docling_num_threads)
+        extractor = self._get_extractor(extractor_name, profile_cfg.pdf.docling_num_threads)
         try:
             md_text, images_transcription = extractor.extract(file_path, work_dir)
         except Exception as e:

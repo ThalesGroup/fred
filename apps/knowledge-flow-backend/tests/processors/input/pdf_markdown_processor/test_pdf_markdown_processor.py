@@ -206,6 +206,47 @@ def test_pdf_processor_describes_images_with_vision_model(
     assert str(img_path) not in md_text
 
 
+def test_pdf_processor_builds_extractor_only_once_per_config(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    """`_get_extractor` must reuse the same extractor instance across documents
+    instead of calling `_build_extractor` (and, for docling, reloading its
+    OCR/layout models) on every single file."""
+
+    class FakeExtractor:
+        def extract(self, file_path: Path, work_dir: str):
+            return ("# ok\n", [])
+
+    build_calls: list[tuple[str, int]] = []
+
+    def fake_build_extractor(extractor_name: str, docling_num_threads: int = 4):
+        build_calls.append((extractor_name, docling_num_threads))
+        return FakeExtractor()
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
+        lambda: SimpleNamespace(
+            vision_model=None,
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=False,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=False, docling_num_threads=2),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(processor, "_build_extractor", fake_build_extractor)
+
+    for i in range(3):
+        result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path / f"out{i}", f"doc-{i}")
+        assert Path(result["md_file"]).exists()
+
+    assert build_calls == [("docling", 2)]
+
+
 @pytest.mark.integration
 def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_file):
     output_dir = Path("/tmp/knowledge_flow/test/output")
