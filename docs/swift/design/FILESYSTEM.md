@@ -177,6 +177,8 @@ Knowledge Flow owns file bytes and virtual filesystem routing. Important routes:
 | `POST /fs/copy-to-shared/{path}` | human share-by-copy |
 | `POST /fs/edit/{path}` | exact string replacement |
 | `POST /fs/mkdir/{path}` | create a directory |
+| `POST /fs/rename/{path}` | rename a file or folder in place (same parent) |
+| `GET /fs/stats/{path}` | usage-by-file-type counts/sizes, recursive (Resources dashboard) |
 | `DELETE /fs/delete/{path}` | delete a file or directory |
 | `GET /fs/glob` / `GET /fs/grep` | discovery/search over visible paths |
 

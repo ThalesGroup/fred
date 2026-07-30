@@ -136,7 +136,7 @@ next to the sibling `retrievable`/`title` routes it was modeled on:
    `document_name` forever, defeating the point of a *real* rename. So
    `rename_document` writes `document_name` and unconditionally sets
    `title = None`. The older cosmetic-only `update_document_title` endpoint
-   (RFC §13.8 in KNOWLEDGE-WORKSPACE-REWORK-RFC.md, decision 9) is **not**
+   (see `docs/swift/design/RESOURCES-DASHBOARD.md`) is **not**
    removed — `title` remains a legitimate independent field for any future
    surface that only wants a display override — but the Corpus "Renommer"
    action now calls `rename_document`, not `update_document_title`.
