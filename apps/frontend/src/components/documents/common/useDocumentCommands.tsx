@@ -20,7 +20,6 @@ import {
   DocumentMetadata,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
-  useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -46,8 +45,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
-  const [updateDocumentTitle] =
-    useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation();
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
@@ -235,32 +232,11 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [updateTag, refresh, showError, t],
   );
 
-  // Corpus document rename (RFC §13.8) — cosmetic only (decision 9): sets
-  // `identity.title`, browser-display only. Citations and vector search keep
-  // referencing the original ingested file name.
-  const renameDocumentTitle = useCallback(
-    async (doc: DocumentMetadata, newTitle: string) => {
-      try {
-        await updateDocumentTitle({
-          documentUid: doc.identity.document_uid,
-          bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: { title: newTitle },
-        }).unwrap();
-        await refresh();
-      } catch (e: any) {
-        showError?.({
-          summary: t("validation.error"),
-          detail: e?.data?.detail || e?.message || "Failed to rename document.",
-        });
-        throw e;
-      }
-    },
-    [updateDocumentTitle, refresh, showError, t],
-  );
-
   // Corpus document rename (DOCUMENT-RENAME-RFC.md) — real rename: changes the
   // actual `identity.document_name`, propagated (best-effort) to the vector
-  // index and the content-store filename lookup. Supersedes the cosmetic
-  // `renameDocumentTitle` above for the Corpus "Renommer" action.
+  // index and the content-store filename lookup. Supersedes the earlier
+  // cosmetic title-only rename (identity.title, browser-display only) for
+  // the Corpus "Renommer" action.
   const renameDocument = useCallback(
     async (doc: DocumentMetadata, newName: string) => {
       try {
@@ -285,7 +261,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
     renameTag,
-    renameDocumentTitle,
     renameDocument,
     preview,
     previewTarget,
