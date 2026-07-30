@@ -20,12 +20,18 @@ interface SpinnerProps {
   /** Stroke color — defaults to the current text color so it drops into any
    *  colored context (e.g. a `--on-surface-retreat` loading label) unchanged. */
   color?: string;
+  /** Set when a host already exposes its own accessible label/live region for
+   *  this loading state (e.g. TaskIndicator's own aria-label'd trigger button) —
+   *  drops this spinner's own `role="status"`/`aria-label` so screen readers
+   *  don't announce "Loading" a second time per instance, which gets noisy
+   *  fast with several concurrent spinners (e.g. an activity list). */
+  decorative?: boolean;
 }
 
 /** Indeterminate circular progress ring — the M3 loading affordance for "work
  *  is happening, no known duration". Extracted from TaskIndicator's inline
  *  SpinningRing so page-level loading states can reuse the same visual. */
-export function Spinner({ size = 20, color = "currentColor" }: SpinnerProps) {
+export function Spinner({ size = 20, color = "currentColor", decorative = false }: SpinnerProps) {
   const strokeWidth = 2;
   const r = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * r;
@@ -38,8 +44,9 @@ export function Spinner({ size = 20, color = "currentColor" }: SpinnerProps) {
       viewBox={`0 0 ${size} ${size}`}
       className={styles.ring}
       style={{ flexShrink: 0 }}
-      role="status"
-      aria-label="Loading"
+      role={decorative ? undefined : "status"}
+      aria-label={decorative ? undefined : "Loading"}
+      aria-hidden={decorative ? "true" : undefined}
     >
       <circle cx={cx} cy={cx} r={r} fill="none" stroke={color} strokeWidth={strokeWidth} opacity={0.18} />
       <circle

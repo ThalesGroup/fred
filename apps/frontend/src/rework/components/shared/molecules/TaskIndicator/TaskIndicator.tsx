@@ -56,7 +56,7 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
         ) : task.state === "cancelled" ? (
           <BanIcon color={fg} size={ringSize} />
         ) : task.state === "running" ? (
-          <Spinner color={fg} size={ringSize} />
+          <Spinner color={fg} size={ringSize} decorative />
         ) : (
           <span className={styles.dot} data-state={task.state} style={{ "--dot-color": fg } as React.CSSProperties} />
         )}

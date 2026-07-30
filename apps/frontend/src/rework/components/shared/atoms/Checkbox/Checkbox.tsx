@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./Checkbox.module.scss";
-import { ComponentPropsWithRef } from "react";
+import { ComponentPropsWithRef, useEffect, useRef } from "react";
 
 interface CheckboxProps extends ComponentPropsWithRef<"input"> {
   /** Neither checked nor unchecked — e.g. a "select all" header checkbox when
@@ -21,15 +21,29 @@ interface CheckboxProps extends ComponentPropsWithRef<"input"> {
   indeterminate?: boolean;
 }
 
-export default function Checkbox({ ref, indeterminate = false, className, ...rest }: CheckboxProps) {
+export default function Checkbox({ ref: externalRef, indeterminate = false, className, ...rest }: CheckboxProps) {
   const containerClasses = [styles["checkbox-container"]];
   if (className) containerClasses.push(className);
+
+  // The visual/ARIA state above is enough for the custom `.box` and modern
+  // screen readers, but the native `.indeterminate` DOM property (unlike
+  // `.checked`, it has no HTML attribute) is what the rest of this codebase's
+  // other checkboxes set (e.g. DocumentLibraryScopePicker) and what anything
+  // reading the input directly — assistive tech, tests, autofill — expects.
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = indeterminate;
+  }, [indeterminate]);
 
   return (
     <label className={containerClasses.join(" ")}>
       <input
         type="checkbox"
-        ref={ref}
+        ref={(el) => {
+          inputRef.current = el;
+          if (typeof externalRef === "function") externalRef(el);
+          else if (externalRef) externalRef.current = el;
+        }}
         className={styles["native-input"]}
         aria-checked={indeterminate ? "mixed" : undefined}
         data-indeterminate={indeterminate || undefined}
