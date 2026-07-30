@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import case, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.common.team_id import TeamId
@@ -323,18 +323,51 @@ class TeamMetadataStore:
         `NOT NULL` — a team deleted concurrently with a storage recalculation
         pass would turn one team's accounting update into a raw
         `IntegrityError` (500) instead of skipping just that team.
+
+        The result is clamped at 0: usage is a byte count, so a negative value
+        is always accounting drift rather than a real state, and letting it go
+        negative would hand the team free quota. The clamp logs a warning so the
+        drift stays visible instead of being silently absorbed (#2149).
+
+        The update is a single atomic `UPDATE ... SET col = col + :delta`, not a
+        read-modify-write. Bulk deletes fan out with `asyncio.gather`
+        (`tag_service._delete_one_tag`), so N releases hit one team row
+        concurrently; loading the row and writing back an absolute value lost
+        most of those decrements under READ COMMITTED, leaving exactly the drift
+        this accounting exists to prevent (#2149 review finding).
         """
         async with use_session(self._sessions, session) as s:
-            row = await s.get(TeamMetadataRow, str(team_id))
-            if row is None:
+            # CASE, not GREATEST/MAX: `GREATEST` is Postgres-only and `MAX` is an
+            # aggregate there, so neither is portable to the SQLite used by tests.
+            new_value = (
+                func.coalesce(TeamMetadataRow.current_resources_storage_size, 0) + delta
+            )
+            result = await s.execute(
+                update(TeamMetadataRow)
+                .where(TeamMetadataRow.id == str(team_id))
+                .values(
+                    current_resources_storage_size=case(
+                        (new_value < 0, 0), else_=new_value
+                    )
+                )
+                .returning(TeamMetadataRow.current_resources_storage_size)
+            )
+            updated = result.scalar_one_or_none()
+            if updated is None:
                 logger.warning(
                     "Skipping storage size update for unknown team '%s' (delta=%d)",
                     team_id,
                     delta,
                 )
                 return
-            current = row.current_resources_storage_size or 0
-            row.current_resources_storage_size = current + delta
+            if delta < 0 and updated == 0:
+                # Cannot distinguish "landed exactly on 0" from "clamped" without a
+                # second read; warn on both rather than add a query to a hot path.
+                logger.warning(
+                    "Storage accounting for team '%s' reached 0 (delta=%d); if this was a clamp, usage had drifted",
+                    team_id,
+                    delta,
+                )
 
     async def check_quota(
         self,

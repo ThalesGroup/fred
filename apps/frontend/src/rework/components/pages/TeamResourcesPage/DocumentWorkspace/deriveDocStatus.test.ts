@@ -15,7 +15,7 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
-import { deriveDocStatus } from "./deriveDocStatus.ts";
+import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 
 const doc = (stages: Record<string, string>): DocumentMetadata =>
   ({ processing: { stages } }) as unknown as DocumentMetadata;
@@ -51,5 +51,23 @@ describe("deriveDocStatus", () => {
       progress: 0.4,
     });
     expect(deriveDocStatus(doc({ vector: "done" }), task("failed")).status).toBe("failed");
+  });
+});
+
+describe("isTabularOnlyDoc", () => {
+  it("is true for a dataset that only completed the sql stage", () => {
+    expect(isTabularOnlyDoc(doc({ raw: "done", preview: "done", sql: "done" }))).toBe(true);
+  });
+
+  it("is false for a vectorized (prose) document", () => {
+    expect(isTabularOnlyDoc(doc({ raw: "done", vector: "done" }))).toBe(false);
+  });
+
+  it("is false when neither stage is done yet", () => {
+    expect(isTabularOnlyDoc(doc({ raw: "done" }))).toBe(false);
+  });
+
+  it("is false when a dataset has also been vectorized (pointer chunks enabled)", () => {
+    expect(isTabularOnlyDoc(doc({ raw: "done", sql: "done", vector: "done" }))).toBe(false);
   });
 });

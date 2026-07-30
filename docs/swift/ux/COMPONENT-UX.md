@@ -1987,7 +1987,7 @@ Toggling a capability no longer changes the name's font size
 Active emphasis is now weight + `--primary` color at identical metrics; only
 the config sub-form still expands, which is expected.
 
-### `TeamFilesystemBrowser` / `AgentFilesystemBrowser` (Resources tabs)
+### `FilesystemWorkspace` / `AgentsWorkspace` (Resources tabs — Mon espace/Espace d'équipe/Agents)
 
 Expanding an empty folder now shows the same explanatory hint pattern as the
 corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an

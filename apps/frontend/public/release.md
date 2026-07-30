@@ -1,3 +1,77 @@
+**v2.1.22** — 2026-07-30
+
+- **Summary**
+
+  The team Resources page is rebuilt: a tab switcher and a rich, sortable table
+  replace the old always-expanded tree, with search, real rename (folders and
+  documents), multi-select bulk actions, and file-type usage dashboard cards.
+  A document rename now actually changes its file name everywhere, not just
+  its display label. Signing in no longer hangs the whole app if Keycloak is
+  briefly slow or unreachable.
+
+- **Features**
+
+  - Team Resources page rebuilt: tab switcher, a sortable/paginated table (name, size, date added, author), and search within a folder (#2168)
+  - Rename folders and documents directly from the Resources table — a document rename changes its actual file name, not just its display title (#2168)
+  - Select multiple rows in the Resources table for bulk delete, bulk download (zipped for 2+ files), and bulk exclude/include from search (#2168)
+  - Usage dashboard cards (files by type, storage by type), toggleable from the page header (#2168)
+  - The document preview drawer can switch between the original file and its extracted text ("Fichier"/"Raw") (#2168)
+
+- **Improvements**
+
+  - A folder's size in the Resources table now shows its real total storage size, including subfolders, instead of just a document count (#2168)
+  - The Resources table shows who uploaded each document (#2168)
+  - Signing in no longer hangs the entire app if Keycloak is slow or unreachable — a stalled session refresh now fails over cleanly instead of blocking every request (#2168)
+  - Fixed a couple of screen-reader accessibility issues (duplicate/missing status announcements) on the Resources page (#2168)
+
+- **Bug Fixes**
+
+  - A spreadsheet or CSV file could be wrongly flagged "excluded from search" and offered a fix-it action that risked corrupting its indexing — that badge and action no longer appear for this file type (#2168)
+  - Renaming a folder in Mon espace/Espace d'équipe/Agents could crash instead of completing (#2168)
+  - Deleting the last row of a paginated table could leave the page stuck empty with an incorrect page count (#2168)
+  - Some legacy Word/Excel/PowerPoint file types showed a generic icon instead of their correct type and color (#2168)
+
+- **Deployment note**
+
+  - The three additional resource spaces (Mon espace, Espace d'équipe, Agents) are built and tested but ship behind an off-by-default platform feature flag (`enableAllResourceSpaces`) — only "Corpus d'équipe" is visible until that flag is turned on. No other action needed — all changes are additive.
+
+**v2.1.21** — 2026-07-30
+
+- **Summary**
+
+  A permission gap that let a non-member of a public team view its prompt
+  library and run its agents is fixed — team content and execution now
+  correctly require membership. Signing in and switching teams is noticeably
+  faster on larger platforms. The evaluation runs page now supports search,
+  sort, and pagination at scale, lets you export results as versioned JSON,
+  and shows who started each run; its dashboard counts and pager no longer
+  show stale or empty results once an evaluation has many runs.
+
+- **Features**
+
+  - Evaluation run results can be exported as versioned JSON — a single case or a full run report — for archiving or further analysis (#2162)
+  - The evaluation runs table shows who started each run (#2162)
+
+- **Improvements**
+
+  - Evaluation and evaluation-runs lists support search, sorting, and pagination, so large evaluation histories stay fast and scannable (#2162)
+  - Settings pages' Back button now returns to where you came from, instead of always going to Agents (#2162)
+  - Signing in and loading team pages is noticeably faster on platforms with many teams, and team role changes made elsewhere show up promptly instead of waiting out a cache (#2160)
+
+- **Bug Fixes**
+
+  - Evaluation run dashboard counts (active/completed/cases/critical failures) could be wrong once an evaluation had more runs than fit on one page (#2162)
+  - Deleting the last run on a runs page could leave the pager empty until the next reload (#2162)
+  - The built-in self-test agent could fail to provision with a "template not found" error (#2164)
+
+- **Security**
+
+  - Fixed a permission gap where a non-member of a public team could read its prompt library and execute its agents just because the team was publicly discoverable — both now correctly require team membership (#2147)
+
+- **Deployment note**
+
+  - The evaluation-run KPI fix depends on the separately-deployed `fred-agent-evaluator` backend also being upgraded (its new runs-summary endpoint, merged in fred-agent/fred-agent-evaluator#46). No other action needed — all changes are additive.
+
 **v2.1.20** — 2026-07-29
 
 - **Summary**
