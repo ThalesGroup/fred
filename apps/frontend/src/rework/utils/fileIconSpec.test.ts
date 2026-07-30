@@ -20,15 +20,15 @@ describe("fileIconSpec", () => {
     expect(fileIconSpec("pdf")).toEqual({ type: "picture_as_pdf", color: "var(--error)" });
   });
 
-  it.each(["docx", "md", "html", "txt"])("maps %s (Word/Texte) to article in tertiary", (fileType) => {
+  it.each(["docx", "doc", "odt", "md", "html", "txt"])("maps %s (Word/Texte) to article in tertiary", (fileType) => {
     expect(fileIconSpec(fileType)).toEqual({ type: "article", color: "var(--tertiary)" });
   });
 
-  it.each(["xlsx", "csv"])("maps %s (Excel/CSV) to table in success", (fileType) => {
+  it.each(["xlsx", "xls", "ods", "csv"])("maps %s (Excel/CSV) to table in success", (fileType) => {
     expect(fileIconSpec(fileType)).toEqual({ type: "table", color: "var(--success)" });
   });
 
-  it.each(["ppt", "pptx"])("maps %s (PowerPoint) to slideshow in warning", (fileType) => {
+  it.each(["ppt", "pptx", "odp"])("maps %s (PowerPoint) to slideshow in warning", (fileType) => {
     expect(fileIconSpec(fileType)).toEqual({ type: "slideshow", color: "var(--warning)" });
   });
 
