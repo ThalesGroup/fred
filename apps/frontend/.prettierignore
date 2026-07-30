@@ -12,3 +12,9 @@ src/slices/**/**OpenApi.ts
 # capability OpenAPI specs (see `make update-<cap>-capability-api`).
 src/rework/features/capabilities/**/api/**OpenApi.ts
 src/rework/features/capabilities/**/api/openapi.json
+
+# Ignore the vendored fred-agent-evaluator OpenAPI snapshot (cross-repo source
+# of truth for evaluationOpenApi.ts — see src/slices/evaluation/README.md).
+# Every other backend's raw openapi.json lives outside apps/frontend, so this
+# is the only one prettier's `.` scan would otherwise reach.
+src/slices/evaluation/openapi.json
