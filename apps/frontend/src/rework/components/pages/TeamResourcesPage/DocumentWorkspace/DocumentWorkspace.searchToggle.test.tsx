@@ -47,6 +47,16 @@ const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
+// A tabular dataset only ever completes the `sql` stage — `retrievable` stays
+// false there by design (no vector chunks), not a real exclusion.
+const tabularDoc = (uid: string, name: string) => ({
+  identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
+  file: { file_type: "xlsx", file_size_bytes: 2048 },
+  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
+  processing: { stages: { raw: "done", sql: "done" } },
+  tags: { tag_ids: ["tag-cir"] },
+});
+
 // Mirrors the real hook: flips the doc's current value and returns the new
 // one, which is exactly what DocumentWorkspace needs to patch its own state.
 const toggleRetrievable = vi.fn(async (d: { source: { retrievable?: boolean } }) => !d.source.retrievable);
@@ -64,8 +74,9 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
           doc("uid-excluded-1", "Excluded one", false),
           doc("uid-excluded-2", "Excluded two", false),
           doc("uid-included", "Included doc", true),
+          tabularDoc("uid-tabular", "Tabular doc"),
         ],
-        total: 3,
+        total: 4,
       }),
     }),
   ],
@@ -177,6 +188,23 @@ describe("DocumentWorkspace — row 'more' menu searchable label", () => {
     const label = openMenuAndReadSearchableLabel(moreButtons()[2]);
     expect(label.endsWith("rework.resources.action.searchable")).toBe(true);
   });
+
+  it("omits the searchable/include-in-search option entirely for a tabular-only dataset", () => {
+    act(() => {
+      moreButtons()[3].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    const items = [
+      ...document.querySelectorAll(
+        '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
+      ),
+    ];
+    const item = items.find(
+      (el) =>
+        el.textContent?.includes("rework.resources.action.includeInSearch") ||
+        el.textContent?.includes("rework.resources.action.searchable"),
+    );
+    expect(item).toBeUndefined();
+  });
 });
 
 describe("DocumentWorkspace — bulk search-toggle button", () => {
@@ -208,6 +236,30 @@ describe("DocumentWorkspace — bulk search-toggle button", () => {
       button.click();
     });
     expect(toggleRetrievable).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a tabular-only doc in the selection — still shows 'Include in search' for the two real exclusions, not hidden as a mixed selection", () => {
+    selectRows(0, 1, 3); // two excluded + the tabular doc
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]')).toBeNull();
+  });
+
+  it("does not toggle the tabular doc when the bulk action fires on a mixed real+tabular selection", () => {
+    selectRows(0, 1, 3);
+    const button = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.includeInSearch"]',
+    ) as HTMLButtonElement;
+    act(() => {
+      button.click();
+    });
+    // Only the two real exclusions toggle — the tabular doc is skipped entirely.
+    expect(toggleRetrievable).toHaveBeenCalledTimes(2);
+  });
+
+  it("hides the button entirely when only tabular-only docs are selected — nothing toggle-relevant", () => {
+    selectRows(3);
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]')).toBeNull();
   });
 });
 

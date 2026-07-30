@@ -16,7 +16,11 @@
 // Coverage: a document excluded from search (source.retrievable === false)
 // shows an error-colored indicator icon at the end of its row, just left of
 // the Preview icon button — visible only for that state, not for a
-// retrievable (or not-yet-stamped) document.
+// retrievable (or not-yet-stamped) document. Also covers a tabular dataset
+// (CSV/XLSX, only the `sql` stage ever completes): `retrievable` stays false
+// there by design (RAG-DATASET-DISCOVERY-RFC.md, no vector chunks emitted
+// unless dataset pointer chunks are enabled), so the indicator must stay
+// hidden — it isn't a real exclusion for that content type.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -41,6 +45,14 @@ const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
+const tabularDoc = (uid: string, name: string) => ({
+  identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
+  file: { file_type: "xlsx", file_size_bytes: 2048 },
+  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
+  processing: { stages: { raw: "done", sql: "done" } },
+  tags: { tag_ids: ["tag-cir"] },
+});
+
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
@@ -54,8 +66,9 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
           doc("uid-excluded", "Excluded doc", false),
           doc("uid-included", "Included doc", true),
           doc("uid-unset", "Unset doc", undefined),
+          tabularDoc("uid-tabular", "Tabular doc"),
         ],
-        total: 3,
+        total: 4,
       }),
     }),
   ],
@@ -145,6 +158,12 @@ describe("DocumentWorkspace — excluded-from-search row indicator", () => {
   it("hides the indicator when retrievable has never been stamped (undefined, not explicitly false)", () => {
     expect(
       rowFor("Unset doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
+    ).toBeNull();
+  });
+
+  it("hides the indicator for a tabular dataset even though retrievable is false", () => {
+    expect(
+      rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
     ).toBeNull();
   });
 });

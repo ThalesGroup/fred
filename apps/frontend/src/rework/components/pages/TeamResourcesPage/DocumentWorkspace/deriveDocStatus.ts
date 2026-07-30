@@ -53,3 +53,21 @@ export function deriveDocStatus(doc: DocumentMetadata, task?: TaskViewModel): Re
   if (QUERYABLE_STAGES.some((stage) => stages[stage] === "done")) return { status: "ready", progress: null };
   return { status: "raw", progress: null };
 }
+
+/**
+ * A tabular dataset (CSV/XLSX) only ever completes the `sql` stage — it's
+ * never chunked/embedded. `source.retrievable` is a vector-search-only flag
+ * (RAG-DATASET-DISCOVERY-RFC.md): TabularProcessor deliberately never marks
+ * it true unless dataset pointer chunks are enabled (off by default), because
+ * marking a doc retrievable with zero vector chunks would break the
+ * VECTORIZED-stage invariant the orphan-chunk cleanup path relies on. So for
+ * this content type, `retrievable === false` is the expected steady state,
+ * not a real exclusion — the dataset stays fully queryable through the
+ * SQL/tabular tool. Callers that surface "excluded from search" to the user
+ * should check this first, or they'll flag every successfully-ingested
+ * dataset as if someone had deliberately excluded it.
+ */
+export function isTabularOnlyDoc(doc: DocumentMetadata): boolean {
+  const stages = doc.processing?.stages ?? {};
+  return stages["sql"] === "done" && stages["vector"] !== "done";
+}

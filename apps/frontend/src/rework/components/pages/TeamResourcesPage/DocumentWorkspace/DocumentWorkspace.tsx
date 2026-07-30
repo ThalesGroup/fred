@@ -59,7 +59,7 @@ import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
-import { deriveDocStatus } from "./deriveDocStatus.ts";
+import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 import styles from "./DocumentWorkspace.module.css";
 
@@ -579,15 +579,20 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
   };
 
-  // "exclude" when every selected doc is currently searchable, "include" when
-  // every one is already excluded, undefined (button hidden, per BulkActionsBar's
-  // "omit to hide" convention) on a mixed selection — there's no single
-  // unambiguous action to offer for a set of files in both states at once.
+  // "exclude" when every toggle-relevant selected doc is currently searchable,
+  // "include" when every one is already excluded, undefined (button hidden, per
+  // BulkActionsBar's "omit to hide" convention) on a mixed selection — there's
+  // no single unambiguous action to offer for a set of files in both states at
+  // once. A tabular-only dataset's `retrievable` is always false without being
+  // a real exclusion (see isTabularOnlyDoc) — excluded from this computation
+  // entirely, not counted toward either direction, same as if it weren't
+  // selected at all.
   const searchToggleMode = useMemo<"exclude" | "include" | undefined>(() => {
-    if (selectedDocs.length === 0) return undefined;
-    const excludedCount = selectedDocs.filter((doc) => doc.source.retrievable === false).length;
+    const toggleable = selectedDocs.filter((doc) => !isTabularOnlyDoc(doc));
+    if (toggleable.length === 0) return undefined;
+    const excludedCount = toggleable.filter((doc) => doc.source.retrievable === false).length;
     if (excludedCount === 0) return "exclude";
-    if (excludedCount === selectedDocs.length) return "include";
+    if (excludedCount === toggleable.length) return "include";
     return undefined;
   }, [selectedDocs]);
 
@@ -618,10 +623,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   };
 
   const bulkToggleSearchable = async () => {
-    // searchToggleMode being defined guarantees the selection is uniform (all
-    // searchable or all excluded), so toggling every doc unconditionally moves
-    // them all the same direction.
-    await Promise.all(selectedDocs.map((doc) => toggleSearchable(doc)));
+    // searchToggleMode being defined guarantees the toggle-relevant subset of
+    // the selection is uniform (all searchable or all excluded), so toggling
+    // every one of those docs unconditionally moves them all the same
+    // direction. Tabular-only docs are skipped — same reasoning as
+    // searchToggleMode above, they were never counted toward that direction.
+    await Promise.all(selectedDocs.filter((doc) => !isTabularOnlyDoc(doc)).map((doc) => toggleSearchable(doc)));
     setSelectedKeys(new Set());
   };
 
@@ -694,15 +701,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
     if (canCreateFolder) {
       const excludedFromSearch = doc.source.retrievable === false;
+      // A tabular-only dataset's `retrievable` is always false without being a
+      // real exclusion (see isTabularOnlyDoc) — it stays queryable via the
+      // SQL/tabular tool regardless. Offering "Include in search" here would
+      // let a user flip `retrievable` to true on a doc with zero vector
+      // chunks, which the ingestion invariant relies on never happening,
+      // for zero actual benefit (there's nothing to include it into).
       options.push(
-        {
-          value: "searchable",
-          key: "searchable",
-          label: t(
-            excludedFromSearch ? "rework.resources.action.includeInSearch" : "rework.resources.action.searchable",
-          ),
-          icon: { category: "outlined", type: excludedFromSearch ? "search" : "search_off" },
-        },
+        ...(isTabularOnlyDoc(doc)
+          ? []
+          : [
+              {
+                value: "searchable" as const,
+                key: "searchable",
+                label: t(
+                  excludedFromSearch ? "rework.resources.action.includeInSearch" : "rework.resources.action.searchable",
+                ),
+                icon: {
+                  category: "outlined" as const,
+                  type: excludedFromSearch ? ("search" as const) : ("search_off" as const),
+                },
+              },
+            ]),
         ...(SHOW_REPROCESS_ACTION
           ? [
               {
@@ -826,7 +846,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "8rem",
       cellRenderer: (row) => (
         <span className={styles.actionsCell}>
-          {row.kind === "document" && row.doc.source.retrievable === false && (
+          {row.kind === "document" && row.doc.source.retrievable === false && !isTabularOnlyDoc(row.doc) && (
             <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
               <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
                 <Icon category="outlined" type="search_off" />
