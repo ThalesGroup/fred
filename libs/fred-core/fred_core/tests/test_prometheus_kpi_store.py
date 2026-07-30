@@ -176,6 +176,33 @@ def test_prometheus_store_promotes_runtime_stage_and_rebac_operation() -> None:
     assert "service" in label_names
 
 
+def test_prometheus_store_promotes_pdf_stage_as_a_distinct_label_from_runtime_stage() -> (
+    None
+):
+    """
+    `pdf_stage` (knowledge_flow.pdf.image_loop_latency_ms /
+    image_description_latency_ms) is a separate closed-set dim from
+    `runtime_stage` on purpose — see PROMETHEUS_ALLOWED_LABELS — so a Grafana
+    `runtime_stage` query never mixes TURN-01's auth stages with Knowledge
+    Flow's PDF pipeline stages, even though both dims exist on the same
+    Prometheus label allow-list.
+    """
+    delegate = _RecordingKPIStore()
+    store = PrometheusKPIStore(delegate=delegate)
+    metric_name = f"test.pdf_stage_promotion_{uuid4().hex}"
+    event = KPIEvent(
+        metric=Metric(name=metric_name, type="timer", value=3.0, unit="ms"),
+        dims={"pdf_stage": "image_loop", "file_type": "pdf"},
+    )
+
+    store.index_event(event)
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    label_names = store._label_names[(resolved_name, "timer")]
+    assert "pdf_stage" in label_names
+    assert "runtime_stage" not in label_names
+
+
 def test_prometheus_store_gives_each_runtime_stage_value_a_distinct_series() -> None:
     delegate = _RecordingKPIStore()
     store = PrometheusKPIStore(delegate=delegate)

@@ -244,7 +244,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             loop_start = time.perf_counter()
             with self._pdf_kpi_timer(
                 "knowledge_flow.pdf.image_loop_latency_ms",
-                {"runtime_stage": "image_loop", "file_type": "pdf"},
+                {"pdf_stage": "image_loop", "file_type": "pdf"},
             ):
                 ocr_model = PaddleOCRmodel()
                 ocr_results = self._use_ocr(ocr_model, images_transcription)
@@ -252,7 +252,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     if use_image_describer:
                         with self._pdf_kpi_timer(
                             "knowledge_flow.pdf.image_description_latency_ms",
-                            {"runtime_stage": "image_description", "model_name": vision_model_name},
+                            {"pdf_stage": "image_description", "model_name": vision_model_name},
                         ):
                             image_transcription.transcription = self._use_image_describer(image_describer, image_transcription, ocr_result)
                     else:

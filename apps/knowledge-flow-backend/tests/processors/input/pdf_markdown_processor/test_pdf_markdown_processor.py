@@ -293,7 +293,7 @@ def test_pdf_kpi_timer_emits_when_in_activity_context(monkeypatch: pytest.Monkey
     monkeypatch.setattr(ApplicationContext, "get_instance", classmethod(lambda cls: _FakeAppContext(fake_writer)))
 
     def call_timer() -> bool:
-        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_description_latency_ms", {"runtime_stage": "image_description", "model_name": "fake-vision"}):
+        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_description_latency_ms", {"pdf_stage": "image_description", "model_name": "fake-vision"}):
             pass
         return True
 
@@ -301,13 +301,13 @@ def test_pdf_kpi_timer_emits_when_in_activity_context(monkeypatch: pytest.Monkey
         return await to_thread_with_heartbeat(call_timer)
 
     assert asyncio.run(env.run(activity_body)) is True
-    assert fake_writer.calls == [("knowledge_flow.pdf.image_description_latency_ms", {"runtime_stage": "image_description", "model_name": "fake-vision"})]
+    assert fake_writer.calls == [("knowledge_flow.pdf.image_description_latency_ms", {"pdf_stage": "image_description", "model_name": "fake-vision"})]
 
 
 def test_pdf_kpi_timer_noops_outside_activity_context(processor: PdfMarkdownProcessor):
     """Outside a Temporal activity (e.g. `procbench` or a plain unit test), the timer
     must no-op without ever touching ApplicationContext — which may not be initialized."""
-    with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"runtime_stage": "image_loop", "file_type": "pdf"}):
+    with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
         pass
 
 
@@ -322,7 +322,7 @@ def test_pdf_kpi_timer_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch, p
     monkeypatch.setattr(ApplicationContext, "get_instance", classmethod(boom))
 
     def call_timer() -> bool:
-        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"runtime_stage": "image_loop", "file_type": "pdf"}):
+        with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
             pass
         return True
 
