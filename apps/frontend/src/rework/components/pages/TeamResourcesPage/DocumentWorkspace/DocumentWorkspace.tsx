@@ -58,6 +58,7 @@ import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
+import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
 import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
@@ -196,6 +197,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [reprocessOverrides, setReprocessOverrides] = useState<Record<string, { snapshot: string; deadline: number }>>(
     {},
   );
+  // A just-reprocessed doc must read as "processing" even though its stale
+  // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
+  // above. Centralized here since every status-driven cell (menu label,
+  // StatusChip, excluded-from-search gating) needs the same override applied.
+  const getDocStatus = (doc: DocumentMetadata): DocStatus =>
+    reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -307,12 +314,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // badge flips to Ready/Failed without a manual refresh.
   useEffect(() => {
     const pendingTagIds = Object.entries(perTag)
-      .filter(([, page]) =>
-        page.docs.some(
-          (doc) =>
-            deriveDocStatus(doc).status === "processing" || reprocessOverrides[doc.identity.document_uid] !== undefined,
-        ),
-      )
+      .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
       .map(([tagId]) => tagId);
     if (pendingTagIds.length === 0) return;
     const interval = setInterval(() => {
@@ -684,7 +686,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
-    const status = reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
+    const status = getDocStatus(doc);
     const options: OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] = [];
     if (canCreateFolder) {
       options.push({
@@ -836,10 +838,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "6rem",
       cellRenderer: (row) => {
         if (row.kind !== "document") return null;
-        const status = reprocessOverrides[row.doc.identity.document_uid]
-          ? "processing"
-          : deriveDocStatus(row.doc).status;
-        return <StatusChip status={status} />;
+        return <StatusChip status={getDocStatus(row.doc)} />;
       },
     },
     {
@@ -862,9 +861,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         // flips true once vectorization completes), not just for a deliberate
         // exclusion — gate on `ready` too, or this icon flags every
         // still-processing document as "excluded from search".
-        const status =
-          row.kind === "document" &&
-          (reprocessOverrides[row.doc.identity.document_uid] ? "processing" : deriveDocStatus(row.doc).status);
+        const status = row.kind === "document" && getDocStatus(row.doc);
         return (
           <span className={styles.actionsCell}>
             {row.kind === "document" &&
