@@ -331,7 +331,7 @@ export function CapabilityTeamMatrixDrawer({
 
           {status === "loading" && (
             <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
-              <Spinner size={16} />
+              <Spinner size={16} decorative />
               {t("rework.admin.capabilities.matrix.teamsLoading")}
             </p>
           )}
