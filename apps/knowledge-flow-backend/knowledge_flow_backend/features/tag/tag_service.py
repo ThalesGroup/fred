@@ -59,6 +59,12 @@ from knowledge_flow_backend.features.users.users_service import UserSummary, get
 
 logger = logging.getLogger(__name__)
 
+# How many documents to detach from a tag at once when deleting it. Each removal
+# holds a pooled DB connection and updates the owning counter, so this bounds
+# both pool usage and write contention on a single row (#2149 review). Kept
+# comfortably under the production pool size rather than tuned to it.
+_TAG_ITEM_DELETE_BATCH = 5
+
 
 class TagService:
     """
@@ -114,7 +120,11 @@ class TagService:
         if path_prefix:
             prefix = self._normalize_path(path_prefix)
             if prefix:
-                tags = [t for t in tags if self._full_path_of(t).startswith(prefix)]
+                # Match on a path boundary, not a raw string prefix: plain
+                # `startswith` made "/Sales" also select "/Salesforce", so
+                # deleting one library silently deleted a sibling whose name
+                # merely began with the same characters (#2149 review).
+                tags = [t for t in tags if self._full_path_of(t) == prefix or self._full_path_of(t).startswith(prefix.rstrip("/") + "/")]
 
         # 4) stable sort by full_path (optional but nice for UI determinism)
         tags.sort(key=lambda t: self._full_path_of(t).lower())
@@ -323,20 +333,37 @@ class TagService:
         tag = await self._tag_store.get_tag_by_id(tag_id)
 
         # Get all sub tags (recusrively) and the current tag
-        sub_tags = await self.list_all_tags_for_user(user, tag.type, path_prefix=tag.full_path)
+        # No UI pagination here: the default limit is a page size, and a tree
+        # larger than one page would be deleted only partially, leaving orphaned
+        # sub-tags and their documents' storage charged (#2149 review).
+        sub_tags = await self.list_all_tags_for_user(user, tag.type, path_prefix=tag.full_path, limit=1_000_000)
 
-        # Delete all of them
-        await asyncio.gather(*(self._delete_one_tag(sub_tag, user) for sub_tag in sub_tags))
+        # Delete them one tag at a time, NOT with asyncio.gather. A document
+        # carrying both a parent and a descendant tag is touched by two of these
+        # tasks; run concurrently, each loaded its own metadata copy, removed a
+        # different tag, saw a tag still remaining and saved — so the document was
+        # never deleted, its storage never released, and it kept referencing tag
+        # rows that both tasks then removed (#2149 review finding). The item-level
+        # fan-out inside `_delete_one_tag` is untouched: those are distinct
+        # documents with no shared row.
+        for sub_tag in sub_tags:
+            await self._delete_one_tag(sub_tag, user)
 
     async def _delete_one_tag(self, tag: Tag, user: KeycloakUser):
         await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag.id)
         item_service = get_specific_tag_item_service(tag.type)
 
-        # Remove tag on all items (and delete them if they have no tag anymore)
+        # Remove tag on all items (and delete them if they have no tag anymore).
+        # Bounded batches, not one coroutine per document: each removal takes a
+        # pooled DB connection and writes the owning team's counter, so an
+        # unbounded gather over a large library exhausted the connection pool and
+        # piled every write onto one contended row (#2149 review).
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
-        await asyncio.gather(
-            *(item_service.remove_tag_id_from_item(user, item_id, tag.id) for item_id in item_ids),
-        )
+        for start in range(0, len(item_ids), _TAG_ITEM_DELETE_BATCH):
+            batch = item_ids[start : start + _TAG_ITEM_DELETE_BATCH]
+            await asyncio.gather(
+                *(item_service.remove_tag_id_from_item(user, item_id, tag.id) for item_id in batch),
+            )
 
         # Remove tag
         await self._tag_store.delete_tag_by_id(tag.id)
