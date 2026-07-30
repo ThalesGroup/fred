@@ -13,15 +13,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TEAM-05, #2118: locks in the read/write split (team_editor writes,
+// TEAM-05, #2118 + #2167: locks in the read/write split (team_editor writes,
 // team_admin reads §6), that the default-profile + operation-rule fields
-// round-trip through the query result, and that a rejected PATCH surfaces
-// the server's 400 detail inline (§7.2 write-time validation errors).
+// round-trip through the query result, that both profile pickers are scoped
+// to the team's `can_use`-enabled models (§13), and that a rejected PATCH
+// surfaces the server's 400 detail inline (§7.2 write-time validation
+// errors).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TeamRoutingPolicy, TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  AvailableModelProfileList,
+  TeamRoutingPolicy,
+  TeamWithPermissions,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,6 +37,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
   policy: undefined as TeamRoutingPolicy | undefined,
+  availableModels: undefined as AvailableModelProfileList | undefined,
   updateRoutingPolicy: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
 }));
 
@@ -40,6 +47,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamRoutingPolicyQuery: () => ({ data: h.policy, isLoading: false }),
+  useAvailableModelProfilesQuery: () => ({ data: h.availableModels, isLoading: false }),
   useUpdateTeamRoutingPolicyMutation: () => [h.updateRoutingPolicy, { isLoading: false }],
 }));
 
@@ -64,9 +72,33 @@ afterEach(() => {
   container.remove();
   h.updateRoutingPolicy.mockClear();
   h.policy = undefined;
+  h.availableModels = undefined;
 });
 
 const TEAM = { id: "team-1", name: "Team One", is_member: true, admins: [], permissions: [] } as TeamWithPermissions;
+
+const ONE_MODEL: AvailableModelProfileList = {
+  profiles: [{ profile_id: "chat.openai.gpt5", capability_id: "model__openai__gpt-5", name: "GPT-5" }],
+};
+
+const TWO_MODELS: AvailableModelProfileList = {
+  profiles: [
+    { profile_id: "default.chat.mistral", capability_id: "model__mistral__default", name: "Mistral" },
+    { profile_id: "chat.openai.gpt5", capability_id: "model__openai__gpt-5", name: "GPT-5" },
+  ],
+};
+
+// Select's trigger is a <button aria-haspopup="listbox">; plain action
+// buttons ("Add rule", "Save") carry no such attribute.
+function selectTriggers(): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll('button[aria-haspopup="listbox"]'));
+}
+
+function pressKey(el: Element, key: string) {
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
 
 describe("TeamSettingsRouting", () => {
   it("renders the stored default profile id and operation rules", () => {
@@ -76,25 +108,58 @@ describe("TeamSettingsRouting", () => {
       chat_default_profile_id: "default.chat.mistral",
       operation_rules: [{ rule_id: "r1", operation: "planning", purpose: null, target_profile_id: "chat.openai.gpt5" }],
     };
+    h.availableModels = TWO_MODELS;
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
+    const triggers = selectTriggers();
+    expect(triggers[0].textContent).toContain("Mistral (default.chat.mistral)");
+    expect(triggers[1].textContent).toContain("GPT-5 (chat.openai.gpt5)");
+
     const inputs = container.querySelectorAll("input");
-    expect((inputs[0] as HTMLInputElement).value).toBe("default.chat.mistral");
-    expect((inputs[1] as HTMLInputElement).value).toBe("planning");
-    expect((inputs[3] as HTMLInputElement).value).toBe("chat.openai.gpt5");
+    expect((inputs[0] as HTMLInputElement).value).toBe("planning");
   });
 
-  it("disables every input and hides the save/add controls for a read-only caller (team_admin)", () => {
-    h.policy = { team_id: "team-1", version: 1, chat_default_profile_id: "p1", operation_rules: [] };
+  it("disables every field and hides the save/add controls for a read-only caller (team_admin)", () => {
+    h.policy = { team_id: "team-1", version: 1, chat_default_profile_id: "chat.openai.gpt5", operation_rules: [] };
+    h.availableModels = ONE_MODEL;
     render(<TeamSettingsRouting team={TEAM} canWrite={false} />);
 
-    const inputs = container.querySelectorAll("input");
-    inputs.forEach((input) => expect((input as HTMLInputElement).disabled).toBe(true));
-    expect(container.querySelectorAll("button")).toHaveLength(0);
+    selectTriggers().forEach((trigger) => expect(trigger.disabled).toBe(true));
+    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent?.includes("addRule"))).toBe(
+      false,
+    );
+    expect(
+      Array.from(container.querySelectorAll("button")).some(
+        (b) => b.textContent === "rework.teamSettings.routing.save",
+      ),
+    ).toBe(false);
+  });
+
+  it("shows an explanatory message instead of a picker when the team has no enabled models", () => {
+    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = { profiles: [] };
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    expect(selectTriggers()).toHaveLength(0);
+    expect(container.textContent).toContain("rework.teamSettings.routing.emptyState");
+  });
+
+  it("a stale profile id no longer enabled for the team still renders as a flagged option instead of vanishing", () => {
+    h.policy = {
+      team_id: "team-1",
+      version: 1,
+      chat_default_profile_id: "chat.openai.gpt4o-legacy",
+      operation_rules: [],
+    };
+    h.availableModels = ONE_MODEL;
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    expect(selectTriggers()[0].textContent).toContain("chat.openai.gpt4o-legacy");
   });
 
   it("adding a rule appends one empty row", () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
     const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
@@ -102,20 +167,21 @@ describe("TeamSettingsRouting", () => {
       addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    // 1 default-profile input + 3 inputs for the new row.
-    expect(container.querySelectorAll("input")).toHaveLength(4);
+    // operation + purpose text inputs for the new row.
+    expect(container.querySelectorAll("input")).toHaveLength(2);
+    // default-profile select + the new row's target-profile select.
+    expect(selectTriggers()).toHaveLength(2);
   });
 
-  it("save PATCHes the trimmed default profile id and current rows", async () => {
+  it("save PATCHes the picked default profile id and current rows", async () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
-    const defaultInput = container.querySelector("input")!;
-    act(() => {
-      defaultInput.dispatchEvent(new Event("focusin"));
-      Object.defineProperty(defaultInput, "value", { value: "  chat.openai.gpt5  ", writable: true });
-      defaultInput.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    const defaultTrigger = selectTriggers()[0];
+    pressKey(defaultTrigger, "ArrowDown"); // open, active = "use deployment default" (current value)
+    pressKey(defaultTrigger, "ArrowDown"); // move to the one available model
+    pressKey(defaultTrigger, "Enter");
 
     const saveButton = Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "rework.teamSettings.routing.save",
@@ -133,6 +199,7 @@ describe("TeamSettingsRouting", () => {
 
   it("shows the server's 400 detail inline when the save is rejected", async () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
     h.updateRoutingPolicy.mockReturnValue({
       unwrap: () => Promise.reject({ data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
     } as never);

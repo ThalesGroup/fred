@@ -549,6 +549,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateTeamRoutingPolicyRequest,
       }),
     }),
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: build.query<
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse,
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1249,6 +1255,11 @@ export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchAp
 export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg = {
   teamId: string;
   updateTeamRoutingPolicyRequest: UpdateTeamRoutingPolicyRequest;
+};
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
+  teamId: string;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
@@ -2335,6 +2346,15 @@ export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
   operation_rules?: TeamOperationRouteRule[];
 };
+export type AvailableModelProfile = {
+  profile_id: string;
+  capability_id: string;
+  /** i18n key, same as CapabilityCatalogEntry.name */
+  name: string;
+};
+export type AvailableModelProfileList = {
+  profiles?: AvailableModelProfile[];
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -2761,6 +2781,8 @@ export const {
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
+  useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

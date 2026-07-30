@@ -36,7 +36,7 @@ from control_plane_backend.routing_policy.schemas import (
     UpdateTeamRoutingPolicyRequest,
 )
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
-from fred_core import KeycloakUser, TeamPermission
+from fred_core import AuthorizationError, KeycloakUser, TeamPermission
 from fred_core.common import PostgresStoreConfig, TeamId
 from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
@@ -245,6 +245,29 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     return catalog
 
 
+class _FakeRebacElevatedCheck:
+    """Fake for `_require_elevated_team_role`'s `has_permissions` BatchCheck —
+    a distinct interface from the `has_permission` (singular) fakes below,
+    which back `_validate_write`'s `can_use_capability` checks instead.
+    `allowed` is the fixed `[can_update_info, can_update_resources,
+    can_run_evaluations]` result, in `_ELEVATED_TEAM_ROLE_PERMISSIONS` order.
+    """
+
+    def __init__(self, allowed: list[bool]) -> None:
+        self.allowed = allowed
+        self.calls = 0
+
+    async def has_permissions(self, subject, permissions, resource, **kwargs):
+        self.calls += 1
+        return self.allowed
+
+
+def _elevated_rebac(
+    *, admin=True, editor=False, analyst=False
+) -> _FakeRebacElevatedCheck:
+    return _FakeRebacElevatedCheck([admin, editor, analyst])
+
+
 @pytest.mark.asyncio
 async def test_write_requires_can_update_resources(_stub_team_lookup) -> None:
     deps = _deps(store=_FakeStore(), rebac=None)
@@ -256,7 +279,7 @@ async def test_write_requires_can_update_resources(_stub_team_lookup) -> None:
 
 @pytest.mark.asyncio
 async def test_read_requires_can_read_members(_stub_team_lookup) -> None:
-    deps = _deps(store=_FakeStore(), rebac=None)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
     await routing_policy_service.get_team_routing_policy(
         _user(), TeamId("team-1"), deps
     )
@@ -265,7 +288,7 @@ async def test_read_requires_can_read_members(_stub_team_lookup) -> None:
 
 @pytest.mark.asyncio
 async def test_get_with_no_stored_policy_returns_empty_version_zero() -> None:
-    deps = _deps(store=_FakeStore(), rebac=None)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
     policy = await routing_policy_service.get_team_routing_policy(
         _user(), TeamId("team-1"), deps
     )
@@ -401,6 +424,134 @@ async def test_empty_request_skips_catalog_and_rebac_entirely(monkeypatch) -> No
     await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), UpdateTeamRoutingPolicyRequest(), deps
     )
+
+
+# ---------------------------------------------------------------------------
+# service.py — list_available_model_profiles (routing-policy picker, #2167)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_available_models_requires_can_read_members(
+    _stub_team_lookup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+    assert _stub_team_lookup[-1] == [TeamPermission.CAN_READ_MEMEBERS]
+
+
+@pytest.mark.asyncio
+async def test_available_models_unscoped_when_rebac_disabled(monkeypatch) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert sorted(p.profile_id for p in result.profiles) == [
+        "chat.openai.gpt4o",
+        "chat.openai.gpt5",
+        "chat.openai.gpt5.creative",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_available_models_filtered_by_usable_capability_ids(monkeypatch) -> None:
+    async def _fake_usable(rebac, team_id):
+        return {"model__openai__gpt-4o"}
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt4o"]
+
+
+@pytest.mark.asyncio
+async def test_available_models_empty_when_no_capability_usable(monkeypatch) -> None:
+    async def _fake_usable(rebac, team_id):
+        return set()
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert result.profiles == []
+
+
+# ---------------------------------------------------------------------------
+# service.py — _require_elevated_team_role read gate (#2167 follow-up)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_read_denied_for_plain_team_member() -> None:
+    deps = _deps(
+        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False])
+    )
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.get_team_routing_policy(
+            _user(), TeamId("team-1"), deps
+        )
+
+
+@pytest.mark.parametrize(
+    "allowed", [[True, False, False], [False, True, False], [False, False, True]]
+)
+@pytest.mark.asyncio
+async def test_read_allowed_for_any_elevated_role(allowed: list[bool]) -> None:
+    deps = _deps(store=_FakeStore(), rebac=_FakeRebacElevatedCheck(allowed))
+    policy = await routing_policy_service.get_team_routing_policy(
+        _user(), TeamId("team-1"), deps
+    )
+    assert policy.version == 0
+
+
+@pytest.mark.asyncio
+async def test_available_models_denied_for_plain_team_member(monkeypatch) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    deps = _deps(
+        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False])
+    )
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.list_available_model_profiles(
+            _user(), TeamId("team-1"), deps
+        )
+
+
+@pytest.mark.asyncio
+async def test_elevated_role_check_skipped_for_personal_space() -> None:
+    # A personal-space owner holds team_editor unconditionally (RFC §1) and
+    # must never be denied here even if a real ReBAC round trip would say
+    # otherwise (e.g. a not-yet-self-healed tuple) — `is_personal_team_id`
+    # short-circuits before `has_permissions` is ever called.
+    rebac = _FakeRebacElevatedCheck([False, False, False])
+    deps = _deps(store=_FakeStore(), rebac=rebac)
+    policy = await routing_policy_service.get_team_routing_policy(
+        _user(), TeamId("personal-u1"), deps
+    )
+    assert policy.version == 0
+    assert rebac.calls == 0
 
 
 # ---------------------------------------------------------------------------

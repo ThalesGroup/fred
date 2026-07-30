@@ -1634,7 +1634,7 @@
           "title": "Default chat model",
           "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
-          "placeholder": "e.g. default.chat.mistral"
+          "useDeploymentDefault": "Use deployment default"
         },
         "operationRules": {
           "title": "Operation overrides",
@@ -1642,8 +1642,11 @@
           "operation": "Operation",
           "purpose": "Purpose (optional)",
           "targetProfileId": "Profile id",
+          "targetProfilePlaceholder": "Select a model",
           "addRule": "Add rule"
         },
+        "profileUnavailable": "No longer enabled for this team",
+        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
         "save": "Save",
         "saveError": "Could not save the routing policy."
       },

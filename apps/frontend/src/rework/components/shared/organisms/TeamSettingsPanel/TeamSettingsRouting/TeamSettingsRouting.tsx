@@ -12,20 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSettingsRouting.module.scss";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
+import Select from "@shared/molecules/Select/Select.tsx";
+import type { OptionModel } from "@models/Option.model.ts";
 import type {
   TeamOperationRouteRule,
   TeamWithPermissions,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  useAvailableModelProfilesQuery,
   useTeamRoutingPolicyQuery,
   useUpdateTeamRoutingPolicyMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+
+const NO_DEFAULT = "";
 
 interface TeamSettingsRoutingProps {
   team: TeamWithPermissions;
@@ -49,36 +54,66 @@ function newRow(): RuleRow {
 /**
  * Team-owned LLM model routing policy (TEAM-05, #2118,
  * `TEAM-ROUTING-POLICY-RFC.md`). One default chat profile plus zero or more
- * per-operation overrides, both free-text profile ids validated server-side
- * against the team's `kind="model"` capability enablement (§7) — the server
- * response's 400 detail is the source of truth for "not allowed", surfaced
- * inline rather than pre-filtered client-side (no team-facing "list my
- * enabled models" endpoint exists yet; the admin capabilities matrix is
- * platform-admin-only and cannot back a picker here).
+ * per-operation overrides. Both profile pickers are scoped to the team's
+ * `kind="model"` capability enablement (§7 / §13, `available-models`, #2167)
+ * — a stale reference (e.g. a capability disabled after the policy was
+ * written) still surfaces as a selectable option rather than silently
+ * disappearing, flagged via its option description.
  */
 export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRoutingProps) {
   const { t } = useTranslation();
   const { data: policy, isLoading } = useTeamRoutingPolicyQuery({ teamId: team.id });
+  const { data: availableModels, isLoading: isLoadingModels } = useAvailableModelProfilesQuery({
+    teamId: team.id,
+  });
   const [updateRoutingPolicy, { isLoading: isSaving }] = useUpdateTeamRoutingPolicyMutation();
 
-  const [chatDefaultProfileId, setChatDefaultProfileId] = useState("");
+  const [chatDefaultProfileId, setChatDefaultProfileId] = useState(NO_DEFAULT);
   const [rows, setRows] = useState<RuleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!policy) return;
-    setChatDefaultProfileId(policy.chat_default_profile_id ?? "");
+    setChatDefaultProfileId(policy.chat_default_profile_id ?? NO_DEFAULT);
     setRows((policy.operation_rules ?? []).map((rule) => ({ ...rule, key: rule.rule_id })));
   }, [policy]);
 
-  if (isLoading) return null;
+  const profileOptions: OptionModel<string>[] = useMemo(() => {
+    const options: OptionModel<string>[] = (availableModels?.profiles ?? []).map((profile) => ({
+      value: profile.profile_id,
+      label: `${t(profile.name, { defaultValue: profile.name })} (${profile.profile_id})`,
+      key: profile.profile_id,
+    }));
+    const known = new Set(options.map((option) => option.value));
+    const stale = new Set<string>();
+    if (chatDefaultProfileId && !known.has(chatDefaultProfileId)) stale.add(chatDefaultProfileId);
+    rows.forEach((row) => {
+      if (row.target_profile_id && !known.has(row.target_profile_id)) stale.add(row.target_profile_id);
+    });
+    stale.forEach((profileId) =>
+      options.push({
+        value: profileId,
+        label: profileId,
+        key: profileId,
+        description: t("rework.teamSettings.routing.profileUnavailable"),
+      }),
+    );
+    return options;
+  }, [availableModels, chatDefaultProfileId, rows, t]);
+
+  if (isLoading || isLoadingModels) return null;
+
+  const hasNoModelsAvailable = profileOptions.length === 0;
 
   const handleAddRow = () => setRows((prev) => [...prev, newRow()]);
   const handleRemoveRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
-  const handleRowChange = (key: string, field: keyof TeamOperationRouteRule, value: string) => {
+  const handleRowChange = (key: string, field: "operation" | "purpose", value: string) => {
     setRows((prev) =>
       prev.map((r) => (r.key === key ? { ...r, [field]: field === "purpose" && value === "" ? null : value } : r)),
     );
+  };
+  const handleRowProfileChange = (key: string, targetProfileId: string) => {
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, target_profile_id: targetProfileId } : r)));
   };
 
   const handleSave = async () => {
@@ -87,7 +122,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
       await updateRoutingPolicy({
         teamId: team.id,
         updateTeamRoutingPolicyRequest: {
-          chat_default_profile_id: chatDefaultProfileId.trim() || null,
+          chat_default_profile_id: chatDefaultProfileId || null,
           operation_rules: rows.map(({ key, ...rule }) => {
             void key;
             return rule;
@@ -115,51 +150,68 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
         <span className={styles["section-explanation"]}>
           {t("rework.teamSettings.routing.defaultProfile.explanation")}
         </span>
-        <TextInput
-          label={t("rework.teamSettings.routing.defaultProfile.label")}
-          placeholder={t("rework.teamSettings.routing.defaultProfile.placeholder")}
-          value={chatDefaultProfileId}
-          onChange={(e) => setChatDefaultProfileId(e.target.value)}
-          disabled={!canWrite}
-        />
-      </div>
-
-      <div className={styles["form-section"]}>
-        <span className={styles["section-title"]}>{t("rework.teamSettings.routing.operationRules.title")}</span>
-        <span className={styles["section-explanation"]}>
-          {t("rework.teamSettings.routing.operationRules.explanation")}
-        </span>
-        {rows.map((row) => (
-          <div className={styles["rule-row"]} key={row.key}>
-            <TextInput
-              label={t("rework.teamSettings.routing.operationRules.operation")}
-              value={row.operation}
-              onChange={(e) => handleRowChange(row.key, "operation", e.target.value)}
-              disabled={!canWrite}
-            />
-            <TextInput
-              label={t("rework.teamSettings.routing.operationRules.purpose")}
-              value={row.purpose ?? ""}
-              onChange={(e) => handleRowChange(row.key, "purpose", e.target.value)}
-              disabled={!canWrite}
-            />
-            <TextInput
-              label={t("rework.teamSettings.routing.operationRules.targetProfileId")}
-              value={row.target_profile_id}
-              onChange={(e) => handleRowChange(row.key, "target_profile_id", e.target.value)}
-              disabled={!canWrite}
-            />
-            {canWrite && <DeleteIconButton onClick={() => handleRemoveRow(row.key)} />}
-          </div>
-        ))}
-        {canWrite && (
-          <Button color="secondary" variant="outlined" size="small" onClick={handleAddRow}>
-            {t("rework.teamSettings.routing.operationRules.addRule")}
-          </Button>
+        {hasNoModelsAvailable ? (
+          <span className={styles["section-explanation"]}>{t("rework.teamSettings.routing.emptyState")}</span>
+        ) : (
+          <Select
+            size="medium"
+            label={t("rework.teamSettings.routing.defaultProfile.label")}
+            value={chatDefaultProfileId}
+            options={[
+              {
+                value: NO_DEFAULT,
+                label: t("rework.teamSettings.routing.defaultProfile.useDeploymentDefault"),
+                key: "__no_default__",
+              },
+              ...profileOptions,
+            ]}
+            onChange={setChatDefaultProfileId}
+            disabled={!canWrite}
+          />
         )}
       </div>
 
-      {canWrite && (
+      {!hasNoModelsAvailable && (
+        <div className={styles["form-section"]}>
+          <span className={styles["section-title"]}>{t("rework.teamSettings.routing.operationRules.title")}</span>
+          <span className={styles["section-explanation"]}>
+            {t("rework.teamSettings.routing.operationRules.explanation")}
+          </span>
+          {rows.map((row) => (
+            <div className={styles["rule-row"]} key={row.key}>
+              <TextInput
+                label={t("rework.teamSettings.routing.operationRules.operation")}
+                value={row.operation}
+                onChange={(e) => handleRowChange(row.key, "operation", e.target.value)}
+                disabled={!canWrite}
+              />
+              <TextInput
+                label={t("rework.teamSettings.routing.operationRules.purpose")}
+                value={row.purpose ?? ""}
+                onChange={(e) => handleRowChange(row.key, "purpose", e.target.value)}
+                disabled={!canWrite}
+              />
+              <Select
+                size="medium"
+                label={t("rework.teamSettings.routing.operationRules.targetProfileId")}
+                placeholder={t("rework.teamSettings.routing.operationRules.targetProfilePlaceholder")}
+                value={row.target_profile_id}
+                options={profileOptions}
+                onChange={(value) => handleRowProfileChange(row.key, value)}
+                disabled={!canWrite}
+              />
+              {canWrite && <DeleteIconButton onClick={() => handleRemoveRow(row.key)} />}
+            </div>
+          ))}
+          {canWrite && (
+            <Button color="secondary" variant="outlined" size="small" onClick={handleAddRow}>
+              {t("rework.teamSettings.routing.operationRules.addRule")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {canWrite && !hasNoModelsAvailable && (
         <div className={styles["actions-row"]}>
           <Button color="primary" variant="filled" size="medium" onClick={handleSave} disabled={isSaving}>
             {t("rework.teamSettings.routing.save")}

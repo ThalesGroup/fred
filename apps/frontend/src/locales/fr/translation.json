@@ -1634,7 +1634,7 @@
           "title": "Modèle de chat par défaut",
           "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
           "label": "Identifiant du profil par défaut",
-          "placeholder": "ex. default.chat.mistral"
+          "useDeploymentDefault": "Utiliser le défaut du déploiement"
         },
         "operationRules": {
           "title": "Règles par opération",
@@ -1642,8 +1642,11 @@
           "operation": "Opération",
           "purpose": "Objectif (optionnel)",
           "targetProfileId": "Identifiant du profil",
+          "targetProfilePlaceholder": "Sélectionner un modèle",
           "addRule": "Ajouter une règle"
         },
+        "profileUnavailable": "Plus activé pour cette équipe",
+        "emptyState": "Cette équipe n'a encore aucun modèle activé. Demandez à un administrateur de la plateforme d'activer au moins une capability de modèle avant de configurer des règles de routage.",
         "save": "Enregistrer",
         "saveError": "Impossible d'enregistrer la politique de routage."
       },

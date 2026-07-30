@@ -1,10 +1,14 @@
 # RFC — Team Routing Policy
 
-**Status:** Draft for team review — **rewritten 2026-07-26** on top of the
-shipped models-as-capability system (issue #2110, `AGENT-CAPABILITY-RFC.md`
-§8.7). The original 2026-05-23 draft predates that system and proposed a
-second, parallel guardrail object (`TeamPlatformPolicy.model_guardrails`) and
-a per-turn snapshot contract that would now contradict the security posture
+**Status:** Shipped 2026-07-30 (issue #2118, rewritten 2026-07-26 on top of
+the shipped models-as-capability system, issue #2110, `AGENT-CAPABILITY-RFC.md`
+§8.7). §13's frontend picker landed 2026-07-30 via the follow-up
+`available-models` endpoint (issue #2167) — #2118 shipped free-text profile
+inputs with server-side-only validation first; §13 now matches the code. The
+original 2026-05-23 draft predates the models-as-capability system and
+proposed a second, parallel guardrail object
+(`TeamPlatformPolicy.model_guardrails`) and a per-turn snapshot contract that
+would now contradict the security posture
 `EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already locked in. See §7 and §8
 for what changed and why; §3, §5, §9, §10 are materially unchanged from the
 original.
@@ -223,6 +227,15 @@ Read:
 
 - `team_admin`
 - `team_editor`
+- `team_analyst` — added 2026-07-30 (#2167 follow-up), matching the frontend's
+  `hasElevatedTeamRole` gate on the same "Routing" tab (`TeamSettingsPage.tsx`)
+  and `TeamSettingsRouting`'s pre-existing `canWrite`-gated read-only
+  rendering for non-editors. Implementation note: the service layer checks
+  `can_read_members` first (team existence + minimum membership, shared
+  plumbing also used by KPI scope/task activity/corpus manager — deliberately
+  not narrowed, since narrowing it would change those unrelated surfaces
+  too), then a routing-policy-specific `_require_elevated_team_role` check
+  narrows to these three roles specifically. A plain `team_member` is denied.
 
 Write:
 
@@ -544,10 +557,18 @@ like `TeamUsagePage` already is (OBSERV-02 v3, #2110):
   here; §7.1 established the enablement check already handles it uniformly.
 - **Content:** a picker for `chat_default_profile_id` scoped to only the
   profiles whose derived capability is `can_use`-enabled for this team
-  (§7.1) — the same enabled-model list `CapabilityTeamMatrixDrawer` already
-  fetches for this team, reused as the picker's option set rather than
-  re-derived. Zero or more operation-rule rows (`operation`, optional
+  (§7.1). Shipped via a dedicated team-facing read endpoint,
+  `GET /teams/{team_id}/routing-policy/available-models` (#2167) — not a
+  reuse of `CapabilityTeamMatrixDrawer`'s data, which is platform-admin-only
+  (`capability#can_manage`) and cannot back a team-scoped picker; the new
+  endpoint shares the same `team_admin`/`team_editor` read gate as `GET
+  .../routing-policy` and the same catalog-aggregation +
+  `usable_capability_ids` building blocks the write path already validates
+  against (§7.2). Zero or more operation-rule rows (`operation`, optional
   `purpose`, `target_profile_id`), same enabled-profile constraint per row.
+  A profile id referenced by a stored policy that has since become
+  unavailable (e.g. its capability was disabled) still renders as a
+  selectable option, flagged rather than silently dropped from the list.
 - **Read-only view for `team_admin`:** per §6, `team_admin` reads but never
   writes; render the same panel with inputs disabled rather than a second
   read-only component.

@@ -1769,6 +1769,36 @@ team list is an open product question, not folded into this fix.
 passed/35 failed/0 error before, 205 passed/20 failed/0 error after — the
 remaining 20 are exclusively the `GET /teams` open question above.
 
+### 8.29 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`, 2026-07-27)
+
+**What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
+carries two new fields threaded from control-plane at session-prep time, the
+same three-hop channel `context_prompt_text` already uses (RFC §8.2):
+
+- `chat_default_profile_id: str | None` — the team's default chat model
+  profile, or `None` to fall through to the runtime's own default.
+- `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
+  `(rule_id, operation, purpose | None, target_profile_id)` overrides.
+
+Both are a **session-prep snapshot, not a per-turn lookup** (RFC §8.1) —
+resolved once by `routing_policy/service.py::resolve_execution_routing_snapshot`
+when `ExecutionPreparation` is built, not re-read from control-plane on every
+turn. `fred-runtime`'s `ModelRoutingResolver`
+(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
+fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
+already match — the static rules stay the ops escape hatch and always win
+(RFC §8.3). A referenced `target_profile_id` unknown to the pod fails closed
+(`ModelNotUsableError`), matching the write-time `can_use` validation
+control-plane already performed (RFC §7.2) — this is drift detection, not a
+second authorization gate (RFC §8.4).
+
+Product-surface companion to this contract change: `GET`/`PATCH
+/control-plane/v1/teams/{team_id}/routing-policy` (`team_editor` writes,
+`team_admin`+`team_editor`+`team_analyst` read — the read gate excludes a
+plain `team_member` as of the same-day #2167 follow-up, RFC §6) and, as of
+that same follow-up, `GET .../routing-policy/available-models` backing the
+frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`
