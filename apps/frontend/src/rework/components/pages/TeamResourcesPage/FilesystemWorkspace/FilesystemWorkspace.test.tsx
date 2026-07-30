@@ -66,7 +66,8 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
+const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../CreateFolderModal/CreateFolderModal.tsx", () => ({ default: () => null }));
 
 const downloadUtils = vi.hoisted(() => ({
@@ -258,6 +259,28 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
       await Promise.resolve();
     });
 
+    expect(downloadButton().disabled).toBe(false);
+    expect(downloadButton().getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("shows an error toast and clears the loading state when the zip download fails", async () => {
+    toast.showError.mockClear();
+    downloadUtils.downloadManyAsZip.mockRejectedValueOnce(new Error("network down"));
+    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+
+    act(() => {
+      rowCheckbox().click();
+    });
+    const downloadButton = () =>
+      container.querySelector('button[aria-label="rework.resources.bulkActions.download"]') as HTMLButtonElement;
+    click(downloadButton());
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toast.showError).toHaveBeenCalledOnce();
     expect(downloadButton().disabled).toBe(false);
     expect(downloadButton().getAttribute("aria-busy")).toBe("false");
   });
