@@ -57,7 +57,7 @@ pages concernées._
 
 ---
 
-## 2. Fonctionnalités — `features`
+## 2. Fonctionnalités — `features` ✅
 
 ### `index.md` — Vue d'ensemble
 
@@ -111,7 +111,7 @@ pages concernées._
 
 ---
 
-## 3. Guides et cas d'usage — `guides`
+## 3. Guides et cas d'usage — `guides` ✅
 
 ### `index.md` — Choisir son guide
 
@@ -142,7 +142,7 @@ pages concernées._
 
 ---
 
-## 4. Résolution de problèmes — `troubleshooting`
+## 4. Résolution de problèmes — `troubleshooting` ✅
 
 ### `index.md` — Diagnostic rapide
 
@@ -166,7 +166,7 @@ pages concernées._
 
 ---
 
-## 5. FAQ — `faq`
+## 5. FAQ — `faq` ✅
 
 ### `index.md` — Questions générales
 
@@ -183,7 +183,7 @@ pages concernées._
 
 ---
 
-## 6. Architecture technique — `architecture`
+## 6. Architecture technique — `architecture` ✅
 
 ### `index.md` — Vue d'ensemble
 
@@ -201,7 +201,7 @@ pages concernées._
 
 ---
 
-## 7. Nouveautés — `changelog`
+## 7. Nouveautés — `changelog` ✅
 
 ### `index.md` — Dernières versions
 
@@ -210,10 +210,19 @@ pages concernées._
 
 ---
 
-## Questions ouvertes pour toi
+## Questions ouvertes — résolues
 
-1. **Ton de rédaction** : tutoiement ou vouvoiement ? (l'UI actuelle tutoie-t-elle ?)
-2. **Nom du produit** dans les pages : « Fred », autre nom de marque, ou générique ?
-3. **Architecture technique** : niveau de détail ? (grand public éclairé vs annexe pour devs/intégrateurs)
-4. **Changelog** : reprise des release notes existantes ou rédaction dédiée ?
-5. Pages que je n'ai pas devinées : y a-t-il des fonctionnalités à venir (roadmap proche) à documenter dès la v1 ?
+1. **Ton** : ✅ vouvoiement + impératif (l'UI vouvoie systématiquement).
+2. **Nom du produit** : ✅ « la plateforme » (neutre), « Fred » au minimum.
+3. **Architecture technique** : ✅ grand public éclairé, pas d'annexe dev.
+4. **Changelog** : ✅ lien vers `/release-notes`, pas de duplication.
+5. **Roadmap** : ✅ seulement l'existant.
+
+## Reste à faire
+
+- **Captures d'écran** : 21 emplacements marqués `![TODO: capture …]` /
+  `![TODO: screenshot …]` dans les pages, à fournir puis déposer dans
+  `content/assets/` (voir `content/README.md`).
+- **Relecture** du fond par un référent produit (surtout Architecture et FAQ
+  « Mes données »).
+- Ce fichier `CONTENT-PLAN.md` pourra être supprimé une fois la relecture faite.
