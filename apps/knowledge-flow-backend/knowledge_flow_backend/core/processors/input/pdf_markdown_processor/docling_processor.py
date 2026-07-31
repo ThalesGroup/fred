@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import threading
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.accelerator_options import AcceleratorOptions
@@ -46,6 +47,25 @@ class DoclingPdfExtractor(BasePdfExtractor):
         usable standalone, e.g. from the procbench benchmark harness with no live ApplicationContext.
         """
         self._num_threads = num_threads
+        self._converter: Optional[DocumentConverter] = None
+        self._converter_lock = threading.Lock()
+
+    def _get_document_converter(self) -> DocumentConverter:
+        """Build the DocumentConverter once and reuse it across calls.
+
+        Building one loads the OCR/layout/picture-classification ONNX models from
+        disk and allocates their inference sessions — doing that per document
+        (as this used to) reloads the whole pipeline on every file, on every one
+        of the worker's concurrent Temporal activity threads. The lock guards the
+        lazy build only; docling's own PyPdfiumDocumentBackend already serializes
+        native pdfium access internally, so concurrent `convert()` calls on the
+        shared converter are safe once built.
+        """
+        if self._converter is None:
+            with self._converter_lock:
+                if self._converter is None:
+                    self._converter = self._build_document_converter()
+        return self._converter
 
     def extract(self, file_path: Path, work_dir: str) -> tuple[str, List[ImageTranscription]]:
         """Convert a PDF file to Markdown and extract its embedded images.
@@ -53,7 +73,7 @@ class DoclingPdfExtractor(BasePdfExtractor):
         Each picture found in the document is saved as a PNG file inside `work_dir`
         and wrapped in an ImageTranscription object for downstream processing.
         """
-        doc = self._build_document_converter().convert(str(file_path)).document
+        doc = self._get_document_converter().convert(str(file_path)).document
 
         images_transcription = []
         for i, pic in enumerate(doc.pictures):

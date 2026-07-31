@@ -52,6 +52,11 @@ logger = logging.getLogger(__name__)
 #   closed-set replacements scoped to TURN-01's three pre-LLM stages and the
 #   five OpenFGA operations (see kpi_runtime_stage_metric.py and
 #   openfga_engine._rebac_timer) — never reuse `phase`/`operation` themselves.
+#   `pdf_stage` is the same pattern for the PDF image OCR/VLM loop (two closed
+#   values, "image_loop"/"image_description" — see pdf_markdown_processor.py's
+#   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
+#   `runtime_stage` so a Grafana `runtime_stage` variable/query never mixes
+#   TURN-01's auth stages with Knowledge Flow's PDF pipeline stages.
 PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
         "tool_name",
@@ -75,6 +80,7 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "agent_step",
         "runtime_stage",
         "rebac_operation",
+        "pdf_stage",
     }
 )
 

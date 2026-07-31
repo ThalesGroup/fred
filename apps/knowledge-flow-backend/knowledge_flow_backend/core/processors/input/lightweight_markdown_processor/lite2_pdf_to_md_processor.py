@@ -93,8 +93,15 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         count_char: int = 0
         truncated: bool = False
 
-        # Extract raw pages from pymupdf4llm
-        pages = pymupdf4llm.to_markdown(file_path, ignore_images=True, ignore_graphics=True, header=False, footer=False, page_chunks=True)
+        # Extract raw pages from pymupdf4llm. Open the fitz.Document ourselves
+        # (instead of letting pymupdf4llm open it from the path) so we can guarantee
+        # it's closed: pymupdf4llm.to_markdown() never closes a document it opens
+        # internally, which leaks native MuPDF memory (pages, xref table) per file.
+        doc = fitz.open(file_path)
+        try:
+            pages = pymupdf4llm.to_markdown(doc, ignore_images=True, ignore_graphics=True, header=False, footer=False, page_chunks=True)
+        finally:
+            doc.close()
 
         # Normalize each page
         pages_md: List[LitePageMarkdown] = []
@@ -218,12 +225,13 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
         try:
             doc = fitz.open(str(file_path))
             info = doc.metadata or {}
+            page_count = doc.page_count
             doc.close()
             return {
                 "title": info.get("title") or None,
                 "author": info.get("author") or None,
                 "document_name": file_path.name,
-                "page_count": doc.page_count,
+                "page_count": page_count,
                 "extras": {
                     "pdf.subject": info.get("subject") or None,
                     "pdf.producer": info.get("producer") or None,
