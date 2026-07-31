@@ -1,0 +1,88 @@
+.card {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 2rem auto;
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: var(--spacing-l);
+  width: min(48rem, calc(100vw - 2rem));
+}
+
+.closeButton {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-xl) 0;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+
+.header {
+  padding-right: 2.5rem;
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.description {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+/* ── Category chip (static — not selectable) ──────────────────────────────── */
+
+.categoryChip {
+  align-self: flex-start;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  padding: 4px 14px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  white-space: nowrap;
+}
+
+/* ── Prompt text ───────────────────────────────────────────────────────────── */
+
+.textSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.textHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: var(--spacing-xs);
+}
+
+.textLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.textarea {
+  cursor: default;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-s);
+  height: 24rem;
+  overflow-y: auto;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  user-select: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}

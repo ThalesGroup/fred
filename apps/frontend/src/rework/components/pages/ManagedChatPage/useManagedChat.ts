@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -42,8 +41,6 @@ interface UseManagedChatParams {
 export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showError } = useToast();
-  const { i18n } = useTranslation();
-  const lang = i18n.language.split("-")[0];
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
@@ -73,9 +70,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     { skip: !teamId || !sessionId },
   );
 
-  // Library prompts available as chat context (personal + team + platform defaults).
+  // Library prompts available as chat context (personal + team).
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId, lang },
+    { teamId },
     { skip: !teamId },
   );
 
@@ -147,7 +144,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   } = useChatSse({
     agentInstanceId,
     teamId,
-    lang,
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
     onTurnPersisted: touchSessionActivity,

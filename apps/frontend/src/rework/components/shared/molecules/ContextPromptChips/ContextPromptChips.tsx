@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon";
+import { hashColorIndex } from "@shared/utils/hashColorIndex.ts";
 import { useTranslation } from "react-i18next";
 import type { ContextPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { PROMPT_CATEGORY_MAP } from "../../../../config/promptCategories";
 import styles from "./ContextPromptChips.module.css";
 
 interface ContextPromptChipsProps {
@@ -36,15 +36,10 @@ export function ContextPromptChips({ prompts, onRemove }: ContextPromptChipsProp
   return (
     <div className={styles.chips} aria-label={t("chatbot.contextPrompts.ariaLabel")}>
       {prompts.map((prompt) => {
-        const catDef = prompt.category ? PROMPT_CATEGORY_MAP[prompt.category] : null;
         return (
           <span key={prompt.id} className={styles.chip}>
-            <span
-              className={styles.icon}
-              style={catDef ? { backgroundColor: catDef.pillBg, color: catDef.pillFg } : undefined}
-              aria-hidden
-            >
-              <Icon category="outlined" type={catDef ? catDef.icon : "edit_note"} />
+            <span className={styles.icon} data-color={hashColorIndex(prompt.id)} aria-hidden>
+              <Icon category="outlined" type="edit_note" />
             </span>
             <span className={styles.name} title={prompt.name}>
               {prompt.name}

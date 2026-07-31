@@ -163,7 +163,6 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
         const prep = await prepareExecution({
           teamId,
           agentInstanceId,
-          lang: "en",
           ...(sessionId ? { sessionId } : {}),
         }).unwrap();
         return streamAgentTurn(prep, {

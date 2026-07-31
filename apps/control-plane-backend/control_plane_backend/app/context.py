@@ -46,6 +46,7 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.evaluations.store import EvaluationStore
+from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.scheduler.policies.policy_loader import (
@@ -81,6 +82,7 @@ class ApplicationContext:
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
+        self._prompt_category_store: PromptCategoryStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
         self._service_token_provider: M2MTokenProvider | None = None
@@ -353,6 +355,13 @@ class ApplicationContext:
         if self._prompt_store is None:
             self._prompt_store = PromptStore(engine=self.get_pg_async_engine())
         return self._prompt_store
+
+    def get_prompt_category_store(self) -> PromptCategoryStore:
+        if self._prompt_category_store is None:
+            self._prompt_category_store = PromptCategoryStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._prompt_category_store
 
     def get_task_service(self) -> TaskService:
         if self._task_service is None:

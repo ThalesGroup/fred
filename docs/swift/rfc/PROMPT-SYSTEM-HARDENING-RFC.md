@@ -147,4 +147,8 @@ This likely depends on the evaluation/KPI track and should not block `PROMPT-04`
 - No change to the runtime scalar `RuntimeContext.context_prompt_text` contract.
 - No live binding from an agent instance back to mutable prompt-library text.
 - No marketplace moderation model in this RFC.
-- No change to the shipped default prompt catalog.
+- ~~No change to the shipped default prompt catalog.~~ **Superseded
+  2026-07-30** by [`TEAM-PROMPT-CATEGORIES-RFC.md`](./TEAM-PROMPT-CATEGORIES-RFC.md)
+  (`PROMPT-09`): the platform default-prompt catalog and the global
+  `PromptCategory` enum are removed entirely — every team now owns its own
+  starter-kit prompts and categories, seeded at creation and fully editable.

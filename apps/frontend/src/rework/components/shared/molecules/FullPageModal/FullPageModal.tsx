@@ -21,8 +21,9 @@ interface FullPageModalProps {
   onClose: () => void;
   children: ReactNode;
   id: string;
-  /** Backdrop background token. Defaults to "main" (--surface-main). */
-  background?: "main" | "container";
+  /** Backdrop background token. Defaults to "main" (--surface-main). "scrim" is
+   *  the normal translucent dialog backdrop (--scrim) instead of an opaque page. */
+  background?: "main" | "container" | "scrim";
 }
 
 export interface ModalInteractionProps {
@@ -49,6 +50,16 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
 
   if (!isOpen) return null;
 
+  // Only the "scrim" backdrop is click-to-close — it's the only variant that
+  // reads as a dismissible overlay behind a centred card. The opaque
+  // "main"/"container" full-page takeovers (edit forms, etc.) have no "outside"
+  // to click and shouldn't lose in-progress input to a stray click.
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (background === "scrim" && e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
     <Portal id="modal-portal">
       <div
@@ -58,6 +69,7 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
         className={styles.modal}
         data-state="open"
         data-background={background}
+        onClick={handleBackdropClick}
       >
         {children}
       </div>

@@ -260,6 +260,12 @@ export function AgentFormBody({
 
       {!templateMissing && (
         <>
+          {errorSections.size > 0 && (
+            <div className={styles.validationBanner} role="alert">
+              {t("rework.teams.formAgent.validation.requiredFields")}
+            </div>
+          )}
+
           <div className={styles.tabStrip}>
             <ButtonGroup
               key={visibleSections.join(",")}
@@ -278,12 +284,6 @@ export function AgentFormBody({
               }))}
             />
           </div>
-
-          {errorSections.size > 0 && (
-            <div className={styles.validationBanner} role="alert">
-              {t("rework.teams.formAgent.validation.requiredFields")}
-            </div>
-          )}
 
           <div className={styles.sectionContent}>
             {effectiveSection === "general" && (
@@ -346,17 +346,19 @@ export function AgentFormBody({
               </ul>
             )}
             {effectiveSection === "commitments" && (
-              <TextArea
-                label={t("rework.teams.formAgent.fields.usageStatement.label")}
-                explanation={t("rework.teams.formAgent.fields.usageStatement.explanation")}
-                placeholder={t("rework.teams.formAgent.fields.usageStatement.placeholder")}
-                value={usageStatement}
-                onChange={(e) => onUsageStatementChange(e.target.value)}
-                rows={8}
-                required
-                disabled={isSubmitting}
-                error={usageStatementError}
-              />
+              <>
+                <p className={styles.commitmentsIntro}>{t("rework.teams.formAgent.fields.usageStatement.intro")}</p>
+                <TextArea
+                  label={t("rework.teams.formAgent.fields.usageStatement.label")}
+                  placeholder={t("rework.teams.formAgent.fields.usageStatement.placeholder")}
+                  value={usageStatement}
+                  onChange={(e) => onUsageStatementChange(e.target.value)}
+                  rows={8}
+                  required
+                  disabled={isSubmitting}
+                  error={usageStatementError}
+                />
+              </>
             )}
           </div>
         </>
