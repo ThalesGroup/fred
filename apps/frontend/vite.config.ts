@@ -61,21 +61,26 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
-    // Pre-bundle mermaid (and crawl its dynamically imported diagram chunks,
-    // e.g. flowDiagram) at startup. Without this, those sub-chunks are
-    // discovered mid-session, triggering a dep re-optimization + reload that
-    // invalidates the in-flight chunk hash and produces intermittent
-    // "error loading dynamically imported module" failures in MermaidBlock.
+    // mermaid lazy-loads each diagram type (flowDiagram, sequence, …) via an
+    // internal dynamic import(). esbuild's pre-bundle scan can't follow those,
+    // so pre-bundling mermaid (`include`) still let the diagram sub-chunks be
+    // discovered mid-session — that triggers a dep re-optimization which
+    // invalidates the in-flight `?v=` chunk hash and throws
+    // "error loading dynamically imported module" in MermaidBlock.
+    // mermaid 11 is pure ESM, so EXCLUDING it is the reliable fix: Vite serves
+    // it (and its diagram modules) as native ESM straight from node_modules,
+    // with no `?v=` optimize hashing to go stale.
     //
     // NOTE: `optimizeDeps` only affects the Vite DEV SERVER (esbuild pre-bundling
     // of CommonJS/lazy deps). It has NO effect on `npm run build` / production,
-    // where Rollup bundles everything ahead of time. So this list is purely a
-    // local dev-experience tweak — it is not needed and does nothing in prod.
+    // where Rollup bundles everything ahead of time — so this is purely a
+    // local dev-experience tweak.
     //
-    // react-dropzone is added here because it is lazy-loaded by MigrationPage;
-    // pre-bundling it avoids the same mid-session re-optimize + 504
-    // "Outdated Optimize Dep" reload dance when that route is first visited.
-    include: ["mermaid", "react-dropzone"],
+    // react-dropzone is pre-bundled because it is lazy-loaded by MigrationPage;
+    // this avoids the same mid-session re-optimize + 504 "Outdated Optimize Dep"
+    // reload dance when that route is first visited.
+    include: ["react-dropzone"],
+    exclude: ["mermaid"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",
