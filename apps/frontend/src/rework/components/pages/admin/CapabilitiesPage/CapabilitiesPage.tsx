@@ -26,6 +26,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useState } from "react";
@@ -325,21 +326,22 @@ export default function CapabilitiesPage() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{t("rework.admin.capabilities.title")}</h1>
-        <p className={styles.subtitle}>{t("rework.admin.capabilities.subtitle")}</p>
-      </header>
-
-      <ButtonGroup
-        size="small"
-        color="primary"
-        variant="radio"
-        aria-label={t("rework.admin.capabilities.kindFilter.aria")}
-        selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
-        onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
-        items={KIND_FILTERS.map((kind) => ({
-          label: t(`rework.admin.capabilities.kindFilter.${kind}`),
-        }))}
+      <PageHeader
+        title={t("rework.admin.capabilities.title")}
+        subtitle={t("rework.admin.capabilities.subtitle")}
+        tabs={
+          <ButtonGroup
+            size="small"
+            color="primary"
+            variant="radio"
+            aria-label={t("rework.admin.capabilities.kindFilter.aria")}
+            selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
+            onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
+            items={KIND_FILTERS.map((kind) => ({
+              label: t(`rework.admin.capabilities.kindFilter.${kind}`),
+            }))}
+          />
+        }
       />
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}

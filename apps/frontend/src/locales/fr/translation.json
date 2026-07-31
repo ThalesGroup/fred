@@ -1514,7 +1514,7 @@
         "launch": "Lancer la migration",
         "launching": "Lancement...",
         "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
-        "title": "Migration de plateforme",
+        "title": "Données plateforme",
         "import": {
           "title": "Importer"
         },
@@ -1600,6 +1600,7 @@
       }
     },
     "adminTeams": {
+      "title": "Equipes",
       "existingTeams": {
         "title": "Équipes existantes",
         "empty": "Aucune équipe pour l'instant.",
@@ -1686,6 +1687,7 @@
         "retention": "Rétention"
       },
       "routing": {
+        "title": "Routage des modèles",
         "defaultProfile": {
           "title": "Modèle de chat par défaut",
           "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
@@ -1707,6 +1709,7 @@
         "saveError": "Impossible d'enregistrer la politique de routage."
       },
       "parameters": {
+        "title": "Paramètres",
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."

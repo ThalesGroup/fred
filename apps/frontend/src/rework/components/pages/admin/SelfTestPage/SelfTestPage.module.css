@@ -23,12 +23,6 @@
   max-width: 760px;
 }
 
-.pageTitle {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-large);
-}
-
 .testSection {
   display: flex;
   flex-direction: column;

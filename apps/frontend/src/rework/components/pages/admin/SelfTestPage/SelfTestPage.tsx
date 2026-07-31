@@ -23,6 +23,7 @@ import { selfTestScenario } from "../../../../features/pipeline/scenarios/selfTe
 import { useAuthzProbeRun } from "../../../../features/pipeline/useAuthzProbeRun";
 import { useListUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { StepReportPanel } from "./StepReportPanel";
 import styles from "./SelfTestPage.module.css";
 
@@ -137,7 +138,7 @@ export default function SelfTestPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>{t("rework.selftest.page.title")}</h1>
+      <PageHeader title={t("rework.selftest.page.title")} />
       <FunctionalSelfTestSection />
       <AuthzSelfTestSection />
     </div>

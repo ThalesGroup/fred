@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import styles from "./TeamSettingsParameters.module.scss";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -146,6 +147,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
 
   return (
     <div className={styles["team-settings-parameters-container"]}>
+      <PageHeader title={t("rework.teamSettings.parameters.title")} />
       <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
         <div className={styles["team-banner"]}>
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBanner.title")}</span>

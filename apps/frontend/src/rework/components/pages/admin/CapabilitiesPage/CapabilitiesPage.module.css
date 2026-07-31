@@ -34,24 +34,6 @@
   min-height: 0;
 }
 
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-medium);
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
 .status {
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

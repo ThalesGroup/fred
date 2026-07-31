@@ -42,6 +42,7 @@ import PieChart from "@shared/molecules/PieChart/PieChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -224,9 +225,7 @@ export default function AnalyticsPage() {
   if (serviceDown) {
     return (
       <div className={styles.page}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>{t("rework.analytics.title")}</h1>
-        </div>
+        <PageHeader title={t("rework.analytics.title")} />
         <ServiceNotice
           icon="cloud_off"
           title={t("rework.serviceNotice.controlPlane.title")}
@@ -239,21 +238,23 @@ export default function AnalyticsPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>{t("rework.analytics.title")}</h1>
-        <div className={styles.headerControls}>
-          <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
-          <IconButton
-            color="primary"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "refresh" }}
-            onClick={handleRefresh}
-            disabled={isFetching}
-            title={t("common.refresh")}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title={t("rework.analytics.title")}
+        actions={
+          <>
+            <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
+            <IconButton
+              color="primary"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "refresh" }}
+              onClick={handleRefresh}
+              disabled={isFetching}
+              title={t("common.refresh")}
+            />
+          </>
+        }
+      />
 
       {/* Grouped into collapsible sections (closes #1777's density critique)
           rather than one flat scroll. */}

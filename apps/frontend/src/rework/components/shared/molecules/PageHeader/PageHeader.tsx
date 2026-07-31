@@ -19,26 +19,34 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  /** Optional "you are here" trail or one-off link rendered above the title row. */
+  breadcrumb?: ReactNode;
+  /** Optional tab strip or filter control rendered below the title row, full width. */
+  tabs?: ReactNode;
 }
 
 /**
  * The single `<h1>` + optional subtitle + optional right-aligned actions row
- * every top-level page/tab under Team content used to hand-roll slightly
- * differently (2026-07-30 harmonization: `TeamUsagePage`, `TaskActivity`,
- * `Evaluations` had three different heading levels/subtitle placements).
+ * every top-level admin/team page used to hand-roll slightly differently
+ * (2026-07-30/31 harmonization). This is the only place a page title should
+ * be rendered — do not hand-roll an `<h1>`/`<h2>` page title elsewhere.
  * Vertically centers the title against `actions` when there's no subtitle
  * (a single-line title reads oddly top-aligned against same-height controls);
  * aligns to the top when there is one, so `actions` sits at the title's
  * baseline instead of drifting down toward the two-line block's middle.
  */
-export default function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, actions, breadcrumb, tabs }: PageHeaderProps) {
   return (
-    <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
-      <div className={styles.titleBlock}>
-        <h1 className={styles.title}>{title}</h1>
-        {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
+    <div className={styles.wrapper}>
+      {breadcrumb && <div className={styles.breadcrumb}>{breadcrumb}</div>}
+      <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>{title}</h1>
+          {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
+        </div>
+        {actions && <div className={styles.actions}>{actions}</div>}
       </div>
-      {actions && <div className={styles.actions}>{actions}</div>}
+      {tabs && <div className={styles.tabs}>{tabs}</div>}
     </div>
   );
 }

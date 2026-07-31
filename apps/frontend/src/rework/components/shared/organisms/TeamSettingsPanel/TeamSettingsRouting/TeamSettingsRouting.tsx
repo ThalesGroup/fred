@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSettingsRouting.module.scss";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
@@ -145,6 +146,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
 
   return (
     <div className={styles["team-settings-routing-container"]}>
+      <PageHeader title={t("rework.teamSettings.routing.title")} />
       <div className={styles["form-section"]}>
         <span className={styles["section-title"]}>{t("rework.teamSettings.routing.defaultProfile.title")}</span>
         <span className={styles["section-explanation"]}>

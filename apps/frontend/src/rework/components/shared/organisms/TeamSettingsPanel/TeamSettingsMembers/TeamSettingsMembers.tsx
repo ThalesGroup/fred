@@ -18,6 +18,7 @@ import AddTeamMembersDialog from "./AddTeamMembersDialog/AddTeamMembersDialog.ts
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -39,47 +40,47 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   return (
     <div className={styles["team-settings-members-container"]}>
-      <div className={styles["team-settings-members-header"]}>
-        <div className={styles["team-settings-members-header-left"]}>
-          <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
-          <LeaveTeamButton team={team} />
-        </div>
-        <div className={styles["team-settings-members-header-right"]}>
-          <div className={styles["team-settings-members-search"]}>
-            <TextInput
-              ref={searchInputRef}
-              compact
-              icon={{ category: "outlined", type: "search" }}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("rework.teamSettings.members.search.placeholder")}
-              aria-label={t("rework.teamSettings.members.search.ariaLabel")}
-              style={search ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
-            />
-            {search && (
-              <span className={styles["team-settings-members-search-clear"]}>
-                <IconButton
-                  type="button"
-                  size="small"
-                  color="on-surface-retreat"
-                  variant="icon"
-                  icon={{ category: "outlined", type: "close" }}
-                  aria-label={t("rework.teamSettings.members.search.clearAriaLabel")}
-                  onClick={() => {
-                    setSearch("");
-                    searchInputRef.current?.focus();
-                  }}
-                />
-              </span>
+      <PageHeader
+        title={t("rework.teamSettings.members.title")}
+        actions={
+          <>
+            <div className={styles["team-settings-members-search"]}>
+              <TextInput
+                ref={searchInputRef}
+                compact
+                icon={{ category: "outlined", type: "search" }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("rework.teamSettings.members.search.placeholder")}
+                aria-label={t("rework.teamSettings.members.search.ariaLabel")}
+                style={search ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
+              />
+              {search && (
+                <span className={styles["team-settings-members-search-clear"]}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    color="on-surface-retreat"
+                    variant="icon"
+                    icon={{ category: "outlined", type: "close" }}
+                    aria-label={t("rework.teamSettings.members.search.clearAriaLabel")}
+                    onClick={() => {
+                      setSearch("");
+                      searchInputRef.current?.focus();
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+            <LeaveTeamButton team={team} />
+            {can_administer_members && (
+              <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
+                {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
+              </Button>
             )}
-          </div>
-          {can_administer_members && (
-            <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
-              {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
-            </Button>
-          )}
-        </div>
-      </div>
+          </>
+        }
+      />
       <div className={styles["team-settings-members-table-wrapper"]}>
         <TeamSettingsMembersTable team={team} search={search} />
       </div>

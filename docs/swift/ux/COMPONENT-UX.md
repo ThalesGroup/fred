@@ -1394,6 +1394,52 @@ match — consistent with every other elevated-role tab instead of a dead end. P
 
 ---
 
+### `PageHeader`
+
+**Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
+**Status:** `Functional`
+
+The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
+`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+row below the title/actions row). This is the only place a page-level title should ever be
+rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
+title against `actions` when there's no subtitle; aligns to the top when there is one, so
+`actions` sits at the title's baseline instead of drifting toward the two-line block's middle.
+
+Extracted 2026-07-30 (commit `e01d0b47`) because `TeamUsagePage`, `TaskActivity`, and the team
+Evaluations view had each hand-rolled a slightly different heading level/subtitle placement.
+Extended 2026-07-31 with the `breadcrumb`/`tabs` slots and retrofitted onto every remaining
+admin-scope and team-admin-scope page in the same pass, so platform-admin and team-admin pages
+now share one consistent header pattern instead of diverging per page:
+
+| Page | Slots used |
+| --- | --- |
+| `TeamUsagePage` | title, actions (`TimeRangeSelector` + refresh) |
+| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle |
+| `Evaluations` (team Evaluations tab) | title, subtitle, actions |
+| `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
+| `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
+| `SelfTestPage` | title only |
+| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
+| `MigrationPage` (Platform data) | title, breadcrumb (Kea cutover link) |
+| `AdminTeamsPage` | title only (new — page previously had no page-level header) |
+| `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
+| `TeamSettingsParameters` | title only (new) |
+| `TeamSettingsRouting` | title only (new) |
+| `KeaMigrationPage` (temporary, unlisted) | title only — hardcoded French string kept as-is; this page has no i18n at all and is slated for deletion with the Kea cutover, so it was wrapped for visual consistency without doing a full i18n pass |
+
+Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
+visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
+filter, not a tab strip.
+
+#### Open UX issues
+
+- No lint rule enforces `PageHeader` usage — a new or edited page can still hand-roll a title.
+  Consider an eslint rule or code-review checklist item if regressions show up again.
+
+---
+
 ---
 
 ## CHAT-05 atoms (Wave 1 + additions)

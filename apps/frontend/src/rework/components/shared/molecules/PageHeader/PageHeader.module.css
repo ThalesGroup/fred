@@ -1,8 +1,24 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+}
+
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-m);
+}
+
+.tabs {
+  display: flex;
 }
 
 .headerWithSubtitle {
@@ -28,6 +44,8 @@
 .actions {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
 }

@@ -47,18 +47,17 @@ export default function TeamContentNavbar() {
   const { pathname } = location;
   const navigate = useNavigate();
 
-  // "Back" from a focused view (settings / usage) should return to wherever the
-  // user came from, not always dump them on the agents page. React Router marks
-  // the first history entry of a session with key "default"; navigating back from
-  // there would leave the app, so fall back to the team's agents view then.
-  const handleBack = () => {
-    if (location.key === "default") {
-      navigate(`/team/${teamId}/agents`);
-    } else {
-      navigate(-1);
-    }
-  };
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
+
+  // "Back" from a focused view (settings / usage) always returns to the team's
+  // main content view — a fixed, predictable destination. `navigate(-1)` was
+  // tried first but reads as arbitrary: from settings it pops one entry off
+  // the raw browser history stack, which is very often another settings tab
+  // (e.g. Members -> Parameters -> Back lands back on Members), not a place a
+  // "Back" affordance should land on.
+  const handleBack = () => {
+    navigate(`/team/${teamId}/agents`);
+  };
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateAgents, canUpdateInfo } = capabilities;
 
