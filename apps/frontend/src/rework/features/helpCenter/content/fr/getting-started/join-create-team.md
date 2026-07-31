@@ -7,6 +7,10 @@ icon: groups
 
 # Rejoindre ou créer une équipe
 
+Tout se passe au sein d'une équipe. La bonne nouvelle : il en existe
+probablement déjà une pour votre sujet — et sinon, en créer une prend quelques
+secondes.
+
 ## La marketplace des équipes
 
 La **marketplace** liste les équipes visibles de votre organisation. Depuis le

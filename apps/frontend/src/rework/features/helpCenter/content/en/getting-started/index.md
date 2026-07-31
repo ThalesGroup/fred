@@ -7,10 +7,10 @@ icon: rocket_launch
 
 # Welcome
 
-The platform brings together, in one place, your **AI assistants** (agents),
-your teams' **knowledge** (your documents), and the **conversations** that put
-them to work together. The goal: help you get reliable answers grounded in your
-own content, rather than from a generic model cut off from your context.
+Welcome! The platform brings together, in one place, your **AI assistants**
+(agents), your teams' **documents**, and the **conversations** that put them to
+work together. The goal: help you get reliable answers that draw on your own
+content, rather than generalities disconnected from your work.
 
 In practice, you work within a **team**. A team gathers people, agents
 configured for a specific purpose, a library of reusable prompts, and a

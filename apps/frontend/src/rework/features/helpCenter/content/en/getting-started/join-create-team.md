@@ -7,6 +7,9 @@ icon: groups
 
 # Join or create a team
 
+Everything happens within a team. The good news: there's probably already one
+for your topic — and if not, creating one takes just a few seconds.
+
 ## The team marketplace
 
 The **marketplace** lists the visible teams in your organization. From the

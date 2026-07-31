@@ -7,6 +7,9 @@ icon: forum
 
 # Première conversation
 
+Pas besoin d'être un expert : discuter avec un agent, c'est aussi simple
+qu'écrire un message. Voici comment se déroule un premier échange.
+
 ## Choisir un agent
 
 Sélectionnez votre équipe dans le panneau de navigation, puis ouvrez la page
@@ -32,8 +35,8 @@ envoyez. Quelques conseils pour de meilleures réponses :
 Vous pouvez **joindre un fichier** à un message pour que l'agent en tienne
 compte le temps de la conversation. Pour un usage durable et partagé, déposez
 plutôt vos documents dans les [ressources](/help/fr/features/resources) de
-l'équipe : ils deviennent interrogeables par les agents et cités dans les
-réponses.
+l'équipe : l'agent peut alors s'y référer et vous montrer les passages qu'il
+utilise.
 
 ## Lire une réponse
 

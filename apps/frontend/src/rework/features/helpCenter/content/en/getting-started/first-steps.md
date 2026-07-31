@@ -7,6 +7,9 @@ icon: login
 
 # First login
 
+A few minutes are enough to sign in and get your bearings. We'll walk you
+through it step by step.
+
 ## Signing in
 
 You access the platform with your organization account, through the secure

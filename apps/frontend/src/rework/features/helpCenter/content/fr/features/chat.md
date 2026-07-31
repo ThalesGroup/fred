@@ -28,8 +28,8 @@ gauche. Vous pouvez :
 Vous pouvez **joindre un fichier** à un message : l'agent en tient compte le
 temps de la conversation. C'est pratique pour un document ponctuel. Pour un
 usage durable et partagé, préférez les
-[ressources](/help/fr/features/resources) de l'équipe, qui restent
-interrogeables au fil des conversations.
+[ressources](/help/fr/features/resources) de l'équipe, que l'agent peut
+consulter au fil des conversations.
 
 ## Prompts attachés
 

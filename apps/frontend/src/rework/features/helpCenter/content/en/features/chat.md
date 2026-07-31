@@ -25,8 +25,8 @@ conversations are kept and **grouped by agent** in the left-hand list. You can:
 
 You can **attach a file** to a message: the agent takes it into account for the
 duration of the conversation. Handy for a one-off document. For lasting, shared
-use, prefer the team's [resources](/help/en/features/resources), which stay
-queryable across conversations.
+use, prefer the team's [resources](/help/en/features/resources), which the
+agent can consult across conversations.
 
 ## Attached prompts
 

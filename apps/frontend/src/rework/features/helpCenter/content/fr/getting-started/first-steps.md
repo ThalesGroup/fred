@@ -7,6 +7,9 @@ icon: login
 
 # Première connexion
 
+Quelques minutes suffisent pour vous connecter et prendre vos repères. On vous
+guide pas à pas.
+
 ## Se connecter
 
 L'accès à la plateforme se fait avec votre compte d'organisation, via la page

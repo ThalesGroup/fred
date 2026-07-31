@@ -7,6 +7,9 @@ icon: forum
 
 # First conversation
 
+No need to be an expert: talking to an agent is as simple as writing a message.
+Here's how a first exchange goes.
+
 ## Picking an agent
 
 Select your team in the navigation panel, then open the **Agents** page. Each
@@ -30,8 +33,8 @@ send. A few tips for better answers:
 
 You can **attach a file** to a message so the agent takes it into account for
 the duration of the conversation. For lasting, shared use, upload your documents
-to the team's [resources](/help/en/features/resources) instead: they become
-queryable by agents and cited in answers.
+to the team's [resources](/help/en/features/resources) instead: the agent can
+then draw on them and show you the passages it uses.
 
 ## Reading an answer
 

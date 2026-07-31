@@ -7,11 +7,11 @@ icon: rocket_launch
 
 # Bienvenue
 
-La plateforme réunit, au même endroit, des **assistants IA** (les agents),
-les **connaissances** de vos équipes (vos documents) et les **conversations**
-qui les font travailler ensemble. L'objectif : vous aider à obtenir des
-réponses fiables, appuyées sur vos propres contenus, plutôt que sur un modèle
-générique coupé de votre contexte.
+Bienvenue ! La plateforme réunit, au même endroit, des **assistants IA** (les
+agents), les **documents** de vos équipes et les **conversations** qui les font
+travailler ensemble. L'objectif : vous aider à obtenir des réponses fiables,
+qui s'appuient sur vos propres contenus plutôt que sur des généralités sans lien
+avec votre travail.
 
 Concrètement, vous travaillez au sein d'une **équipe**. Une équipe rassemble
 des personnes, des agents configurés pour un usage précis, une bibliothèque de
