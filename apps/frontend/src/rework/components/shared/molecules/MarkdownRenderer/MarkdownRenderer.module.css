@@ -103,9 +103,11 @@
 
 /* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */
 
-/* Scroll target lands below any sticky chrome when navigating to #fragment. */
+/* When navigating to #fragment, the target heading lands below the Help
+   Center's ~57px header instead of behind it. 4rem clears the header with a
+   small gap. Only headingAnchors (Help Center) uses this class. */
 .anchoredHeading {
-  scroll-margin-top: var(--spacing-xl);
+  scroll-margin-top: 4rem;
 }
 
 /* Copy-link affordance: invisible until the heading is hovered or the button

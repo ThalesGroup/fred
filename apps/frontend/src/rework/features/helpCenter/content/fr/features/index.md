@@ -15,8 +15,8 @@ Cette section décrit chaque fonctionnalité en détail. Choisissez un thème :
   assistants IA.
 - [La bibliothèque de prompts](/help/fr/features/prompts) — catégories,
   création et réutilisation de prompts.
-- [Les ressources documentaires](/help/fr/features/resources) — déposer,
-  organiser et indexer vos documents.
+- [Les ressources documentaires](/help/fr/features/resources) — déposer et
+  organiser les documents que vos agents exploitent.
 - [Les capacités des agents](/help/fr/features/capabilities) — les fonctions
   supplémentaires activables par équipe.
 - [Administrer son équipe](/help/fr/features/teams) — membres, réglages,

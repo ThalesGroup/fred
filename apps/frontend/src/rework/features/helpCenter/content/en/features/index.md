@@ -16,7 +16,7 @@ This section covers each feature in detail. Pick a topic:
 - [Prompt library](/help/en/features/prompts) — categories, creating and
   reusing prompts.
 - [Document resources](/help/en/features/resources) — upload, organize, and
-  index your documents.
+  the documents your agents draw on.
 - [Agent capabilities](/help/en/features/capabilities) — the extra functions
   you enable per team.
 - [Administering your team](/help/en/features/teams) — members, settings,

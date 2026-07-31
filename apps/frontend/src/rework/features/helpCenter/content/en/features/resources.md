@@ -1,62 +1,59 @@
 ---
 title: Document resources
 order: 40
-description: Upload, organize, and index the documents your agents can query.
+description: Upload and organize the documents your agents can draw on.
 icon: folder
 ---
 
 # Document resources
 
-**Resources** are your team's documents. Once indexed, they become queryable by
-agents, which can then answer based on them and **cite their sources**.
+**Resources** are your team's documents. Once uploaded, your agents can draw on
+them to answer your questions and **show you the passages** they relied on.
+That's what lets them talk about _your_ content rather than generalities.
 
-## Spaces
+## The team corpus
 
-The **Resources** page distinguishes several spaces:
+The **Resources** page shows the **team corpus**: the shared document base,
+common to the team's members, that your agents work from.
 
-- **Team corpus**: the team's knowledge base, indexed for AI search and shared
-  between members.
-- **My space**: your private files within this team — drafts, templates — that
-  only you see.
-- **Team space** and **Agents**: files attached to the team or produced by
-  agents.
+## Filing documents into libraries
 
-## Libraries and upload
+Documents are filed into **libraries**, a bit like folders. Start by creating a
+library, then add your documents inside it.
 
-In the team corpus, documents are filed into **libraries** (folders). Create a
-library first, then add documents inside it.
+> A document uploaded outside a library can't be used by your agents: always
+> remember to place it in a library.
 
-> A file left at the top level, outside a library, is **not indexed**: agents
-> won't find it.
+The usual formats are accepted: PDF, text documents, presentations
+(PowerPoint), spreadsheets (Excel, CSV), Markdown.
 
-Common formats are supported: PDF, text documents, presentations (PPT),
-spreadsheets (Excel/CSV), Markdown.
+## What happens after upload
 
-## Ingestion and statuses
+When you add a document, it needs a short **preparation** moment before it can
+be used. During that time, a **Processing** tag shows next to its name; it
+**disappears on its own** as soon as the document is ready — there's nothing for
+you to do.
 
-After upload, each document goes through an **ingestion** phase (analysis and
-indexing). Its status evolves: **Pending**, **Processing**, **Ready**, or
-**Error** on failure. Only **Ready** documents are usable by agents.
+Each document also shows where it came from: **Uploaded** (added by a team
+member), **Generated** (produced by an agent), or **Shared**.
 
-Each document also shows its **origin** — **Uploaded** (imported by a member),
-**Generated** (produced by an agent), or **Shared**.
-
-![TODO: screenshot — the team corpus with statuses and origin](assets/resources-corpus.png)
+![TODO: screenshot — the team corpus with the Processing tag](assets/resources-corpus.png)
 
 ## Managing documents
 
+From the corpus, you can:
+
 - **Rename** a document or a library.
-- **Exclude from search** so a document is no longer taken into account by
-  agents, without deleting it.
-- **Preview** a document in the built-in viewer.
-- **Delete** a document or a library (deleting a library also removes its
-  content from the index).
+- **Preview** a document without leaving the page.
+- **Set a document aside** so your agents stop taking it into account, without
+  deleting it.
+- **Delete** a document or a whole library.
 
-## Storage
+## Storage space
 
-Each team has a **storage quota**. The page shows consumption and statistics by
-file type (PDF, text, PPT, Excel, other). If you exceed it, trim the corpus or
-contact an administrator.
+Each team has a **storage space** for its documents. The page shows you what's
+in use. If you're getting close to the limit, do a little cleanup (duplicates,
+outdated versions) or ask one of your team's administrators for help.
 
-A document ingested but never cited? See
+A document you uploaded but the agent never seems to use? Take a look at
 [Document issues](/help/en/troubleshooting/documents-issues).

@@ -26,7 +26,7 @@ see.
   activation.
 - **Activity**: running tasks and processing history.
 - **Self-test**: checks that the platform is working correctly.
-- **Corpus audit**: control and repair of the document index.
+- **Corpus audit**: checking and repairing the document base.
 - **Platform data**: export and import of the platform's state.
 
 ![TODO: screenshot — the admin console](assets/admin-console.png)

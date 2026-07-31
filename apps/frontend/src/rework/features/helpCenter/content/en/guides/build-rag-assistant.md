@@ -1,48 +1,49 @@
 ---
 title: Build a document assistant
 order: 10
-description: From scratch to an agent that answers on your documents, citing its sources.
+description: From scratch to an agent that answers from your documents.
 icon: school
 ---
 
 # Build a document assistant
 
-Goal: get an agent able to answer from **your** documents, citing its sources.
-Four steps.
+The goal: get an agent able to answer from **your** documents, showing you the
+passages it used. Four steps are enough.
 
 ## 1. Prepare the team
 
 [Create or join a team](/help/en/getting-started/join-create-team) to hold the
-assistant and its documents. Everything you add afterwards belongs to it and
-stays private to its members.
+assistant and its documents. Everything you add there afterwards stays private
+to its members.
 
-## 2. Build the corpus
+## 2. Gather the documents
 
 On the [Resources](/help/en/features/resources) page, create a **library**, then
-upload your documents into it. Wait for their status to reach **Ready**: only
-indexed documents are usable.
+upload your documents into it. Give them a moment to be prepared (the
+"Processing" tag disappears when it's done).
 
-Best practices:
+A few tips for better results:
 
-- **Source quality**: prefer clean, up-to-date documents; drop duplicates and
-  stale versions.
-- **Structure**: well-structured documents (headings, sections) yield better
-  citations than one massive, heterogeneous file.
-- **Scope**: a corpus focused on one topic answers better than a catch-all.
+- **Choose good documents**: clean, up to date, without duplicates or stale
+  versions.
+- **Favor well-structured documents** (with headings and sections) over one big
+  catch-all file.
+- **Stay on one topic**: a focused base answers better than a mix of everything.
 
 ## 3. Create the agent
 
-On the [Agents](/help/en/features/agents) page, create an agent from a template
-able to search documents. Attach the library built in step 2, and write an
-**engagement prompt** that states its role and asks it to rely on the sources.
+On the [Agents](/help/en/features/agents) page, create an agent from a model able
+to search documents. Attach the library from step 2, and write a **system
+prompt** that states its role and asks it to rely on your documents.
 
-## 4. Test and iterate
+## 4. Test and improve
 
 Open a [conversation](/help/en/features/chat) and ask real questions. For each
-answer, **check the cited sources**:
+answer, **check the cited passages**:
 
-- Off-topic answers? Refine the engagement prompt or the corpus scope.
-- Documents never cited? Check their ingestion status and see
+- Off-topic answers? Refine the agent's system prompt, or revisit the documents
+  you gave it.
+- Documents never used? See
   [Document issues](/help/en/troubleshooting/documents-issues).
 
-Iterate until answers are reliable, then share the agent with your team.
+Repeat until answers are reliable, then share the agent with your team.

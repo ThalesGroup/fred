@@ -23,10 +23,10 @@ Un **template** est un modèle fourni par la plateforme ; l'**agent** (ou
 instance) est la version concrète que votre équipe crée et configure à partir de
 ce template. Voir [Les agents](/help/fr/features/agents).
 
-## Pourquoi mon agent ne cite-t-il pas mes documents ?
+## Pourquoi mon agent n'utilise-t-il pas mes documents ?
 
-Le plus souvent parce que les documents ne sont pas **indexés** (statut autre que
-« Prêt ») ou sont hors bibliothèque. Voir
+Le plus souvent parce que les documents sont encore en préparation, ou parce
+qu'ils ont été déposés en dehors d'une bibliothèque. Voir
 [Problèmes de documents](/help/fr/troubleshooting/documents-issues).
 
 ## Puis-je changer la langue de l'interface ?

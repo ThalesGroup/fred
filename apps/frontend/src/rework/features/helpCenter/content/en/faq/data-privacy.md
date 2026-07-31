@@ -23,7 +23,7 @@ delay is set, erasure is immediate.
 ## My documents and AI
 
 The documents you upload serve to answer your questions within your team: they
-are analyzed and indexed so agents can refer to them and cite their sources.
+are prepared so agents can refer to them and show you the passages they used.
 They stay within the team's scope.
 
 ## Export and compliance

@@ -24,15 +24,11 @@ Administrateur, Éditeur, Analyste ou Membre (voir
 
 ## Agent
 
-Un **agent** est un assistant IA prêt à dialoguer. Il se décline en deux temps :
-
-- Un **template** est un modèle d'agent fourni par la plateforme (par exemple
-  un agent capable de fouiller des documents).
-- Une **instance** est l'agent concret que votre équipe crée à partir d'un
-  template et configure à sa main : son prompt d'engagement, les prompts qui
-  lui sont attachés, ses ressources et ses capacités.
-
-Quand vous discutez, vous parlez toujours à une **instance** d'agent.
+Un **agent** est un assistant IA prêt à dialoguer. Votre équipe le crée à partir
+d'un **modèle** fourni par la plateforme (par exemple un agent capable de
+chercher dans des documents), puis le personnalise : ses **instructions**, les
+prompts qui lui sont attachés, ses ressources et ses capacités. C'est à ces
+agents que vous parlez dans vos conversations.
 
 ## Prompt
 
@@ -45,9 +41,9 @@ comportement.
 ## Ressource
 
 Les **ressources** sont les documents de votre équipe. Une fois déposés, ils
-sont **ingérés** (analysés et indexés) pour devenir interrogeables par les
-agents : c'est ce qui permet à un assistant de répondre en s'appuyant sur vos
-contenus et de **citer ses sources**.
+deviennent, après un court moment de préparation, consultables par les agents :
+c'est ce qui permet à un assistant de répondre en s'appuyant sur vos contenus et
+de **vous montrer les passages** qu'il a utilisés.
 
 ## Session de chat
 

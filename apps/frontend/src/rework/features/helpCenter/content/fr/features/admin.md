@@ -26,7 +26,7 @@ Ouvrez le **menu profil** (en bas du panneau de navigation) puis
   équipe.
 - **Activité** : les tâches en cours et l'historique de traitement.
 - **Auto-test** : les vérifications de bon fonctionnement de la plateforme.
-- **Audit du corpus** : le contrôle et la réparation de l'index documentaire.
+- **Audit du corpus** : la vérification et la réparation de la base documentaire.
 - **Données plateforme** : l'export et l'import de l'état de la plateforme.
 
 ![TODO: capture — la console d'administration](assets/admin-console.png)

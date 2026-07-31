@@ -20,8 +20,8 @@ La plateforme s'organise en quelques composants complémentaires :
   droits — tout ce qui relève de l'organisation et de l'accès.
 - **Les agents** : exécutent les conversations, mobilisent les capacités et
   appellent les modèles de langage.
-- **La chaîne documentaire** : ingère vos documents, les indexe et permet leur
-  recherche.
+- **La chaîne documentaire** : prépare vos documents après leur dépôt et permet
+  aux agents d'y retrouver les passages utiles.
 
 ## Le chemin d'une question
 

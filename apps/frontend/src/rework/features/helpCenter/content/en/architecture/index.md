@@ -20,8 +20,8 @@ The platform is organized into a few complementary components:
   everything about organization and access.
 - **The agents**: run conversations, call on capabilities, and invoke language
   models.
-- **The document pipeline**: ingests your documents, indexes them, and enables
-  their search.
+- **The document pipeline**: prepares your documents after upload and lets
+  agents find the useful passages in them.
 
 ## The path of a question
 

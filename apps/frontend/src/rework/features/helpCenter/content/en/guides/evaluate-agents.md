@@ -24,7 +24,7 @@ spot the cases where the agent falls short and understand why.
 
 ## Iterate
 
-Use the report to adjust the agent — engagement prompt, attached prompts,
+Use the report to adjust the agent — system prompt, attached prompts,
 document corpus — then run another campaign to check that quality is improving.
 This **measure → adjust → re-measure** cycle is what moves an agent forward.
 

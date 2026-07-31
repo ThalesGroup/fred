@@ -23,8 +23,8 @@ par l'équipe. Si aucun délai n'est défini, l'effacement est immédiat.
 ## Mes documents et l'IA
 
 Les documents que vous déposez servent à répondre à vos questions au sein de
-votre équipe : ils sont analysés et indexés pour que les agents puissent s'y
-référer et citer leurs sources. Ils restent dans le périmètre de l'équipe.
+votre équipe : ils sont préparés pour que les agents puissent s'y référer et
+vous montrer les passages utilisés. Ils restent dans le périmètre de l'équipe.
 
 ## Export et conformité
 

@@ -24,7 +24,7 @@ pour repérer les cas où l'agent déçoit et comprendre pourquoi.
 
 ## Itérer
 
-Servez-vous du rapport pour ajuster l'agent — prompt d'engagement, prompts
+Servez-vous du rapport pour ajuster l'agent — instructions, prompts
 attachés, corpus documentaire — puis relancez une campagne pour vérifier que la
 qualité progresse. C'est ce cycle **mesurer → ajuster → remesurer** qui fait
 avancer un agent.

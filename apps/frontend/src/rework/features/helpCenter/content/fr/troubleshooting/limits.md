@@ -24,7 +24,7 @@ réduisez-le.
 
 Certaines opérations prennent du temps, c'est normal :
 
-- **L'ingestion** d'un document (analyse et indexation) dépend de sa taille.
+- **La préparation** d'un document (après son dépôt) dépend de sa taille.
 - **Les questions très ouvertes** ou portant sur de gros volumes tabulaires
   peuvent atteindre les limites de traitement — ciblez davantage votre demande.
 

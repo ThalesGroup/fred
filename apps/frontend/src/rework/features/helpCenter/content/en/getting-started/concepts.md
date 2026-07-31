@@ -24,15 +24,11 @@ Administrator, Editor, Analyst, or Member (see
 
 ## Agent
 
-An **agent** is an AI assistant ready to chat. It comes in two stages:
-
-- A **template** is an agent blueprint provided by the platform (for example an
-  agent able to search through documents).
-- An **instance** is the concrete agent your team creates from a template and
-  configures its own way: its engagement prompt, the prompts attached to it,
-  its resources, and its capabilities.
-
-When you chat, you always talk to an agent **instance**.
+An **agent** is an AI assistant ready to chat. Your team creates it from a
+**model** provided by the platform (for example an agent able to search through
+documents), then personalizes it: its **system prompt**, the prompts attached to
+it, its resources, and its capabilities. These are the agents you talk to in
+your conversations.
 
 ## Prompt
 
@@ -43,9 +39,9 @@ to an agent to shape its behavior.
 
 ## Resource
 
-**Resources** are your team's documents. Once uploaded, they are **ingested**
-(analyzed and indexed) to become queryable by agents: this is what lets an
-assistant answer based on your content and **cite its sources**.
+**Resources** are your team's documents. Once uploaded, after a short
+preparation moment they become available to agents: this is what lets an
+assistant answer based on your content and **show you the passages** it used.
 
 ## Chat session
 

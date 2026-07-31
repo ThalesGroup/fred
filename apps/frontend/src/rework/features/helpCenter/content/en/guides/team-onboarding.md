@@ -29,7 +29,7 @@ usage counter reveals the ones that truly help.
 
 Create a few well-configured, unambiguously named
 [agents](/help/en/features/agents) rather than a swarm of near-identical ones. A
-reference agent, documented by its engagement prompt, acts as a shared entry
+reference agent, documented by its system prompt, acts as a shared entry
 point.
 
 ## Naming conventions

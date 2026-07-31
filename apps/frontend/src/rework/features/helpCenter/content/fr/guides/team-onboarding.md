@@ -29,7 +29,7 @@ d'usage révèle ceux qui rendent vraiment service.
 
 Créez quelques [agents](/help/fr/features/agents) bien configurés et nommés sans
 ambiguïté, plutôt qu'une multitude d'agents proches. Un agent de référence,
-documenté par son prompt d'engagement, sert de point d'entrée commun.
+documenté par ses instructions, sert de point d'entrée commun.
 
 ## Conventions de nommage
 

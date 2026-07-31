@@ -23,7 +23,7 @@ A file that's too large is rejected: split it or shrink it.
 
 Some operations take time, and that's normal:
 
-- **Ingesting** a document (analysis and indexing) depends on its size.
+- **Preparing** a document (after upload) depends on its size.
 - **Very open questions** or ones over large tabular volumes can hit processing
   limits — narrow your request.
 
