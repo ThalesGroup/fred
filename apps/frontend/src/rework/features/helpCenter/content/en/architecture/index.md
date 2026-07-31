@@ -25,21 +25,13 @@ The platform is organized into a few complementary components:
 
 ## The path of a question
 
-```mermaid
-flowchart LR
-  U["You"] --> UI["Interface"]
-  UI --> CP["Control plane"]
-  CP --> AG["Agents"]
-  AG --> KF["Document pipeline"]
-  KF --> AG
-  AG --> UI
-  UI --> U
-```
+> **You** → **Interface** → **Control plane** → **Agents** →
+> **Document pipeline**, then back the other way to your screen.
 
-You ask a question in the interface; the control plane checks your permissions
-and routes the request; the agent builds the answer, querying the document
-pipeline when needed to retrieve and cite your sources; the answer comes back to
-you in the interface.
+In detail: you ask a question in the interface; the control plane checks your
+permissions and routes the request; the agent builds the answer, querying the
+document pipeline when needed to retrieve the useful passages from your
+documents; the answer comes back to you in the interface.
 
 ## Going further
 

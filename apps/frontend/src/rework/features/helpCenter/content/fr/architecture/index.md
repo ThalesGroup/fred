@@ -25,21 +25,13 @@ La plateforme s'organise en quelques composants complémentaires :
 
 ## Le chemin d'une question
 
-```mermaid
-flowchart LR
-  U["Vous"] --> UI["Interface"]
-  UI --> CP["Plan de contrôle"]
-  CP --> AG["Agents"]
-  AG --> KF["Chaîne documentaire"]
-  KF --> AG
-  AG --> UI
-  UI --> U
-```
+> **Vous** → **Interface** → **Plan de contrôle** → **Agents** →
+> **Chaîne documentaire**, puis le chemin inverse jusqu'à votre écran.
 
-Vous posez une question dans l'interface ; le plan de contrôle vérifie vos
-droits et achemine la demande ; l'agent construit la réponse, en interrogeant au
-besoin la chaîne documentaire pour retrouver et citer vos sources ; la réponse
-vous revient dans l'interface.
+Dans le détail : vous posez une question dans l'interface ; le plan de contrôle
+vérifie vos droits et achemine la demande ; l'agent construit la réponse, en
+interrogeant au besoin la chaîne documentaire pour retrouver les passages utiles
+de vos documents ; la réponse vous revient dans l'interface.
 
 ## Pour aller plus loin
 

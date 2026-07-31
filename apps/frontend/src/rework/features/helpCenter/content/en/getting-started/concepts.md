@@ -57,18 +57,11 @@ Capabilities are enabled per team.
 
 ## How it all fits together
 
-```mermaid
-flowchart TD
-  T["Team"] --> A["Agents"]
-  T --> P["Prompts"]
-  T --> R["Resources"]
-  A --> S["Chat session"]
-  P --> S
-  R --> S
-  S --> Rep["Cited answer + produced documents"]
-```
+> **Your team** brings together your **agents**, your **prompts**, and your
+> **resources**. A **conversation** puts them to work together to produce an
+> **answer grounded in your documents**.
 
-The team gathers agents, prompts, and resources; the conversation puts them to
-work together to produce an answer grounded in your content.
+In short: **Team** → (agents · prompts · resources) → **Conversation** →
+**Answer**.
 
 Next: [join or create a team](/help/en/getting-started/join-create-team).

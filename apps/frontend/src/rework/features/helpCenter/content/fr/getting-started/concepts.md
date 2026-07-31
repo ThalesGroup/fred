@@ -60,18 +60,11 @@ données tabulaires. Les capacités s'activent par équipe.
 
 ## Comment tout s'articule
 
-```mermaid
-flowchart TD
-  T["Équipe"] --> A["Agents"]
-  T --> P["Prompts"]
-  T --> R["Ressources"]
-  A --> S["Session de chat"]
-  P --> S
-  R --> S
-  S --> Rep["Réponse citée + documents produits"]
-```
+> **Votre équipe** réunit vos **agents**, vos **prompts** et vos **ressources**.
+> Une **conversation** les fait travailler ensemble pour produire une **réponse
+> appuyée sur vos documents**.
 
-L'équipe réunit agents, prompts et ressources ; la conversation les fait
-travailler ensemble pour produire une réponse appuyée sur vos contenus.
+En résumé : **Équipe** → (agents · prompts · ressources) → **Conversation** →
+**Réponse**.
 
 La suite : [rejoindre ou créer une équipe](/help/fr/getting-started/join-create-team).

@@ -61,26 +61,24 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
-    // mermaid lazy-loads each diagram type (flowDiagram, sequence, …) via an
-    // internal dynamic import(). esbuild's pre-bundle scan can't follow those,
-    // so pre-bundling mermaid (`include`) still let the diagram sub-chunks be
-    // discovered mid-session — that triggers a dep re-optimization which
-    // invalidates the in-flight `?v=` chunk hash and throws
-    // "error loading dynamically imported module" in MermaidBlock.
-    // mermaid 11 is pure ESM, so EXCLUDING it is the reliable fix: Vite serves
-    // it (and its diagram modules) as native ESM straight from node_modules,
-    // with no `?v=` optimize hashing to go stale.
+    // Pre-bundle mermaid so its (CommonJS) transitive deps get proper ESM
+    // named-export interop — excluding it instead breaks e.g.
+    // `@braintree/sanitize-url` ("doesn't provide an export named 'sanitizeUrl'")
+    // and takes the whole app down, since MermaidBlock is statically imported by
+    // MarkdownRenderer. Note: mermaid *diagram rendering* is still fragile in dev
+    // (its diagram types are lazy-loaded via internal dynamic import, which can
+    // trigger a mid-session dep re-optimization) — so the Help Center uses plain
+    // markdown instead of ```mermaid blocks. Revisit if a robust dev story for
+    // rendering mermaid is needed.
     //
     // NOTE: `optimizeDeps` only affects the Vite DEV SERVER (esbuild pre-bundling
     // of CommonJS/lazy deps). It has NO effect on `npm run build` / production,
-    // where Rollup bundles everything ahead of time — so this is purely a
-    // local dev-experience tweak.
+    // where Rollup bundles everything ahead of time.
     //
     // react-dropzone is pre-bundled because it is lazy-loaded by MigrationPage;
     // this avoids the same mid-session re-optimize + 504 "Outdated Optimize Dep"
     // reload dance when that route is first visited.
-    include: ["react-dropzone"],
-    exclude: ["mermaid"],
+    include: ["mermaid", "react-dropzone"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",
