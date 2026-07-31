@@ -76,6 +76,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         # extractor config is built once and reused rather than rebuilt per document.
         self._extractor_cache: dict[tuple[str, int], BasePdfExtractor] = {}
         self._extractor_cache_lock = threading.Lock()
+        # Same reasoning as _extractor_cache, for the OCR model used on extracted
+        # images (see _get_ocr_model): PaddleOCRmodel.__init__ loads two ONNX Runtime
+        # sessions from disk, so it must not be rebuilt per document either.
+        self._ocr_model: PaddleOCRmodel | None = None
+        self._ocr_model_lock = threading.Lock()
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -171,6 +176,23 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     self._extractor_cache[cache_key] = extractor
         return extractor
 
+    def _get_ocr_model(self) -> PaddleOCRmodel:
+        """Build the OCR model once and reuse it across documents.
+
+        Mirrors `_get_extractor` above: `PaddleOCRmodel.__init__` loads two ONNX
+        Runtime inference sessions (detection + recognition) from disk and builds
+        their thread pools, so rebuilding it per document — as the inline
+        `PaddleOCRmodel()` call in `_extract_md` used to — reloads that pipeline on
+        every file, on every one of the worker's concurrent activity threads. Same
+        cost `_get_extractor` already guards against for the docling extractor;
+        this closes the same gap for the image OCR/VLM loop's model.
+        """
+        if self._ocr_model is None:
+            with self._ocr_model_lock:
+                if self._ocr_model is None:
+                    self._ocr_model = PaddleOCRmodel()
+        return self._ocr_model
+
     def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
         """Guarded KPI timer for the per-image OCR/VLM path.
 
@@ -248,7 +270,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 "knowledge_flow.pdf.image_loop_latency_ms",
                 {"pdf_stage": "image_loop", "file_type": "pdf"},
             ):
-                ocr_model = PaddleOCRmodel()
+                ocr_model = self._get_ocr_model()
                 ocr_results = self._use_ocr(ocr_model, images_transcription)
                 for image_transcription, ocr_result in zip(images_transcription, ocr_results):
                     if use_image_describer:
