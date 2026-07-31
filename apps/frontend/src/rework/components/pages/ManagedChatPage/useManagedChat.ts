@@ -116,7 +116,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const attachments = useChatAttachments({ teamId, sessionId });
 
-  const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
+  // `currentData`, not `data`: RTK Query's `data` deliberately reuses the last
+  // resolved result across an arg change (here, a session switch) while the
+  // new args' request is still in flight — exactly the case navigating from
+  // session A to session B hits. `currentData` is undefined until the result
+  // actually belongs to the CURRENT args, closing the window where A's stale
+  // payload could get attributed to B below (title, context prompt rehydrate).
+  const { currentData: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
     { skip: !teamId || !sessionId },
   );

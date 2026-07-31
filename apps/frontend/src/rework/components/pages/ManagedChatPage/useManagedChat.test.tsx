@@ -150,6 +150,12 @@ let patchSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 const registerSessionCalls: unknown[] = [];
 const patchSessionCalls: unknown[] = [];
 let sessionData: { context_prompt_ids?: string[]; title?: string } | undefined;
+// True only for the regression test below modeling RTK Query's data/
+// currentData divergence during a session switch (`data` reuses the last
+// resolved result across an arg change; `currentData` doesn't). Every other
+// test doesn't care about the distinction, so currentData mirrors data for
+// them, unchanged.
+let sessionDataIsStaleForCurrentArgs = false;
 
 // Real RTK Query mutation triggers return a promise-like object that is
 // BOTH directly catchable (`trigger(...).catch(...)`, used by
@@ -178,7 +184,10 @@ function deferred<T>() {
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({ data: [] }),
-  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery: () => ({ data: sessionData }),
+  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery: () => ({
+    data: sessionData,
+    currentData: sessionDataIsStaleForCurrentArgs ? undefined : sessionData,
+  }),
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation: () => [
     (args: unknown) => {
       patchSessionCalls.push(args);
@@ -246,6 +255,7 @@ describe("useManagedChat — session write reliability", () => {
     registerSessionCalls.length = 0;
     patchSessionCalls.length = 0;
     sessionData = undefined;
+    sessionDataIsStaleForCurrentArgs = false;
     sendMock.mockClear();
     showErrorMock.mockClear();
     notifyApiErrorMock.mockClear();
@@ -869,6 +879,56 @@ describe("useManagedChat — session write reliability", () => {
 
     // B has no local mutation yet — a fresh server snapshot for B must apply
     // normally, exactly like a first-time session entry.
+    sessionData = { context_prompt_ids: ["pB-from-server"] };
+    rerender();
+    expect(latest.contextPromptIds).toEqual(["pB-from-server"]);
+  });
+
+  it("does not attribute session A's reused (stale) sessionData to session B while B's query is still resolving", async () => {
+    // Regression test: RTK Query's `data` deliberately reuses the last
+    // resolved result across an arg change (here, a session switch) while
+    // the new args' request is still in flight — `sessionDataIsStaleForCurrentArgs`
+    // models exactly that. The fix reads `currentData` instead, which stays
+    // undefined until the result genuinely belongs to the new session.
+    mount();
+
+    // Bind and enter session A.
+    act(() => {
+      latest.handleAddAttachments([], "picker");
+    });
+    rerender();
+    const sidA = latest.sessionId;
+    expect(sidA).not.toBeNull();
+
+    // A's server snapshot resolves normally.
+    sessionData = { context_prompt_ids: ["pA-from-server"] };
+    rerender();
+    expect(latest.contextPromptIds).toEqual(["pA-from-server"]);
+
+    // Navigate to a new session B — a real transition, not a handleSend bind.
+    act(() => {
+      latest.startNewConversation();
+    });
+    expect(latest.contextPromptIds).toEqual([]);
+
+    // B's own query hasn't resolved yet — set this BEFORE the render where
+    // sessionId actually flips to B, so the race is captured at the exact
+    // render where they first interact: `data` still reflects A's payload
+    // (the real-world RTK Query behavior), but `currentData` correctly does
+    // not.
+    sessionDataIsStaleForCurrentArgs = true;
+    act(() => {
+      latest.handleAddAttachments([], "picker");
+    });
+    rerender();
+    const sidB = latest.sessionId;
+    expect(sidB).not.toBeNull();
+    expect(sidB).not.toBe(sidA);
+    // Must NOT inherit A's prompts under B's session id.
+    expect(latest.contextPromptIds).toEqual([]);
+
+    // B's real snapshot finally arrives.
+    sessionDataIsStaleForCurrentArgs = false;
     sessionData = { context_prompt_ids: ["pB-from-server"] };
     rerender();
     expect(latest.contextPromptIds).toEqual(["pB-from-server"]);
