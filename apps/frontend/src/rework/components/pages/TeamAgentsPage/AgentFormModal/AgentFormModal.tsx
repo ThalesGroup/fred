@@ -297,6 +297,7 @@ export default function AgentFormModal({
       ? [
           ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
           ...(!form.displayName.trim() ? (["general"] as const) : []),
+          ...(capabilityBlocked ? (["tools"] as const) : []),
           ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
         ]
       : [],
@@ -305,13 +306,14 @@ export default function AgentFormModal({
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (!canSave) {
-      const firstErrorSection = (["general", "prompts", "commitments"] as const).find((s) => {
+      const firstErrorSection = (["general", "prompts", "tools", "commitments"] as const).find((s) => {
         if (s === "general") {
           return (
             !form.displayName.trim() ||
             requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === "general")
           );
         }
+        if (s === "tools") return capabilityBlocked;
         if (s === "commitments") return !form.usageStatement.trim();
         return requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === s);
       });

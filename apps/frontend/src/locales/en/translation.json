@@ -1798,7 +1798,7 @@
           },
           "usageStatement": {
             "label": "Use case",
-            "explanation": "Clearly describe the use cases you plan to address with this agent.",
+            "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },

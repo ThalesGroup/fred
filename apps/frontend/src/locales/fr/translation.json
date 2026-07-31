@@ -1798,7 +1798,7 @@
           },
           "usageStatement": {
             "label": "Cas d'usage",
-            "explanation": "Décrivez clairement les cas d'usage que vous envisagez de traiter grâce à cet agent.",
+            "intro": "Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur, veuillez décrire en détail la raison-d'être de cet agent, ses utilisations envisagées et les risques associés.",
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           }
         },

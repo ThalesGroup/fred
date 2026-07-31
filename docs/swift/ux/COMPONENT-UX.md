@@ -1349,7 +1349,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
 - **Outils** — capability cards, unchanged content. Hidden when the template has none.
-- **Engagement** — new required "Cas d'usage" field (large `TextArea`, label + explanation + placeholder), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk).
+- **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
 
@@ -1371,7 +1371,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-retreat` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
-- **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab) and usage_statement (Engagement tab); no toast for validation.
+- **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
 
 ---
