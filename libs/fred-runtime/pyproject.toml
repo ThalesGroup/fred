@@ -44,6 +44,9 @@ demo_echo = "fred_runtime.capabilities.demo:DemoEchoCapability"
 # SDK `DocumentSearchPort` (CAPAB-01). Auto-discovered at app construction — do
 # NOT also register it manually (double-registration trips the boot invariant).
 document_access = "fred_runtime.capabilities.document_access:DocumentAccessCapability"
+# Split out of document_access (RFC §10.1): admin-gated, HITL-gated on-demand
+# summarization. Auto-discovered the same way — do NOT register manually.
+document_summarize = "fred_runtime.capabilities.document_summarize:DocumentSummarizeCapability"
 
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.

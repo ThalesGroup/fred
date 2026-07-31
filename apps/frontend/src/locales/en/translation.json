@@ -134,6 +134,10 @@
       "name": "Document access",
       "description": "Search documents uploaded using semantic similarity (RAG)."
     },
+    "document_summarize": {
+      "name": "Document summarization",
+      "description": "Generate an on-demand summary of one document. Requires human approval before each call."
+    },
     "writable_document": {
       "name": "Writable document",
       "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
@@ -303,7 +307,11 @@
     "conversationFiles": "Conversation files",
     "dropFilesHere": "Drop files here",
     "errors": {
-      "missingContext": "Missing team or agent context in URL."
+      "missingContext": "Missing team or agent context in URL.",
+      "sessionSaveFailedSummary": "Conversation not saved",
+      "sessionSaveFailedDetail": "Could not save this conversation. Please try again.",
+      "contextPromptSaveFailedSummary": "Prompt selection not saved",
+      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again."
     },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {

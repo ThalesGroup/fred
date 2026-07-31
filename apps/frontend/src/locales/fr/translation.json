@@ -134,6 +134,10 @@
       "name": "Accès aux documents",
       "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
     },
+    "document_summarize": {
+      "name": "Résumé de document",
+      "description": "Génère à la demande le résumé d'un document. Nécessite une approbation humaine avant chaque appel."
+    },
     "writable_document": {
       "name": "Document collaboratif",
       "description": "Rédigez des documents avec l'agent dans un éditeur Markdown côte à côte, et exportez-les en Word ou Markdown.",
@@ -303,7 +307,11 @@
     "conversationFiles": "Fichiers de conversation",
     "dropFilesHere": "Déposez les fichiers ici",
     "errors": {
-      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
+      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL.",
+      "sessionSaveFailedSummary": "Conversation non enregistrée",
+      "sessionSaveFailedDetail": "Impossible d'enregistrer cette conversation. Veuillez réessayer.",
+      "contextPromptSaveFailedSummary": "Sélection de prompts non enregistrée",
+      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer."
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
