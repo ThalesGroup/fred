@@ -146,6 +146,11 @@ export const materialIcons = [
   "arrow_upward",
   "arrow_downward",
   "bar_chart",
+  "help",
+  "link",
+  "rocket_launch",
+  "quiz",
+  "new_releases",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

@@ -2164,6 +2164,39 @@ _(none)_
 
 ---
 
+## HELP-01 Help Center (#2189, 2026-07-31)
+
+### `HelpCenterPage` (+ `HelpSidebar`, `HelpArticle`)
+
+**Location:** `src/rework/components/pages/HelpCenterPage/`
+**Status:** `Functional`
+
+Standalone wiki-style documentation page (own tab, no app chrome) at
+`/help/:lang/:sectionId/:pageId`, rendered from the markdown corpus in
+`features/helpCenter/content/`. Two panes: navigation rail
+(`surface-container`, 32px `label-medium` section headers, `NavigationMenuItem`
+page items, `Separator` dividers) and the article column
+(`Breadcrumb` + copy-page-link `IconButton`, `MarkdownRenderer` with
+`headingAnchors`). fr/en switch as an xs `ButtonGroup` in the header, synced
+with the URL. Entry: profile menu item below "Profil" (icon `help`).
+
+### `MarkdownRenderer` `headingAnchors` + `HeadingWithAnchor`
+
+**Location:** `src/rework/components/shared/molecules/MarkdownRenderer/`
+**Status:** `Functional`
+
+Opt-in h2/h3 rendering with a slug `id` and a hover/focus-revealed copy-link
+button (xs icon `IconButton`, `link` → `check` feedback). Off by default —
+chat rendering unchanged.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — sidebar density, header weight, article
+  measure, and the anchor-button hover affordance need a designer pass once
+  real content lands (HELP-01.C).
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

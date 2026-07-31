@@ -1,0 +1,40 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+.sidebar {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  background: var(--surface-container);
+  padding: var(--spacing-s);
+  width: 280px;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-xs);
+  height: 2rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+/* Air between sections now that dividers are gone — skipped on the first
+   header so the rail doesn't start with a gap. */
+.sectionHeader:not(:first-child) {
+  margin-top: var(--spacing-s);
+}

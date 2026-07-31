@@ -101,6 +101,29 @@
   font: var(--font-title-medium);
 }
 
+/* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */
+
+/* Scroll target lands below any sticky chrome when navigating to #fragment. */
+.anchoredHeading {
+  scroll-margin-top: var(--spacing-xl);
+}
+
+/* Copy-link affordance: invisible until the heading is hovered or the button
+   itself is keyboard-focused — reading stays clean, sharing stays one hover
+   away. */
+.anchorAction {
+  display: inline-flex;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  margin-left: var(--spacing-2xs);
+}
+
+.anchoredHeading:hover .anchorAction,
+.anchorAction:focus-within {
+  opacity: 1;
+}
+
 /* ---- Lists ---- */
 
 .root :global(ul),

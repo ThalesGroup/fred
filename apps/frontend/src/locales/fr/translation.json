@@ -1206,10 +1206,28 @@
         "yourTeams": "Vos équipes"
       }
     },
+    "helpCenter": {
+      "title": "Centre d'aide",
+      "languageAria": "Langue de la documentation",
+      "sidebarAria": "Navigation du centre d'aide",
+      "copyPageLink": "Copier le lien de la page",
+      "copyHeadingLink": "Copier le lien vers ce titre",
+      "missingPage": "Cette page n'existe pas encore.",
+      "sections": {
+        "gettingStarted": "Démarrage",
+        "features": "Fonctionnalités",
+        "guides": "Guides et cas d'usage",
+        "troubleshooting": "Résolution de problèmes",
+        "faq": "FAQ",
+        "architecture": "Architecture technique",
+        "changelog": "Nouveautés"
+      }
+    },
     "profileMenu": {
       "adminBadge": "admin",
       "adminConsole": "Console technique",
       "contactSupport": "Contacter le support",
+      "helpCenter": "Centre d'aide",
       "profile": "Profil"
     },
     "promptCategories": {
