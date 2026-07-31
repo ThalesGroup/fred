@@ -1,3 +1,35 @@
+**v2.1.23** — 2026-07-31
+
+- **Summary**
+
+  PDF ingestion is more reliable: a memory leak that could crash the processing
+  worker after handling many documents is fixed, and PDF files using OCR or
+  image description now process faster after the first one in a batch. Storage
+  quota accounting for team libraries is fixed — deleting documents now
+  correctly frees up quota instead of drifting upward over time, and uploads
+  without a tag no longer bypass the quota check. Several small Resources page
+  glitches are also fixed: an incorrect "excluded from search" indicator,
+  tooltips clipped near the top of tables, and the uploader's name briefly
+  flashing as a raw ID after upload.
+
+- **Improvements**
+
+  - PDF documents using OCR or image description now process faster after the first file in a batch, since the underlying models no longer reload for every document (#2173)
+
+- **Bug Fixes**
+
+  - Fixed the "excluded from search" indicator showing on documents that were still processing, and disappearing once they were actually excluded — it now reflects the real state (#2173)
+  - Fixed tooltips near the top of a table (e.g. the preview icon on the first row) getting clipped instead of showing fully (#2173)
+  - Fixed the uploader's name briefly showing as a raw ID right after uploading a document (#2173)
+  - Fixed a memory leak in PDF ingestion that could crash the processing worker after handling many documents (#2173)
+  - Fixed storage quota not being released when documents were deleted, which could eventually block valid uploads even with space available (#2149)
+  - Fixed bulk-deleting a folder with many documents sometimes stopping partway through, and deleting a folder occasionally also matching a similarly-named one (e.g. deleting "Sales" also touching "Salesforce") (#2149)
+  - Fixed uploads without a tag/folder bypassing storage quota checks (#2150)
+
+- **Deployment note**
+
+  - If a deployment's storage-quota counts may have drifted before this fix (e.g. uploads rejected as over-quota despite available space), the storage-usage recalculation script now runs correctly and can be used to fix them. No action is required otherwise — this release is additive only.
+
 **v2.1.22** — 2026-07-30
 
 - **Summary**
