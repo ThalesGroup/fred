@@ -35,6 +35,12 @@ from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from sqlalchemy.exc import IntegrityError
 
+from control_plane_backend.product.prompt_starter_kit import (
+    STARTER_CATEGORY_NAMES,
+    STARTER_PROMPTS,
+)
+from control_plane_backend.prompts.category_store import PromptCategoryRecord
+from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
 )
@@ -46,12 +52,6 @@ from control_plane_backend.scheduler.policies.retention_resolver import (
     FieldRetentionResolution,
     resolve_team_retention_view,
 )
-from control_plane_backend.product.prompt_starter_kit import (
-    STARTER_CATEGORY_NAMES,
-    STARTER_PROMPTS,
-)
-from control_plane_backend.prompts.category_store import PromptCategoryRecord
-from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
