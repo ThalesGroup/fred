@@ -52,6 +52,7 @@ from fred_sdk import (
     UIHints,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
+
 from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 
 _BASE_SYSTEM_PROMPT_EN = """\

@@ -47,12 +47,12 @@ from fred_runtime.react.middleware import (
     TracingKpiMiddleware,
     build_react_platform_middleware_frame,
 )
-from fred_runtime.support.thinking import RECALLED_REASONING_PREFIX
 from fred_runtime.react.react_model_adapter import (
     REACT_MODEL_OPERATION_ROUTING,
     infer_react_model_operation_from_messages,
 )
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+from fred_runtime.support.thinking import RECALLED_REASONING_PREFIX
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,

@@ -40,7 +40,6 @@ Example:
 - `from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT`
 """
 
-from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
@@ -48,6 +47,8 @@ from fred_sdk import (
     UIHints,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
+
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 
 _BASE_SYSTEM_PROMPT = """\
 You are a document-grounded assistant. Your answers must be grounded in \

@@ -22,20 +22,20 @@ from fred_runtime.react.react_prompting import (
     build_tool_failure_recovery_suffix,
     compose_system_prompt,
 )
+from fred_runtime.react.react_tool_binding import (
+    TOOL_REPETITION_RULE,
+    BoundTool,
+    build_runtime_tool_prompt_suffix,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_runtime.react.react_tool_binding import (
-    TOOL_REPETITION_RULE,
-    BoundTool,
-    build_runtime_tool_prompt_suffix,
-)
 from fred_sdk.contracts.models import ReActAgentDefinition
-from langchain_core.tools import BaseTool
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
+from langchain_core.tools import BaseTool
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 

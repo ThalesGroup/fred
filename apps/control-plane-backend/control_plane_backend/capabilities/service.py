@@ -36,12 +36,12 @@ from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
+    ReasoningNotSupported,
     _cap_ref,
     disable_capability_for_team,
     enable_capability_for_team,
     ensure_capability_anchor,
     is_template_capability_instance,
-    ReasoningNotSupported,
     reset_capability_for_team,
     revive_dependent_instances,
     set_capability_default_on,

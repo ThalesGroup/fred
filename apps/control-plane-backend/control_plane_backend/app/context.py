@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
@@ -47,7 +48,6 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.prompts.store import PromptStore
-from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
