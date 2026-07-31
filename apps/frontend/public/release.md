@@ -1,3 +1,15 @@
+**v2.1.24** — 2026-07-31
+
+- **Summary**
+
+  Another PDF ingestion memory leak is fixed: documents processed with OCR no
+  longer reload the OCR model from disk each time, which could grow worker
+  memory over a large batch and crash the processing pod.
+
+- **Bug Fixes**
+
+  - Fixed a memory leak in PDF ingestion where the OCR model was rebuilt for every document instead of being reused, which could crash the processing worker after handling many documents (#2184)
+
 **v2.1.23** — 2026-07-31
 
 - **Summary**
