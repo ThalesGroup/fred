@@ -260,6 +260,42 @@ def _build_test_config(
     )
 
 
+def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    A replica whose durable SQL storage is unreachable at boot must never
+    finish starting — that is what stops Kubernetes from ever marking it
+    Ready (RUNTIME-EXECUTION-CONTRACT.md §8, dated entry). Regression test
+    for the finding: initialize_sql() used to swallow this failure and let
+    the pod start "stateless" with checkpointer/history_store silently None.
+    """
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    import fred_core.sql.base_sql as base_sql_module
+
+    def _raise(_config):
+        raise ConnectionRefusedError("could not connect to server")
+
+    monkeypatch.setattr(base_sql_module, "create_async_engine_from_config", _raise)
+
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+
+    with pytest.raises(ConnectionRefusedError):
+        with TestClient(app):
+            pytest.fail(
+                "TestClient must not finish startup when SQL storage is unreachable"
+            )
+
+
 def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
     monkeypatch, tmp_path
 ) -> None:

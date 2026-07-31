@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import cast
 
 import httpx
@@ -206,3 +207,143 @@ def test_ring_buffers_are_instance_level_not_global(minimal_config) -> None:
     assert events1[0]["audit_event"] == "event_a"
     assert len(events2) == 1
     assert events2[0]["audit_event"] == "event_b"
+
+
+# ---------------------------------------------------------------------------
+# initialize_sql() — durable storage must never degrade silently (finding:
+# a SQL init failure used to be swallowed and logged as "running stateless",
+# leaving checkpointer/history_store at None with no signal to the caller).
+# ---------------------------------------------------------------------------
+
+
+def _sqlite_config(minimal_config, tmp_path):
+    config = minimal_config.model_copy(deep=True)
+    config.storage.postgres.sqlite_path = str(tmp_path / "runtime.sqlite3")
+    return config
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_succeeds_and_wires_checkpointer_and_history_store(
+    minimal_config, tmp_path
+) -> None:
+    """A reachable (sqlite, dev-equivalent) store must produce a non-None
+    checkpointer and history store — the happy path the failure tests below
+    are contrasted against."""
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+
+    await container.initialize_sql()
+
+    assert container.get_sql_engine() is not None
+    assert container.get_checkpointer() is not None
+    assert container.get_history_store() is not None
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_propagates_when_engine_construction_fails(
+    minimal_config, tmp_path, monkeypatch
+) -> None:
+    """A local config error (e.g. missing FRED_POSTGRES_PASSWORD, missing
+    host/database/username) must abort pod startup, not degrade silently."""
+    import fred_core.sql.base_sql as base_sql_module
+
+    def _raise(_config):
+        raise ValueError("Missing required Postgres config fields: host")
+
+    monkeypatch.setattr(base_sql_module, "create_async_engine_from_config", _raise)
+
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+
+    with pytest.raises(ValueError, match="Missing required Postgres config fields"):
+        await container.initialize_sql()
+
+    assert container.get_checkpointer() is None
+    assert container.get_history_store() is None
+
+
+class _FailingConnection:
+    async def __aenter__(self):
+        raise ConnectionRefusedError("could not connect to server")
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+class _UnreachableEngine:
+    dialect = SimpleNamespace(name="postgresql")
+
+    def connect(self):
+        return _FailingConnection()
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_propagates_when_postgres_is_unreachable(
+    minimal_config, tmp_path, monkeypatch
+) -> None:
+    """The actual production incident: config is well-formed but Postgres
+    cannot be reached. SQLAlchemy's async engine is lazy — construction alone
+    never opens a connection — so this only surfaces through the explicit
+    boot-time SELECT 1 ping. Must abort startup, not run stateless."""
+    import fred_core.sql.base_sql as base_sql_module
+
+    monkeypatch.setattr(
+        base_sql_module,
+        "create_async_engine_from_config",
+        lambda _config: _UnreachableEngine(),
+    )
+
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+
+    with pytest.raises(ConnectionRefusedError):
+        await container.initialize_sql()
+
+    assert container.get_sql_engine() is None
+    assert container.get_checkpointer() is None
+    assert container.get_history_store() is None
+
+
+class _SlowConnection:
+    async def __aenter__(self):
+        await asyncio.sleep(1.0)
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def execute(self, *args, **kwargs):
+        return None
+
+
+class _HangingEngine:
+    dialect = SimpleNamespace(name="postgresql")
+
+    def connect(self):
+        return _SlowConnection()
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_bounds_the_connectivity_ping(
+    minimal_config, tmp_path, monkeypatch
+) -> None:
+    """A network black hole (dropped packets, no TCP RST) must not hang pod
+    startup for asyncpg's ~60s default connect timeout — the boot ping is
+    bounded and fails fast instead."""
+    import fred_core.sql.base_sql as base_sql_module
+    from fred_runtime.app import context as context_module
+
+    monkeypatch.setattr(
+        base_sql_module,
+        "create_async_engine_from_config",
+        lambda _config: _HangingEngine(),
+    )
+    monkeypatch.setattr(context_module, "_SQL_BOOT_PING_TIMEOUT_S", 0.05)
+
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+
+    with pytest.raises(TimeoutError):
+        await container.initialize_sql()
+
+    assert container.get_checkpointer() is None

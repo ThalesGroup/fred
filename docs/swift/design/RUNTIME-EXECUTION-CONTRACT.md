@@ -1801,6 +1801,46 @@ frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
 
 ---
 
+### 8.30 ✅ A pod whose durable SQL storage cannot be reached must never finish starting (2026-07-31)
+
+**What changed.** `PodApplicationContext.initialize_sql()`
+(`libs/fred-runtime/fred_runtime/app/context.py`) used to catch every
+exception from engine/checkpointer/history-store construction, log
+`"running stateless"`, and return — leaving `checkpointer`/`history_store`
+at `None` with no signal to the FastAPI lifespan. Because SQLAlchemy's async
+engine is lazy (construction never opens a connection), an unreachable or
+misconfigured Postgres passed silently: the pod finished startup, passed its
+`tcpSocket` readiness probe, and served conversation turns with no
+persistence — invisibly, and only for whichever replica lost the race.
+
+`initialize_sql()` now (1) lets construction failures (missing
+`FRED_POSTGRES_PASSWORD`, missing `host`/`database`/`username`) propagate
+instead of swallowing them, and (2) runs one bounded (5s) `SELECT 1` against
+the engine right after construction — the only point that actually proves
+connectivity — before wiring the checkpointer/history store. Either failure
+now aborts the FastAPI lifespan, so the pod process exits without ever
+reaching `Running`; Kubernetes never marks it `Ready` regardless of probe
+type, and the two other invariants already enforced in `agent_app.py`'s
+lifespan (checkpointer and history store must both come from the same
+`initialize_sql()` call, and neither may be set without the other) still
+hold on top of this.
+
+There is no supported "stateless" pod mode today — every real
+`AgentPodConfig.storage.postgres` (dev SQLite via `sqlite_path`, production
+Postgres) intends durable storage; SQLite-for-dev is a backend choice, not
+an opt-out. This change does not introduce one.
+
+**Not done, deliberately deferred:** dedicated `/healthz` + dependency-aware
+`/ready` HTTP endpoints (the pattern `knowledge-flow-backend` and
+`control-plane-backend` already use) and switching fred-agents' Helm probes
+from `tcpSocket` to `httpGet`. The fail-fast boot behavior above already
+satisfies the production invariant without either; closing the small
+residual race window (a `tcpSocket` probe could see the port briefly open
+during the ≤5s connectivity check before the process exits) is left as
+follow-up if it proves necessary in practice.
+
+---
+
 ### 8.31 ✅ ReAct/Deep prompt composition no longer depends on the process-global runtime context (2026-07-31)
 
 **What changed.** `ReActRuntime.build_executor` and `DeepAgentRuntime.build_executor`
