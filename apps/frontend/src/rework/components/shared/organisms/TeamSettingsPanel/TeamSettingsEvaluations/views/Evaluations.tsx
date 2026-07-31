@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import Select from "@shared/molecules/Select/Select";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import type { OptionModel } from "@models/Option.model.ts";
@@ -90,15 +91,15 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>{t("rework.evaluation.evaluations.title")}</h1>
-          <p className={styles.subtitle}>{t("rework.evaluation.evaluations.description")}</p>
-        </div>
-        <Button color="primary" variant="filled" size="medium" onClick={onNewEvaluation}>
-          {t("rework.evaluation.evaluations.new")}
-        </Button>
-      </div>
+      <PageHeader
+        title={t("rework.evaluation.evaluations.title")}
+        subtitle={t("rework.evaluation.evaluations.description")}
+        actions={
+          <Button color="primary" variant="filled" size="medium" onClick={onNewEvaluation}>
+            {t("rework.evaluation.evaluations.new")}
+          </Button>
+        }
+      />
 
       <div className={styles.toolbar}>
         <div className={styles.toolbarSearch}>

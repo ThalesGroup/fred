@@ -22,23 +22,6 @@
   container-type: inline-size;
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-}
-
-.subtitle {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-}
-
 .group {
   display: flex;
   flex-direction: column;

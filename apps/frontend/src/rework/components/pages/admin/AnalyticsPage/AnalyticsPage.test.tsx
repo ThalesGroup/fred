@@ -46,10 +46,6 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
   useUserCapabilities: () => h.capabilities,
 }));
 
-vi.mock("@shared/organisms/TaskActivity/TaskActivity.tsx", () => ({
-  default: () => <div data-testid="task-activity" />,
-}));
-
 // The real chart molecules call getComputedStyle at render time (PieChart) or
 // pull in recharts/ResizeObserver machinery this Node-environment test suite
 // has no DOM for — stub them to trivial title-echoing placeholders so this
@@ -102,14 +98,12 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     h.capabilities = { ...h.capabilities, canAdmin: false };
     const html = render();
     expect(html).not.toContain("rework.analytics.sections.administration");
-    expect(html).not.toContain("task-activity");
   });
 
   it("shows the administration section for a platform_admin", () => {
     h.capabilities = { ...h.capabilities, canAdmin: true };
     const html = render();
     expect(html).toContain("rework.analytics.sections.administration");
-    expect(html).toContain("task-activity");
     expect(html).toContain("/admin/capabilities?kind=model");
   });
 

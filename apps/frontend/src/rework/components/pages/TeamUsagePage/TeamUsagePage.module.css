@@ -5,24 +5,6 @@
   padding: var(--spacing-xl);
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-large);
-}
-
-.headerControls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
 /* Bento grid: the timeline is the hero chart (full width); the two
    breakdowns share the row below it. */
 .chartGrid {
@@ -56,18 +38,4 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--spacing-s);
   margin-bottom: var(--spacing-m);
-}
-
-/* team_admin's Activités section: summary line + the embedded TaskActivity
-   organism, stacked. */
-.sectionStack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-}
-
-.activitySummary {
-  margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
 }

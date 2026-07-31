@@ -1083,7 +1083,6 @@
         "users": "Utilisateurs"
       },
       "administration": {
-        "activitiesTitle": "Activités",
         "modelsGovernanceLink": "Gérer les modèles",
         "storageByTeam": {
           "empty": "Aucune équipe proche de son quota de stockage.",
@@ -1142,9 +1141,8 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "pageTitle": "Consommation de l'équipe",
         "sectionTitle": "Consommation de l'équipe",
-        "editorSectionTitle": "Activités (ingestion)",
-        "adminSectionTitle": "Activités",
         "membersLabel": "Membres",
         "agentsLabel": "Agents",
         "documentsLabel": "Documents",
@@ -1160,10 +1158,6 @@
         "mostActiveAgents": {
           "title": "Agents les plus actifs",
           "valueLabel": "Conversations"
-        },
-        "activitySummary": {
-          "active": "{{count}} conversations sur cette période — active",
-          "quiet": "{{count}} conversations sur cette période — calme"
         }
       }
     },

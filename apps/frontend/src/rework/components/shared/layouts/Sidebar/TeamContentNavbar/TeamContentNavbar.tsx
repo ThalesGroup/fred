@@ -203,6 +203,20 @@ export default function TeamContentNavbar() {
     });
   }
 
+  const backButton = (
+    <span className={styles["settings-back-container"]}>
+      <Button
+        color={"primary"}
+        variant={"text"}
+        size={"medium"}
+        onClick={handleBack}
+        icon={{ category: "outlined", type: "arrow_back", filled: true }}
+      >
+        {t("rework.back")}
+      </Button>
+    </span>
+  );
+
   return (
     <div className={styles.teamContentNavbarContainer}>
       <div className={styles.bannerContainer} style={bannerStyle}>
@@ -240,38 +254,19 @@ export default function TeamContentNavbar() {
         {showRoleLabel && <span className={styles.teamRoleLabel}>{roleLabel}</span>}
       </div>
       <div className={styles.navigationContainer}>
-        {inSettings ? (
+        {inSettings || (inUsage && !isPersonalTeam) ? (
           <>
-            <span className={styles["settings-back-container"]}>
-              <Button
-                color={"primary"}
-                variant={"text"}
-                size={"medium"}
-                onClick={handleBack}
-                icon={{ category: "outlined", type: "arrow_back", filled: true }}
-              >
-                {t("rework.back")}
-              </Button>
-            </span>
+            {backButton}
+            {/* Usage is one of `settingsItems` (line ~186) — being on it highlights
+                that entry via NavLink's own active-route match, so this doubles as
+                "which tab am I on" instead of a bare, contextless Back. */}
             <NavigationMenu items={settingsItems} />
           </>
         ) : inUsage ? (
-          // Same focused-view treatment as settings: the usage dashboard
-          // replaces team browsing, so the agents/resources/prompts nav and
-          // chat list step aside for a single Back action (OBSERV-02 /
-          // BACKLOG.md §7b — keeps the experience consistent for everyone,
-          // whether reached from the admin/observer rail or here).
-          <span className={styles["settings-back-container"]}>
-            <Button
-              color={"primary"}
-              variant={"text"}
-              size={"medium"}
-              onClick={handleBack}
-              icon={{ category: "outlined", type: "arrow_back", filled: true }}
-            >
-              {t("rework.back")}
-            </Button>
-          </span>
+          // Personal space's Usage page has no sibling tabs to switch between —
+          // it's the only settings-equivalent surface a personal team has
+          // (OBSERV-02 / BACKLOG.md §7b) — so Back alone is still correct here.
+          backButton
         ) : (
           <>
             <NavigationMenu items={navigationItems} />

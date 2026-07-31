@@ -1,0 +1,33 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.headerWithSubtitle {
+  align-items: flex-start;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  margin: var(--spacing-2xs) 0 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--spacing-xs);
+}

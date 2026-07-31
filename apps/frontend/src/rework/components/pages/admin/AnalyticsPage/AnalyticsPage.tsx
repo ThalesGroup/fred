@@ -44,7 +44,6 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
-import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
@@ -409,10 +408,6 @@ export default function AnalyticsPage() {
               isLoading={storageByTeamIsLoading}
               isError={storageByTeamIsError}
             />
-            <section>
-              <h2 className={styles.subheading}>{t("rework.analytics.administration.activitiesTitle")}</h2>
-              <TaskActivity scope="platform" />
-            </section>
             <Link to="/admin/capabilities?kind=model" className={styles.governanceLink}>
               {t("rework.analytics.administration.modelsGovernanceLink")}
             </Link>

@@ -82,12 +82,6 @@
   gap: var(--spacing-m);
 }
 
-.subheading {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--on-surface);
-  font: var(--font-title-small);
-}
-
 .governanceLink {
   display: inline-flex;
   align-items: center;
