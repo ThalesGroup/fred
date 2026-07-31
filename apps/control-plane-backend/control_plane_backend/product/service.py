@@ -2138,6 +2138,31 @@ def _to_session_attachment_summary(
     )
 
 
+def _record_owned_by_user(
+    record: SessionMetadataRecord, *, user_id: str, allow_unowned: bool
+) -> bool:
+    """
+    Whether ``record.user_id`` counts as belonging to ``user_id``.
+
+    Shared by `_get_owned_session_record` (attachment CRUD) and
+    `_session_usable_for_execution` (execution context) — both compare the
+    same nullable `user_id` column, but must apply different policies to a
+    row with no recorded owner (`user_id IS NULL`, e.g. a session created
+    before this column existed):
+
+    - `allow_unowned=True`: no owner recorded -> treat as accessible. Matches
+      attachment CRUD's historical behavior; an unowned legacy session
+      shouldn't lock its own uploader out of managing its attachments.
+    - `allow_unowned=False`: deny-by-default. `_session_usable_for_execution`
+      exists specifically to stop one session's data from leaking into
+      another user's execution (RUNTIME-07) — an unowned row gets no
+      benefit of the doubt there.
+    """
+    if record.user_id is None:
+        return allow_unowned
+    return record.user_id == user_id
+
+
 async def _get_owned_session_record(
     *,
     deps: ProductServiceDependencies,
@@ -2165,7 +2190,7 @@ async def _get_owned_session_record(
             f"Session {session_id!r} not found for team {team_id!r}.",
             http_status=404,
         )
-    if record.user_id is not None and record.user_id != user_id:
+    if not _record_owned_by_user(record, user_id=user_id, allow_unowned=True):
         raise SessionAttachmentRequestError(
             f"Session {session_id!r} is not owned by user {user_id!r}.",
             http_status=404,
@@ -2795,6 +2820,10 @@ def _session_usable_for_execution(
 
     Ownership rule:
     - the session must exist, and belong to the same team and the same user
+    - a session with no recorded owner (`user_id IS NULL`, e.g. predating
+      that column) is deny-by-default here — see `_record_owned_by_user`'s
+      `allow_unowned` doc for why this deliberately differs from the more
+      permissive attachment-CRUD ownership check
     - `agent_instance_id` is only enforced when the session was actually
       scoped to an instance at creation (it is optional on
       `CreateSessionRequest`) — an agent-agnostic session matches any
@@ -2804,7 +2833,7 @@ def _session_usable_for_execution(
         return False
     if str(session_record.team_id) != str(team_id):
         return False
-    if session_record.user_id != user_id:
+    if not _record_owned_by_user(session_record, user_id=user_id, allow_unowned=False):
         return False
     if (
         session_record.agent_instance_id is not None

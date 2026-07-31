@@ -1963,6 +1963,103 @@ async def test_prepare_execution_rejects_session_owned_by_another_user(
 
 
 @pytest.mark.asyncio
+async def test_prepare_execution_rejects_session_with_no_recorded_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session row with `user_id=None` (no owner ever recorded — e.g. a row
+    predating the column) must be denied by default, not treated as
+    accessible to whoever asks. `_session_usable_for_execution` deliberately
+    diverges here from the more permissive attachment-CRUD ownership check
+    (`_get_owned_session_record`, which does allow an unowned row through) —
+    see `_record_owned_by_user`'s `allow_unowned` doc in product/service.py."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="inst-42",
+                user_id=None,
+                title=None,
+                context_prompt_ids=["p1"],
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="p1", team_id="personal", text="Secret.")]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert resp.status_code == 404
+    assert "Secret." not in resp.text
+
+
+def test_record_owned_by_user_diverges_on_unowned_row_by_policy() -> None:
+    """Locks in both sides of the deliberate `allow_unowned` divergence between
+    `_get_owned_session_record` (attachment CRUD, allow_unowned=True) and
+    `_session_usable_for_execution` (execution context, allow_unowned=False),
+    so a future edit can't silently re-merge the two policies."""
+    from control_plane_backend.product.service import _record_owned_by_user
+
+    unowned = SessionMetadataRecord(
+        session_id="sess-1",
+        team_id=TeamId("personal"),
+        agent_instance_id="inst-1",
+        user_id=None,
+        title=None,
+    )
+    assert _record_owned_by_user(unowned, user_id="admin", allow_unowned=True) is True
+    assert _record_owned_by_user(unowned, user_id="admin", allow_unowned=False) is False
+
+    owned = SessionMetadataRecord(
+        session_id="sess-2",
+        team_id=TeamId("personal"),
+        agent_instance_id="inst-1",
+        user_id="admin",
+        title=None,
+    )
+    assert _record_owned_by_user(owned, user_id="admin", allow_unowned=True) is True
+    assert _record_owned_by_user(owned, user_id="admin", allow_unowned=False) is True
+    assert (
+        _record_owned_by_user(owned, user_id="someone-else", allow_unowned=True)
+        is False
+    )
+
+
+@pytest.mark.asyncio
 async def test_prepare_execution_rejects_session_owned_by_another_team(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
