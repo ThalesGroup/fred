@@ -211,7 +211,7 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         tools = self.tools(ctx)
         if not tools:
             return []
-        return [ToolCarrierMiddleware(tools)]
+        return [ToolCarrierMiddleware(tools, capability_id=self.manifest.id)]
 
 
 class ToolCarrierMiddleware(AgentMiddleware):
@@ -227,6 +227,18 @@ class ToolCarrierMiddleware(AgentMiddleware):
     instances shared by every consumer.
     """
 
-    def __init__(self, tools: Sequence["BaseTool"]) -> None:
+    def __init__(self, tools: Sequence["BaseTool"], *, capability_id: str) -> None:
         super().__init__()
         self.tools = list(tools)
+        self._capability_id = capability_id
+
+    @property
+    def name(self) -> str:
+        # Unique per capability. An agent may select several tool-bearing
+        # capabilities, each contributing one of these instances;
+        # `create_agent` rejects a middleware list with duplicate `.name`s
+        # ("Please remove duplicate middleware instances."), and the base
+        # default is the shared class name. Keying on the capability id keeps
+        # every instance distinct (mirrors `_McpInstructionsMiddleware`,
+        # `fred_runtime/capabilities/mcp.py`, which hit this exact bug first).
+        return f"ToolCarrier[{self._capability_id}]"
