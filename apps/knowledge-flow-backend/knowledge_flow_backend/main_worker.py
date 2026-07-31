@@ -20,7 +20,10 @@ Start with:
 """
 
 import asyncio
+import ctypes
+import gc
 import logging
+import signal
 from contextlib import suppress
 
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
@@ -36,6 +39,63 @@ from knowledge_flow_backend.common.config_loader import (
 from knowledge_flow_backend.features.scheduler.worker import run_worker
 
 logger = logging.getLogger(__name__)
+
+
+def _current_rss_kb() -> int:
+    """Current resident set size, in KiB — unlike resource.getrusage().ru_maxrss
+    (peak since process start, never decreases), this reflects the process's
+    actual memory right now."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1])
+    except OSError:
+        pass
+    return -1
+
+
+def _debug_gc_and_trim() -> None:
+    """SIGUSR1 handler: force a full GC cycle, then return freed pymalloc arenas
+    to the OS via glibc's malloc_trim(0) — CPython's allocator does NOT do this on
+    its own, so a `gc.collect()` alone can look like a no-op from `kubectl top`
+    even when it genuinely freed Python objects.
+
+    Diagnostic only, no scheduled/automatic trigger: run on demand from outside
+    with `kubectl exec <pod> -- kill -USR1 1` while the worker is idle, then watch
+    `kubectl top pod` / this log line. RSS drops after this -> reference-cycle
+    garbage (needs a real gc.collect(), plain refcounting never freed it) or
+    allocator-held-but-unused arenas. RSS unchanged -> either something still
+    holds a real reference (a genuine leak, not just uncollected cycles) or the
+    memory is native (e.g. onnxruntime/docling), outside gc's and malloc_trim's
+    reach entirely.
+    """
+    before_kb = _current_rss_kb()
+    objects_before = len(gc.get_objects())
+    collected = gc.collect()
+    uncollectable = len(gc.garbage)
+    objects_after = len(gc.get_objects())
+
+    trimmed = False
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+        trimmed = True
+    except OSError:
+        logger.warning("[DEBUG][GC] malloc_trim unavailable (not glibc?) — RSS reading below only reflects gc.collect()")
+
+    after_kb = _current_rss_kb()
+    logger.warning(
+        "[DEBUG][GC] SIGUSR1: gc.collect()=%d freed, %d uncollectable in gc.garbage, "
+        "objects %d -> %d, malloc_trim=%s | RSS %dKi -> %dKi (delta %dKi)",
+        collected,
+        uncollectable,
+        objects_before,
+        objects_after,
+        trimmed,
+        before_kb,
+        after_kb,
+        before_kb - after_kb,
+    )
 
 
 def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> list[asyncio.Task[None]]:
@@ -90,6 +150,11 @@ async def main() -> None:
     env_file = get_loaded_env_file_path() or "<unset>"
     config_file = get_loaded_config_file_path() or "<unset>"
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
+
+    # Diagnostic only — no automatic trigger. `kubectl exec <pod> -- kill -USR1 1`
+    # while idle to force gc.collect() + malloc_trim(0) and log the RSS delta; see
+    # _debug_gc_and_trim's docstring for how to read the result.
+    asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, _debug_gc_and_trim)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
