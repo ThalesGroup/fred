@@ -381,6 +381,16 @@ class CapabilityCatalogEntry(BaseModel):
     # capability actually offers). Always empty for kind="tool"/"agent"
     # entries — only `kind="model"` populates it.
     model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # The subset of `model_profile_ids` declaring `supports_thinking`
+    # (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). Aptitude is
+    # declared per profile, where the behaviour actually differs; the admin
+    # reasoning toggle is keyed per model, because that is what this entry's
+    # id is. This field is the derived projection between the two — never
+    # authored, computed by the pod inside the same (provider, name) grouping
+    # that produces `model_profile_ids`. Empty = no reasoning-capable profile,
+    # so the admin row shows no reasoning control at all (an administrator
+    # cannot make a model reason). Always empty for kind="tool"/"agent".
+    model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def from_manifest(

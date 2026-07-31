@@ -36,6 +36,7 @@ from control_plane_backend.capabilities.enablement import (
     CapabilitySettingsInvalid,
     DefaultOnNotAllowed,
     PersonalScopeNotAllowed,
+    ReasoningNotSupported,
 )
 from control_plane_backend.capabilities.schemas import (
     CapabilityDefaultOnResult,
@@ -43,8 +44,10 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
     EnableTeamCapabilityRequest,
+    ModelReasoningResult,
     SetCapabilityDefaultOnRequest,
     SetCapabilityPersonalScopeRequest,
+    SetModelReasoningRequest,
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.product.dependencies import (
@@ -232,5 +235,41 @@ async def put_capability_personal_scope(
         CapabilityNotFound,
         PersonalScopeNotAllowed,
         AgentCapabilityDependencyNotSatisfied,
+    ) as exc:
+        raise _map_error(exc) from exc
+
+
+@router.patch(
+    "/admin/capabilities/{capability_id}/reasoning",
+    response_model=ModelReasoningResult,
+    summary="Switch one model's platform-wide reasoning on or off (REASON-01).",
+)
+async def patch_capability_reasoning(
+    capability_id: Annotated[str, Path(min_length=1)],
+    body: SetModelReasoningRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> ModelReasoningResult:
+    """Level 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` — the platform admin's
+    per-model reasoning activation.
+
+    Global and subject-less by design (§5.1): this is not a permission, so it
+    is a table row rather than a ReBAC grant, and it does NOT touch the
+    per-team `can_use` enablement that decides who may use the model at all.
+    409s for a capability with no thinking-capable profile — aptitude is
+    declared in `models_catalog.yaml`, never granted here (§5.3).
+    """
+
+    try:
+        return await capability_service.set_model_reasoning(
+            user=user,
+            capability_id=capability_id,
+            reasoning_enabled=body.reasoning_enabled,
+            deps=deps,
+        )
+    except (
+        AuthorizationError,
+        CapabilityNotFound,
+        ReasoningNotSupported,
     ) as exc:
         raise _map_error(exc) from exc

@@ -32,6 +32,15 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
+  /** REASON-01 level 3: does this agent offer the composer's reasoning toggle? */
+  reasoningEnabled: boolean;
+  /**
+   * REASON-01 Amendment B: does a new conversation start with that toggle
+   * already on? Always submitted, including while `reasoningEnabled` is false —
+   * the value is then inert backend-side, which is what lets an author withdraw
+   * the offer and restore it later without losing their default.
+   */
+  reasoningDefaultOn: boolean;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -72,6 +81,8 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
+  reasoningEnabled: boolean;
+  reasoningDefaultOn: boolean;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -122,6 +133,8 @@ export function buildAgentFormSubmitPayload(
     role: form.role.trim(),
     description: form.description.trim(),
     usageStatement: form.usageStatement.trim(),
+    reasoningEnabled: form.reasoningEnabled,
+    reasoningDefaultOn: form.reasoningDefaultOn,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
@@ -170,6 +183,8 @@ export default function AgentFormModal({
     role: "",
     description: "",
     usageStatement: "",
+    reasoningEnabled: false,
+    reasoningDefaultOn: false,
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -192,6 +207,8 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
+        reasoningEnabled: editInstance.reasoning_enabled ?? false,
+        reasoningDefaultOn: editInstance.reasoning_default_on ?? false,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -208,6 +225,8 @@ export default function AgentFormModal({
         role: "",
         description: "",
         usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -232,6 +251,8 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
+      reasoningEnabled: false,
+      reasoningDefaultOn: false,
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: [],
       capabilityConfigValues: {},
@@ -371,6 +392,8 @@ export default function AgentFormModal({
               role={form.role}
               description={form.description}
               usageStatement={form.usageStatement}
+              reasoningEnabled={form.reasoningEnabled}
+              reasoningDefaultOn={form.reasoningDefaultOn}
               tuningFieldValues={form.tuningValues}
               selectedCapabilityIds={form.selectedCapabilityIds}
               capabilityConfigValues={form.capabilityConfigValues}
@@ -386,6 +409,8 @@ export default function AgentFormModal({
               onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
               onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
+              onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, reasoningEnabled: v }))}
+              onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
               onCapabilityConfigChange={handleCapabilityConfigChange}

@@ -42,26 +42,14 @@ Do not skip this. Open and skim:
 - **The minimal tracer** — `libs/fred-runtime/fred_runtime/capabilities/demo.py`
   (`DemoEchoCapability`): one static tool + one config field + router + owned table +
   chat part + side panel. The smallest full vertical.
-- **The out-of-tree / asset-bearing reference** — `libs/fred-capability-ppt-filler/`
-  (`PptFillerCapability`, #1903): its OWN pip package installed in the `fred-agents`
-  pod (entry point in its own `pyproject.toml`, uv path source in
-  `apps/fred-agents/pyproject.toml`); an `AssetSlot` upload parsed + stored in
-  `validate_config` via `ctx.services.agent_assets` (keys only, never bytes, in the
-  stored config); config-derived dynamic tool schemas; a custom form widget
-  (`FieldSpec.ui.widget` → frontend plugin `configWidgets`); a contributed chat part +
-  side panel; a stateless `/analyze` route on `manifest.router`. **Copy its shape for
-  any capability that ships as a package or uploads a file.** Note its `min_count=0`
-  trick: the platform slot gate runs on every save, so a mandatory asset is enforced
-  as `validate_config` content logic, not slot cardinality — otherwise every ordinary
-  edit would demand a re-upload. It implements only `middleware()` (a dynamically-built
-  tool schema, a genuine ReAct-only hook per Step 3) and declares
-  `manifest.execution_models = ("react",)` exactly — do not copy the `middleware()`-only
-  part unless your capability has the same need; if it also needs plain tools, implement
-  `tools()` too and leave `execution_models` at its default (both). **A `middleware()`-only
-  capability whose `execution_models` contains `"graph"` is never a silent no-op** —
-  whether the field was never mentioned (kept the default) or written out explicitly as
-  `("react", "graph")`, pod boot refuses it outright, before a Graph agent could ever
-  select it.
+- **Not everything is a capability** — if the thing adjusts *how the model is
+  called* rather than *what the model can call*, stop and reconsider. Reasoning
+  was built as a full capability and then withdrawn
+  (`MODEL-REASONING-ENABLEMENT-RFC.md` §15): an agent does not *use* reasoning
+  the way it uses document search, so the Tools tab was the wrong home for it.
+  It ships instead as a plain agent field (`AgentTuning.reasoning_enabled`, in
+  the form's General section) plus a platform-emitted chat control. Model-call
+  parameters and per-turn platform options belong outside this system.
 - **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).

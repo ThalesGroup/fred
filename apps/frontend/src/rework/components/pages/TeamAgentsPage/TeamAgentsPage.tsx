@@ -173,6 +173,8 @@ export default function TeamAgentsPage() {
       role: payload.role || undefined,
       description: payload.description || undefined,
       usage_statement: payload.usageStatement,
+      reasoning_enabled: payload.reasoningEnabled,
+      reasoning_default_on: payload.reasoningDefaultOn,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
@@ -215,6 +217,8 @@ export default function TeamAgentsPage() {
       role: payload.role || undefined,
       description: payload.description || undefined,
       usage_statement: payload.usageStatement,
+      reasoning_enabled: payload.reasoningEnabled,
+      reasoning_default_on: payload.reasoningDefaultOn,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
@@ -294,6 +298,12 @@ export default function TeamAgentsPage() {
         role: source.role,
         description: source.description ?? "",
         usageStatement: source.usage_statement ?? "",
+        // A duplicate must carry the original's reasoning offer, like its role
+        // and description — otherwise duplicating silently drops the feature.
+        // Same for its preselection (Amendment B): a copy that offers reasoning
+        // but starts it off is a different agent from the one being duplicated.
+        reasoningEnabled: source.reasoning_enabled ?? false,
+        reasoningDefaultOn: source.reasoning_default_on ?? false,
         tuningValues: (source.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: source.selected_capability_ids ?? [],
         capabilityConfigValues: extractCapabilityConfigValues(source.capability_config),
@@ -308,6 +318,8 @@ export default function TeamAgentsPage() {
       role: payload.role || undefined,
       description: payload.description || undefined,
       usage_statement: payload.usageStatement,
+      reasoning_enabled: payload.reasoningEnabled,
+      reasoning_default_on: payload.reasoningDefaultOn,
       tuning_field_values:
         Object.keys(payload.tuningFieldValues).length > 0
           ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)

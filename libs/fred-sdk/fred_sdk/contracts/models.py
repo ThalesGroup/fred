@@ -291,6 +291,21 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Does this agent OFFER per-question reasoning (REASON-01 level 3, "
+            "`MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent "
+            "property, deliberately NOT a capability: reasoning is a property "
+            "of how the model is called, not a tool the agent can use, so it "
+            "belongs next to role/description rather than in the tool picker.\n\n"
+            "True only means the chat composer OFFERS the toggle — it never "
+            "turns reasoning on by itself. The user still has to flip it per "
+            "question (level 4, default off), and a platform admin still has "
+            "to have enabled the model's reasoning (level 2, a ceiling)."
+        ),
+    )
+
     # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
     # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
     # is now an `mcp:<server>` capability. Its activation is an entry in
@@ -794,21 +809,31 @@ class ToolSelectionPolicy(FrozenModel):
     - default assistant: `allow_parallel_calls=False`, no explicit call limit
     - fast investigation: `allow_parallel_calls=True` for independent reads
     - strict mode: set `max_tool_calls_per_turn=1` to cap exploration
-      (note: call limit is not enforced yet in the first v2 runtime)
     """
 
     allow_parallel_calls: bool = Field(
         default=False,
         description=(
-            "Allow the runtime to execute independent tool calls in parallel."
+            "Allow the runtime to execute independent tool calls in parallel. "
+            "DECLARATIVE ONLY today: the ReAct runtime does not pass this to "
+            "the model, and its sole production effect is one sentence in "
+            "`AgentPreview.summary` (`AGENT-THINKING-API-RFC.md` §C.8 measured "
+            "this and recorded it as 'Decorative. Never reaches the model')."
         ),
     )
     max_tool_calls_per_turn: int | None = Field(
         default=None,
         ge=1,
         description=(
-            "Optional cap for tool calls in one assistant turn. Reserved for now: "
-            "first v2 ReAct runtime does not enforce this limit yet."
+            "Cap on tool calls in one assistant turn. ENFORCED: the ReAct frame "
+            "appends LangChain's `ToolCallLimitMiddleware` with this as its "
+            "`run_limit` whenever it is set (`react/middleware/frame.py`), "
+            "placed after the HITL gate so `after_model`'s reverse ordering "
+            "blocks an over-limit call before a human is ever asked about it. "
+            "`None` (the default) means no cap — the middleware is not appended "
+            "at all. See `MODEL-REASONING-ENABLEMENT-RFC.md` §9: this is the "
+            "guardrail reasoning-capable agents are expected to set, because "
+            "reasoning on a tool loop was measured re-issuing duplicate calls."
         ),
     )
 

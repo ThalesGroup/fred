@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
@@ -19,6 +20,7 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
+  toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
 import phaseStyles from "../phaseBadge.module.css";
@@ -26,13 +28,16 @@ import styles from "./TraceEntryRow.module.css";
 
 interface TraceEntryRowProps {
   entry: TraceEntry;
+  /** 1-based tool step number. Null for notes/errors, which are not steps. */
+  index?: number | null;
 }
 
 function DotStatus({ status }: { status: TraceStatus }) {
   return <span className={`${styles.dot} ${styles[`dot_${status}`]}`} aria-label={status} />;
 }
 
-export function TraceEntryRow({ entry }: TraceEntryRowProps) {
+export function TraceEntryRow({ entry, index = null }: TraceEntryRowProps) {
+  const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry);
   const label = entryLabel(entry);
@@ -41,28 +46,42 @@ export function TraceEntryRow({ entry }: TraceEntryRowProps) {
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";
 
+  // Curated volume metadata (never raw args/content) so two calls to the same
+  // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
+  const discriminator = toolDiscriminator(entry);
+  const discriminatorText = discriminator
+    ? t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })
+    : "";
+
   return (
     <div
       className={`${styles.row} ${styles[`row_${status}`]}`}
       role="button"
       tabIndex={0}
-      aria-label={`${label}: ${primary}`}
+      aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}`}
       onClick={() => openTrace(entry)}
       onKeyDown={(e) => e.key === "Enter" && openTrace(entry)}
     >
+      {/* Always rendered, empty for unnumbered notes, so the status dots of every
+          row stay on the same vertical line as the timeline guideline. */}
+      <span className={styles.index} aria-hidden="true">
+        {index ?? ""}
+      </span>
+
       <DotStatus status={status} />
 
-      <div className={styles.labelRow}>
-        <span
-          className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
-          data-phase={phase ?? undefined}
-        >
-          {label}
-        </span>
-        <span className={`${styles.primary} ${isPending ? styles.primaryPending : ""}`}>
-          {primary || (isPending ? "running…" : "")}
-        </span>
-      </div>
+      <span
+        className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
+        data-phase={phase ?? undefined}
+      >
+        {label}
+      </span>
+
+      {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
+
+      <span className={`${styles.primary} ${isPending ? styles.primaryPending : ""}`}>
+        {primary || (isPending ? t("rework.chatTrace.running") : "")}
+      </span>
 
       {secondary && <span className={styles.secondary}>{secondary}</span>}
     </div>

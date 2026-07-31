@@ -29,6 +29,7 @@ These tests exercise the load-bearing pieces:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 from fred_runtime.react.react_message_codec import stringify_langchain_content
@@ -38,10 +39,12 @@ from fred_runtime.react.react_stream_adapter import (
     decode_stream_chunk,
 )
 from fred_runtime.support.thinking import (
+    RECALLED_REASONING_PREFIX,
     content_to_text,
     extract_thinking_text,
     is_thinking_block,
     strip_reasoning_from_history,
+    thread_reasoning_within_open_turn,
 )
 from fred_sdk.contracts.react_contract import (
     ReActInput,
@@ -507,3 +510,124 @@ def _stream_frame(
 ) -> tuple[str, tuple[AIMessageChunk, dict[str, str]]]:
     """Build a `('messages', (chunk, metadata))` stream event."""
     return ("messages", (AIMessageChunk(content=content), {"langgraph_node": "agent"}))
+
+
+# ---------------------------------------------------------------------------
+# thread_reasoning_within_open_turn — candidate fix for reasoning drift
+# ---------------------------------------------------------------------------
+
+
+def _reasoning_message(text: str, answer: str | None = None) -> AIMessage:
+    content: list[str | dict[Any, Any]] = [
+        {"type": "thinking", "thinking": [{"type": "text", "text": text}]}
+    ]
+    if answer:
+        content.append({"type": "text", "text": answer})
+    return AIMessage(content=content)
+
+
+def test_open_turn_reasoning_is_replayed_as_text() -> None:
+    """
+    The reasoning of the turn in progress must survive as ordinary text.
+
+    Why this test exists:
+    - this is the whole point of the function: today the model gets its own
+      message back with the content emptied, which is what makes it re-derive
+      the plan and re-issue the identical tool call
+    - the `text` channel is the only one that survives both model clients, so
+      the reasoning must land there and not in a `thinking` block
+    """
+    history = [
+        HumanMessage(content="quel est le délai ?"),
+        _reasoning_message("Je n'ai pas le rapport, je cherche."),
+    ]
+
+    threaded = thread_reasoning_within_open_turn(history)
+
+    content = threaded[1].content
+    assert isinstance(content, str)
+    assert "Je n'ai pas le rapport, je cherche." in content
+    assert content.startswith(RECALLED_REASONING_PREFIX)
+
+
+def test_closed_turn_reasoning_is_still_stripped() -> None:
+    """
+    Reasoning from a turn the user already closed must NOT be replayed.
+
+    Why this test exists:
+    - it is the half of ISSUE-005 §6.3 that is easy to drop by accident, and
+      dropping it costs context tokens on every later request for reasoning
+      whose question has already been answered
+    """
+    history = [
+        HumanMessage(content="première question"),
+        _reasoning_message("réflexion périmée", answer="Première réponse."),
+        HumanMessage(content="deuxième question"),
+        _reasoning_message("réflexion en cours"),
+    ]
+
+    threaded = thread_reasoning_within_open_turn(history)
+
+    closed = threaded[1].content
+    assert isinstance(closed, str)
+    assert "réflexion périmée" not in closed
+    assert closed == "Première réponse."
+
+    still_open = threaded[3].content
+    assert isinstance(still_open, str)
+    assert "réflexion en cours" in still_open
+
+
+def test_threading_preserves_tool_calls_and_leaves_other_roles_alone() -> None:
+    """
+    Threading must not disturb `tool_calls`, nor any non-assistant message.
+
+    Why this test exists:
+    - the reasoning rides on an assistant message that also carries the tool
+      call; losing the call while keeping the reasoning would break the loop
+      outright rather than merely make it repeat itself
+    - human/tool messages may hold multimodal content that must pass verbatim
+    """
+    tool_call = {
+        "name": "knowledge_search",
+        "args": {"query": "délai"},
+        "id": "c1",
+        "type": "tool_call",
+    }
+    message = _reasoning_message("je cherche")
+    message = message.model_copy(update={"tool_calls": [tool_call]})
+    human_blocks: list[str | dict[Any, Any]] = [
+        {"type": "text", "text": "regarde"},
+        {"type": "image_url"},
+    ]
+    history = [
+        HumanMessage(content=human_blocks),
+        message,
+        ToolMessage(content="Article 4.2", tool_call_id="c1"),
+    ]
+
+    threaded = thread_reasoning_within_open_turn(history)
+
+    assert threaded[0].content == human_blocks
+    assert threaded[1].tool_calls == [tool_call]  # type: ignore[union-attr]
+    assert "je cherche" in str(threaded[1].content)
+    assert threaded[2].content == "Article 4.2"
+
+
+def test_threading_is_a_no_op_without_reasoning() -> None:
+    """
+    A turn with no reasoning must come back byte-identical in content.
+
+    Why this test exists:
+    - the function runs on every model call, including the vast majority that
+      involve no reasoning at all; it must not invent a marker out of nothing
+    """
+    history = [
+        HumanMessage(content="salut"),
+        AIMessage(content=[{"type": "text", "text": "Bonjour."}]),
+    ]
+
+    threaded = thread_reasoning_within_open_turn(history)
+
+    assert threaded[1].content == "Bonjour."
+    assert RECALLED_REASONING_PREFIX not in str(threaded[1].content)

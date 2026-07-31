@@ -217,6 +217,21 @@ export function isCapabilityUnused(
 }
 
 /**
+ * Whether this row should carry a reasoning toggle at all (REASON-01,
+ * `MODEL-REASONING-ENABLEMENT-RFC.md` §5.3).
+ *
+ * True only when the pod advertised at least one `supports_thinking` profile
+ * behind this model. A model with none gets **no control**, not a disabled one:
+ * aptitude is declared in `models_catalog.yaml` and an administrator cannot
+ * grant it, so a greyed-out switch would suggest a permission problem where
+ * there is none. Absent (a pre-REASON-01 pod, or any non-model kind) reads the
+ * same way — the safe direction, since off is the default anyway (§5.6).
+ */
+export function hasReasoningControl(capability: Pick<CapabilityEnablementItem, "thinking_profile_ids">): boolean {
+  return (capability.thinking_profile_ids ?? []).length > 0;
+}
+
+/**
  * Case-insensitive name filter for the team matrix drawer. A blank (or
  * whitespace-only) query means "no filter", not "match nothing" — production
  * rosters run ~100 teams, so the drawer starts from the full list.

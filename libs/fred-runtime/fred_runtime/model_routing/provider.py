@@ -39,6 +39,7 @@ from .contracts import (
     ModelSelectionRequest,
     ModelSelectionSource,
     TeamRoutingProfileDriftError,
+    without_reasoning_settings,
 )
 from .resolver import ModelRoutingResolver, resolve_team_override
 
@@ -205,6 +206,24 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         computed ONCE per turn by the caller, never here — this method may
         run several times per turn (once per distinct `operation`) and must
         never itself trigger a ReBAC call.
+
+        Reasoning enforcement (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md`) —
+        the SINGLE point where reasoning is turned off, for every level:
+
+        - **level 2**, the platform admin's per-model toggle, snapshotted at
+          session prep on `RuntimeContext.reasoning_enabled_model_ids`. Off by
+          default, so an absent list means no model reasons;
+        - **level 4**, the user's per-question choice, on
+          `RuntimeContext.reasoning`. `None` means the agent never offered the
+          choice, so levels 1-2 decide alone; `False` means this turn must not
+          reason whatever the platform allows.
+
+        Level 2 is a ceiling: `reasoning=True` on a model the admin has not
+        enabled still does not reason (§5.3). Both are enforced HERE, at client
+        construction, because the YAML has already put `reasoning_effort` in
+        `settings` — a switch that only declined to *add* it would never reach
+        the model (§5.6.2), which is precisely the failure mode this feature
+        exists to avoid.
         """
         selection = self.select(
             definition=definition,
@@ -213,10 +232,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             purpose=purpose,
             operation=operation,
         )
+        capability_id = model_capability_id(
+            selection.model.provider or "", selection.model.name or ""
+        )
         if binding.usable_model_ids is not None:
-            capability_id = model_capability_id(
-                selection.model.provider or "", selection.model.name or ""
-            )
             if capability_id not in binding.usable_model_ids:
                 logger.warning(
                     "[V2][MODEL_ROUTING] denied: team=%s model=%s/%s (%s) not "
@@ -231,8 +250,20 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     provider=selection.model.provider or "",
                     name=selection.model.name or "",
                 )
+        # Cheap and allocation-free in the common case: `without_reasoning_settings`
+        # returns the SAME object when the profile carries no reasoning setting,
+        # which is every profile but the ones ops declared thinking-capable.
+        model_config = selection.model
+        platform_allows = capability_id in (
+            binding.runtime_context.reasoning_enabled_model_ids or ()
+        )
+        # `is False`, not falsy: `None` means "no per-question choice offered"
+        # and must NOT strip, while `False` means the user actively said no.
+        turn_declined = binding.runtime_context.reasoning is False
+        if not platform_allows or turn_declined:
+            model_config = without_reasoning_settings(model_config)
         model = self._provider.build_model(
-            selection.model, capability=selection.capability
+            model_config, capability=selection.capability
         )
         if not isinstance(model, BaseChatModel):
             raise TypeError(

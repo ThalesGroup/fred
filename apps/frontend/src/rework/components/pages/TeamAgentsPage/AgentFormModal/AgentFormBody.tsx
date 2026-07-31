@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Switch from "@shared/atoms/Switch/Switch.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -84,6 +85,10 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
+  /** REASON-01 level 3 — offers the composer's reasoning toggle to users. */
+  reasoningEnabled: boolean;
+  /** REASON-01 Amendment B — that toggle starts ON in every new conversation. */
+  reasoningDefaultOn: boolean;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -102,6 +107,8 @@ type AgentFormBodyProps = {
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
+  onReasoningEnabledChange: (v: boolean) => void;
+  onReasoningDefaultOnChange: (v: boolean) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
@@ -117,6 +124,8 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
+  reasoningEnabled,
+  reasoningDefaultOn,
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
@@ -132,6 +141,8 @@ export function AgentFormBody({
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
+  onReasoningEnabledChange,
+  onReasoningDefaultOnChange,
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilityConfigChange,
@@ -313,6 +324,50 @@ export function AgentFormBody({
                   maxLength={500}
                   disabled={isSubmitting}
                 />
+                {/*
+                  REASON-01 level 3. Deliberately HERE and not in the Tools tab:
+                  reasoning is a property of how this agent's model is called,
+                  not a tool it can use, so asking an author to enable it among
+                  the tools would put the decision in the wrong mental model.
+                */}
+                <div className={styles.switchRow}>
+                  <Switch
+                    checked={reasoningEnabled}
+                    disabled={isSubmitting}
+                    onChange={() => onReasoningEnabledChange(!reasoningEnabled)}
+                    aria-label={t("rework.teams.formAgent.fields.reasoning.label")}
+                  />
+                  <div className={styles.switchText}>
+                    <span className={styles.switchLabel}>{t("rework.teams.formAgent.fields.reasoning.label")}</span>
+                    <span className={styles.switchHint}>{t("rework.teams.formAgent.fields.reasoning.hint")}</span>
+                  </div>
+                </div>
+                {/*
+                  REASON-01 Amendment B — where the composer's switch STARTS in a
+                  new conversation. Rendered only while the offer above is on:
+                  a preselection for a toggle nobody is shown is unanswerable,
+                  and hiding it is what makes the nesting read as "and then".
+                  The stored value survives hiding, so withdrawing the offer and
+                  restoring it later does not silently lose this choice.
+                */}
+                {reasoningEnabled && (
+                  <div className={`${styles.switchRow} ${styles.switchRowNested}`}>
+                    <Switch
+                      checked={reasoningDefaultOn}
+                      disabled={isSubmitting}
+                      onChange={() => onReasoningDefaultOnChange(!reasoningDefaultOn)}
+                      aria-label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
+                    />
+                    <div className={styles.switchText}>
+                      <span className={styles.switchLabel}>
+                        {t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
+                      </span>
+                      <span className={styles.switchHint}>
+                        {t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {renderFieldList(generalFields)}
               </>
             )}

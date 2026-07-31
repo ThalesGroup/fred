@@ -24,7 +24,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, AnyMessage
 
-from fred_runtime.support.thinking import strip_reasoning_from_history
+from fred_runtime.support.thinking import thread_reasoning_within_open_turn
 from fred_runtime.support.tool_loop import (
     collect_tool_outputs,
     sanitize_dangling_tool_calls,
@@ -42,9 +42,11 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
 
     Why this exists:
     - poisoned checkpoints (dangling tool calls from crashed turns) make OpenAI
-      reject the payload with HTTP 400; replayed reasoning blocks make Mistral
-      reject with HTTP 422; unbounded history contaminates queries
-    - the legacy loop applied sanitize → trim → reasoning-strip to the MODEL
+      reject the payload with HTTP 400; unbounded history contaminates queries
+    - raw provider reasoning blocks must never be replayed as such (the model
+      client drops them anyway); the open turn's reasoning is instead carried
+      back as text, see `thread_reasoning_within_open_turn`
+    - the legacy loop applied sanitize → trim → reasoning handling to the MODEL
       INPUT only, never to the persisted checkpoint — so this must be a
       `wrap_model_call` request override, NOT a `before_model` state update
       (state updates would rewrite the checkpoint and destroy history)
@@ -78,13 +80,15 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # it already ran on the untrimmed list above. Re-run it: idempotent
             # on an already-clean list, closes the gap on a freshly-cut one.
             messages = sanitize_dangling_tool_calls(trimmed)
-        # Strip provider-native reasoning from replayed assistant messages
-        # (RUNTIME-05 Layer 2c): reasoning-capable models (Mistral via the
-        # OpenAI-compatible client, Claude extended thinking) leave reasoning
-        # blocks in the checkpointed AIMessage. Replaying them makes Mistral
-        # reject the request (HTTP 422) and pollutes context. The reasoning was
-        # already surfaced to the UI as THOUGHT_* events.
-        messages = strip_reasoning_from_history(messages)
+        # Reasoning continuity (RUNTIME-05 Layer 2c, RFC Amendment E §E.3).
+        # Provider-native reasoning blocks cannot be replayed as such — the model
+        # client drops them — so the reasoning of the turn IN PROGRESS is carried
+        # back as ordinary text and reasoning from closed turns is dropped.
+        # Without this the model gets its own message back with the content
+        # emptied, re-derives the plan, and re-issues the identical tool call:
+        # measured 9/12 turns and 67 duplicate calls on a bare prompt, 0/12 with
+        # this (p = 1.7e-4). Raw reasoning blocks are still never replayed.
+        messages = thread_reasoning_within_open_turn(messages)
         response = await handler(
             request.override(messages=cast("list[AnyMessage]", messages))
         )

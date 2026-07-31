@@ -734,6 +734,12 @@ async def _model_capabilities_for_source(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            # REASON-01 §5.3 — the pod derives this subset from each profile's
+            # `supports_thinking`; control-plane carries it verbatim, exactly
+            # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
+            # then reads as "no reasoning-capable profile" and shows no
+            # reasoning control — the safe direction (§5.6).
+            model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -862,6 +868,85 @@ async def _resolve_chat_controls(
         for item in per_capability.get(cap_id, []):
             descriptors.append(ChatControlDescriptor.from_item(cap_id, item))
     return descriptors
+
+
+# REASON-01's composer widget id (§7). Reasoning is NOT a capability — it is a
+# property of how the model is called, not a tool an agent can use — so this
+# control has no owning capability and control-plane emits it directly.
+_REASONING_TOGGLE_WIDGET = "reasoning_toggle"
+
+# Reserved `ChatControlDescriptor.capability_id` for controls the PLATFORM
+# contributes rather than a capability. Before REASON-01 every chat control came
+# from a capability (`AGENT-CAPABILITY-RFC.md` §3.3); this is the first that does
+# not, and it needs an owner id because the field is required and the frontend
+# keys its plugin lookup on it. A reserved sentinel — never a real capability id,
+# so a plugin can never accidentally claim it and the stock-kit fallback (keyed
+# on widget id alone) resolves it.
+PLATFORM_CHAT_CONTROL_OWNER = "platform"
+
+
+def _platform_reasoning_control(
+    *,
+    reasoning_enabled: bool,
+    reasoning_default_on: bool,
+    reasoning_enabled_model_ids: Sequence[str],
+) -> ChatControlDescriptor | None:
+    """The composer's reasoning toggle, or `None` when a gate upstream is closed
+    (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
+
+    Emitted here, not by a capability, because reasoning is not a tool: an agent
+    does not "use" reasoning the way it uses document search, so putting it in
+    the capability/tool system would ask an author to enable it in the wrong
+    place. Level 3 is a plain agent property (`tuning.reasoning_enabled`, set in
+    the General section of the agent form) and this function is where it meets
+    the platform gate.
+
+    §8's diagnosability rule decides the return type. Three of the four gates are
+    invisible from the chat page, so a control that cannot do anything must be
+    **absent**, never present-and-inert — otherwise the predictable support
+    ticket is "I turned reasoning on and nothing happened" with no way to tell
+    which gate blocked:
+
+    - the agent's author did not offer it → no control;
+    - no model has its reasoning enabled platform-wide → no control.
+
+    `reasoning_default_on` (Amendment B) is read only once past those gates: it
+    decides where the emitted switch *starts*, never whether one is emitted.
+    An author who left the offer off but the default on gets no control — the
+    stored value simply stays inert until the offer comes back.
+
+    Checking "is any model's reasoning on?" also covers the aptitude gate,
+    because the write path already enforces it: `set_model_reasoning` refuses
+    (409 `ReasoningNotSupported`) a model with no `supports_thinking` profile, so
+    a stored enabled row can only ever name a reasoning-capable model. No catalog
+    fetch is needed on this send path.
+
+    Deliberately NOT narrowed to the profile this turn will route to: routing
+    resolves per *operation* at runtime while chat controls are computed once per
+    session (RFC §12 q3). Under-hiding — showing a control a later operation
+    might not honour — beats over-hiding one that would have worked.
+    """
+
+    if not reasoning_enabled:
+        return None
+    if not reasoning_enabled_model_ids:
+        logger.debug(
+            "[reasoning] no %s control: the agent offers it but no model has "
+            "its reasoning enabled platform-wide (REASON-01 §8)",
+            _REASONING_TOGGLE_WIDGET,
+        )
+        return None
+    return ChatControlDescriptor(
+        capability_id=PLATFORM_CHAT_CONTROL_OWNER,
+        widget=_REASONING_TOGGLE_WIDGET,
+        # Seeds the composer's initial value only (RFC §3.7) — the user can
+        # still flip it off for this question. Author-chosen since Amendment B
+        # (`tuning.reasoning_default_on`); it was hardcoded False before, and
+        # False remains the default because `AGENT-THINKING-API-RFC.md`
+        # Amendment C measured reasoning re-issuing duplicate tool calls in
+        # 10/10 turns on this stack. Starting ON is an author's opt-in.
+        params={"default": reasoning_default_on},
+    )
 
 
 def _validate_tuning_field_values(
@@ -2057,6 +2142,8 @@ def _record_to_summary(
         description=record.description,
         role=record.tuning.role,
         usage_statement=record.tuning.usage_statement,
+        reasoning_enabled=record.tuning.reasoning_enabled,
+        reasoning_default_on=record.tuning.reasoning_default_on,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2345,6 +2432,13 @@ async def enroll_agent_instance(
             "role": request.role or request.display_name,
             "description": request.description or request.display_name,
             "usage_statement": request.usage_statement,
+            # REASON-01 level 3 — a plain agent property set on the General
+            # section of the form, alongside role/description. Not a capability.
+            "reasoning_enabled": request.reasoning_enabled,
+            # Amendment B — where the composer's toggle starts on a new
+            # conversation. Stored even when the offer above is off: inert, but
+            # it survives the author toggling the offer off and back on.
+            "reasoning_default_on": request.reasoning_default_on,
         }
     )
     if request.tuning_field_values:
@@ -2589,6 +2683,22 @@ async def update_agent_instance(
         # partial-update callers like the enable/disable toggle.
         new_tuning = (new_tuning or record.tuning).model_copy(
             update={"usage_statement": request.usage_statement}
+        )
+
+    if request.reasoning_enabled is not None:
+        # REASON-01 level 3, same "None means unchanged" convention as role and
+        # usage_statement above: a partial update (e.g. the enable/disable
+        # toggle) must not silently switch an agent's reasoning offer off.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"reasoning_enabled": request.reasoning_enabled}
+        )
+
+    if request.reasoning_default_on is not None:
+        # Amendment B, same "None means unchanged" convention. Independent of
+        # reasoning_enabled above on purpose: switching the offer off must not
+        # erase the author's default, so the two fields never write each other.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"reasoning_default_on": request.reasoning_default_on}
         )
 
     updated = await store.update(
@@ -2901,10 +3011,30 @@ async def prepare_execution(
     # #2118) — resolved once here at session prep, same lifecycle as
     # context_prompt_text above, NOT a per-turn lookup (that's how model
     # *authorization*/usable_model_ids works, deliberately not this).
+    # Second snapshot on the same lifecycle: the platform reasoning activation
+    # (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5), for the same
+    # reason — the runtime must not do a live lookup per turn. Deliberately NOT
+    # filtered against this team's usable models: reasoning is global, and the
+    # runtime keys on the model it actually resolves. Two independent reads, so
+    # gathered rather than chained — this is a user-facing send path.
     (
-        chat_default_profile_id,
-        operation_route_rules,
-    ) = await resolve_execution_routing_snapshot(team_id, deps)
+        (chat_default_profile_id, operation_route_rules),
+        reasoning_enabled_model_ids,
+    ) = await asyncio.gather(
+        resolve_execution_routing_snapshot(team_id, deps),
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
+    )
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_model_ids)
+    # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
+    # a capability — appended last so it sits after the capability-owned rows in
+    # the composer menu, and omitted entirely when a gate upstream is closed (§8).
+    reasoning_control = _platform_reasoning_control(
+        reasoning_enabled=instance.tuning.reasoning_enabled,
+        reasoning_default_on=instance.tuning.reasoning_default_on,
+        reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+    )
+    if reasoning_control is not None:
+        chat_controls = [*chat_controls, reasoning_control]
 
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
@@ -2919,6 +3049,7 @@ async def prepare_execution(
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
         operation_route_rules=operation_route_rules,
+        reasoning_enabled_model_ids=sorted_reasoning_model_ids,
     )
 
 

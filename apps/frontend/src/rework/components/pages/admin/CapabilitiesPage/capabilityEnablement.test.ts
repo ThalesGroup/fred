@@ -20,6 +20,7 @@ import {
   enabledTeamCount,
   excludePersonalTeams,
   filterTeamsByName,
+  hasReasoningControl,
   isCapabilityOnForTeam,
   isCapabilityUnused,
   isPersonalTeamId,
@@ -376,5 +377,21 @@ describe("teamMatrixStatus (drawer loading/error/empty precedence)", () => {
 
   it("is not 'searchEmpty' when a query is active but still matches something", () => {
     expect(teamMatrixStatus({ ...base, hasQuery: true, visibleCount: 1 })).toBe("ready");
+  });
+});
+
+describe("hasReasoningControl (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.3)", () => {
+  it("shows the toggle when the model has at least one thinking-capable profile", () => {
+    expect(hasReasoningControl({ thinking_profile_ids: ["chat.mistral.small"] })).toBe(true);
+  });
+
+  it("shows NO control when no profile declares the aptitude", () => {
+    // Not a disabled switch: an administrator cannot make a model reason, and
+    // a greyed-out control would read as a permission problem instead.
+    expect(hasReasoningControl({ thinking_profile_ids: [] })).toBe(false);
+  });
+
+  it("shows no control when the field is absent (pre-REASON-01 pod, or a tool row)", () => {
+    expect(hasReasoningControl({})).toBe(false);
   });
 });

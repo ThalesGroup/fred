@@ -128,6 +128,28 @@ class CapabilityEnablementItem(BaseModel):
             "so the admin surface can group by team."
         ),
     )
+    thinking_profile_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            'For a `kind="model"` row: the models_catalog.yaml profile ids of '
+            "this model that declare `supports_thinking` (REASON-01, "
+            "`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3). Always empty for other "
+            "kinds. **The admin row renders a reasoning control only when this "
+            "is non-empty** — aptitude is not an administrator's choice, nobody "
+            "can make a model reason that cannot."
+        ),
+    )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether this model's thinking-capable profiles may run with "
+            "reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no "
+            "subject: an activation, not a permission — per-team model access "
+            "remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored "
+            "row means `false` (§5.6): enabling a model and enabling its "
+            "reasoning are two separate admin actions, in that order."
+        ),
+    )
 
 
 class CapabilityEnablementList(BaseModel):
@@ -148,6 +170,25 @@ class SetCapabilityPersonalScopeRequest(BaseModel):
     """Set the personal-space class tri-state for a capability (RFC §8.4)."""
 
     scope: PersonalScope
+
+
+class SetModelReasoningRequest(BaseModel):
+    """Switch one model's platform-wide reasoning on or off (REASON-01 §5)."""
+
+    reasoning_enabled: bool
+
+
+class ModelReasoningResult(BaseModel):
+    """The stored state after a reasoning toggle write (REASON-01 §5).
+
+    Carries no impact counts, unlike the enablement results above: this toggle
+    suspends nothing and revives nothing. It changes *how* a model runs, never
+    *whether* an agent may run at all — a reasoning-off agent still works, it
+    just stops reasoning.
+    """
+
+    capability_id: str
+    reasoning_enabled: bool
 
 
 class TeamCapabilityEnablementResult(BaseModel):
@@ -177,6 +218,15 @@ class CapabilityDefaultOnResult(BaseModel):
     revived_instances: int = Field(
         default=0,
         description="Dependent instances revived by turning default-on ON (#1975).",
+    )
+    reasoning_disabled: bool = Field(
+        default=False,
+        description=(
+            "True when switching this model OFF also switched its reasoning off "
+            "(REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.7). Reported so the "
+            "admin sees the second state change instead of discovering it later "
+            "in the row."
+        ),
     )
 
 

@@ -297,6 +297,7 @@
       "scopeTitle": "Portée de recherche",
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
+      "reasoningRowLabel": "Raisonnement",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
     "conversationAriaLabel": "Conversation",
@@ -861,6 +862,7 @@
           "enabledTeams": "Équipes activées",
           "defaultOn": "Activé pour tous",
           "health": "État",
+          "reasoning": "Raisonnement",
           "actions": "Actions"
         },
         "enabledTeams": {
@@ -936,7 +938,12 @@
             "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
             "defaultError": "Impossible de remettre le défaut des espaces personnels."
           }
-        }
+        },
+        "defaultOffReasoningToast": "Le raisonnement a été désactivé avec le modèle. Réactivez le modèle, puis le raisonnement, pour le rétablir.",
+        "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
+        "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
+        "reasoningOnToast": "Raisonnement activé pour ce modèle.",
+        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle."
       },
       "corpusAudit": {
         "title": "Audit du corpus",
@@ -1185,6 +1192,29 @@
       "tokenPlaceholder": "Saisissez le secret de démarrage"
     },
     "cancel": "Annuler",
+    "chatTrace": {
+      "ariaLabel": "Trace de raisonnement de l'agent",
+      "details": "Détails",
+      "hide": "Masquer le raisonnement et les appels d'outils",
+      "openReasoning": "Ouvrir le raisonnement complet",
+      "phase": {
+        "observation": "Observation",
+        "planning": "Planification",
+        "reflection": "Réflexion",
+        "synthesis": "Synthèse",
+        "tool_use": "Appel d'outil"
+      },
+      "rows_one": "{{count}} ligne",
+      "rows_other": "{{count}} lignes",
+      "running": "en cours…",
+      "show": "Afficher le raisonnement et les appels d'outils",
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "summaryReasoning": "Réflexion {{duration}}",
+      "summaryTools_one": "{{count}} outil",
+      "summaryTools_other": "{{count}} outils",
+      "thinking": "Réflexion en cours…"
+    },
     "collapse": "Réduire",
     "create": "Créer",
     "delete": "Supprimer",
@@ -1795,6 +1825,14 @@
             "label": "Cas d'usage",
             "explanation": "Décrivez clairement les cas d'usage que vous envisagez de traiter grâce à cet agent.",
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
+          },
+          "reasoning": {
+            "label": "Raisonnement",
+            "hint": "Permet aux utilisateurs d'activer le raisonnement du modèle pour une seule question, depuis le composeur de chat. N'apparaît que si le modèle le supporte et qu'un administrateur l'a activé."
+          },
+          "reasoningDefaultOn": {
+            "label": "Raisonnement activé par défaut",
+            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
@@ -1812,7 +1850,6 @@
           "aria": "Sections du formulaire",
           "general": "Général",
           "prompts": "Prompts",
-          "tools": "Outils",
           "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",

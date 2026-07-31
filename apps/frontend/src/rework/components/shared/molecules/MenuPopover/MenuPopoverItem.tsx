@@ -28,6 +28,17 @@ export interface MenuPopoverItemProps {
   badge?: string;
   /** Trailing affordance icon, e.g. "chevron_right" for sub-rows or "add" for actions. */
   trailingIcon?: IconType;
+  /**
+   * Renders a switch as the trailing affordance and makes the row a boolean
+   * control (`menuitemcheckbox` + `aria-checked` from `selected`).
+   *
+   * The switch is drawn by this row, not composed from the `Switch` atom: the
+   * atom is a `<label><input>` pair and this row is a `<button>`, so nesting it
+   * would put an interactive element inside a button — invalid, and a double
+   * click target. Drawn here, the whole row stays one button: click anywhere,
+   * Space/Enter, one tab stop.
+   */
+  trailingToggle?: boolean;
   /** Destructive styling (red label + icon), e.g. logout. */
   danger?: boolean;
   disabled?: boolean;
@@ -55,6 +66,7 @@ export default function MenuPopoverItem({
   value,
   badge,
   trailingIcon,
+  trailingToggle = false,
   danger = false,
   disabled = false,
   selected = false,
@@ -65,15 +77,20 @@ export default function MenuPopoverItem({
   onKeyDown,
   ...aria
 }: MenuPopoverItemProps) {
+  const effectiveRole = trailingToggle ? "menuitemcheckbox" : role;
   return (
     <button
       ref={ref}
       type="button"
-      role={role}
+      role={effectiveRole}
       className={`${styles.item} ${danger ? styles.danger : ""}`}
       disabled={disabled}
-      data-selected={selected}
-      aria-selected={role === "option" ? selected : undefined}
+      // A toggle row is NOT "selected" the way a picked option is — the row
+      // stays in the menu either way, so highlighting it as chosen would read
+      // as a selection. `aria-checked` carries the state instead.
+      data-selected={trailingToggle ? undefined : selected}
+      aria-selected={role === "option" && !trailingToggle ? selected : undefined}
+      aria-checked={trailingToggle ? selected : undefined}
       onClick={onClick}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
@@ -87,6 +104,11 @@ export default function MenuPopoverItem({
       <span className={styles.itemLabel}>{label}</span>
       {value != null && <span className={styles.itemValue}>{value}</span>}
       {badge != null && <span className={styles.badge}>{badge}</span>}
+      {trailingToggle && (
+        <span className={styles.itemToggle} data-on={selected} aria-hidden>
+          <span className={styles.itemToggleHandle} />
+        </span>
+      )}
       {trailingIcon && (
         <span className={styles.itemTrailing} aria-hidden>
           <Icon category="outlined" type={trailingIcon} />

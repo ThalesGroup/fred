@@ -40,6 +40,7 @@ Example:
 - `from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT`
 """
 
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
@@ -123,7 +124,11 @@ class ReactRagMcpDefinition(ReActAgentDefinition):
     )
 
     def policy(self) -> ReActPolicy:
-        return ReActPolicy(system_prompt_template=self.system_prompt_template)
+        return ReActPolicy(
+            system_prompt_template=self.system_prompt_template,
+            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
+            tool_selection=REASONING_SAFE_TOOL_SELECTION,
+        )
 
 
 REACT_RAG_MCP_AGENT = ReactRagMcpDefinition()

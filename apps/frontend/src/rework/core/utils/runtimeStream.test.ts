@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi } from "vitest";
-import { mergeContextPromptText, mergeRoutingPolicy, parseSseFrames } from "./runtimeStream";
+import { mergeContextPromptText, mergeReasoningActivation, mergeRoutingPolicy, parseSseFrames } from "./runtimeStream";
 
 // Build a ReadableStream<Uint8Array> from string chunks, mirroring how a fetch
 // body delivers SSE bytes (chunk boundaries do not respect frame boundaries).
@@ -110,5 +110,26 @@ describe("mergeRoutingPolicy", () => {
 
   it("omits operation_route_rules when the array is empty", () => {
     expect(mergeRoutingPolicy({}, null, [])).toEqual({});
+  });
+});
+
+describe("mergeReasoningActivation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.5)", () => {
+  it("forwards the enabled model ids", () => {
+    expect(mergeReasoningActivation({ search_policy: "hybrid" }, ["model__openai__mistral-small-latest"])).toEqual({
+      search_policy: "hybrid",
+      reasoning_enabled_model_ids: ["model__openai__mistral-small-latest"],
+    });
+  });
+
+  it("forwards an EMPTY list rather than omitting it", () => {
+    // Deliberately unlike mergeRoutingPolicy: empty means "no model reasons"
+    // (§5.6, off by default), not "unset". Reading an absent key as
+    // "unrestricted" — the usable_model_ids convention — would be backwards.
+    expect(mergeReasoningActivation({}, [])).toEqual({ reasoning_enabled_model_ids: [] });
+  });
+
+  it("omits the key when the control-plane sent nothing at all", () => {
+    expect(mergeReasoningActivation({ search_policy: "hybrid" }, null)).toEqual({ search_policy: "hybrid" });
+    expect(mergeReasoningActivation({ search_policy: "hybrid" }, undefined)).toEqual({ search_policy: "hybrid" });
   });
 });

@@ -209,6 +209,27 @@ class ManagedAgentInstanceSummary(BaseModel):
             "such as the enable/disable toggle are unaffected."
         ),
     )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether this agent offers the per-question reasoning toggle in "
+            "its chat composer (REASON-01 level 3). A plain agent property "
+            "edited in the General section of the agent form, NOT a "
+            "capability — reasoning is a property of how the model is called, "
+            "not a tool the agent can use. False for every agent enrolled "
+            "before REASON-01 until independently edited."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Whether a new conversation with this agent starts with the "
+            "composer's reasoning toggle already ON (REASON-01 Amendment B). "
+            "Only meaningful while `reasoning_enabled` is true — with no "
+            "toggle offered there is nothing to preselect. The user can still "
+            "switch it off per question."
+        ),
+    )
     status: Literal["enabled", "disabled"]
     suspension_reason: SuspensionReason | None = Field(
         default=None,
@@ -373,6 +394,21 @@ class ExecutionPreparation(BaseModel):
         description=(
             "Team's per-operation model-routing overrides, same resolution "
             "notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2)."
+        ),
+    )
+    reasoning_enabled_model_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            'kind="model" capability ids whose reasoning a platform admin has '
+            "switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). "
+            "Resolved once here at session prep and folded onto RuntimeContext "
+            "by the frontend, exactly like chat_default_profile_id — the same "
+            "three-hop channel, deliberately not a per-turn lookup. GLOBAL, not "
+            "per team: an activation ('does this model run with reasoning'), "
+            "not a permission — per-team model access is untouched (§5.1). "
+            "**Empty means no model reasons** (§5.6, off by default); the "
+            "runtime strips the reasoning settings for every model absent from "
+            "this list at client construction (§5.6.2)."
         ),
     )
 
@@ -607,6 +643,28 @@ class CreateAgentInstanceRequest(BaseModel):
             "verbatim. Values for unselected capabilities are ignored."
         ),
     )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer the per-question reasoning toggle in this agent's chat "
+            "composer (REASON-01 level 3). A plain agent property alongside "
+            "role/description — NOT a capability, because reasoning is a "
+            "property of how the model is called rather than a tool the agent "
+            "can use. Defaults to False: enabling it only makes the composer "
+            "toggle appear, and the user still has to flip it per question."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Start every new conversation with this agent's reasoning toggle "
+            "already ON (REASON-01 Amendment B). Read only when "
+            "`reasoning_enabled` is true; it seeds the composer's initial "
+            "value and nothing more — the user can switch it off for any "
+            "question. Defaults to False, the platform behaviour before this "
+            "field existed."
+        ),
+    )
 
 
 class UpdateAgentInstanceRequest(BaseModel):
@@ -669,6 +727,25 @@ class UpdateAgentInstanceRequest(BaseModel):
             "reset every selected capability to its defaults. Each selected "
             "capability's effective config is re-validated by the source pod "
             "and the returned stored envelope is persisted verbatim."
+        ),
+    )
+    reasoning_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Offer the per-question reasoning toggle in this agent's chat "
+            "composer (REASON-01 level 3). Omit to leave the current setting "
+            "unchanged — same convention as `role`, so a partial update such "
+            "as the enable/disable toggle is not forced to resupply it."
+        ),
+    )
+    reasoning_default_on: bool | None = Field(
+        default=None,
+        description=(
+            "Start new conversations with the reasoning toggle already ON "
+            "(REASON-01 Amendment B). Omit to leave the current setting "
+            "unchanged. Written independently of `reasoning_enabled`: "
+            "withdrawing the offer leaves this value stored but inert, so "
+            "re-offering reasoning restores the author's original default."
         ),
     )
 

@@ -60,6 +60,15 @@ from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
 from test_main import _FakeAgentInstanceStore, _make_record
 
+
+class _NoReasoningEnabledStore:
+    """No model has its reasoning switched on — the REASON-01 §5.6 default.
+    The reasoning toggle's own behaviour lives in test_model_reasoning_toggle.py."""
+
+    async def list_enabled_model_ids(self) -> set[str]:
+        return set()
+
+
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -2024,6 +2033,8 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
     deps = SimpleNamespace(
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+        # REASON-01 §5: no model has its reasoning switched on — off by default.
+        get_model_reasoning_store=lambda: _NoReasoningEnabledStore(),
     )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
@@ -2087,6 +2098,8 @@ async def test_aggregate_list_derives_personal_scope(
     deps = SimpleNamespace(
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+        # REASON-01 §5: no model has its reasoning switched on — off by default.
+        get_model_reasoning_store=lambda: _NoReasoningEnabledStore(),
     )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
