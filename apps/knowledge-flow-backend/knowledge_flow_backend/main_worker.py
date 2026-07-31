@@ -25,6 +25,7 @@ import gc
 import logging
 import os
 import signal
+from collections import Counter
 from contextlib import suppress
 
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
@@ -96,6 +97,54 @@ def _debug_gc_and_trim() -> None:
         before_kb,
         after_kb,
         before_kb - after_kb,
+    )
+
+
+def _debug_gc_types(top_n: int = 20) -> None:
+    """SIGUSR2 handler: same idea as _debug_gc_and_trim (SIGUSR1), but reports WHICH
+    object types make up the reference-cycle garbage instead of just a count — the
+    piece ISSUE-009 left open (cycles confirmed real via 0-uncollectable SIGUSR1
+    tests, never identified what they're made of).
+
+    gc.DEBUG_SAVEALL makes gc.collect() keep collected-but-cyclic objects reachable
+    via gc.garbage instead of destroying them immediately, just for this one
+    collection, so their types can be inspected before release. gc.garbage is
+    cleared explicitly afterward (dropping our references) and a second plain
+    gc.collect() actually frees them — otherwise they'd stay pinned in gc.garbage
+    forever, a leak of our own making. Heavier than SIGUSR1 (the type-counting pass
+    itself), so kept as an explicit separate signal rather than folded into the
+    periodic task.
+    """
+    before_kb = _current_rss_kb()
+    old_flags = gc.get_debug()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    collected = gc.collect()
+    gc.set_debug(old_flags)
+
+    top_types = Counter(type(o).__name__ for o in gc.garbage).most_common(top_n)
+    garbage_count = len(gc.garbage)
+    gc.garbage.clear()
+    freed_after_clear = gc.collect()
+
+    trimmed = False
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+        trimmed = True
+    except OSError:
+        pass
+
+    after_kb = _current_rss_kb()
+    logger.warning(
+        "[DEBUG][GC] SIGUSR2 type breakdown: gc.collect()=%d, %d objects held in gc.garbage "
+        "for inspection then released (+%d freed on the follow-up collect), malloc_trim=%s | "
+        "RSS %dKi -> %dKi | top types: %s",
+        collected,
+        garbage_count,
+        freed_after_clear,
+        trimmed,
+        before_kb,
+        after_kb,
+        top_types,
     )
 
 
@@ -185,10 +234,13 @@ async def main() -> None:
     config_file = get_loaded_config_file_path() or "<unset>"
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
-    # Manual trigger always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
+    # Manual triggers always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
     # `kubectl exec <pod> -- kill -USR1 1` to force gc.collect() + malloc_trim(0) and
-    # log the RSS delta on demand; see _debug_gc_and_trim's docstring for how to read it.
-    asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, _debug_gc_and_trim)
+    # log the RSS delta on demand (see _debug_gc_and_trim's docstring); `kill -USR2 1`
+    # for the heavier type-breakdown variant (see _debug_gc_types's docstring).
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGUSR1, _debug_gc_and_trim)
+    loop.add_signal_handler(signal.SIGUSR2, _debug_gc_types)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
