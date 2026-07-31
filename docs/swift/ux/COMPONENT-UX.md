@@ -70,7 +70,23 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 Compact inline search input with a leading search Icon atom and a trailing clear IconButton atom.
 Props: `value`, `onChange(value: string)`, optional `placeholder` and `clearAriaLabel`.
-Used by `PromptsPage` (replaces native `<input>` + `<button>` search bar).
+Used by `CapabilityTeamMatrixDrawer`.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `SearchInput`
+
+**Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
+**Status:** `Functional`
+
+`TextInput`-based search field (search icon + inline clear button) — extracted from the pattern
+originally inlined in `TeamSettingsMembers`. Props: `value`, `onChange(value: string)`, optional
+`placeholder`, `ariaLabel`, `clearAriaLabel`, `autoFocus`.
+Used by `PromptsPage` and `TeamSettingsMembers`.
 
 #### Open UX issues
 
@@ -85,7 +101,9 @@ _(none)_
 
 Horizontally-wrapping row of toggle chips for single-select filtering. Generic over chip ID type (`T extends string`).
 Supports an optional "All" chip (via `allLabel`), expand/collapse beyond `maxVisible`, and full `aria-pressed` accessibility.
-Used by `PromptsPage` (replaces native `<button>` category filter row).
+Used by `PromptsPage` (replaces native `<button>` category filter row). `PromptsPage` prepends a
+"Sans catégorie" pseudo-option (sentinel id, not a real `PromptCategorySummary`) right after the
+"All" chip, matching prompts with no `category_id`.
 
 #### Open UX issues
 
@@ -2051,13 +2069,44 @@ outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
 the row's explicit upload action; rows without a tag (pure path prefixes) are
 not drop targets.
 
-### `CategoryPicker` / prompt category surfaces
+### `CategoryPicker` / prompt category surfaces (PROMPT-09)
 
-Pickers and filters offer exactly 7 functional categories (doc-assist,
-summary, extraction, writing, analysis, conversational, integration).
-`monitoring`, `migration` and `other` are retired from selection but keep
-their pill rendering on pre-existing prompts; the "show more" fold is gone
-(7 visible).
+**Location:** `src/rework/components/shared/molecules/CategoryPicker/CategoryPicker.tsx`
+**Status:** `Functional`
+
+Categories are team-owned content, not a fixed global list (PROMPT-09) —
+`CategoryPicker` takes a live `categories: PromptCategorySummary[]` prop
+(fetched per-team) instead of a static catalog. Rendered as a single
+flex-wrap row of small selectable chips (name only, no icon, no colour —
+colour-coding categories was tried and dropped as adding no value). Selected
+chip gets a filled `--primary` background; no fold/show-more, chips just
+wrap. First chip is always "Sans catégorie" (`onChange(null)`) — the default
+selection for a new prompt (`emptyForm.category_id === null`) and for any
+existing prompt with no category.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `ManageCategoriesDialog`
+
+**Location:** `src/rework/components/pages/PromptsPage/ManageCategoriesDialog/ManageCategoriesDialog.tsx`
+**Status:** `Functional`
+
+Reachable from a `tune`-icon button in `PromptsPage`'s category filter-chips row (gated on nothing —
+every visitor can open it, but create/rename/delete calls are `team_editor`-gated server-side and
+surface a 403 toast on denial). Staged draft/save/cancel model: Créer / Éditer / Supprimer only edit
+local state — nothing hits the backend until "Enregistrer" is clicked, which diffs the draft against
+the original list and fires exactly the needed create/rename/delete calls; "Annuler" discards the
+draft with zero calls. No per-row delete confirmation (the staging itself is the undo). A row still
+referenced by ≥1 prompt surfaces the backend's 409 as a toast on save (hard block, no automatic
+reassignment). Rows show a name only, no colour swatch (dropped along with `CategoryPicker`'s).
+
+#### Open UX issues
+
+_(none)_
 
 ---
 

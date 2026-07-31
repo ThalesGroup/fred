@@ -6,17 +6,17 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+    background-color 120ms ease,
+    border-color 120ms ease;
   cursor: pointer;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid transparent;
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
 
   &:hover {
-    box-shadow: var(--shadow-m);
-    border-color: var(--outline);
+    border-color: var(--outline-retreat);
+    background: var(--state-on-surface-hover);
 
     .editOverlay {
       opacity: 1;
@@ -26,17 +26,6 @@
   &:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
-  }
-
-  /* System defaults: readable but visually quieter */
-  &[data-default] {
-    opacity: 0.85;
-
-    &:hover {
-      cursor: pointer;
-      box-shadow: var(--shadow-s);
-      border-color: var(--outline);
-    }
   }
 }
 
@@ -56,47 +45,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-}
-
-.icon {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  border-radius: var(--radius-s);
-  width: 1.875rem;
-  height: 1.875rem;
-  font-size: 0.95rem;
-
-  /* Fallback hash-palette — 5 semantic families, tokens only */
-  &[data-color="0"] {
-    background: var(--info-container);
-    color: var(--info);
-  }
-  &[data-color="1"] {
-    background: var(--success-container);
-    color: var(--success);
-  }
-  &[data-color="2"] {
-    background: var(--secondary-container);
-    color: var(--secondary);
-  }
-  &[data-color="3"] {
-    background: var(--warning-container);
-    color: var(--warning);
-  }
-  &[data-color="4"] {
-    background: var(--error-container);
-    color: var(--error);
-  }
-  &:not([data-color]) {
-    background: var(--surface-container-high);
-  }
-}
-
-.iconEmoji {
-  font-size: 1rem;
-  line-height: 1;
 }
 
 .name {
@@ -121,7 +69,7 @@
   margin: 0;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   line-height: 1.45;
 }
@@ -139,27 +87,15 @@
   line-height: 1.45;
 }
 
-/* ── Footer: uses left · author right ───────────────────────────────────────── */
+/* ── Footer: usage count ───────────────────────────────────────────────────── */
 
 .footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  opacity: 0.7;
   margin-top: var(--spacing-2xs);
-  color: var(--on-surface-variant);
-  font: var(--font-label-medium);
 }
 
 .uses {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.author {
-  max-width: 55%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
 }

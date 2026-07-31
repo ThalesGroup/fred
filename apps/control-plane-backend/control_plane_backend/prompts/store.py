@@ -4,14 +4,12 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, literal, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import delete, func, literal, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.models.prompt_models import DefaultPromptUsageRow, PromptRow
+from control_plane_backend.models.prompt_models import PromptRow
 
 
 def _utcnow() -> datetime:
@@ -45,7 +43,7 @@ class PromptRecord:
         team_id: TeamId,
         name: str,
         description: str | None,
-        category: str | None = None,
+        category_id: str | None = None,
         emoji: str | None = None,
         tags: list[str] | None = None,
         text: str,
@@ -63,7 +61,7 @@ class PromptRecord:
         self.team_id = team_id
         self.name = name
         self.description = description
-        self.category = category
+        self.category_id = category_id
         self.emoji = emoji
         self.tags = tags or []
         self.text = text
@@ -88,7 +86,7 @@ class ContextPromptRecord:
         name: str,
         description: str | None,
         scope: str,
-        category: str | None,
+        category_id: str | None,
         version: int,
         session_count: int,
         score: float | None,
@@ -97,7 +95,7 @@ class ContextPromptRecord:
         self.name = name
         self.description = description
         self.scope = scope
-        self.category = category
+        self.category_id = category_id
         self.version = version
         self.session_count = session_count
         self.score = score
@@ -109,7 +107,7 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
         team_id=TeamId(row.team_id),
         name=row.name,
         description=row.description,
-        category=row.category,
+        category_id=row.category_id,
         emoji=row.emoji,
         tags=row.tags or [],
         text=row.text,
@@ -128,7 +126,6 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
 class PromptStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
-        self._dialect_name = engine.dialect.name
 
     async def create(
         self,
@@ -158,7 +155,7 @@ class PromptStore:
             team_id=str(record.team_id),
             name=record.name,
             description=record.description,
-            category=record.category,
+            category_id=record.category_id,
             emoji=record.emoji,
             tags=record.tags,
             text=record.text,
@@ -244,7 +241,7 @@ class PromptStore:
         *,
         name: str,
         description: str | None,
-        category: str | None,
+        category_id: str | None,
         emoji: str | None,
         tags: list[str],
         text: str,
@@ -278,7 +275,7 @@ class PromptStore:
                     .values(
                         name=name,
                         description=description,
-                        category=category,
+                        category_id=category_id,
                         emoji=emoji,
                         tags=tags,
                         text=text,
@@ -345,61 +342,26 @@ class PromptStore:
                 .values(session_count=PromptRow.session_count + 1)
             )
 
-    async def increment_default_usage(
+    async def count_by_category(
         self,
-        category: str,
         team_id: TeamId,
+        category_id: str,
         session: AsyncSession | None = None,
-    ) -> None:
-        """Increment the session_count for one platform-default prompt category.
+    ) -> int:
+        """Count prompts in `team_id` referencing `category_id`.
 
-        Default prompts are never stored in PromptRow, so their usage is tracked
-        in the separate default_prompt_usage table keyed by (team_id, category).
-        The row is created on first use and incremented on each subsequent call.
+        Used to block deleting a category still in use — a category delete
+        must fail (409) while at least one prompt references it.
         """
 
         async with use_session(self._sessions, session) as s:
-            insert = pg_insert if self._dialect_name == "postgresql" else sqlite_insert
-            stmt = (
-                insert(DefaultPromptUsageRow)
-                .values(team_id=str(team_id), category=category, session_count=1)
-                .on_conflict_do_update(
-                    index_elements=["team_id", "category"],
-                    set_={
-                        "session_count": DefaultPromptUsageRow.__table__.c.session_count
-                        + 1
-                    },
+            count = await s.scalar(
+                select(func.count()).where(
+                    PromptRow.team_id == str(team_id),
+                    PromptRow.category_id == category_id,
                 )
             )
-            await s.execute(stmt)
-
-    async def get_default_usage(
-        self,
-        team_id: TeamId,
-        categories: list[str],
-        session: AsyncSession | None = None,
-    ) -> dict[str, int]:
-        """Return {category: session_count} for the given team and category list.
-
-        Missing rows (never used) are absent from the result; callers should
-        default to 0 for any category not present in the returned dict.
-        """
-
-        if not categories:
-            return {}
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                await s.execute(
-                    select(
-                        DefaultPromptUsageRow.category,
-                        DefaultPromptUsageRow.session_count,
-                    ).where(
-                        DefaultPromptUsageRow.team_id == str(team_id),
-                        DefaultPromptUsageRow.category.in_(categories),
-                    )
-                )
-            ).all()
-        return {row[0]: row[1] for row in rows}
+        return count or 0
 
     async def update_score(
         self,
@@ -447,7 +409,7 @@ class PromptStore:
             PromptRow.version,
             PromptRow.session_count,
             PromptRow.score,
-            PromptRow.category,
+            PromptRow.category_id,
         ).where(PromptRow.team_id == personal_str)
 
         team_q = select(
@@ -458,7 +420,7 @@ class PromptStore:
             PromptRow.version,
             PromptRow.session_count,
             PromptRow.score,
-            PromptRow.category,
+            PromptRow.category_id,
         ).where(PromptRow.team_id == team_str)
 
         combined = personal_q if personal_str == team_str else team_q
@@ -475,7 +437,7 @@ class PromptStore:
                 version=row[4],
                 session_count=row[5],
                 score=row[6],
-                category=row[7],
+                category_id=row[7],
             )
             for row in rows
         ]

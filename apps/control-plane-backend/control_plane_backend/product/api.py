@@ -9,7 +9,6 @@ from fastapi import (
     Form,
     HTTPException,
     Path,
-    Query,
     Request,
     UploadFile,
 )
@@ -33,6 +32,7 @@ from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
+    CreatePromptCategoryRequest,
     CreatePromptRequest,
     CreateSessionAttachmentRequest,
     CreateSessionRequest,
@@ -41,6 +41,7 @@ from control_plane_backend.product.schemas import (
     FrontendConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    PromptCategorySummary,
     PromptDetail,
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
@@ -49,6 +50,7 @@ from control_plane_backend.product.schemas import (
     SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
+    UpdatePromptCategoryRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
 )
@@ -62,10 +64,12 @@ from control_plane_backend.product.service import (
     build_frontend_bootstrap,
     build_frontend_config,
     create_prompt,
+    create_prompt_category,
     create_session,
     create_session_attachment,
     delete_or_defer_session,
     delete_prompt,
+    delete_prompt_category,
     delete_session_attachment,
     enroll_agent_instance,
     get_prompt,
@@ -74,6 +78,7 @@ from control_plane_backend.product.service import (
     list_agent_templates,
     list_context_prompts,
     list_managed_agent_instances,
+    list_prompt_categories,
     list_prompts,
     list_session_attachments,
     list_sessions,
@@ -84,6 +89,7 @@ from control_plane_backend.product.service import (
     unenroll_agent_instance,
     update_agent_instance,
     update_prompt,
+    update_prompt_category,
     update_prompt_score,
     update_session_activity,
 )
@@ -558,23 +564,21 @@ async def get_team_prompts(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
-    lang: str = "en",
 ) -> list[PromptSummary]:
     """
-    Return the team-scoped prompt library merged with the 9 platform system defaults.
+    Return the team-scoped prompt library.
 
     Why this endpoint exists:
     - prompt management must be a first-class control-plane product surface,
       independent from managed-agent instance CRUD
-    - system defaults are injected at query time so they are always present,
-      always translated, and never lost regardless of user actions
+    - every prompt is a real, editable team row (PROMPT-09) — new teams start
+      with a starter kit seeded at creation, not a read-only platform catalog
 
     How to use it:
-    - call with one team id and the UI language preference after authentication
-    - pass ``lang=fr`` or ``lang=en`` (defaults to ``en``)
+    - call with one team id after authentication
 
     Example:
-    - `GET /control-plane/v1/teams/personal/prompts?lang=fr`
+    - `GET /control-plane/v1/teams/personal/prompts`
     """
 
     team_id = await require_team_access(
@@ -583,7 +587,7 @@ async def get_team_prompts(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_prompts(team_id, deps, lang=lang)
+    return await list_prompts(team_id, deps)
 
 
 @router.post(
@@ -633,20 +637,18 @@ async def post_team_prompt(
 async def get_context_prompts_early(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
-    lang: str = Query(default="en"),
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[ContextPromptSummary]:
     """
-    Return the union of the calling user's personal prompts, the team's prompts,
-    and the platform default prompts. DB prompts are ordered by session_count DESC;
-    platform defaults are always appended after so that frequently-used custom prompts
-    appear first.
+    Return the calling user's personal prompts (personal space) or the team's
+    prompts (team space) for the chat-context picker, ordered by session_count
+    DESC (most-used first).
 
     Registered before ``/prompts/{prompt_id}`` so FastAPI does not swallow
     the literal segment ``context`` as a path parameter.
 
     Example:
-    - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context?lang=fr``
+    - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context``
     """
 
     team_id = await require_team_access(
@@ -655,7 +657,7 @@ async def get_context_prompts_early(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_context_prompts(user, team_id, deps, lang=lang)
+    return await list_context_prompts(user, team_id, deps)
 
 
 @router.get(
@@ -712,7 +714,7 @@ async def post_record_prompt_use(
     user: KeycloakUser = Depends(get_current_user),
 ) -> Response:
     """
-    Increment the session_count (or default_prompt_usage counter) for one prompt.
+    Increment the session_count for one prompt.
 
     Why this endpoint exists:
     - prompts can be selected from the chat context picker or from the agent-form
@@ -722,7 +724,6 @@ async def post_record_prompt_use(
 
     How to use it:
     - fire-and-forget after the user confirms a prompt selection in any picker
-    - works for both DB prompts (UUID ids) and default prompts ("default:<category>" ids)
 
     AUTHZ-05 post-implementation review finding: this write (it increments a
     persistent counter) used to fall back to the default `CAN_READ`, which
@@ -735,7 +736,7 @@ async def post_record_prompt_use(
     already gates, so no new capability is introduced for this one call site.
 
     Example:
-    - ``POST /control-plane/v1/teams/personal/prompts/default:doc-assist/use``
+    - ``POST /control-plane/v1/teams/personal/prompts/abc-123/use``
     """
 
     team_id = await require_team_access(
@@ -923,6 +924,145 @@ async def patch_team_prompt(
             detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
         )
     return result
+
+
+@router.get(
+    "/teams/{team_id}/prompt-categories",
+    response_model=list[PromptCategorySummary],
+    summary="List one team's prompt categories.",
+)
+async def get_team_prompt_categories(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[PromptCategorySummary]:
+    """
+    List one team's prompt categories, alphabetically.
+
+    Why this endpoint exists (PROMPT-09):
+    - categories are team-owned content, not a platform-wide taxonomy — every
+      team manages its own set, starting from a starter kit seeded at creation
+
+    Example:
+    - `GET /control-plane/v1/teams/bid-and-capture/prompt-categories`
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    return await list_prompt_categories(team_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/prompt-categories",
+    response_model=PromptCategorySummary,
+    status_code=201,
+    summary="Create one team-scoped prompt category.",
+)
+async def post_team_prompt_category(
+    team_id: Annotated[TeamId, Path()],
+    body: CreatePromptCategoryRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptCategorySummary:
+    """
+    Create one new prompt category for the given team.
+
+    Example:
+    - `POST /control-plane/v1/teams/bid-and-capture/prompt-categories`
+      `{ "name": "Support client" }`
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    try:
+        return await create_prompt_category(team_id, body, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.put(
+    "/teams/{team_id}/prompt-categories/{category_id}",
+    response_model=PromptCategorySummary,
+    summary="Rename one team-scoped prompt category.",
+)
+async def put_team_prompt_category(
+    team_id: Annotated[TeamId, Path()],
+    category_id: Annotated[str, Path(min_length=1)],
+    body: UpdatePromptCategoryRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptCategorySummary:
+    """
+    Rename one saved prompt category for the given team.
+
+    Example:
+    - `PUT /control-plane/v1/teams/bid-and-capture/prompt-categories/abc-123`
+      `{ "name": "Relation client" }`
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    try:
+        result = await update_prompt_category(team_id, category_id, body, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Category {category_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.delete(
+    "/teams/{team_id}/prompt-categories/{category_id}",
+    status_code=204,
+    response_model=None,
+    summary="Delete one team-scoped prompt category.",
+)
+async def delete_team_prompt_category(
+    team_id: Annotated[TeamId, Path()],
+    category_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """
+    Delete one saved prompt category for the given team.
+
+    Returns 409 when at least one prompt in the team still references this
+    category — the caller must reassign or delete those prompts first.
+
+    Example:
+    - `DELETE /control-plane/v1/teams/bid-and-capture/prompt-categories/abc-123`
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    try:
+        deleted = await delete_prompt_category(team_id, category_id, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Category {category_id!r} not found for team {team_id!r}.",
+        )
 
 
 @router.get(
@@ -1294,7 +1434,6 @@ async def post_prepare_execution(
     http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
-    lang: str = Query(default="en"),
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -1306,11 +1445,8 @@ async def post_prepare_execution(
     the pod authenticates the user (Keycloak JWT) and authorizes via OpenFGA.
 
     Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
-    when the session has a context prompt configured.
-
-    Pass ``lang`` (query param) so platform ``default:`` context prompts resolve in
-    the UI language — must match the value sent to ``/prompts/context``. Library
-    prompts are language-agnostic (stored text). Defaults to ``en``.
+    when the session has a context prompt configured. Library prompts are stored
+    verbatim (language-agnostic).
 
     HITL resume needs no special preparation — the runtime derives the resume action
     from the request's ``resume_payload``.
@@ -1338,7 +1474,6 @@ async def post_prepare_execution(
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
-            lang=lang,
             deps=deps,
             # Forwarded to the pod's chat-controls evaluation so the pod-side
             # auth sees the acting user — same pattern as the validate-config

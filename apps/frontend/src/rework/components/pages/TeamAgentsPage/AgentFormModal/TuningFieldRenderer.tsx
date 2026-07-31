@@ -19,7 +19,7 @@ import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibrarySco
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
@@ -62,13 +62,9 @@ export function TuningFieldRenderer({
   const [pickerExplicit, setPickerExplicit] = useState<boolean | null>(null);
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId: teamId ?? "", lang },
+    { teamId: teamId ?? "" },
     { skip: !teamId || !isPromptField },
   );
-
-  // Index by id so handlePickPrompt can use embedded text for default prompts
-  // without an extra API call (default IDs are synthetic, not real DB rows).
-  const contextPromptMap = useMemo(() => new Map(contextPrompts.map((p) => [p.id, p])), [contextPrompts]);
 
   const [fetchDetail, { isLoading: isLoadingDetail }] =
     useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
@@ -76,22 +72,13 @@ export function TuningFieldRenderer({
   const [recordUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
 
   const handlePickPrompt = async (promptId: string) => {
-    const cached = contextPromptMap.get(promptId);
-    if (cached?.text) {
-      // Default prompt — text is embedded in the summary, no fetch needed.
-      onChange(field.key, cached.text);
-      setPickerExplicit(null);
-    } else {
-      if (!teamId) return;
-      const result = await fetchDetail({ teamId, promptId });
-      if (!result.data) return;
-      onChange(field.key, result.data.text);
-      setPickerExplicit(null);
-    }
-    // Fire-and-forget: record usage for both default and custom prompts.
-    if (teamId) {
-      recordUse({ teamId, promptId }).catch(() => {});
-    }
+    if (!teamId) return;
+    const result = await fetchDetail({ teamId, promptId });
+    if (!result.data) return;
+    onChange(field.key, result.data.text);
+    setPickerExplicit(null);
+    // Fire-and-forget usage tracking.
+    recordUse({ teamId, promptId }).catch(() => {});
   };
 
   if (field.ui?.hide) return null;

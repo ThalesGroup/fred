@@ -163,7 +163,40 @@ async def _no_search_users(*_a, **_k) -> list:
     return []
 
 
-def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
+class _FakePromptCategoryStoreForSeed:
+    """Records `create()` calls; can be made to fail to exercise best-effort seeding."""
+
+    def __init__(self, *, raises: Exception | None = None) -> None:
+        self.created: list[tuple[str, str, str]] = []  # (category_id, team_id, name)
+        self._raises = raises
+
+    async def create(self, record):
+        if self._raises is not None:
+            raise self._raises
+        self.created.append((record.category_id, str(record.team_id), record.name))
+        return record
+
+
+class _FakePromptStoreForSeed:
+    """Records `create()` calls for prompt rows seeded at team creation."""
+
+    def __init__(self) -> None:
+        self.created: list[
+            tuple[str, str, str | None]
+        ] = []  # (prompt_id, team_id, category_id)
+
+    async def create(self, record):
+        self.created.append((record.prompt_id, str(record.team_id), record.category_id))
+        return record
+
+
+def _deps(
+    rebac: _FakeRebac,
+    store: _FakeMetadataStore,
+    *,
+    prompt_store: Any = None,
+    prompt_category_store: Any = None,
+):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
     config = MagicMock()
@@ -173,6 +206,10 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, lambda: store),
+        get_prompt_store=cast(Any, lambda: prompt_store or cast(Any, object())),
+        get_prompt_category_store=cast(
+            Any, lambda: prompt_category_store or cast(Any, object())
+        ),
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
@@ -233,6 +270,81 @@ async def test_create_team_rolls_back_metadata_when_structural_write_fails() -> 
     assert len(store.created) == 1
     assert store.deleted_ids == [store.created[0][0]]
     assert rebac.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_seed_starter_kit_creates_categories_and_linked_prompts() -> None:
+    """PROMPT-09: `_seed_starter_kit` (called by `create_team` right after the
+    ReBAC bootstrap succeeds) creates the 4 starter categories and the 4
+    starter prompts, each prompt correctly linked to its own category —
+    replacing the removed platform-wide default-prompt catalog with real,
+    team-owned, immediately editable content."""
+    from control_plane_backend.product.prompt_starter_kit import (
+        STARTER_CATEGORY_NAMES,
+        STARTER_PROMPTS,
+    )
+    from control_plane_backend.teams.service import _seed_starter_kit
+
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore()
+    category_store = _FakePromptCategoryStoreForSeed()
+    prompt_store = _FakePromptStoreForSeed()
+    team_id = TeamId("swiftpost-team-id")
+
+    await _seed_starter_kit(
+        team_id,
+        _deps(
+            rebac,
+            store,
+            prompt_store=prompt_store,
+            prompt_category_store=category_store,
+        ),
+    )
+
+    assert len(category_store.created) == len(STARTER_CATEGORY_NAMES)
+    seeded_names = {name for _cat_id, _team_id, name in category_store.created}
+    assert seeded_names == set(STARTER_CATEGORY_NAMES)
+    assert all(str(team_id) == tid for _cid, tid, _n in category_store.created)
+
+    category_id_by_name = {
+        name: cat_id for cat_id, _team_id, name in category_store.created
+    }
+    assert len(prompt_store.created) == len(STARTER_PROMPTS)
+    for spec in STARTER_PROMPTS:
+        match = next(
+            (
+                (pid, tid, cid)
+                for pid, tid, cid in prompt_store.created
+                if cid == category_id_by_name[spec.category_name]
+            ),
+            None,
+        )
+        assert match is not None, (
+            f"no seeded prompt linked to category {spec.category_name!r}"
+        )
+        _prompt_id, prompt_team_id, _cid = match
+        assert prompt_team_id == str(team_id)
+
+
+@pytest.mark.asyncio
+async def test_seed_starter_kit_failure_is_swallowed() -> None:
+    """Starter-kit seeding is best-effort: a category-store failure must not
+    propagate out of `_seed_starter_kit` — `create_team` calls it after the
+    ReBAC bootstrap already succeeded, and a team with an empty prompt
+    library is a degraded-but-valid state, unlike a missing ReBAC relation."""
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore()
+    failing_category_store = _FakePromptCategoryStoreForSeed(
+        raises=RuntimeError("db unavailable")
+    )
+
+    from control_plane_backend.teams.service import _seed_starter_kit
+
+    # Must not raise.
+    await _seed_starter_kit(
+        TeamId("swiftpost-team-id"),
+        _deps(rebac, store, prompt_category_store=failing_category_store),
+    )
 
 
 # --------------------------- can_rescue_team_admin ---------------------------

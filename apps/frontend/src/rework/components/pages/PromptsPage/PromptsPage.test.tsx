@@ -41,8 +41,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-router-dom", () => ({
-  useParams: () => ({ teamId: "team-1" }),
+vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
+  useSelectedTeam: () => ({ teamId: "team-1", selectedTeam: undefined }),
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
@@ -55,8 +55,7 @@ const PROMPT_SUMMARY = {
   id: "prompt-1",
   name: "Real Name",
   description: "Real description",
-  category: "other" as const,
-  is_default: false,
+  category_id: null,
 };
 
 // Stable object reference on purpose: the real backend response for the
@@ -66,7 +65,7 @@ const PROMPT_DETAIL = {
   team_id: "team-1",
   name: "Real Name",
   description: "Real description",
-  category: "other" as const,
+  category_id: null,
   tags: ["greeting"],
   text: "Real prompt text",
 };
@@ -79,15 +78,14 @@ const PROMPT_B_SUMMARY = {
   id: "prompt-2",
   name: "Other Name",
   description: "Other description",
-  category: "other" as const,
-  is_default: false,
+  category_id: null,
 };
 const PROMPT_B_DETAIL = {
   id: "prompt-2",
   team_id: "team-1",
   name: "Other Name",
   description: "Other description",
-  category: "other" as const,
+  category_id: null,
   tags: [],
   text: "Other prompt text",
 };
@@ -100,6 +98,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     isFetching: false,
     isUninitialized: false,
     isError: false,
+    refetch: async () => {},
+  }),
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({
+    data: [],
     refetch: async () => {},
   }),
   // Faithful reproduction of RTK Query's confirmed `data` persistence
@@ -137,10 +139,17 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation: () => [
     async () => ({ unwrap: async () => undefined }),
   ],
-}));
-
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useUsersByIdsQuery: () => ({ data: [] }),
+  usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+    { isLoading: false },
+  ],
+  usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+    { isLoading: false },
+  ],
+  useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+  ],
 }));
 
 import PromptsPage from "./PromptsPage";

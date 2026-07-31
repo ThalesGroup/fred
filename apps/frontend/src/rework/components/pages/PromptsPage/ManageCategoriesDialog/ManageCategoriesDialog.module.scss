@@ -1,0 +1,89 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 2rem auto;
+  border-radius: var(--radius-l);
+  background: var(--surface-main);
+  padding: var(--spacing-l);
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+/* ── Create row ────────────────────────────────────────────────────────────── */
+
+.createRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+}
+
+.createRow > :first-child {
+  flex: 1;
+}
+
+/* ── List ──────────────────────────────────────────────────────────────────── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  max-height: 20rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  padding-left: 16px;
+
+  > :first-child {
+    flex: 1;
+  }
+}
+
+.name {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--spacing-3xs);
+}
+
+.empty {
+  padding: var(--spacing-m) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}

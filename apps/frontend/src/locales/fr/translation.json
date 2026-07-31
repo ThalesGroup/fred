@@ -259,8 +259,7 @@
       "uses": "▷ {{count}}",
       "scope": {
         "personal": "Personnel",
-        "team": "Équipe",
-        "default": "Suggérés"
+        "team": "Équipe"
       }
     },
     "attachments": {
@@ -1214,20 +1213,25 @@
       "profile": "Profil"
     },
     "promptCategories": {
-      "analysis": "Analyse & évaluation",
-      "conversational": "Agent conversationnel",
-      "doc-assist": "Assistance documentaire",
-      "extraction": "Extraction & structuration",
-      "integration": "Intégration & outils (MCP)",
-      "migration": "Migration & transformation",
-      "monitoring": "Monitoring & supervision",
-      "other": "Autre / personnalisé",
-      "pickerSubtitle": "Une seule — elle définit l'icône et la couleur de la carte.",
-      "pickerTitle": "Catégorie de fonction",
-      "showLess": "Réduire",
-      "showMore": "Voir les {{count}} autres catégories...",
-      "summary": "Synthèse & résumé",
-      "writing": "Rédaction & génération"
+      "pickerTitle": "Catégorie",
+      "noCategory": "Sans catégorie",
+      "manage": {
+        "buttonAria": "Gérer les catégories",
+        "title": "Gérer les catégories",
+        "createPlaceholder": "Nouvelle catégorie...",
+        "create": "Créer",
+        "empty": "Aucune catégorie pour cette équipe.",
+        "saveAria": "Enregistrer",
+        "cancelEditAria": "Annuler",
+        "editAria": "Renommer {{name}}",
+        "deleteAria": "Supprimer {{name}}",
+        "deleteConfirmTitle": "Supprimer la catégorie ?",
+        "deleteConfirmMessage": "Supprimer \"{{name}}\" ? Cette action est irréversible.",
+        "createError": "Échec de la création de la catégorie",
+        "renameError": "Échec du renommage de la catégorie",
+        "deleteError": "Échec de la suppression de la catégorie",
+        "genericError": "Une erreur est survenue."
+      }
     },
     "releaseNotes": {
       "baseRelease": "Version de base Fred",
@@ -1832,8 +1836,10 @@
         }
       },
       "prompts": {
+        "card": {
+          "uses": "Utilisations : {{count}}"
+        },
         "clearSearch": "Effacer la recherche",
-        "close": "Fermer",
         "create": "Nouveau prompt",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "firstCreate": "Créer un prompt",

@@ -57,16 +57,12 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
-from control_plane_backend.product.default_prompts import (
-    DEFAULT_PROMPTS,
-    DefaultPromptSpec,
-)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
+    CreatePromptCategoryRequest,
     CreatePromptRequest,
     CreateSessionAttachmentRequest,
     CreateSessionRequest,
@@ -77,6 +73,7 @@ from control_plane_backend.product.schemas import (
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PermissionSummary,
+    PromptCategorySummary,
     PromptDetail,
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
@@ -85,8 +82,13 @@ from control_plane_backend.product.schemas import (
     SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
+    UpdatePromptCategoryRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
+)
+from control_plane_backend.prompts.category_store import (
+    PromptCategoryAlreadyExistsError,
+    PromptCategoryRecord,
 )
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
@@ -117,11 +119,6 @@ from control_plane_backend.teams.service import list_teams as list_teams_from_se
 from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
-
-_VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
-    spec.category for spec in DEFAULT_PROMPTS
-)
-_DEFAULT_PROMPT_BY_CATEGORY = {spec.category: spec for spec in DEFAULT_PROMPTS}
 
 # Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
 # persisted. Control-plane may cache the pod's per-capability evaluation
@@ -2743,7 +2740,6 @@ async def _resolve_context_prompt_text(
     deps: ProductServiceDependencies,
     *,
     team_ids: Sequence[TeamId],
-    lang: str = "en",
 ) -> str | None:
     """Resolve one attached chat-context prompt id to its current text.
 
@@ -2751,18 +2747,11 @@ async def _resolve_context_prompt_text(
     caller's authorized teams (active team plus personal team), matching the
     prompts the context picker can surface (PROMPTS.md §4/§6). A team-scoped
     lookup is used instead of a raw ``get(prompt_id)`` by primary key so a
-    session cannot resolve a prompt owned by an unrelated team. Synthetic
-    ``default:{category}`` ids resolve from the in-memory platform defaults.
-    Unknown / deleted / out-of-scope ids resolve to ``None`` and are skipped by
-    the caller, so a stale id never breaks an open conversation (PROMPTS.md §5).
+    session cannot resolve a prompt owned by an unrelated team. Unknown /
+    deleted / out-of-scope ids resolve to ``None`` and are skipped by the
+    caller, so a stale id never breaks an open conversation (PROMPTS.md §5).
     """
 
-    if prompt_id.startswith("default:"):
-        category = prompt_id.removeprefix("default:")
-        spec = _DEFAULT_PROMPT_BY_CATEGORY.get(category)
-        if spec is None:
-            return None
-        return spec.text("fr" if lang == "fr" else "en")
     store = deps.get_prompt_store()
     for team_id in team_ids:
         prompt = await store.get_for_team(prompt_id, team_id)
@@ -2777,7 +2766,6 @@ async def prepare_execution(
     team_id: TeamId,
     agent_instance_id: str,
     session_id: str | None = None,
-    lang: str = "en",
     deps: ProductServiceDependencies,
     authorization: str | None = None,
 ) -> ExecutionPreparation:
@@ -2865,7 +2853,7 @@ async def prepare_execution(
             resolved: list[str] = []
             for prompt_id in session_record.context_prompt_ids:
                 text = await _resolve_context_prompt_text(
-                    prompt_id, deps, team_ids=allowed_team_ids, lang=lang
+                    prompt_id, deps, team_ids=allowed_team_ids
                 )
                 if text:
                     resolved.append(text)
@@ -3032,7 +3020,7 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
         id=record.prompt_id,
         name=record.name,
         description=record.description,
-        category=PromptCategory(record.category) if record.category else None,
+        category_id=record.category_id,
         emoji=record.emoji,
         tags=record.tags,
         text_preview=preview or None,
@@ -3113,7 +3101,7 @@ async def create_prompt(
         team_id=team_id,
         name=request.name,
         description=request.description,
-        category=request.category.value,
+        category_id=request.category_id,
         emoji=request.emoji,
         tags=request.tags,
         text=request.text,
@@ -3129,71 +3117,35 @@ async def create_prompt(
     return _prompt_record_to_summary(created)
 
 
-def _system_default_to_summary(
-    spec: DefaultPromptSpec, lang: str, session_count: int = 0
-) -> PromptSummary:
-    """Project one system-default spec into a read-only PromptSummary.
-
-    For defaults, text_preview carries the FULL prompt text (no truncation)
-    so the frontend can show the complete content in a read-only modal without
-    a separate API call. The text is in-memory so there is no storage cost.
-    session_count is supplied by the caller from the default_prompt_usage table.
-    """
-    effective = "fr" if lang == "fr" else "en"
-    return PromptSummary(
-        id=f"default:{spec.category}",
-        name=spec.name(effective),
-        description=spec.description(effective),
-        category=PromptCategory(spec.category),
-        text_preview=spec.text(effective),
-        is_default=True,
-        created_by="Fred",
-        session_count=session_count,
-    )
-
-
 async def list_prompts(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     *,
-    lang: str = "en",
     limit: int = 100,
 ) -> list[PromptSummary]:
     """
-    List prompt-library records for one team, merging personal prompts with
-    the 9 platform system defaults.
+    List prompt-library records for one team.
 
     Why this function exists:
     - prompt management needs a stable control-plane listing surface separate
       from managed-agent CRUD
-    - system defaults are injected at query time (not stored per-user) so they
-      are always present, always translated, and never lost
 
     How to use it:
     - call from the team prompts route after team membership is checked
-    - pass `lang` from the frontend Accept-Language / UI preference
 
     Sort order:
     - session_count DESC (most-used first)
-    - on equal session_count: personal prompts float above system defaults
 
     Example:
-    - `prompts = await list_prompts(team_id, deps, lang="fr")`
+    - `prompts = await list_prompts(team_id, deps)`
     """
 
     store = deps.get_prompt_store()
     records = await store.list_by_team(team_id, limit=limit)
-    personal = [_prompt_record_to_summary(r) for r in records]
-    categories = [spec.category for spec in DEFAULT_PROMPTS]
-    usage = await store.get_default_usage(team_id, categories)
-    defaults = [
-        _system_default_to_summary(spec, lang, usage.get(spec.category, 0))
-        for spec in DEFAULT_PROMPTS
-    ]
-    combined = sorted(
-        personal + defaults, key=lambda p: (-p.session_count, p.is_default)
+    return sorted(
+        (_prompt_record_to_summary(r) for r in records),
+        key=lambda p: -p.session_count,
     )
-    return combined
 
 
 async def get_prompt(
@@ -3230,22 +3182,15 @@ async def record_prompt_use(
     """Increment usage counter for any prompt selected from a picker.
 
     Covers both the chat context picker and the agent-form prompt picker.
-    For default prompts (id starts with "default:") the counter lives in
-    default_prompt_usage; for DB prompts it lives in PromptRow.session_count.
     Silently skips if the prompt has been deleted.
     """
 
     store = deps.get_prompt_store()
-    if prompt_id.startswith("default:"):
-        category = prompt_id.removeprefix("default:")
-        if category in _VALID_DEFAULT_CATEGORIES:
-            await store.increment_default_usage(category, team_id)
-    else:
-        prompt = await store.get_for_team(prompt_id, team_id)
-        if prompt is None:
-            prompt = await store.get_for_team(prompt_id, personal_team_id(user.uid))
-        if prompt is not None:
-            await store.increment_session_count(prompt_id, prompt.team_id)
+    prompt = await store.get_for_team(prompt_id, team_id)
+    if prompt is None:
+        prompt = await store.get_for_team(prompt_id, personal_team_id(user.uid))
+    if prompt is not None:
+        await store.increment_session_count(prompt_id, prompt.team_id)
 
 
 async def update_prompt(
@@ -3281,7 +3226,7 @@ async def update_prompt(
             team_id,
             name=request.name,
             description=request.description,
-            category=request.category.value,
+            category_id=request.category_id,
             emoji=request.emoji,
             tags=request.tags,
             text=request.text,
@@ -3322,49 +3267,29 @@ async def list_context_prompts(
     user: KeycloakUser,
     team_id: TeamId,
     deps: ProductServiceDependencies,
-    *,
-    lang: str = "en",
 ) -> list[ContextPromptSummary]:
-    """Return the space's own prompts + platform defaults for the context picker.
+    """Return the space's own prompts for the chat-context picker.
 
     Personal prompts appear only in the personal space — a team context
-    exposes the team's prompts, never the caller's personal ones. DB records are
-    ordered by session_count DESC; defaults are appended at the end so
-    frequently-used custom prompts appear first.
+    exposes the team's prompts, never the caller's personal ones. Ordered by
+    session_count DESC (most-used first).
     """
 
     store = deps.get_prompt_store()
     records = await store.list_context_prompts(personal_team_id(user.uid), team_id)
-    effective_lang = "fr" if lang == "fr" else "en"
-    results: list[ContextPromptSummary] = [
+    return [
         ContextPromptSummary(
             id=r.prompt_id,
             name=r.name,
             description=r.description,
             scope=r.scope,  # type: ignore[arg-type]
-            category=PromptCategory(r.category) if r.category else None,
+            category_id=r.category_id,
             version=r.version,
             session_count=r.session_count,
             score=r.score,
         )
         for r in records
     ]
-    categories = [spec.category for spec in DEFAULT_PROMPTS]
-    usage = await store.get_default_usage(team_id, categories)
-    for spec in DEFAULT_PROMPTS:
-        results.append(
-            ContextPromptSummary(
-                id=f"default:{spec.category}",
-                name=spec.name(effective_lang),
-                description=spec.description(effective_lang),
-                scope="default",
-                category=PromptCategory(spec.category),
-                version=1,
-                session_count=usage.get(spec.category, 0),
-                text=spec.text(effective_lang),
-            )
-        )
-    return results
 
 
 async def promote_prompt(
@@ -3416,6 +3341,105 @@ async def update_prompt_score(
     if updated is None:
         return None
     return _prompt_record_to_summary(updated)
+
+
+# ---------------------------------------------------------------------------
+# Prompt categories (PROMPT-09) — team-owned, no global taxonomy
+# ---------------------------------------------------------------------------
+
+
+def _category_record_to_summary(
+    record: PromptCategoryRecord,
+) -> PromptCategorySummary:
+    return PromptCategorySummary(
+        id=record.category_id,
+        team_id=record.team_id,
+        name=record.name,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+async def list_prompt_categories(
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> list[PromptCategorySummary]:
+    """List one team's prompt categories, alphabetically."""
+
+    records = await deps.get_prompt_category_store().list_by_team(team_id)
+    return [_category_record_to_summary(r) for r in records]
+
+
+async def create_prompt_category(
+    team_id: TeamId,
+    request: CreatePromptCategoryRequest,
+    deps: ProductServiceDependencies,
+) -> PromptCategorySummary:
+    """Create one team-scoped prompt category. Raises 409 on a duplicate name."""
+
+    record = PromptCategoryRecord(
+        category_id=str(uuid4()),
+        team_id=team_id,
+        name=request.name,
+    )
+    try:
+        created = await deps.get_prompt_category_store().create(record)
+    except PromptCategoryAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Category name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    return _category_record_to_summary(created)
+
+
+async def update_prompt_category(
+    team_id: TeamId,
+    category_id: str,
+    request: UpdatePromptCategoryRequest,
+    deps: ProductServiceDependencies,
+) -> PromptCategorySummary | None:
+    """Rename one team-scoped prompt category.
+
+    Returns `None` when the category does not belong to `team_id`. Raises 409
+    on a duplicate name.
+    """
+
+    try:
+        updated = await deps.get_prompt_category_store().update(
+            category_id, team_id, name=request.name
+        )
+    except PromptCategoryAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Category name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    if updated is None:
+        return None
+    return _category_record_to_summary(updated)
+
+
+async def delete_prompt_category(
+    team_id: TeamId,
+    category_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Delete one team-scoped prompt category.
+
+    Returns `False` when the category does not belong to `team_id` (the route
+    maps this to 404). Raises `PromptRequestError(409)` when at least one
+    prompt in the team still references this category — the user-facing
+    requirement is a hard block, never an automatic reassignment.
+    """
+
+    in_use = await deps.get_prompt_store().count_by_category(team_id, category_id)
+    if in_use > 0:
+        raise PromptRequestError(
+            f"Category {category_id!r} is still used by {in_use} prompt(s) — "
+            "reassign or delete them first.",
+            http_status=409,
+        )
+    return await deps.get_prompt_category_store().delete(category_id, team_id)
 
 
 # ---------------------------------------------------------------------------

@@ -1532,7 +1532,6 @@ async def _run_import_body(
                     team_id=team_id,
                     name=name,
                     description=str(description)[:500] if description else None,
-                    category="other",
                     tags=[t for t in (doc.get("labels") or []) if isinstance(t, str)],
                     text=text,
                     created_by=str(author),

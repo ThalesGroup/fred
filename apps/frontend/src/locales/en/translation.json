@@ -259,8 +259,7 @@
       "uses": "▷ {{count}}",
       "scope": {
         "personal": "Personal",
-        "team": "Team",
-        "default": "Suggested"
+        "team": "Team"
       }
     },
     "attachments": {
@@ -1214,20 +1213,25 @@
       "profile": "Profile"
     },
     "promptCategories": {
-      "analysis": "Analysis & evaluation",
-      "conversational": "Conversational agent",
-      "doc-assist": "Document assistance",
-      "extraction": "Extraction & structuring",
-      "integration": "Integration & tools (MCP)",
-      "migration": "Migration & transformation",
-      "monitoring": "Monitoring & supervision",
-      "other": "Other / custom",
-      "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
-      "pickerTitle": "Functional category",
-      "showLess": "Show less",
-      "showMore": "Show {{count}} more categories...",
-      "summary": "Summary & synthesis",
-      "writing": "Writing & generation"
+      "pickerTitle": "Category",
+      "noCategory": "No category",
+      "manage": {
+        "buttonAria": "Manage categories",
+        "title": "Manage categories",
+        "createPlaceholder": "New category...",
+        "create": "Create",
+        "empty": "No categories for this team yet.",
+        "saveAria": "Save",
+        "cancelEditAria": "Cancel",
+        "editAria": "Rename {{name}}",
+        "deleteAria": "Delete {{name}}",
+        "deleteConfirmTitle": "Delete this category?",
+        "deleteConfirmMessage": "Remove \"{{name}}\"? This cannot be undone.",
+        "createError": "Failed to create category",
+        "renameError": "Failed to rename category",
+        "deleteError": "Failed to delete category",
+        "genericError": "Something went wrong."
+      }
     },
     "releaseNotes": {
       "baseRelease": "Base Fred release",
@@ -1832,8 +1836,10 @@
         }
       },
       "prompts": {
+        "card": {
+          "uses": "Uses: {{count}}"
+        },
         "clearSearch": "Clear search",
-        "close": "Close",
         "create": "New prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",

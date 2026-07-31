@@ -46,6 +46,12 @@ from control_plane_backend.scheduler.policies.retention_resolver import (
     FieldRetentionResolution,
     resolve_team_retention_view,
 )
+from control_plane_backend.product.prompt_starter_kit import (
+    STARTER_CATEGORY_NAMES,
+    STARTER_PROMPTS,
+)
+from control_plane_backend.prompts.category_store import PromptCategoryRecord
+from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
@@ -402,6 +408,71 @@ async def _list_teams(
     return list(selectable_teams.values())
 
 
+async def _seed_starter_kit(team_id: TeamId, deps: TeamServiceDependencies) -> None:
+    """Seed one brand-new team with its starter prompt categories + prompts (PROMPT-09).
+
+    Why this function exists:
+    - platform-wide default prompts are gone; every team now owns real,
+      editable rows from day one instead of borrowing a read-only global
+      catalog
+
+    How to use it:
+    - call once, right after a team's ReBAC relations are bootstrapped
+
+    Best-effort by design: unlike the ReBAC relation writes above (a team
+    without correct relations is an unsafe state and rolls back team
+    creation), a seeding failure only leaves the team with an empty prompt
+    library — degraded, not unsafe — so it is logged and swallowed rather
+    than failing the whole team-creation call.
+    """
+
+    try:
+        category_store = deps.get_prompt_category_store()
+        # Each category is independent of its siblings — only the prompt
+        # phase below depends on this one having finished (it needs every
+        # category_id to link prompts to their category).
+        created_categories = await asyncio.gather(
+            *(
+                category_store.create(
+                    PromptCategoryRecord(
+                        category_id=str(uuid4()), team_id=team_id, name=name
+                    )
+                )
+                for name in STARTER_CATEGORY_NAMES
+            )
+        )
+        category_id_by_name = {
+            record.name: record.category_id for record in created_categories
+        }
+
+        prompt_store = deps.get_prompt_store()
+        # Independent of each other too — each prompt only needs its own
+        # (already-resolved) category id, not any sibling prompt.
+        await asyncio.gather(
+            *(
+                prompt_store.create(
+                    PromptRecord(
+                        prompt_id=str(uuid4()),
+                        team_id=team_id,
+                        name=spec.name,
+                        description=spec.description,
+                        category_id=category_id_by_name.get(spec.category_name),
+                        text=spec.text,
+                        created_by=None,
+                    )
+                )
+                for spec in STARTER_PROMPTS
+            )
+        )
+    except Exception:
+        logger.warning(
+            "Failed to seed starter prompt kit for team %s — continuing with an "
+            "empty prompt library.",
+            team_id,
+            exc_info=True,
+        )
+
+
 async def create_team(
     user: KeycloakUser,
     request: CreateTeamRequest,
@@ -489,6 +560,8 @@ async def create_team(
         request.name,
         ", ".join(request.initial_team_admin_ids),
     )
+
+    await _seed_starter_kit(team_id, deps)
 
     # Build the response directly rather than through the permission-gated
     # `get_team_by_id` path: the calling platform_admin is not necessarily a

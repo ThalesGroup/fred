@@ -53,6 +53,28 @@
   height: 1.75rem;
   color: var(--on-surface-retreat);
   font-size: 18px;
+
+  /* Fallback hash-palette — 5 semantic families, tokens only (matches PromptCard) */
+  &[data-color="0"] {
+    background: var(--info-container);
+    color: var(--info);
+  }
+  &[data-color="1"] {
+    background: var(--success-container);
+    color: var(--success);
+  }
+  &[data-color="2"] {
+    background: var(--secondary-container);
+    color: var(--secondary);
+  }
+  &[data-color="3"] {
+    background: var(--warning-container);
+    color: var(--warning);
+  }
+  &[data-color="4"] {
+    background: var(--error-container);
+    color: var(--error);
+  }
 }
 
 .text {

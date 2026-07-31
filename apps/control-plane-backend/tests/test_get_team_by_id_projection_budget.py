@@ -133,6 +133,8 @@ def _deps(
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=lambda: cast(Any, store),
+        get_prompt_store=cast(Any, object),
+        get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),

@@ -840,7 +840,7 @@ async def test_prompt_store_create_list_update_and_delete(
             TeamId("personal"),
             name="Daily brief v2",
             description="Refined",
-            category="writing",
+            category_id="cat-writing",
             emoji=None,
             tags=[],
             text="Today is {today}. Session: {session_id}.",

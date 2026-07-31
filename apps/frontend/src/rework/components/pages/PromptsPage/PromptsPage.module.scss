@@ -25,13 +25,24 @@
   padding: 0 var(--spacing-l) var(--spacing-m);
 }
 
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.searchBar {
+  width: 100%;
+  max-width: 360px;
+}
+
 /* ── Prompt grid ────────────────────────────────────────────────────────────── */
 
 .promptList {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   grid-auto-rows: auto;
-  align-items: start;
+  align-items: stretch;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);
   overflow: auto;
@@ -60,11 +71,10 @@
 .modalCard {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
+  gap: 4px;
   margin: 2rem auto;
-  box-shadow: var(--shadow-l);
   border-radius: var(--radius-l);
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   padding: var(--spacing-l);
   width: min(48rem, calc(100vw - 2rem));
 }
@@ -73,6 +83,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: 16px;
 }
 
 .modalTitle {
@@ -83,7 +94,7 @@
 .modalContent {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-xs);
 }
 
 .modalFooter {
