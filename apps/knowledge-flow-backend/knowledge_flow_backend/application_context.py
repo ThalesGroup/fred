@@ -287,6 +287,7 @@ class ApplicationContext:
     _resource_store_instance: Optional[BaseResourceStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _content_store_instance: Optional[BaseContentStore] = None
+    _embedder_instance: Optional[Embeddings] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
@@ -611,9 +612,17 @@ class ApplicationContext:
         - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
         - Only secrets live in env; all other wiring lives in YAML.
         - Typed return (Embeddings) keeps the contract clear at call sites.
+
+        Cached like every other get_* factory in this class (get_file_store,
+        get_content_store, ...): get_embeddings() builds a real provider client on
+        each call, and this is called per-activity from several scheduler activities
+        (fast_store_vectors, delete_vectors, ...), not just once at startup.
         """
+        if self._embedder_instance is not None:
+            return self._embedder_instance
         cfg: ModelConfiguration = self.configuration.embedding_model
-        return get_embeddings(cfg)
+        self._embedder_instance = get_embeddings(cfg)
+        return self._embedder_instance
 
     def get_utility_model(self):
         if not self.configuration.chat_model:

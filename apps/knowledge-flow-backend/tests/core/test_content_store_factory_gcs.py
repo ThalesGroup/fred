@@ -45,3 +45,15 @@ def test_get_content_store_builds_once_and_reuses_the_instance(app_context: Appl
     second = app_context.get_content_store()
 
     assert first is second
+
+
+def test_get_embedder_builds_once_and_reuses_the_instance(app_context: ApplicationContext):
+    """`get_embedder()` was the one get_* factory in ApplicationContext without a cache
+    slot, unlike every sibling (get_file_store, get_content_store, ...) — it's called
+    per-activity from several scheduler activities (fast_store_vectors, delete_vectors,
+    ...), not just once at startup, so rebuilding the underlying provider client on
+    every call matters just like the content-store case above."""
+    first = app_context.get_embedder()
+    second = app_context.get_embedder()
+
+    assert first is second

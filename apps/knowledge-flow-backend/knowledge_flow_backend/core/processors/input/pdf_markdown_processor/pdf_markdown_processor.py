@@ -32,6 +32,7 @@ from temporalio import activity
 
 from knowledge_flow_backend.application_context import get_configuration
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
 from knowledge_flow_backend.core.processors.input.common.ocr.paddle_ocr import PaddleOCRmodel
@@ -81,6 +82,13 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         # sessions from disk, so it must not be rebuilt per document either.
         self._ocr_model: PaddleOCRmodel | None = None
         self._ocr_model_lock = threading.Lock()
+        # Same reasoning again, for the vision-model image describer (see
+        # _get_image_describer): build_image_describer -> get_model() constructs a
+        # real provider client per call — for Vertex-backed providers specifically,
+        # fred-core's factory does not share the process-wide httpx pool the way it
+        # does for OpenAI/Azure, so each call builds its own auth + connection pool.
+        self._image_describer: BaseImageDescriber | None = None
+        self._image_describer_lock = threading.Lock()
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -193,6 +201,22 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     self._ocr_model = PaddleOCRmodel()
         return self._ocr_model
 
+    def _get_image_describer(self, vision_cfg) -> BaseImageDescriber | None:
+        """Build the vision-model image describer once and reuse it across documents.
+
+        Mirrors _get_extractor/_get_ocr_model above: build_image_describer() ->
+        get_model() constructs a real provider client (auth + connection pool) on
+        every call — rebuilding it per document reloads that on every file, on every
+        one of the worker's concurrent activity threads. Dormant under the shipped
+        default (`process_images: false`), but one config flag away from firing on
+        every document, same as the two already-fixed bugs in this file.
+        """
+        if self._image_describer is None:
+            with self._image_describer_lock:
+                if self._image_describer is None:
+                    self._image_describer = build_image_describer(vision_cfg)
+        return self._image_describer
+
     def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
         """Guarded KPI timer for the per-image OCR/VLM path.
 
@@ -236,7 +260,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         vision_model_name = "unknown"
         vision_model = get_configuration().vision_model
         if profile_cfg.process_images and vision_model:
-            image_describer = build_image_describer(vision_model)
+            image_describer = self._get_image_describer(vision_model)
             use_image_describer = True
             vision_model_name = vision_model.name or "unknown"
         if profile_cfg.pdf.do_ocr:
