@@ -8,7 +8,11 @@ absent from the autogenerate metadata, so nothing compared the two. REASON-01
 added that import (the table has a migration; it belongs under drift detection),
 which surfaced the drift as a pending ``modify_comment`` in ``alembic check``.
 
-Pure metadata change: COMMENT ON COLUMN touches no rows and takes no heavy lock.
+On PostgreSQL this is a pure metadata change: COMMENT ON COLUMN touches no rows
+and takes no heavy lock. `batch_alter_table` is required for SQLite, which has
+no COMMENT DDL at all — batch mode recreates the table and drops the comment on
+the floor rather than failing to compile `ColumnComment`. Same shape as
+f824bb94e60d, which syncs comments on agent_instance/team_capability_settings.
 
 Revision ID: d8e4f7a2c1b9
 Revises: a7c3d91f2b40
@@ -34,23 +38,23 @@ COMMENT = "JSON-serialized list of TeamOperationRouteRule (fred_sdk.contracts.co
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.alter_column(
-        "team_routing_policy",
-        "operation_rules_json",
-        existing_type=sa.Text(),
-        existing_nullable=False,
-        existing_server_default=sa.text("'[]'"),
-        comment=COMMENT,
-    )
+    with op.batch_alter_table("team_routing_policy") as batch_op:
+        batch_op.alter_column(
+            "operation_rules_json",
+            existing_type=sa.TEXT(),
+            existing_nullable=False,
+            existing_server_default=sa.text("'[]'"),
+            comment=COMMENT,
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.alter_column(
-        "team_routing_policy",
-        "operation_rules_json",
-        existing_type=sa.Text(),
-        existing_nullable=False,
-        existing_server_default=sa.text("'[]'"),
-        comment=None,
-    )
+    with op.batch_alter_table("team_routing_policy") as batch_op:
+        batch_op.alter_column(
+            "operation_rules_json",
+            existing_type=sa.TEXT(),
+            existing_nullable=False,
+            existing_server_default=sa.text("'[]'"),
+            comment=None,
+        )
