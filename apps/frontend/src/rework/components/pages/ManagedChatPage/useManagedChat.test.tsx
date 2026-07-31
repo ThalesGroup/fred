@@ -49,6 +49,13 @@ vi.mock("react-i18next", () => ({
 // Reactive stand-in for react-router-dom's useSearchParams: bindSessionId
 // must actually update `sessionId` across renders for the retry tests below
 // (a retry re-reads `sessionId` from this, exactly like the real hook).
+// `capturedSetSearchParams` additionally lets a test jump directly back to an
+// arbitrary previously-visited sid (e.g. clicking a session in a sidebar) —
+// something `startNewConversation()`/`handleSend()` alone can't simulate,
+// since both only ever mint a brand-new sid, never rebind to an existing one.
+let capturedSetSearchParams:
+  | ((updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams)) => void)
+  | undefined;
 vi.mock("react-router-dom", () => ({
   useSearchParams: () => {
     const [params, setParams] = useState(new URLSearchParams());
@@ -58,6 +65,7 @@ vi.mock("react-router-dom", () => ({
     ) => {
       setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
     };
+    capturedSetSearchParams = setSearchParams;
     return [params, setSearchParams] as const;
   },
 }));
@@ -421,6 +429,75 @@ describe("useManagedChat — session write reliability", () => {
     });
 
     expect(registerSessionCalls).toHaveLength(2);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("two concurrently-failing new sessions can each be retried independently", async () => {
+    // Regression test: sessionCreateFailedIdRef used to be a single scalar
+    // shared across ALL sessions — session B's failure silently overwrote
+    // session A's, so returning to A skipped retrying its creation
+    // (needsCreate false) while A's write tail stayed permanently failed,
+    // making it unsendable forever. Fixed by keying it per sid, like
+    // writeTailsRef.
+    mount();
+    registerSessionImpl = async () => {
+      throw new Error("transient failure");
+    };
+
+    // Session A: creation fails.
+    act(() => {
+      latest.setInput("message for A");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    const sidA = latest.sessionId;
+    expect(sidA).not.toBeNull();
+    expect(registerSessionCalls).toHaveLength(1);
+
+    // Navigate away and start session B — its creation ALSO fails, while the
+    // impl is still throwing.
+    act(() => {
+      latest.startNewConversation();
+    });
+    act(() => {
+      latest.setInput("message for B");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    const sidB = latest.sessionId;
+    expect(sidB).not.toBeNull();
+    expect(sidB).not.toBe(sidA);
+    expect(registerSessionCalls).toHaveLength(2);
+
+    // The transient failure has cleared — creation succeeds going forward.
+    registerSessionImpl = async () => ({});
+
+    // Navigate directly back to session A (e.g. clicking it in a sidebar) —
+    // not via startNewConversation, which would mint an unrelated third sid.
+    act(() => {
+      capturedSetSearchParams?.(new URLSearchParams({ session: sidA! }));
+    });
+    rerender();
+    expect(latest.sessionId).toBe(sidA);
+
+    act(() => {
+      latest.setInput("retry for A");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    // A's earlier failure must still be remembered independently of B's:
+    // creation is retried (a 3rd registerSession call, for sid A again), and
+    // the retried send actually goes through.
+    expect(registerSessionCalls).toHaveLength(3);
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 

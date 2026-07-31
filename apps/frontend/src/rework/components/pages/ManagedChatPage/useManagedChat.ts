@@ -195,12 +195,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [],
   );
 
-  // The sid bound to the URL whose creation POST is known to have failed (and
-  // hasn't since succeeded). `bindSessionId` runs eagerly, before the POST
-  // settles, so on retry `sessionId` already equals this sid — without this,
-  // a retry would see "session already bound" and skip re-creating the row
-  // entirely, then send against a session that was never actually persisted.
-  const sessionCreateFailedIdRef = useRef<string | null>(null);
+  // Every sid bound to the URL whose creation POST is known to have failed
+  // (and hasn't since succeeded). `bindSessionId` runs eagerly, before the
+  // POST settles, so on retry `sessionId` already equals this sid — without
+  // this, a retry would see "session already bound" and skip re-creating the
+  // row entirely, then send against a session that was never actually
+  // persisted. Keyed by sid (not a single scalar, matching `writeTailsRef`'s
+  // per-sid keying) — different sessions can each be creating concurrently
+  // (e.g. two "new conversation" starts in quick succession), and a single
+  // shared slot would let one session's failure silently overwrite another's:
+  // the forgotten session's own write tail stays permanently failed, but
+  // `needsCreate` would no longer recognize it, so it can never be retried.
+  const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
 
   // Stability loop, not a single snapshot await: `Promise.all` over a
   // point-in-time collection can miss a write enqueued WHILE the flush is
@@ -342,12 +348,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
           }).unwrap(),
         (error) => {
-          sessionCreateFailedIdRef.current = sid;
+          sessionCreateFailedIdRef.current.add(sid);
           notifySessionSaveFailed(error);
         },
       ).then((result) => {
-        if (result.ok && sessionCreateFailedIdRef.current === sid) {
-          sessionCreateFailedIdRef.current = null;
+        if (result.ok) {
+          sessionCreateFailedIdRef.current.delete(sid);
         }
       });
     },
@@ -356,7 +362,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const ensureSessionForAttachments = useCallback((): string => {
     let sid = sessionId;
-    const needsCreate = !sid || sid === sessionCreateFailedIdRef.current;
+    const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
     if (!sid) {
       sid = uuidv4();
       skipResetOnSessionBindRef.current = true;
@@ -398,7 +404,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       // confirms success — clearing it eagerly would lose the user's message if
       // session creation fails, forcing a retype on retry.
       let sid = sessionId;
-      const needsCreate = !sid || sid === sessionCreateFailedIdRef.current;
+      const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
       if (!sid) {
         sid = uuidv4();
         console.debug(`[useManagedChat] handleSend() — no session, creating new sid=${sid}, calling bindSessionId`);
