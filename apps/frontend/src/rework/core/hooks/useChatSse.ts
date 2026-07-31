@@ -764,11 +764,45 @@ export function useChatSse(
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
+      // Takes over `abortRef` from outside, exactly like abort()/reset() do —
+      // so it must also unconditionally free preflightOwnerRef the same way
+      // they do. Without this, a send() still preflighting when this fires
+      // keeps "owning" preflightOwnerRef until its own stale continuation
+      // happens to resume and notice it was aborted — which can be
+      // arbitrarily late, since prepare-execution isn't actually
+      // signal-cancellable — silently dropping every send() attempt made in
+      // the meantime.
+      preflightOwnerRef.current = null;
 
-      await KeyCloakService.ensureFreshToken(30);
+      try {
+        await KeyCloakService.ensureFreshToken(30);
+      } catch (err) {
+        if (!ac.signal.aborted) {
+          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
+        }
+        return;
+      }
+      if (ac.signal.aborted) {
+        return;
+      }
       const token = KeyCloakService.GetToken() ?? "";
 
-      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      let prep: ExecutionPreparation;
+      try {
+        prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      } catch (err) {
+        if (!ac.signal.aborted) {
+          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
+        }
+        return;
+      }
+      // This attempt may have been superseded (by a new send() or another
+      // sendHitlResume) while prepare-execution was in flight — don't apply
+      // a stale response's chat controls/capability URLs over the current
+      // owner's state.
+      if (ac.signal.aborted) {
+        return;
+      }
       applyPreparation(prep);
 
       const sessionId = pending.session_id;

@@ -98,6 +98,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   ],
 }));
 
+import type { AwaitingHumanEvent } from "../../../slices/agentic/agenticOpenApi";
 import { useChatSse } from "./useChatSse";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
@@ -373,6 +374,47 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // Only B's turn ever actually started.
     expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     expect(latest.messages).toHaveLength(1);
+    expect(latest.waitResponse).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume taking over from a preflighting send() frees the lock immediately — a later send is not blocked", async () => {
+    // Regression test: sendHitlResume used to reassign abortRef without
+    // touching preflightOwnerRef, so a send() it superseded stayed the
+    // lock's "owner" until its own stale continuation happened to resume —
+    // which could be arbitrarily late, silently dropping any send() fired
+    // in the meantime.
+    flushPendingWrites = async () => true;
+    mount();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+
+    const pendingHitl: AwaitingHumanEvent = {
+      type: "awaiting_human",
+      session_id: "session-1",
+      exchange_id: "exch-1",
+      payload: { checkpoint_id: "cp-1" },
+    };
+
+    await act(async () => {
+      // A starts preflighting — synchronously acquires the reentrancy lock.
+      const sendA = latest.send("hello", "session-1");
+      // The pending HITL card is answered while A is still preflighting.
+      // Fired in the same synchronous tick, before A's own stale
+      // continuation has had a chance to run — exactly the window the fix
+      // targets.
+      const hitlPromise = latest.sendHitlResume(pendingHitl, "yes");
+      // A third attempt, fired immediately after sendHitlResume takes over
+      // — must NOT be dropped. Before the fix, preflightOwnerRef still
+      // pointed at A's (aborted, but not yet self-cleaned) controller here.
+      const sendC = latest.send("hello", "session-1");
+      await Promise.all([sendA, hitlPromise, sendC]);
+    });
+
+    // Neither A (cancelled by the HITL takeover) nor the HITL resume itself
+    // (cancelled in turn by the third send) ever reached prepare-execution
+    // — only the third send's own call remains.
+    expect(prepareExecutionCalls).toHaveLength(1);
+    expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     expect(latest.waitResponse).toBe(false);
     fetchSpy.mockRestore();
   });
