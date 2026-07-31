@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -60,6 +60,20 @@ export default function HelpArticle({ lang, section, page }: HelpArticleProps) {
     });
   };
 
+  // Cross-links in the markdown render as plain <a href="/help/...">, which
+  // trigger a full-page reload. Delegate clicks on same-origin absolute links
+  // to the router so navigation between help pages stays instant. Modified
+  // clicks (new tab, middle-click) and external/hash links fall through to the
+  // browser's default handling.
+  const onContentClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const anchor = (e.target as HTMLElement).closest("a");
+    const href = anchor?.getAttribute("href");
+    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
+    e.preventDefault();
+    navigate(href);
+  };
+
   return (
     <article className={styles.article}>
       <div className={styles.articleTop}>
@@ -72,7 +86,9 @@ export default function HelpArticle({ lang, section, page }: HelpArticleProps) {
           onClick={copyPageLink}
         />
       </div>
-      <MarkdownRenderer text={page.body} headingAnchors />
+      <div onClick={onContentClick}>
+        <MarkdownRenderer text={page.body} headingAnchors />
+      </div>
     </article>
   );
 }

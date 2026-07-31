@@ -17,7 +17,7 @@
   flex-shrink: 0;
   flex-direction: column;
   gap: var(--spacing-3xs);
-  background: var(--surface-container);
+  background: var(--surface-container-high);
   padding: var(--spacing-s);
   width: 280px;
   overflow-y: auto;
@@ -26,8 +26,15 @@
 
 .sectionHeader {
   display: flex;
+  // The rail scrolls; its rows must keep their exact height instead of being
+  // squeezed by the column's flex-shrink when the content overflows.
+  flex-shrink: 0;
   align-items: center;
-  padding: 0 var(--spacing-xs);
+  // content-box so the padding-bottom adds *below* the 32px header row
+  // (a real gap before the first item) instead of shrinking it under
+  // the global border-box.
+  box-sizing: content-box;
+  padding: 0 var(--spacing-xs) var(--spacing-2xs);
   height: 2rem;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
@@ -37,4 +44,13 @@
    header so the rail doesn't start with a gap. */
 .sectionHeader:not(:first-child) {
   margin-top: var(--spacing-s);
+}
+
+/* Denser rows here only — the shared NavigationMenuItem stays 32px elsewhere
+   (team rail, admin). Its items render as direct <button> children of the
+   rail. flex-shrink: 0 stops the overflowing column from squeezing the fixed
+   24px height down to the items' content height. */
+.sidebar > button {
+  flex-shrink: 0;
+  height: 24px;
 }
