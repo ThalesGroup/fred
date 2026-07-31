@@ -74,12 +74,30 @@ export type ChatSseCallbacks = {
   onAwaitingHuman?: (event: AwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
-   * Ordering barrier awaited immediately before prepare-execution. Lets the
-   * caller flush any in-flight session writes (row creation, context-prompt
-   * PATCH) so the control-plane resolves chat context from the freshly
-   * persisted session instead of a stale/empty set on the first turn.
+   * Fires the instant this turn actually starts — right before the
+   * optimistic user message is created and streaming begins, once
+   * prepare-execution has succeeded. Callers use this (not a fixed point
+   * before send() is even called) to clear composer input/attachments, so a
+   * prepare-execution failure (flush barrier, 404/503/network) never wipes
+   * text or attachments the user still needs for a retry. Deliberately a
+   * distinct, positive-only signal rather than a second error callback: by
+   * default (this never firing) nothing has been cleared, so there is
+   * nothing to "undo" on failure — no `onPreparationFailed` needed, `onError`
+   * already covers showing the failure itself.
    */
-  flushPendingWrites?: () => Promise<void>;
+  onTurnStarted?: () => void;
+  /**
+   * Ordering barrier awaited immediately before prepare-execution, keyed on
+   * the session id this turn is about to use. Lets the caller flush any
+   * in-flight session writes (row creation, context-prompt PATCH) for THAT
+   * session so the control-plane resolves chat context from the freshly
+   * persisted session instead of a stale/empty set on the first turn.
+   *
+   * Resolves `false` when any tracked write failed — `send()` must then abort
+   * before calling prepare-execution rather than proceed against a session
+   * the caller's own writes never actually committed to.
+   */
+  flushPendingWrites?: (sessionId: string) => Promise<boolean>;
 };
 
 /**
@@ -108,6 +126,7 @@ export function useChatSse(
     onTurnPersisted,
     onAwaitingHuman,
     onError,
+    onTurnStarted,
     flushPendingWrites,
   } = params;
 
@@ -116,6 +135,25 @@ export function useChatSse(
   const dispatch = useDispatch();
 
   const abortRef = useRef<AbortController | null>(null);
+  // Synchronous reentrancy lock for the preflight phase of send() (token
+  // refresh → flush → prepare-execution, i.e. everything before
+  // onTurnStarted). Checked and set BEFORE any await, so two Enters fired
+  // back to back can never both reach prepare-execution — the second is
+  // dropped outright, not turned into a cancel/replace of the first. Once
+  // the preflight succeeds and the turn genuinely starts, this is released
+  // and the existing "a new send() aborts the current stream" behavior
+  // (via abortRef) takes back over, unchanged.
+  //
+  // Holds the OWNING attempt's own AbortController, not a bare boolean —
+  // ownership matters because an aborted attempt can resume its cleanup
+  // (releasePreflightLock, below) arbitrarily late, well after a later
+  // send() has already become the current owner. A boolean flag would let
+  // that stale cleanup wrongly clear the NEW owner's lock (the exact bug: A
+  // aborted, B starts, A's suspended await resumes and releases B's lock,
+  // letting a third send() sneak in concurrently with B). Comparing against
+  // `ac` — this attempt's own controller — makes a late cleanup a no-op
+  // once someone else owns the slot.
+  const preflightOwnerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -158,6 +196,11 @@ export function useChatSse(
     console.debug("[useChatSse] reset() called — clearing all state");
     abortRef.current?.abort();
     abortRef.current = null;
+    // An explicit reset always cancels whatever attempt currently owns the
+    // lock (if any) and immediately frees the slot for the next send() —
+    // unconditional, unlike releasePreflightLock's ownership-checked release,
+    // because this IS the current owner's cancellation, issued from outside.
+    preflightOwnerRef.current = null;
     setWaitResponse(false);
     thoughtBufsRef.current.clear();
     setAll([]);
@@ -169,6 +212,10 @@ export function useChatSse(
     console.debug("[useChatSse] abort() called — clearing waitResponse");
     abortRef.current?.abort();
     abortRef.current = null;
+    // Otherwise an explicit Stop during preflight would leave the lock held
+    // forever, blocking every subsequent Send. Unconditional for the same
+    // reason as in reset() above.
+    preflightOwnerRef.current = null;
     setWaitResponse(false);
   }, []);
 
@@ -494,51 +541,161 @@ export function useChatSse(
         `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} input="${input.slice(0, 40)}"`,
       );
 
+      // Synchronous reentrancy lock — checked and acquired before the first
+      // await. A second Enter fired while this call is still preflighting
+      // is dropped here, outright: not cancelled, not merged, not queued.
+      if (preflightOwnerRef.current) {
+        console.debug(`[useChatSse][${sendId}] IGNORED — a send() is already preflighting`);
+        return;
+      }
+
       if (abortRef.current) {
         console.debug(`[useChatSse][${sendId}] aborting previous in-flight request`);
         abortRef.current.abort();
       }
       const ac = new AbortController();
       abortRef.current = ac;
+      preflightOwnerRef.current = ac;
+      // Immediately non-reentrant, not only once prepare-execution succeeds —
+      // the send button disables right away, matching the synchronous lock.
+      setWaitResponse(true);
 
-      await KeyCloakService.ensureFreshToken(30);
+      // Releases the preflight lock on every early-return path below —
+      // INCLUDING every error path (a rejected await must never leave the
+      // lock or waitResponse stuck, or the composer becomes permanently
+      // unusable). Ownership-checked: only touches preflightOwnerRef/
+      // abortRef/waitResponse if THIS attempt (`ac`) still owns them. An
+      // explicit abort()/reset() (Stop button, or a later attempt that took
+      // over after this one was cancelled) may already have handed the slot
+      // to someone else — this attempt's cleanup, however late it resumes,
+      // must then be a complete no-op on shared state.
+      const releasePreflightLock = () => {
+        if (preflightOwnerRef.current === ac) {
+          preflightOwnerRef.current = null;
+        }
+        if (abortRef.current === ac) {
+          abortRef.current = null;
+          setWaitResponse(false);
+        }
+      };
+
+      // Uniform handling for every preflight-stage failure (token refresh,
+      // write-barrier flush, prepare-execution + its synchronous response
+      // processing): release this attempt's own state, then — unless the
+      // failure is really just this attempt having been cancelled (Stop /
+      // reset while the stage was in flight, in which case no toast is
+      // shown for an intentional cancellation) — surface it via onError.
+      // Always returns normally: no stage here is allowed to let a
+      // rejection escape send() as an unhandled promise rejection, since
+      // callers (handleSend) do not await/catch send()'s own promise.
+      const failPreflight = (stage: string, err: unknown) => {
+        releasePreflightLock();
+        if (ac.signal.aborted) {
+          console.debug(`[useChatSse][${sendId}] ${stage} settled after cancellation — no toast`);
+          return;
+        }
+        const msg = (err as Error)?.message ?? String(err);
+        console.error(`[useChatSse][${sendId}] ${stage} failed — ${msg}`);
+        onError?.(`Could not prepare this turn: ${msg}`);
+      };
+
+      try {
+        await KeyCloakService.ensureFreshToken(30);
+      } catch (err) {
+        failPreflight("token refresh", err);
+        return;
+      }
+      if (ac.signal.aborted) {
+        console.debug(`[useChatSse][${sendId}] aborted during token refresh — never reaching onTurnStarted`);
+        releasePreflightLock();
+        return;
+      }
       const token = KeyCloakService.GetToken() ?? "";
 
       // Ordering barrier: any in-flight session row creation and context-prompt
       // PATCH must commit before prepare-execution reads them, otherwise the
       // first turn is prepared from a stale/empty prompt set while the composer
       // chip already shows the new selection. No-op latency when already settled.
-      await flushPendingWrites?.();
+      // A `false` result means a tracked write failed — never call
+      // prepare-execution against a session the caller's writes never actually
+      // committed to; the failure already surfaced its own toast at the write
+      // site, this just stops the turn from starting.
+      let writesCommitted: boolean | undefined;
+      try {
+        writesCommitted = await flushPendingWrites?.(sessionId ?? "");
+      } catch (err) {
+        failPreflight("session write flush", err);
+        return;
+      }
+      if (ac.signal.aborted) {
+        console.debug(`[useChatSse][${sendId}] aborted during flush — never reaching onTurnStarted`);
+        releasePreflightLock();
+        return;
+      }
+      if (writesCommitted === false) {
+        console.debug(`[useChatSse][${sendId}] aborting — a pending session write failed`);
+        releasePreflightLock();
+        return;
+      }
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
       // Pass the session id so the control-plane can resolve and concatenate the
       // session's attached chat-context prompts into `context_prompt_text`, and
       // the UI lang so platform `default:` prompts resolve in the picker's
       // language (library prompts are language-agnostic).
-      const prep = await prepareExecution({
-        teamId,
-        agentInstanceId,
-        lang,
-        ...(sessionId ? { sessionId } : {}),
-      }).unwrap();
-      console.debug(
-        `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
-      );
-      applyPreparation(prep);
+      let prep: ExecutionPreparation;
+      let effectiveContext: RuntimeContext;
+      let exchangeId: string;
+      let effectiveSessionId: string;
+      try {
+        prep = await prepareExecution({
+          teamId,
+          agentInstanceId,
+          lang,
+          ...(sessionId ? { sessionId } : {}),
+        }).unwrap();
+        if (ac.signal.aborted) {
+          console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
+          releasePreflightLock();
+          return;
+        }
+        console.debug(
+          `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
+        );
+        applyPreparation(prep);
 
-      // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
-      // team carried in runtime_context (no signed grant). Always include team_id.
-      const effectiveContext = mergeRoutingPolicy(
-        mergeContextPromptText(
-          { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
-          prep.context_prompt_text,
-        ),
-        prep.chat_default_profile_id,
-        prep.operation_route_rules,
-      );
+        // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
+        // team carried in runtime_context (no signed grant). Always include team_id.
+        effectiveContext = mergeRoutingPolicy(
+          mergeContextPromptText(
+            { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
+            prep.context_prompt_text,
+          ),
+          prep.chat_default_profile_id,
+          prep.operation_route_rules,
+        );
+        exchangeId = uuidv4();
+        effectiveSessionId = sessionId ?? "draft";
+      } catch (err) {
+        // Was previously unguarded: a rejection here (e.g. an unknown/foreign
+        // session_id, an unreachable runtime source) propagated as an
+        // unhandled promise rejection — silently dropping the turn with no
+        // toast and `waitResponse` never set, so the composer looked idle
+        // with no sign the message never sent.
+        failPreflight("prepare-execution", err);
+        return;
+      }
 
-      const exchangeId = uuidv4();
-      const effectiveSessionId = sessionId ?? "draft";
+      // The turn is now genuinely starting. Preflight is over — release the
+      // reentrancy lock so the existing "a new send() replaces the current
+      // stream" behavior (via abortRef, below) governs from here on,
+      // unchanged. This is also the caller's cue to clear composer
+      // input/attachments; any earlier failure or cancellation returned
+      // above without ever reaching this point, leaving them untouched.
+      if (preflightOwnerRef.current === ac) {
+        preflightOwnerRef.current = null;
+      }
+      onTurnStarted?.();
 
       // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
@@ -553,8 +710,7 @@ export function useChatSse(
       };
       messagesRef.current = upsertOne(messagesRef.current, userMsg);
       setMessages([...messagesRef.current]);
-      setWaitResponse(true);
-      console.debug(`[useChatSse][${sendId}] waitResponse=true — starting streamToMessages`);
+      console.debug(`[useChatSse][${sendId}] starting streamToMessages`);
 
       try {
         await streamToMessages(
@@ -590,7 +746,17 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites, applyPreparation],
+    [
+      agentInstanceId,
+      teamId,
+      lang,
+      prepareExecution,
+      streamToMessages,
+      onError,
+      onTurnStarted,
+      flushPendingWrites,
+      applyPreparation,
+    ],
   );
 
   const sendHitlResume = useCallback(

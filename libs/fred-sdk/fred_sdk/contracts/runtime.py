@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
 
+from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field
@@ -860,6 +861,15 @@ class RuntimeServices:
     # scoped folder/document tree listing and on-demand summarization.
     document_tree: DocumentTreePort | None = None
     document_summarize: DocumentSummarizePort | None = None
+    # Raw KPI writer, distinct from `metrics` (a narrower MetricsProvider
+    # adapter): runtimes that need the full BaseKPIWriter surface (e.g. to
+    # record llm.call_latency_ms alongside compiled-graph metrics) read it
+    # from here instead of a process-global runtime context, keeping
+    # `build_executor` a pure function of its injected dependencies. Added
+    # last (not grouped with `metrics`/`checkpointer`) so it can never shift
+    # the positional meaning of any field an external positional-argument
+    # caller might already rely on.
+    kpi_writer: BaseKPIWriter | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

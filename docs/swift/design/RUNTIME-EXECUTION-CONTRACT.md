@@ -1801,6 +1801,35 @@ frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
 
 ---
 
+### 8.31 ✅ ReAct/Deep prompt composition no longer depends on the process-global runtime context (2026-07-31)
+
+**What changed.** `ReActRuntime.build_executor` and `DeepAgentRuntime.build_executor`
+(`libs/fred-runtime/fred_runtime/react/react_runtime.py`,
+`libs/fred-runtime/fred_runtime/deep/deep_runtime.py`) fetched the KPI writer
+via `get_runtime_context().get_kpi_writer()` — a bare process-global lookup —
+inline during executor construction, instead of through the existing
+`RuntimeServices` dependency-injection container both runtimes already
+receive. Any standalone unit test of `build_executor()` (not routed through
+`agent_app.py`'s lifespan-initialized global context) raised
+`RuntimeError: RuntimeContext has not been initialized.` `RuntimeServices`
+(`libs/fred-sdk/fred_sdk/contracts/runtime.py`) gains a `kpi_writer:
+BaseKPIWriter | None` field, populated in `agent_app.py`'s
+`_build_runtime_services` from the same `runtime_config.kpi_writer` already
+in scope there; both `build_executor` methods now read
+`self.services.kpi_writer` instead of the global. `kpi=None` is the
+pre-existing, already-`None`-safe default for every downstream KPI
+consumer (`TracingKpiMiddleware`, `ToolObservabilityMiddleware`,
+`build_tool_loop_compiled_react_agent`), so no behavior changed for any
+lifespan-initialized production request — only the composition path's
+testability changed. Confirmed by 3 previously-failing prompt-injection unit
+tests going green, deterministically, independent of test-file collection
+order (a `test_deep_agent_middleware.py` test was separately found to leak
+`set_runtime_context(...)` into the shared process-global for the rest of
+the pytest session with no teardown; that call is now unnecessary and was
+removed rather than patched with a reset).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

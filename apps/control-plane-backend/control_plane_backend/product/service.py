@@ -2771,6 +2771,49 @@ async def _resolve_context_prompt_text(
     return None
 
 
+def _session_usable_for_execution(
+    session_record: SessionMetadataRecord | None,
+    *,
+    team_id: TeamId,
+    user_id: str,
+    agent_instance_id: str,
+) -> bool:
+    """
+    Whether ``session_record`` may lend its context prompts to this execution.
+
+    Why this exists:
+    - `prepare_execution` used to load any `session_id` unchecked (a raw
+      primary-key fetch) and resolve its `context_prompt_ids` with no
+      ownership check at all — a caller could pass a foreign session_id and
+      have ITS context prompts influence a DIFFERENT user's/team's/agent's
+      execution. The sibling `get_session` already guards its own raw fetch
+      with a `team_id` check; `prepare_execution` never did.
+
+    How to use it:
+    - call right after loading the session record, before touching
+      `context_prompt_ids`
+
+    Ownership rule:
+    - the session must exist, and belong to the same team and the same user
+    - `agent_instance_id` is only enforced when the session was actually
+      scoped to an instance at creation (it is optional on
+      `CreateSessionRequest`) — an agent-agnostic session matches any
+      instance the same user/team requests
+    """
+    if session_record is None:
+        return False
+    if str(session_record.team_id) != str(team_id):
+        return False
+    if session_record.user_id != user_id:
+        return False
+    if (
+        session_record.agent_instance_id is not None
+        and session_record.agent_instance_id != agent_instance_id
+    ):
+        return False
+    return True
+
+
 async def prepare_execution(
     *,
     user: KeycloakUser,
@@ -2854,7 +2897,25 @@ async def prepare_execution(
     context_prompt_text: str | None = None
     if session_id is not None:
         session_record = await deps.get_session_metadata_store().get(session_id)
-        if session_record is not None and session_record.context_prompt_ids:
+        if not _session_usable_for_execution(
+            session_record,
+            team_id=team_id,
+            user_id=user.uid,
+            agent_instance_id=agent_instance_id,
+        ):
+            # Deliberately the same error (message and status) whether the
+            # session_id is unknown or belongs to another user/team/agent
+            # instance — distinguishing the two would let a caller probe for
+            # the existence of a foreign session_id (finding: prior code
+            # loaded ANY session_id unchecked and fell back to "no context
+            # prompt" instead of rejecting, silently discarding an attacker's
+            # or a stale client's mismatched session rather than surfacing
+            # the mismatch).
+            raise ExecutionPreparationError(
+                f"Session {session_id!r} is not usable for this execution."
+            )
+        assert session_record is not None
+        if session_record.context_prompt_ids:
             # Resolve library prompts only within the caller's authorized scope:
             # the active team plus the caller's personal team (the same union the
             # context picker draws from — PROMPTS.md §4/§6).

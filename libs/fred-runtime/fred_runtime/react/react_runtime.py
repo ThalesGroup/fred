@@ -81,7 +81,6 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
-from fred_runtime.runtime_context import get_runtime_context
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -728,13 +727,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             approval_policy=policy.tool_approval,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             tracer=self.services.tracer,
-            # `RuntimeServices` carries no `BaseKPIWriter` field (only the
-            # narrower `metrics: MetricsProvider`) — this was hardcoded None,
-            # silently dropping `llm.call_latency_ms` for every ReAct turn.
-            # `get_runtime_context().get_kpi_writer()` is the same writer
-            # already feeding `api_request_latency_ms` (KPIMiddleware) and
-            # `agent.tool_latency_ms` (ContextAwareTool) — reuse it here too.
-            kpi=get_runtime_context().get_kpi_writer(),
+            kpi=self.services.kpi_writer,
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
