@@ -21,8 +21,8 @@
 .filterBar {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-s);
-  padding: 0 var(--spacing-l) var(--spacing-m);
+  gap: var(--spacing-m);
+  padding: 16px var(--spacing-l) var(--spacing-l);
 }
 
 .searchRow {

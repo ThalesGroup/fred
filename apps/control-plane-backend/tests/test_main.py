@@ -7118,6 +7118,50 @@ async def test_get_update_and_delete_prompt_use_team_scope(
 
 
 @pytest.mark.asyncio
+async def test_get_prompt_detail_includes_category_id_emoji_and_tags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression test: `_prompt_record_to_detail` used to omit `category_id`,
+    `emoji`, and `tags` entirely, so the single-prompt GET endpoint always
+    returned `category_id: null` and `tags: []` regardless of what was
+    actually stored — surfacing as "always shows no category" in the
+    frontend's read-only prompt view, and silently wiping category/tags on
+    any edit-form save (the edit form seeds itself from this same endpoint).
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    record = PromptRecord(
+        prompt_id="prompt-1",
+        team_id=TeamId("personal"),
+        name="Daily brief",
+        description="Ops baseline",
+        category_id="cat-writing",
+        emoji="✍️",
+        tags=["daily", "ops"],
+        text="Today is {today}.",
+        created_by="internal-admin",
+    )
+    store = _FakePromptStore([record])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        detail = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["category_id"] == "cat-writing"
+    assert body["emoji"] == "✍️"
+    assert body["tags"] == ["daily", "ops"]
+
+
+@pytest.mark.asyncio
 async def test_prompt_library_rejects_invalid_prompt_template_before_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

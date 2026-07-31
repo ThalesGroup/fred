@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
@@ -25,6 +26,7 @@ import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
+import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
@@ -65,6 +67,7 @@ export default function PromptsPage() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
+  const [viewingPrompt, setViewingPrompt] = useState<PromptSummary | null>(null);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   // Which prompt id `form` is currently fully seeded for. RTK Query's
@@ -84,7 +87,6 @@ export default function PromptsPage() {
     isFetching,
     isUninitialized,
     isError,
-    refetch,
   } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
 
   const { data: categories = [], refetch: refetchCategories } =
@@ -127,6 +129,12 @@ export default function PromptsPage() {
     }
   }, [editingPrompt, editDetail, seededForId]);
 
+  const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+  const usedCategoryIds = useMemo(
+    () => new Set(prompts.map((p) => p.category_id).filter(Boolean) as string[]),
+    [prompts],
+  );
+
   // Client-side filter: search text + active category
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -149,6 +157,10 @@ export default function PromptsPage() {
   const openPrompt = (prompt: PromptSummary) => {
     setForm({ ...emptyForm, category_id: prompt.category_id ?? null });
     setEditingPrompt(prompt);
+  };
+
+  const openView = (prompt: PromptSummary) => {
+    setViewingPrompt(prompt);
   };
 
   const closeModal = () => {
@@ -188,7 +200,6 @@ export default function PromptsPage() {
         showSuccess({ summary: "Prompt created" });
       }
       closeModal();
-      await refetch();
     } catch (error: unknown) {
       const err = error as { data?: { detail?: string }; message?: string };
       showError({
@@ -209,7 +220,6 @@ export default function PromptsPage() {
           await deletePrompt({ teamId, promptId: prompt.id }).unwrap();
           showSuccess({ summary: "Prompt deleted" });
           closeModal();
-          await refetch();
         } catch (error: unknown) {
           const err = error as { data?: { detail?: string }; message?: string };
           showError({
@@ -280,16 +290,19 @@ export default function PromptsPage() {
                   onChange={setSearch}
                   placeholder={t("rework.teams.prompts.searchPlaceholder")}
                   clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                  size="small"
                 />
               </div>
-              <IconButton
-                size="medium"
-                color="on-surface-retreat"
-                variant="icon"
-                icon={{ category: "outlined", type: "tune" }}
-                aria-label={t("rework.promptCategories.manage.buttonAria")}
-                onClick={() => setIsManageCategoriesOpen(true)}
-              />
+              <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
+                <IconButton
+                  size="medium"
+                  color="on-surface-retreat"
+                  variant="icon"
+                  icon={{ category: "outlined", type: "tune" }}
+                  aria-label={t("rework.promptCategories.manage.buttonAria")}
+                  onClick={() => setIsManageCategoriesOpen(true)}
+                />
+              </Tooltip>
             </div>
 
             {categories.length > 0 && (
@@ -313,7 +326,14 @@ export default function PromptsPage() {
           ) : (
             <div className={styles.promptList}>
               {filtered.map((prompt) => (
-                <PromptCard key={prompt.id} prompt={prompt} canManage={canManage} onEdit={() => openPrompt(prompt)} />
+                <PromptCard
+                  key={prompt.id}
+                  prompt={prompt}
+                  categoryName={(prompt.category_id && categoryNameById.get(prompt.category_id)) || null}
+                  canManage={canManage}
+                  onView={() => openView(prompt)}
+                  onEdit={() => openPrompt(prompt)}
+                />
               ))}
             </div>
           )}
@@ -394,8 +414,17 @@ export default function PromptsPage() {
         open={isManageCategoriesOpen}
         teamId={teamId}
         categories={categories}
+        usedCategoryIds={usedCategoryIds}
         onClose={() => setIsManageCategoriesOpen(false)}
         onChanged={() => refetchCategories()}
+      />
+
+      <PromptViewDialog
+        open={!!viewingPrompt}
+        teamId={teamId}
+        promptId={viewingPrompt?.id ?? null}
+        categories={categories}
+        onClose={() => setViewingPrompt(null)}
       />
     </div>
   );

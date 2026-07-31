@@ -43,12 +43,18 @@
 
 .header {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
+  flex-direction: column;
+}
+
+.category {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .name {
-  flex: 1;
   padding-right: var(--spacing-l);
   overflow: hidden;
   color: var(--on-surface);

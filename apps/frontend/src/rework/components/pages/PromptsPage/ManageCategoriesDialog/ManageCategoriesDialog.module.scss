@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-l);
-  margin: 2rem auto;
+  margin: auto;
   border-radius: var(--radius-l);
   background: var(--surface-main);
   padding: var(--spacing-l);
@@ -40,8 +40,6 @@
   gap: var(--spacing-2xs);
   margin: 0;
   padding: 0;
-  max-height: 20rem;
-  overflow-y: auto;
   list-style: none;
 }
 

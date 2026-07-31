@@ -19,11 +19,13 @@ import styles from "./PromptCard.module.scss";
 
 export interface PromptCardProps {
   prompt: PromptSummary;
+  categoryName: string | null;
   canManage: boolean;
+  onView: () => void;
   onEdit: () => void;
 }
 
-export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProps) {
+export default function PromptCard({ prompt, categoryName, canManage, onView, onEdit }: PromptCardProps) {
   const { t } = useTranslation();
   const body = prompt.description && prompt.description !== prompt.name ? prompt.description : null;
   const preview = !body && prompt.text_preview ? prompt.text_preview : null;
@@ -31,10 +33,10 @@ export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProp
   return (
     <div
       className={styles.card}
-      onClick={onEdit}
+      onClick={onView}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onEdit()}
+      onKeyDown={(e) => e.key === "Enter" && onView()}
     >
       {/* ── Edit overlay (hover only, personal prompts only) ── */}
       {canManage && (
@@ -52,8 +54,9 @@ export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProp
         </div>
       )}
 
-      {/* ── Header: name ── */}
+      {/* ── Header: category + name ── */}
       <div className={styles.header}>
+        {categoryName && <span className={styles.category}>{categoryName}</span>}
         <span className={styles.name}>{prompt.name}</span>
       </div>
 

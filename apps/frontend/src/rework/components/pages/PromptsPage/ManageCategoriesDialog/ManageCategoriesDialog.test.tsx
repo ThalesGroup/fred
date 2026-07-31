@@ -114,7 +114,14 @@ describe("ManageCategoriesDialog", () => {
 
     act(() => {
       root.render(
-        <ManageCategoriesDialog open teamId="team-1" categories={CATEGORIES} onClose={onClose} onChanged={onChanged} />,
+        <ManageCategoriesDialog
+          open
+          teamId="team-1"
+          categories={CATEGORIES}
+          usedCategoryIds={new Set()}
+          onClose={onClose}
+          onChanged={onChanged}
+        />,
       );
     });
 
@@ -195,7 +202,14 @@ describe("ManageCategoriesDialog", () => {
 
     act(() => {
       root.render(
-        <ManageCategoriesDialog open teamId="team-1" categories={CATEGORIES} onClose={onClose} onChanged={onChanged} />,
+        <ManageCategoriesDialog
+          open
+          teamId="team-1"
+          categories={CATEGORIES}
+          usedCategoryIds={new Set()}
+          onClose={onClose}
+          onChanged={onChanged}
+        />,
       );
     });
 
@@ -222,5 +236,36 @@ describe("ManageCategoriesDialog", () => {
     expect(calls.delete).toHaveLength(0);
     expect(onChanged).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("disables delete with an explanatory tooltip for a category that has prompts attached", () => {
+    act(() => {
+      root.render(
+        <ManageCategoriesDialog
+          open
+          teamId="team-1"
+          categories={CATEGORIES}
+          usedCategoryIds={new Set(["cat-2"])}
+          onClose={vi.fn()}
+          onChanged={vi.fn()}
+        />,
+      );
+    });
+
+    const dialog = document.body;
+
+    const deleteCommunication = dialog.querySelector(
+      '[aria-label*="deleteAria"][aria-label*="Communication"]',
+    ) as HTMLButtonElement;
+    expect(deleteCommunication.disabled).toBe(true);
+    const blockedTooltip = deleteCommunication.closest('[class*="tooltip-wrapper"]')?.querySelector('[role="tooltip"]');
+    expect(blockedTooltip?.textContent).toBe("rework.promptCategories.manage.deleteBlocked");
+
+    // "Analyse" has no prompts attached — delete stays enabled with the
+    // normal per-category tooltip.
+    const deleteAnalyse = dialog.querySelector(
+      '[aria-label*="deleteAria"][aria-label*="Analyse"]:not([aria-label*="Communication"])',
+    ) as HTMLButtonElement;
+    expect(deleteAnalyse.disabled).toBe(false);
   });
 });

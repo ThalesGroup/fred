@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
@@ -31,6 +32,10 @@ interface ManageCategoriesDialogProps {
   open: boolean;
   teamId: string;
   categories: PromptCategorySummary[];
+  /** Category ids currently referenced by at least one prompt in the team —
+   *  their delete action is disabled (matches the backend's 409 rule, but
+   *  pre-empts the round trip). */
+  usedCategoryIds: Set<string>;
   onClose: () => void;
   onChanged: () => void;
 }
@@ -53,6 +58,7 @@ export default function ManageCategoriesDialog({
   open,
   teamId,
   categories,
+  usedCategoryIds,
   onClose,
   onChanged,
 }: ManageCategoriesDialogProps) {
@@ -208,6 +214,7 @@ export default function ManageCategoriesDialog({
           <ul className={styles.list}>
             {drafts.map((draft) => {
               const isEditing = editingKey === draft.key;
+              const isInUse = !!draft.id && usedCategoryIds.has(draft.id);
               return (
                 <li key={draft.key} className={styles.row}>
                   {isEditing ? (
@@ -229,42 +236,57 @@ export default function ManageCategoriesDialog({
                   <div className={styles.actions}>
                     {isEditing ? (
                       <>
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          variant="icon"
-                          icon={{ category: "outlined", type: "check" }}
-                          disabled={!editingName.trim()}
-                          aria-label={t("rework.promptCategories.manage.saveAria")}
-                          onClick={commitEdit}
-                        />
-                        <IconButton
-                          size="small"
-                          color="on-surface-retreat"
-                          variant="icon"
-                          icon={{ category: "outlined", type: "close" }}
-                          aria-label={t("rework.promptCategories.manage.cancelEditAria")}
-                          onClick={cancelEdit}
-                        />
+                        <Tooltip text={t("rework.promptCategories.manage.saveAria")}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            variant="icon"
+                            icon={{ category: "outlined", type: "check" }}
+                            disabled={!editingName.trim()}
+                            aria-label={t("rework.promptCategories.manage.saveAria")}
+                            onClick={commitEdit}
+                          />
+                        </Tooltip>
+                        <Tooltip text={t("rework.promptCategories.manage.cancelEditAria")}>
+                          <IconButton
+                            size="small"
+                            color="on-surface-retreat"
+                            variant="icon"
+                            icon={{ category: "outlined", type: "close" }}
+                            aria-label={t("rework.promptCategories.manage.cancelEditAria")}
+                            onClick={cancelEdit}
+                          />
+                        </Tooltip>
                       </>
                     ) : (
                       <>
-                        <IconButton
-                          size="small"
-                          color="on-surface-retreat"
-                          variant="icon"
-                          icon={{ category: "outlined", type: "edit" }}
-                          aria-label={t("rework.promptCategories.manage.editAria", { name: draft.name })}
-                          onClick={() => startEdit(draft)}
-                        />
-                        <IconButton
-                          size="small"
-                          color="error"
-                          variant="icon"
-                          icon={{ category: "outlined", type: "delete" }}
-                          aria-label={t("rework.promptCategories.manage.deleteAria", { name: draft.name })}
-                          onClick={() => removeDraft(draft)}
-                        />
+                        <Tooltip text={t("rework.promptCategories.manage.editAria", { name: draft.name })}>
+                          <IconButton
+                            size="small"
+                            color="on-surface-retreat"
+                            variant="icon"
+                            icon={{ category: "outlined", type: "edit" }}
+                            aria-label={t("rework.promptCategories.manage.editAria", { name: draft.name })}
+                            onClick={() => startEdit(draft)}
+                          />
+                        </Tooltip>
+                        <Tooltip
+                          text={
+                            isInUse
+                              ? t("rework.promptCategories.manage.deleteBlocked")
+                              : t("rework.promptCategories.manage.deleteAria", { name: draft.name })
+                          }
+                        >
+                          <IconButton
+                            size="small"
+                            color="error"
+                            variant="icon"
+                            icon={{ category: "outlined", type: "delete" }}
+                            disabled={isInUse}
+                            aria-label={t("rework.promptCategories.manage.deleteAria", { name: draft.name })}
+                            onClick={() => removeDraft(draft)}
+                          />
+                        </Tooltip>
                       </>
                     )}
                   </div>

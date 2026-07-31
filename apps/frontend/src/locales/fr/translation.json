@@ -1225,6 +1225,7 @@
         "cancelEditAria": "Annuler",
         "editAria": "Renommer {{name}}",
         "deleteAria": "Supprimer {{name}}",
+        "deleteBlocked": "Cette catégorie ne peut être supprimée, des prompts lui sont rattachés.",
         "deleteConfirmTitle": "Supprimer la catégorie ?",
         "deleteConfirmMessage": "Supprimer \"{{name}}\" ? Cette action est irréversible.",
         "createError": "Échec de la création de la catégorie",
@@ -1853,7 +1854,12 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
-        "title": "Prompts"
+        "title": "Prompts",
+        "view": {
+          "closeAria": "Fermer",
+          "copiedToast": "Copié dans le presse-papier",
+          "copyAria": "Copier le prompt"
+        }
       }
     },
     "userSettings": {

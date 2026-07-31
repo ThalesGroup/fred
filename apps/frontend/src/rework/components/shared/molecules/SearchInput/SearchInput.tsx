@@ -14,6 +14,7 @@
 
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import type { ComponentSize } from "@shared/utils/Type.ts";
 import { useRef } from "react";
 import styles from "./SearchInput.module.scss";
 
@@ -24,6 +25,7 @@ export interface SearchInputProps {
   ariaLabel?: string;
   clearAriaLabel?: string;
   autoFocus?: boolean;
+  size?: ComponentSize;
 }
 
 /** Compact `TextInput`-based search field (search icon + inline clear button),
@@ -36,6 +38,7 @@ export default function SearchInput({
   ariaLabel,
   clearAriaLabel,
   autoFocus = false,
+  size,
 }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,6 +47,7 @@ export default function SearchInput({
       <TextInput
         ref={inputRef}
         compact
+        size={size}
         autoFocus={autoFocus}
         icon={{ category: "outlined", type: "search" }}
         value={value}

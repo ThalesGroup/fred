@@ -44,6 +44,11 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({ teamId: "team-1", selectedTeam: undefined }),
 }));
+// Card click now opens a read-only view dialog (PROMPT-09 follow-up); editing
+// is only reachable through the card's hover-edit pencil, which is gated on
+// `canManage` — force it on so the edit-form-reseed regression tests below
+// can still reach that pencil.
+vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
@@ -190,16 +195,20 @@ describe("PromptsPage edit form reseed", () => {
       root.render(<PromptsPage />);
     });
 
-    const openCard = (index = 0) => {
+    // Card click now opens the read-only view dialog — reach the edit form
+    // through the hover-edit pencil instead (see PROMPT-09 follow-up test below
+    // for the card-click-opens-view-dialog behavior itself).
+    const openEditForm = (index = 0) => {
       const cards = container.querySelectorAll('[role="button"]');
       const card = cards[index] as HTMLElement;
+      const editButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent === "edit");
       act(() => {
-        card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       });
     };
 
     // First open: form should be fully seeded from the detail query.
-    openCard();
+    openEditForm();
     expect(formValues()).toEqual({
       name: "Real Name",
       description: "Real description",
@@ -214,7 +223,7 @@ describe("PromptsPage edit form reseed", () => {
 
     // Reopen the SAME card: the form must be fully seeded again, not left
     // at openPrompt()'s partial pre-fill (empty name/description/text).
-    openCard();
+    openEditForm();
     expect(formValues()).toEqual({
       name: "Real Name",
       description: "Real description",
@@ -236,16 +245,17 @@ describe("PromptsPage edit form reseed", () => {
       root.render(<PromptsPage />);
     });
 
-    const openCard = (index: number) => {
+    const openEditForm = (index: number) => {
       const cards = container.querySelectorAll('[role="button"]');
       const card = cards[index] as HTMLElement;
+      const editButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent === "edit");
       act(() => {
-        card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       });
     };
 
     // Open prompt 1 — resolves immediately, seeds the form.
-    openCard(0);
+    openEditForm(0);
     expect(formValues()).toEqual({
       name: "Real Name",
       description: "Real description",
@@ -258,7 +268,7 @@ describe("PromptsPage edit form reseed", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-    openCard(1);
+    openEditForm(1);
     expect(formValues()).toEqual({ name: "", description: "", text: "" });
 
     // Prompt 2's query resolves: the form must now show ITS data.
@@ -271,5 +281,85 @@ describe("PromptsPage edit form reseed", () => {
       description: "Other description",
       text: "Other prompt text",
     });
+  });
+});
+
+describe("PromptsPage card click", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("opens a read-only view dialog instead of the edit form", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+
+    const card = container.querySelectorAll('[role="button"]')[0] as HTMLElement;
+    act(() => {
+      card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog).toBeTruthy();
+    // No editable inputs/textareas at all — this is a pure display view, not
+    // the edit form (the prompt text itself is a non-interactive scrollable
+    // div, not a textarea).
+    expect(dialog.querySelectorAll("input, textarea")).toHaveLength(0);
+    expect(dialog.textContent).toContain("Real prompt text");
+  });
+
+  it("does not show the previous prompt's data while the next prompt's detail query is pending", () => {
+    // Same root cause as issue #1996 (see the edit-form regression tests
+    // above), but for PromptViewDialog: RTK Query's `data` keeps returning
+    // the previous promptId's result for a moment after switching ids.
+    promptBReady = false;
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+
+    const clickCard = (index: number) => {
+      const card = container.querySelectorAll('[role="button"]')[index] as HTMLElement;
+      act(() => {
+        card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+    };
+
+    // Open prompt 1 — resolves immediately.
+    clickCard(0);
+    let dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain("Real prompt text");
+
+    // Close, then open prompt 2 while its detail query is still pending. Must
+    // show a loading state, never prompt 1's stale text.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    clickCard(1);
+    dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.querySelector('[role="status"]')).toBeTruthy();
+    expect(dialog.textContent).not.toContain("Real prompt text");
+
+    // Prompt 2's query resolves: the dialog must now show ITS data.
+    promptBReady = true;
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain("Other prompt text");
   });
 });

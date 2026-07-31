@@ -1225,6 +1225,7 @@
         "cancelEditAria": "Cancel",
         "editAria": "Rename {{name}}",
         "deleteAria": "Delete {{name}}",
+        "deleteBlocked": "This category cannot be deleted, prompts are attached to it.",
         "deleteConfirmTitle": "Delete this category?",
         "deleteConfirmMessage": "Remove \"{{name}}\"? This cannot be undone.",
         "createError": "Failed to create category",
@@ -1853,7 +1854,12 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts"
+        "title": "Prompts",
+        "view": {
+          "closeAria": "Close",
+          "copiedToast": "Copied to clipboard",
+          "copyAria": "Copy prompt"
+        }
       }
     },
     "userSettings": {

@@ -2100,9 +2100,50 @@ every visitor can open it, but create/rename/delete calls are `team_editor`-gate
 surface a 403 toast on denial). Staged draft/save/cancel model: Créer / Éditer / Supprimer only edit
 local state — nothing hits the backend until "Enregistrer" is clicked, which diffs the draft against
 the original list and fires exactly the needed create/rename/delete calls; "Annuler" discards the
-draft with zero calls. No per-row delete confirmation (the staging itself is the undo). A row still
-referenced by ≥1 prompt surfaces the backend's 409 as a toast on save (hard block, no automatic
-reassignment). Rows show a name only, no colour swatch (dropped along with `CategoryPicker`'s).
+draft with zero calls. No per-row delete confirmation (the staging itself is the undo). Rows show a
+name only, no colour swatch (dropped along with `CategoryPicker`'s).
+
+Every row icon button (edit, delete, and the check/close pair shown while editing) is wrapped in the
+instant `Tooltip` atom. A row whose category id is in `usedCategoryIds` (computed in `PromptsPage`
+from the live prompt list, mirroring the backend's own in-use check) has its delete button disabled
+with a tooltip explaining why ("Cette catégorie ne peut être supprimée, des prompts lui sont
+rattachés") instead of letting the user stage a delete that would 409 on save — a UI-level pre-empt
+of the same rule the backend still enforces as the source of truth.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `PromptViewDialog`
+
+**Location:** `src/rework/components/pages/PromptsPage/PromptViewDialog/PromptViewDialog.tsx`
+**Status:** `Functional`
+
+Clicking a `PromptCard` opens this read-only view (name, description, category as a static
+non-interactive chip — "Sans catégorie" when unset — and the full prompt text) instead of jumping
+straight to the edit form, which was the old, editor-only behaviour. Editing is now reachable only
+through the card's hover-edit pencil (gated on `canManage`); the dialog itself has no edit action,
+only a close (X) — deliberately pure read-only, no "Edit" shortcut inside it. The close button is
+`size="medium"`, `color="on-surface-retreat"`, absolutely positioned 16px from the card's top and
+right edges (not a flex sibling of the title, so a long name never pushes it around). Uses
+`FullPageModal`'s `background="scrim"` variant (a normal translucent `--scrim` backdrop) rather than
+the opaque `main`/`container` full-page takeover the rest of the app's `FullPageModal` instances use.
+Clicking the scrim (outside the card) closes the dialog — `FullPageModal` gates this click-to-close
+on `background === "scrim"` only, so the opaque `main`/`container` data-entry forms (edit form,
+`ManageCategoriesDialog`) keep their current behaviour and can't lose in-progress input to a stray
+click.
+
+Prompt text is a plain scrollable `div` (`white-space: pre-wrap`, fixed height, `overflow-y: auto`),
+not a `textarea` — a `readOnly` textarea can still be focused, clicked into, and have its text
+selected/dragged, which this deliberately avoids (`tabIndex={-1}`, `user-select: none`): scroll is
+the only interaction, the copy button is the only way to get the text out. A `content_copy`/`check`-
+toggling `size="medium"` icon button in the text section's header copies the full prompt text to the
+clipboard (same 2s-revert pattern as `CodeBlock`'s copy button) and fires a 2s `showSuccess` toast
+("Copié dans le presse-papier"). Fetches the full prompt (`text` isn't on the list-level
+`PromptSummary`, only `text_preview`) via the same detail query the edit form uses, keyed off the
+clicked prompt's id.
 
 #### Open UX issues
 

@@ -14,4 +14,8 @@
   &[data-background="container"] {
     background: var(--surface-container);
   }
+
+  &[data-background="scrim"] {
+    background: var(--scrim);
+  }
 }
