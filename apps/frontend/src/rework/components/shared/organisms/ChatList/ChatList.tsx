@@ -81,12 +81,6 @@ export default function ChatList({ teamId }: ChatListProps) {
       message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
       confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
       cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
-      // Same inverted emphasis as "Delete agent"/"Leave team" — Cancel stays
-      // the visually dominant filled button, Delete drops to a low-emphasis
-      // text button.
-      cancelVariant: "filled",
-      cancelColor: "primary",
-      confirmVariant: "text",
       onConfirm: async () => {
         await deleteSession({ teamId: teamId!, sessionId })
           .unwrap()

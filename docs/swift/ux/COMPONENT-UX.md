@@ -103,7 +103,9 @@ Horizontally-wrapping row of toggle chips for single-select filtering. Generic o
 Supports an optional "All" chip (via `allLabel`), expand/collapse beyond `maxVisible`, and full `aria-pressed` accessibility.
 Used by `PromptsPage` (replaces native `<button>` category filter row). `PromptsPage` prepends a
 "Sans catégorie" pseudo-option (sentinel id, not a real `PromptCategorySummary`) right after the
-"All" chip, matching prompts with no `category_id`.
+"All" chip, matching prompts with no `category_id`. Each option can carry an optional `count`,
+rendered right after the label with an 8px gap (`PromptsPage` computes a per-category prompt count
+from the live prompt list); the "All" chip itself has no count.
 
 #### Open UX issues
 
@@ -907,16 +909,20 @@ from the members list; the backend's last-admin invariant is the actual
 source of truth and still applies server-side regardless). Confirms via
 `ConfirmationDialog`, then redirects to `/team/personal/agents`.
 
-#### `ConfirmationDialog` — per-call button emphasis override
+#### `ConfirmationDialog` — mandatory inverted emphasis for `criticalAction`
 
-Added optional `cancelVariant`/`cancelColor`/`confirmVariant` props
-(threaded through `ConfirmationDialogProvider`'s `showConfirmationDialog`),
-defaulting to the existing fixed styling (`Cancel` = outlined/on-surface,
-`Confirm` = filled) so every other call site is unaffected. The leave-team
-dialog is the first consumer to invert the usual emphasis — `Annuler` =
-filled (the safe, reversible choice stays visually dominant), `Quitter` =
-text + error (the destructive choice is low-emphasis, M3 "Text" tier) — a
-deliberate risk-reduction pattern, not the default hierarchy.
+Every `criticalAction: true` dialog now defaults to the same button
+formalism, without any call site needing to opt in: `Cancel` = filled +
+primary (the safe, reversible choice stays visually dominant), `Confirm` =
+text + error (the destructive choice is low-emphasis, M3 "Text" tier).
+Non-critical dialogs keep the old defaults (`Cancel` = outlined/on-surface,
+`Confirm` = filled/primary). `cancelVariant`/`cancelColor`/`confirmVariant`
+props (threaded through `ConfirmationDialogProvider`'s
+`showConfirmationDialog`) still exist for an explicit per-call override, but
+every existing critical dialog (leave team, delete agent, delete session,
+delete prompt) now gets the inverted emphasis for free — the three call
+sites that used to pass the override triplet by hand had it removed since
+it's now redundant with the default.
 
 #### Open UX issues
 
@@ -2095,9 +2101,10 @@ _(none)_
 **Location:** `src/rework/components/pages/PromptsPage/ManageCategoriesDialog/ManageCategoriesDialog.tsx`
 **Status:** `Functional`
 
-Reachable from a `tune`-icon button in `PromptsPage`'s category filter-chips row (gated on nothing —
-every visitor can open it, but create/rename/delete calls are `team_editor`-gated server-side and
-surface a 403 toast on denial). Staged draft/save/cancel model: Créer / Éditer / Supprimer only edit
+Reachable from a `tune`-icon button in `PromptsPage`'s category filter-chips row, rendered only for
+`canManage` (`canUpdateResources`, the same team-editor flag that gates the card hover-edit pencil) —
+non-editors never see the button, and every mutation is independently `team_editor`-gated server-side
+too (403 toast on denial if that ever drifts). Staged draft/save/cancel model: Créer / Éditer / Supprimer only edit
 local state — nothing hits the backend until "Enregistrer" is clicked, which diffs the draft against
 the original list and fires exactly the needed create/rename/delete calls; "Annuler" discards the
 draft with zero calls. No per-row delete confirmation (the staging itself is the undo). Rows show a

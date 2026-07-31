@@ -134,6 +134,18 @@ export default function PromptsPage() {
     () => new Set(prompts.map((p) => p.category_id).filter(Boolean) as string[]),
     [prompts],
   );
+  const categoryCounts = useMemo(() => {
+    const byId = new Map<string, number>();
+    let noCategory = 0;
+    for (const p of prompts) {
+      if (p.category_id) {
+        byId.set(p.category_id, (byId.get(p.category_id) ?? 0) + 1);
+      } else {
+        noCategory += 1;
+      }
+    }
+    return { byId, noCategory };
+  }, [prompts]);
 
   // Client-side filter: search text + active category
   const filtered = useMemo(() => {
@@ -293,23 +305,33 @@ export default function PromptsPage() {
                   size="small"
                 />
               </div>
-              <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
-                <IconButton
-                  size="medium"
-                  color="on-surface-retreat"
-                  variant="icon"
-                  icon={{ category: "outlined", type: "tune" }}
-                  aria-label={t("rework.promptCategories.manage.buttonAria")}
-                  onClick={() => setIsManageCategoriesOpen(true)}
-                />
-              </Tooltip>
+              {canManage && (
+                <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
+                  <IconButton
+                    size="medium"
+                    color="on-surface-retreat"
+                    variant="icon"
+                    icon={{ category: "outlined", type: "tune" }}
+                    aria-label={t("rework.promptCategories.manage.buttonAria")}
+                    onClick={() => setIsManageCategoriesOpen(true)}
+                  />
+                </Tooltip>
+              )}
             </div>
 
             {categories.length > 0 && (
               <FilterChips
                 options={[
-                  { id: NO_CATEGORY_FILTER_ID, label: t("rework.promptCategories.noCategory") },
-                  ...categories.map((cat) => ({ id: cat.id, label: cat.name })),
+                  {
+                    id: NO_CATEGORY_FILTER_ID,
+                    label: t("rework.promptCategories.noCategory"),
+                    count: categoryCounts.noCategory,
+                  },
+                  ...categories.map((cat) => ({
+                    id: cat.id,
+                    label: cat.name,
+                    count: categoryCounts.byId.get(cat.id) ?? 0,
+                  })),
                 ]}
                 value={activeCategory}
                 onChange={(v) => setActiveCategory(v)}

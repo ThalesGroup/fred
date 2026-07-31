@@ -27,12 +27,15 @@ interface ConfirmationDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   criticalAction?: boolean;
-  /** Override the cancel/dismiss button's emphasis — default "outlined". */
+  /** Override the cancel/dismiss button's emphasis — default "outlined", or
+   *  "filled" when `criticalAction` is set. */
   cancelVariant?: ButtonVariant;
-  /** Override the cancel/dismiss button's color — default "on-surface". */
+  /** Override the cancel/dismiss button's color — default "on-surface", or
+   *  "primary" when `criticalAction` is set. */
   cancelColor?: ColorTheme;
-  /** Override the confirm button's emphasis — default "filled". Color still
-   *  follows `criticalAction` (error vs. primary), independent of variant. */
+  /** Override the confirm button's emphasis — default "filled", or "text"
+   *  when `criticalAction` is set. Color still follows `criticalAction`
+   *  (error vs. primary), independent of variant. */
   confirmVariant?: ButtonVariant;
   onConfirm: () => void;
   onCancel: () => void;
@@ -46,12 +49,20 @@ export function ConfirmationDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   criticalAction = false,
-  cancelVariant = "outlined",
-  cancelColor = "on-surface",
-  confirmVariant = "filled",
+  cancelVariant,
+  cancelColor,
+  confirmVariant,
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps) {
+  // Critical-action dialogs always de-emphasize the destructive choice: a
+  // filled, primary "Cancel" and a text-only, error-coloured confirm — never
+  // the other way around. Callers can still override any of the three
+  // explicitly, but this is the one formalism every critical dialog in the
+  // app must default to, so no call site needs to remember to opt into it.
+  const resolvedCancelVariant = cancelVariant ?? (criticalAction ? "filled" : "outlined");
+  const resolvedCancelColor = cancelColor ?? (criticalAction ? "primary" : "on-surface");
+  const resolvedConfirmVariant = confirmVariant ?? (criticalAction ? "text" : "filled");
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -81,12 +92,12 @@ export function ConfirmationDialog({
             {details}
           </div>
           <div className={styles.actions}>
-            <Button color={cancelColor} variant={cancelVariant} size="medium" onClick={onCancel}>
+            <Button color={resolvedCancelColor} variant={resolvedCancelVariant} size="medium" onClick={onCancel}>
               {cancelLabel}
             </Button>
             <Button
               color={criticalAction ? "error" : "primary"}
-              variant={confirmVariant}
+              variant={resolvedConfirmVariant}
               size="medium"
               onClick={onConfirm}
             >

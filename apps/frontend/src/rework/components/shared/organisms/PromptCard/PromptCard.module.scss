@@ -12,7 +12,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-m);
   background: var(--surface-container);
-  padding: var(--spacing-m);
+  padding: 12px var(--spacing-m);
 
   &:hover {
     border-color: var(--outline-retreat);
@@ -47,8 +47,9 @@
 }
 
 .category {
+  padding-bottom: 4px;
   overflow: hidden;
-  color: var(--on-surface-retreat);
+  color: var(--primary);
   font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;

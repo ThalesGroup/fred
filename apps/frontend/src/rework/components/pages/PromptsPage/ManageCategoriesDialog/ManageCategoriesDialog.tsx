@@ -240,7 +240,7 @@ export default function ManageCategoriesDialog({
                           <IconButton
                             size="small"
                             color="primary"
-                            variant="icon"
+                            variant="filled"
                             icon={{ category: "outlined", type: "check" }}
                             disabled={!editingName.trim()}
                             aria-label={t("rework.promptCategories.manage.saveAria")}
