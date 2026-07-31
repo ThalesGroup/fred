@@ -850,6 +850,55 @@ async def test_missing_workspace_fs_raises_runtime_error(no_pdf):
         await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
 
 
+# --- L. Heavy-job admission control (#2183) -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_busy_pod_rejects_fill_without_writing(no_pdf, monkeypatch):
+    """When the per-pod heavy-job bound is saturated, the fill fails fast with a
+    clear busy message instead of running (never queues)."""
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    workspace = FakeWorkspace()
+    ctx = _ctx(schema_slides(deck), template_bytes=deck, workspace=workspace)
+    monkeypatch.setattr(fill_mod, "acquire_heavy_job_slot", lambda: False)
+
+    content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
+
+    assert artifact.is_error is True
+    assert "busy" in content.lower()
+    assert workspace.writes == []
+
+
+@pytest.mark.asyncio
+async def test_heavy_job_slot_released_after_successful_fill(no_pdf):
+    from fred_capability_ppt_filler import concurrency as concurrency_mod
+
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    ctx = _ctx(schema_slides(deck), template_bytes=deck)
+
+    _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
+
+    assert artifact.is_error is False
+    assert concurrency_mod._active_jobs == 0
+
+
+@pytest.mark.asyncio
+async def test_heavy_job_slot_released_after_failed_fill(no_pdf):
+    """The slot is released even when the sync worker raises (e.g. a corrupt
+    template), not only on the success path."""
+    from fred_capability_ppt_filler import concurrency as concurrency_mod
+
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    # Not a real .pptx -> Presentation(...) raises inside the thread worker.
+    ctx = _ctx(schema_slides(deck), template_bytes=b"not a pptx")
+
+    content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
+
+    assert artifact.is_error is True
+    assert "Could not fill" in content
+    assert concurrency_mod._active_jobs == 0
+
+
 @pytest.mark.asyncio
 async def test_missing_document_content_for_image_fails_the_fill(no_pdf):
     """A missing ``document_content`` port fails LOUD like the other port guards.
