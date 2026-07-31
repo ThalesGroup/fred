@@ -273,8 +273,14 @@ class _FailingConnection:
 class _UnreachableEngine:
     dialect = SimpleNamespace(name="postgresql")
 
+    def __init__(self) -> None:
+        self.disposed = False
+
     def connect(self):
         return _FailingConnection()
+
+    async def dispose(self) -> None:
+        self.disposed = True
 
 
 @pytest.mark.asyncio
@@ -287,10 +293,11 @@ async def test_initialize_sql_propagates_when_postgres_is_unreachable(
     boot-time SELECT 1 ping. Must abort startup, not run stateless."""
     import fred_core.sql.base_sql as base_sql_module
 
+    engine = _UnreachableEngine()
     monkeypatch.setattr(
         base_sql_module,
         "create_async_engine_from_config",
-        lambda _config: _UnreachableEngine(),
+        lambda _config: engine,
     )
 
     container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
@@ -302,6 +309,10 @@ async def test_initialize_sql_propagates_when_postgres_is_unreachable(
     assert container.get_sql_engine() is None
     assert container.get_checkpointer() is None
     assert container.get_history_store() is None
+    # This engine never reaches self._sql_engine on this failure path, so
+    # shutdown()'s own dispose() can never reach it either — it must be
+    # disposed on the failure path itself, or it leaks.
+    assert engine.disposed is True
 
 
 class _SlowConnection:
@@ -319,8 +330,14 @@ class _SlowConnection:
 class _HangingEngine:
     dialect = SimpleNamespace(name="postgresql")
 
+    def __init__(self) -> None:
+        self.disposed = False
+
     def connect(self):
         return _SlowConnection()
+
+    async def dispose(self) -> None:
+        self.disposed = True
 
 
 @pytest.mark.asyncio
@@ -333,10 +350,11 @@ async def test_initialize_sql_bounds_the_connectivity_ping(
     import fred_core.sql.base_sql as base_sql_module
     from fred_runtime.app import context as context_module
 
+    engine = _HangingEngine()
     monkeypatch.setattr(
         base_sql_module,
         "create_async_engine_from_config",
-        lambda _config: _HangingEngine(),
+        lambda _config: engine,
     )
     monkeypatch.setattr(context_module, "_SQL_BOOT_PING_TIMEOUT_S", 0.05)
 
@@ -347,3 +365,6 @@ async def test_initialize_sql_bounds_the_connectivity_ping(
         await container.initialize_sql()
 
     assert container.get_checkpointer() is None
+    # Same leak-on-failure regression as the unreachable-Postgres case above
+    # — the timeout path must dispose the engine too.
+    assert engine.disposed is True

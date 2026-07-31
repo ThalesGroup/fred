@@ -185,6 +185,13 @@ class PodApplicationContext:
                 postgres_config.database,
                 type(exc).__name__,
             )
+            # This engine never reaches self._sql_engine on this path, so
+            # shutdown()'s own dispose() (below) can never reach it either —
+            # dispose it here or it leaks. Harmless today (the sole caller,
+            # agent_app.py's lifespan, has no retry and the process exits on
+            # this raise) but becomes a real leak the moment any retry/backoff
+            # wrapper is added around initialize_sql() or the lifespan.
+            await engine.dispose()
             raise
 
         init_user_store(engine)
