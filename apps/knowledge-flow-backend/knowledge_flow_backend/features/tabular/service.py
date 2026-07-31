@@ -38,6 +38,12 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     read_tabular_artifact,
     read_tabular_multi_artifact,
 )
+from knowledge_flow_backend.features.tabular.execution import (
+    DuckDBAbortHandle,
+    close_duckdb_connection,
+    open_duckdb_connection,
+    run_duckdb_job,
+)
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularDatasetResponse,
@@ -154,6 +160,11 @@ def _redacting_dataset_read_errors():
     """
     try:
         yield
+    except duckdb.OutOfMemoryException:
+        # Same reasoning as the query wrapper: a scan that blows the per-query
+        # budget is the caller asking for too much, not a server failure.
+        logger.warning("[TABULAR] dataset read exceeded its memory budget")
+        raise TabularQueryError("Reading this dataset exceeded the per-query memory budget. Scope the request to fewer datasets.") from None
     except duckdb.Error as exc:
         raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
 
@@ -178,6 +189,17 @@ def _redacting_query_execution_errors():
     """
     try:
         yield
+    except duckdb.OutOfMemoryException:
+        # Spilling is disabled on purpose (see execution.py), so an over-budget
+        # query fails instead of silently writing gigabytes to the container's
+        # filesystem. That makes this a caller fault — the query asked for more
+        # than one request is allowed to use — and it must read as 400, not as a
+        # 500 with a stack trace, so an LLM caller can narrow and retry. The
+        # DuckDB text is dropped rather than redacted: it names the configured
+        # limit and advises setting `temp_directory`, neither of which is the
+        # caller's business.
+        logger.warning("[TABULAR] read query exceeded its memory budget")
+        raise TabularQueryError("Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.") from None
     except (duckdb.ProgrammingError, duckdb.DataError) as exc:
         message = _redact_signed_urls(str(exc))
         logger.warning("[TABULAR] read query rejected by DuckDB: %s", message)
@@ -459,7 +481,7 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        return self._load_dataset_frame(dataset=dataset)
+        return await self._load_dataset_frame(dataset=dataset)
 
     async def read_dataset_preview_frame(
         self,
@@ -495,7 +517,7 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        return self._load_dataset_frame(dataset=dataset, max_rows=max_rows)
+        return await self._load_dataset_frame(dataset=dataset, max_rows=max_rows)
 
     async def query_read(
         self,
@@ -533,33 +555,44 @@ class TabularService:
             raise ValueError("No authorized tabular datasets are available for this query")
 
         allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
-        sql_query = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
-        tabular_config = self.tabular_config
-
-        started_at = time.perf_counter()
-        sql_hash = hashlib.sha256(sql_query.encode("utf-8")).hexdigest()
+        query_config = self.tabular_config.query
         effective_max_rows = min(
-            request.max_rows or tabular_config.query.default_max_rows,
-            tabular_config.query.max_rows,
+            request.max_rows or query_config.default_max_rows,
+            query_config.max_rows,
         )
 
-        connection = duckdb.connect(database=":memory:")
-        try:
-            await self._mount_datasets(connection=connection, datasets=selected_datasets)
-            limited_query = f"SELECT * FROM ({sql_query}) AS fred_result LIMIT {effective_max_rows}"
-            with _redacting_query_execution_errors():
-                rows_df = connection.execute(limited_query).df()
-            rows = rows_df.to_dict(orient="records")
-        finally:
-            connection.close()
+        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], list[ResolvedDataset]]:
+            connection = open_duckdb_connection(handle, config=query_config)
+            try:
+                handle.raise_if_aborted()
+                # Validation parses the SQL and already knows which authorized
+                # aliases it touches, so it runs here — inside the worker, since
+                # it opens its own DuckDB connection — and its result decides
+                # what gets mounted.
+                validated = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
+                mounted_datasets = self._datasets_to_mount(
+                    selected_datasets=selected_datasets,
+                    referenced_relations=validated.referenced_relations,
+                )
+                self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
+                handle.raise_if_aborted()
+                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
+                with _redacting_query_execution_errors():
+                    rows_df = connection.execute(limited_query).df()
+                return validated.sql, rows_df.to_dict(orient="records"), mounted_datasets
+            finally:
+                close_duckdb_connection(handle, connection)
+
+        started_at = time.perf_counter()
+        sql_query, rows, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
 
         duration_ms = (time.perf_counter() - started_at) * 1000
         logger.info(
             "[TABULAR] user=%s datasets=%s aliases=%s sql_sha256=%s rows=%s duration_ms=%.2f",
             user.uid,
-            [dataset.metadata.document_uid for dataset in selected_datasets],
-            [dataset.query_alias for dataset in selected_datasets],
-            sql_hash,
+            [dataset.metadata.document_uid for dataset in mounted_datasets],
+            [dataset.query_alias for dataset in mounted_datasets],
+            hashlib.sha256(sql_query.encode("utf-8")).hexdigest(),
             len(rows),
             duration_ms,
         )
@@ -568,8 +601,8 @@ class TabularService:
             sql_query=sql_query,
             rows=rows,
             error=None,
-            dataset_uids=[dataset.metadata.document_uid for dataset in selected_datasets],
-            query_aliases=[dataset.query_alias for dataset in selected_datasets],
+            dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
+            query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )
 
     async def search_values(
@@ -617,38 +650,64 @@ class TabularService:
         if not selected_datasets:
             raise ValueError("No authorized tabular datasets are available for this search")
 
+        query_config = self.tabular_config.query
+        # A search has no SQL to narrow the selection with, so the cap is the only
+        # bound on how many tables one request may scan. Truncating here bounds
+        # mounting too, which on a remote store is one Parquet metadata fetch per
+        # dataset before any scanning starts.
+        scanned_datasets = selected_datasets[: query_config.max_selected_datasets]
+        selection_truncated = len(scanned_datasets) < len(selected_datasets)
+        # A multi-table workbook can be cut mid-document by the cap. Reporting
+        # its uid as searched would tell the caller "the value is not in this
+        # document" when tables of it were never opened, so a partially scanned
+        # document is left out of `searched_dataset_uids` entirely.
+        dropped_document_uids = {dataset.metadata.document_uid for dataset in selected_datasets[query_config.max_selected_datasets :]}
+        if selection_truncated:
+            logger.info(
+                "[TABULAR] search selection capped user=%s selected=%s scanned=%s",
+                user.uid,
+                len(selected_datasets),
+                len(scanned_datasets),
+            )
+
+        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[TabularTableMatch], bool]:
+            connection = open_duckdb_connection(handle, config=query_config)
+            try:
+                handle.raise_if_aborted()
+                # Normalize the keyword through the exact same DuckDB expression the
+                # column values pass through, so both operands are strictly comparable.
+                keyword_probe_sql = f"SELECT {self._normalize_expr(quote_string_literal(raw_keyword))}"
+                probe_row = connection.execute(keyword_probe_sql).fetchone()
+                probe_keyword = probe_row[0] if probe_row else None
+                if not probe_keyword:
+                    raise ValueError("Keyword is empty after normalization; provide a more specific value")
+
+                self._mount_datasets(connection=connection, datasets=scanned_datasets, handle=handle)
+
+                matches: list[TabularTableMatch] = []
+                tables_truncated = selection_truncated
+                with _redacting_dataset_read_errors():
+                    for dataset in scanned_datasets:
+                        if len(matches) >= request.max_matching_tables:
+                            # The cap is reached and at least one more table remains
+                            # unscanned: other occurrences may exist beyond what we return.
+                            tables_truncated = True
+                            break
+                        handle.raise_if_aborted()
+                        match = self._search_one_table(
+                            connection=connection,
+                            dataset=dataset,
+                            normalized_keyword=probe_keyword,
+                            max_rows_per_table=request.max_rows_per_table,
+                        )
+                        if match is not None:
+                            matches.append(match)
+                return probe_keyword, matches, tables_truncated
+            finally:
+                close_duckdb_connection(handle, connection)
+
         started_at = time.perf_counter()
-        connection = duckdb.connect(database=":memory:")
-        try:
-            # Normalize the keyword through the exact same DuckDB expression the
-            # column values pass through, so both operands are strictly comparable.
-            keyword_probe_sql = f"SELECT {self._normalize_expr(quote_string_literal(raw_keyword))}"
-            probe_row = connection.execute(keyword_probe_sql).fetchone()
-            normalized_keyword = probe_row[0] if probe_row else None
-            if not normalized_keyword:
-                raise ValueError("Keyword is empty after normalization; provide a more specific value")
-
-            await self._mount_datasets(connection=connection, datasets=selected_datasets)
-
-            matches: list[TabularTableMatch] = []
-            tables_truncated = False
-            with _redacting_dataset_read_errors():
-                for dataset in selected_datasets:
-                    if len(matches) >= request.max_matching_tables:
-                        # The cap is reached and at least one more table remains
-                        # unscanned: other occurrences may exist beyond what we return.
-                        tables_truncated = True
-                        break
-                    match = self._search_one_table(
-                        connection=connection,
-                        dataset=dataset,
-                        normalized_keyword=normalized_keyword,
-                        max_rows_per_table=request.max_rows_per_table,
-                    )
-                    if match is not None:
-                        matches.append(match)
-        finally:
-            connection.close()
+        normalized_keyword, matches, tables_truncated = await run_duckdb_job(_job, config=query_config, operation="search")
 
         duration_ms = (time.perf_counter() - started_at) * 1000
         # The keyword itself is not logged: it may carry sensitive terms, exactly
@@ -656,7 +715,7 @@ class TabularService:
         logger.info(
             "[TABULAR] search user=%s datasets=%s matches=%s tables_truncated=%s duration_ms=%.2f",
             user.uid,
-            [dataset.metadata.document_uid for dataset in selected_datasets],
+            [dataset.metadata.document_uid for dataset in scanned_datasets],
             len(matches),
             tables_truncated,
             duration_ms,
@@ -667,7 +726,7 @@ class TabularService:
             normalized_keyword=normalized_keyword,
             matches=matches,
             tables_truncated=tables_truncated,
-            searched_dataset_uids=list(dict.fromkeys(dataset.metadata.document_uid for dataset in selected_datasets)),
+            searched_dataset_uids=[document_uid for document_uid in dict.fromkeys(dataset.metadata.document_uid for dataset in scanned_datasets) if document_uid not in dropped_document_uids],
         )
 
     @staticmethod
@@ -986,11 +1045,46 @@ class TabularService:
             self.tag_service = TagService()
         return self.tag_service
 
-    async def _mount_datasets(
+    def _datasets_to_mount(
+        self,
+        *,
+        selected_datasets: list[ResolvedDataset],
+        referenced_relations: frozenset[str],
+    ) -> list[ResolvedDataset]:
+        """
+        Narrow one authorized selection to the datasets a query actually reads.
+
+        Why this exists:
+        - Leaving `dataset_uids` empty selects every readable dataset, and every
+          selected dataset used to be mounted whether or not the SQL referenced
+          it. On a remote content store each mount is a Parquet metadata fetch,
+          so an unscoped `SELECT 1` against a large tenant paid for hundreds of
+          round trips before executing anything. Mounting only the referenced
+          relations makes that cost proportional to the query.
+        - The remaining cap is a backstop for a query that legitimately joins
+          more datasets than one request is allowed to open at once.
+
+        How to use:
+        - Pass the authorized selection and `ValidatedReadQuery.referenced_relations`.
+        - Raises `ValueError` (HTTP 400) when the query reads no dataset at all,
+          or when it reads more than `max_selected_datasets`.
+        """
+
+        mounted_datasets = [dataset for dataset in selected_datasets if dataset.query_alias in referenced_relations]
+        if not mounted_datasets:
+            raise ValueError("Query references no authorized dataset; name at least one dataset alias in the FROM clause")
+
+        max_selected = self.tabular_config.query.max_selected_datasets
+        if len(mounted_datasets) > max_selected:
+            raise ValueError(f"Query references {len(mounted_datasets)} datasets, above the limit of {max_selected}; narrow dataset_uids or the query")
+        return mounted_datasets
+
+    def _mount_datasets(
         self,
         *,
         connection: duckdb.DuckDBPyConnection,
         datasets: list[ResolvedDataset],
+        handle: DuckDBAbortHandle,
     ) -> None:
         """
         Mount authorized Parquet datasets as temporary DuckDB views.
@@ -1000,11 +1094,18 @@ class TabularService:
           session are visible to the query.
 
         How to use:
-        - Call on a fresh in-memory connection before executing one SQL query.
+        - Call on a fresh in-memory connection, inside the worker thread, before
+          executing one SQL query.
+        - The abort handle is checked before each dataset because this loop is
+          the one part of a job `connection.interrupt()` cannot stop: resolving a
+          location and opening a remote Parquet are blocking calls outside
+          DuckDB's own interruptible execution. Checking between datasets bounds
+          how much of an abandoned mount still runs.
         """
 
         dataset_locations: list[tuple[ResolvedDataset, str]] = []
         for dataset in datasets:
+            handle.raise_if_aborted()
             location = self._resolve_dataset_location(dataset.artifact.object_key)
             dataset_locations.append((dataset, location))
 
@@ -1013,6 +1114,7 @@ class TabularService:
 
         with _redacting_dataset_read_errors():
             for dataset, location in dataset_locations:
+                handle.raise_if_aborted()
                 connection.from_parquet(location).create_view(dataset.query_alias)
 
     def _resolve_dataset_location(self, object_key: str) -> str:
@@ -1133,7 +1235,7 @@ class TabularService:
             generated_at=dataset.artifact.generated_at,
         )
 
-    def _load_dataset_frame(
+    async def _load_dataset_frame(
         self,
         *,
         dataset: ResolvedDataset,
@@ -1145,25 +1247,44 @@ class TabularService:
         Why this exists:
         - Full dataset reads and preview reads share the same object-location
           resolution and DuckDB/httpfs setup.
-        - Keeping that logic in one helper avoids preview-specific drift.
+        - Keeping that logic in one helper avoids preview-specific drift, and
+          means the document-preview route gets the same execution guardrails as
+          SQL queries — it shares the process-wide slot budget rather than
+          bypassing it.
 
         How to use:
         - Pass a resolved dataset from `_get_dataset_or_raise(...)`.
         - Optionally set `max_rows` to limit the returned preview size.
 
         Example:
-        - `frame = self._load_dataset_frame(dataset=dataset, max_rows=200)`
+        - `frame = await self._load_dataset_frame(dataset=dataset, max_rows=200)`
         """
-        connection = duckdb.connect(database=":memory:")
-        try:
-            location = self._resolve_dataset_location(dataset.artifact.object_key)
-            if self._requires_httpfs(location):
-                self._ensure_httpfs_ready(connection)
 
-            with _redacting_dataset_read_errors():
-                relation = connection.from_parquet(location)
-                if max_rows is not None:
-                    relation = relation.limit(max_rows)
-                return relation.df()
-        finally:
-            connection.close()
+        query_config = self.tabular_config.query
+
+        def _job(handle: DuckDBAbortHandle) -> pd.DataFrame:
+            connection = open_duckdb_connection(handle, config=query_config)
+            try:
+                handle.raise_if_aborted()
+                location = self._resolve_dataset_location(dataset.artifact.object_key)
+                if self._requires_httpfs(location):
+                    self._ensure_httpfs_ready(connection)
+
+                handle.raise_if_aborted()
+                with _redacting_dataset_read_errors():
+                    relation = connection.from_parquet(location)
+                    if max_rows is not None:
+                        relation = relation.limit(max_rows)
+                    return relation.df()
+            finally:
+                close_duckdb_connection(handle, connection)
+
+        started_at = time.perf_counter()
+        frame = await run_duckdb_job(_job, config=query_config, operation="preview")
+        logger.info(
+            "[TABULAR] preview dataset=%s rows=%s duration_ms=%.2f",
+            dataset.metadata.document_uid,
+            len(frame),
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return frame

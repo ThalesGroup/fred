@@ -6559,9 +6559,51 @@
                             },
                             "max_rows": {
                               "default": 1000,
-                              "description": "Hard cap applied to query result previews.",
+                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
                               "minimum": 1,
                               "title": "Max Rows",
+                              "type": "integer"
+                            },
+                            "max_concurrent_queries": {
+                              "default": 2,
+                              "description": "Maximum DuckDB jobs running at once in this process. Sizes the dedicated thread pool, so it also bounds worst-case DuckDB memory together with duckdb_memory_limit.",
+                              "minimum": 1,
+                              "title": "Max Concurrent Queries",
+                              "type": "integer"
+                            },
+                            "max_queued_queries": {
+                              "default": 4,
+                              "description": "Extra jobs allowed to wait for a free slot before new requests are rejected with 503. Absorbs bursts without letting the queue grow without bound.",
+                              "minimum": 0,
+                              "title": "Max Queued Queries",
+                              "type": "integer"
+                            },
+                            "query_timeout_seconds": {
+                              "default": 30.0,
+                              "description": "Wall-clock budget for one DuckDB job before it is aborted and the caller receives 504. Abort is best-effort for work blocked on network I/O.",
+                              "exclusiveMinimum": 0,
+                              "title": "Query Timeout Seconds",
+                              "type": "number"
+                            },
+                            "duckdb_threads": {
+                              "default": 1,
+                              "description": "Threads DuckDB may use per connection. Set explicitly because DuckDB otherwise auto-detects the host's CPUs and ignores the container's CPU limit.",
+                              "minimum": 1,
+                              "title": "Duckdb Threads",
+                              "type": "integer"
+                            },
+                            "duckdb_memory_limit": {
+                              "default": "256MB",
+                              "description": "Buffer-manager budget per DuckDB connection, e.g. '256MB'. Validated at startup so a typo fails fast instead of at the first query.",
+                              "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
+                              "title": "Duckdb Memory Limit",
+                              "type": "string"
+                            },
+                            "max_selected_datasets": {
+                              "default": 50,
+                              "description": "Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
+                              "minimum": 1,
+                              "title": "Max Selected Datasets",
                               "type": "integer"
                             }
                           },
@@ -11096,9 +11138,51 @@
                             },
                             "max_rows": {
                               "default": 1000,
-                              "description": "Hard cap applied to query result previews.",
+                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
                               "minimum": 1,
                               "title": "Max Rows",
+                              "type": "integer"
+                            },
+                            "max_concurrent_queries": {
+                              "default": 2,
+                              "description": "Maximum DuckDB jobs running at once in this process. Sizes the dedicated thread pool, so it also bounds worst-case DuckDB memory together with duckdb_memory_limit.",
+                              "minimum": 1,
+                              "title": "Max Concurrent Queries",
+                              "type": "integer"
+                            },
+                            "max_queued_queries": {
+                              "default": 4,
+                              "description": "Extra jobs allowed to wait for a free slot before new requests are rejected with 503. Absorbs bursts without letting the queue grow without bound.",
+                              "minimum": 0,
+                              "title": "Max Queued Queries",
+                              "type": "integer"
+                            },
+                            "query_timeout_seconds": {
+                              "default": 30.0,
+                              "description": "Wall-clock budget for one DuckDB job before it is aborted and the caller receives 504. Abort is best-effort for work blocked on network I/O.",
+                              "exclusiveMinimum": 0,
+                              "title": "Query Timeout Seconds",
+                              "type": "number"
+                            },
+                            "duckdb_threads": {
+                              "default": 1,
+                              "description": "Threads DuckDB may use per connection. Set explicitly because DuckDB otherwise auto-detects the host's CPUs and ignores the container's CPU limit.",
+                              "minimum": 1,
+                              "title": "Duckdb Threads",
+                              "type": "integer"
+                            },
+                            "duckdb_memory_limit": {
+                              "default": "256MB",
+                              "description": "Buffer-manager budget per DuckDB connection, e.g. '256MB'. Validated at startup so a typo fails fast instead of at the first query.",
+                              "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
+                              "title": "Duckdb Memory Limit",
+                              "type": "string"
+                            },
+                            "max_selected_datasets": {
+                              "default": 50,
+                              "description": "Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
+                              "minimum": 1,
+                              "title": "Max Selected Datasets",
                               "type": "integer"
                             }
                           },

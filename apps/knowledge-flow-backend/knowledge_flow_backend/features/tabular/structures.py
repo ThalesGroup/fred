@@ -170,8 +170,13 @@ class TabularQueryRequest(BaseModel):
 
     How to use:
     - Send `sql` and an optional `dataset_uids` subset.
-    - Leave `dataset_uids` empty to query every readable dataset in the active
-      tabular scope.
+    - Leave `dataset_uids` empty to make every readable dataset in the active
+      tabular scope available to the query. Only the aliases the SQL actually
+      references are mounted, so leaving it empty costs nothing.
+    - The query must reference at least one dataset alias in its `FROM` clause;
+      a query that reads no dataset (`SELECT 1`) is rejected with 400.
+    - A query joining more datasets than the server's per-request limit is also
+      rejected with 400 — split it or scope `dataset_uids`.
     - Optionally pass `owner_filter`, `team_id`, and
       `document_library_tags_ids` so SQL execution stays inside the current
       personal/team area and selected libraries.
@@ -329,8 +334,11 @@ class TabularSearchResponse(BaseModel):
 
     How to use:
     - Returned by `POST /tabular/search`.
-    - When `tables_truncated` is true the search stopped at the table cap: the
-      keyword is too generic to disambiguate — refine it or read the catalog.
+    - When `tables_truncated` is true the result is partial, for one of two
+      reasons: the keyword matched more tables than `max_matching_tables` (it is
+      too generic — refine it), or the scope held more datasets than one request
+      may scan (scope it with `dataset_uids`). Compare `searched_dataset_uids`
+      with what you expected to tell the two apart.
     """
 
     keyword: str
@@ -338,6 +346,9 @@ class TabularSearchResponse(BaseModel):
     matches: list[TabularTableMatch] = Field(default_factory=list)
     tables_truncated: bool = Field(
         default=False,
-        description="True when the max_matching_tables cap was reached: other tables may also contain the value.",
+        description="True when the result is partial: either the max_matching_tables cap was reached, or the scope exceeded the number of datasets one search may scan. Other tables may also contain the value.",
     )
-    searched_dataset_uids: list[str] = Field(default_factory=list)
+    searched_dataset_uids: list[str] = Field(
+        default_factory=list,
+        description="Documents that were in scope for this search. A document dropped by the dataset limit is omitted entirely. Note this is not proof a listed document was read exhaustively: when tables_truncated is true the scan stopped early, so a listed document may still hold the keyword in a table that was never opened.",
+    )

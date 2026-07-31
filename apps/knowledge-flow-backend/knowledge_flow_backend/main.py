@@ -72,6 +72,7 @@ from knowledge_flow_backend.features.resources.controller import ResourceControl
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
 from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.tree.controller import TreeController
@@ -199,6 +200,10 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
+    # The tabular execution guard is reached from several features (tabular
+    # routes, document preview, summarize, corpus filesystem), so its two
+    # errors are mapped once here rather than per route.
+    register_tabular_exception_handlers(app)
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)

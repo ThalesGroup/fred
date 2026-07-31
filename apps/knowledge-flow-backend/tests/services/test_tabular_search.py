@@ -219,3 +219,91 @@ async def test_search_rejects_too_short_keyword(tmp_path, metadata_store):
     service = TabularService()
     with pytest.raises(ValueError, match="at least 2 characters"):
         await service.search_values(_user(), request=TabularSearchRequest(keyword="a"))
+
+
+@pytest.mark.asyncio
+async def test_search_caps_datasets_examined_even_when_nothing_matches(tmp_path, metadata_store):
+    """
+    Verify the scan is bounded by tables *examined*, not only by tables matched.
+
+    Why this exists:
+    - `max_matching_tables` only breaks the loop once matches accumulate, so a
+      keyword that matches nothing used to scan every selected dataset twice
+      (an aggregate pass plus a sampled pass). That is issue #2182 finding C:
+      the zero-match case was the unbounded one.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    for index in range(4):
+        await _ingest_csv(
+            tmp_path=tmp_path,
+            document_uid=f"doc-quiet-{index}",
+            file_name=f"quiet-{index}.csv",
+            content="label\nsomethingelse\n",
+        )
+
+    service = TabularService()
+    service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
+
+    examined: list[str] = []
+    original_search = service._search_one_table
+
+    def _record(*, connection, dataset, normalized_keyword, max_rows_per_table):
+        examined.append(dataset.query_alias)
+        return original_search(
+            connection=connection,
+            dataset=dataset,
+            normalized_keyword=normalized_keyword,
+            max_rows_per_table=max_rows_per_table,
+        )
+
+    service._search_one_table = _record
+
+    response = await service.search_values(_user(), request=TabularSearchRequest(keyword="absent-value"))
+
+    assert response.matches == []
+    assert len(examined) == 2, "a zero-match search must still stop at the dataset cap"
+    assert response.tables_truncated is True
+    assert len(response.searched_dataset_uids) == 2
+
+
+@pytest.mark.asyncio
+async def test_search_does_not_claim_to_have_searched_a_partially_scanned_document(tmp_path, metadata_store):
+    """
+    Verify a workbook cut in half by the dataset cap is not reported as searched.
+
+    Why this exists:
+    - A spreadsheet expands to one dataset per table, so the cap can slice
+      through the middle of one document. Listing its uid in
+      `searched_dataset_uids` would tell the caller "the value is not in this
+      document" when tables of it were never opened — a wrong answer, not a
+      partial one. `tables_truncated` alone does not say which document is
+      incomplete.
+    """
+    # Reuse the workbook fixture rather than duplicating the two-sheet build.
+    from tests.services.test_tabular_service import _ingest_excel_workbook
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-book")
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-plain",
+        file_name="plain.csv",
+        content="label\nwidget\n",
+    )
+
+    service = TabularService()
+    all_datasets = await service._resolve_authorized_datasets(_user())
+    workbook_tables = [dataset for dataset in all_datasets if dataset.metadata.document_uid == "doc-book"]
+    assert len(workbook_tables) > 1, "fixture must produce a multi-table workbook"
+
+    # Cap below the workbook's table count so the document is sliced in half.
+    service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 1})})
+
+    response = await service.search_values(_user(), request=TabularSearchRequest(keyword="Paris"))
+
+    assert response.tables_truncated is True
+    assert "doc-book" not in response.searched_dataset_uids, "a half-scanned workbook must not be reported as searched"
