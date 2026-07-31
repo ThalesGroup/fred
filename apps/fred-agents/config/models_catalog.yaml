@@ -209,6 +209,7 @@ profiles:
       name: mock-openai-chat
       settings:
         base_url: http://localhost:8383/v1
+        api_key: key-1
 
   - profile_id: default.language.mock
     capability: language
@@ -217,6 +218,7 @@ profiles:
       name: mock-openai-chat
       settings:
         base_url: http://localhost:8383/v1
+        api_key: key-1
 
   - profile_id: chat.anthropic.claude-sonnet
     capability: chat
