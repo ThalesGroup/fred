@@ -29,7 +29,7 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAdminCapabilitiesQuery,
@@ -85,6 +85,17 @@ export default function CapabilitiesPage() {
   // switch guarded against a concurrent submit without ever disabling the
   // one element that's still focused.
   const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
+  // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
+  // the same capability id. A rapid double-click on the same row (the
+  // always-undebounced "turn default-on on" path in onToggleDefault, below)
+  // fires two calls before React has re-rendered — a togglingCapabilityId
+  // state check alone can't see the first call's update in time. Without
+  // this, both calls' `finally` blocks race to clear the single
+  // togglingCapabilityId, and whichever resolves first can transiently
+  // re-disable the still-in-flight row's Switch while it's still focused —
+  // reintroducing the exact Chromium forced-blur bug the exclusion above
+  // was written to prevent.
+  const inFlightDefaultOnIdRef = useRef<string | null>(null);
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -100,6 +111,10 @@ export default function CapabilitiesPage() {
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (inFlightDefaultOnIdRef.current === capability.id) {
+      return;
+    }
+    inFlightDefaultOnIdRef.current = capability.id;
     setTogglingCapabilityId(capability.id);
     try {
       const result = await setDefaultOn({
@@ -119,6 +134,7 @@ export default function CapabilitiesPage() {
     } catch {
       showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
     } finally {
+      inFlightDefaultOnIdRef.current = null;
       setTogglingCapabilityId(null);
     }
   };
