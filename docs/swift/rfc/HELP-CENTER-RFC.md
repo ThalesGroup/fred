@@ -1,6 +1,6 @@
 # RFC — In-App Help Center (Wiki-Style User Documentation)
 
-**Status:** In progress — HELP-01.A (shell) implemented 2026-07-31; search (.B) and content (.C) pending
+**Status:** In progress — HELP-01.A (shell) + HELP-01.B (search) implemented 2026-07-31; content (.C) pending
 **Author:** Maxime Daragon (drafted with Claude Code)
 **Date:** 2026-07-31
 **Area:** `frontend` (v1 is frontend-only — no backend change)

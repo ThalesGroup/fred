@@ -1,0 +1,86 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+.search {
+  position: relative;
+  width: 260px;
+}
+
+.panel {
+  display: flex;
+  position: absolute;
+  top: calc(100% + var(--spacing-2xs));
+  right: 0;
+  left: 0;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  z-index: 10;
+  box-shadow: var(--shadow-m);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs);
+  max-height: 60vh;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.empty {
+  padding: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  padding: var(--spacing-xs);
+  width: 100%;
+  color: var(--on-surface);
+  text-align: left;
+
+  &:hover {
+    background: var(--state-on-surface-hover);
+  }
+}
+
+.resultTitle {
+  font: var(--font-label-large);
+}
+
+.resultHeading {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.resultSection {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.resultSnippet {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+
+  // Injected match highlight (search.ts wraps the matched run in <mark>).
+  :global(mark) {
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+  }
+}

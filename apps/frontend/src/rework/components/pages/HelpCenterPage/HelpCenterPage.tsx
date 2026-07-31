@@ -21,6 +21,7 @@ import { getHelpPage, getHelpTree, helpPagePath } from "@rework/features/helpCen
 import { DEFAULT_SECTION_ID, HELP_LANGS, isHelpLang, type HelpLang } from "@rework/features/helpCenter/manifest";
 import HelpSidebar from "./HelpSidebar";
 import HelpArticle from "./HelpArticle";
+import HelpSearch from "./HelpSearch";
 import styles from "./HelpCenterPage.module.scss";
 
 /** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
@@ -82,15 +83,18 @@ export default function HelpCenterPage() {
           </span>
           <span>{t("rework.helpCenter.title")}</span>
         </div>
-        <ButtonGroup
-          variant="radio"
-          size="xs"
-          color="secondary"
-          aria-label={t("rework.helpCenter.languageAria")}
-          items={HELP_LANGS.map((l) => ({ label: l.toUpperCase() }))}
-          selectedIndex={HELP_LANGS.indexOf(lang)}
-          onSelectedIndexChange={(index) => switchLanguage(HELP_LANGS[index])}
-        />
+        <div className={styles.headerActions}>
+          <HelpSearch lang={lang} tree={tree} />
+          <ButtonGroup
+            variant="radio"
+            size="xs"
+            color="secondary"
+            aria-label={t("rework.helpCenter.languageAria")}
+            items={HELP_LANGS.map((l) => ({ label: l.toUpperCase() }))}
+            selectedIndex={HELP_LANGS.indexOf(lang)}
+            onSelectedIndexChange={(index) => switchLanguage(HELP_LANGS[index])}
+          />
+        </div>
       </header>
       <div className={styles.body}>
         <HelpSidebar tree={tree} lang={lang} activeSectionId={section.id} activePageId={pageId} />

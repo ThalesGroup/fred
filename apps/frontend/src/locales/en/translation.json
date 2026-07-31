@@ -1213,6 +1213,13 @@
       "copyPageLink": "Copy page link",
       "copyHeadingLink": "Copy link to this heading",
       "missingPage": "This page doesn't exist yet.",
+      "search": {
+        "placeholder": "Search the help…",
+        "ariaLabel": "Search the Help Center",
+        "clearAriaLabel": "Clear search",
+        "resultsAria": "Search results",
+        "noResults": "No results."
+      },
       "sections": {
         "gettingStarted": "Getting started",
         "features": "Features",

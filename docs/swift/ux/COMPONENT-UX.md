@@ -2189,11 +2189,25 @@ Opt-in h2/h3 rendering with a slug `id` and a hover/focus-revealed copy-link
 button (xs icon `IconButton`, `link` → `check` feedback). Off by default —
 chat rendering unchanged.
 
+### `HelpSearch` (HELP-01.B)
+
+**Location:** `src/rework/components/pages/HelpCenterPage/HelpSearch.tsx`
+**Status:** `Functional`
+
+Global help search in the page header: a `SearchInput` (reused) with a
+results dropdown. The index (`features/helpCenter/search.ts`) is built
+client-side, lazily on the first keystroke, cached per language for the
+session — nothing runs until the user types. Weighted scoring (title >
+description > heading > body), AND semantics across terms, `<mark>`-highlighted
+snippet; a heading hit carries the heading's anchor so selecting the result
+lands on the exact section.
+
 #### Open UX issues
 
 - **Not yet design-reviewed** — sidebar density, header weight, article
-  measure, and the anchor-button hover affordance need a designer pass once
-  real content lands (HELP-01.C).
+  measure, the anchor-button hover affordance, and the search dropdown
+  (result density, snippet length, keyboard navigation) need a designer pass
+  once real content lands (HELP-01.C).
 
 ---
 

@@ -144,6 +144,12 @@ export function getHelpPage(lang: HelpLang, sectionId: string, pageId: string): 
   return { meta: stored.meta, body: resolveAssetUrls(stored.rawBody) };
 }
 
+/** Every page of one language with its meta + raw markdown body — the source
+ *  the search index is built from (see `search.ts`). */
+export function getHelpPagesForLang(lang: HelpLang): { meta: HelpPageMeta; body: string }[] {
+  return [...pages.values()].filter((p) => p.meta.lang === lang).map((p) => ({ meta: p.meta, body: p.rawBody }));
+}
+
 /** Canonical in-app path of a help page (index pages use the bare section URL). */
 export function helpPagePath(lang: HelpLang, sectionId: string, pageId: string): string {
   return pageId === "index" ? `/help/${lang}/${sectionId}` : `/help/${lang}/${sectionId}/${pageId}`;

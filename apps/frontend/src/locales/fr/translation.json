@@ -1213,6 +1213,13 @@
       "copyPageLink": "Copier le lien de la page",
       "copyHeadingLink": "Copier le lien vers ce titre",
       "missingPage": "Cette page n'existe pas encore.",
+      "search": {
+        "placeholder": "Rechercher dans l'aide…",
+        "ariaLabel": "Rechercher dans le centre d'aide",
+        "clearAriaLabel": "Effacer la recherche",
+        "resultsAria": "Résultats de recherche",
+        "noResults": "Aucun résultat."
+      },
       "sections": {
         "gettingStarted": "Démarrage",
         "features": "Fonctionnalités",
