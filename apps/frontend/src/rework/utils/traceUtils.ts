@@ -280,6 +280,26 @@ export function asRagSearchResult(data: Record<string, unknown> | null): RagSear
   return null;
 }
 
+// summarize_document / list_document_tree (first-party document capabilities, not
+// third-party MCP tools) return their content as plain prose/tree text, not a JSON
+// envelope — there's no shape to sniff, so these two are recognized by tool name
+// instead of by parsed-content shape. Still a curated allowlist, not a blanket
+// "show raw text for any tool" rule.
+export function isSummarizeDocumentTool(name: string): boolean {
+  return name === "summarize_document";
+}
+
+export function isDocumentTreeTool(name: string): boolean {
+  return name === "list_document_tree";
+}
+
+/** Strips list_document_tree's bracketed internal document uids before display —
+ *  same "never show this id to the user" rule the tool's docstring imposes on the
+ *  model's own answers (identifier hygiene, shared with summarize_document). */
+export function stripDocumentUids(tree: string): string {
+  return tree.replace(/\s*\[[\w-]+\]/g, "");
+}
+
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
 export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
   const action = humanizeToolName(toolName(entry.call));
@@ -299,6 +319,8 @@ export function toolCopyText(entry: TraceEntry): string | null {
   if (sqlResult) return sqlResult.sql_query;
   const ragResult = asRagSearchResult(data);
   if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
+  if (entry.result && isSummarizeDocumentTool(toolName(entry.call))) return toolResultContent(entry.result);
+  if (entry.result && isDocumentTreeTool(toolName(entry.call))) return stripDocumentUids(toolResultContent(entry.result));
   return JSON.stringify(genericToolPayload(entry), null, 2);
 }
 

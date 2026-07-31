@@ -51,7 +51,6 @@ from control_plane_backend.routing_policy.schemas import (
 )
 from control_plane_backend.teams.service import require_team_access
 
-
 # Read gate for routing policy (#2167 follow-up, explicit product decision):
 # only team_admin, team_editor, or team_analyst may read a team's routing
 # policy — a plain team_member must not. Each permission below is a proxy for

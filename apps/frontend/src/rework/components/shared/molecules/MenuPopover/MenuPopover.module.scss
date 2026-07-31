@@ -89,9 +89,9 @@
 /* Current value shown inline on the right, muted — mirrors the profile menu's
  * admin badge: the state is visible without opening the sub-menu. */
 .itemValue {
-  overflow: hidden;
   flex-shrink: 1;
   max-width: 45%;
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
   text-overflow: ellipsis;
