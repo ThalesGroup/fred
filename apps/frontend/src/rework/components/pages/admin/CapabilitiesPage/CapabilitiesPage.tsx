@@ -74,6 +74,17 @@ export default function CapabilitiesPage() {
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
+  // Which row's mutation is in flight — NOT just a boolean. Disabling every
+  // switch off `isTogglingDefault` used to include the one the admin just
+  // clicked, which still holds native focus at that instant: yanking
+  // `disabled` onto a focused control forces the browser to blur it and,
+  // in Chromium, silently scrollIntoView() the nearest scroll container
+  // (here `html`, kept `overflow: hidden` in styles/index.css) — no visible
+  // scrollbar, no wheel response, only a reload undoes it. Excluding the
+  // in-flight row's own id from the disabled check keeps every *other*
+  // switch guarded against a concurrent submit without ever disabling the
+  // one element that's still focused.
+  const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -89,6 +100,7 @@ export default function CapabilitiesPage() {
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    setTogglingCapabilityId(capability.id);
     try {
       const result = await setDefaultOn({
         capabilityId: capability.id,
@@ -106,6 +118,8 @@ export default function CapabilitiesPage() {
       }
     } catch {
       showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
+    } finally {
+      setTogglingCapabilityId(null);
     }
   };
 
@@ -188,7 +202,7 @@ export default function CapabilitiesPage() {
         <div className={styles.centered}>
           <Switch
             checked={cap.default_on}
-            disabled={isTogglingDefault}
+            disabled={isTogglingDefault && togglingCapabilityId !== cap.id}
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
