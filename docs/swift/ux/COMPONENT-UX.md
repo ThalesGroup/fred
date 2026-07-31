@@ -265,10 +265,12 @@ shared molecule.
   + SSE consumption) — a reasonable fast-follow, not required for the current fix since
   `content` already carries enough to render useful citations.
 
-- **Unrecognized-tool fallback still raw JSON** — only two content shapes are recognized
-  (SQL `{sql_query, rows, error}`, RAG `{query, hits}`); any other tool still falls back to
-  the redacted `{action, status, latency}` JSON view. Intentional (see Resolved below) but
-  the list of recognized shapes may need to grow as more tools are added.
+- **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
+  `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
+  (`summarize_document`, `list_document_tree`, see Resolved below) are recognized; any
+  other tool still falls back to the redacted `{action, status, latency}` JSON view.
+  Intentional (see Resolved below) but the list of recognized tools/shapes may need to
+  grow as more tools are added.
 
 #### Resolved
 
@@ -293,6 +295,19 @@ shared molecule.
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
   tool shape still falls back to the original redacted view — see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Curated views for `summarize_document` and `list_document_tree` (2026-07-31)** — these
+  two first-party document-capability tools return plain text (a prose summary / an
+  indented tree listing), not a JSON envelope, so they can't be recognized by content
+  shape like SQL/RAG — they're recognized by tool name instead (`isSummarizeDocumentTool`,
+  `isDocumentTreeTool` in `traceUtils.ts`), still a curated allowlist rather than a
+  blanket raw-text pass-through. `summarize_document` renders its summary through the
+  existing `MarkdownRenderer` (same treatment as reasoning text) instead of a JSON dump.
+  `list_document_tree` renders the tree in a plaintext `CodeBlock`, with the bracketed
+  internal `document_uid` after each entry stripped before display (`stripDocumentUids()`)
+  — the tool's own docstring already forbids the model from repeating that id to the end
+  user; the drawer now honors the same identifier-hygiene rule. The header copy action
+  copies the summary text / the uid-stripped tree text respectively.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed

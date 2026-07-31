@@ -320,7 +320,8 @@ export function toolCopyText(entry: TraceEntry): string | null {
   const ragResult = asRagSearchResult(data);
   if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
   if (entry.result && isSummarizeDocumentTool(toolName(entry.call))) return toolResultContent(entry.result);
-  if (entry.result && isDocumentTreeTool(toolName(entry.call))) return stripDocumentUids(toolResultContent(entry.result));
+  if (entry.result && isDocumentTreeTool(toolName(entry.call)))
+    return stripDocumentUids(toolResultContent(entry.result));
   return JSON.stringify(genericToolPayload(entry), null, 2);
 }
 
