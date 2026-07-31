@@ -7,13 +7,35 @@ icon: rocket_launch
 
 # Welcome
 
-> 🚧 Page under construction — final content lands with HELP-01.C
-> (see the Getting started section of the content plan).
+The platform brings together, in one place, your **AI assistants** (agents),
+your teams' **knowledge** (your documents), and the **conversations** that put
+them to work together. The goal: help you get reliable answers grounded in your
+own content, rather than from a generic model cut off from your context.
 
-This section walks you through your first steps: logging in, the
-platform's key concepts, and your first conversation with an agent.
+In practice, you work within a **team**. A team gathers people, agents
+configured for a specific purpose, a library of reusable prompts, and a
+document space. You also have a **personal space** to experiment on your own
+before sharing.
 
-## Where to start?
+## Who this help center is for
 
-- [Key concepts](/help/en/getting-started/concepts) — the platform's
-  vocabulary and how everything fits together.
+- **New here?** Read the pages in this section in order: they take you from
+  your first login to your first conversation.
+- **Running a team?** The [Features](/help/en/features) section covers agents,
+  prompts, resources, and team administration.
+- **Solving a specific case?** The [Guides & use cases](/help/en/guides)
+  section offers end-to-end journeys, from need to result.
+
+## Where to start
+
+1. [First login](/help/en/getting-started/first-steps) — sign in, pick your
+   language, and find your way around.
+2. [Key concepts](/help/en/getting-started/concepts) — the platform's
+   vocabulary and how everything fits together.
+3. [Join or create a team](/help/en/getting-started/join-create-team) — find
+   your team or start one.
+4. [First conversation](/help/en/getting-started/first-conversation) — ask an
+   agent a question and read its answer.
+
+> Can't find an answer? Use the **search** at the top of this help center, or
+> check the [FAQ](/help/en/faq).

@@ -151,6 +151,7 @@ export const materialIcons = [
   "rocket_launch",
   "quiz",
   "new_releases",
+  "login",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

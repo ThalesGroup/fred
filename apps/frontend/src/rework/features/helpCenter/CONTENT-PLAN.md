@@ -2,14 +2,29 @@
 
 > Document de travail pour HELP-01.C (issue #2189, `HELP-CENTER-RFC.md`).
 > À relire/annoter : barre, ajoute, réordonne, commente. Il sera supprimé
-> une fois les pages rédigées. Les slugs (en anglais) deviendront les noms
-> de fichiers/URLs ; les titres affichés seront traduits fr/en.
+> une fois les pages rédigées. Les slugs (en anglais) deviennent les noms
+> de fichiers/URLs ; les titres affichés sont traduits fr/en.
 
 Légende : chaque puce = un thème couvert par la page.
+**Statut : ✅ = rédigée (fr+en), sinon = placeholder à rédiger.**
+
+## Décisions éditoriales (déduites du code, à confirmer)
+
+- **Ton** : vouvoiement + impératif — l'UI existante vouvoie systématiquement
+  (52 marqueurs « vous/votre/vos », 0 tutoiement).
+- **Nom du produit** : « la plateforme » (neutre, rebrandable via
+  `releaseBrand`), « Fred » réservé au strict minimum.
+- **Architecture technique** : niveau grand public éclairé, pas d'annexe dev.
+- **Changelog** : lien vers la page Notes de version existante (`/release-notes`),
+  pas de duplication.
+- **Roadmap** : on ne documente que l'existant, pas les fonctionnalités à venir.
+
+_Corrige ici si l'une de ces décisions ne te convient pas — je reprends les
+pages concernées._
 
 ---
 
-## 1. Démarrage — `getting-started`
+## 1. Démarrage — `getting-started` ✅
 
 ### `index.md` — Bienvenue
 
