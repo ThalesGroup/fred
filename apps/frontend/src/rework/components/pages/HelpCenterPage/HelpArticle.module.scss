@@ -26,3 +26,15 @@
   align-items: center;
   gap: var(--spacing-s);
 }
+
+// Article-specific text colors, scoped here so the shared MarkdownRenderer is
+// unchanged elsewhere (chat, previews). `> :global(div)` is the renderer's
+// root: recoloring it retreats the body text (paragraphs/lists inherit).
+// h2/h3 keep the renderer's on-surface; only h1 is overridden to secondary.
+.articleBody > :global(div) {
+  color: var(--on-surface-retreat);
+}
+
+.articleBody > :global(div) > :global(h1) {
+  color: var(--secondary);
+}

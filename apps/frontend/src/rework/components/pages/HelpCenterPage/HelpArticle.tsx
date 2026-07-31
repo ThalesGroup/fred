@@ -16,6 +16,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Breadcrumb, type BreadcrumbSegment } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { helpPagePath, type HelpPage, type HelpSectionTree } from "@rework/features/helpCenter/content";
@@ -78,15 +79,17 @@ export default function HelpArticle({ lang, section, page }: HelpArticleProps) {
     <article className={styles.article}>
       <div className={styles.articleTop}>
         <Breadcrumb segments={segments} />
-        <IconButton
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-          aria-label={t("rework.helpCenter.copyPageLink")}
-          onClick={copyPageLink}
-        />
+        <Tooltip text={t("rework.helpCenter.copyPageLink")}>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
+            aria-label={t("rework.helpCenter.copyPageLink")}
+            onClick={copyPageLink}
+          />
+        </Tooltip>
       </div>
-      <div onClick={onContentClick}>
+      <div className={styles.articleBody} onClick={onContentClick}>
         <MarkdownRenderer text={page.body} headingAnchors />
       </div>
     </article>

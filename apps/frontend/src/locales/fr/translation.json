@@ -1211,7 +1211,7 @@
       "languageAria": "Langue de la documentation",
       "sidebarAria": "Navigation du centre d'aide",
       "copyPageLink": "Copier le lien de la page",
-      "copyHeadingLink": "Copier le lien vers ce titre",
+      "copyHeadingLink": "Copier le lien de ce paragraphe",
       "missingPage": "Cette page n'existe pas encore.",
       "search": {
         "placeholder": "Rechercher dans l'aide…",

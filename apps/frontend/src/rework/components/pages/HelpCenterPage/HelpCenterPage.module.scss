@@ -25,7 +25,9 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--outline-muted);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-l);
+  color: var(--on-surface);
 }
 
 .headerTitle {
@@ -55,8 +57,10 @@
 
 .main {
   flex: 1;
+  background: var(--surface-main);
   padding: var(--spacing-xl);
   overflow-y: auto;
+  color: var(--on-surface);
 }
 
 .missingPage {

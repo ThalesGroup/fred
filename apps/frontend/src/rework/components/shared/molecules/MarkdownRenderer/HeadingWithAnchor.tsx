@@ -15,6 +15,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import styles from "./MarkdownRenderer.module.css";
 
 /**
@@ -68,13 +69,15 @@ export function HeadingWithAnchor({ level, children }: HeadingWithAnchorProps) {
     <Tag id={slug} className={styles.anchoredHeading}>
       {children}
       <span className={styles.anchorAction}>
-        <IconButton
-          variant="icon"
-          size="xs"
-          icon={{ category: "outlined", type: copied ? "check" : "link" }}
-          aria-label={t("rework.helpCenter.copyHeadingLink")}
-          onClick={copyLink}
-        />
+        <Tooltip text={t("rework.helpCenter.copyHeadingLink")}>
+          <IconButton
+            variant="icon"
+            size="xs"
+            icon={{ category: "outlined", type: copied ? "check" : "link" }}
+            aria-label={t("rework.helpCenter.copyHeadingLink")}
+            onClick={copyLink}
+          />
+        </Tooltip>
       </span>
     </Tag>
   );
