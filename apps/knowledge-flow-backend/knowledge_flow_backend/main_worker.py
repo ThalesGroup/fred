@@ -23,6 +23,7 @@ import asyncio
 import ctypes
 import gc
 import logging
+import os
 import signal
 from contextlib import suppress
 
@@ -127,6 +128,39 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
     ]
 
 
+async def _periodic_gc_and_trim(interval_s: float) -> None:
+    """Call _debug_gc_and_trim on a fixed interval instead of waiting for a manual
+    SIGUSR1. Mitigation for the reference-cycle growth confirmed live on fredlab
+    2026-07-31 (ISSUE-009): repeated SIGUSR1 triggers freed real memory every time
+    (0 uncollectable in gc.garbage — genuine cycles, not a hard leak), scaling with
+    document volume (1930 objects/~260MB freed after ~1 doc, 8803 objects/~1.65GB
+    after ~30 docs across two batches). Runs regardless of whether the worker is
+    currently busy — gc.collect()'s own cost is small next to a PDF conversion, and
+    waiting for "idle" would need tracking activity concurrency this module doesn't
+    have visibility into today.
+    """
+    while True:
+        await asyncio.sleep(interval_s)
+        _debug_gc_and_trim()
+
+
+def _start_periodic_gc_task() -> list[asyncio.Task[None]]:
+    """Opt-in via KF_WORKER_GC_INTERVAL_SEC (seconds; unset or <=0 disables — matches
+    the interval-driven KPI tasks' own on/off convention above). Env var rather than
+    YAML: this is a deployment-level mitigation knob, not product configuration —
+    same category as FRED_MODELS_CATALOG_FILE, not app.* config."""
+    raw = os.environ.get("KF_WORKER_GC_INTERVAL_SEC", "0")
+    try:
+        interval_s = float(raw)
+    except ValueError:
+        logger.warning("[DEBUG][GC] Invalid KF_WORKER_GC_INTERVAL_SEC=%r, ignoring (periodic GC disabled)", raw)
+        return []
+    if interval_s <= 0:
+        return []
+    logger.warning("[DEBUG][GC] Periodic gc.collect()+malloc_trim() enabled every %.0fs (KF_WORKER_GC_INTERVAL_SEC)", interval_s)
+    return [asyncio.create_task(_periodic_gc_and_trim(interval_s))]
+
+
 async def main() -> None:
     """
     Run the Knowledge Flow Temporal worker with worker-side observability enabled.
@@ -151,9 +185,9 @@ async def main() -> None:
     config_file = get_loaded_config_file_path() or "<unset>"
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
-    # Diagnostic only — no automatic trigger. `kubectl exec <pod> -- kill -USR1 1`
-    # while idle to force gc.collect() + malloc_trim(0) and log the RSS delta; see
-    # _debug_gc_and_trim's docstring for how to read the result.
+    # Manual trigger always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
+    # `kubectl exec <pod> -- kill -USR1 1` to force gc.collect() + malloc_trim(0) and
+    # log the RSS delta on demand; see _debug_gc_and_trim's docstring for how to read it.
     asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, _debug_gc_and_trim)
 
     if not configuration.scheduler.enabled:
@@ -173,6 +207,8 @@ async def main() -> None:
     if prom_cfg.enabled:
         start_http_server(prom_cfg.port, addr=prom_cfg.address)
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
+    gc_tasks = _start_periodic_gc_task()
+    background_tasks = kpi_tasks + gc_tasks
 
     try:
         await run_worker(
@@ -181,14 +217,14 @@ async def main() -> None:
             max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
         )
     finally:
-        for task in kpi_tasks:
+        for task in background_tasks:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
             if not task.cancelled():
                 exc = task.exception()
                 if exc is not None:
-                    logger.error("Background KPI task %r failed during shutdown", task, exc_info=exc)
+                    logger.error("Background task %r failed during shutdown", task, exc_info=exc)
         await app_context.shutdown()
 
 
