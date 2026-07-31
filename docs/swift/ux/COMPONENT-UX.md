@@ -135,17 +135,23 @@ _(none)_
 
 Inline prompt library picker used inside `TuningFieldRenderer` for `type: "prompt"` tuning fields.
 Renders a toggle button ("Pick from library"). When open, shows all available `ContextPromptSummary`
-items as a card grid (auto-fill columns, min 240px). Each card: name + scope badge + description (2
-lines clamped). Clicking a card calls `onSelect(id)` and closes itself; the parent fetches full text
-and fills the `TextArea`.
+items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
+organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
+visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
+always `false` here (no hover-edit pencil — picking, not managing) and the card's click handler is
+rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
+`GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
+match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
+bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
+version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
+was the explicit ask.
 
 #### Open UX issues
 
-- **Content preview** — cards show name + description only. Full prompt text preview requires the
-  backend `GET /teams/{id}/prompts/context` response to include a `text_snippet` field (tracked in
-  PROMPT-03). No extra fetches until then.
 - **Loading state** — no skeleton shown while `isLoadingSelection` is true; button goes disabled
   but the grid stays visible with stale content. Consider a spinner overlay on the grid during load.
+- **Dropped scope badge** — personal vs. team origin is no longer visually distinguished per card
+  (see above). Revisit if that turns out to matter in practice.
 
 ---
 

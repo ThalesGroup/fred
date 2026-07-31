@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -62,6 +63,10 @@ export function TuningFieldRenderer({
   const [pickerExplicit, setPickerExplicit] = useState<boolean | null>(null);
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
+    { teamId: teamId ?? "" },
+    { skip: !teamId || !isPromptField },
+  );
+  const { data: promptCategories = [] } = useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
     { teamId: teamId ?? "" },
     { skip: !teamId || !isPromptField },
   );
@@ -147,7 +152,12 @@ export function TuningFieldRenderer({
               {t("rework.teams.formAgent.promptField.writeFromScratch")}
             </Button>
           </div>
-          <PromptPicker prompts={contextPrompts} disabled={disabled || isLoadingDetail} onSelect={handlePickPrompt} />
+          <PromptPicker
+            prompts={contextPrompts}
+            categories={promptCategories}
+            disabled={disabled || isLoadingDetail}
+            onSelect={handlePickPrompt}
+          />
           {error && <p className={styles.error}>{error}</p>}
         </div>
       );

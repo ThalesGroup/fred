@@ -53,6 +53,10 @@
   font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  &[data-uncategorized="true"] {
+    color: var(--on-surface-retreat);
+  }
 }
 
 .name {

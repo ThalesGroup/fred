@@ -56,7 +56,9 @@ export default function PromptCard({ prompt, categoryName, canManage, onView, on
 
       {/* ── Header: category + name ── */}
       <div className={styles.header}>
-        {categoryName && <span className={styles.category}>{categoryName}</span>}
+        <span className={styles.category} data-uncategorized={!categoryName}>
+          {categoryName ?? t("rework.promptCategories.noCategory")}
+        </span>
         <span className={styles.name}>{prompt.name}</span>
       </div>
 

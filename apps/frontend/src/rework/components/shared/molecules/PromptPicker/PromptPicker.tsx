@@ -12,27 +12,94 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ContextPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type {
+  ContextPromptSummary,
+  PromptCategorySummary,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./PromptPicker.module.css";
 
 type PromptPickerProps = {
   prompts: ContextPromptSummary[];
+  categories: PromptCategorySummary[];
   disabled?: boolean;
   onSelect: (id: string) => void;
 };
 
-export function PromptPicker({ prompts, disabled, onSelect }: PromptPickerProps) {
+// Sentinel filter value for "prompts with no category" — distinct from `null`,
+// which means "no filter active" (the "Tous" chip). Mirrors PromptsPage.
+const NO_CATEGORY_FILTER_ID = "__no_category__";
+
+export function PromptPicker({ prompts, categories, disabled, onSelect }: PromptPickerProps) {
+  const { t } = useTranslation();
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+
+  // A prompt's category_id may point at a category outside this list (e.g. a
+  // personal-scope prompt's own category, since `prompts` pools personal +
+  // team scope but `categories` is this team's only) — treated as
+  // uncategorized for filtering purposes rather than crashing or mismatching.
+  const categoryCounts = useMemo(() => {
+    const byId = new Map<string, number>();
+    let noCategory = 0;
+    for (const p of prompts) {
+      if (p.category_id && categoryNameById.has(p.category_id)) {
+        byId.set(p.category_id, (byId.get(p.category_id) ?? 0) + 1);
+      } else {
+        noCategory += 1;
+      }
+    }
+    return { byId, noCategory };
+  }, [prompts, categoryNameById]);
+
+  const filtered = useMemo(() => {
+    if (!activeCategory) return prompts;
+    if (activeCategory === NO_CATEGORY_FILTER_ID) {
+      return prompts.filter((p) => !p.category_id || !categoryNameById.has(p.category_id));
+    }
+    return prompts.filter((p) => p.category_id === activeCategory);
+  }, [prompts, activeCategory, categoryNameById]);
+
   return (
-    <div className={styles.grid}>
-      {prompts.map((p) => (
-        <button key={p.id} type="button" className={styles.card} onClick={() => onSelect(p.id)} disabled={disabled}>
-          <span className={styles.cardHeader}>
-            <span className={styles.name}>{p.name}</span>
-            <span className={styles.scopeBadge}>{p.scope}</span>
-          </span>
-          {p.description && <span className={styles.description}>{p.description}</span>}
-        </button>
-      ))}
+    <div className={styles.wrapper}>
+      {categories.length > 0 && (
+        <FilterChips
+          options={[
+            {
+              id: NO_CATEGORY_FILTER_ID,
+              label: t("rework.promptCategories.noCategory"),
+              count: categoryCounts.noCategory,
+            },
+            ...categories.map((cat) => ({
+              id: cat.id,
+              label: cat.name,
+              count: categoryCounts.byId.get(cat.id) ?? 0,
+            })),
+          ]}
+          value={activeCategory}
+          onChange={setActiveCategory}
+          allLabel={t("rework.teams.agents.podFilter.all")}
+          maxVisible={4}
+          showMoreLabel={(count) => `+${count}`}
+          showLessLabel="−"
+        />
+      )}
+      <div className={styles.grid} data-disabled={disabled}>
+        {filtered.map((p) => (
+          <PromptCard
+            key={p.id}
+            prompt={p}
+            categoryName={(p.category_id && categoryNameById.get(p.category_id)) || null}
+            canManage={false}
+            onView={() => !disabled && onSelect(p.id)}
+            onEdit={() => {}}
+          />
+        ))}
+      </div>
     </div>
   );
 }
