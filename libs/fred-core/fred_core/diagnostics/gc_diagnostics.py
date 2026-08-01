@@ -37,7 +37,9 @@ How to use it:
 
 Manual triggers (best-effort, Unix + main-thread only — see install_gc_diagnostics):
     kubectl exec <pod> -- kill -USR1 1   # collect_and_trim: one-line RSS delta
-    kubectl exec <pod> -- kill -USR2 1   # collect_and_report_types: + object types
+    kubectl exec <pod> -- kill -USR2 1   # collect_and_report_types + live_object_census:
+                                          # uncollected-cycle types, then a full census
+                                          # of every reachable object (not just garbage)
 """
 
 from __future__ import annotations
@@ -50,6 +52,7 @@ import logging
 import os
 import platform
 import signal
+import sys
 from collections import Counter
 from contextlib import suppress
 from dataclasses import dataclass
@@ -200,6 +203,54 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
     return result
 
 
+@dataclass(frozen=True)
+class LiveObjectCensus:
+    total_objects: int
+    total_bytes_shallow: int
+    top_by_count: tuple[tuple[str, int], ...]
+    top_by_size: tuple[tuple[str, int], ...]
+
+
+def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus:
+    """Census of every object the garbage collector currently tracks — not just
+    uncollected cycles (see collect_and_report_types for that). Answers "what's
+    actually reachable and heavy right now", which a low/zero
+    collect_and_report_types() result can't: gc.collect() only ever frees cyclic
+    garbage, never memory some live code is still genuinely holding a reference
+    to — the two are different bug classes with different symptoms here.
+
+    Sizes are sys.getsizeof() — SHALLOW, an object's own overhead, not what it
+    points to (a dict of huge values looks small; the values themselves show up
+    under their own type instead). top_by_count is often more telling than
+    top_by_size for exactly that reason. No third-party deep-sizer (e.g.
+    pympler) is used, to keep this module dependency-free."""
+    objects = gc.get_objects()
+    counts: Counter[str] = Counter()
+    sizes: Counter[str] = Counter()
+    for obj in objects:
+        name = type(obj).__name__
+        counts[name] += 1
+        try:
+            sizes[name] += sys.getsizeof(obj)
+        except Exception:
+            pass
+    result = LiveObjectCensus(
+        total_objects=len(objects),
+        total_bytes_shallow=sum(sizes.values()),
+        top_by_count=tuple(counts.most_common(top_n)),
+        top_by_size=tuple(sizes.most_common(top_n)),
+    )
+    if log:
+        logger.warning(
+            "[GC][census] total_objects=%d total_bytes_shallow=%s top_by_count=%s top_by_size=%s",
+            result.total_objects,
+            result.total_bytes_shallow,
+            result.top_by_count,
+            result.top_by_size,
+        )
+    return result
+
+
 async def _periodic_loop(interval_s: float) -> None:
     while True:
         await asyncio.sleep(interval_s)
@@ -217,6 +268,16 @@ def _periodic_interval_from_env(env_var: str) -> float:
             raw,
         )
         return 0.0
+
+
+def _handle_sigusr2() -> None:
+    """SIGUSR2: run both heavier diagnostics back to back — the uncollected-cycle
+    type breakdown first (collect_and_report_types), then a full census of every
+    reachable object (live_object_census). The first answers "is anything still
+    leaking cyclic garbage"; the second answers "what's actually using memory
+    right now", regardless of the first's answer."""
+    collect_and_report_types()
+    live_object_census()
 
 
 class GCDiagnosticsHandle:
@@ -250,7 +311,7 @@ def install_gc_diagnostics(
     during shutdown.
 
     - manual_signals=True (default): registers SIGUSR1 (-> collect_and_trim)
-      and SIGUSR2 (-> collect_and_report_types), e.g.
+      and SIGUSR2 (-> collect_and_report_types + live_object_census), e.g.
       `kubectl exec <pod> -- kill -USR1 1`. Best-effort and never fatal: a
       platform without these signals (Windows) or a loop/thread that can't
       register asyncio signal handlers (also Windows, or not the main
@@ -277,7 +338,7 @@ def install_gc_diagnostics(
                 active_loop.add_signal_handler(
                     sigusr1, lambda: collect_and_trim("SIGUSR1")
                 )
-                active_loop.add_signal_handler(sigusr2, collect_and_report_types)
+                active_loop.add_signal_handler(sigusr2, _handle_sigusr2)
                 signals_installed = True
             except (NotImplementedError, RuntimeError) as exc:
                 logger.warning(

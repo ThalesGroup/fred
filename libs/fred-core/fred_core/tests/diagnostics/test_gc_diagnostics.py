@@ -24,6 +24,7 @@ from fred_core.diagnostics import (
     collect_and_trim,
     current_rss_kb,
     install_gc_diagnostics,
+    live_object_census,
     malloc_trim,
 )
 from fred_core.diagnostics import gc_diagnostics as gcd
@@ -135,6 +136,55 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
         # the contract (no debug flags, no garbage) actually held afterward.
         assert gc.get_debug() == old_debug
         assert gc.garbage == []
+
+
+# ---------------------------------------------------------------------------
+# live_object_census
+# ---------------------------------------------------------------------------
+
+
+def test_live_object_census_returns_a_populated_result(caplog):
+    with caplog.at_level(logging.WARNING):
+        result = live_object_census(log=True)
+    assert result.total_objects > 0
+    assert result.total_bytes_shallow > 0
+    assert result.top_by_count
+    assert result.top_by_size
+    assert any("[GC][census]" in r.message for r in caplog.records)
+
+
+def test_live_object_census_can_skip_logging():
+    result = live_object_census(log=False)
+    assert result.total_objects > 0
+
+
+def test_live_object_census_counts_reflect_a_known_live_object():
+    class _Marker:
+        pass
+
+    markers = [_Marker() for _ in range(50)]
+    try:
+        result = live_object_census(top_n=1000, log=False)
+        counts = dict(result.top_by_count)
+        assert counts.get("_Marker", 0) >= 50
+    finally:
+        del markers
+
+
+def test_sigusr2_handler_runs_both_diagnostics(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        gcd,
+        "collect_and_report_types",
+        lambda: calls.append("types"),
+    )
+    monkeypatch.setattr(
+        gcd,
+        "live_object_census",
+        lambda: calls.append("census"),
+    )
+    gcd._handle_sigusr2()
+    assert calls == ["types", "census"]
 
 
 # ---------------------------------------------------------------------------
