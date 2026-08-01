@@ -535,7 +535,7 @@ class ApplicationContext:
         Returns:
             BaseContentStore: An instance of the storage backend.
         """
-        if self._content_store_instance:
+        if self._content_store_instance is not None:
             return self._content_store_instance
 
         # Get the singleton application context and configuration

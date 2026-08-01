@@ -156,17 +156,22 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
     the reference-cycle garbage, not just a count (this is how ISSUE-010 was
     found live). gc.DEBUG_SAVEALL keeps this one collection's cyclic garbage
     reachable via gc.garbage instead of destroying it immediately, so its
-    types can be inspected — then gc.garbage is cleared and re-collected so
-    nothing stays pinned."""
+    types can be inspected — then only the entries THIS call added are
+    cleared and re-collected, leaving any pre-existing gc.garbage contents
+    (and the previous debug flags) untouched even if collection raises."""
     before_kb = current_rss_kb()
     old_flags = gc.get_debug()
-    gc.set_debug(gc.DEBUG_SAVEALL)
-    collected = gc.collect()
-    gc.set_debug(old_flags)
+    pre_existing_garbage_count = len(gc.garbage)
+    try:
+        gc.set_debug(gc.DEBUG_SAVEALL)
+        collected = gc.collect()
+    finally:
+        gc.set_debug(old_flags)
 
-    top_types = tuple(Counter(type(o).__name__ for o in gc.garbage).most_common(top_n))
-    garbage_count = len(gc.garbage)
-    gc.garbage.clear()
+    new_garbage = gc.garbage[pre_existing_garbage_count:]
+    top_types = tuple(Counter(type(o).__name__ for o in new_garbage).most_common(top_n))
+    garbage_count = len(new_garbage)
+    del gc.garbage[pre_existing_garbage_count:]
     freed_after_clear = gc.collect()
     trimmed = malloc_trim()
     after_kb = current_rss_kb()
@@ -285,10 +290,16 @@ def install_gc_diagnostics(
     )
     tasks: list[asyncio.Task[None]] = []
     if interval_s > 0:
-        logger.warning(
-            "[fred-core][gc-diagnostics] periodic gc.collect()+malloc_trim() enabled every %.0fs",
-            interval_s,
-        )
-        tasks.append(asyncio.create_task(_periodic_loop(interval_s)))
+        try:
+            tasks.append(asyncio.create_task(_periodic_loop(interval_s)))
+        except RuntimeError as exc:
+            # No running event loop (e.g. called from sync startup code) —
+            # never fatal, same contract as the signal-registration branch above.
+            logger.warning("[fred-core][gc-diagnostics] periodic GC disabled: %s", exc)
+        else:
+            logger.warning(
+                "[fred-core][gc-diagnostics] periodic gc.collect()+malloc_trim() enabled every %ss",
+                interval_s,
+            )
 
     return GCDiagnosticsHandle(signals_installed=signals_installed, tasks=tasks)
