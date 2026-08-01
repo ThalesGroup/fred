@@ -18,6 +18,7 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
@@ -225,12 +226,17 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
+        # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
+        # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010) — same
+        # protection every fred-runtime agent pod gets automatically.
+        gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
         await _reconcile_team_organization_relations(container)
         await _seed_capability_registration_defaults(container)
         try:
             yield
         finally:
+            await gc_diagnostics.stop()
             await container.shutdown()
             logger.info("[MAIN] Lifespan exit: orderly shutdown.")
 
