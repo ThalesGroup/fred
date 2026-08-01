@@ -577,7 +577,10 @@ class ApplicationContext:
         elif isinstance(config, LocalContentStorageConfig):
             document_root = Path(config.root_path).expanduser() / "documents"
             object_root = Path(config.root_path).expanduser() / "objects"
-            self._content_store_instance = FileSystemContentStore(document_root=document_root, object_root=object_root)
+            self._content_store_instance = FileSystemContentStore(
+                document_root=document_root,
+                object_root=object_root,
+            )
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 
