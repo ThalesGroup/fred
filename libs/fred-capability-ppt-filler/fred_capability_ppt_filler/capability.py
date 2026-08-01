@@ -49,6 +49,7 @@ exactly like Kea's `asset_required`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import List
@@ -70,6 +71,10 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
+from fred_capability_ppt_filler.concurrency import (
+    acquire_heavy_job_slot,
+    release_heavy_job_slot,
+)
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.folder_resolution import (
     FolderResolver,
@@ -97,9 +102,20 @@ TEMPLATE_SLOT = "template"
 # `{slide, key, code, message}` shape with slide=0/key="" (same as Kea).
 CODE_ASSET_REQUIRED = "asset_required"
 CODE_INVALID_UPLOAD = "invalid_upload"
+CODE_SERVER_BUSY = "server_busy"
 
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+
+# Explicit cap on the uploaded .pptx (#2183): unbounded reads on `/analyze`
+# and `validate_config` are an uncapped memory/CPU sink. 50 MB mirrors the
+# control-plane import/export snapshot cap; real templates are well under it.
+MAX_TEMPLATE_UPLOAD_BYTES = 50 * 1024 * 1024
+
+_BUSY_MESSAGE = (
+    "The server is busy analyzing other PowerPoint templates right now. "
+    "Please try again in a moment."
 )
 
 
@@ -155,9 +171,37 @@ def _build_ppt_filler_router() -> APIRouter:
         (`folder_not_found`) needs platform access and is enforced by the
         save round-trip; every other error code is reported here.
         """
-        content = await file.read()
+        # Bounded read: an unbounded upload is an uncapped memory sink (#2183).
+        content = await file.read(MAX_TEMPLATE_UPLOAD_BYTES + 1)
+        if len(content) > MAX_TEMPLATE_UPLOAD_BYTES:
+            return ParseResult(
+                schema=[],
+                errors=[
+                    TemplateError(
+                        slide=0,
+                        key="",
+                        code=CODE_INVALID_UPLOAD,
+                        message=(
+                            "The uploaded .pptx exceeds the "
+                            f"{MAX_TEMPLATE_UPLOAD_BYTES // (1024 * 1024)} MB limit."
+                        ),
+                    )
+                ],
+            )
+
+        # Bounded per pod: parsing/geometry work is CPU-heavy python-pptx work
+        # offloaded to a thread below; fail fast rather than queue (#2183).
+        if not acquire_heavy_job_slot():
+            return ParseResult(
+                schema=[],
+                errors=[
+                    TemplateError(
+                        slide=0, key="", code=CODE_SERVER_BUSY, message=_BUSY_MESSAGE
+                    )
+                ],
+            )
         try:
-            result = parse(content)
+            result = await asyncio.to_thread(parse, content)
             # resolver=None: skip the folder→tag lookup (no platform access on
             # this stateless route) but keep the pure geometry check.
             return await resolve_and_validate_images(content, result, None)
@@ -175,6 +219,8 @@ def _build_ppt_filler_router() -> APIRouter:
                     )
                 ],
             )
+        finally:
+            release_heavy_job_slot()
 
     return router
 
@@ -292,33 +338,50 @@ class PptFillerCapability(
         # --- State 1: upload present → parse, resolve, store blob, persist schema.
         if template_uploads:
             pptx_bytes = template_uploads[0].content
-            try:
-                result = parse(pptx_bytes)
-            except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a 422 reject
+            # Explicit cap (#2183): the generic AssetSlot machinery already
+            # fully read this upload; reject oversized ones here rather than
+            # feeding them into parsing.
+            if len(pptx_bytes) > MAX_TEMPLATE_UPLOAD_BYTES:
                 raise ValueError(
-                    f"The uploaded file could not be read as a .pptx: {exc}"
-                ) from exc
-
-            # Space-aware folder resolution + image-location validation. The
-            # resolver rides the save services; a save path without the port
-            # must fail LOUD when the template actually uses image folders —
-            # never silently skip validation (RFC §3.9).
-            folder_port = ctx.services.document_folders
-            needs_resolution = any(
-                key_field.type == "image" and key_field.folder
-                for slide_schema in result.slides
-                for key_field in slide_schema.keys
-            )
-            resolver: FolderResolver | None = None
-            if folder_port is not None:
-                resolver = _PortFolderResolver(folder_port)
-            elif needs_resolution:
-                raise RuntimeError(
-                    "ppt_filler: RuntimeServices.document_folders is not "
-                    "available on this save path, but the template declares "
-                    "image folders."
+                    "The uploaded .pptx exceeds the "
+                    f"{MAX_TEMPLATE_UPLOAD_BYTES // (1024 * 1024)} MB limit."
                 )
-            result = await resolve_and_validate_images(pptx_bytes, result, resolver)
+
+            # Bounded per pod: parsing/geometry/folder-resolution below is
+            # CPU-heavy python-pptx work (offloaded to a thread) plus platform
+            # I/O; fail fast rather than queue (#2183).
+            if not acquire_heavy_job_slot():
+                raise RuntimeError(_BUSY_MESSAGE)
+            try:
+                try:
+                    result = await asyncio.to_thread(parse, pptx_bytes)
+                except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a 422 reject
+                    raise ValueError(
+                        f"The uploaded file could not be read as a .pptx: {exc}"
+                    ) from exc
+
+                # Space-aware folder resolution + image-location validation. The
+                # resolver rides the save services; a save path without the port
+                # must fail LOUD when the template actually uses image folders —
+                # never silently skip validation (RFC §3.9).
+                folder_port = ctx.services.document_folders
+                needs_resolution = any(
+                    key_field.type == "image" and key_field.folder
+                    for slide_schema in result.slides
+                    for key_field in slide_schema.keys
+                )
+                resolver: FolderResolver | None = None
+                if folder_port is not None:
+                    resolver = _PortFolderResolver(folder_port)
+                elif needs_resolution:
+                    raise RuntimeError(
+                        "ppt_filler: RuntimeServices.document_folders is not "
+                        "available on this save path, but the template declares "
+                        "image folders."
+                    )
+                result = await resolve_and_validate_images(pptx_bytes, result, resolver)
+            finally:
+                release_heavy_job_slot()
             if result.errors:
                 raise ValueError(_format_template_errors(result.errors))
 

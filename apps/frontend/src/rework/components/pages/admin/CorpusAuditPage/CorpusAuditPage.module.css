@@ -29,32 +29,6 @@
   min-height: 0;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-m);
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-medium);
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
-.headerActions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
 .status {
   display: flex;
   align-items: center;

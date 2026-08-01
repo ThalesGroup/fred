@@ -38,8 +38,6 @@ from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
-from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
-from fred_runtime.runtime_context import RuntimeContext as ProcessRuntimeContext
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -157,12 +155,6 @@ async def test_deep_build_executor_wires_observability_middleware(
         captured["middleware"] = list(cast(list, kwargs["middleware"]))
         return object()
 
-    # build_executor reads the KPI writer off the process-wide runtime
-    # context (mirrors `test_kf_workspace_client.py`'s `_make_client`
-    # helper) — a NoOpKPIWriter is enough, no real config needed.
-    set_runtime_context(
-        ProcessRuntimeContext(RuntimeConfig(knowledge_flow_url="http://test"))
-    )
     monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
     monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
     monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)

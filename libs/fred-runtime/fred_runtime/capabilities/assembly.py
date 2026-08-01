@@ -373,7 +373,9 @@ def build_capability_agent_block(
         # combining capability's tools() output from the ReAct binding
         # (block.tools/HITL still saw it, but create_agent() never did).
         if capability_tools:
-            middleware.append(ToolCarrierMiddleware(capability_tools))
+            middleware.append(
+                ToolCarrierMiddleware(capability_tools, capability_id=cap_id)
+            )
         if type(capability).middleware is not AgentCapability.middleware:
             # Overridden: call it too, for the hook tools() cannot express.
             # No double-computation risk — the default middleware() (which

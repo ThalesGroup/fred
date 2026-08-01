@@ -369,10 +369,12 @@ per-component magic numbers.
   + SSE consumption) — a reasonable fast-follow, not required for the current fix since
   `content` already carries enough to render useful citations.
 
-- **Unrecognized-tool fallback still raw JSON** — only two content shapes are recognized
-  (SQL `{sql_query, rows, error}`, RAG `{query, hits}`); any other tool still falls back to
-  the redacted `{action, status, latency}` JSON view. Intentional (see Resolved below) but
-  the list of recognized shapes may need to grow as more tools are added.
+- **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
+  `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
+  (`summarize_document`, `list_document_tree`, see Resolved below) are recognized; any
+  other tool still falls back to the redacted `{action, status, latency}` JSON view.
+  Intentional (see Resolved below) but the list of recognized tools/shapes may need to
+  grow as more tools are added.
 
 #### Resolved
 
@@ -397,6 +399,19 @@ per-component magic numbers.
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
   tool shape still falls back to the original redacted view — see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Curated views for `summarize_document` and `list_document_tree` (2026-07-31)** — these
+  two first-party document-capability tools return plain text (a prose summary / an
+  indented tree listing), not a JSON envelope, so they can't be recognized by content
+  shape like SQL/RAG — they're recognized by tool name instead (`isSummarizeDocumentTool`,
+  `isDocumentTreeTool` in `traceUtils.ts`), still a curated allowlist rather than a
+  blanket raw-text pass-through. `summarize_document` renders its summary through the
+  existing `MarkdownRenderer` (same treatment as reasoning text) instead of a JSON dump.
+  `list_document_tree` renders the tree in a plaintext `CodeBlock`, with the bracketed
+  internal `document_uid` after each entry stripped before display (`stripDocumentUids()`)
+  — the tool's own docstring already forbids the model from repeating that id to the end
+  user; the drawer now honors the same identifier-hygiene rule. The header copy action
+  copies the summary text / the uid-stripped tree text respectively.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
@@ -1467,23 +1482,84 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 
 Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
 (`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
-its own `Disclosure`) now sits below capability-gated team sections prepended above it, all
+its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
 in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
 `hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
 tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
-storage quota, conversations over time, and a most-active-agents breakdown. team_editor gets
-an ingestion-filtered Activités (`TaskActivity`) section; team_admin gets an unfiltered one plus
-a `team_activity_summary` trend line. Entry point is a new gear icon on the personal-space
-banner (`TeamContentNavbar.tsx`) — the same slot team settings uses, gated on `isPersonalTeam`
-instead of `canOpenTeamSettings` since the two are mutually exclusive.
+storage quota, conversations over time, and a most-active-agents breakdown. Entry point is a new
+gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same slot team settings
+uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the two are mutually
+exclusive.
+
+The page's `<h1>` is role-aware (2026-07-30 fix): "My token usage" for a plain member or anyone
+on a personal team (only the personal section ever renders for them), "Team usage" for an
+elevated viewer (admin/editor/analyst) — the original always-"My token usage" title read as
+mislabeled for an admin looking at a page that's majority team-scoped content.
+
+**Activités removed from this page (2026-07-30).** team_editor's ingestion-filtered and
+team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
+line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
+`/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
+nav rail, which additionally has ack support this embed never did. See
+`KPI-ANALYTICS-RFC.md` §2.8 and the `TaskActivity` entry below.
+
+The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
+`/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
+you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
+Activity/Evaluations/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
+match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
+(no sibling tabs to switch to) keeps the bare Back.
 
 #### Open UX issues
 
 - Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
   `AnalyticsPage` but haven't been checked against a live stack with real token data.
-- All new v3 sections default their `Disclosure` open — consistent with `TaskActivity`'s own
-  convention, but the page now has up to 4 stacked disclosures; revisit if that reads as dense
-  once seen with real data.
+
+---
+
+### `PageHeader`
+
+**Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
+**Status:** `Functional`
+
+The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
+`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+row below the title/actions row). This is the only place a page-level title should ever be
+rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
+title against `actions` when there's no subtitle; aligns to the top when there is one, so
+`actions` sits at the title's baseline instead of drifting toward the two-line block's middle.
+
+Extracted 2026-07-30 (commit `e01d0b47`) because `TeamUsagePage`, `TaskActivity`, and the team
+Evaluations view had each hand-rolled a slightly different heading level/subtitle placement.
+Extended 2026-07-31 with the `breadcrumb`/`tabs` slots and retrofitted onto every remaining
+admin-scope and team-admin-scope page in the same pass, so platform-admin and team-admin pages
+now share one consistent header pattern instead of diverging per page:
+
+| Page | Slots used |
+| --- | --- |
+| `TeamUsagePage` | title, actions (`TimeRangeSelector` + refresh) |
+| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle |
+| `Evaluations` (team Evaluations tab) | title, subtitle, actions |
+| `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
+| `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
+| `SelfTestPage` | title only |
+| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
+| `MigrationPage` (Platform data) | title, breadcrumb (Kea cutover link) |
+| `AdminTeamsPage` | title only (new — page previously had no page-level header) |
+| `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
+| `TeamSettingsParameters` | title only (new) |
+| `TeamSettingsRouting` | title only (new) |
+| `KeaMigrationPage` (temporary, unlisted) | title only — hardcoded French string kept as-is; this page has no i18n at all and is slated for deletion with the Kea cutover, so it was wrapped for visual consistency without doing a full i18n pass |
+
+Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
+visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
+filter, not a tab strip.
+
+#### Open UX issues
+
+- No lint rule enforces `PageHeader` usage — a new or edited page can still hand-roll a title.
+  Consider an eslint rule or code-review checklist item if regressions show up again.
 
 ---
 
@@ -1948,14 +2024,20 @@ including every `*_skipped` counter and `users_processed`, not just the
 granted/imported ones (AUTHZ-07 Step 3 close-out) — and the full warning list, open
 by default when warnings are present. A `failed` task renders `task.error` inline.
 
-New call sites (v3, OBSERV-02, 2026-07-26) — no component change, embedded as-is per
-§2.8: `AnalyticsPage`'s admin-only section (`scope="platform"`), `TeamUsagePage`'s
-team_editor section (`scope="team" kind="ingestion"`), and its team_admin section
-(`scope="team"`, unfiltered). Note: this organism's own rows have no ack/dismiss
-affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives
-in `TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a
-different, non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by`
-fields.
+Two call sites remain, both dedicated Activity surfaces rather than embeds inside another
+dashboard: `TasksPage` (`/admin/tasks`, `scope="platform"`) and `TeamSettingsPage`'s Activity tab
+(`/team/:teamId/settings/activity`, `scope="team"`). This organism's own rows have no ack/dismiss
+affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives in
+`TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a different,
+non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
+
+**Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
+`AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
+(`scope="team" kind="ingestion"`) and team_admin (`scope="team"`, unfiltered) sections briefly
+embedded this organism per KPI-ANALYTICS-RFC.md §2.8. Removed as a live-review finding: they
+duplicated the two dedicated surfaces above, one click away in the same nav rail, without this
+organism's missing ack affordance ever getting fixed for the duplicate. See
+`KPI-ANALYTICS-RFC.md` §2.8.
 
 #### Open UX issues
 
@@ -1966,8 +2048,9 @@ fields.
   populated at once.
 - **No ack affordance in this organism's own rows** — a platform/team admin reading
   Activités here has no one-click way to mark a failed/cancelled row seen; only the
-  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Worth revisiting
-  once this dashboard sees real usage — see `NOTES-OBSERV-02-FOLLOWUPS.md`.
+  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Lower urgency now
+  that the only two call sites are the dedicated Activity tabs, not a dashboard embed
+  seen incidentally.
 
 #### Resolved
 

@@ -666,6 +666,30 @@
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
+                    "startColumn": 46,
+                    "endColumn": 55,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 47,
+                    "endColumn": 56,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 46,
+                    "endColumn": 55,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
                     "startColumn": 30,
                     "endColumn": 39,
                     "lineCount": 1

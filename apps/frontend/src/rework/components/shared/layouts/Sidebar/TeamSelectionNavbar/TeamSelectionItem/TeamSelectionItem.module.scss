@@ -32,6 +32,15 @@
       transform: scale(calc(40 / 36));
     }
   }
+
+  /* The one team the user is already inside (its own settings) — a no-op
+   * destination, so dim and block just this avatar. Every other avatar in
+   * the rail (other teams, personal space, marketplace) stays reachable. */
+  &[data-disabled="true"] {
+    opacity: 0.3;
+    cursor: default;
+    pointer-events: none;
+  }
 }
 
 .link {

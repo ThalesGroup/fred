@@ -26,9 +26,10 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAdminCapabilitiesQuery,
@@ -81,6 +82,28 @@ export default function CapabilitiesPage() {
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
+  // Which row's mutation is in flight — NOT just a boolean. Disabling every
+  // switch off `isTogglingDefault` used to include the one the admin just
+  // clicked, which still holds native focus at that instant: yanking
+  // `disabled` onto a focused control forces the browser to blur it and,
+  // in Chromium, silently scrollIntoView() the nearest scroll container
+  // (here `html`, kept `overflow: hidden` in styles/index.css) — no visible
+  // scrollbar, no wheel response, only a reload undoes it. Excluding the
+  // in-flight row's own id from the disabled check keeps every *other*
+  // switch guarded against a concurrent submit without ever disabling the
+  // one element that's still focused.
+  const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
+  // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
+  // the same capability id. A rapid double-click on the same row (the
+  // always-undebounced "turn default-on on" path in onToggleDefault, below)
+  // fires two calls before React has re-rendered — a togglingCapabilityId
+  // state check alone can't see the first call's update in time. Without
+  // this, both calls' `finally` blocks race to clear the single
+  // togglingCapabilityId, and whichever resolves first can transiently
+  // re-disable the still-in-flight row's Switch while it's still focused —
+  // reintroducing the exact Chromium forced-blur bug the exclusion above
+  // was written to prevent.
+  const inFlightDefaultOnIdRef = useRef<string | null>(null);
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -96,6 +119,11 @@ export default function CapabilitiesPage() {
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (inFlightDefaultOnIdRef.current === capability.id) {
+      return;
+    }
+    inFlightDefaultOnIdRef.current = capability.id;
+    setTogglingCapabilityId(capability.id);
     try {
       const result = await setDefaultOn({
         capabilityId: capability.id,
@@ -120,6 +148,9 @@ export default function CapabilitiesPage() {
       }
     } catch {
       showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
+    } finally {
+      inFlightDefaultOnIdRef.current = null;
+      setTogglingCapabilityId(null);
     }
   };
 
@@ -218,7 +249,7 @@ export default function CapabilitiesPage() {
         <div className={styles.centered}>
           <Switch
             checked={cap.default_on}
-            disabled={isTogglingDefault}
+            disabled={isTogglingDefault && togglingCapabilityId !== cap.id}
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
@@ -390,21 +421,22 @@ export default function CapabilitiesPage() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{t("rework.admin.capabilities.title")}</h1>
-        <p className={styles.subtitle}>{t("rework.admin.capabilities.subtitle")}</p>
-      </header>
-
-      <ButtonGroup
-        size="small"
-        color="primary"
-        variant="radio"
-        aria-label={t("rework.admin.capabilities.kindFilter.aria")}
-        selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
-        onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
-        items={KIND_FILTERS.map((kind) => ({
-          label: t(`rework.admin.capabilities.kindFilter.${kind}`),
-        }))}
+      <PageHeader
+        title={t("rework.admin.capabilities.title")}
+        subtitle={t("rework.admin.capabilities.subtitle")}
+        tabs={
+          <ButtonGroup
+            size="small"
+            color="primary"
+            variant="radio"
+            aria-label={t("rework.admin.capabilities.kindFilter.aria")}
+            selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
+            onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
+            items={KIND_FILTERS.map((kind) => ({
+              label: t(`rework.admin.capabilities.kindFilter.${kind}`),
+            }))}
+          />
+        }
       />
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}

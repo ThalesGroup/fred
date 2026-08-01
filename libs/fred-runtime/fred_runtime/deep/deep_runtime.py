@@ -64,7 +64,6 @@ from fred_runtime.react.react_runtime import (
 )
 from fred_runtime.react.react_tool_binding import ReActToolBinder
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
-from fred_runtime.runtime_context import get_runtime_context
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",
@@ -149,7 +148,7 @@ class DeepAgentRuntime(ReActRuntime):
             middleware=_build_deepagent_runtime_middleware(
                 filesystem_tools_enabled=filesystem_tools_enabled,
                 tracer=self.services.tracer,
-                kpi=get_runtime_context().get_kpi_writer(),
+                kpi=self.services.kpi_writer,
                 binding=binding,
             ),
         )

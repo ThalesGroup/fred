@@ -5,7 +5,7 @@
  * (CAPAB-01 #1976). */
 
 .controlSlotBox {
-  width: 272px;
+  width: 380px;
 }
 
 /* Position anchor for the chat-context-prompts row's anchored dialog. */
@@ -40,7 +40,7 @@
 
 @media (max-width: 720px) {
   .controlSlotBox {
-    width: min(272px, calc(100vw - 32px));
+    width: min(380px, calc(100vw - 32px));
   }
 
   .pickerMenu {

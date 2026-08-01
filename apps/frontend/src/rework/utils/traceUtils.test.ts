@@ -6,14 +6,18 @@ import {
   formatLatencyMs,
   groupTraceEntries,
   humanizeToolName,
+  isDocumentTreeTool,
   isTraceChannel,
   isFinalChannel,
+  isSummarizeDocumentTool,
   parseToolResultContent,
   primaryTextForEntry,
   secondaryTextForEntry,
   splitTraceEntries,
   statusForEntry,
+  stripDocumentUids,
   textOf,
+  toolCopyText,
   toolDiscriminator,
   totalLatencyMs,
   traceSummary,
@@ -627,6 +631,58 @@ describe("asRagSearchResult", () => {
   it("does not misclassify a SQL result as a RAG result", () => {
     const sqlData = { sql_query: "SELECT 1", rows: [] };
     expect(asRagSearchResult(sqlData)).toBeNull();
+  });
+});
+
+describe("isSummarizeDocumentTool / isDocumentTreeTool", () => {
+  it("recognizes the exact first-party tool names only", () => {
+    expect(isSummarizeDocumentTool("summarize_document")).toBe(true);
+    expect(isSummarizeDocumentTool("list_document_tree")).toBe(false);
+    expect(isSummarizeDocumentTool("mcp__tavily__web_search")).toBe(false);
+
+    expect(isDocumentTreeTool("list_document_tree")).toBe(true);
+    expect(isDocumentTreeTool("summarize_document")).toBe(false);
+  });
+});
+
+describe("stripDocumentUids", () => {
+  it("removes a bracketed uid after a document name", () => {
+    expect(stripDocumentUids("report.pdf [doc-abc123] (2026-01-01)")).toBe("report.pdf (2026-01-01)");
+  });
+
+  it("strips uids on every line of a multi-line tree", () => {
+    const tree = ["Sales", "  report.pdf [doc-1] (2026-01-01)", "  HR", "    notes.docx [doc-2] (2026-02-02)"].join(
+      "\n",
+    );
+    expect(stripDocumentUids(tree)).toBe(
+      ["Sales", "  report.pdf (2026-01-01)", "  HR", "    notes.docx (2026-02-02)"].join("\n"),
+    );
+  });
+
+  it("leaves text with no bracketed uid unchanged", () => {
+    expect(stripDocumentUids("Sales\n  HR")).toBe("Sales\n  HR");
+  });
+});
+
+describe("toolCopyText", () => {
+  it("copies the raw summary text for summarize_document", () => {
+    const call = toolCallMsg("c1", "summarize_document", { document_uid: "doc-1" });
+    const result = toolResultMsg("c1", "This document is about...");
+    const entries = groupTraceEntries([call, result]);
+    expect(toolCopyText(entries[0])).toBe("This document is about...");
+  });
+
+  it("copies the uid-stripped tree text for list_document_tree", () => {
+    const call = toolCallMsg("c1", "list_document_tree", {});
+    const result = toolResultMsg("c1", "report.pdf [doc-1] (2026-01-01)");
+    const entries = groupTraceEntries([call, result]);
+    expect(toolCopyText(entries[0])).toBe("report.pdf (2026-01-01)");
+  });
+
+  it("falls back to the generic {action, status} payload when the tool call has no result yet", () => {
+    const call = toolCallMsg("c1", "summarize_document", {});
+    const entries = groupTraceEntries([call]);
+    expect(JSON.parse(toolCopyText(entries[0]) ?? "")).toEqual({ action: "Summarize Document", status: "running" });
   });
 });
 

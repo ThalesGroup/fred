@@ -280,15 +280,16 @@ been cosmetic only without this. Fixed: `PresetDef.platform_admin_only` (only
 `team_activity_summary` is unaffected — it requires `team_id` and only ever
 authorizes via `can_read_members`.
 
-### 21. `TaskActivity`'s own rows have no ack affordance
+### 21. ✅ RESOLVED 2026-07-30 (by removal) — `TaskActivity`'s own rows have no ack affordance
 F4 wired the real per-task ack (`POST /tasks/{id}/ack`) into `TaskCard`/
 `TaskDetailPopover` — the personal tray (`TaskTray`) and `MigrationPage`. But
-`TaskActivity` (now embedded in `AnalyticsPage`'s and `TeamUsagePage`'s new
-admin/editor sections, per §2.8) renders its own inline rows, not `TaskCard`,
-and has no dismiss button of its own. A platform/team admin reading Activités
-in these new dashboards has no one-click way to acknowledge a failed row from
-there — they'd need to find the same task in their personal tray, or wait for
-`acknowledged_at` to arrive from wherever else it does. Not fixed here: adding
-an ack column/button to `TaskActivity`'s row renderer is a real UI addition,
-not the "wire it into the two existing places the RFC named" this pass
-scoped. Worth its own small follow-up once this dashboard sees real usage.
+`TaskActivity`, embedded in `AnalyticsPage`'s and `TeamUsagePage`'s admin/editor
+sections per §2.8, rendered its own inline rows, not `TaskCard`, with no dismiss
+button of its own — a platform/team admin reading Activités in those dashboards
+had no one-click way to acknowledge a failed row from there. Not fixed by adding
+an ack affordance: those embeds turned out to duplicate the dedicated
+`/admin/tasks` and `/team/:teamId/settings/activity` Activity tabs (which *do*
+have ack, via `TaskCard`/`TaskDetailPopover`) one click away in the same nav
+rail. Removed the embeds instead (`KPI-ANALYTICS-RFC.md` §2.8) — the gap this
+item tracked no longer exists because the duplicate surface it was on doesn't
+either.

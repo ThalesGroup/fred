@@ -50,6 +50,11 @@ export default function TeamSelectionNavbar() {
   const currentRouteTeamId = pathname.match(/^\/team\/([^/]+)/)?.[1];
   const isPersonalRouteSelected = isPersonalTeamId(currentRouteTeamId);
 
+  // The team whose settings are currently open is a no-op destination for its
+  // own avatar — dim/block just that one item, never the whole rail (personal
+  // space, marketplace, and every other team must stay reachable).
+  const inTeamSettings = /^\/team\/[^/]+\/settings(\/|$)/.test(pathname);
+
   return (
     <div className={styles.teamNavbarContainer}>
       <div>
@@ -61,6 +66,7 @@ export default function TeamSelectionNavbar() {
           redirection={`/team/${personalTeamId}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
           selected={isPersonalRouteSelected}
+          disabled={isPersonalRouteSelected && inTeamSettings}
           imgUrl={defaultPersonalAvatarFile ? `/images/${defaultPersonalAvatarFile}` : undefined}
           avatarName={KeyCloakService.GetUserFullName()}
           avatarColor={PERSONAL_TEAM_COLOR}
@@ -77,12 +83,14 @@ export default function TeamSelectionNavbar() {
       <Separator margin={"var(--spacing-xs)"} />
       <div className={styles.teamContainer}>
         {collaborativeTeams.map((team) => {
+          const selected = pathname.startsWith(`/team/${team.id}`);
           return (
             <TeamSelectionItem
               key={team.id}
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
-              selected={pathname.startsWith(`/team/${team.id}`)}
+              selected={selected}
+              disabled={selected && inTeamSettings}
               imgUrl={team.banner_image_url ?? (defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined)}
               avatarName={team.name}
               adminBadge={!!currentUserId && (team.admins ?? []).some((admin) => admin.id === currentUserId)}

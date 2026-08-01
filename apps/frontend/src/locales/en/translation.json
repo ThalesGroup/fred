@@ -134,6 +134,10 @@
       "name": "Document access",
       "description": "Search documents uploaded using semantic similarity (RAG)."
     },
+    "document_summarize": {
+      "name": "Document summarization",
+      "description": "Generate an on-demand summary of one document. Requires human approval before each call."
+    },
     "writable_document": {
       "name": "Writable document",
       "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
@@ -303,7 +307,11 @@
     "conversationFiles": "Conversation files",
     "dropFilesHere": "Drop files here",
     "errors": {
-      "missingContext": "Missing team or agent context in URL."
+      "missingContext": "Missing team or agent context in URL.",
+      "sessionSaveFailedSummary": "Conversation not saved",
+      "sessionSaveFailedDetail": "Could not save this conversation. Please try again.",
+      "contextPromptSaveFailedSummary": "Prompt selection not saved",
+      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again."
     },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
@@ -1089,7 +1097,6 @@
         "users": "Users"
       },
       "administration": {
-        "activitiesTitle": "Activités",
         "modelsGovernanceLink": "Manage models",
         "storageByTeam": {
           "empty": "No team is near its storage quota.",
@@ -1148,9 +1155,8 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "pageTitle": "Team usage",
         "sectionTitle": "Team usage",
-        "editorSectionTitle": "Activités (ingestion)",
-        "adminSectionTitle": "Activités",
         "membersLabel": "Members",
         "agentsLabel": "Agents",
         "documentsLabel": "Documents",
@@ -1166,10 +1172,6 @@
         "mostActiveAgents": {
           "title": "Most active agents",
           "valueLabel": "Conversations"
-        },
-        "activitySummary": {
-          "active": "{{count}} conversations in this period — active",
-          "quiet": "{{count}} conversations in this period — quiet"
         }
       }
     },
@@ -1555,7 +1557,7 @@
         "launch": "Launch migration",
         "launching": "Launching...",
         "keaLink": "Kea → Swift cutover tools (temporary) →",
-        "title": "Platform migration",
+        "title": "Platform data",
         "import": {
           "title": "Import"
         },
@@ -1641,6 +1643,7 @@
       }
     },
     "adminTeams": {
+      "title": "Teams",
       "existingTeams": {
         "title": "Existing teams",
         "empty": "No teams yet.",
@@ -1727,11 +1730,12 @@
         "retention": "Retention"
       },
       "routing": {
+        "title": "Model routing",
         "defaultProfile": {
           "title": "Default chat model",
           "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
-          "placeholder": "e.g. default.chat.mistral"
+          "useDeploymentDefault": "Use deployment default"
         },
         "operationRules": {
           "title": "Operation overrides",
@@ -1739,12 +1743,16 @@
           "operation": "Operation",
           "purpose": "Purpose (optional)",
           "targetProfileId": "Profile id",
+          "targetProfilePlaceholder": "Select a model",
           "addRule": "Add rule"
         },
+        "profileUnavailable": "No longer enabled for this team",
+        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
         "save": "Save",
         "saveError": "Could not save the routing policy."
       },
       "parameters": {
+        "title": "Settings",
         "description": {
           "label": "Team description",
           "placeholder": "Help other users understand your team's role."

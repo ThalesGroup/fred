@@ -2058,3 +2058,41 @@ stored enabled row can only ever name a reasoning-capable model.
 resolves a profile per *operation* at runtime while chat controls are computed
 once per session (RFC §12 q3). Erring toward under-hiding — showing a control a
 later operation might not honour — beats over-hiding one that would have worked.
+
+---
+
+## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
+
+**Gap found and closed.** `prepare_execution` (`product/service.py`) accepts
+an optional `session_id` and, when present, resolves that session's
+`context_prompt_ids` into `context_prompt_text` for the returned
+`ExecutionPreparation`. The session row was loaded via
+`SessionMetadataStore.get(session_id)` — a raw, unscoped primary-key fetch —
+with **no check** that the resolved session belonged to the calling user,
+the requested `team_id`, or the requested `agent_instance_id`. The sibling
+`get_session` (same file) already guards its identical raw fetch with a
+`record.team_id != team_id` check; `prepare_execution` never applied that
+idiom. Exploitability was accidentally limited (prompt *text* resolution is
+scoped to the caller's own team/personal team, not the session's team, so a
+foreign-team session's prompt ids resolved to nothing) but the gap was real
+and untested.
+
+**Fix.** `prepare_execution` now rejects (`ExecutionPreparationError`, 404,
+generic message — deliberately identical whether `session_id` is unknown or
+belongs to another user/team/agent instance, so the error itself carries no
+existence oracle) whenever a supplied `session_id` does not resolve to a
+session owned by the same `user_id` and `team_id`, and — only when the
+session was actually scoped to an instance at creation (`agent_instance_id`
+is optional on `CreateSessionRequest`) — the same `agent_instance_id`. An
+agent-agnostic session (created with no `agent_instance_id`) is unaffected
+and matches any instance the same user/team requests.
+
+**Behavior change to note:** previously, a `session_id` that did not resolve
+at all (typo, deleted session, race with an in-flight creation) was silently
+treated as "no context prompt" and the turn still executed. It now rejects
+the whole `prepare_execution` call instead. This is intentional and expected
+to be safe in practice: the frontend's session-write barrier
+(`useManagedChat.ts`'s `flushSessionWrites`) is fixed in the same change to
+block `send()` until the session row is confirmed created, so by the time
+`prepare_execution` is called with a `session_id`, that session should
+already exist.

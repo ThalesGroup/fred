@@ -1947,6 +1947,107 @@ model — see §C.9 and the note below.
 
 ---
 
+### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`, 2026-07-27)
+
+**What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
+carries two new fields threaded from control-plane at session-prep time, the
+same three-hop channel `context_prompt_text` already uses (RFC §8.2):
+
+- `chat_default_profile_id: str | None` — the team's default chat model
+  profile, or `None` to fall through to the runtime's own default.
+- `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
+  `(rule_id, operation, purpose | None, target_profile_id)` overrides.
+
+Both are a **session-prep snapshot, not a per-turn lookup** (RFC §8.1) —
+resolved once by `routing_policy/service.py::resolve_execution_routing_snapshot`
+when `ExecutionPreparation` is built, not re-read from control-plane on every
+turn. `fred-runtime`'s `ModelRoutingResolver`
+(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
+fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
+already match — the static rules stay the ops escape hatch and always win
+(RFC §8.3). A referenced `target_profile_id` unknown to the pod fails closed
+(`ModelNotUsableError`), matching the write-time `can_use` validation
+control-plane already performed (RFC §7.2) — this is drift detection, not a
+second authorization gate (RFC §8.4).
+
+Product-surface companion to this contract change: `GET`/`PATCH
+/control-plane/v1/teams/{team_id}/routing-policy` (`team_editor` writes,
+`team_admin`+`team_editor`+`team_analyst` read — the read gate excludes a
+plain `team_member` as of the same-day #2167 follow-up, RFC §6) and, as of
+that same follow-up, `GET .../routing-policy/available-models` backing the
+frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
+
+---
+
+### 8.33 ✅ A pod whose durable SQL storage cannot be reached must never finish starting (2026-07-31)
+
+**What changed.** `PodApplicationContext.initialize_sql()`
+(`libs/fred-runtime/fred_runtime/app/context.py`) used to catch every
+exception from engine/checkpointer/history-store construction, log
+`"running stateless"`, and return — leaving `checkpointer`/`history_store`
+at `None` with no signal to the FastAPI lifespan. Because SQLAlchemy's async
+engine is lazy (construction never opens a connection), an unreachable or
+misconfigured Postgres passed silently: the pod finished startup, passed its
+`tcpSocket` readiness probe, and served conversation turns with no
+persistence — invisibly, and only for whichever replica lost the race.
+
+`initialize_sql()` now (1) lets construction failures (missing
+`FRED_POSTGRES_PASSWORD`, missing `host`/`database`/`username`) propagate
+instead of swallowing them, and (2) runs one bounded (5s) `SELECT 1` against
+the engine right after construction — the only point that actually proves
+connectivity — before wiring the checkpointer/history store. Either failure
+now aborts the FastAPI lifespan, so the pod process exits without ever
+reaching `Running`; Kubernetes never marks it `Ready` regardless of probe
+type, and the two other invariants already enforced in `agent_app.py`'s
+lifespan (checkpointer and history store must both come from the same
+`initialize_sql()` call, and neither may be set without the other) still
+hold on top of this.
+
+There is no supported "stateless" pod mode today — every real
+`AgentPodConfig.storage.postgres` (dev SQLite via `sqlite_path`, production
+Postgres) intends durable storage; SQLite-for-dev is a backend choice, not
+an opt-out. This change does not introduce one.
+
+**Not done, deliberately deferred:** dedicated `/healthz` + dependency-aware
+`/ready` HTTP endpoints (the pattern `knowledge-flow-backend` and
+`control-plane-backend` already use) and switching fred-agents' Helm probes
+from `tcpSocket` to `httpGet`. The fail-fast boot behavior above already
+satisfies the production invariant without either; closing the small
+residual race window (a `tcpSocket` probe could see the port briefly open
+during the ≤5s connectivity check before the process exits) is left as
+follow-up if it proves necessary in practice.
+
+---
+
+### 8.34 ✅ ReAct/Deep prompt composition no longer depends on the process-global runtime context (2026-07-31)
+
+**What changed.** `ReActRuntime.build_executor` and `DeepAgentRuntime.build_executor`
+(`libs/fred-runtime/fred_runtime/react/react_runtime.py`,
+`libs/fred-runtime/fred_runtime/deep/deep_runtime.py`) fetched the KPI writer
+via `get_runtime_context().get_kpi_writer()` — a bare process-global lookup —
+inline during executor construction, instead of through the existing
+`RuntimeServices` dependency-injection container both runtimes already
+receive. Any standalone unit test of `build_executor()` (not routed through
+`agent_app.py`'s lifespan-initialized global context) raised
+`RuntimeError: RuntimeContext has not been initialized.` `RuntimeServices`
+(`libs/fred-sdk/fred_sdk/contracts/runtime.py`) gains a `kpi_writer:
+BaseKPIWriter | None` field, populated in `agent_app.py`'s
+`_build_runtime_services` from the same `runtime_config.kpi_writer` already
+in scope there; both `build_executor` methods now read
+`self.services.kpi_writer` instead of the global. `kpi=None` is the
+pre-existing, already-`None`-safe default for every downstream KPI
+consumer (`TracingKpiMiddleware`, `ToolObservabilityMiddleware`,
+`build_tool_loop_compiled_react_agent`), so no behavior changed for any
+lifespan-initialized production request — only the composition path's
+testability changed. Confirmed by 3 previously-failing prompt-injection unit
+tests going green, deterministically, independent of test-file collection
+order (a `test_deep_agent_middleware.py` test was separately found to leak
+`set_runtime_context(...)` into the shared process-global for the rest of
+the pytest session with no teardown; that call is now unnecessary and was
+removed rather than patched with a reset).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

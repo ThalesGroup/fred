@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import pytest
 from deck_builders import IMAGE_NOTES, build_deck
+from fred_capability_ppt_filler import capability as capability_mod
 from fred_capability_ppt_filler.capability import (
     PPT_FILLER_TEMPLATE_KEY,
     TEMPLATE_SLOT,
@@ -120,6 +121,42 @@ async def test_unreadable_pptx_raises_valueerror_without_storing():
         )
 
     assert "could not be read as a .pptx" in str(excinfo.value)
+    assert assets.store_calls == []
+
+
+# --- Upload cap / admission control (#2183) -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_oversized_upload_raises_valueerror_without_storing(monkeypatch):
+    monkeypatch.setattr(capability_mod, "MAX_TEMPLATE_UPLOAD_BYTES", 10)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    assert len(deck) > 10
+    assets = FakeAssets()
+
+    with pytest.raises(ValueError) as excinfo:
+        await PptFillerCapability().validate_config(
+            PptFillerConfig(), _uploads(deck), _save_ctx(assets=assets)
+        )
+
+    assert "limit" in str(excinfo.value).lower()
+    assert assets.store_calls == []
+
+
+@pytest.mark.asyncio
+async def test_busy_pod_raises_runtimeerror_without_storing(monkeypatch):
+    """When the per-pod heavy-job bound is saturated, the save fails fast
+    rather than queuing (#2183)."""
+    monkeypatch.setattr(capability_mod, "acquire_heavy_job_slot", lambda: False)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    assets = FakeAssets()
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await PptFillerCapability().validate_config(
+            PptFillerConfig(), _uploads(deck), _save_ctx(assets=assets)
+        )
+
+    assert "busy" in str(excinfo.value).lower()
     assert assets.store_calls == []
 
 

@@ -134,6 +134,10 @@
       "name": "Accès aux documents",
       "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
     },
+    "document_summarize": {
+      "name": "Résumé de document",
+      "description": "Génère à la demande le résumé d'un document. Nécessite une approbation humaine avant chaque appel."
+    },
     "writable_document": {
       "name": "Document collaboratif",
       "description": "Rédigez des documents avec l'agent dans un éditeur Markdown côte à côte, et exportez-les en Word ou Markdown.",
@@ -303,7 +307,11 @@
     "conversationFiles": "Fichiers de conversation",
     "dropFilesHere": "Déposez les fichiers ici",
     "errors": {
-      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
+      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL.",
+      "sessionSaveFailedSummary": "Conversation non enregistrée",
+      "sessionSaveFailedDetail": "Impossible d'enregistrer cette conversation. Veuillez réessayer.",
+      "contextPromptSaveFailedSummary": "Sélection de prompts non enregistrée",
+      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer."
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
@@ -1089,7 +1097,6 @@
         "users": "Utilisateurs"
       },
       "administration": {
-        "activitiesTitle": "Activités",
         "modelsGovernanceLink": "Gérer les modèles",
         "storageByTeam": {
           "empty": "Aucune équipe proche de son quota de stockage.",
@@ -1148,9 +1155,8 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "pageTitle": "Consommation de l'équipe",
         "sectionTitle": "Consommation de l'équipe",
-        "editorSectionTitle": "Activités (ingestion)",
-        "adminSectionTitle": "Activités",
         "membersLabel": "Membres",
         "agentsLabel": "Agents",
         "documentsLabel": "Documents",
@@ -1166,10 +1172,6 @@
         "mostActiveAgents": {
           "title": "Agents les plus actifs",
           "valueLabel": "Conversations"
-        },
-        "activitySummary": {
-          "active": "{{count}} conversations sur cette période — active",
-          "quiet": "{{count}} conversations sur cette période — calme"
         }
       }
     },
@@ -1555,7 +1557,7 @@
         "launch": "Lancer la migration",
         "launching": "Lancement...",
         "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
-        "title": "Migration de plateforme",
+        "title": "Données plateforme",
         "import": {
           "title": "Importer"
         },
@@ -1641,6 +1643,7 @@
       }
     },
     "adminTeams": {
+      "title": "Equipes",
       "existingTeams": {
         "title": "Équipes existantes",
         "empty": "Aucune équipe pour l'instant.",
@@ -1727,11 +1730,12 @@
         "retention": "Rétention"
       },
       "routing": {
+        "title": "Routage des modèles",
         "defaultProfile": {
           "title": "Modèle de chat par défaut",
           "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
           "label": "Identifiant du profil par défaut",
-          "placeholder": "ex. default.chat.mistral"
+          "useDeploymentDefault": "Utiliser le défaut du déploiement"
         },
         "operationRules": {
           "title": "Règles par opération",
@@ -1739,12 +1743,16 @@
           "operation": "Opération",
           "purpose": "Objectif (optionnel)",
           "targetProfileId": "Identifiant du profil",
+          "targetProfilePlaceholder": "Sélectionner un modèle",
           "addRule": "Ajouter une règle"
         },
+        "profileUnavailable": "Plus activé pour cette équipe",
+        "emptyState": "Cette équipe n'a encore aucun modèle activé. Demandez à un administrateur de la plateforme d'activer au moins une capability de modèle avant de configurer des règles de routage.",
         "save": "Enregistrer",
         "saveError": "Impossible d'enregistrer la politique de routage."
       },
       "parameters": {
+        "title": "Paramètres",
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."

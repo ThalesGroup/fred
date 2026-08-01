@@ -42,6 +42,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { dueRelative, relativeTime } from "@rework/features/tasks/taskLabels";
 import { taskBackendFor, type TaskBackend } from "@rework/features/tasks/taskKinds";
 import { useTaskAcknowledgement } from "@rework/features/tasks/useTaskAcknowledgement";
@@ -280,10 +281,7 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
 
   return (
     <section className={styles.container}>
-      <header className={styles.head}>
-        <h3 className={styles.title}>{t("rework.taskActivity.title")}</h3>
-        <span className={styles.subtitle}>{t("rework.taskActivity.subtitle")}</span>
-      </header>
+      <PageHeader title={t("rework.taskActivity.title")} subtitle={t("rework.taskActivity.subtitle")} />
 
       {isLoading && <div className={styles.hint}>{t("rework.taskActivity.loading")}</div>}
       {isError && <div className={styles.error}>{t("rework.taskActivity.loadError")}</div>}

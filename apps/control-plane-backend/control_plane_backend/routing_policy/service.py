@@ -24,14 +24,25 @@ its own package — a merge-isolated feature slice.
 
 from __future__ import annotations
 
-from fred_core import KeycloakUser, TeamPermission
-from fred_core.common import TeamId
+from fred_core import (
+    AuthorizationError,
+    KeycloakUser,
+    RebacReference,
+    Resource,
+    TeamPermission,
+)
+from fred_core.common import TeamId, is_personal_team_id
 from fred_sdk.contracts.context import TeamOperationRouteRule
 
-from control_plane_backend.capabilities.authz import can_use_capability
+from control_plane_backend.capabilities.authz import (
+    can_use_capability,
+    usable_capability_ids,
+)
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
+    AvailableModelProfile,
+    AvailableModelProfileList,
     DuplicateOperationRuleError,
     ProfileNotUsableError,
     TeamRoutingPolicy,
@@ -39,6 +50,59 @@ from control_plane_backend.routing_policy.schemas import (
     UpdateTeamRoutingPolicyRequest,
 )
 from control_plane_backend.teams.service import require_team_access
+
+# Read gate for routing policy (#2167 follow-up, explicit product decision):
+# only team_admin, team_editor, or team_analyst may read a team's routing
+# policy — a plain team_member must not. Each permission below is a proxy for
+# exactly one team-role relation in schema.fga: CAN_UPDATE_INFO -> team_admin,
+# CAN_UPDATE_RESOURCES -> team_editor, CAN_RUN_EVALUATIONS -> team_analyst or
+# team_admin. Together their union is "holds an elevated team role", matching
+# the frontend's `hasElevatedTeamRole` gate on the same "Routing" tab
+# (`TeamSettingsPage.tsx`).
+_ELEVATED_TEAM_ROLE_PERMISSIONS = (
+    TeamPermission.CAN_UPDATE_INFO,
+    TeamPermission.CAN_UPDATE_RESOURCES,
+    TeamPermission.CAN_RUN_EVALUATIONS,
+)
+
+
+async def _require_elevated_team_role(
+    user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
+) -> None:
+    """Narrower than the shared `can_read_members` permission
+    (`schema.fga`: `can_read_members: team_member`) `require_team_access`
+    already checked before this runs — that permission is wider on purpose
+    because it also backs unrelated surfaces (KPI scope, task activity,
+    corpus manager) this change must not touch. `require_team_access`'s
+    `required_permissions` list is AND-only
+    (`check_user_team_permissions_or_raise`), so it cannot express "holds any
+    one of these three roles" — one `has_permissions` BatchCheck instead,
+    OR'd locally.
+
+    Skipped for personal spaces: the owner holds `team_editor`
+    unconditionally (RFC §1) and `require_team_access` already let system
+    teams through without touching ReBAC at all; a second, independent ReBAC
+    round trip here could race the owner's lazily self-healed `team_editor`
+    tuple (`platform/REBAC.md` "Personal teams") and wrongly deny them.
+    `team_id` must be the canonical id `require_team_access` returned, not
+    the raw path param — `is_personal_team_id` only matches
+    `"personal-<uid>"`, never the `"personal"` alias.
+    """
+
+    if is_personal_team_id(team_id):
+        return
+    allowed = await deps.team_dependencies.rebac.has_permissions(
+        RebacReference(Resource.USER, user.uid),
+        list(_ELEVATED_TEAM_ROLE_PERMISSIONS),
+        RebacReference(Resource.TEAM, team_id),
+    )
+    if not any(allowed):
+        raise AuthorizationError(
+            user_id=user.uid,
+            action="read_routing_policy",
+            resource=Resource.TEAM,
+            message="You are not allowed to view this team's routing policy. Only team admins, editors, or analysts can.",
+        )
 
 
 async def _profile_to_capability_id_map(
@@ -126,15 +190,17 @@ async def get_team_routing_policy(
     team_id: TeamId,
     deps: ProductServiceDependencies,
 ) -> TeamRoutingPolicy:
-    """RFC §6 read gate: team_admin or team_editor (elevated roles) — reusing
-    `can_read_members`, the same permission Activity's `scope=team` view
-    already requires, rather than inventing a new ReBAC relation for this one
-    read. Personal-space owners pass through ungated, same as every other
-    system-team read (`require_team_access`)."""
+    """RFC §6 read gate: team_admin, team_editor, or team_analyst (elevated
+    roles) — `can_read_members` alone (checked first, below) is wider
+    (`team_member`) and shared with unrelated surfaces, so
+    `_require_elevated_team_role` narrows it for this read specifically
+    (#2167 follow-up). Personal-space owners pass through ungated, same as
+    every other system-team read (`require_team_access`)."""
 
-    await require_team_access(
+    team_id = await require_team_access(
         user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
     )
+    await _require_elevated_team_role(user, team_id, deps)
     store = deps.get_team_routing_policy_store()
     stored = await store.get(team_id=team_id)
     if stored is None:
@@ -145,6 +211,36 @@ async def get_team_routing_policy(
         chat_default_profile_id=stored.chat_default_profile_id,
         operation_rules=list(stored.operation_rules),
     )
+
+
+async def list_available_model_profiles(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> AvailableModelProfileList:
+    """RFC §13's picker option set: every `kind="model"` profile_id this team
+    is `can_use`-enabled for. Same read gate as the routing policy itself
+    (team_admin/team_editor/team_analyst, #2167 follow-up) — this reads the
+    team's own enablement state, not the platform-admin aggregate list gated
+    on `capability#can_manage`.
+    """
+
+    team_id = await require_team_access(
+        user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
+    )
+    await _require_elevated_team_role(user, team_id, deps)
+    catalog = await aggregate_capability_catalog(deps)
+    usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    profiles = [
+        AvailableModelProfile(
+            profile_id=profile_id, capability_id=entry.id, name=entry.name
+        )
+        for entry in catalog.values()
+        if entry.kind == "model" and (usable is None or entry.id in usable)
+        for profile_id in entry.model_profile_ids
+    ]
+    profiles.sort(key=lambda p: p.profile_id)
+    return AvailableModelProfileList(profiles=profiles)
 
 
 async def update_team_routing_policy(

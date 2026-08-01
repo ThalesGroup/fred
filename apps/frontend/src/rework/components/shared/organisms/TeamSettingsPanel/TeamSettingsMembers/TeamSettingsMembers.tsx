@@ -16,6 +16,7 @@ import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMem
 import LeaveTeamButton from "./LeaveTeamButton/LeaveTeamButton.tsx";
 import AddTeamMembersDialog from "./AddTeamMembersDialog/AddTeamMembersDialog.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,28 +38,28 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   return (
     <div className={styles["team-settings-members-container"]}>
-      <div className={styles["team-settings-members-header"]}>
-        <div className={styles["team-settings-members-header-left"]}>
-          <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
-          <LeaveTeamButton team={team} />
-        </div>
-        <div className={styles["team-settings-members-header-right"]}>
-          <div className={styles["team-settings-members-search"]}>
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder={t("rework.teamSettings.members.search.placeholder")}
-              ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
-              clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
-            />
-          </div>
-          {can_administer_members && (
-            <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
-              {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title={t("rework.teamSettings.members.title")}
+        actions={
+          <>
+            <div className={styles["team-settings-members-search"]}>
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder={t("rework.teamSettings.members.search.placeholder")}
+                ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
+                clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
+              />
+            </div>
+            <LeaveTeamButton team={team} />
+            {can_administer_members && (
+              <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
+                {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
+              </Button>
+            )}
+          </>
+        }
+      />
       <div className={styles["team-settings-members-table-wrapper"]}>
         <TeamSettingsMembersTable team={team} search={search} />
       </div>

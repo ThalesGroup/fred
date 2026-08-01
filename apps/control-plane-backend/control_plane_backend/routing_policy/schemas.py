@@ -42,6 +42,20 @@ class UpdateTeamRoutingPolicyRequest(BaseModel):
     operation_rules: list[TeamOperationRouteRule] = Field(default_factory=list)
 
 
+class AvailableModelProfile(BaseModel):
+    """One `can_use`-enabled model profile this team may reference from its
+    routing policy — the option set for the `chat_default_profile_id` /
+    `target_profile_id` picker (`TEAM-ROUTING-POLICY-RFC.md` §13, #2167)."""
+
+    profile_id: str
+    capability_id: str
+    name: str = Field(description="i18n key, same as CapabilityCatalogEntry.name")
+
+
+class AvailableModelProfileList(BaseModel):
+    profiles: list[AvailableModelProfile] = Field(default_factory=list)
+
+
 class ProfileNotUsableError(Exception):
     """One or more profile ids in a routing-policy write are not `can_use`-enabled
     for this team (RFC §7.2) — the write-time counterpart of the runtime's

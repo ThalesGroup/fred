@@ -13,10 +13,12 @@
 // limitations under the License.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
 import type { AwaitingHumanEvent } from "../../../../slices/agentic/agenticOpenApi";
 import {
@@ -41,6 +43,8 @@ interface UseManagedChatParams {
 export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showError } = useToast();
+  const { notifyApiError } = useApiErrorToast();
+  const { t } = useTranslation();
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
@@ -50,8 +54,54 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // truth is the control-plane session; hydrated from sessionData and persisted
   // via PATCH on every change.
   const [contextPromptIds, setContextPromptIds] = useState<string[]>([]);
+  // Monotonic counter, PER SESSION ID — the "generation" of the most
+  // recently issued setContextPrompts call for that sid. A write's failure
+  // callback only rolls back if its own generation still matches the
+  // CURRENT generation for the SAME sid it was issued for (i.e. no newer
+  // selection for that same session has since superseded it) — otherwise an
+  // old rejection could stomp a newer already-applied selection, regardless
+  // of network resolution order. Keyed by sid (not a single global counter)
+  // so session A's write settling after navigating to session B can never
+  // even be mistaken for "still current" — B's generation for A's sid never
+  // moves, since nothing ever calls setContextPrompts against A's sid again.
+  const contextPromptGenerationBySidRef = useRef<Map<string, number>>(new Map());
+  // The last context-prompt selection we know the server actually holds,
+  // PER SESSION ID — the correct rollback target on a failed PATCH. Kept in
+  // sync by every successful write and by the session-load rehydrate
+  // effect, both scoped to the sid they apply to.
+  const lastConfirmedContextPromptIdsBySidRef = useRef<Map<string, string[]>>(new Map());
+  // Always the CURRENTLY active session id, refreshed every render — a
+  // callback closure captures `sid` (whatever session it was issued for) at
+  // call time, but must compare against the LATEST active session at
+  // settlement time, which requires a ref (a plain closure over `sessionId`
+  // would be frozen at call time too). A settling write for a session the
+  // user has since navigated away from must never touch `contextPromptIds`
+  // (a single, not-per-session piece of UI state) or show a toast for it.
+  const activeSessionIdRef = useRef(sessionId);
+  activeSessionIdRef.current = sessionId;
+  // Whether a local context-prompt mutation has happened for the CURRENTLY
+  // active session. Once true, the rehydrate effect below stops applying
+  // incoming `sessionData` snapshots — a GET that resolves late (e.g. after
+  // a refetch) must never overwrite an already-pending or already-confirmed
+  // local selection with an older server snapshot. Reset to false by the
+  // sessionId-change effect below, so entering a (new or different) session
+  // always starts with normal rehydration.
+  const hasLocalMutationForActiveSessionRef = useRef(false);
   // Suppresses the sessionId-change reset when handleSend itself binds a new session.
   const skipResetOnSessionBindRef = useRef(false);
+  // Synchronous reentrancy guard for handleSend()'s OWN preflight — session
+  // id selection, bindSessionId, and createSessionRow all happen BEFORE
+  // useChatSse's send() (and its own lock) is ever called: send() is not
+  // reached until after `await flushSessionWrites(sid)` resolves. The
+  // `waitResponse` check below does not cover this window — it only flips
+  // true once send() itself runs, well after two rapid handleSend() calls
+  // (e.g. a double Enter) could each have already generated their own
+  // session id, bound it, and created a session row. Checked and set
+  // synchronously, before any await, independent of `waitResponse` or a
+  // React rerender — a second handleSend() arriving while the first is
+  // still inside this window (including while suspended in
+  // flushSessionWrites) is dropped outright, not queued or merged.
+  const handleSendOwnerRef = useRef(false);
 
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId },
@@ -65,7 +115,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const attachments = useChatAttachments({ teamId, sessionId });
 
-  const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
+  // `currentData`, not `data`: RTK Query's `data` deliberately reuses the last
+  // resolved result across an arg change (here, a session switch) while the
+  // new args' request is still in flight — exactly the case navigating from
+  // session A to session B hits. `currentData` is undefined until the result
+  // actually belongs to the CURRENT args, closing the window where A's stale
+  // payload could get attributed to B below (title, context prompt rehydrate).
+  const { currentData: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
     { skip: !teamId || !sessionId },
   );
@@ -106,29 +162,70 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [setSearchParams],
   );
 
-  // Session writes (row creation POST, context-prompt PATCH) are fired eagerly
-  // for a snappy UI, but the first turn's prepare-execution must not read the
-  // session before they commit. We track each in-flight write here and expose
-  // flushSessionWrites() as an ordering barrier awaited just before prep.
-  const pendingSessionWritesRef = useRef<Set<Promise<unknown>>>(new Set());
-  // The latest session-creation POST, so context-prompt PATCHes can chain after
-  // it (the brand-new-session sub-race: a PATCH must not reach the server before
-  // the session row exists).
-  const sessionCreatePromiseRef = useRef<Promise<unknown> | null>(null);
+  // Serialized per-session write queue for critical session writes (row
+  // creation POST, context-prompt PATCH). These must never race: two
+  // concurrent PATCHes for the same session can have their HTTP responses
+  // land out of order, letting an OLDER selection silently overwrite a
+  // NEWER one server-side. Each session's writes are chained onto a per-sid
+  // "tail" promise — write N+1's actual network call does not start until
+  // write N has fully settled (success or failure) — so responses are
+  // always received in send order, and two writes for the same sid are
+  // never in flight together. Writes for DIFFERENT sessions use different
+  // tails and never block or contaminate each other. A tail promise NEVER
+  // rejects (a failure is converted to `{ok:false}` and reported via that
+  // write's own `onError`) so a failure never stops the NEXT write in the
+  // chain from being attempted, and nothing here can become an unhandled
+  // rejection.
+  const writeTailsRef = useRef<Map<string, Promise<{ ok: boolean }>>>(new Map());
 
-  const trackSessionWrite = useCallback((promise: Promise<unknown>) => {
-    const settled: Promise<unknown> = promise
-      .catch(() => {})
-      .finally(() => {
-        pendingSessionWritesRef.current.delete(settled);
-      });
-    pendingSessionWritesRef.current.add(settled);
-  }, []);
+  const enqueueSessionWrite = useCallback(
+    (sid: string, action: () => Promise<unknown>, onError: (error: unknown) => void): Promise<{ ok: boolean }> => {
+      const previousTail = writeTailsRef.current.get(sid) ?? Promise.resolve({ ok: true });
+      const nextTail: Promise<{ ok: boolean }> = previousTail
+        .then(() => action())
+        .then(() => ({ ok: true }))
+        .catch((error: unknown) => {
+          onError(error);
+          return { ok: false };
+        });
+      writeTailsRef.current.set(sid, nextTail);
+      return nextTail;
+    },
+    [],
+  );
 
-  const flushSessionWrites = useCallback(async () => {
-    // Await a snapshot: writes already in flight when the send starts must
-    // commit before prep resolves chat context from the persisted session.
-    await Promise.all(Array.from(pendingSessionWritesRef.current));
+  // Every sid bound to the URL whose creation POST is known to have failed
+  // (and hasn't since succeeded). `bindSessionId` runs eagerly, before the
+  // POST settles, so on retry `sessionId` already equals this sid — without
+  // this, a retry would see "session already bound" and skip re-creating the
+  // row entirely, then send against a session that was never actually
+  // persisted. Keyed by sid (not a single scalar, matching `writeTailsRef`'s
+  // per-sid keying) — different sessions can each be creating concurrently
+  // (e.g. two "new conversation" starts in quick succession), and a single
+  // shared slot would let one session's failure silently overwrite another's:
+  // the forgotten session's own write tail stays permanently failed, but
+  // `needsCreate` would no longer recognize it, so it can never be retried.
+  const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
+
+  // Stability loop, not a single snapshot await: `Promise.all` over a
+  // point-in-time collection can miss a write enqueued WHILE the flush is
+  // already awaiting — send() could then reach prepare-execution before
+  // that write commits. This re-reads the session's tail after every await
+  // and keeps waiting as long as a newer tail keeps replacing the one just
+  // observed. Returns the outcome of the LAST write actually enqueued for
+  // this session: an earlier failure superseded by a later success must not
+  // block send (mirrors the generation guard in setContextPrompts below —
+  // the most recent user intent, not write history, decides the outcome).
+  const flushSessionWrites = useCallback(async (sid: string | null): Promise<boolean> => {
+    if (!sid) return true;
+    let ok = true;
+    let observedTail: Promise<{ ok: boolean }> | undefined;
+    for (;;) {
+      const currentTail = writeTailsRef.current.get(sid);
+      if (!currentTail || currentTail === observedTail) return ok;
+      observedTail = currentTail;
+      ok = (await currentTail).ok;
+    }
   }, []);
 
   const {
@@ -149,6 +246,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onTurnPersisted: touchSessionActivity,
     onAwaitingHuman: (event) => setPendingHitl(event),
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
+    // Fires only once prepare-execution has actually succeeded and the turn
+    // is really starting — clearing the composer any earlier would lose the
+    // user's text/attachments on a prepare-execution failure (404/503/network).
+    onTurnStarted: () => {
+      setInput("");
+      attachments.clearReadyAttachments();
+    },
   });
 
   // Chat controls are resolved per agent instance/config, not per session — a
@@ -174,6 +278,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setInput("");
     setSessionTitle(null);
     setContextPromptIds([]);
+    // A genuine entry into a (new or different) session — normal
+    // rehydration governs from here until the first local mutation.
+    hasLocalMutationForActiveSessionRef.current = false;
     composer.reset(sessionId, chatControlsRef.current);
     // Eager prep (RFC §3.7, CAPAB-01 #1976): resolve chat_controls at chat open
     // — not only inside send() — so the composer control slot isn't empty
@@ -186,10 +293,25 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, [sessionData]);
 
   // Rehydrate attached chat-context prompts from the persisted session so the
-  // pills survive a reload (PROMPTS.md §5).
+  // pills survive a reload (PROMPTS.md §5). Also resets the rollback target
+  // (see setContextPrompts) to this freshly-loaded, durably-confirmed value.
+  //
+  // Guarded by `hasLocalMutationForActiveSessionRef`: `sessionData` is an
+  // RTK Query result that can resolve or re-resolve (a refetch, a slow
+  // initial fetch racing a fast local PATCH) at any time, including WHILE a
+  // local mutation for this same session is pending or has already
+  // committed. Once the user has made at least one local mutation for the
+  // CURRENTLY active session, an incoming (possibly older) server snapshot
+  // must never silently replace their pending/confirmed selection — this
+  // effect goes back to applying it only once a genuinely new session is
+  // entered (the sessionId-change effect above resets the flag).
   useEffect(() => {
-    if (sessionData?.context_prompt_ids != null) setContextPromptIds(sessionData.context_prompt_ids);
-  }, [sessionData]);
+    if (!sessionId) return;
+    if (sessionData?.context_prompt_ids == null) return;
+    if (hasLocalMutationForActiveSessionRef.current) return;
+    setContextPromptIds(sessionData.context_prompt_ids);
+    lastConfirmedContextPromptIdsBySidRef.current.set(sessionId, sessionData.context_prompt_ids);
+  }, [sessionData, sessionId]);
 
   const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
 
@@ -200,23 +322,55 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onLoaded: replaceAllMessages,
   });
 
+  const notifySessionSaveFailed = useCallback(
+    (error: unknown) =>
+      notifyApiError(error, {
+        summary: t("chatbot.errors.sessionSaveFailedSummary"),
+        fallbackDetail: t("chatbot.errors.sessionSaveFailedDetail"),
+      }),
+    [notifyApiError, t],
+  );
+
+  // Enqueues the session-row creation POST onto this sid's write tail, so it
+  // always precedes any context-prompt PATCH for the same sid (both go
+  // through `enqueueSessionWrite` keyed on `sid`). Marks/clears `sid` in
+  // `sessionCreateFailedIdRef` so a retry against the same (already
+  // URL-bound) sid re-attempts creation instead of silently skipping it.
+  const createSessionRow = useCallback(
+    (sid: string, title: string) => {
+      void enqueueSessionWrite(
+        sid,
+        () =>
+          registerSession({
+            teamId,
+            createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
+          }).unwrap(),
+        (error) => {
+          sessionCreateFailedIdRef.current.add(sid);
+          notifySessionSaveFailed(error);
+        },
+      ).then((result) => {
+        if (result.ok) {
+          sessionCreateFailedIdRef.current.delete(sid);
+        }
+      });
+    },
+    [agentInstanceId, enqueueSessionWrite, notifySessionSaveFailed, registerSession, teamId],
+  );
+
   const ensureSessionForAttachments = useCallback((): string => {
     let sid = sessionId;
+    const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
     if (!sid) {
       sid = uuidv4();
       skipResetOnSessionBindRef.current = true;
       bindSessionId(sid);
-      const created = registerSession({
-        teamId,
-        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: "New conversation" },
-      })
-        .unwrap()
-        .catch(() => {});
-      sessionCreatePromiseRef.current = created;
-      trackSessionWrite(created);
+    }
+    if (needsCreate) {
+      createSessionRow(sid, "New conversation");
     }
     return sid;
-  }, [agentInstanceId, bindSessionId, registerSession, sessionId, teamId, trackSessionWrite]);
+  }, [bindSessionId, createSessionRow, sessionId]);
 
   const handleAddAttachments = useCallback(
     (files: File[], source: "picker" | "drop") => {
@@ -226,7 +380,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [attachments.addFiles, ensureSessionForAttachments],
   );
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const text = input.trim();
     const attachmentContext = attachments.attachmentsMarkdown;
     console.debug(
@@ -238,85 +392,104 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       );
       return;
     }
-    setInput("");
-    setPendingHitl(null);
-    let sid = sessionId;
-    if (!sid) {
-      sid = uuidv4();
-      console.debug(`[useManagedChat] handleSend() — no session, creating new sid=${sid}, calling bindSessionId`);
-      skipResetOnSessionBindRef.current = true;
-      bindSessionId(sid);
-      const created = registerSession({
-        teamId,
-        createSessionRequest: {
-          session_id: sid,
-          agent_instance_id: agentInstanceId,
-          title: text ? text.slice(0, 120) : "Attached files",
-        },
-      })
-        .unwrap()
-        .catch(() => {});
-      sessionCreatePromiseRef.current = created;
-      // Tracked so the barrier below (send → flushSessionWrites) waits for the
-      // session row before prepare-execution runs.
-      trackSessionWrite(created);
+    if (handleSendOwnerRef.current) {
+      console.debug("[useManagedChat] handleSend() IGNORED — a handleSend() is already in flight");
+      return;
     }
-    console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
-    // `document_scope`'s params carry the same `bound_library_ids` the retired
-    // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
-    // MCP-server-bound library scope the picker cannot override.
-    const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
-    const boundLibraryIds =
-      (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
-    // The picker's per-turn selection reaches the OWNING capability's typed
-    // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
-    // `document_access` declares a TurnOptionsModel for it. The MCP
-    // capability's document_scope widget reads RuntimeContext (built below)
-    // and validates turn_options against EmptyModel, so sending it a slice
-    // is a typed 422.
-    const turnOptions =
-      documentScopeControl && documentScopeControl.capability_id === "document_access"
-        ? {
-            [documentScopeControl.capability_id]: {
-              library_tag_ids: composer.selectedLibraryIds,
-              document_uids: composer.selectedDocumentUids,
-            },
-          }
-        : undefined;
-    // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
-    // platform chat option, not a capability's turn_options slice — it travels
-    // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
-    // when the composer actually offers the control: its absence means the
-    // agent does not offer reasoning (or a gate upstream is closed, §8), and
-    // that must reach the runtime as "no choice made", never as an explicit
-    // `false` that would suppress reasoning the agent never offered to begin
-    // with.
-    const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
-    touchSessionActivity(sid);
-    send(
-      text,
-      sid,
-      buildComposerRuntimeContext({
-        selectedLibraryIds: composer.selectedLibraryIds,
-        selectedDocumentUids: composer.selectedDocumentUids,
-        searchPolicy: composer.searchPolicy,
-        ragScope: composer.ragScope,
-        boundLibraryIds,
-        attachmentsMarkdown: attachmentContext,
-        ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
-      }),
-      turnOptions,
-    );
-    attachments.clearReadyAttachments();
+    handleSendOwnerRef.current = true;
+    try {
+      // Composer input is left untouched until the session write barrier below
+      // confirms success — clearing it eagerly would lose the user's message if
+      // session creation fails, forcing a retype on retry.
+      let sid = sessionId;
+      const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
+      if (!sid) {
+        sid = uuidv4();
+        console.debug(`[useManagedChat] handleSend() — no session, creating new sid=${sid}, calling bindSessionId`);
+        skipResetOnSessionBindRef.current = true;
+        bindSessionId(sid);
+      }
+      if (needsCreate) {
+        // Tracked so the barrier below (flushSessionWrites) waits for the
+        // session row before prepare-execution runs, and surfaces a toast +
+        // aborts the send if the row was never actually created. Re-fires on a
+        // retry against the same (already URL-bound) sid whose prior creation
+        // failed — see `sessionCreateFailedIdRef`.
+        createSessionRow(sid, text ? text.slice(0, 120) : "Attached files");
+      }
+
+      // Block the send entirely on any pending or just-failed session write —
+      // including a context-prompt PATCH fired earlier that hasn't committed
+      // yet. A failure already triggered its own toast (via the write's
+      // onError above); nothing further to show here, just don't proceed —
+      // the message stays in the composer for an explicit retry.
+      const writesOk = await flushSessionWrites(sid);
+      if (!writesOk) {
+        console.debug("[useManagedChat] handleSend() ABORTED — a pending session write failed");
+        return;
+      }
+
+      // Input/attachments stay untouched here too — cleared only from
+      // onTurnStarted, once prepare-execution inside send() has actually
+      // succeeded. A prepare-execution failure (404/503/network) must never
+      // wipe text the user still needs to retry with; see useChatSse.ts.
+      setPendingHitl(null);
+      console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
+      // `document_scope`'s params carry the same `bound_library_ids` the retired
+      // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
+      // MCP-server-bound library scope the picker cannot override.
+      const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
+      const boundLibraryIds =
+        (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ??
+        null;
+      // The picker's per-turn selection reaches the OWNING capability's typed
+      // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
+      // `document_access` declares a TurnOptionsModel for it. The MCP
+      // capability's document_scope widget reads RuntimeContext (built below)
+      // and validates turn_options against EmptyModel, so sending it a slice
+      // is a typed 422.
+      const turnOptions =
+        documentScopeControl && documentScopeControl.capability_id === "document_access"
+          ? {
+              [documentScopeControl.capability_id]: {
+                library_tag_ids: composer.selectedLibraryIds,
+                document_uids: composer.selectedDocumentUids,
+              },
+            }
+          : undefined;
+      // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
+      // platform chat option, not a capability's turn_options slice — it travels
+      // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
+      // when the composer actually offers the control: its absence means the
+      // agent does not offer reasoning (or a gate upstream is closed, §8), and
+      // that must reach the runtime as "no choice made", never as an explicit
+      // `false` that would suppress reasoning the agent never offered to begin
+      // with.
+      const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
+      touchSessionActivity(sid);
+      send(
+        text,
+        sid,
+        buildComposerRuntimeContext({
+          selectedLibraryIds: composer.selectedLibraryIds,
+          selectedDocumentUids: composer.selectedDocumentUids,
+          searchPolicy: composer.searchPolicy,
+          ragScope: composer.ragScope,
+          boundLibraryIds,
+          attachmentsMarkdown: attachmentContext,
+          ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
+        }),
+        turnOptions,
+      );
+    } finally {
+      handleSendOwnerRef.current = false;
+    }
   }, [
     attachments.attachmentsMarkdown,
-    attachments.clearReadyAttachments,
     attachments.hasUploadingAttachments,
     input,
     waitResponse,
     sessionId,
-    teamId,
-    agentInstanceId,
     chatControls,
     composer.selectedLibraryIds,
     composer.selectedDocumentUids,
@@ -324,8 +497,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     composer.ragScope,
     composer.reasoning,
     bindSessionId,
-    registerSession,
-    trackSessionWrite,
+    createSessionRow,
+    flushSessionWrites,
     touchSessionActivity,
     send,
   ]);
@@ -362,21 +535,61 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   // Replace the full ordered set of attached chat-context prompts and persist it.
   // Ensures a session exists first so prompts can be attached before the first
-  // message of a brand-new conversation.
+  // message of a brand-new conversation. Optimistic for a snappy UI; on a
+  // failed PATCH, rolled back — but ONLY if:
+  // - this call is still the most recent one FOR THIS SID (per-sid
+  //   generation counter), so a slow/failed old write can never stomp a
+  //   newer selection for the SAME session, regardless of which write's
+  //   network response lands first (both are additionally serialized
+  //   per-sid — see `enqueueSessionWrite` — so this guard is defense-in-depth
+  //   against the fact that the optimistic update itself is synchronous and
+  //   not part of that serialization);
+  // - AND `sid` is still the currently active session (`activeSessionIdRef`)
+  //   — a write for session A settling after the user has navigated to
+  //   session B must never touch B's `contextPromptIds` (a single, shared
+  //   piece of UI state, not itself keyed by session) or show a toast in B's
+  //   context. A's own write still completes normally server-side either
+  //   way; only the UI-facing side effects are suppressed.
   const setContextPrompts = useCallback(
     (ids: string[]) => {
-      setContextPromptIds(ids);
       const sid = ensureSessionForAttachments();
-      // Chain the PATCH after any in-flight session creation so the row exists
-      // before its context prompts are written, then track it so the next send
-      // waits for it to commit (see flushSessionWrites).
-      const create = sessionCreatePromiseRef.current ?? Promise.resolve();
-      const patch = create.then(() =>
-        refreshSession({ teamId, sessionId: sid, updateSessionRequest: { context_prompt_ids: ids } }).unwrap(),
-      );
-      trackSessionWrite(patch);
+      const myGeneration = (contextPromptGenerationBySidRef.current.get(sid) ?? 0) + 1;
+      contextPromptGenerationBySidRef.current.set(sid, myGeneration);
+      hasLocalMutationForActiveSessionRef.current = true;
+      setContextPromptIds(ids);
+      void enqueueSessionWrite(
+        sid,
+        () => refreshSession({ teamId, sessionId: sid, updateSessionRequest: { context_prompt_ids: ids } }).unwrap(),
+        (error) => {
+          if (activeSessionIdRef.current !== sid) {
+            // The user has navigated away from `sid` entirely — its write
+            // still failed for real (surfaced nowhere now, by design: there
+            // is no longer a UI context to attach the error to), but must
+            // not touch whatever session is displayed now.
+            return;
+          }
+          if (myGeneration !== contextPromptGenerationBySidRef.current.get(sid)) {
+            // Superseded by a newer selection for this SAME session — that
+            // one's own outcome now governs the UI; showing an error for a
+            // choice the user has already moved past would be confusing
+            // and, worse, could silently revert their newer, already-
+            // confirmed selection.
+            return;
+          }
+          setContextPromptIds(lastConfirmedContextPromptIdsBySidRef.current.get(sid) ?? []);
+          notifyApiError(error, {
+            summary: t("chatbot.errors.contextPromptSaveFailedSummary"),
+            fallbackDetail: t("chatbot.errors.contextPromptSaveFailedDetail"),
+          });
+        },
+      ).then((result) => {
+        // Always recorded, even for a no-longer-active sid — this is the
+        // durable per-session bookkeeping a LATER visit to `sid` (or a
+        // still-current write for it) may need, not a UI side effect.
+        if (result.ok) lastConfirmedContextPromptIdsBySidRef.current.set(sid, ids);
+      });
     },
-    [ensureSessionForAttachments, refreshSession, teamId, trackSessionWrite],
+    [enqueueSessionWrite, ensureSessionForAttachments, notifyApiError, refreshSession, t, teamId],
   );
 
   return {

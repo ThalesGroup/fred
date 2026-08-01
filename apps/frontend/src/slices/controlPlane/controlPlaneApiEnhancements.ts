@@ -248,6 +248,9 @@ export const {
   // Team routing policy (TEAM-05, #2118).
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery: useTeamRoutingPolicyQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation: useUpdateTeamRoutingPolicyMutation,
+  // Routing-policy picker option set (#2167).
+  useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
+    useAvailableModelProfilesQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,

@@ -794,6 +794,7 @@ def _build_runtime_services(
     return RuntimeServices(
         tracer=build_default_tracer(),
         metrics=KPIWriterMetricsAdapter(runtime_config.kpi_writer),
+        kpi_writer=runtime_config.kpi_writer,
         chat_model_factory=runtime_config.chat_model_factory,
         tool_invoker=tool_invoker,
         tool_provider=tool_provider,

@@ -41,6 +41,7 @@ no geometry constraint).
 
 from __future__ import annotations
 
+import asyncio
 import io
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Set, Union
@@ -101,6 +102,33 @@ def _image_key_invalid_location_message(slide_number: int, keys: List[str]) -> s
     )
 
 
+def _scan_invalid_location_keys(
+    pptx_source: Union[bytes, str, Path],
+) -> Dict[int, Set[str]]:
+    """CPU-bound geometry scan: open the deck once and find, per slide, which
+    image keys have an anchor sitting in a table cell.
+
+    Split out from :func:`resolve_and_validate_images` so it can run via
+    ``asyncio.to_thread`` (#2183) — python-pptx parsing/traversal is
+    synchronous and must never run inline on the event loop.
+    """
+    if isinstance(pptx_source, bytes):
+        presentation = Presentation(io.BytesIO(pptx_source))
+    else:
+        presentation = Presentation(str(pptx_source))
+
+    invalid_location_keys_by_slide: Dict[int, Set[str]] = {}
+    for index, slide in enumerate(presentation.slides):
+        slide_number = index + 1
+        invalid_keys: Set[str] = set()
+        for anchor in list_image_anchors_on_slide(slide):
+            if anchor.invalid_location:
+                invalid_keys.add(anchor.key)
+        if invalid_keys:
+            invalid_location_keys_by_slide[slide_number] = invalid_keys
+    return invalid_location_keys_by_slide
+
+
 async def resolve_and_validate_images(
     pptx_source: Union[bytes, str, Path],
     parse_result: ParseResult,
@@ -131,22 +159,11 @@ async def resolve_and_validate_images(
     whose image keys carry their resolved ``folder_tag_id``. The input ``parse_result`` is
     not mutated.
     """
-    if isinstance(pptx_source, bytes):
-        presentation = Presentation(io.BytesIO(pptx_source))
-    else:
-        presentation = Presentation(str(pptx_source))
-
     # Per-slide set of keys whose anchors (any occurrence) sit in an invalid location.
-    # Geometry is read once per slide from the shared image-anchor traversal.
-    invalid_location_keys_by_slide: Dict[int, Set[str]] = {}
-    for index, slide in enumerate(presentation.slides):
-        slide_number = index + 1
-        invalid_keys: Set[str] = set()
-        for anchor in list_image_anchors_on_slide(slide):
-            if anchor.invalid_location:
-                invalid_keys.add(anchor.key)
-        if invalid_keys:
-            invalid_location_keys_by_slide[slide_number] = invalid_keys
+    # The deck-opening/geometry scan is CPU-bound python-pptx work — off the loop (#2183).
+    invalid_location_keys_by_slide = await asyncio.to_thread(
+        _scan_invalid_location_keys, pptx_source
+    )
 
     # Resolve each DISTINCT non-empty folder once (several keys may share a folder).
     resolved: Dict[str, Optional[str]] = {}

@@ -31,6 +31,7 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -132,33 +133,33 @@ export default function CorpusAuditPage() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>{t("rework.admin.corpusAudit.title")}</h1>
-          <p className={styles.subtitle}>{t("rework.admin.corpusAudit.subtitle")}</p>
-        </div>
-        <div className={styles.headerActions}>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "refresh", filled: false }}
-            onClick={() => void refetch()}
-            disabled={isLoading || isFetching}
-            title={t("rework.admin.corpusAudit.refresh")}
-          />
-          <Button
-            color="error"
-            variant="outlined"
-            size="medium"
-            icon={{ category: "outlined", type: "build" }}
-            onClick={() => setShowFixConfirm(true)}
-            disabled={isLoading || isFetching || isFixing || !hasRepairableAnomalies}
-          >
-            {isFixing ? t("rework.admin.corpusAudit.fixing") : t("rework.admin.corpusAudit.fix")}
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title={t("rework.admin.corpusAudit.title")}
+        subtitle={t("rework.admin.corpusAudit.subtitle")}
+        actions={
+          <>
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "refresh", filled: false }}
+              onClick={() => void refetch()}
+              disabled={isLoading || isFetching}
+              title={t("rework.admin.corpusAudit.refresh")}
+            />
+            <Button
+              color="error"
+              variant="outlined"
+              size="medium"
+              icon={{ category: "outlined", type: "build" }}
+              onClick={() => setShowFixConfirm(true)}
+              disabled={isLoading || isFetching || isFixing || !hasRepairableAnomalies}
+            >
+              {isFixing ? t("rework.admin.corpusAudit.fixing") : t("rework.admin.corpusAudit.fix")}
+            </Button>
+          </>
+        }
+      />
 
       {isLoading && (
         <p className={styles.status}>

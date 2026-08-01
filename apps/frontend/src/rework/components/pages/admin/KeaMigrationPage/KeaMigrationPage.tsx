@@ -27,6 +27,7 @@ import { useDispatch } from "react-redux";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { personalTeamId } from "@shared/utils/teamId";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
@@ -207,7 +208,7 @@ export default function KeaMigrationPage() {
 
   return (
     <div className={styles.page}>
-      <h1>Kea → Swift — réconciliation (temporaire, cutover 2026)</h1>
+      <PageHeader title="Kea → Swift — réconciliation (temporaire, cutover 2026)" />
       <p className={styles.intro}>
         Étape 1 : « Analyser » ne touche à rien (ni Keycloak, ni OpenFGA, ni Postgres) — relance-le aussi souvent que
         nécessaire pendant que tu vérifies une hypothèse. Étape 2 : « Lancer l&apos;import réel » appelle l&apos;import
