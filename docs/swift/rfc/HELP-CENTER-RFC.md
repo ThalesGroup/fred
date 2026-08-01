@@ -1,10 +1,30 @@
 # RFC — In-App Help Center (Wiki-Style User Documentation)
 
-**Status:** In progress — HELP-01.A (shell) + HELP-01.B (search) + HELP-01.C (content: 7 sections, 32 pages fr+en) implemented 2026-07-31; screenshots pending
+**Status:** In progress — HELP-01.A (shell) + HELP-01.B (search) + HELP-01.C (content) implemented 2026-07-31/08-02. **Content is a first draft — see "Content maturity" below.**
 **Author:** Maxime Daragon (drafted with Claude Code)
 **Date:** 2026-07-31
 **Area:** `frontend` (v1 is frontend-only — no backend change)
 **Tracks:** `HELP-01`
+
+> **⚠️ Content maturity — first draft, review by iteration (2026-08-02).**
+> The Help Center **mechanism** (routing, rendering, search, anchors, i18n,
+> mermaid) is functional, but the **written content is an explicit first draft**
+> and is not to be treated as final or authoritative. It was produced quickly to
+> establish structure, tone, and coverage; it still needs to be reviewed and
+> refined **iteratively**:
+>
+> - factual review against the real product/code by a domain owner (the
+>   Architecture section is grounded in the frozen contracts, but the rest is
+>   best-effort and may drift as the product changes);
+> - editorial/tone pass and terminology consistency (fr/en parity);
+> - the ~21 `![TODO]` screenshot placeholders are unfilled;
+> - some sections are deliberately thin and will be expanded (and possibly new
+>   sections added) in later passes.
+>
+> Treat every page as a starting point, not a finished reference. Corrections
+> are cheap: content is plain markdown under
+> `apps/frontend/src/rework/features/helpCenter/content/` — anyone can edit a
+> page without touching React code (see the `content/README.md`).
 
 ## 1. Problem
 
@@ -106,13 +126,13 @@ Two-pane wiki layout, full viewport (no team sidebar):
 
 ### 2.5 Cross-cutting features
 
-| Feature | Design |
-| --- | --- |
-| **Global search** | Client-side. A lazy-built index over all pages of the current language (frontmatter `title`/`description` + headings + body text, weighted in that order). Search field in the Help Center header; results list page title + section + matching snippet; selecting a result navigates to the page (and heading anchor when the match is a heading). No backend. |
-| **Breadcrumb** | `Help Center › <Section> › <Page>`, existing `Breadcrumb` molecule. |
-| **Language switch** | Toggle in the Help Center header — swaps `:lang` in the URL **and** calls `i18n.changeLanguage` (keeps chrome and content consistent). If the target page doesn't exist in the other language, fall back to the section index. |
-| **Share page link** | Icon button (`content_copy` → `check` feedback) copying the canonical URL — same pattern as `PromptViewDialog`'s copy button. |
-| **Share heading link** | Every `h2`/`h3` gets a stable slug id; hovering shows a link icon that copies `<page-url>#<slug>`. On load, the page scrolls to `location.hash`. |
+| Feature                | Design                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Global search**      | Client-side. A lazy-built index over all pages of the current language (frontmatter `title`/`description` + headings + body text, weighted in that order). Search field in the Help Center header; results list page title + section + matching snippet; selecting a result navigates to the page (and heading anchor when the match is a heading). No backend. |
+| **Breadcrumb**         | `Help Center › <Section> › <Page>`, existing `Breadcrumb` molecule.                                                                                                                                                                                                                                                                                             |
+| **Language switch**    | Toggle in the Help Center header — swaps `:lang` in the URL **and** calls `i18n.changeLanguage` (keeps chrome and content consistent). If the target page doesn't exist in the other language, fall back to the section index.                                                                                                                                  |
+| **Share page link**    | Icon button (`content_copy` → `check` feedback) copying the canonical URL — same pattern as `PromptViewDialog`'s copy button.                                                                                                                                                                                                                                   |
+| **Share heading link** | Every `h2`/`h3` gets a stable slug id; hovering shows a link icon that copies `<page-url>#<slug>`. On load, the page scrolls to `location.hash`.                                                                                                                                                                                                                |
 
 ### 2.6 Search index & performance
 
