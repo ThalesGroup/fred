@@ -16,6 +16,7 @@ import asyncio
 import gc
 import logging
 import signal
+from typing import cast
 
 import pytest
 from fred_core.diagnostics import (
@@ -107,8 +108,8 @@ def test_collect_and_trim_can_skip_logging():
 def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
     # Build genuine cyclic garbage so the report has something to find.
     class _Node:
-        def __init__(self):
-            self.other = None
+        def __init__(self) -> None:
+            self.other: "_Node | None" = None
 
     a, b = _Node(), _Node()
     a.other, b.other = b, a
@@ -161,8 +162,9 @@ async def test_install_handles_add_signal_handler_raising(monkeypatch, caplog):
         def add_signal_handler(self, *_args, **_kwargs):
             raise NotImplementedError("no signals on this event loop")
 
+    fake_loop = cast(asyncio.AbstractEventLoop, _FakeLoop())
     with caplog.at_level(logging.WARNING):
-        handle = install_gc_diagnostics(loop=_FakeLoop(), periodic_interval_s=0)
+        handle = install_gc_diagnostics(loop=fake_loop, periodic_interval_s=0)
     assert handle.signals_installed is False
     assert any(
         "unavailable on this platform/thread" in r.message for r in caplog.records
