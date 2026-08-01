@@ -1953,14 +1953,24 @@ per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §
 
 ### Delivery to the runtime
 
-`ExecutionPreparation.reasoning_enabled_model_ids` → folded by the frontend onto
-`RuntimeContext.reasoning_enabled_model_ids` → `RoutedChatModelFactory` strips
-the reasoning settings for any model absent from it, at client construction
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.29). Resolved **once at session prep**, the
-same three-hop channel and lifecycle as `chat_default_profile_id`
-(`TEAM-ROUTING-POLICY-RFC.md` §8.2) — never a per-turn lookup. A session already
-open therefore keeps the setting it started with; the toggle takes effect from
-the next prepare-execution.
+`ExecutionPreparation.reasoning_enabled_model_ids` is still returned at session
+prep, for the frontend to render the composer control's initial state. It is
+**not**, however, what the runtime enforces against per turn (updated
+2026-08-01): `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids` — resolved
+fresh on every turn's own `GET /teams/{team_id}/agent-instances/{id}/runtime`
+call, from the same store — is what `RoutedChatModelFactory` strips reasoning
+settings against. The runtime-binding call already happens once per turn to
+resolve the instance's tuning and team-capability settings, so this piggybacks
+on it rather than adding a new round trip. This closes a gap where a session
+that stayed open past an admin's platform-wide toggle would keep reasoning
+active for the rest of that session: the enforced value is now current as of
+the next turn, not the next session.
+
+`chat_default_profile_id`/`operation_route_rules` are unaffected by this
+change and remain resolved once at session prep and forwarded by the frontend
+unchanged — routing-profile choice is a cost/comfort lever already bounded by
+the per-turn model authorization check, not an admin control, so the same
+freshness requirement does not apply to it.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 

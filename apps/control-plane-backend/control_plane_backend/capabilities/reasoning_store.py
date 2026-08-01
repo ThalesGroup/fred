@@ -78,8 +78,11 @@ class ModelReasoningStore:
         """Every model capability id whose reasoning is switched ON.
 
         One row per model that an admin has ever touched, and only the enabled
-        ones come back — this is read once per session prep (§5.5, the
-        `ExecutionPreparation` snapshot), never per turn.
+        ones come back. Read at session prep and also on every managed turn
+        from `get_runtime_binding_for_team` — the pod does not trust a
+        client-forwarded copy of this value, so it needs a fresh answer each
+        turn rather than once per session. A single indexed boolean-column
+        read; cheap enough to not need its own cache.
         """
 
         async with use_session(self._sessions, session) as s:

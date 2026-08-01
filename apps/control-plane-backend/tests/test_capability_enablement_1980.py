@@ -2141,6 +2141,14 @@ async def test_can_use_is_scoped_to_the_team_context() -> None:
 # ---------------------------------------------------------------------------
 
 
+class _FakeReasoningStore:
+    def __init__(self, enabled_model_ids: set[str] | None = None) -> None:
+        self._enabled_model_ids = enabled_model_ids or set()
+
+    async def list_enabled_model_ids(self) -> set[str]:
+        return set(self._enabled_model_ids)
+
+
 @pytest.mark.asyncio
 async def test_runtime_binding_carries_selected_team_settings() -> None:
     from types import SimpleNamespace
@@ -2169,6 +2177,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
     deps = SimpleNamespace(
         get_agent_instance_store=lambda: instance_store,
         get_team_capability_settings_store=lambda: settings,
+        get_model_reasoning_store=lambda: _FakeReasoningStore(),
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2176,6 +2185,36 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
     assert binding is not None
     # Only the SELECTED capability's settings are shipped to the pod.
     assert binding.team_capability_settings == {"corp_drive": {"root_folder": "f-1"}}
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> None:
+    """GitHub #2191: the pod stops trusting the client-forwarded reasoning
+    snapshot, so this per-turn call must hand back a fresh one instead. Same
+    store as prepare-execution, just read again here — no caching, no
+    trusting a value the caller supplied."""
+
+    from types import SimpleNamespace
+
+    import control_plane_backend.product.service as service
+
+    record = _make_record(agent_instance_id="inst", team_id="team-a")
+    instance_store = _FakeAgentInstanceStore([record])
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: instance_store,
+        get_team_capability_settings_store=lambda: _FakeSettingsStore(),
+        get_model_reasoning_store=lambda: _FakeReasoningStore(
+            {"model__openai__gpt-5.1", "model__mistral__small"}
+        ),
+    )
+
+    binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
+
+    assert binding is not None
+    assert binding.reasoning_enabled_model_ids == [
+        "model__mistral__small",
+        "model__openai__gpt-5.1",
+    ]
 
 
 # ---------------------------------------------------------------------------

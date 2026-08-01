@@ -1062,6 +1062,11 @@ class _ResolvedAgentInstance(BaseModel):
     # (CAPAB-01 / #1980, RFC §8.2), keyed by capability id and already
     # restricted to the instance's selected capabilities.
     team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Which models currently have reasoning switched on, resolved fresh by
+    # control-plane on this same call — see
+    # `_ResolvedExecutionTarget.reasoning_enabled_model_ids` for why this
+    # replaced reading the same field off the caller-supplied context.
+    reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -1079,6 +1084,16 @@ class _ResolvedExecutionTarget:
     # capability id. Reaches each capability as `CapabilityContext.team_settings`
     # — never an LLM tool signature. Empty for direct template execution.
     team_settings: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Which models currently have reasoning switched on. Resolved by
+    # control-plane on the SAME per-turn call that fetches `tuning` above, not
+    # read from the caller-supplied `context`: that copy is a session-open
+    # snapshot the frontend replays on every turn unchanged, so a stale or
+    # tampered copy could keep reasoning on past the moment an admin switched
+    # it off platform-wide. The routing-profile fields nearby stay
+    # client-forwarded because they're a frugality/comfort lever, not an admin
+    # control — this one is, so it's worth a fresh check. Empty for direct
+    # template execution, same as `tuning`.
+    reasoning_enabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
 
 
 def _active_mcp_server_refs(
@@ -1321,6 +1336,7 @@ async def _resolve_agent_instance(
         agent_instance_name=resolution.display_name or None,
         tuning=resolution.tuning,
         team_settings=resolution.team_capability_settings,
+        reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
     )
 
 
@@ -2323,6 +2339,7 @@ async def _stream(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -2364,6 +2381,7 @@ async def _stream(
         tuning=tuning,
         capability_registry=capability_registry,
         team_settings=team_settings,
+        reasoning_enabled_model_ids=reasoning_enabled_model_ids,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -2676,6 +2694,7 @@ async def _iterate_runtime_event_payloads(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -2797,27 +2816,27 @@ async def _iterate_runtime_event_payloads(
             for rule in (ctx.get("operation_route_rules") or [])
         ]
         or None,
-        # Platform reasoning activation snapshot (REASON-01,
-        # `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5) — same channel and same
-        # session-prep lifecycle as the two fields above, and forwarded here
-        # for the same hard-won reason: this mapping is field-by-field, so a
-        # field that is not named is silently dropped. Both comments above
-        # record a production bug caused by exactly that. `RoutedChatModelFactory`
-        # strips the reasoning settings for every model absent from this list
-        # (§5.6.2), so dropping it here would pin reasoning permanently OFF and
-        # make the admin toggle decorative — the failure §5.6.2 exists to
-        # prevent, one layer up from where it is enforced.
+        # Which models currently have reasoning switched on. Resolved
+        # control-plane-side on THIS turn's own runtime-binding call and
+        # threaded through as the `reasoning_enabled_model_ids` parameter — NOT
+        # read from the caller-supplied `ctx`, unlike `chat_default_profile_id`/
+        # `operation_route_rules` above. Those two stay client-forwarded
+        # because they are a frugality/comfort lever already bounded by the
+        # per-turn model `can_use` check; this one is the admin's incident
+        # lever (switch reasoning off platform-wide), so a stale or spoofed
+        # client-forwarded copy could keep it on past the moment an admin
+        # turned it off. Downstream model routing strips the reasoning
+        # settings for every model absent from this list, so an empty list
+        # here pins reasoning permanently OFF and makes the admin toggle
+        # decorative.
         #
-        # Intersected with level 3 (the agent's own switch) rather than taken
-        # as-is, and that is the whole point of doing it HERE: this list rides
-        # the request, `tuning` is resolved server-side from the managed
-        # instance. An agent whose author did not enable reasoning must not
-        # reason whatever the request claims the platform allows — all four
-        # levels must hold (§3), so the ceiling is `level 2 AND level 3`.
-        # Absent tuning (agent-to-agent invocation, no managed instance) means
-        # no author ever enabled it: off, the default everywhere in REASON-01.
+        # Intersected with the agent's own reasoning switch rather than taken
+        # as-is: an agent whose author did not enable reasoning must not
+        # reason whatever the platform allows. Absent tuning (agent-to-agent
+        # invocation, no managed instance) means no author ever enabled it:
+        # off by default.
         reasoning_enabled_model_ids=(
-            ctx.get("reasoning_enabled_model_ids")
+            list(reasoning_enabled_model_ids or ())
             if tuning is not None and tuning.reasoning_enabled
             else []
         ),
@@ -3912,6 +3931,7 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
+                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -3992,6 +4012,7 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
+                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4097,6 +4118,7 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
+                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             ),
             media_type="text/event-stream",
         )

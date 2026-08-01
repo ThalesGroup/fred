@@ -291,7 +291,7 @@ per-finding acceptance criteria live in
 | 1 | `POST /agents/execute/stream` | Validate request and Keycloak identity; normalize trusted runtime context |
 | 2 | Session/checkpoint access | Verify resumed checkpoint ownership when applicable; for an existing session, verify existence and owner in PostgreSQL |
 | 3 | Pod execution authorization | For a regular collaborative-team user, require OpenFGA `CAN_USE_TEAM_AGENTS`; personal ownership and the scoped service-agent rule keep their documented behavior |
-| 4 | Managed runtime binding | Call the control-plane internal binding endpoint, authorize the team there, read the instance and team capability settings, then cross-check the resolved owner team |
+| 4 | Managed runtime binding | Call the control-plane internal binding endpoint, authorize the team there, read the instance/team capability settings and the current reasoning-enabled model set, then cross-check the resolved owner team |
 | 5 | Model authorization | Resolve usable model capabilities with a team-scoped OpenFGA lookup before model routing |
 | 6 | Runtime activation | Build request context/services/capabilities, activate MCP tools, construct the selected ReAct/Deep/Graph runtime and executor |
 | 7 | Model/tool loop | Stream remote LLM output; execute tools and any HITL pause/resume; checkpoint through the shared async SQL engine |
@@ -2045,6 +2045,36 @@ order (a `test_deep_agent_middleware.py` test was separately found to leak
 `set_runtime_context(...)` into the shared process-global for the rest of
 the pytest session with no teardown; that call is now unnecessary and was
 removed rather than patched with a reset).
+
+---
+
+### 8.35 ✅ Reasoning-enabled model list is resolved fresh per turn, not trusted from the request (2026-08-01)
+
+**What changed.** Of the three fields riding the client-forwarded request
+context that mirror a control-plane session-open snapshot (routing default
+profile, routing override rules, reasoning-enabled model ids), only the third
+is a genuine admin control — the other two are a frugality/comfort choice
+already bounded by the per-turn model-authorization check, so they are left
+as-is. Reasoning is different: it is the admin's platform-wide kill switch,
+and a client that keeps forwarding a session-open copy could keep reasoning
+active past the moment an admin switched it off.
+
+`ManagedAgentRuntimeBinding` (control-plane, `product/schemas.py`) and
+`_ResolvedAgentInstance`/`_ResolvedExecutionTarget` (fred-runtime,
+`app/agent_app.py`) gain a `reasoning_enabled_model_ids` field, populated by
+`get_runtime_binding_for_team` from the same store `prepare_execution` reads.
+This call already happens once per turn to resolve the instance's tuning and
+team-capability settings, so this adds one cheap store read to an existing
+round trip rather than a new one. `_iterate_runtime_event_payloads` now takes
+`reasoning_enabled_model_ids` as a parameter sourced from this resolved
+target instead of reading it off the caller-supplied context.
+
+**Left alone, on purpose:** `chat_default_profile_id`/`operation_route_rules`
+keep riding the client-forwarded context unchanged. The per-turn model
+`can_use` check already stops a request from reaching a model the team isn't
+authorized for, whatever routing profile it names — narrowing that further
+was assessed and rejected as disproportionate for what is a cost/comfort
+lever, not an access boundary.
 
 ---
 

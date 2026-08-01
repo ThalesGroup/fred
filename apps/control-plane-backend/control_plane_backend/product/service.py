@@ -3158,6 +3158,11 @@ async def get_runtime_binding_for_team(
       enforced by the runtime pod (Keycloak JWT + OpenFGA) AND by the caller of
       this function (team ReBAC at the endpoint), so the binding it returns is
       tenant-isolated by construction.
+    - Also resolves the current reasoning-enabled model set: the pod already
+      calls this once per turn for the instance/team settings above, so this
+      is the one place that can hand back a trustworthy reasoning toggle at no
+      extra round-trip cost — see
+      `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids`.
 
     How to use it:
     - call from the team-scoped resolution endpoint after a team ReBAC check
@@ -3179,6 +3184,9 @@ async def get_runtime_binding_for_team(
         for cap_id, settings in all_team_settings.items()
         if cap_id in selected
     }
+    reasoning_enabled_model_ids = (
+        await deps.get_model_reasoning_store().list_enabled_model_ids()
+    )
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
@@ -3187,6 +3195,7 @@ async def get_runtime_binding_for_team(
         enabled=instance.enabled,
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
+        reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
     )
 
 

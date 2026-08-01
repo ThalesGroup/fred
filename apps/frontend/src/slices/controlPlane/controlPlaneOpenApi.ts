@@ -2232,6 +2232,7 @@ export type ManagedAgentRuntimeBinding = {
       [key: string]: any;
     };
   };
+  reasoning_enabled_model_ids?: string[];
 };
 export type SessionListItem = {
   session_id: string;
