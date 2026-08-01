@@ -9,7 +9,7 @@
 .toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-2xs);
   transition: color 150ms;
   cursor: pointer;
   border: none;
@@ -25,21 +25,19 @@
 }
 
 .chevron {
-  display: inline-block;
+  display: inline-flex;
   flex-shrink: 0;
-  transition: transform 180ms;
-  font-size: 0.75rem;
-  line-height: 1;
+  align-items: center;
+  font-size: 1rem;
 }
 
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
+/* The trace header is the ONLY size step in this component: everything inside
+   the body shares one type size and differs by colour alone. Mixing sizes made
+   an uppercase phase label shout louder than the header above it. */
 .summary {
   overflow: hidden;
   color: inherit;
-  font: var(--font-label-small);
+  font: var(--font-label-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -58,30 +56,35 @@
   }
 }
 
-/* Body with timeline guideline ------------------------------------------ */
-.body {
-  display: flex;
-  position: relative;
-  padding-top: var(--spacing-xs);
-}
+/* Body: reasoning lane, then step lane. No cards, no fills — the trace is
+   secondary UI and must stay lighter than the answer below it. The one piece of
+   chrome kept is the timeline rail: it is what makes the turn read as a process
+   unfolding, from the reasoning marker down through the numbered tool steps.
 
-/* Thin guideline running through the centre of the status dots.
- * Geometry: .entries padding-left (--spacing-xs) + half of the 8px dot column. */
-.guideline {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--spacing-xs) + 4px);
-  transform: translateX(-50%);
-  background: var(--outline-muted);
-  width: 1px;
-  pointer-events: none;
+   `--trace-rail-x` is the shared geometry: step-number column (18px) + row gap
+   (4px) + half a status dot (3px) = 25px. It cascades to ReasoningBlock and
+   TraceEntryRow, which align their markers on it, so the rail threads every
+   marker with no per-component magic. Deliberately whole pixels: at 24.6px the
+   2px rail straddled a half pixel and rendered as a blurred grey smear. */
+.body {
+  --trace-rail-x: calc(18px + var(--spacing-2xs) + 3px);
+
+  display: flex;
+  flex-direction: column;
+  /* No gap: each row draws its own rail segment, so any gap would break the
+     line. Breathing room comes from the rows' own vertical padding instead. */
+  gap: 0;
+  padding-top: var(--spacing-2xs);
 }
 
 .entries {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 0;
-  padding-left: var(--spacing-xs);
+}
+
+/* Nothing above the first step: the rail must start AT its marker, not float
+   above it. (Element selector, not a class: the row is TraceEntryRow's root.) */
+.entriesLeading > div:first-child::before {
+  top: 50%;
 }

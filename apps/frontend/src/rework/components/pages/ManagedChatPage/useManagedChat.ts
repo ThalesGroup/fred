@@ -283,6 +283,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             },
           }
         : undefined;
+    // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
+    // platform chat option, not a capability's turn_options slice — it travels
+    // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
+    // when the composer actually offers the control: its absence means the
+    // agent does not offer reasoning (or a gate upstream is closed, §8), and
+    // that must reach the runtime as "no choice made", never as an explicit
+    // `false` that would suppress reasoning the agent never offered to begin
+    // with.
+    const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
     touchSessionActivity(sid);
     send(
       text,
@@ -294,6 +303,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         ragScope: composer.ragScope,
         boundLibraryIds,
         attachmentsMarkdown: attachmentContext,
+        ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
       }),
       turnOptions,
     );
@@ -312,6 +322,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     composer.selectedDocumentUids,
     composer.searchPolicy,
     composer.ragScope,
+    composer.reasoning,
     bindSessionId,
     registerSession,
     trackSessionWrite,
@@ -392,6 +403,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setSearchPolicy: composer.setSearchPolicy,
     ragScope: composer.ragScope,
     setRagScope: composer.setRagScope,
+    reasoning: composer.reasoning,
+    setReasoning: composer.setReasoning,
     contextPrompts,
     contextPromptIds,
     setContextPrompts,

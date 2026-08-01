@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
@@ -79,6 +80,7 @@ class ApplicationContext:
         self._agent_instance_store: AgentInstanceStore | None = None
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
+        self._model_reasoning_store: ModelReasoningStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
@@ -336,6 +338,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._team_routing_policy_store
+
+    def get_model_reasoning_store(self) -> ModelReasoningStore:
+        if self._model_reasoning_store is None:
+            self._model_reasoning_store = ModelReasoningStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._model_reasoning_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

@@ -78,6 +78,14 @@ export interface ChatTurnControlComposerState {
   onSearchPolicyChange: (value: SearchPolicyName) => void;
   ragScope: RagScopeName;
   onRagScopeChange: (value: RagScopeName) => void;
+  /**
+   * Per-question reasoning activation (REASON-01 level 4,
+   * MODEL-REASONING-ENABLEMENT-RFC.md §7 + §15). Travels on `RuntimeContext`
+   * exactly like `searchPolicy`/`ragScope` above — reasoning is not a
+   * capability, so it has no typed `turn_options` slice to belong to.
+   */
+  reasoning: boolean;
+  onReasoningChange: (value: boolean) => void;
 }
 
 export interface CapabilityChatTurnControlProps<TParams = Record<string, unknown>> {

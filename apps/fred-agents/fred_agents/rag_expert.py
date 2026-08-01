@@ -38,6 +38,8 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
+
 # The shared global base prompt (Mermaid output contract) is injected at
 # execution time by the runtime, not baked into this editable template.
 _RAG_EXPERT_SYSTEM_PROMPT: str = load_agent_prompt_markdown(
@@ -128,6 +130,8 @@ class RagExpertReActDefinition(ReActAgentDefinition):
 
         return ReActPolicy(
             system_prompt_template=self.system_prompt_template,
+            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
+            tool_selection=REASONING_SAFE_TOOL_SELECTION,
             guardrails=(
                 GuardrailDefinition(
                     guardrail_id="grounding",

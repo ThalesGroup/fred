@@ -984,6 +984,19 @@ class _ModelCatalogEntry(BaseModel):
     team-settings picker needs the reverse (which profile_ids this enabled
     capability actually offers). Declaration order in the source YAML,
     first-seen first — same order `default_profile_by_capability` favors."""
+    thinking_profile_ids: list[str] = Field(default_factory=list)
+    """The subset of `profile_ids` above declaring `supports_thinking`
+    (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). DERIVED here,
+    never authored twice: aptitude is declared per profile (§4, where the
+    behaviour actually differs), while the admin toggle is keyed per model
+    because that is what the capability id space and the admin UI both are
+    (§5.2 — the id space is not negotiable). This field is the projection
+    between the two.
+
+    Empty means this model has NO reasoning-capable profile, and the admin row
+    shows no reasoning control at all — aptitude is not a choice, an
+    administrator cannot make a model reason. Non-empty means the row carries
+    the toggle. Same established join as `profile_ids` above."""
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1018,15 +1031,20 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         key = (provider, name)
         existing = seen.get(key)
         if existing is None:
-            seen[key] = _ModelCatalogEntry(
+            existing = _ModelCatalogEntry(
                 id=model_capability_id(provider, name),
                 provider=provider,
                 name=name,
                 description=profile.description,
                 profile_ids=[profile.profile_id],
             )
+            seen[key] = existing
         else:
             existing.profile_ids.append(profile.profile_id)
+        # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
+        # this one condition is the whole projection between them.
+        if profile.supports_thinking:
+            existing.thinking_profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 
@@ -1740,6 +1758,27 @@ async def _validate_session_checkpoint_access(
         )
 
 
+@dataclass
+class _OpenThought:
+    """
+    One reasoning block being accumulated while mapping a turn to history rows.
+
+    Why the rank is reserved at THOUGHT_START rather than at THOUGHT_END:
+    - a model-native block opens on the first reasoning token and closes only at
+      the first answer delta (RFC AGENT-THINKING-API §7.3), so it brackets every
+      tool call of the turn
+    - the live UI assigns the row's rank at `thought_start` (`useChatSse.ts`);
+      ranking it at close instead would file the reasoning *after* the tools it
+      actually preceded, so a reloaded trace would not match what the user saw
+    """
+
+    rank: int
+    phase: str
+    title: str | None
+    source: str | None
+    text: list[str] = field(default_factory=list)
+
+
 async def _write_turn_history(
     *,
     session_id: str,
@@ -1775,6 +1814,7 @@ async def _write_turn_history(
     Event-to-message mapping:
     - ``tool_call``      → ``Role.assistant / Channel.tool_call``
     - ``tool_result``    → ``Role.tool    / Channel.tool_result``
+    - ``thought_*``      → ``Role.assistant / Channel.thought`` (one row per block)
     - ``awaiting_human`` → ``Role.system  / Channel.hitl_request`` (full choices)
     - ``node_error``     → ``Role.system  / Channel.error``
     - ``final``          → ``Role.assistant / Channel.final`` (answer + sources)
@@ -1784,6 +1824,7 @@ async def _write_turn_history(
     from fred_core.history.history_schema import (
         Channel,
         ChatMessage,
+        ChatMetadata,
         ChatTokenUsage,
         Role,
         TextPart,
@@ -1827,6 +1868,55 @@ async def _write_turn_history(
         messages.append(make_user_text(session_id, exchange_id, rank, request_message))
         rank += 1
 
+    # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
+    # its rank when it opens but only becomes a row once its text is complete.
+    open_thoughts: dict[str, _OpenThought] = {}
+
+    def _thought_row(
+        block: _OpenThought,
+        *,
+        thought_id: str,
+        conclusion: str | None = None,
+        duration_ms: int | None = None,
+    ) -> ChatMessage:
+        """
+        Build one ``Channel.thought`` row from an accumulated reasoning block.
+
+        The envelope must match what the live stream emits client-side
+        (`useChatSse.ts`) — same role, same channel, same ``metadata.extras``
+        keys — because the chat UI feeds streamed and reloaded messages through
+        a single rendering path (`traceUtils.thoughtExtras`).
+
+        ``streaming_delta`` is deliberately absent: a persisted block is
+        complete, and carrying that flag would render it as still running.
+        """
+        return ChatMessage(
+            session_id=session_id,
+            exchange_id=exchange_id,
+            rank=block.rank,
+            timestamp=datetime.now(timezone.utc),
+            role=Role.assistant,
+            channel=Channel.thought,
+            parts=[TextPart(text="".join(block.text))],
+            # `extras` is not a declared field: `ChatMetadata` sets
+            # `extra="allow"` precisely so callers can attach structured payloads
+            # without every consumer of the model growing a dependency on them.
+            # `model_validate` is how that is reached type-safely — a keyword
+            # argument would not type-check against the declared fields.
+            metadata=ChatMetadata.model_validate(
+                {
+                    "extras": {
+                        "thought_id": thought_id,
+                        "phase": block.phase,
+                        "title": block.title,
+                        "source": block.source,
+                        "conclusion": conclusion,
+                        "duration_ms": duration_ms,
+                    }
+                }
+            ),
+        )
+
     # 2. Map runtime events to messages
     final_content = ""
     final_sources: list[VectorSearchHit] = []
@@ -1863,6 +1953,48 @@ async def _write_turn_history(
                 )
             )
             rank += 1
+
+        elif kind == "thought_start":
+            # `tool_use` blocks are synthetic bookkeeping the runtime opens around
+            # every tool call (RFC Amendment A, Layer 1). The chat UI has hidden
+            # them since Amendment B — the tool call/result combo row already
+            # carries what ran, how it went and how long it took. Persisting them
+            # would file up to `max_tool_calls_per_turn` content-free rows a turn.
+            if payload.get("phase") == "tool_use":
+                continue
+            thought_id = str(payload.get("thought_id") or "")
+            if not thought_id:
+                continue
+            open_thoughts[thought_id] = _OpenThought(
+                rank=rank,
+                phase=str(payload.get("phase") or "planning"),
+                title=payload.get("title"),
+                source=payload.get("source"),
+            )
+            rank += 1
+
+        elif kind == "thought_delta":
+            block = open_thoughts.get(str(payload.get("thought_id") or ""))
+            if block is not None:
+                block.text.append(str(payload.get("delta") or ""))
+
+        elif kind == "thought_end":
+            thought_id = str(payload.get("thought_id") or "")
+            block = open_thoughts.pop(thought_id, None)
+            # A block with neither text nor conclusion carries nothing to show;
+            # persisting it would render an empty reasoning card on reload. Its
+            # reserved rank is simply left unused — ranks must increase, not be
+            # contiguous.
+            conclusion = payload.get("conclusion")
+            if block is not None and ("".join(block.text) or conclusion):
+                messages.append(
+                    _thought_row(
+                        block,
+                        thought_id=thought_id,
+                        conclusion=conclusion,
+                        duration_ms=payload.get("duration_ms"),
+                    )
+                )
 
         elif kind == "awaiting_human":
             # Store the full HITL gate definition — question and all choices —
@@ -1921,6 +2053,14 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+
+    # 2b. Blocks the stream never closed (truncated turn, crashed node). The live
+    # UI closes them itself on `final` so the accordion does not pulse forever
+    # (`useChatSse.ts`); history keeps the same parity — reasoning the user was
+    # shown must not disappear on reload just because the block was left open.
+    for thought_id, block in open_thoughts.items():
+        if "".join(block.text):
+            messages.append(_thought_row(block, thought_id=thought_id))
 
     # 3. Terminal assistant message (from FinalRuntimeEvent)
     if final_content or final_model:
@@ -2656,6 +2796,35 @@ async def _iterate_runtime_event_payloads(
             for rule in (ctx.get("operation_route_rules") or [])
         ]
         or None,
+        # Platform reasoning activation snapshot (REASON-01,
+        # `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5) — same channel and same
+        # session-prep lifecycle as the two fields above, and forwarded here
+        # for the same hard-won reason: this mapping is field-by-field, so a
+        # field that is not named is silently dropped. Both comments above
+        # record a production bug caused by exactly that. `RoutedChatModelFactory`
+        # strips the reasoning settings for every model absent from this list
+        # (§5.6.2), so dropping it here would pin reasoning permanently OFF and
+        # make the admin toggle decorative — the failure §5.6.2 exists to
+        # prevent, one layer up from where it is enforced.
+        #
+        # Intersected with level 3 (the agent's own switch) rather than taken
+        # as-is, and that is the whole point of doing it HERE: this list rides
+        # the request, `tuning` is resolved server-side from the managed
+        # instance. An agent whose author did not enable reasoning must not
+        # reason whatever the request claims the platform allows — all four
+        # levels must hold (§3), so the ceiling is `level 2 AND level 3`.
+        # Absent tuning (agent-to-agent invocation, no managed instance) means
+        # no author ever enabled it: off, the default everywhere in REASON-01.
+        reasoning_enabled_model_ids=(
+            ctx.get("reasoning_enabled_model_ids")
+            if tuning is not None and tuning.reasoning_enabled
+            else []
+        ),
+        # The user's per-question reasoning choice (REASON-01 level 4). Same
+        # trap as every field above: unnamed here means silently dropped. Kept
+        # tri-state on purpose — `ctx.get` yielding None means "the agent never
+        # offered the choice", which is NOT the same as the user answering no.
+        reasoning=ctx.get("reasoning"),
     )
 
     binding = BoundRuntimeContext(

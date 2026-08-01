@@ -128,6 +128,19 @@ function toTitleCase(s: string): string {
 }
 
 /**
+ * Bare tool slug of a raw tool name: MCP prefix and provider dropped, trailing
+ * numeric suffix stripped. `mcp__knowledge_flow__read_query_2` → `read_query`.
+ */
+export function toolSlug(rawName: string): string {
+  let slug = rawName;
+  if (slug.startsWith("mcp__")) {
+    const parts = slug.split("__");
+    slug = parts.length >= 3 ? parts.slice(2).join("_") : parts.slice(1).join("_");
+  }
+  return slug.replace(/_\d+$/, "");
+}
+
+/**
  * Converts a raw tool name into a human-friendly label.
  *
  * Examples:
@@ -140,20 +153,13 @@ export function humanizeToolName(rawName: string): string {
   if (!rawName) return "Tool";
 
   let provider = "";
-  let slug = rawName;
 
-  if (slug.startsWith("mcp__")) {
-    const parts = slug.split("__");
-    if (parts.length >= 3) {
-      provider = parts[1].toLowerCase();
-      slug = parts.slice(2).join("_");
-    } else {
-      slug = parts.slice(1).join("_");
-    }
+  if (rawName.startsWith("mcp__")) {
+    const parts = rawName.split("__");
+    if (parts.length >= 3) provider = parts[1].toLowerCase();
   }
 
-  // Strip trailing numeric suffix (e.g. tool_name_3 → tool_name)
-  slug = slug.replace(/_\d+$/, "");
+  const slug = toolSlug(rawName);
 
   // Explicit overrides for well-known compound slugs
   if (SLUG_OVERRIDES[slug]) return SLUG_OVERRIDES[slug];
@@ -343,6 +349,35 @@ export function detailTextForEntry(entry: TraceEntry): string {
   return textOf(entry.message);
 }
 
+/**
+ * Flattens markdown to plain text for a one-glance preview.
+ *
+ * Reasoning text is markdown, and models emphasise heavily — a clamped preview
+ * rendered raw shows literal `**Chiffre d'Affaires**` to the user. Previews are
+ * clamped to two lines, so running them through the real markdown renderer
+ * would be both heavy and pointless (block layout inside a clamped line box);
+ * the full markdown is one click away in the detail drawer.
+ *
+ * Single `_` emphasis is deliberately NOT stripped: it would mangle the
+ * snake_case identifiers that reasoning text is full of.
+ */
+export function plainPreviewText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s{0,3}[-*+]\s+/gm, "")
+    .replace(/(\*\*\*|___)(.+?)\1/g, "$2")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Stable identity for a trace entry. The detail drawer stores this key (not the
 // entry object) so it can re-resolve the entry against the live message list and
 // stream reasoning deltas in real time instead of showing a frozen snapshot.
@@ -500,9 +535,125 @@ export function totalLatencyMs(entries: TraceEntry[]): number {
   }, 0);
 }
 
-// Format "Thought for Xs" summary line
-export function thoughtSummaryLabel(entries: TraceEntry[]): string {
-  const ms = totalLatencyMs(entries);
-  if (ms > 0) return `Thought for ${formatLatencyMs(ms)}`;
-  return "Thought…";
+// ── Trace lanes: reasoning vs tool steps ─────────────────────────────────────
+//
+// Reasoning and tool execution are two different species and must not be
+// rendered as one flat pile of look-alike rows (#2172). The model-native
+// reasoning block is opened on the first reasoning token and closed only when
+// the first answer delta arrives (react_runtime.py), so it holds the lowest
+// rank and stays "streaming" for the whole turn — as one more row in the tool
+// list it permanently squats the top of the pile and reads like a stuck tool.
+// Splitting it out is what makes the distinction visible.
+
+/** A tool call paired with its result (or still awaiting one). */
+export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
+
+/** One row of the step lane. `index` is the 1-based tool step number, null for
+ *  notes and errors — they are sequenced with the tools but are not steps. */
+export type TraceStep = { entry: TraceEntry; index: number | null };
+
+export type TraceLanes = {
+  /** Reasoning entries (thought / plan / observation) — rendered as cards. */
+  reasoning: TraceEntry[];
+  /** Tool executions, plus system notes and errors, in arrival order. */
+  steps: TraceStep[];
+};
+
+function isStepEntry(entry: TraceEntry): boolean {
+  // Orphan tool_results (call never seen) land here too: they are tool activity.
+  return entry.kind === "combo" || entry.message.channel === "tool_result";
+}
+
+function isReasoningEntry(entry: TraceEntry): boolean {
+  if (entry.kind !== "solo") return false;
+  const channel = entry.message.channel;
+  return channel === "thought" || channel === "plan" || channel === "observation";
+}
+
+/** Splits a flat trace into its reasoning lane and its numbered step lane. */
+export function splitTraceEntries(entries: TraceEntry[]): TraceLanes {
+  const reasoning: TraceEntry[] = [];
+  const steps: TraceStep[] = [];
+  let toolIndex = 0;
+
+  for (const entry of entries) {
+    if (isReasoningEntry(entry)) {
+      reasoning.push(entry);
+    } else if (isStepEntry(entry)) {
+      steps.push({ entry, index: ++toolIndex });
+    } else {
+      // system_note / error — sequenced with the steps, but unnumbered.
+      steps.push({ entry, index: null });
+    }
+  }
+
+  return { reasoning, steps };
+}
+
+// Tool slugs whose result volume IS a row count. A completed call to one of
+// these always reports its count — zero included — because "0 rows" is the
+// answer the reader needs (the query ran and found nothing, or came back in a
+// shape we can't read), not an absence of information. Without this, a barren
+// query rendered as a bare "Reading query" row, indistinguishable from a step
+// still missing its metadata.
+const ROW_COUNT_TOOL_SLUGS: ReadonlySet<string> = new Set(["read_query"]);
+
+/**
+ * Curated discriminator for a tool step, so two calls to the same tool are
+ * distinguishable ("Reading query" ×2 was byte-identical before).
+ *
+ * Only volume metadata is derived — never raw arguments or raw result content,
+ * which stay redacted per the rule enforced in {@link primaryTextForEntry}.
+ * Returns null when the result shape is unrecognized, still running, or failed
+ * (the red status dot already carries the failure).
+ */
+export function toolDiscriminator(entry: TraceEntry): { kind: "rows" | "sources"; count: number } | null {
+  if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) return null;
+  const data = parseToolResultContent(entry.result);
+  const sql = asSqlQueryResult(data);
+  if (sql) return { kind: "rows", count: sql.error ? 0 : sql.rows.length };
+  const rag = asRagSearchResult(data);
+  if (rag) return { kind: "sources", count: rag.hits.length };
+  if (ROW_COUNT_TOOL_SLUGS.has(toolSlug(toolName(entry.call)))) return { kind: "rows", count: 0 };
+  return null;
+}
+
+export type TraceSummary = {
+  /** Reasoning wall-clock, or null when no reasoning block reported one. */
+  reasoningMs: number | null;
+  /** Number of tool executions in this turn. */
+  toolCount: number;
+  /** Sum of tool execution latencies. */
+  toolMs: number;
+  /** Something is still streaming or awaiting a result. */
+  running: boolean;
+};
+
+/**
+ * Structured summary for the trace header. Returns data, not a string, so the
+ * component formats it through i18n.
+ *
+ * `reasoningMs` is the MAX of the reasoning blocks' durations, not their sum:
+ * the model-native block brackets the tool calls (and any nested reasoning), so
+ * summing would count the same wall-clock twice. The former
+ * `thoughtSummaryLabel()` had the opposite flaw — it advertised "Thought for
+ * 856ms" while summing tool latencies only, next to a 16.4s reasoning row.
+ */
+export function traceSummary(entries: TraceEntry[]): TraceSummary {
+  const { reasoning, steps } = splitTraceEntries(entries);
+
+  let reasoningMs: number | null = null;
+  for (const entry of reasoning) {
+    if (entry.kind !== "solo") continue;
+    const duration = thoughtExtras(entry.message).duration_ms;
+    if (duration != null && (reasoningMs === null || duration > reasoningMs)) reasoningMs = duration;
+  }
+
+  const toolCount = steps.filter((s) => s.entry.kind === "combo").length;
+  const running = entries.some((e) => {
+    const status = statusForEntry(e);
+    return status === "streaming" || status === "pending";
+  });
+
+  return { reasoningMs, toolCount, toolMs: totalLatencyMs(entries), running };
 }

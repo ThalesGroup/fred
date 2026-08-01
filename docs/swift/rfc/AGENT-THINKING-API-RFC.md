@@ -4,7 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Status:** Draft  
 **Date:** 2026-05-23  
-**Last amended:** 2026-07-22 — chat trace UI stops rendering the synthetic `tool_use` thought row (Amendment B)
+**Last amended:** 2026-07-30 — trace presentation split into a reasoning lane and a numbered tool-step lane; collapse behaviour fixed (Amendment D)
 **Track:** fred-sdk / fred-runtime execution contract
 
 ---
@@ -252,6 +252,11 @@ mapping applies with `source="model_native"`. Where it is not exposed (o1 early
 versions hide it), nothing is emitted — graceful silence.
 
 ### 7.3 Mistral adjustable reasoning
+
+> **Verified against the live API on 2026-07-29 — see Amendment C.** The wire
+> format below is confirmed exactly as specified; Amendment C §C.2 records the
+> observed payload verbatim and adds two details this section did not capture
+> (the `closed` flag, and the absence of any top-level `reasoning_content`).
 
 Mistral Small 4 / `mistral-small-latest` can surface native reasoning when
 `reasoning_effort` is enabled. In non-streaming responses, `message.content`
@@ -770,3 +775,494 @@ shape is tool-specific and Layer 2 already exists for exactly this purpose.
 Non-`tool_use` thought phases (`planning`, `observation`, `reflection`,
 `synthesis`) are unaffected — their `conclusion` is real agent-authored or
 model-native text, not this synthetic placeholder, and continues to render.
+
+---
+
+## Amendment C — Reasoning continuity across the tool loop: measured findings (2026-07-29)
+
+**Author:** Timothé Le Chatelier
+**Date:** 2026-07-29
+**Status:** Measured findings. Confirms §7.3 and §A.3; identifies one scope gap
+in this RFC and one undocumented load-bearing dependency in the runtime. No
+design change is proposed here — see §C.8 for the decisions this enables.
+**Amends:** §7.3 (Mistral adjustable reasoning), §A.3 (Layer 2b)
+**Related:** `docs/swift/issues/ISSUE-005-reasoning-model-redundant-tool-calls.md`
+
+### C.1 Why this amendment exists
+
+ISSUE-005 documented, from a reported observation, that enabling
+`reasoning_effort` on a tool-calling ReAct agent makes the model re-issue the
+same tool call 3–5 times per turn. Its §7 step 1 — "reproduce and capture a
+clean trace as the regression fixture" — was never done, and no trace exists in
+the repository. Every downstream recommendation in that issue (including a 3–5
+engineer-day client migration) therefore rested on an unverified premise.
+
+This amendment records a measurement campaign run against the live Mistral API
+on 2026-07-28/29 (147 trials across two benches plus three structural probes),
+which confirms the core claim, refutes two of its supporting premises, and
+identifies why the symptom is not currently visible in production.
+
+**Scope of the evidence.** One model (`mistral-small-latest`,
+`reasoning_effort: high`, temperature 0), one question, one to two tools,
+`langchain-openai 1.3.2`, repository at `c170333d`. Sufficient to establish
+causal direction and order of magnitude; insufficient to generalise to other
+providers or to multi-tool chains of arbitrary depth.
+
+### C.2 Confirmed — the Mistral wire format (amends §7.3)
+
+The observed non-streaming payload, verbatim:
+
+```json
+{
+  "role": "assistant",
+  "tool_calls": [{ "id": "PGYQU5Tiw", "type": "function", "function": { ... } }],
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": [{ "type": "text", "text": "L'utilisateur demande le délai…" }],
+      "closed": true
+    }
+  ]
+}
+```
+
+Two details §7.3 did not capture:
+
+- Each `ThinkChunk` carries a `closed: boolean` flag.
+- There is **no top-level `reasoning_content` field**. The reasoning travels
+  exclusively as a `content` block. This matters for §C.3.
+
+`support/thinking.py` already duck-types this shape correctly; no change needed.
+
+### C.3 Refuted — "the client cannot carry the reasoning"
+
+`ChatOpenAI` is documented (`base.py:1-11`) as not extracting non-standard
+third-party fields such as `reasoning_content`. That warning was read as meaning
+Fred never receives Mistral's reasoning. **That reading is wrong.** Because
+Mistral ships the reasoning as an ordinary `content` block (§C.2) and not as an
+exotic top-level field, LangChain passes it through untouched.
+
+Probe, against the live endpoint through `ChatOpenAI` + `bind_tools`:
+
+```text
+type(content)     : list
+types de blocs    : ['thinking']
+tool_calls        : ['knowledge_search']
+>>> reasoning received by Fred : True
+```
+
+The reasoning therefore _does_ reach the checkpoint, and
+`strip_reasoning_from_history` genuinely has material to remove. §A.3 (Layer 2b)
+is correct as specified and is the reason the UI shows
+`PLANNING · Model reasoning`.
+
+### C.4 The real blocker is the outbound direction
+
+`_format_message_content` (`langchain_openai/chat_models/base.py:296-306`) drops
+`thinking` and `reasoning_content` blocks from any message it sends, under the
+comment "Remove unexpected block types". Probe:
+
+| target API         | `thinking` block preserved on send |
+| ------------------ | ---------------------------------- |
+| `chat/completions` | **No**                             |
+| `responses`        | **No**                             |
+
+Consequence, and the single most actionable finding of this campaign: **removing
+Fred's own strip achieves nothing**, because the client re-applies an equivalent
+filter one layer down. Measured on the real stack, 10 trials per condition:
+
+| condition                                           | turns with a duplicate | duplicate calls |
+| --------------------------------------------------- | ---------------------- | --------------- |
+| `mistral-medium` (historical default, no reasoning) | 0 / 10                 | 0               |
+| `mistral-small`, reasoning **off**                  | 0 / 10                 | 0               |
+| `mistral-small` + reasoning, **with** Fred's strip  | 10 / 10                | 28              |
+| `mistral-small` + reasoning, **strip removed**      | 10 / 10                | 28              |
+
+The bare-loop rate was re-measured twice more under the same conditions
+(16/16 → 40 duplicates; 12/12 → 30), so the effect is stable, not a one-off.
+
+Any fix must therefore replace or bypass the model client. Amending Fred alone
+cannot work. This is the empirical basis for ISSUE-005 §6, and it narrows the
+target: the defect is entirely in the model-access layer, not in Fred's
+orchestration.
+
+### C.5 Not reproduced — the HTTP 422 that justifies stripping
+
+`support/thinking.py:185-201` justifies `strip_reasoning_from_history` by
+stating that Mistral rejects replayed assistant content with
+`HTTP 422 ("content … should be a valid string")`.
+
+**17 trials replaying the raw `thinking` block verbatim produced zero
+rejections.** The current API accepts the shape the docstring describes as
+refused. The documented justification for the strip is not currently valid.
+
+This does not by itself unblock anything — §C.4 shows the client filters
+regardless — but it removes the 422 from the set of hard constraints, and it
+should be re-verified rather than assumed by anyone designing the fix.
+
+_Caveat:_ one model, one scenario, one API generation. Sufficient to demote the
+422 from certainty to open question; insufficient to declare it extinct.
+
+### C.6 Validated — threading the reasoning does fix it
+
+Measured on a raw-HTTP bench where threading is actually possible (bypassing the
+§C.4 filter), replaying the `thinking` block verbatim inside the open tool loop:
+
+| condition                        | turns with a duplicate | duplicate calls |
+| -------------------------------- | ---------------------- | --------------- |
+| reasoning disabled               | 0 / 5                  | 0               |
+| reasoning + strip (Fred's model) | 8 / 17 (47 %)          | 10              |
+| reasoning + verbatim replay      | 2 / 17 (12 %)          | 2               |
+
+One-sided Fisher exact test on the 12-trial sub-campaign (6/12 vs 1/12):
+**p = 0.034**.
+
+The "thread within the open turn, strip on closed turns" rule that ISSUE-005 §6.3
+proposes is therefore validated experimentally, not merely by analogy with other
+frameworks.
+
+_Method note, recorded because it nearly caused a wrong conclusion:_ at n = 5 the
+contrast was 2/5 vs 1/5 and the interim reading was "threading changes nothing".
+That was underpowering, not a result. Twelve trials per condition were needed for
+the signal to separate.
+
+### C.7 The symptom is currently masked by an unrelated prompt suffix
+
+Despite every link of the mechanism being armed in production — reasoning active,
+`CheckpointHygieneMiddleware` outermost in the ReAct frame
+(`middleware/frame.py:79`), no guardrail configured — duplicate tool calls are
+**not observed** in the running product, including against an empty corpus where
+retrieval returns nothing useful.
+
+The reason is `build_tool_failure_recovery_suffix()`
+(`react/react_prompting.py:219-226`), added by commit `d2f1c467` for issue #2073
+(agents surfacing raw tool-error text as the final answer). It instructs the
+model to "retry the call **with corrected arguments**" and to "answer from what
+other calls have **already returned** if that is enough". Both clauses function
+as anti-repetition guidance, and it is injected at composition time so it
+survives an operator replacing the agent prompt wholesale.
+
+Its effect is large. Identical conditions, 12 trials per prompt:
+
+| system prompt                        | turns with a duplicate | duplicate calls |
+| ------------------------------------ | ---------------------- | --------------- |
+| none                                 | 12 / 12                | 30              |
+| generic, role-only                   | 12 / 12                | **41**          |
+| explicit anti-repetition instruction | **0 / 12**             | **0**           |
+
+Note that a generic prompt provides no protection at all — marginally worse than
+none. Only the explicit instruction suppresses the behaviour.
+
+**This is a load-bearing dependency that nobody has written down.** The suffix was
+authored for a different problem; no test, comment, or document ties it to
+reasoning-drift suppression. Reformulating it for #2073 reasons would silently
+re-expose the defect, with nothing to catch the regression. Recording that
+coupling is the cheapest risk reduction available here.
+
+### C.8 Runtime guardrail state, as measured and read
+
+Verified against the code at `c170333d`, correcting an earlier assertion that no
+guardrail existed:
+
+| element                  | state                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-turn iteration cap   | **Implemented.** `ToolCallLimitMiddleware` wired at `middleware/frame.py:114-126`, placed after `FredHitl` so `after_model`'s reverse ordering blocks over-limit calls before the human gate.                                                                                                                                                         |
+| … but active?            | **No.** Appended only when `max_tool_calls_per_turn` is set; default `None`, and no agent config in `apps/` sets it.                                                                                                                                                                                                                                  |
+| Tool-call de-duplication | **Absent.** No hashing of `(tool_name, canonical_args)` anywhere in `react/` or `support/`. Existing dedup covers tool _names_ at assembly time only.                                                                                                                                                                                                 |
+| `allow_parallel_calls`   | **Decorative.** Never reaches the model; its only production use renders a sentence into a prompt summary (`fred_sdk/contracts/models.py:1262`).                                                                                                                                                                                                      |
+| SDK contract docstring   | **Stale.** `ToolSelectionPolicy` still says the cap is "Reserved for now … does not enforce this limit yet" (`models.py:797, 810-811`), which has been untrue since `frame.py` wired it. A reader would conclude the only available lever is inoperative.                                                                                             |
+| Chat UI trace rendering  | **Not hiding anything.** `traceUtils.groupTraceEntries()` filters only `tool_use`-phase thought rows (Amendment B) and de-duplicates `tool_call` messages **by `call_id`**; genuinely repeated calls carry distinct provider ids and render separately. `runtime.py:183` enforces `call_id` non-empty, so the `!id` drop branch is unreachable today. |
+
+### C.9 Scope gap in this RFC
+
+This RFC — including Amendment A — specifies how model-native reasoning is
+**surfaced**: detected, split from the answer, streamed as `THOUGHT_*`, and kept
+out of the assistant text. It works, and §C.3 confirms it end to end.
+
+It has never specified what happens to that reasoning on the **way back into the
+model**. Continuity across an open tool loop is out of scope of every section
+written so far, and `strip_reasoning_from_history` was introduced as runtime
+hygiene rather than as a decision this RFC recorded. §C.4 shows that gap has a
+measurable behavioural cost.
+
+Two coherent resolutions, both requiring a decision this amendment does not take:
+
+1. Declare reasoning continuity an explicit **non-goal** of this RFC and move it
+   wholly to ISSUE-005 / its successor RFC, with a pointer from §7 so the
+   boundary is visible to the next reader.
+2. Extend this RFC with a "Layer 2c — reasoning continuity" section stating the
+   thread-within-open-turn rule (ISSUE-005 §6.3) as part of the thinking
+   contract, since the same content is at stake in both directions.
+
+### C.10 Open questions this campaign raises
+
+1. **Is the 422 genuinely gone, or shape-dependent?** §C.5 tested one replay
+   shape on one API generation. Before any design relies on being able to replay
+   reasoning, the accepted shapes should be enumerated deliberately.
+2. **Does `use_previous_response_id` work against Mistral?** `base.py:3003-3006`
+   suggests `use_responses_api=True, use_previous_response_id=True` for
+   non-OpenAI endpoints reached via `base_url`, which would offload continuity to
+   the provider. §C.4 shows the block filter applies to the `responses` API too,
+   so the entire hope rests on the previous-response-id semantics being
+   implemented server-side. A one-hour spike settles it, and settling it first
+   may remove the need for a multi-day client migration.
+3. **Does the §C.7 masking hold for single-tool agents?** The production agent
+   observed uses the multi-tool `document_access` capability. A capability
+   exposing one dominant tool has not been tested against the real prompt stack.
+4. **Should the anti-repetition guidance be made explicit and tested?** Adding it
+   to `build_runtime_tool_prompt_suffix()` (`react_tool_binding.py:98-105`) —
+   which currently carries no such rule — would make the protection intentional
+   and greppable rather than incidental to #2073.
+
+### C.11 Reproducing these measurements
+
+The campaign harnesses are not committed (they hold no repository-relevant code
+and require a live API key). Their shape, for anyone re-running:
+
+| harness           | what it establishes                                                                                                                     | key needed |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| mechanism proof   | Imports the real `strip_reasoning_from_history`; asserts the replayed assistant `content` collapses to `''` while `tool_calls` survive. | no         |
+| wire-format dump  | Prints the raw Mistral message with `reasoning_effort` enabled (§C.2).                                                                  | yes        |
+| bench A           | Raw HTTP, strip vs verbatim replay, duplicate signature counting (§C.6).                                                                | yes        |
+| structural probes | Reasoning traversal through `ChatOpenAI`, inbound and outbound (§C.3, §C.4).                                                            | yes        |
+| bench B           | Real stack, `ChatOpenAI` + the real strip, with and without it (§C.4).                                                                  | yes        |
+| prompt control    | Identical conditions, three system prompts (§C.7).                                                                                      | yes        |
+
+A duplicate is counted as a tool call whose
+`(name, JSON-canonicalised sorted arguments)` signature already appeared in the
+same turn. Tool results are held constant across a run so that no new information
+can legitimately justify a second call.
+
+---
+
+## Amendment D — Trace presentation: reasoning is not a tool step (2026-07-30)
+
+**ID:** #2172
+**Status:** Implemented (frontend only)
+**Amends:** Amendment A §A (ReAct thought surface) — presentation layer only; no
+event, contract, or runtime change.
+
+### D.1 Problem
+
+Amendments A and B settled _which_ thoughts the runtime emits. They left the
+presentation flat: `ThoughtTrace` rendered every `TraceEntry` — reasoning blocks
+and tool executions alike — as one list of look-alike rows. Three defects
+followed, all reported from a live tabular-agent turn:
+
+1. **The reasoning block looked like a tool stuck in "running".** The
+   model-native block is opened on the first reasoning token and closed only
+   when the first answer delta arrives (`react_runtime.py`, §7.3 passthrough).
+   The frontend assigns a row's rank at `thought_start`, so the block holds the
+   lowest rank for the whole turn: permanently row #1 of the tool pile, pulsing
+   `streaming_delta` under a pile of tools that start and finish beneath it.
+2. **Repeated calls to one tool were indistinguishable.** Two `read_query`
+   calls rendered as two byte-identical "READING QUERY" rows, because the
+   redaction rule from #1774/CHAT-13 (no raw tool name, no arguments in the
+   user-facing trace) leaves only the humanized label.
+3. **The summary line contradicted the rows below it.** `thoughtSummaryLabel()`
+   summed _tool_ latencies only and printed "Thought for 856ms" directly above a
+   reasoning row reading 16.4s. And the block never collapsed: `expanded` was
+   initialised `true` and the `done` prop only drove an animation, despite a
+   comment claiming auto-collapse.
+
+### D.2 Decision
+
+Render the trace as **two lanes**, not one list:
+
+| Lane      | Contents                               | Presentation                                                                         |
+| --------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+| Reasoning | `thought`, `plan`, `observation`       | `ReasoningBlock`: marker, phase label, duration, 2-line clamped preview               |
+| Steps     | tool call/result combos, notes, errors | `TraceEntryRow` list: 1-based step number, status dot, label, discriminator, latency |
+
+`splitTraceEntries()` (`traceUtils.ts`) is the single classifier. Only tool
+executions are numbered; notes and errors are sequenced with them but unnumbered.
+
+**Discriminator (defect 2).** `toolDiscriminator()` derives _volume metadata
+only_ — `12 rows` / `5 sources` — from the two already-recognised curated
+content shapes (`SqlQueryResult`, `RagSearchResult`, see Amendment B). The
+redaction rule stands: raw arguments and raw result content are still never
+rendered in the trace. A failed or unrecognised result yields no discriminator;
+the red status dot already carries the failure.
+
+**Summary (defect 3).** `traceSummary()` replaces `thoughtSummaryLabel()` and
+returns structured data (`reasoningMs`, `toolCount`, `toolMs`, `running`) that
+the component formats through i18n. `reasoningMs` is the **max** of the
+reasoning blocks' durations, not their sum: the model-native block brackets the
+tool calls and any nested reasoning, so summing would count the same wall-clock
+twice.
+
+**Collapse (defect 3).** Open while the turn streams, auto-collapsed once it is
+done; an explicit toggle is persisted in `localStorage` and read once at mount,
+so hiding the trace is a durable one-click action without a toggle on one turn
+retroactively flipping every other trace on screen
+(`resolveTraceExpanded()` is the pure, unit-tested precedence rule).
+
+### D.3 Explicitly not changed
+
+The lifecycle that makes the reasoning duration cover the whole turn — the
+model-native block closing only at the first answer delta — is **unchanged**.
+Closing it before the first `tool_call` and opening a fresh block afterwards
+would make `duration_ms` mean "time actually spent reasoning", and would let the
+two lanes interleave chronologically. That touches the runtime execution
+contract and its event ordering guarantee (§9.5), so it is deliberately left to
+a separate proposal. The presentation change above stands on its own: the
+reasoning block no longer occupies a slot in the tool list, so its long-running
+nature is no longer read as a stuck tool.
+
+### D.4 Impact
+
+Frontend only: `traceUtils.ts`, `ThoughtTrace`, new `ReasoningBlock`,
+`TraceEntryRow`, new `useTraceExpansion` hook, and the first i18n coverage of
+the trace surface (`rework.chatTrace.*`, en + fr — the trace was hardcoded
+English). No SSE event, no persisted shape, no OpenAPI change.
+
+---
+
+## Amendment E — Reasoning is persisted for display; continuity measured again (2026-07-31)
+
+**Author:** Timothé Le Chatelier
+**Status:** Half implemented, half measured. §E.1 ships; §E.2 records a spike and
+takes no design decision.
+**Amends:** §C.9 (the scope gap), §8 (durable trace)
+**Related:** `RUNTIME-EXECUTION-CONTRACT.md` §8.31
+
+### E.1 The display half — closed
+
+§C.9 observed that this RFC specifies how reasoning is *surfaced* and never what
+happens to it afterwards. One half of that gap had a plain user-visible cost:
+**reasoning disappeared on page reload.** `_write_turn_history` never mapped the
+`thought_*` kinds, so nothing was ever written on `Channel.thought` — a channel
+that had existed in the stored schema all along, with a frontend already able to
+render it and a read endpoint already returning it. Only the writer was absent.
+
+That is now implemented; `RUNTIME-EXECUTION-CONTRACT.md` §8.31 is the normative
+record, including the four rules that make a reloaded trace match the live one.
+
+Note what this does **not** do: it changes nothing about what is replayed to the
+model. §8's `thought_trace` on `GraphExecutionOutput` (evaluation/replay) and this
+history row (display) remain separate surfaces, deliberately.
+
+### E.2 The continuity half — a spike, and one closed door
+
+Amendment C §C.10 q2 proposed a one-hour spike on `use_previous_response_id`,
+noting that settling it first *"may remove the need for a multi-day client
+migration"*. It was run on 2026-07-31. **It does not: the door is closed.**
+
+| Probe | Result |
+| ----- | ------ |
+| `POST https://api.mistral.ai/v1/responses` | **HTTP 404, "no Route matched with those values"** — Mistral exposes no Responses API at all |
+| `_format_message_content`, langchain-openai **1.3.2** | still drops `thinking` / `reasoning_content` on `chat/completions` **and** `responses` — §C.4 re-confirmed at the current version |
+| Same reasoning text carried by a `{"type": "text"}` block | **survives the filter intact** |
+| Verbatim replay still accepted by the API (§C.5's absent 422) | **HTTP 200** — §C.5 confirmed, the documented 422 remains unreproducible |
+
+> _Harness note, recorded because it nearly produced a wrong conclusion:_ the
+> first replay attempt returned HTTP 400
+> `invalid_request_message_order` (code 3230) and was briefly read as "the API
+> refuses the reasoning". It does not — the model had emitted **two** tool calls
+> and the harness supplied one tool response. One response per call, and the
+> same replay returns 200. Mistral rejects the message *count*, not the
+> `thinking` block.
+
+**The framing that makes this legible** (developer's, 2026-07-31): continuity is
+a property of the *endpoint*, not of the vendor. A **stateful** API keeps the
+reasoning items server-side and hands back a reference (`previous_response_id`);
+nothing needs replaying. A **stateless** API keeps nothing, so the client must
+resend the reasoning itself. Anthropic is proprietary and stateless — it
+*requires* verbatim replay of signed `thinking` blocks inside a tool-use turn,
+exactly like an open-weight endpoint. So the axis is stateful/stateless, not
+proprietary/open.
+
+Consequence for Fred, whose whole catalogue routes through the OpenAI-compatible
+client: Mistral is stateless **and** has no Responses endpoint, so the provider
+cannot be asked to hold the reasoning. Client-side replay is the only branch left.
+
+**The opening.** The filter keys on the block's `type` discriminator and nothing
+else. Re-homing the reasoning into an ordinary `text` block traverses it
+untouched, with no client fork, no patched `_format_message_content`, and no
+dependency pin.
+
+### E.3 Measured — re-homed reasoning suppresses the drift completely
+
+Implemented as `thread_reasoning_within_open_turn` (`support/thinking.py`) and
+measured on 2026-07-31, same day, on the **real Fred stack** (`ChatOpenAI` +
+`bind_tools` + the real functions), 12 trials per condition, `mistral-small-latest`,
+temperature 0, one tool, a constant tool result, §C.11's duplicate definition.
+
+| Prompt | Condition | Turns with a duplicate | Duplicates | Tool calls / trial |
+| ------ | --------- | ---------------------- | ---------- | ------------------ |
+| Fred's real prompt | `strip_reasoning_from_history` (today) | 2 / 12 | 6 | 2.50 |
+| Fred's real prompt | `thread_reasoning_within_open_turn` | **0 / 12** | **0** | 2.08 |
+| Fred's real prompt | reasoning disabled | 0 / 12 | 0 | 2.00 |
+| Bare prompt | `strip_reasoning_from_history` (today) | 9 / 12 | **67** | **7.50** |
+| Bare prompt | `thread_reasoning_within_open_turn` | **0 / 12** | **0** | 2.00 |
+| Bare prompt | reasoning disabled | 0 / 12 | 0 | 1.83 |
+
+One-sided Fisher exact, bare prompt (9/12 vs 0/12): **p = 1.7 × 10⁻⁴**. On the
+real prompt (2/12 vs 0/12) the difference is directionally identical but **not
+significant at n = 12 (p = 0.24)** — stated plainly rather than rounded into a
+claim the sample does not support.
+
+**Three readings, in order of what they settle:**
+
+1. **The concern in the previous draft was wrong, and strongly so.** Text-re-encoded
+   replay does not merely match verbatim replay, it beats it: §C.6's verbatim
+   replay went 6/12 → 1/12 (p = 0.034), this goes 9/12 → 0/12. The worry that a
+   `text` block would carry less weight than a privileged `thinking` block is not
+   what the data shows.
+2. **It does not win by breaking the loop.** The candidate makes 2.00–2.08 tool
+   calls per trial — the same as the reasoning-disabled control (1.83–2.00) and
+   the count the question actually warrants. Today's behaviour inflates that to
+   **7.50 on a bare prompt: 90 calls where 24 suffice**. Checking this was not
+   optional; a "fix" that suppressed duplicates by suppressing tool use would
+   have produced identical duplicate counts and been worthless.
+3. **§C.7's masking is re-confirmed, and it is the real argument for shipping.**
+   The same code drifts 9/12 with a bare prompt and 2/12 with Fred's. The
+   protection in production still rests on prompt wording — the "load-bearing
+   dependency that nobody has written down". This change makes it structural: the
+   candidate holds at 0/12 in **both** prompt regimes, so a future rewording of
+   `TOOL_REPETITION_RULE` can no longer silently re-expose the defect.
+
+### E.4 What the model actually receives — and the echo risk, measured
+
+Asked before the switch was flipped, and worth recording because the answer is
+uncomfortable and load-bearing: **the reasoning is injected as ordinary assistant
+speech, and there is no protocol-level way to mark it as anything else.** The
+exact payload:
+
+```json
+{
+  "role": "assistant",
+  "content": "[your reasoning so far this turn] Je n'ai pas le contrat en contexte…",
+  "tool_calls": [{ "type": "function", "id": "c1", "function": { … } }]
+}
+```
+
+That `content` field is the same one the model writes a user-facing reply into.
+`RECALLED_REASONING_PREFIX` is a **textual convention, not a guarantee** — on an
+OpenAI-compatible endpoint the only channel carrying privileged "this is
+reasoning" semantics is the `thinking` block, which the client drops (§E.2).
+Anyone reading this later should not imagine a stronger separation than exists.
+
+**The consequent risk — the model repeating its reasoning to the user — was
+measured: 0 / 8 final answers contaminated.** Every answer opened on the contract
+content ("D'après les documents contractuels : …"), none narrated the act of
+searching, none reproduced the marker. Small sample, one scenario; enough to say
+the risk does not materialise here, not enough to call it impossible.
+
+**Status: implemented, tested, and wired** (2026-07-31).
+`CheckpointHygieneMiddleware` calls `thread_reasoning_within_open_turn`. Two
+tests in `test_react_middleware_frame.py` pin both halves — open-turn reasoning
+reaches the model as text, closed-turn reasoning is still dropped — because the
+wiring is one line whose absence is invisible: the loop keeps working, it just
+silently repeats tool calls again.
+
+**Limits of this evidence, stated so the next reader does not overclaim.** One
+model, one question, one tool, one API generation, 12 trials (8 for the echo
+test). The production-prompt result is under-powered. Nothing here measures
+answer quality, latency, or token cost — only duplicate tool calls. Re-homed
+reasoning is ordinary content, so it does consume context tokens that the
+previous emptied-content behaviour did not.
+
+§C.9's two coherent resolutions are now decidable: option 2 — a "Layer 2c —
+reasoning continuity" section stating the thread-within-open-turn rule as part of
+this contract — is the one the evidence supports.

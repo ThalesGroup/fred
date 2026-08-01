@@ -101,6 +101,47 @@
   font-size: 1.25rem;
 }
 
+/* Trailing switch for boolean rows (`trailingToggle`). Same tokens as the
+ * `Switch` atom so it reads as the same control, at menu-row scale — the atom
+ * itself is 52x32 and cannot be nested in this row's <button> anyway (it is a
+ * label+input pair). Purely presentational: the row's button owns the state,
+ * the click target and the focus ring. */
+.itemToggle {
+  display: inline-flex;
+  position: relative;
+  flex-shrink: 0;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container-high);
+  width: 2rem;
+  height: 1.125rem;
+}
+
+.itemToggleHandle {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  transition: transform 120ms ease;
+  border-radius: var(--radius-2xl);
+  background: var(--on-surface-retreat);
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.itemToggle[data-on="true"] {
+  border-color: var(--primary);
+  background: var(--primary);
+
+  .itemToggleHandle {
+    transform: translateY(-50%) translateX(0.875rem);
+    background: var(--on-primary);
+  }
+}
+
 .badge {
   flex-shrink: 0;
   border-radius: var(--radius-l);

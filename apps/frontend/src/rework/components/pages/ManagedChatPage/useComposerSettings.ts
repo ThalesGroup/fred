@@ -23,6 +23,8 @@ interface ComposerState {
   ragScope: RagScope;
   selectedLibraryIds: string[];
   selectedDocumentUids: string[];
+  /** Per-question reasoning activation (REASON-01 level 4, RFC §7.4). */
+  reasoning: boolean;
 }
 
 /** Reads a stock widget's `params.default` (RFC §3.3), e.g. `search_policy` /
@@ -60,6 +62,12 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
     ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
     selectedLibraryIds: [],
     selectedDocumentUids: [],
+    // Seeded from the `reasoning_toggle` widget's `params.default` like any
+    // other stock row. The backend ships `false` and that default is a safety
+    // decision, not a style one (RFC §9): reasoning on a tool loop was
+    // measured re-issuing duplicate tool calls. `?? false` also means a
+    // frontend newer than the pod (no such widget) simply never reasons.
+    reasoning: findDefault<boolean>(chatControls, "reasoning_toggle") ?? false,
   };
   const stored = readStorage(sessionId);
   return { ...defaults, ...stored };
@@ -116,11 +124,15 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
 
   const setSelectedDocumentUids = useCallback((uids: string[]) => update({ selectedDocumentUids: uids }), [update]);
 
+  const setReasoning = useCallback((value: boolean) => update({ reasoning: value }), [update]);
+
   return {
     searchPolicy: state.searchPolicy,
     ragScope: state.ragScope,
     selectedLibraryIds: state.selectedLibraryIds,
     selectedDocumentUids: state.selectedDocumentUids,
+    reasoning: state.reasoning,
+    setReasoning,
     setSearchPolicy,
     setRagScope,
     setSelectedLibraryIds,

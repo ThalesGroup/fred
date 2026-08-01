@@ -22,6 +22,11 @@ from fred_runtime.react.react_prompting import (
     build_tool_failure_recovery_suffix,
     compose_system_prompt,
 )
+from fred_runtime.react.react_tool_binding import (
+    TOOL_REPETITION_RULE,
+    BoundTool,
+    build_runtime_tool_prompt_suffix,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -30,6 +35,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
+from langchain_core.tools import BaseTool
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 
@@ -92,6 +98,45 @@ def test_tool_failure_recovery_suffix_tells_model_not_to_surface_raw_errors() ->
     assert "answer from what other calls have already returned" in suffix
     # Composed onto the end of the system prompt, so it must self-separate.
     assert suffix.startswith("\n\n")
+
+
+def test_tool_prompt_suffix_carries_an_explicit_anti_repetition_rule() -> None:
+    """Precondition 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` §9
+    (`AGENT-THINKING-API-RFC.md` §C.10 q4).
+
+    Amendment C §C.7 measured a reasoning model on a tool loop re-issuing the
+    same call with identical arguments in 12/12 turns under a generic prompt,
+    and 0/12 under an explicit anti-repetition instruction. In production the
+    defect was masked only by ACCIDENT — the #2073 tool-failure suffix happens
+    to contain two clauses that read as anti-repetition guidance, and nothing
+    tied them to this defect.
+
+    This test is that tie. It exists so a future rewording of #2073's suffix
+    (whose own test above pins its #2073 wording, not this property) cannot
+    silently re-expose a measured defect.
+    """
+
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="search_documents",
+                description="Search the corpus.",
+                tool=cast(BaseTool, SimpleNamespace(name="search_documents")),
+            )
+        ]
+    )
+
+    assert TOOL_REPETITION_RULE in suffix
+    # The property, not just the constant: an agent reading this must be told
+    # that repeating an identical call is pointless AND what to do instead.
+    assert "Never repeat a tool call" in suffix
+    assert "same arguments" in suffix
+
+
+def test_anti_repetition_rule_is_absent_when_no_tool_is_bound() -> None:
+    # The no-tools branch tells the model it cannot call anything at all, so a
+    # repetition rule there would be noise about an impossible action.
+    assert TOOL_REPETITION_RULE not in build_runtime_tool_prompt_suffix([])
 
 
 def test_attachment_context_suffix_announces_current_files() -> None:

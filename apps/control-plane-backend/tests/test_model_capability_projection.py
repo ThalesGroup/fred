@@ -72,6 +72,55 @@ async def test_parses_a_well_formed_models_catalog_response(
 
 
 @pytest.mark.asyncio
+async def test_carries_thinking_profile_ids_through_the_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REASON-01 §5.3 — the derived per-profile aptitude reaches control-plane.
+
+    Carried verbatim from the pod, same as `profile_ids`: this is what decides
+    whether the admin row renders a reasoning control at all, so losing it here
+    would silently hide the toggle for every reasoning-capable model.
+    """
+
+    payload = {
+        "models": [
+            {
+                "id": "model__openai__mistral-small-latest",
+                "provider": "openai",
+                "name": "mistral-small-latest",
+                "profile_ids": ["chat.mistral.small", "language.mistral.small"],
+                "thinking_profile_ids": ["chat.mistral.small"],
+            },
+            {
+                "id": "model__openai__gpt-4o",
+                "provider": "openai",
+                "name": "gpt-4o",
+                "profile_ids": ["chat.openai.gpt4o"],
+            },
+        ]
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    entries = await _model_capabilities_for_source("http://pod")
+
+    assert entries is not None
+    assert entries[0].model_profile_ids == (
+        "chat.mistral.small",
+        "language.mistral.small",
+    )
+    assert entries[0].model_thinking_profile_ids == ("chat.mistral.small",)
+    # A pod that advertises no thinking profiles for a model (or a pre-REASON-01
+    # pod that never sends the key) reads as "cannot reason" — no toggle, which
+    # is the safe direction (§5.6).
+    assert entries[1].model_thinking_profile_ids == ()
+
+
+@pytest.mark.asyncio
 async def test_ignores_malformed_entries_without_crashing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

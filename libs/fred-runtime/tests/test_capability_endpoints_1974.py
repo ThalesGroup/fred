@@ -214,6 +214,11 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         # Both in-tree capabilities self-register via `fred.capabilities` entry
         # points and are advertised sorted by id (demo_echo tracer + the #1906
         # document_access pilot).
+        #
+        # Reasoning is deliberately NOT here: it is a property of how the model
+        # is called, not a tool an agent uses, so it is a plain agent field
+        # (`AgentTuning.reasoning_enabled`) plus a platform-emitted composer
+        # control — never a capability (REASON-01 §6/§7).
         assert [e["id"] for e in entries] == ["demo_echo", "document_access"]
         entry = entries[0]
         assert entry["version"] == DemoEchoCapability.manifest.version

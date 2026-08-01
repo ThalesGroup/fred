@@ -105,3 +105,40 @@
   color: var(--on-error-container);
   font: var(--font-body-small);
 }
+
+/* REASON-01 level 3 — the reasoning offer, in the General section under the
+   description. A switch plus a two-line label/hint, matching the density of the
+   text inputs above it rather than the capability cards in the Tools tab. */
+.switchRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3, 0.75rem);
+}
+
+/* REASON-01 Amendment B — the "start conversations with reasoning on" row is a
+   child of the offer above it, not a sibling: indented and separated by a rule
+   so the dependency is legible without a second heading. Only rendered while
+   the parent switch is on. */
+.switchRowNested {
+  margin-left: var(--spacing-3, 0.75rem);
+  border-left: 1px solid var(--color-outline-variant, var(--divider, #e0e0e0));
+  padding-left: var(--spacing-3, 0.75rem);
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.switchLabel {
+  color: var(--color-on-surface);
+  font-weight: 500;
+  font-size: var(--font-size-sm, 0.875rem);
+}
+
+.switchHint {
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-xs, 0.75rem);
+}

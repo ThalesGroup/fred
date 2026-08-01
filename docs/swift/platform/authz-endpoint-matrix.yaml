@@ -534,6 +534,11 @@ operations:
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
     review_status: approved
     required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (platform_admin from organization)
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning
+    review_status: approved
+    required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (platform_admin from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
 
   - service: knowledge-flow
     method: GET

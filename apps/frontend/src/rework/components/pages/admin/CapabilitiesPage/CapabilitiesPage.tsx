@@ -35,12 +35,18 @@ import {
   useLazyCapabilityRevokeImpactQuery,
   useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
+  useSetModelReasoningMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
-import { enabledTeamCount, isCapabilityUnused as isUnused, personalSpaceCount } from "./capabilityEnablement";
+import {
+  enabledTeamCount,
+  hasReasoningControl,
+  isCapabilityUnused as isUnused,
+  personalSpaceCount,
+} from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -61,6 +67,8 @@ export default function CapabilitiesPage() {
   // every team, including ones they don't personally belong to (#1981).
   const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
+  // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
+  const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
 
   // Live impact preview fired on demand when the disable-confirmation dialog
   // opens — a platform-wide (no teamId) preview of what turning default-on off
@@ -103,8 +111,31 @@ export default function CapabilitiesPage() {
             : t("rework.admin.capabilities.defaultOffToast"),
         });
       }
+      // A model switched off takes its reasoning down with it (REASON-01 §5.7).
+      // Its own toast, in addition to the one above rather than instead of it:
+      // the row's reasoning switch flips on its own when the list refetches,
+      // and an unexplained state change on an admin screen reads as a bug.
+      if (result.reasoning_disabled) {
+        showWarn({ summary: t("rework.admin.capabilities.defaultOffReasoningToast") });
+      }
     } catch {
       showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
+    }
+  };
+
+  const applyReasoning = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    try {
+      await setModelReasoning({
+        capabilityId: capability.id,
+        setModelReasoningRequest: { reasoning_enabled: nextValue },
+      }).unwrap();
+      showSuccess({
+        summary: t(
+          nextValue ? "rework.admin.capabilities.reasoningOnToast" : "rework.admin.capabilities.reasoningOffToast",
+        ),
+      });
+    } catch {
+      showError({ summary: t("rework.admin.capabilities.reasoningToggleError") });
     }
   };
 
@@ -209,6 +240,40 @@ export default function CapabilitiesPage() {
         </div>
       ),
     },
+    // Reasoning activation (REASON-01 §5) — a models-only column, so it is
+    // absent entirely from the tool/agent views rather than rendered blank.
+    // The two axes share this screen and must not be confused: the default-on
+    // column above is "who may use this model at all" (ReBAC, per team); this
+    // one is "does it run with reasoning" (global, no subject, §5.4).
+    ...(kindFilter === "model"
+      ? [
+          {
+            label: t("rework.admin.capabilities.col.reasoning"),
+            size: "1fr",
+            cellRenderer: (cap: CapabilityEnablementItem) => {
+              // §5.3: no reasoning-capable profile means NO control at all, not
+              // a disabled one. Aptitude is declared in models_catalog.yaml —
+              // an administrator cannot make a model reason, and a greyed-out
+              // switch would suggest the opposite.
+              if (!hasReasoningControl(cap)) {
+                return <div className={styles.centered} />;
+              }
+              return (
+                <div className={styles.centered}>
+                  <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
+                    <Switch
+                      checked={cap.reasoning_enabled ?? false}
+                      disabled={isTogglingReasoning}
+                      onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
+                      aria-label={t("rework.admin.capabilities.col.reasoning")}
+                    />
+                  </Tooltip>
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
       // Wider than the other 1fr columns: the two reach badges (teams,
