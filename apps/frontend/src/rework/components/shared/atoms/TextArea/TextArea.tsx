@@ -24,6 +24,9 @@ export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
 export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
   const id = useId();
   const characterCounter = String(value).length;
+  // No hint/error/counter to show — drop the container entirely rather than
+  // leaving an empty row under the field.
+  const hasInformation = !!error || !!explanation || !!maxLength;
 
   return (
     <div
@@ -35,10 +38,12 @@ export default function TextArea({ label, explanation, error, maxLength, value, 
 
       <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
 
-      <span className={styles.information}>
-        <span className={styles.hint}>{error || explanation || null}</span>
-        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
-      </span>
+      {hasInformation && (
+        <span className={styles.information}>
+          <span className={styles.hint}>{error || explanation || null}</span>
+          <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+        </span>
+      )}
     </div>
   );
 }

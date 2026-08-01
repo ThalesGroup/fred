@@ -286,6 +286,8 @@ class ApplicationContext:
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
+    _content_store_instance: Optional[BaseContentStore] = None
+    _embedder_instance: Optional[Embeddings] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
@@ -525,9 +527,17 @@ class ApplicationContext:
     def get_content_store(self) -> BaseContentStore:
         """
         Factory function to get the appropriate storage backend based on configuration.
+        Built once and cached — same reasoning as get_file_store/get_log_store right
+        here in this class: GcsContentStore.__init__ builds a real GCS client (auth +
+        HTTP connection pool) via build_gcs_client(), so rebuilding it on every call
+        (this used to) reloads that pipeline on every Temporal activity that touches
+        content storage, not just once per pod.
         Returns:
             BaseContentStore: An instance of the storage backend.
         """
+        if self._content_store_instance is not None:
+            return self._content_store_instance
+
         # Get the singleton application context and configuration
         config = ApplicationContext.get_instance().get_config().content_storage
         backend_type = config.type
@@ -535,7 +545,7 @@ class ApplicationContext:
         if isinstance(config, MinioStorageConfig):
             document_bucket = f"{config.bucket_name}-documents"
             object_bucket = f"{config.bucket_name}-objects"
-            return MinioStorageBackend(
+            self._content_store_instance = MinioStorageBackend(
                 endpoint=config.endpoint,
                 access_key=config.access_key,
                 secret_key=config.secret_key,
@@ -558,7 +568,7 @@ class ApplicationContext:
                     "that holds storage.objects.get on the objects bucket and on which the "
                     "Workload Identity service account has iam.serviceAccounts.signBlob."
                 )
-            return GcsContentStore(
+            self._content_store_instance = GcsContentStore(
                 document_bucket=f"{config.bucket_name}-documents",
                 object_bucket=f"{config.bucket_name}-objects",
                 project_id=config.project_id,
@@ -567,9 +577,14 @@ class ApplicationContext:
         elif isinstance(config, LocalContentStorageConfig):
             document_root = Path(config.root_path).expanduser() / "documents"
             object_root = Path(config.root_path).expanduser() / "objects"
-            return FileSystemContentStore(document_root=document_root, object_root=object_root)
+            self._content_store_instance = FileSystemContentStore(
+                document_root=document_root,
+                object_root=object_root,
+            )
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
+
+        return self._content_store_instance
 
     def get_file_store(self) -> BaseFileStore:
         """
@@ -600,9 +615,17 @@ class ApplicationContext:
         - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
         - Only secrets live in env; all other wiring lives in YAML.
         - Typed return (Embeddings) keeps the contract clear at call sites.
+
+        Cached like every other get_* factory in this class (get_file_store,
+        get_content_store, ...): get_embeddings() builds a real provider client on
+        each call, and this is called per-activity from several scheduler activities
+        (fast_store_vectors, delete_vectors, ...), not just once at startup.
         """
+        if self._embedder_instance is not None:
+            return self._embedder_instance
         cfg: ModelConfiguration = self.configuration.embedding_model
-        return get_embeddings(cfg)
+        self._embedder_instance = get_embeddings(cfg)
+        return self._embedder_instance
 
     def get_utility_model(self):
         if not self.configuration.chat_model:

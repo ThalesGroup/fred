@@ -351,11 +351,6 @@ export default function TeamAgentsPage() {
       message: t("rework.agentCard.deleteDialog.message", { name: instance.display_name }),
       confirmButtonLabel: t("rework.agentCard.deleteDialog.confirm"),
       cancelButtonLabel: t("rework.agentCard.deleteDialog.cancel"),
-      // Same inverted emphasis as "Leave team" — Cancel stays the visually
-      // dominant filled button, Delete drops to a low-emphasis text button.
-      cancelVariant: "filled",
-      cancelColor: "primary",
-      confirmVariant: "text",
       onConfirm: async () => {
         try {
           await deleteManagedInstance({

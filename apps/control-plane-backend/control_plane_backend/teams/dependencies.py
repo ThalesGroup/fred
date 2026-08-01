@@ -15,6 +15,8 @@ from fred_core.teams.metadata_store import TeamMetadataStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.prompts.category_store import PromptCategoryStore
+from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
 )
@@ -68,6 +70,8 @@ class TeamServiceDependencies:
     rebac: RebacEngine
     scheduler_backend: SchedulerBackend
     get_team_metadata_store: Callable[[], TeamMetadataStore]
+    get_prompt_store: Callable[[], PromptStore]
+    get_prompt_category_store: Callable[[], PromptCategoryStore]
     get_content_store: Callable[[], ContentStore]
     get_session_store: Callable[[], BaseSessionStore]
     get_purge_queue_store: Callable[[], PurgeQueueStore]
@@ -182,6 +186,8 @@ def build_team_service_dependencies(
         rebac=container.get_rebac_engine(),
         scheduler_backend=container.get_scheduler_backend(),
         get_team_metadata_store=container.get_team_metadata_store,
+        get_prompt_store=container.get_prompt_store,
+        get_prompt_category_store=container.get_prompt_category_store,
         get_content_store=container.get_content_store,
         get_session_store=container.get_session_store,
         get_purge_queue_store=container.get_purge_queue_store,

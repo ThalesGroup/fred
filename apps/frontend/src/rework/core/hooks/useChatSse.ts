@@ -100,15 +100,11 @@ export function useChatSse(
   params: {
     agentInstanceId: string;
     teamId: string;
-    /** UI language forwarded to prepare-execution so platform `default:` context
-     *  prompts resolve in the same language shown in the picker. */
-    lang: string;
   } & ChatSseCallbacks,
 ) {
   const {
     agentInstanceId,
     teamId,
-    lang,
     onBindDraftAgentToSessionId,
     onTurnPersisted,
     onAwaitingHuman,
@@ -517,13 +513,10 @@ export function useChatSse(
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
       // Pass the session id so the control-plane can resolve and concatenate the
-      // session's attached chat-context prompts into `context_prompt_text`, and
-      // the UI lang so platform `default:` prompts resolve in the picker's
-      // language (library prompts are language-agnostic).
+      // session's attached chat-context prompts into `context_prompt_text`.
       const prep = await prepareExecution({
         teamId,
         agentInstanceId,
-        lang,
         ...(sessionId ? { sessionId } : {}),
       }).unwrap();
       console.debug(
@@ -598,7 +591,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites, applyPreparation],
+    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, flushPendingWrites, applyPreparation],
   );
 
   const sendHitlResume = useCallback(
@@ -667,13 +660,12 @@ export function useChatSse(
       const prep = await prepareExecution({
         teamId,
         agentInstanceId,
-        lang,
         ...(sessionId ? { sessionId } : {}),
       }).unwrap();
       applyPreparation(prep);
       return prep;
     },
-    [teamId, agentInstanceId, lang, prepareExecution, applyPreparation],
+    [teamId, agentInstanceId, prepareExecution, applyPreparation],
   );
 
   return {

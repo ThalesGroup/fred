@@ -5,6 +5,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
+from knowledge_flow_backend.features.tabular.execution import (
+    TabularCapacityExceededError,
+    TabularExecutionTimeoutError,
+)
 from knowledge_flow_backend.features.tabular.service import (
     TabularDatasetAccessUnsupportedError,
     TabularQueryError,
@@ -209,7 +213,16 @@ class TabularController:
 
             How to use:
             - Send `sql` and optional `dataset_uids` (document uids; one
-              spreadsheet uid mounts every table of the workbook).
+              spreadsheet uid makes every table of the workbook available).
+            - Only the aliases your SQL references are mounted. The query must
+              name at least one dataset alias in its `FROM` clause: a query
+              reading no dataset returns 400, as does one joining more datasets
+              than the server allows per request.
+            - 503 means the server is momentarily at capacity and 504 that the
+              query exceeded its time budget; both are worth one retry, and a
+              504 is a hint to add filters or aggregate. 400 with a memory
+              message means the query needs more memory than one request may
+              use — narrow it rather than retrying.
             """
 
             try:
@@ -220,6 +233,12 @@ class TabularController:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
+            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
+                # Re-raise for the app-level handlers registered in main.py. This
+                # branch exists only because of the `except Exception` catch-all
+                # below, which would otherwise turn overload into a 500 before
+                # the handler ever sees it.
+                raise
             except TabularQueryError as e:
                 # Invalid SQL (binder/parser/type error) is a caller fault, not a
                 # server failure: return 400 without a stack trace. Must precede
@@ -269,6 +288,9 @@ class TabularController:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
+            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
+                # Same reason as read_query: the catch-all below would mask these.
+                raise
             except TabularQueryError as e:
                 # A DuckDB authoring error is a caller fault (400), not a server
                 # failure — same classification as read_query.

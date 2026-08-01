@@ -56,6 +56,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
@@ -4205,14 +4206,19 @@ def create_agent_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Boot order (must be preserved — each step depends on the previous):
         # 1. log_setup         — formatter/handlers ready for all subsequent logs
-        # 2. initialize_kpi_writer — needed by bootstrap_observability
-        # 3. initialize_control_plane_client — sync, no network until first call
-        # 4. bootstrap_observability — global tracer + metrics provider
-        # 5. attach_pod_container — container in app.state before any request
-        # 6. initialize_sql    — async, may take time
-        # 7. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 8. start_kpi_tasks   — asyncio tasks, after SQL engine is known
-        # 9. set_runtime_context — wires all built parts into the global config
+        # 2. install_gc_diagnostics — independent of everything below; installed
+        #    early so SIGUSR1/SIGUSR2 (fred_core.diagnostics) are live for the
+        #    pod's whole lifetime, protecting every agent pod (ours and third
+        #    parties' alike) against the reference-cycle class of leak found in
+        #    ISSUE-010 without any per-pod code
+        # 3. initialize_kpi_writer — needed by bootstrap_observability
+        # 4. initialize_control_plane_client — sync, no network until first call
+        # 5. bootstrap_observability — global tracer + metrics provider
+        # 6. attach_pod_container — container in app.state before any request
+        # 7. initialize_sql    — async, may take time
+        # 8. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 9. start_kpi_tasks   — asyncio tasks, after SQL engine is known
+        # 10. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
@@ -4221,6 +4227,7 @@ def create_agent_app(
                 opensearch_config=config.storage.opensearch,
             ),
         )
+        gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
         container.initialize_kpi_writer()
         container.initialize_control_plane_client()
@@ -4289,6 +4296,7 @@ def create_agent_app(
             list(registry.keys()),
         )
         yield
+        await gc_diagnostics.stop()
         await container.shutdown()
 
     app = FastAPI(

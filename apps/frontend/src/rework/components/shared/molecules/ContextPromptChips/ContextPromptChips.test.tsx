@@ -37,11 +37,11 @@ describe("ContextPromptChips", () => {
     expect(html.match(/<button/g)?.length).toBe(2);
   });
 
-  it("uses the category icon, falling back to edit_note when unset", () => {
-    expect(render([makePrompt({ id: "p1", name: "A", scope: "team", category: "summary" })])).toContain(
-      'data-icon="summarize"',
+  it("always renders the edit_note icon (categories are team-owned, no per-category icon)", () => {
+    expect(render([makePrompt({ id: "p1", name: "A", scope: "team", category_id: "cat-1" })])).toContain(
+      'data-icon="edit_note"',
     );
-    expect(render([makePrompt({ id: "p1", name: "A", scope: "team", category: null })])).toContain(
+    expect(render([makePrompt({ id: "p1", name: "A", scope: "team", category_id: null })])).toContain(
       'data-icon="edit_note"',
     );
   });

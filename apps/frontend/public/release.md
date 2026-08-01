@@ -45,6 +45,20 @@
     conversations are unaffected: reasoning is kept from now on, not
     reconstructed backwards
 
+**v2.1.25** — 2026-07-31
+
+- **Summary**
+
+  Three more PDF ingestion memory leaks are fixed, and the root cause of a slower
+  background memory leak affecting every KPI-emitting service (not just PDF
+  ingestion) is resolved.
+
+- **Bug Fixes**
+
+  - Fixed a memory leak where the ingestion pipeline rebuilt its cloud storage connection on every operation instead of reusing one, adding up over many documents (#2188)
+  - Fixed a memory leak in image-described PDF ingestion and in embedding generation where their respective models were rebuilt per call instead of being reused (#2188)
+  - Fixed a slow background memory leak affecting every service that emits usage metrics (KPIs), caused by how a metric field was validated internally — could very gradually grow a service's memory over long uptimes (#2188)
+
 **v2.1.24** — 2026-07-31
 
 - **Summary**

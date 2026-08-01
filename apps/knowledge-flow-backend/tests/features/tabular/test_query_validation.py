@@ -8,17 +8,37 @@ from knowledge_flow_backend.features.tabular.utils import validate_read_query
 def test_validate_read_query_allows_authorized_cte_references():
     query = "WITH scoped AS (SELECT * FROM d_sales) SELECT * FROM scoped"
 
-    normalized = validate_read_query(query, allowed_relations={"d_sales"})
+    validated = validate_read_query(query, allowed_relations={"d_sales"})
 
-    assert normalized == query
+    assert validated.sql == query
+    # The CTE name is not a dataset and must never reach the mount set.
+    assert validated.referenced_relations == frozenset({"d_sales"})
 
 
 def test_validate_read_query_collects_natural_join_relations():
     query = "SELECT * FROM d_sales NATURAL JOIN d_targets"
 
-    normalized = validate_read_query(query, allowed_relations={"d_sales", "d_targets"})
+    validated = validate_read_query(query, allowed_relations={"d_sales", "d_targets"})
 
-    assert normalized == query
+    assert validated.sql == query
+    assert validated.referenced_relations == frozenset({"d_sales", "d_targets"})
+
+
+def test_validate_read_query_reports_only_the_referenced_subset_of_allowed_relations():
+    """The mount set must follow the query, not the whole authorized selection."""
+
+    validated = validate_read_query(
+        "SELECT city FROM d_sales",
+        allowed_relations={"d_sales", "d_targets", "d_stock"},
+    )
+
+    assert validated.referenced_relations == frozenset({"d_sales"})
+
+
+def test_validate_read_query_reports_no_relation_for_a_scalar_only_query():
+    validated = validate_read_query("SELECT 1", allowed_relations={"d_sales"})
+
+    assert validated.referenced_relations == frozenset()
 
 
 def test_validate_read_query_rejects_table_functions_hidden_behind_natural_join():

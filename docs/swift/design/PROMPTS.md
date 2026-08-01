@@ -1,8 +1,8 @@
 # Prompt System
 
-**Status:** Current as-built design (consolidated 2026-07-06)
+**Status:** Current as-built design (consolidated 2026-07-06, updated 2026-07-30 for PROMPT-09)
 
-**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`, `PROMPT-08`
+**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`, `PROMPT-08`, `PROMPT-09`
 
 **Forward work:** [`PROMPT-SYSTEM-HARDENING-RFC.md`](../rfc/PROMPT-SYSTEM-HARDENING-RFC.md)
 
@@ -61,7 +61,7 @@ Stored prompts use the `prompt` table and `PromptRow` ORM model.
 Core fields:
 
 - `prompt_id`, `team_id`, `name`, `description`, `text`, `created_by`
-- `category`, `emoji`, `tags`
+- `category_id`, `emoji`, `tags`
 - `version`, `import_count`, `session_count`, `score`
 - `avg_input_tokens`, `avg_output_tokens`
 - `created_at`, `updated_at`
@@ -80,9 +80,28 @@ The main API surface is:
 - `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/promote`
 - `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/use`
 
-Platform default prompts are in-memory `DefaultPromptSpec` records, not rows in
-the `prompt` table. They appear as synthetic ids such as `default:technical` and
-track use through `default_prompt_usage`.
+**There is no platform default-prompt catalog (PROMPT-09).** Every prompt is a
+real row in the `prompt` table, owned and fully editable by its team. New teams
+are seeded with a 4-category / 4-prompt starter kit at creation time
+(`_seed_starter_kit`, best-effort — a seeding failure never fails team
+creation); from that point on the starter kit is ordinary team content.
+
+### 3.1 Prompt categories
+
+Categories are team-owned content, not a shared taxonomy: table
+`prompt_category` (`category_id`, `team_id`, `name`), one set per team,
+created/renamed/deleted by that team's `team_editor`s. `prompt.category_id` is
+a nullable reference into this table, scoped to the same team.
+
+- `GET /control-plane/v1/teams/{team_id}/prompt-categories`
+- `POST /control-plane/v1/teams/{team_id}/prompt-categories`
+- `PUT /control-plane/v1/teams/{team_id}/prompt-categories/{category_id}`
+- `DELETE /control-plane/v1/teams/{team_id}/prompt-categories/{category_id}`
+  — returns 409 while ≥1 prompt in the team still references the category
+  (hard block, never an automatic reassignment)
+
+No icon/color field: category pills use the same hash-based fallback palette
+already used for uncategorized prompts (`hashColorIndex`, frontend).
 
 ## 4. Scope And Access
 
@@ -112,7 +131,7 @@ persisted in the `session_context_prompts` association table:
 | Column | Meaning |
 | --- | --- |
 | `session_id` | Session metadata id |
-| `prompt_id` | Library prompt id or synthetic `default:{category}` id |
+| `prompt_id` | Library prompt id |
 | `position` | Prompt order in the conversation context |
 
 `UpdateSessionRequest.context_prompt_ids` is a full ordered replacement set:
@@ -148,29 +167,30 @@ templates (`render_prompt_template`), so a library prompt may use the validated
 scalar reached the agent binding but no runtime appended it, so selected prompts
 had no effect (issue #1915).
 
-Default prompt text is localized by the `lang` query parameter on both
-`/prompts/context` and `/prepare-execution`; stored library prompts are
-language-agnostic.
+Library prompts are stored verbatim (language-agnostic) — neither
+`/prompts/context` nor `/prepare-execution` take a `lang` query parameter
+(PROMPT-09 removed it along with the default-prompt catalog it used to
+localize).
 
-Usage counters increment on first attach only:
-
-- DB prompts increment `PromptRow.session_count`
-- defaults increment `default_prompt_usage`
+Usage counters increment on first attach only, via `PromptRow.session_count` —
+uniformly for every prompt, since there is no separate default-prompt counter
+table anymore.
 
 ## 6. Frontend Surfaces
 
 The shipped prompt UI has two parts:
 
-- `PromptsPage`: basic prompt-library CRUD
+- `PromptsPage`: prompt-library CRUD, plus category management
+  (`ManageCategoriesDialog`: Créer/Éditer/Supprimer)
 - chat composer prompt picker: `SearchConfig` opens `ContextPromptPicker`, and
   selected prompts render as removable `ContextPromptChips`
 
 The context picker reads
-`GET /control-plane/v1/teams/{team_id}/prompts/context`, which returns the
-space's own prompts plus platform defaults. Personal prompts appear only in the
-personal space — a team context never exposes the caller's personal prompts
-(changed 2026-07-20, #2023; previously the endpoint returned the union). DB
-prompts are ordered by usage, and defaults are appended.
+`GET /control-plane/v1/teams/{team_id}/prompts/context`, which returns only
+the space's own prompts (no platform defaults — PROMPT-09). Personal prompts
+appear only in the personal space — a team context never exposes the caller's
+personal prompts (changed 2026-07-20, #2023; previously the endpoint returned
+the union). Prompts are ordered by usage.
 
 Agent-form import/save/version-drift UX is not complete; it is tracked as
 `PROMPT-04` in the hardening RFC.

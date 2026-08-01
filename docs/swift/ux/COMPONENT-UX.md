@@ -70,7 +70,23 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 Compact inline search input with a leading search Icon atom and a trailing clear IconButton atom.
 Props: `value`, `onChange(value: string)`, optional `placeholder` and `clearAriaLabel`.
-Used by `PromptsPage` (replaces native `<input>` + `<button>` search bar).
+Used by `CapabilityTeamMatrixDrawer`.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `SearchInput`
+
+**Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
+**Status:** `Functional`
+
+`TextInput`-based search field (search icon + inline clear button) — extracted from the pattern
+originally inlined in `TeamSettingsMembers`. Props: `value`, `onChange(value: string)`, optional
+`placeholder`, `ariaLabel`, `clearAriaLabel`, `autoFocus`.
+Used by `PromptsPage` and `TeamSettingsMembers`.
 
 #### Open UX issues
 
@@ -85,7 +101,11 @@ _(none)_
 
 Horizontally-wrapping row of toggle chips for single-select filtering. Generic over chip ID type (`T extends string`).
 Supports an optional "All" chip (via `allLabel`), expand/collapse beyond `maxVisible`, and full `aria-pressed` accessibility.
-Used by `PromptsPage` (replaces native `<button>` category filter row).
+Used by `PromptsPage` (replaces native `<button>` category filter row). `PromptsPage` prepends a
+"Sans catégorie" pseudo-option (sentinel id, not a real `PromptCategorySummary`) right after the
+"All" chip, matching prompts with no `category_id`. Each option can carry an optional `count`,
+rendered right after the label with an 8px gap (`PromptsPage` computes a per-category prompt count
+from the live prompt list); the "All" chip itself has no count.
 
 #### Open UX issues
 
@@ -115,17 +135,23 @@ _(none)_
 
 Inline prompt library picker used inside `TuningFieldRenderer` for `type: "prompt"` tuning fields.
 Renders a toggle button ("Pick from library"). When open, shows all available `ContextPromptSummary`
-items as a card grid (auto-fill columns, min 240px). Each card: name + scope badge + description (2
-lines clamped). Clicking a card calls `onSelect(id)` and closes itself; the parent fetches full text
-and fills the `TextArea`.
+items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
+organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
+visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
+always `false` here (no hover-edit pencil — picking, not managing) and the card's click handler is
+rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
+`GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
+match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
+bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
+version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
+was the explicit ask.
 
 #### Open UX issues
 
-- **Content preview** — cards show name + description only. Full prompt text preview requires the
-  backend `GET /teams/{id}/prompts/context` response to include a `text_snippet` field (tracked in
-  PROMPT-03). No extra fetches until then.
 - **Loading state** — no skeleton shown while `isLoadingSelection` is true; button goes disabled
   but the grid stays visible with stale content. Consider a spinner overlay on the grid during load.
+- **Dropped scope badge** — personal vs. team origin is no longer visually distinguished per card
+  (see above). Revisit if that turns out to matter in practice.
 
 ---
 
@@ -967,16 +993,20 @@ from the members list; the backend's last-admin invariant is the actual
 source of truth and still applies server-side regardless). Confirms via
 `ConfirmationDialog`, then redirects to `/team/personal/agents`.
 
-#### `ConfirmationDialog` — per-call button emphasis override
+#### `ConfirmationDialog` — mandatory inverted emphasis for `criticalAction`
 
-Added optional `cancelVariant`/`cancelColor`/`confirmVariant` props
-(threaded through `ConfirmationDialogProvider`'s `showConfirmationDialog`),
-defaulting to the existing fixed styling (`Cancel` = outlined/on-surface,
-`Confirm` = filled) so every other call site is unaffected. The leave-team
-dialog is the first consumer to invert the usual emphasis — `Annuler` =
-filled (the safe, reversible choice stays visually dominant), `Quitter` =
-text + error (the destructive choice is low-emphasis, M3 "Text" tier) — a
-deliberate risk-reduction pattern, not the default hierarchy.
+Every `criticalAction: true` dialog now defaults to the same button
+formalism, without any call site needing to opt in: `Cancel` = filled +
+primary (the safe, reversible choice stays visually dominant), `Confirm` =
+text + error (the destructive choice is low-emphasis, M3 "Text" tier).
+Non-critical dialogs keep the old defaults (`Cancel` = outlined/on-surface,
+`Confirm` = filled/primary). `cancelVariant`/`cancelColor`/`confirmVariant`
+props (threaded through `ConfirmationDialogProvider`'s
+`showConfirmationDialog`) still exist for an explicit per-call override, but
+every existing critical dialog (leave team, delete agent, delete session,
+delete prompt) now gets the inverted emphasis for free — the three call
+sites that used to pass the override triplet by hand had it removed since
+it's now redundant with the default.
 
 #### Open UX issues
 
@@ -1403,7 +1433,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
 - **Outils** — capability cards, unchanged content. Hidden when the template has none.
-- **Engagement** — new required "Cas d'usage" field (large `TextArea`, label + explanation + placeholder), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk).
+- **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
 
@@ -1425,7 +1455,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-retreat` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
-- **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab) and usage_statement (Engagement tab); no toast for validation.
+- **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
 
 ---
@@ -2129,13 +2159,86 @@ outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
 the row's explicit upload action; rows without a tag (pure path prefixes) are
 not drop targets.
 
-### `CategoryPicker` / prompt category surfaces
+### `CategoryPicker` / prompt category surfaces (PROMPT-09)
 
-Pickers and filters offer exactly 7 functional categories (doc-assist,
-summary, extraction, writing, analysis, conversational, integration).
-`monitoring`, `migration` and `other` are retired from selection but keep
-their pill rendering on pre-existing prompts; the "show more" fold is gone
-(7 visible).
+**Location:** `src/rework/components/shared/molecules/CategoryPicker/CategoryPicker.tsx`
+**Status:** `Functional`
+
+Categories are team-owned content, not a fixed global list (PROMPT-09) —
+`CategoryPicker` takes a live `categories: PromptCategorySummary[]` prop
+(fetched per-team) instead of a static catalog. Rendered as a single
+flex-wrap row of small selectable chips (name only, no icon, no colour —
+colour-coding categories was tried and dropped as adding no value). Selected
+chip gets a filled `--primary` background; no fold/show-more, chips just
+wrap. First chip is always "Sans catégorie" (`onChange(null)`) — the default
+selection for a new prompt (`emptyForm.category_id === null`) and for any
+existing prompt with no category.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `ManageCategoriesDialog`
+
+**Location:** `src/rework/components/pages/PromptsPage/ManageCategoriesDialog/ManageCategoriesDialog.tsx`
+**Status:** `Functional`
+
+Reachable from a `tune`-icon button in `PromptsPage`'s category filter-chips row, rendered only for
+`canManage` (`canUpdateResources`, the same team-editor flag that gates the card hover-edit pencil) —
+non-editors never see the button, and every mutation is independently `team_editor`-gated server-side
+too (403 toast on denial if that ever drifts). Staged draft/save/cancel model: Créer / Éditer / Supprimer only edit
+local state — nothing hits the backend until "Enregistrer" is clicked, which diffs the draft against
+the original list and fires exactly the needed create/rename/delete calls; "Annuler" discards the
+draft with zero calls. No per-row delete confirmation (the staging itself is the undo). Rows show a
+name only, no colour swatch (dropped along with `CategoryPicker`'s).
+
+Every row icon button (edit, delete, and the check/close pair shown while editing) is wrapped in the
+instant `Tooltip` atom. A row whose category id is in `usedCategoryIds` (computed in `PromptsPage`
+from the live prompt list, mirroring the backend's own in-use check) has its delete button disabled
+with a tooltip explaining why ("Cette catégorie ne peut être supprimée, des prompts lui sont
+rattachés") instead of letting the user stage a delete that would 409 on save — a UI-level pre-empt
+of the same rule the backend still enforces as the source of truth.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `PromptViewDialog`
+
+**Location:** `src/rework/components/pages/PromptsPage/PromptViewDialog/PromptViewDialog.tsx`
+**Status:** `Functional`
+
+Clicking a `PromptCard` opens this read-only view (name, description, category as a static
+non-interactive chip — "Sans catégorie" when unset — and the full prompt text) instead of jumping
+straight to the edit form, which was the old, editor-only behaviour. Editing is now reachable only
+through the card's hover-edit pencil (gated on `canManage`); the dialog itself has no edit action,
+only a close (X) — deliberately pure read-only, no "Edit" shortcut inside it. The close button is
+`size="medium"`, `color="on-surface-retreat"`, absolutely positioned 16px from the card's top and
+right edges (not a flex sibling of the title, so a long name never pushes it around). Uses
+`FullPageModal`'s `background="scrim"` variant (a normal translucent `--scrim` backdrop) rather than
+the opaque `main`/`container` full-page takeover the rest of the app's `FullPageModal` instances use.
+Clicking the scrim (outside the card) closes the dialog — `FullPageModal` gates this click-to-close
+on `background === "scrim"` only, so the opaque `main`/`container` data-entry forms (edit form,
+`ManageCategoriesDialog`) keep their current behaviour and can't lose in-progress input to a stray
+click.
+
+Prompt text is a plain scrollable `div` (`white-space: pre-wrap`, fixed height, `overflow-y: auto`),
+not a `textarea` — a `readOnly` textarea can still be focused, clicked into, and have its text
+selected/dragged, which this deliberately avoids (`tabIndex={-1}`, `user-select: none`): scroll is
+the only interaction, the copy button is the only way to get the text out. A `content_copy`/`check`-
+toggling `size="medium"` icon button in the text section's header copies the full prompt text to the
+clipboard (same 2s-revert pattern as `CodeBlock`'s copy button) and fires a 2s `showSuccess` toast
+("Copié dans le presse-papier"). Fetches the full prompt (`text` isn't on the list-level
+`PromptSummary`, only `text_preview`) via the same detail query the edit form uses, keyed off the
+clicked prompt's id.
+
+#### Open UX issues
+
+_(none)_
 
 ---
 
