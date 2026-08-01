@@ -61,15 +61,19 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
-    // Pre-bundle mermaid so its (CommonJS) transitive deps get proper ESM
-    // named-export interop — excluding it instead breaks e.g.
-    // `@braintree/sanitize-url` ("doesn't provide an export named 'sanitizeUrl'")
-    // and takes the whole app down, since MermaidBlock is statically imported by
-    // MarkdownRenderer. Note: mermaid *diagram rendering* is still fragile in dev
-    // (its diagram types are lazy-loaded via internal dynamic import, which can
-    // trigger a mid-session dep re-optimization) — so the Help Center uses plain
-    // markdown instead of ```mermaid blocks. Revisit if a robust dev story for
-    // rendering mermaid is needed.
+    // ── mermaid diagram rendering (Help Center Architecture pages, chat) ──
+    // mermaid lazy-loads each diagram type (flowDiagram, …) via an internal
+    // dynamic import(). If mermaid is pre-bundled (`include`), those sub-chunks
+    // land in .vite/deps with a `?v=` hash that goes stale on any mid-session
+    // dep re-optimization → "error loading dynamically imported module".
+    // So mermaid is EXCLUDED: Vite serves it and its diagram modules as native
+    // ESM straight from node_modules, with no `?v=` optimize hash to break.
+    //
+    // But mermaid's CommonJS deps must still be pre-bundled for named-export
+    // interop — otherwise e.g. `@braintree/sanitize-url` is served raw and
+    // "doesn't provide an export named 'sanitizeUrl'", crashing the whole app
+    // (MermaidBlock is statically imported by MarkdownRenderer). The list below
+    // is mermaid's CJS deps reachable from the flowchart type we use.
     //
     // NOTE: `optimizeDeps` only affects the Vite DEV SERVER (esbuild pre-bundling
     // of CommonJS/lazy deps). It has NO effect on `npm run build` / production,
@@ -78,7 +82,8 @@ export default defineConfig({
     // react-dropzone is pre-bundled because it is lazy-loaded by MigrationPage;
     // this avoids the same mid-session re-optimize + 504 "Outdated Optimize Dep"
     // reload dance when that route is first visited.
-    include: ["mermaid", "react-dropzone"],
+    include: ["react-dropzone", "@braintree/sanitize-url", "dompurify", "khroma", "dayjs"],
+    exclude: ["mermaid"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",
