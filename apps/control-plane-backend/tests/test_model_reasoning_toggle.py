@@ -346,9 +346,9 @@ async def test_switching_a_model_on_does_not_switch_its_reasoning_on(
     deps = _FakeDeps(store)
     # No instance holds this capability, so the revive sweep the ON path runs
     # finds no team and this test stays about the reasoning row.
-    deps.get_agent_instance_store = lambda: type(  # type: ignore[method-assign]
+    deps.get_agent_instance_store = type(  # type: ignore[method-assign]
         "_S", (), {"list_all": staticmethod(_empty_list)}
-    )()
+    )
 
     result = await capability_service.set_default_on(
         user=_user(),

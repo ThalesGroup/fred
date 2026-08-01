@@ -2034,7 +2034,7 @@ async def test_aggregate_list_exposes_optouts_and_platform_team_count(
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
         # REASON-01 §5: no model has its reasoning switched on — off by default.
-        get_model_reasoning_store=lambda: _NoReasoningEnabledStore(),
+        get_model_reasoning_store=_NoReasoningEnabledStore,
     )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
@@ -2099,7 +2099,7 @@ async def test_aggregate_list_derives_personal_scope(
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
         # REASON-01 §5: no model has its reasoning switched on — off by default.
-        get_model_reasoning_store=lambda: _NoReasoningEnabledStore(),
+        get_model_reasoning_store=_NoReasoningEnabledStore,
     )
     result = await capability_service.list_capability_enablement(
         user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
