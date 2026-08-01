@@ -167,13 +167,10 @@ class KPIEvent(BaseModel):
     dims: Dims = Field(default_factory=dict)
     cost: Optional[Cost] = None
     quantities: Optional[Quantities] = None
-    # List, not Iterable: every construction site already passes a materialized
-    # list (kpi_writer.py's emit()/timer() call sites), and to_doc() below
-    # re-listifies it anyway. pydantic-core validates Iterable[str] lazily via a
-    # ValidatorIterator even when fed a concrete list — confirmed live (fredlab,
-    # 2026-07-31) to leave a reference cycle behind on every KPIEvent construction,
-    # only ever freed by a forced gc.collect(), never by plain refcounting.
-    # See docs/swift/issues/ISSUE-010-kpievent-labels-validator-iterator-cycle.md.
+    # List, not Iterable: pydantic-core validates Iterable[str] lazily via a
+    # ValidatorIterator even when fed a concrete list, leaving a reference cycle on
+    # every construction (confirmed live, fredlab 2026-07-31). Every call site here
+    # already passes a materialized list, so nothing is lost. See ISSUE-010.
     labels: List[str] = Field(default_factory=list)  # low-cardinality tags
     source: Optional[str] = None
     trace: Optional[Trace] = None

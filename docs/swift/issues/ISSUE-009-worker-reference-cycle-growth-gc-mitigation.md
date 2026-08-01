@@ -34,8 +34,9 @@ documents processed, matching the "grows with volume, not concurrency" signature
   RSS alone.
 
 ## Current evidence
-- Live `SIGUSR1` trigger output (`knowledge_flow_backend/main_worker.py`,
-  `_debug_gc_and_trim`), fredlab, 2026-07-31, worker pod `knowledge-flow-worker-5774d7f88c-8ksb9`:
+- Live `SIGUSR1` trigger output (`knowledge_flow_backend/main_worker.py`, then
+  `_debug_gc_and_trim`, since refactored into `_collect_and_trim`), fredlab, 2026-07-31, worker
+  pod `knowledge-flow-worker-5774d7f88c-8ksb9`:
   ```
   [DEBUG][GC] SIGUSR1: gc.collect()=1930 freed, 0 uncollectable in gc.garbage, objects 1369042 -> 1365383, malloc_trim=True | RSS 2310584Ki -> 2044420Ki (delta 266164Ki)
   [DEBUG][GC] SIGUSR1: gc.collect()=8803 freed, 0 uncollectable in gc.garbage, objects 1376124 -> 1366851, malloc_trim=True | RSS 4408952Ki -> 2713464Ki (delta 1695488Ki)
@@ -56,8 +57,8 @@ documents processed, matching the "grows with volume, not concurrency" signature
   follow-up work. This issue covers the diagnostic proof and the interim mitigation only.
 
 ## Proposed fix (mitigation, not root cause)
-- Applied: `_debug_gc_and_trim()` + `SIGUSR1` handler (manual, always available) — see
-  `ISSUE-008`'s branch history, extended here with **`_periodic_gc_and_trim()`**, an
+- Applied: `_collect_and_trim()` + `SIGUSR1` handler (manual, always available) — see
+  `ISSUE-008`'s branch history, extended here with **`_periodic_gc_loop()`**, an
   interval-driven background `asyncio.Task` in `main_worker.py`, matching the exact pattern
   already used for the two worker-side KPI tasks (`_start_worker_kpi_tasks`) in the same file.
 - Opt-in via `KF_WORKER_GC_INTERVAL_SEC` (seconds; unset/`0` disables) — an env var, not YAML

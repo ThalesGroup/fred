@@ -57,42 +57,35 @@ def _current_rss_kb() -> int:
     return -1
 
 
-def _debug_gc_and_trim() -> None:
-    """SIGUSR1 handler: force a full GC cycle, then return freed pymalloc arenas
-    to the OS via glibc's malloc_trim(0) — CPython's allocator does NOT do this on
-    its own, so a `gc.collect()` alone can look like a no-op from `kubectl top`
-    even when it genuinely freed Python objects.
-
-    Diagnostic only, no scheduled/automatic trigger: run on demand from outside
-    with `kubectl exec <pod> -- kill -USR1 1` while the worker is idle, then watch
-    `kubectl top pod` / this log line. RSS drops after this -> reference-cycle
-    garbage (needs a real gc.collect(), plain refcounting never freed it) or
-    allocator-held-but-unused arenas. RSS unchanged -> either something still
-    holds a real reference (a genuine leak, not just uncollected cycles) or the
-    memory is native (e.g. onnxruntime/docling), outside gc's and malloc_trim's
-    reach entirely.
-    """
-    before_kb = _current_rss_kb()
-    objects_before = len(gc.get_objects())
-    collected = gc.collect()
-    uncollectable = len(gc.garbage)
-    objects_after = len(gc.get_objects())
-
-    trimmed = False
+def _malloc_trim() -> bool:
+    """Return freed pymalloc arenas to the OS (glibc-only). CPython's allocator
+    doesn't do this on its own, so gc.collect() alone can look like a no-op from
+    `kubectl top` even after genuinely freeing objects."""
     try:
         ctypes.CDLL("libc.so.6").malloc_trim(0)
-        trimmed = True
+        return True
     except OSError:
-        logger.warning("[DEBUG][GC] malloc_trim unavailable (not glibc?) — RSS reading below only reflects gc.collect()")
+        return False
 
+
+def _collect_and_trim(label: str) -> None:
+    """Force a full GC cycle + malloc_trim(0), log the RSS delta. Manual trigger:
+    `kubectl exec <pod> -- kill -USR1 1`; also the periodic mitigation task (see
+    ISSUE-009). RSS drop -> reference-cycle garbage (plain refcounting never frees
+    it) or reclaimed arenas. RSS unchanged -> either a real reference is still
+    held, or the memory is native (onnxruntime/docling), outside gc's/malloc_trim's
+    reach.
+    """
+    before_kb = _current_rss_kb()
+    collected = gc.collect()
+    uncollectable = len(gc.garbage)
+    trimmed = _malloc_trim()
     after_kb = _current_rss_kb()
     logger.warning(
-        "[DEBUG][GC] SIGUSR1: gc.collect()=%d freed, %d uncollectable in gc.garbage, "
-        "objects %d -> %d, malloc_trim=%s | RSS %dKi -> %dKi (delta %dKi)",
+        "[GC][%s] collected=%d uncollectable=%d trimmed=%s RSS %dKi -> %dKi (delta %dKi)",
+        label,
         collected,
         uncollectable,
-        objects_before,
-        objects_after,
         trimmed,
         before_kb,
         after_kb,
@@ -100,20 +93,12 @@ def _debug_gc_and_trim() -> None:
     )
 
 
-def _debug_gc_types(top_n: int = 20) -> None:
-    """SIGUSR2 handler: same idea as _debug_gc_and_trim (SIGUSR1), but reports WHICH
-    object types make up the reference-cycle garbage instead of just a count — the
-    piece ISSUE-009 left open (cycles confirmed real via 0-uncollectable SIGUSR1
-    tests, never identified what they're made of).
-
-    gc.DEBUG_SAVEALL makes gc.collect() keep collected-but-cyclic objects reachable
-    via gc.garbage instead of destroying them immediately, just for this one
-    collection, so their types can be inspected before release. gc.garbage is
-    cleared explicitly afterward (dropping our references) and a second plain
-    gc.collect() actually frees them — otherwise they'd stay pinned in gc.garbage
-    forever, a leak of our own making. Heavier than SIGUSR1 (the type-counting pass
-    itself), so kept as an explicit separate signal rather than folded into the
-    periodic task.
+def _collect_and_report_types(top_n: int = 20) -> None:
+    """SIGUSR2 handler: heavier variant of _collect_and_trim that reports WHICH
+    object types make up the reference-cycle garbage, not just a count (ISSUE-010
+    was found this way). gc.DEBUG_SAVEALL keeps this collection's cyclic garbage
+    reachable via gc.garbage instead of destroying it immediately so its types can
+    be inspected, then it's cleared and re-collected so nothing stays pinned.
     """
     before_kb = _current_rss_kb()
     old_flags = gc.get_debug()
@@ -125,19 +110,10 @@ def _debug_gc_types(top_n: int = 20) -> None:
     garbage_count = len(gc.garbage)
     gc.garbage.clear()
     freed_after_clear = gc.collect()
-
-    trimmed = False
-    try:
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-        trimmed = True
-    except OSError:
-        pass
-
+    trimmed = _malloc_trim()
     after_kb = _current_rss_kb()
     logger.warning(
-        "[DEBUG][GC] SIGUSR2 type breakdown: gc.collect()=%d, %d objects held in gc.garbage "
-        "for inspection then released (+%d freed on the follow-up collect), malloc_trim=%s | "
-        "RSS %dKi -> %dKi | top types: %s",
+        "[GC][SIGUSR2] collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %dKi -> %dKi top_types=%s",
         collected,
         garbage_count,
         freed_after_clear,
@@ -177,37 +153,32 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
     ]
 
 
-async def _periodic_gc_and_trim(interval_s: float) -> None:
-    """Call _debug_gc_and_trim on a fixed interval instead of waiting for a manual
-    SIGUSR1. Mitigation for the reference-cycle growth confirmed live on fredlab
-    2026-07-31 (ISSUE-009): repeated SIGUSR1 triggers freed real memory every time
-    (0 uncollectable in gc.garbage — genuine cycles, not a hard leak), scaling with
-    document volume (1930 objects/~260MB freed after ~1 doc, 8803 objects/~1.65GB
-    after ~30 docs across two batches). Runs regardless of whether the worker is
-    currently busy — gc.collect()'s own cost is small next to a PDF conversion, and
-    waiting for "idle" would need tracking activity concurrency this module doesn't
-    have visibility into today.
+async def _periodic_gc_loop(interval_s: float) -> None:
+    """Mitigation for the reference-cycle growth confirmed live on fredlab
+    2026-07-31 (ISSUE-009, root-caused by ISSUE-010): runs unconditionally rather
+    than only when idle — gc.collect()'s cost is small next to a PDF conversion,
+    and this module has no visibility into activity concurrency to detect "idle".
     """
     while True:
         await asyncio.sleep(interval_s)
-        _debug_gc_and_trim()
+        _collect_and_trim("periodic")
 
 
 def _start_periodic_gc_task() -> list[asyncio.Task[None]]:
     """Opt-in via KF_WORKER_GC_INTERVAL_SEC (seconds; unset or <=0 disables — matches
     the interval-driven KPI tasks' own on/off convention above). Env var rather than
-    YAML: this is a deployment-level mitigation knob, not product configuration —
-    same category as FRED_MODELS_CATALOG_FILE, not app.* config."""
+    YAML: a deployment-level mitigation knob, not product configuration — same
+    category as FRED_MODELS_CATALOG_FILE, not app.* config."""
     raw = os.environ.get("KF_WORKER_GC_INTERVAL_SEC", "0")
     try:
         interval_s = float(raw)
     except ValueError:
-        logger.warning("[DEBUG][GC] Invalid KF_WORKER_GC_INTERVAL_SEC=%r, ignoring (periodic GC disabled)", raw)
+        logger.warning("[GC] Invalid KF_WORKER_GC_INTERVAL_SEC=%r, ignoring (periodic GC disabled)", raw)
         return []
     if interval_s <= 0:
         return []
-    logger.warning("[DEBUG][GC] Periodic gc.collect()+malloc_trim() enabled every %.0fs (KF_WORKER_GC_INTERVAL_SEC)", interval_s)
-    return [asyncio.create_task(_periodic_gc_and_trim(interval_s))]
+    logger.warning("[GC] Periodic gc.collect()+malloc_trim() enabled every %.0fs (KF_WORKER_GC_INTERVAL_SEC)", interval_s)
+    return [asyncio.create_task(_periodic_gc_loop(interval_s))]
 
 
 async def main() -> None:
@@ -234,13 +205,12 @@ async def main() -> None:
     config_file = get_loaded_config_file_path() or "<unset>"
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
-    # Manual triggers always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
-    # `kubectl exec <pod> -- kill -USR1 1` to force gc.collect() + malloc_trim(0) and
-    # log the RSS delta on demand (see _debug_gc_and_trim's docstring); `kill -USR2 1`
-    # for the heavier type-breakdown variant (see _debug_gc_types's docstring).
+    # Manual triggers, always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
+    # `kubectl exec <pod> -- kill -USR1 1` / `-USR2 1`. See _collect_and_trim and
+    # _collect_and_report_types.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGUSR1, _debug_gc_and_trim)
-    loop.add_signal_handler(signal.SIGUSR2, _debug_gc_types)
+    loop.add_signal_handler(signal.SIGUSR1, lambda: _collect_and_trim("SIGUSR1"))
+    loop.add_signal_handler(signal.SIGUSR2, _collect_and_report_types)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
