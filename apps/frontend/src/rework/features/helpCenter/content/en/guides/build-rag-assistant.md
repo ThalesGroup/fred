@@ -39,7 +39,7 @@ prompt** that states its role and asks it to rely on your documents.
 ### Sample system prompt
 
 A complete starting point to paste into the agent's **system prompt**, then
-adapt to your case (use the **Copy** button at the top of the block):
+adapt to your case:
 
 ```text
 You are a document assistant serving a team. Your mission: answer questions

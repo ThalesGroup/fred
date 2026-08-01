@@ -40,7 +40,7 @@ demandent de s'appuyer sur vos documents.
 ### Exemple d'instructions
 
 Un point de départ complet, à copier dans le champ **Instructions** de l'agent
-puis à adapter à votre cas (utilisez le bouton **Copy** en haut du bloc) :
+puis à adapter à votre cas :
 
 ```text
 Tu es un assistant documentaire au service d'une équipe. Ta mission : répondre
