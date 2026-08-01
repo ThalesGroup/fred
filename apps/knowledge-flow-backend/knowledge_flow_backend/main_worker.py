@@ -23,6 +23,7 @@ import asyncio
 import logging
 from contextlib import suppress
 
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend
 from prometheus_client import start_http_server
@@ -108,6 +109,12 @@ async def main() -> None:
     if prom_cfg.enabled:
         start_http_server(prom_cfg.port, addr=prom_cfg.address)
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
+    # Manual SIGUSR1/SIGUSR2 triggers (`kubectl exec <pod> -- kill -USR1 1` /
+    # `-USR2 1`) plus the periodic gc.collect()+malloc_trim() mitigation for the
+    # reference-cycle growth confirmed live on fredlab 2026-07-31 (ISSUE-009,
+    # root-caused by ISSUE-010). interval_env_var preserves this worker's existing
+    # KF_WORKER_GC_INTERVAL_SEC opt-in instead of the shared library default name.
+    gc_diagnostics = install_gc_diagnostics(interval_env_var="KF_WORKER_GC_INTERVAL_SEC")
 
     try:
         await run_worker(
@@ -123,7 +130,8 @@ async def main() -> None:
             if not task.cancelled():
                 exc = task.exception()
                 if exc is not None:
-                    logger.error("Background KPI task %r failed during shutdown", task, exc_info=exc)
+                    logger.error("Background task %r failed during shutdown", task, exc_info=exc)
+        await gc_diagnostics.stop()
         await app_context.shutdown()
 
 
