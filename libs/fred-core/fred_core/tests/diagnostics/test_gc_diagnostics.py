@@ -126,6 +126,10 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
         report = collect_and_report_types(log=False)
         assert report.held_for_inspection >= 1
         assert any(name == "_Node" for name, _count in report.top_types)
+        # Regression check: the function must drop its own reference to the
+        # collected garbage before its final gc.collect(), or that collect()
+        # can't actually free anything and freed_after_clear is always 0.
+        assert report.freed_after_clear >= 1
     finally:
         # The function itself clears gc.garbage internally; this just proves
         # the contract (no debug flags, no garbage) actually held afterward.

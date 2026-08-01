@@ -93,7 +93,8 @@ def malloc_trim() -> bool:
             return False  # musl (Alpine): no malloc_trim symbol
         libc.malloc_trim(0)
         return True
-    except OSError:
+    except Exception:
+        logger.debug("[fred-core][gc-diagnostics] malloc_trim failed", exc_info=True)
         return False
 
 
@@ -172,6 +173,8 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
     top_types = tuple(Counter(type(o).__name__ for o in new_garbage).most_common(top_n))
     garbage_count = len(new_garbage)
     del gc.garbage[pre_existing_garbage_count:]
+    # Drop our own reference too, or the collect() below can't free these.
+    del new_garbage
     freed_after_clear = gc.collect()
     trimmed = malloc_trim()
     after_kb = current_rss_kb()
