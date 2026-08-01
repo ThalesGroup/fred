@@ -2570,8 +2570,9 @@ export type TabularSearchResponse = {
   keyword: string;
   normalized_keyword: string;
   matches?: TabularTableMatch[];
-  /** True when the max_matching_tables cap was reached: other tables may also contain the value. */
+  /** True when the result is partial: either the max_matching_tables cap was reached, or the scope exceeded the number of datasets one search may scan. Other tables may also contain the value. */
   tables_truncated?: boolean;
+  /** Documents that were in scope for this search. A document dropped by the dataset limit is omitted entirely. Note this is not proof a listed document was read exhaustively: when tables_truncated is true the scan stopped early, so a listed document may still hold the keyword in a table that was never opened. */
   searched_dataset_uids?: string[];
 };
 export type TabularSearchRequest = {

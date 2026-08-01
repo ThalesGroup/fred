@@ -315,6 +315,15 @@ storage:
       internal_presigned_ttl_seconds: 3600
       default_max_rows: 200
       max_rows: 1000
+      # Execution guardrails: DuckDB runs on a dedicated bounded thread pool.
+      # max_concurrent_queries x duckdb_memory_limit bounds the buffer manager;
+      # it does not bound scalar allocation (see #2182).
+      max_concurrent_queries: 2
+      max_queued_queries: 4
+      query_timeout_seconds: 30.0
+      duckdb_threads: 1
+      duckdb_memory_limit: "256MB"
+      max_selected_datasets: 50
   vector_store:
     type: chroma
 

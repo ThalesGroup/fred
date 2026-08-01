@@ -880,7 +880,37 @@ class TabularQueryConfig(BaseModel):
     max_rows: int = Field(
         default=1000,
         ge=1,
-        description="Hard cap applied to query result previews.",
+        description="Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
+    )
+    max_concurrent_queries: int = Field(
+        default=2,
+        ge=1,
+        description="Maximum DuckDB jobs running at once in this process. Sizes the dedicated thread pool, so it also bounds worst-case DuckDB memory together with duckdb_memory_limit.",
+    )
+    max_queued_queries: int = Field(
+        default=4,
+        ge=0,
+        description="Extra jobs allowed to wait for a free slot before new requests are rejected with 503. Absorbs bursts without letting the queue grow without bound.",
+    )
+    query_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Wall-clock budget for one DuckDB job before it is aborted and the caller receives 504. Abort is best-effort for work blocked on network I/O.",
+    )
+    duckdb_threads: int = Field(
+        default=1,
+        ge=1,
+        description="Threads DuckDB may use per connection. Set explicitly because DuckDB otherwise auto-detects the host's CPUs and ignores the container's CPU limit.",
+    )
+    duckdb_memory_limit: str = Field(
+        default="256MB",
+        pattern=r"(?i)^\d+(\.\d+)?\s*(B|[KMGT]B|[KMGT]iB)$",
+        description="Buffer-manager budget per DuckDB connection, e.g. '256MB'. Validated at startup so a typo fails fast instead of at the first query.",
+    )
+    max_selected_datasets: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
     )
 
 
