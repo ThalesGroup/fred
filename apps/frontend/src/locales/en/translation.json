@@ -263,8 +263,7 @@
       "uses": "▷ {{count}}",
       "scope": {
         "personal": "Personal",
-        "team": "Team",
-        "default": "Suggested"
+        "team": "Team"
       }
     },
     "attachments": {
@@ -1216,20 +1215,26 @@
       "profile": "Profile"
     },
     "promptCategories": {
-      "analysis": "Analysis & evaluation",
-      "conversational": "Conversational agent",
-      "doc-assist": "Document assistance",
-      "extraction": "Extraction & structuring",
-      "integration": "Integration & tools (MCP)",
-      "migration": "Migration & transformation",
-      "monitoring": "Monitoring & supervision",
-      "other": "Other / custom",
-      "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
-      "pickerTitle": "Functional category",
-      "showLess": "Show less",
-      "showMore": "Show {{count}} more categories...",
-      "summary": "Summary & synthesis",
-      "writing": "Writing & generation"
+      "pickerTitle": "Category",
+      "noCategory": "No category",
+      "manage": {
+        "buttonAria": "Manage categories",
+        "title": "Manage categories",
+        "createPlaceholder": "New category...",
+        "create": "Create",
+        "empty": "No categories for this team yet.",
+        "saveAria": "Save",
+        "cancelEditAria": "Cancel",
+        "editAria": "Rename {{name}}",
+        "deleteAria": "Delete {{name}}",
+        "deleteBlocked": "This category cannot be deleted, prompts are attached to it.",
+        "deleteConfirmTitle": "Delete this category?",
+        "deleteConfirmMessage": "Remove \"{{name}}\"? This cannot be undone.",
+        "createError": "Failed to create category",
+        "renameError": "Failed to rename category",
+        "deleteError": "Failed to delete category",
+        "genericError": "Something went wrong."
+      }
     },
     "releaseNotes": {
       "baseRelease": "Base Fred release",
@@ -1801,7 +1806,7 @@
           },
           "usageStatement": {
             "label": "Use case",
-            "explanation": "Clearly describe the use cases you plan to address with this agent.",
+            "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           }
         },
@@ -1840,8 +1845,10 @@
         }
       },
       "prompts": {
+        "card": {
+          "uses": "Uses: {{count}}"
+        },
         "clearSearch": "Clear search",
-        "close": "Close",
         "create": "New prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
@@ -1855,7 +1862,12 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts"
+        "title": "Prompts",
+        "view": {
+          "closeAria": "Close",
+          "copiedToast": "Copied to clipboard",
+          "copyAria": "Copy prompt"
+        }
       }
     },
     "userSettings": {

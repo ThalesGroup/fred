@@ -105,7 +105,6 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
   const hook = useChatSse({
     agentInstanceId: "agent-1",
     teamId: "team-1",
-    lang: "en",
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),

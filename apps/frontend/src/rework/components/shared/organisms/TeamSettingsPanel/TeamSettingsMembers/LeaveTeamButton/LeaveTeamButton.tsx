@@ -56,9 +56,6 @@ export default function LeaveTeamButton({ team }: LeaveTeamButtonProps) {
       message: t("rework.teamSettings.leaveTeam.message", { teamName: team.name ?? "" }),
       confirmButtonLabel: t("rework.teamSettings.leaveTeam.confirmLabel"),
       criticalAction: true,
-      cancelVariant: "filled",
-      cancelColor: "primary",
-      confirmVariant: "text",
       onConfirm: async () => {
         const userId = KeyCloakService.GetUserId();
         if (!userId) return;

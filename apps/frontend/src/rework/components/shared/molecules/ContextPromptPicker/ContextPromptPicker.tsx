@@ -15,8 +15,8 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import { hashColorIndex } from "@shared/utils/hashColorIndex.ts";
 import type { ContextPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { PROMPT_CATEGORY_MAP } from "../../../../config/promptCategories";
 import styles from "./ContextPromptPicker.module.css";
 
 type Scope = ContextPromptSummary["scope"];
@@ -27,7 +27,7 @@ interface ContextPromptPickerProps {
   onChange: (ids: string[]) => void;
 }
 
-const SCOPE_ORDER: Scope[] = ["personal", "team", "default"];
+const SCOPE_ORDER: Scope[] = ["personal", "team"];
 
 /**
  * Pure full-set toggle: remove an already-selected id, otherwise append it at the
@@ -60,7 +60,7 @@ export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextP
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const groups = useMemo(() => {
-    const byScope: Record<Scope, ContextPromptSummary[]> = { personal: [], team: [], default: [] };
+    const byScope: Record<Scope, ContextPromptSummary[]> = { personal: [], team: [] };
     for (const prompt of prompts) byScope[prompt.scope].push(prompt);
     return byScope;
   }, [prompts]);
@@ -86,7 +86,6 @@ export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextP
           <div key={scope} className={styles.group}>
             <div className={styles.groupLabel}>{t(`chatbot.contextPrompts.scope.${scope}`)}</div>
             {items.map((prompt) => {
-              const catDef = prompt.category ? PROMPT_CATEGORY_MAP[prompt.category] : null;
               const isSelected = selected.has(prompt.id);
               return (
                 <button
@@ -98,12 +97,8 @@ export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextP
                   data-selected={isSelected}
                   onClick={() => toggle(prompt.id)}
                 >
-                  <span
-                    className={styles.icon}
-                    style={catDef ? { backgroundColor: catDef.pillBg, color: catDef.pillFg } : undefined}
-                    aria-hidden
-                  >
-                    <Icon category="outlined" type={catDef ? catDef.icon : "edit_note"} />
+                  <span className={styles.icon} data-color={hashColorIndex(prompt.id)} aria-hidden>
+                    <Icon category="outlined" type="edit_note" />
                   </span>
                   <span className={styles.text}>
                     <span className={styles.name}>{prompt.name}</span>

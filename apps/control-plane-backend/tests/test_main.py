@@ -33,7 +33,6 @@ from control_plane_backend.config.models import (
 from control_plane_backend.main import create_app
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.product import service as product_service
-from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     build_product_service_dependencies,
@@ -43,6 +42,7 @@ from control_plane_backend.product.service import (
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
 )
+from control_plane_backend.prompts.category_store import PromptCategoryRecord
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
@@ -420,7 +420,6 @@ class _FakePromptStore:
 
     def __init__(self, records: list[PromptRecord] | None = None) -> None:
         self._records: list[PromptRecord] = list(records or [])
-        self._default_usage: dict[tuple[str, str], int] = {}
 
     async def create(self, record: PromptRecord) -> PromptRecord:
         if any(
@@ -466,7 +465,7 @@ class _FakePromptStore:
         *,
         name: str,
         description: str | None,
-        category: str | None = None,
+        category_id: str | None = None,
         emoji: str | None = None,
         tags: list[str] | None = None,
         text: str,
@@ -508,18 +507,12 @@ class _FakePromptStore:
             if r.prompt_id == prompt_id and r.team_id == team_id:
                 r.session_count += 1
 
-    async def increment_default_usage(self, category: str, team_id: TeamId) -> None:
-        key = (str(team_id), category)
-        self._default_usage[key] = self._default_usage.get(key, 0) + 1
-
-    async def get_default_usage(
-        self, team_id: TeamId, categories: list[str]
-    ) -> dict[str, int]:
-        return {
-            cat: self._default_usage.get((str(team_id), cat), 0)
-            for cat in categories
-            if (str(team_id), cat) in self._default_usage
-        }
+    async def count_by_category(self, team_id: TeamId, category_id: str) -> int:
+        return sum(
+            1
+            for r in self._records
+            if r.team_id == team_id and r.category_id == category_id
+        )
 
     async def update_score(
         self, prompt_id: str, team_id: TeamId, score: float
@@ -550,7 +543,7 @@ class _FakePromptStore:
                         name=r.name,
                         description=r.description,
                         scope=scope,
-                        category=r.category,
+                        category_id=r.category_id,
                         version=r.version,
                         session_count=r.session_count,
                         score=r.score,
@@ -566,6 +559,83 @@ def _patch_prompt_store(
 ) -> None:
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_prompt_store",
+        lambda _self: store,
+    )
+
+
+class _FakePromptCategoryStore:
+    """In-memory stand-in for PromptCategoryStore used in offline tests."""
+
+    def __init__(self, records: list[PromptCategoryRecord] | None = None) -> None:
+        self._records: list[PromptCategoryRecord] = list(records or [])
+
+    async def create(self, record: PromptCategoryRecord) -> PromptCategoryRecord:
+        if any(
+            existing.team_id == record.team_id and existing.name == record.name
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.category_store import (
+                PromptCategoryAlreadyExistsError,
+            )
+
+            raise PromptCategoryAlreadyExistsError(record.name)
+        self._records.append(record)
+        return record
+
+    async def list_by_team(self, team_id: TeamId) -> list[PromptCategoryRecord]:
+        return sorted(
+            (r for r in self._records if r.team_id == team_id),
+            key=lambda r: r.name,
+        )
+
+    async def get_for_team(
+        self, category_id: str, team_id: TeamId
+    ) -> PromptCategoryRecord | None:
+        return next(
+            (
+                r
+                for r in self._records
+                if r.category_id == category_id and r.team_id == team_id
+            ),
+            None,
+        )
+
+    async def update(
+        self, category_id: str, team_id: TeamId, *, name: str
+    ) -> PromptCategoryRecord | None:
+        record = await self.get_for_team(category_id, team_id)
+        if record is None:
+            return None
+        if any(
+            existing.category_id != category_id
+            and existing.team_id == team_id
+            and existing.name == name
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.category_store import (
+                PromptCategoryAlreadyExistsError,
+            )
+
+            raise PromptCategoryAlreadyExistsError(name)
+        record.name = name
+        return record
+
+    async def delete(self, category_id: str, team_id: TeamId) -> bool:
+        before = len(self._records)
+        self._records = [
+            r
+            for r in self._records
+            if not (r.category_id == category_id and r.team_id == team_id)
+        ]
+        return len(self._records) < before
+
+
+def _patch_prompt_category_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakePromptCategoryStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_prompt_category_store",
         lambda _self: store,
     )
 
@@ -1670,75 +1740,6 @@ async def test_prepare_execution_concatenates_attached_context_prompts(
 
     assert resp.status_code == 200
     assert resp.json()["context_prompt_text"] == "First.\n\nSecond."
-
-
-@pytest.mark.asyncio
-async def test_prepare_execution_resolves_default_prompt_in_request_language(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A `default:` prompt resolves in the `lang` threaded from the request, so a
-    French user gets the French default text (matching the localized picker), and
-    omitting `lang` falls back to English (back-compatible)."""
-
-    spec = next(s for s in DEFAULT_PROMPTS if s.category == "conversational")
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.require_team_access",
-        _fake_require_team_access,
-    )
-    store = _FakeAgentInstanceStore(
-        [
-            _make_record(
-                agent_instance_id="inst-42",
-                source_runtime_id="agents-v2",
-                template_id="agents-v2:rags.sample.echo",
-                source_agent_id="rags.sample.echo",
-                display_name="Echo Agent",
-                description="Test",
-            )
-        ]
-    )
-    session_store = _FakeSessionMetadataStore(
-        [
-            SessionMetadataRecord(
-                session_id="sess-1",
-                team_id=TeamId("personal"),
-                agent_instance_id="inst-42",
-                user_id="admin",
-                title=None,
-                context_prompt_ids=["default:conversational"],
-            )
-        ]
-    )
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    _patch_session_store(monkeypatch, session_store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="agents-v2",
-            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
-            enabled=True,
-            ingress_prefix="/runtime/agents-v2",
-        )
-    ]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        fr_resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
-            params={"session_id": "sess-1", "lang": "fr"},
-        )
-        default_resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
-            params={"session_id": "sess-1"},
-        )
-
-    assert fr_resp.status_code == 200
-    assert fr_resp.json()["context_prompt_text"] == spec.text("fr")
-    # No lang param → English (back-compatible default).
-    assert default_resp.status_code == 200
-    assert default_resp.json()["context_prompt_text"] == spec.text("en")
 
 
 @pytest.mark.asyncio
@@ -3010,6 +3011,7 @@ def _build_erasure_deps(
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_prompt_category_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
@@ -5243,6 +5245,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_prompt_store=cast(Any, object),
+        get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
         get_session_store=cast(Any, lambda: object()),
         get_purge_queue_store=cast(Any, lambda: object()),
@@ -5318,6 +5322,8 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_prompt_store=cast(Any, object),
+        get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
         get_session_store=cast(Any, lambda: object()),
         get_purge_queue_store=cast(Any, lambda: object()),
@@ -5636,6 +5642,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
         get_team_metadata_store=lambda: cast(Any, object()),
+        get_prompt_store=cast(Any, object),
+        get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
@@ -7300,10 +7308,8 @@ async def test_list_prompts_returns_team_scoped_summaries(
 
     assert resp.status_code == 200
     body = resp.json()
-    # 9 system defaults are always injected — filter them out to test personal prompts
-    personal = [p for p in body if not p.get("is_default", False)]
-    assert len(personal) == 1
-    item = personal[0]
+    assert len(body) == 1
+    item = body[0]
     assert item["id"] == "prompt-1"
     assert item["name"] == "Daily brief"
     assert item["description"] == "Ops baseline"
@@ -7401,6 +7407,50 @@ async def test_get_update_and_delete_prompt_use_team_scope(
 
 
 @pytest.mark.asyncio
+async def test_get_prompt_detail_includes_category_id_emoji_and_tags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression test: `_prompt_record_to_detail` used to omit `category_id`,
+    `emoji`, and `tags` entirely, so the single-prompt GET endpoint always
+    returned `category_id: null` and `tags: []` regardless of what was
+    actually stored — surfacing as "always shows no category" in the
+    frontend's read-only prompt view, and silently wiping category/tags on
+    any edit-form save (the edit form seeds itself from this same endpoint).
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    record = PromptRecord(
+        prompt_id="prompt-1",
+        team_id=TeamId("personal"),
+        name="Daily brief",
+        description="Ops baseline",
+        category_id="cat-writing",
+        emoji="✍️",
+        tags=["daily", "ops"],
+        text="Today is {today}.",
+        created_by="internal-admin",
+    )
+    store = _FakePromptStore([record])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        detail = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["category_id"] == "cat-writing"
+    assert body["emoji"] == "✍️"
+    assert body["tags"] == ["daily", "ops"]
+
+
+@pytest.mark.asyncio
 async def test_prompt_library_rejects_invalid_prompt_template_before_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -7429,6 +7479,136 @@ async def test_prompt_library_rejects_invalid_prompt_template_before_write(
     assert resp.status_code == 422
     assert "{unknown_token}" in resp.json()["detail"]
     assert store._records == []
+
+
+# ---------------------------------------------------------------------------
+# Prompt categories (PROMPT-09) — team-owned, no global taxonomy
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_and_create_prompt_categories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Categories list alphabetically and create rejects a duplicate name."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    category_store = _FakePromptCategoryStore(
+        [
+            PromptCategoryRecord(
+                category_id="cat-2", team_id=TeamId("personal"), name="Stratégie"
+            ),
+            PromptCategoryRecord(
+                category_id="cat-1", team_id=TeamId("personal"), name="Analyse"
+            ),
+        ]
+    )
+    app = create_app()
+    _patch_prompt_category_store(monkeypatch, category_store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        listed = await client.get("/control-plane/v1/teams/personal/prompt-categories")
+        created = await client.post(
+            "/control-plane/v1/teams/personal/prompt-categories",
+            json={"name": "Communication"},
+        )
+        duplicate = await client.post(
+            "/control-plane/v1/teams/personal/prompt-categories",
+            json={"name": "Analyse"},
+        )
+
+    assert listed.status_code == 200
+    assert [c["name"] for c in listed.json()] == ["Analyse", "Stratégie"]
+    assert created.status_code == 201
+    assert created.json()["name"] == "Communication"
+    assert duplicate.status_code == 409
+    assert "already exists" in duplicate.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_rename_and_delete_prompt_category(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A category can be renamed and, once unused, deleted."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    category_store = _FakePromptCategoryStore(
+        [
+            PromptCategoryRecord(
+                category_id="cat-1", team_id=TeamId("personal"), name="Analyse"
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore([])
+    app = create_app()
+    _patch_prompt_category_store(monkeypatch, category_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        renamed = await client.put(
+            "/control-plane/v1/teams/personal/prompt-categories/cat-1",
+            json={"name": "Analyse & synthèse"},
+        )
+        deleted = await client.delete(
+            "/control-plane/v1/teams/personal/prompt-categories/cat-1"
+        )
+        missing = await client.put(
+            "/control-plane/v1/teams/personal/prompt-categories/cat-1",
+            json={"name": "Nope"},
+        )
+
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "Analyse & synthèse"
+    assert deleted.status_code == 204
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_prompt_category_blocked_while_in_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deleting a category still referenced by a prompt is a hard 409 block —
+    never an automatic reassignment of the orphaned prompt(s)."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    category_store = _FakePromptCategoryStore(
+        [
+            PromptCategoryRecord(
+                category_id="cat-1", team_id=TeamId("personal"), name="Analyse"
+            )
+        ]
+    )
+    record = _make_prompt_record(prompt_id="prompt-1", team_id="personal")
+    record.category_id = "cat-1"
+    prompt_store = _FakePromptStore([record])
+    app = create_app()
+    _patch_prompt_category_store(monkeypatch, category_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/prompt-categories/cat-1"
+        )
+
+    assert resp.status_code == 409
+    assert "still used by 1 prompt" in resp.json()["detail"]
+    # The category row itself must survive the blocked delete.
+    assert await category_store.get_for_team("cat-1", TeamId("personal")) is not None
 
 
 # ---------------------------------------------------------------------------

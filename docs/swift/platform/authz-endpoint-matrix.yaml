@@ -413,6 +413,26 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/prompt-categories
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompt-categories
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/prompt-categories/{category_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/prompt-categories/{category_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/runtimes/{runtime_id}/agents/{agent_id}/prepare-execution
     review_status: pending_review

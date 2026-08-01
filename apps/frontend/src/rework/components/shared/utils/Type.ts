@@ -77,6 +77,7 @@ export const materialIcons = [
   "tune",
   "forum",
   "build",
+  "check",
   "check_circle",
   "check_box",
   "check_box_outline_blank",

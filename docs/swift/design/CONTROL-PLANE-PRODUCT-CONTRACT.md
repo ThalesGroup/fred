@@ -615,6 +615,9 @@ managed agent instances:
 - `PromptDetail`
 - `CreatePromptRequest`
 - `UpdatePromptRequest`
+- `PromptCategorySummary`
+- `CreatePromptCategoryRequest`
+- `UpdatePromptCategoryRequest`
 
 Rules:
 
@@ -626,6 +629,9 @@ Rules:
 - importing or saving a prompt from the agent form is a control-plane workflow,
   but the managed agent instance stores only copied `prompts.*` text, never a
   live prompt reference
+- prompt categories are team-owned content (`category_id`, PROMPT-09) — there
+  is no platform-wide category taxonomy and no platform default-prompt
+  catalog; see §32 for the full contract change
 
 The global prompt marketplace is a follow-up control-plane surface:
 
@@ -1001,6 +1007,12 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 
 ## 13. Contract Notes — PROMPT-05 (June 2026)
 
+> **Superseded in part by §32 (PROMPT-09, 2026-07-30):** every `lang`
+> parameter and `default:{category}` prompt id described below no longer
+> exists — the platform default-prompt catalog they served was removed. This
+> section stays a historical record of the ordered-context-list decision
+> itself, which is otherwise still current.
+
 ### Multi-prompt chat context — session context becomes an ordered list
 
 **2026-06-19 — Decision (PROMPT-05 / `PROMPTS.md` §5):** a conversation
@@ -1325,10 +1337,12 @@ with the acting user's uid on every `PATCH
 
 **Behavior change:** `GET /teams/{team_id}/prompts/context` no longer merges
 the caller's personal prompts into a non-personal team's context (#2023) — a
-team space returns the team's prompts + platform defaults only; the personal
-space returns the caller's prompts (scope `personal`) + defaults. Response
-shape unchanged. Already-attached personal prompts keep resolving at
-prepare-execution (see `design/PROMPTS.md` §5/§6).
+team space returns only the team's own prompts; the personal space returns
+only the caller's prompts (scope `personal`). Response shape unchanged.
+Already-attached personal prompts keep resolving at prepare-execution (see
+`design/PROMPTS.md` §5/§6). *(2026-07-30, PROMPT-09: "+ platform defaults" no
+longer applies — the platform default-prompt catalog this note originally
+described is removed, see §32.)*
 
 ## 21. Contract Notes — personal team isolation rule (CTRLP-10 / AUTHZ-08)
 
@@ -1811,7 +1825,73 @@ destructive button permanently on the general admin surface.
 
 `authz-endpoint-matrix.yaml` drops the `/reset-full` row.
 
-## 32. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
+## 32. Contract Notes — PROMPT-09, team-owned prompt categories (2026-07-30)
+
+**Platform default prompts and the global `PromptCategory` enum are removed.**
+Every prompt returned by the API is now a real, persisted, editable team row
+— there is no more synthetic `default:{category}` id, no `is_default` field on
+`PromptSummary`/`ContextPromptSummary`, and no `default_prompt_usage` table
+(usage is `PromptRow.session_count` for every prompt, uniformly).
+
+**Categories are team-owned content**, not a platform-wide taxonomy:
+
+- new table `prompt_category` (`category_id`, `team_id`, `name`), no DB-level
+  FK to `prompt` (matches every other team-scoped table in this schema)
+- `prompt.category` (free string, validated only against the old fixed enum at
+  the API boundary) becomes `prompt.category_id: str | None`, referencing a
+  `prompt_category` row scoped to the same team; nullable — an uncategorized
+  prompt is valid
+- new endpoints, all under `/teams/{team_id}/prompt-categories`: `GET`/`POST`
+  (`CAN_USE_TEAM_AGENTS`/`CAN_UPDATE_RESOURCES` respectively), `PUT`/`DELETE`
+  on `/{category_id}` (`CAN_UPDATE_RESOURCES`)
+- `DELETE` returns **409** while any prompt in the team still references the
+  category — a hard block, never an automatic reassignment of the orphaned
+  prompt(s)
+
+**Team creation seeds a starter kit.** `create_team` now creates, right after
+the ReBAC bootstrap succeeds: 4 categories ("Création agent", "Analyse et
+synthèse", "Stratégie et idéation", "Communication") and one prompt per
+category. From that point on the starter kit is normal team content — any
+`team_editor` can rename, edit, or delete every part of it, including the
+categories themselves. Seeding is **best-effort**: unlike the ReBAC relation
+writes, a seeding failure logs a warning and does not fail team creation. The
+personal prompt space is **not** seeded.
+
+**Migration (`8ca7cafc292f`)** backfills the same starter kit into every
+*existing* team that had zero prompt rows at migration time (teams that
+already authored custom prompts are left untouched), migrates every existing
+prompt's legacy `category` string into a real per-team category row named
+after the old enum's French label, then drops `prompt.category` and
+`default_prompt_usage`.
+
+**Breaking changes:**
+
+- `PromptSummary.category` / `ContextPromptSummary.category` /
+  `CreatePromptRequest.category` / `UpdatePromptRequest.category`: the fixed
+  `PromptCategory` enum becomes `category_id: str | None`
+- `is_default` removed from `PromptSummary` / `ContextPromptSummary`
+- `ContextPromptSummary.scope` narrows from `"personal" | "team" | "default"`
+  to `"personal" | "team"`; the `text` field (only ever populated for
+  `scope="default"`) is removed
+- `GET /teams/{team_id}/prompts` and `GET .../prompts/context` drop the `lang`
+  query param (it only ever localized the removed default-prompt catalog)
+- `POST /teams/{team_id}/agent-instances/{id}/prepare-execution` drops the
+  `lang` query param for the same reason
+
+**Frontend.** Categories are fetched per-team
+(`useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery`)
+— the static `promptCategories.ts` catalog (fixed id → icon/color/i18n-label
+map) is deleted. Category pills/tiles use a shared hash-based fallback palette
+(`hashColorIndex`, same 5-family token set already used for uncategorized
+prompts) instead of per-category curated icons — categories are free-form
+team content now, not a curated taxonomy. `PromptCard`/`PromptsPage` drop the
+`is_default` read-only branch entirely; `canManage` is computed from
+`useTeamCapabilities(team).canUpdateResources` instead of `!prompt.is_default`
+(which never reflected real permissions). New `ManageCategoriesDialog`
+(Créer/Éditer/Supprimer, 409 surfaced as a toast) reachable from a button in
+the category filter-chips row.
+
+## 33. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
 
 **Gap found and closed.** `prepare_execution` (`product/service.py`) accepts
 an optional `session_id` and, when present, resolves that session's

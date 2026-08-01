@@ -15,6 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
@@ -22,46 +23,52 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
-import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
+import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import {
-  type PromptCategory,
   type PromptSummary,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { PROMPT_CATEGORIES } from "../../../config/promptCategories.ts";
 import styles from "./PromptsPage.module.scss";
 
 type FormState = {
   name: string;
   description: string;
-  category: PromptCategory;
+  category_id: string | null;
   tags: string[];
   text: string;
 };
-const emptyForm: FormState = { name: "", description: "", category: "other", tags: [], text: "" };
+const emptyForm: FormState = { name: "", description: "", category_id: null, tags: [], text: "" };
+
+// Sentinel filter value for "prompts with no category" — distinct from `null`,
+// which means "no filter active" (the "Tous" chip).
+const NO_CATEGORY_FILTER_ID = "__no_category__";
 
 export default function PromptsPage() {
-  const { teamId } = useParams<{ teamId: string }>();
-  const { t, i18n } = useTranslation();
+  const { teamId, selectedTeam } = useSelectedTeam();
+  const { canUpdateResources: canManage } = useTeamCapabilities(selectedTeam);
+  const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
-  const [viewingDefault, setViewingDefault] = useState<PromptSummary | null>(null);
+  const [viewingPrompt, setViewingPrompt] = useState<PromptSummary | null>(null);
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   // Which prompt id `form` is currently fully seeded for. RTK Query's
   // `editDetail` can keep the same object reference across a close/reopen
@@ -71,10 +78,8 @@ export default function PromptsPage() {
   // reseeding reliable regardless of `editDetail`'s identity.
   const [seededForId, setSeededForId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<PromptCategory | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const FILTER_VISIBLE = 4;
-
-  const lang = i18n.language.split("-")[0];
 
   const {
     data: prompts = [],
@@ -82,8 +87,13 @@ export default function PromptsPage() {
     isFetching,
     isUninitialized,
     isError,
-    refetch,
-  } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "", lang }, { skip: !teamId });
+  } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
+
+  const { data: categories = [], refetch: refetchCategories } =
+    useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
+      { teamId: teamId || "" },
+      { skip: !teamId },
+    );
 
   const { data: editDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
     { teamId: teamId || "", promptId: editingPrompt?.id || "" },
@@ -111,7 +121,7 @@ export default function PromptsPage() {
       setForm({
         name: editDetail.name,
         description: editDetail.description ?? "",
-        category: (editDetail.category as PromptCategory) ?? "other",
+        category_id: editDetail.category_id ?? null,
         tags: editDetail.tags ?? [],
         text: editDetail.text,
       });
@@ -119,27 +129,32 @@ export default function PromptsPage() {
     }
   }, [editingPrompt, editDetail, seededForId]);
 
-  // Resolve `created_by` uids to display names for the card footer (#2010), same
-  // batch-lookup pattern as the agent-instance audit fields (#1952).
-  const authorUids = useMemo(
-    () => Array.from(new Set(prompts.map((p) => p.created_by).filter((uid): uid is string => !!uid))),
+  const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+  const usedCategoryIds = useMemo(
+    () => new Set(prompts.map((p) => p.category_id).filter(Boolean) as string[]),
     [prompts],
   );
-  const { data: authorUsers = [] } = useUsersByIdsQuery({ ids: authorUids }, { skip: authorUids.length === 0 });
-  const authorNameById = useMemo(() => new Map(authorUsers.map((u) => [u.id, u])), [authorUsers]);
-
-  // Collect categories actually used in the current prompt list
-  const usedCategories = useMemo(() => {
-    const ids = new Set(prompts.map((p) => p.category).filter(Boolean) as PromptCategory[]);
-    return PROMPT_CATEGORIES.filter((c) => ids.has(c.id));
+  const categoryCounts = useMemo(() => {
+    const byId = new Map<string, number>();
+    let noCategory = 0;
+    for (const p of prompts) {
+      if (p.category_id) {
+        byId.set(p.category_id, (byId.get(p.category_id) ?? 0) + 1);
+      } else {
+        noCategory += 1;
+      }
+    }
+    return { byId, noCategory };
   }, [prompts]);
 
-  // Client-side filter: search text + active category + active tag
+  // Client-side filter: search text + active category
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return prompts.filter((p) => {
       const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q);
-      const matchCategory = !activeCategory || p.category === activeCategory;
+      const matchCategory =
+        !activeCategory ||
+        (activeCategory === NO_CATEGORY_FILTER_ID ? !p.category_id : p.category_id === activeCategory);
       return matchSearch && matchCategory;
     });
   }, [prompts, search, activeCategory]);
@@ -152,18 +167,17 @@ export default function PromptsPage() {
   };
 
   const openPrompt = (prompt: PromptSummary) => {
-    if (prompt.is_default) {
-      setViewingDefault(prompt);
-    } else {
-      setForm({ ...emptyForm, category: (prompt.category as PromptCategory) ?? "other" });
-      setEditingPrompt(prompt);
-    }
+    setForm({ ...emptyForm, category_id: prompt.category_id ?? null });
+    setEditingPrompt(prompt);
+  };
+
+  const openView = (prompt: PromptSummary) => {
+    setViewingPrompt(prompt);
   };
 
   const closeModal = () => {
     setIsCreateOpen(false);
     setEditingPrompt(null);
-    setViewingDefault(null);
     setForm(emptyForm);
     setSeededForId(null);
   };
@@ -178,7 +192,7 @@ export default function PromptsPage() {
           updatePromptRequest: {
             name: form.name,
             description: form.description || undefined,
-            category: form.category,
+            category_id: form.category_id,
             tags: form.tags,
             text: form.text,
           },
@@ -190,7 +204,7 @@ export default function PromptsPage() {
           createPromptRequest: {
             name: form.name,
             description: form.description || undefined,
-            category: form.category,
+            category_id: form.category_id,
             tags: form.tags,
             text: form.text,
           },
@@ -198,7 +212,6 @@ export default function PromptsPage() {
         showSuccess({ summary: "Prompt created" });
       }
       closeModal();
-      await refetch();
     } catch (error: unknown) {
       const err = error as { data?: { detail?: string }; message?: string };
       showError({
@@ -219,7 +232,6 @@ export default function PromptsPage() {
           await deletePrompt({ teamId, promptId: prompt.id }).unwrap();
           showSuccess({ summary: "Prompt deleted" });
           closeModal();
-          await refetch();
         } catch (error: unknown) {
           const err = error as { data?: { detail?: string }; message?: string };
           showError({
@@ -231,7 +243,6 @@ export default function PromptsPage() {
     });
   };
 
-  const hasPrompts = true; // defaults are always injected by the backend
   const promptsQueryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
 
   if (!teamId) {
@@ -260,7 +271,13 @@ export default function PromptsPage() {
 
   return (
     <div className={styles.pageContainer}>
-      {hasPrompts && (
+      {prompts.length === 0 ? (
+        <PageEmptyState
+          icon="edit_note"
+          message={t("rework.teams.prompts.noPrompt")}
+          action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
+        />
+      ) : (
         <>
           {/* ── Toolbar: title + create button ── */}
           <div className={styles.pageTitle}>
@@ -278,16 +295,44 @@ export default function PromptsPage() {
 
           {/* ── Search + category filters ── */}
           <div className={styles.filterBar}>
-            <SearchField
-              value={search}
-              onChange={setSearch}
-              placeholder={t("rework.teams.prompts.searchPlaceholder")}
-              clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-            />
+            <div className={styles.searchRow}>
+              <div className={styles.searchBar}>
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={t("rework.teams.prompts.searchPlaceholder")}
+                  clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                  size="small"
+                />
+              </div>
+              {canManage && (
+                <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
+                  <IconButton
+                    size="medium"
+                    color="on-surface-retreat"
+                    variant="icon"
+                    icon={{ category: "outlined", type: "tune" }}
+                    aria-label={t("rework.promptCategories.manage.buttonAria")}
+                    onClick={() => setIsManageCategoriesOpen(true)}
+                  />
+                </Tooltip>
+              )}
+            </div>
 
-            {usedCategories.length > 0 && (
+            {categories.length > 0 && (
               <FilterChips
-                options={usedCategories.map((cat) => ({ id: cat.id, label: t(cat.labelKey) }))}
+                options={[
+                  {
+                    id: NO_CATEGORY_FILTER_ID,
+                    label: t("rework.promptCategories.noCategory"),
+                    count: categoryCounts.noCategory,
+                  },
+                  ...categories.map((cat) => ({
+                    id: cat.id,
+                    label: cat.name,
+                    count: categoryCounts.byId.get(cat.id) ?? 0,
+                  })),
+                ]}
                 value={activeCategory}
                 onChange={(v) => setActiveCategory(v)}
                 allLabel={t("rework.teams.agents.podFilter.all")}
@@ -297,86 +342,38 @@ export default function PromptsPage() {
               />
             )}
           </div>
+
+          {filtered.length === 0 ? (
+            <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
+          ) : (
+            <div className={styles.promptList}>
+              {filtered.map((prompt) => (
+                <PromptCard
+                  key={prompt.id}
+                  prompt={prompt}
+                  categoryName={(prompt.category_id && categoryNameById.get(prompt.category_id)) || null}
+                  canManage={canManage}
+                  onView={() => openView(prompt)}
+                  onEdit={() => openPrompt(prompt)}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
 
-      {!hasPrompts ? (
-        <PageEmptyState
-          icon="edit_note"
-          message={t("rework.teams.prompts.noPrompt")}
-          action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
-        />
-      ) : filtered.length === 0 ? (
-        <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
-      ) : (
-        <div className={styles.promptList}>
-          {filtered.map((prompt) => (
-            <PromptCard
-              key={prompt.id}
-              prompt={prompt}
-              authorName={
-                prompt.created_by
-                  ? userDisplayName(prompt.created_by, authorNameById.get(prompt.created_by))
-                  : undefined
-              }
-              canManage={!prompt.is_default}
-              onEdit={() => openPrompt(prompt)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── Read-only modal for default prompts ── */}
-      <FullPageModal isOpen={!!viewingDefault} onClose={closeModal} id="prompt-default-modal">
-        {viewingDefault && (
-          <div className={styles.modalCard}>
-            <div className={styles.modalHeader}>
-              <span className={styles.modalTitle}>{viewingDefault.name}</span>
-              <IconButton
-                size="small"
-                color="on-surface"
-                variant="icon"
-                icon={{ category: "outlined", type: "close" }}
-                onClick={closeModal}
-              />
-            </div>
-            {viewingDefault.description && (
-              <p style={{ margin: 0, color: "var(--on-surface-retreat)", font: "var(--font-body-medium)" }}>
-                {viewingDefault.description}
-              </p>
-            )}
-            <TextArea
-              label={t("rework.teams.prompts.form.text")}
-              value={viewingDefault.text_preview ?? ""}
-              rows={12}
-              onChange={() => {}}
-              disabled
-            />
-            <div className={styles.modalFooter}>
-              <div className={styles.modalFooterActions}>
-                <Button color="on-surface" variant="text" size="medium" onClick={closeModal}>
-                  {t("rework.teams.prompts.close")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </FullPageModal>
-
       {/* ── Create / Edit modal ── */}
-      <FullPageModal isOpen={isCreateOpen || !!editingPrompt} onClose={closeModal} id="prompt-form-modal">
+      <FullPageModal
+        isOpen={isCreateOpen || !!editingPrompt}
+        onClose={closeModal}
+        id="prompt-form-modal"
+        background="container"
+      >
         <div className={styles.modalCard}>
           <div className={styles.modalHeader}>
             <span className={styles.modalTitle}>
               {editingPrompt ? t("rework.teams.prompts.modalEdit") : t("rework.teams.prompts.modalCreate")}
             </span>
-            <IconButton
-              size="small"
-              color="on-surface"
-              variant="icon"
-              icon={{ category: "outlined", type: "close" }}
-              onClick={closeModal}
-            />
           </div>
 
           <div className={styles.modalContent}>
@@ -396,7 +393,11 @@ export default function PromptsPage() {
               maxLength={300}
             />
 
-            <CategoryPicker value={form.category} onChange={(cat) => setForm((f) => ({ ...f, category: cat }))} />
+            <CategoryPicker
+              categories={categories}
+              value={form.category_id}
+              onChange={(categoryId) => setForm((f) => ({ ...f, category_id: categoryId }))}
+            />
 
             <TextArea
               label={t("rework.teams.prompts.form.text")}
@@ -430,6 +431,23 @@ export default function PromptsPage() {
           </div>
         </div>
       </FullPageModal>
+
+      <ManageCategoriesDialog
+        open={isManageCategoriesOpen}
+        teamId={teamId}
+        categories={categories}
+        usedCategoryIds={usedCategoryIds}
+        onClose={() => setIsManageCategoriesOpen(false)}
+        onChanged={() => refetchCategories()}
+      />
+
+      <PromptViewDialog
+        open={!!viewingPrompt}
+        teamId={teamId}
+        promptId={viewingPrompt?.id ?? null}
+        categories={categories}
+        onClose={() => setViewingPrompt(null)}
+      />
     </div>
   );
 }
