@@ -1,3 +1,64 @@
+**Unreleased**
+
+- **Breaking changes**
+
+  - **Model reasoning is now off until an administrator turns it on.** Reasoning
+    used to be switched on in a deployment's model configuration file and applied
+    to everyone, invisibly, with a redeploy needed to change it. It is now a
+    toggle on each model row in **Admin → Capabilities → Models**. On upgrade,
+    every model starts with reasoning **off**, including any model that was
+    reasoning before — a platform administrator must switch it back on. Without
+    this step the symptom is "reasoning stopped working after the upgrade" with
+    no visible cause (#2166)
+
+- **Features**
+
+  - Admin → Capabilities → Models: each model that can reason now carries a
+    reasoning toggle, applying to every team at once, effective without a
+    redeploy. Models that cannot reason show no toggle — reasoning is a property
+    of the model, not something an administrator can grant. This is separate
+    from enabling a model for a team: enabling a model does not enable its
+    reasoning — but switching a model off does switch its reasoning off, so a
+    model re-enabled later never comes back reasoning unnoticed (#2166)
+  - Agents can now offer reasoning as a per-question choice. Turn **Reasoning**
+    on in the **General** tab when creating or editing an agent — next to its
+    name and description, not among its tools — and users get a **Reasoning**
+    switch in the chat composer's **+** menu to enable it for a single question.
+    It starts off on every question. The switch only appears when the model can
+    actually reason and an administrator has enabled its reasoning, never as a
+    control that silently does nothing (#2166)
+
+- **Improvements**
+
+  - Agents are now capped at 12 tool calls per question. A model that gets stuck
+    repeating the same lookup now stops and answers with what it has, instead of
+    looping. Normal questions use far fewer calls and are unaffected (#2166)
+  - Agents are told explicitly not to repeat an identical tool call within a
+    question, which measurably reduces wasted lookups and latency with reasoning
+    models (#2166)
+
+- **Bug Fixes**
+
+  - The agent's reasoning now survives a page reload. Reasoning blocks were
+    displayed live but never saved, so reopening a conversation showed the tool
+    steps with the reasoning missing — as if the agent had thought nothing. Past
+    conversations are unaffected: reasoning is kept from now on, not
+    reconstructed backwards
+
+**v2.1.25** — 2026-07-31
+
+- **Summary**
+
+  Three more PDF ingestion memory leaks are fixed, and the root cause of a slower
+  background memory leak affecting every KPI-emitting service (not just PDF
+  ingestion) is resolved.
+
+- **Bug Fixes**
+
+  - Fixed a memory leak where the ingestion pipeline rebuilt its cloud storage connection on every operation instead of reusing one, adding up over many documents (#2188)
+  - Fixed a memory leak in image-described PDF ingestion and in embedding generation where their respective models were rebuilt per call instead of being reused (#2188)
+  - Fixed a slow background memory leak affecting every service that emits usage metrics (KPIs), caused by how a metric field was validated internally — could very gradually grow a service's memory over long uptimes (#2188)
+
 **v2.1.24** — 2026-07-31
 
 - **Summary**

@@ -36,6 +36,7 @@ from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
+    ReasoningNotSupported,
     _cap_ref,
     disable_capability_for_team,
     enable_capability_for_team,
@@ -59,6 +60,7 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
     ImpactedInstanceSummary,
+    ModelReasoningResult,
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
@@ -155,6 +157,7 @@ async def _build_enablement_item(
     total_team_count: int,
     total_personal_space_count: int,
     impact: Mapping[str, CapabilityImpact],
+    reasoning_enabled_ids: frozenset[str],
 ) -> CapabilityEnablementItem:
     """Build one row's ReBAC-derived fields (#2089).
 
@@ -205,6 +208,13 @@ async def _build_enablement_item(
             if entry_impact
             else []
         ),
+        # REASON-01 §5.3: derived pod-side, carried verbatim. Empty for every
+        # kind but "model", and for models with no thinking-capable profile —
+        # which is exactly when the admin row shows no reasoning control.
+        thinking_profile_ids=list(entry.model_thinking_profile_ids),
+        # §5.6 — no stored row means off. One pre-fetched set for the whole
+        # list, not a per-row query.
+        reasoning_enabled=entry.id in reasoning_enabled_ids,
     )
 
 
@@ -240,12 +250,17 @@ async def list_capability_enablement(
             total_team_count,
             total_personal_space_count,
             impact,
+            reasoning_enabled_ids,
         ) = await asyncio.gather(
             aggregate_capability_catalog(deps),
             count_all_collaborative_teams(deps.team_dependencies),
             count_all_personal_spaces(deps.team_dependencies),
             compute_capability_impact(deps, collect_instances=True),
+            # REASON-01 §5: one table read for the whole list, joined per row
+            # below — never a query per model.
+            deps.get_model_reasoning_store().list_enabled_model_ids(),
         )
+    reasoning_enabled_ids = frozenset(reasoning_enabled_ids)
     # Per-row ReBAC reads are independent across rows too (#2089) — gather
     # every row's build instead of awaiting them one at a time.
     items = list(
@@ -257,6 +272,7 @@ async def list_capability_enablement(
                     total_team_count=total_team_count,
                     total_personal_space_count=total_personal_space_count,
                     impact=impact,
+                    reasoning_enabled_ids=reasoning_enabled_ids,
                 )
                 for entry in catalog.values()
             )
@@ -456,11 +472,92 @@ async def set_default_on(
             revived += await _revive_after_grant(
                 capability_id=capability_id, team_id=team_id, deps=deps
             )
+    # Switching a model OFF switches its reasoning off with it (REASON-01 §5.7).
+    # The two axes are independent by design — access has a subject, reasoning
+    # does not — but they are not independent in THIS direction: leaving a
+    # stored `reasoning_enabled` behind on a model the admin just withdrew means
+    # re-enabling the model later silently brings reasoning back, which nobody
+    # asked for. Fail-closed, and one-directional on purpose: turning a model on
+    # still does not turn its reasoning on.
+    reasoning_disabled = False
+    if not default_on and entry.kind == "model":
+        store = deps.get_model_reasoning_store()
+        # Read first so a model nobody ever toggled keeps NO row: an absent row
+        # and a stored `false` mean the same thing (§5.6), and writing one here
+        # would put a row on every model an admin ever switched off.
+        if capability_id in await store.list_enabled_model_ids():
+            await store.set_enabled(
+                model_capability_id=capability_id,
+                reasoning_enabled=False,
+                updated_by=user.uid,
+            )
+            reasoning_disabled = True
+            logger.info(
+                "[capability-reasoning] model=%s reasoning switched off with the "
+                "model itself by=%s",
+                capability_id,
+                user.uid,
+            )
     return CapabilityDefaultOnResult(
         capability_id=capability_id,
         default_on=default_on,
         suspended_instances=suspended,
         revived_instances=revived,
+        reasoning_disabled=reasoning_disabled,
+    )
+
+
+async def set_model_reasoning(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    reasoning_enabled: bool,
+    deps: ProductServiceDependencies,
+) -> ModelReasoningResult:
+    """Switch one model's reasoning on or off, platform-wide (REASON-01,
+    `MODEL-REASONING-ENABLEMENT-RFC.md` §5).
+
+    Sits in this service and behind the same `can_manage` gate as `default_on`
+    because it is the same admin surface — but it writes a plain table row, not
+    a ReBAC tuple, and that difference is the design (§5.1): reasoning has no
+    subject. It is not "who may use this model" (that stays on `can_use`,
+    untouched), it is "how the model runs" for whoever already may.
+
+    Rejects a capability with no thinking-capable profile: aptitude is declared
+    in `models_catalog.yaml` and no admin action can grant it (§5.3).
+
+    Takes effect at the next session preparation — the flag rides the
+    `ExecutionPreparation` snapshot (§5.5), so sessions already open keep the
+    setting they started with. That is the intended lifecycle, the same one the
+    team routing policy uses, and it is why this is a live *operational* lever
+    (§9): switching a model's reasoning off stops the next session from
+    reasoning without a redeploy.
+    """
+
+    rebac = _rebac(deps)
+    await _require_can_manage(rebac, user, capability_id)
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    if entry.kind != "model" or not entry.model_thinking_profile_ids:
+        raise ReasoningNotSupported(
+            f"Capability {capability_id!r} has no reasoning-capable model profile "
+            "— its reasoning cannot be switched on. Aptitude is declared per "
+            "profile in models_catalog.yaml (`supports_thinking`), not granted "
+            "by an administrator."
+        )
+    await deps.get_model_reasoning_store().set_enabled(
+        model_capability_id=capability_id,
+        reasoning_enabled=reasoning_enabled,
+        updated_by=user.uid,
+    )
+    logger.info(
+        "[capability-reasoning] model=%s reasoning_enabled=%s by=%s",
+        capability_id,
+        reasoning_enabled,
+        user.uid,
+    )
+    return ModelReasoningResult(
+        capability_id=capability_id, reasoning_enabled=reasoning_enabled
     )
 
 

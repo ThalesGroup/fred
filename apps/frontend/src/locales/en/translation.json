@@ -300,6 +300,7 @@
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
+      "reasoningRowLabel": "Reasoning",
       "selectLibraryFirst": "Select a library first."
     },
     "conversationAriaLabel": "Conversation",
@@ -868,6 +869,7 @@
           "enabledTeams": "Enabled teams",
           "defaultOn": "Enabled for all",
           "health": "Health",
+          "reasoning": "Reasoning",
           "actions": "Actions"
         },
         "enabledTeams": {
@@ -943,7 +945,12 @@
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
             "defaultError": "Could not reset the personal-space default."
           }
-        }
+        },
+        "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
+        "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
+        "reasoningOffToast": "Reasoning disabled for this model.",
+        "reasoningOnToast": "Reasoning enabled for this model.",
+        "reasoningToggleError": "Could not change this model's reasoning setting."
       },
       "corpusAudit": {
         "title": "Corpus audit",
@@ -1186,6 +1193,29 @@
       "tokenPlaceholder": "Enter the bootstrap secret"
     },
     "cancel": "Cancel",
+    "chatTrace": {
+      "ariaLabel": "Agent reasoning trace",
+      "details": "Details",
+      "hide": "Hide the agent's reasoning and tool calls",
+      "openReasoning": "Open the full reasoning",
+      "phase": {
+        "observation": "Observation",
+        "planning": "Planning",
+        "reflection": "Reflection",
+        "synthesis": "Synthesis",
+        "tool_use": "Tool use"
+      },
+      "rows_one": "{{count}} row",
+      "rows_other": "{{count}} rows",
+      "running": "running…",
+      "show": "Show the agent's reasoning and tool calls",
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "summaryReasoning": "Reasoning {{duration}}",
+      "summaryTools_one": "{{count}} tool",
+      "summaryTools_other": "{{count}} tools",
+      "thinking": "Thinking…"
+    },
     "collapse": "Collapse",
     "create": "Create",
     "delete": "Delete",
@@ -1808,6 +1838,14 @@
             "label": "Use case",
             "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
+          },
+          "reasoning": {
+            "label": "Reasoning",
+            "hint": "Let users turn the model's reasoning on for a single question, from the chat composer. Only appears when the model supports it and an administrator has enabled it."
+          },
+          "reasoningDefaultOn": {
+            "label": "Reasoning on by default",
+            "hint": "Every new conversation with this agent starts with the composer's reasoning toggle already on. Users can still switch it off per question. Reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
         "noTemplates": "No agent templates available — start a runtime pod.",
@@ -1825,7 +1863,6 @@
           "aria": "Form sections",
           "general": "General",
           "prompts": "Prompts",
-          "tools": "Tools",
           "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",

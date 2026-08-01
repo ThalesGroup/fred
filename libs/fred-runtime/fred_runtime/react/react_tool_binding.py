@@ -69,6 +69,31 @@ class BoundTool:
     tool: BaseTool
 
 
+#: The anti-repetition rule, stated on purpose (`AGENT-THINKING-API-RFC.md`
+#: §C.10 q4, precondition 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` §9).
+#:
+#: Amendment C §C.7 measured that a reasoning model on a tool loop re-issues the
+#: same call with byte-identical arguments in 12/12 turns with a generic prompt,
+#: and 0/12 with an explicit anti-repetition instruction. In production the
+#: defect was invisible — but only by accident: `build_tool_failure_recovery_suffix()`
+#: (`react_prompting.py`), written for a completely different problem (#2073,
+#: agents echoing raw tool-error text), happens to say "retry with CORRECTED
+#: arguments" and "answer from what other calls have ALREADY returned", and
+#: those two clauses were carrying the whole protection.
+#:
+#: That was a load-bearing dependency nobody had written down: rewording #2073's
+#: suffix would have silently re-exposed a measured defect with no test to catch
+#: it. This constant makes the protection intentional and greppable, and
+#: `test_react_prompting.py` ties it to reasoning drift by name so it cannot be
+#: deleted as boilerplate.
+TOOL_REPETITION_RULE = (
+    "- Never repeat a tool call you have already made in this turn with the "
+    "same arguments — its result has not changed. Re-read the result you "
+    "already have instead, and either call a DIFFERENT tool, call this one "
+    "with genuinely different arguments, or answer from what you have."
+)
+
+
 def build_runtime_tool_prompt_suffix(bound_tools: Sequence[BoundTool]) -> str:
     """
     Render the tool-availability suffix appended to the ReAct system prompt.
@@ -76,6 +101,10 @@ def build_runtime_tool_prompt_suffix(bound_tools: Sequence[BoundTool]) -> str:
     Why this exists:
     - the model should see the exact tools and names it may call in this runtime
     - one renderer keeps the prompt contract stable as tool bindings evolve
+    - it carries `TOOL_REPETITION_RULE` (see that constant): the explicit
+      anti-repetition instruction reasoning models need on a tool loop, stated
+      here deliberately rather than inherited by accident from #2073's
+      tool-failure suffix
 
     How to use:
     - call after binding tools and append the returned text to the system prompt
@@ -101,6 +130,7 @@ def build_runtime_tool_prompt_suffix(bound_tools: Sequence[BoundTool]) -> str:
             "- Use only the tools listed above.",
             "- Follow each tool's JSON argument schema exactly.",
             "- Never invent tool names or tool results.",
+            TOOL_REPETITION_RULE,
         ]
     )
     return "\n".join(lines)

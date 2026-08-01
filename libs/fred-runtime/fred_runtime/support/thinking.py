@@ -42,6 +42,8 @@ How to use:
 - `extract_thinking_text(item)` — pull the plain reasoning text out of one block
 - `content_to_text(content)` — render message content as text, dropping reasoning
 - `strip_reasoning_from_history(messages)` — sanitise assistant messages before replay
+- `thread_reasoning_within_open_turn(messages)` — same, but keeping the current
+  turn's reasoning as text (candidate fix for reasoning drift; not yet wired)
 """
 
 from __future__ import annotations
@@ -209,3 +211,73 @@ def strip_reasoning_from_history(
         else:
             sanitised.append(message)
     return sanitised
+
+
+# Marker prefixing re-homed reasoning. Deliberately explicit: the text lands in
+# an ordinary assistant `content` field, so the model must be able to tell its
+# own recalled reasoning from something it said to the user.
+RECALLED_REASONING_PREFIX = "[your reasoning so far this turn] "
+
+
+def _rehome_reasoning_as_text(message: AIMessage) -> AIMessage:
+    """
+    Collapse one assistant message to text, KEEPING its reasoning.
+
+    The counterpart of `strip_reasoning_from_history`'s per-message branch: same
+    flattening, opposite decision about the reasoning blocks.
+    """
+
+    fragments: list[str] = []
+    answer = content_to_text(message.content, out_fragments=fragments)
+    reasoning = "".join(fragments).strip()
+    if not reasoning:
+        return message.model_copy(update={"content": answer})
+    recalled = f"{RECALLED_REASONING_PREFIX}{reasoning}"
+    merged = f"{recalled}\n\n{answer}" if answer else recalled
+    return message.model_copy(update={"content": merged})
+
+
+def thread_reasoning_within_open_turn(
+    messages: Sequence[BaseMessage],
+) -> list[BaseMessage]:
+    """
+    Replay the model's reasoning inside the turn it belongs to; strip it elsewhere.
+
+    Why this exists (ISSUE-005 §6.3, AGENT-THINKING-API-RFC Amendment C/E):
+    - a reasoning model that calls a tool gets its own message back with the
+      content emptied, so it re-derives the same plan and re-issues the same
+      call — measured at 10/10 turns, 2.8 duplicate calls per question
+    - provider-native `thinking` blocks cannot carry that reasoning back:
+      `langchain_openai._format_message_content` drops them on both
+      `chat/completions` and `responses`, and the native `langchain_mistralai`
+      client blanks assistant content entirely whenever tool calls are present.
+      An ordinary `text` block is the only channel that survives either client
+    - reasoning from turns the user has already closed is NOT replayed: it costs
+      context on every later request and its value expires with the question
+
+    The open turn is everything after the last `HumanMessage` — the same
+    boundary `trim_to_human_boundary` uses.
+
+    NOT wired into `CheckpointHygieneMiddleware` yet: whether re-homed reasoning
+    suppresses the duplicate calls the way verbatim replay did (p = 0.034,
+    §C.6) is an open measurement. A `thinking` block is privileged context; a
+    `text` block is ordinary assistant speech, and the effect may not transport.
+    """
+
+    last_human = -1
+    for index, message in enumerate(messages):
+        if message.type == "human":
+            last_human = index
+
+    threaded: list[BaseMessage] = []
+    for index, message in enumerate(messages):
+        if not (isinstance(message, AIMessage) and isinstance(message.content, list)):
+            threaded.append(message)
+        elif index > last_human:
+            threaded.append(_rehome_reasoning_as_text(message))
+        else:
+            # Closed turn — same treatment as today.
+            threaded.append(
+                message.model_copy(update={"content": content_to_text(message.content)})
+            )
+    return threaded

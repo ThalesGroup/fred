@@ -243,6 +243,8 @@ export default function ManagedChatPage() {
                 onSearchPolicyChange: chat.setSearchPolicy,
                 ragScope: chat.ragScope,
                 onRagScopeChange: chat.setRagScope,
+                reasoning: chat.reasoning,
+                onReasoningChange: chat.setReasoning,
               }}
               contextPrompts={chat.contextPrompts}
               contextPromptIds={chat.contextPromptIds}

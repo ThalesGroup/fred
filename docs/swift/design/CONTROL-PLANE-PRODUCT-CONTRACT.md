@@ -1891,7 +1891,177 @@ team content now, not a curated taxonomy. `PromptCard`/`PromptsPage` drop the
 (Créer/Éditer/Supprimer, 409 surfaced as a toast) reachable from a button in
 the category filter-chips row.
 
-## 33. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
+---
+
+## 33. Contract Notes — REASON-01, per-model reasoning activation (2026-07-29, #2166)
+
+Level 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` (phase 1 = levels 1–2; levels
+3–4 are phase 2 and not in this change).
+
+### New route
+
+`PATCH /admin/capabilities/{capability_id}/reasoning`, body
+`SetModelReasoningRequest { reasoning_enabled: bool }`, returning
+`ModelReasoningResult { capability_id, reasoning_enabled }`. Gated on
+`capability#can_manage` (org admin), the same gate as the sibling `default-on`
+and `personal-scope` routes it sits next to.
+
+**409 when the capability is not a model, or is a model with no
+thinking-capable profile** (`ReasoningNotSupported`). Aptitude is declared per
+profile in `models_catalog.yaml` (`supports_thinking`) and no admin action can
+grant it (RFC §5.3) — storing the row anyway would persist an activation that
+could never take effect, and put a control in the UI that lies about what it
+does.
+
+### Why a table and not a ReBAC relation
+
+Reasoning has **no subject**. It answers "does this model run with reasoning",
+not "who may use this model" — so it is not a permission (RFC §5.1). Building
+it as a grant would mean duplicating the `capability` type's seven-relation
+enablement lattice for an axis with no per-subject semantics at all. It is one
+row per `kind="model"` capability id in the new `model_reasoning` table
+(migration `a7c3d91f2b40`), written only through the route above.
+
+**Per-team model authorization is untouched.** ReBAC `can_use` on
+`model__<provider>__<name>` still decides who may use a model; this decides how
+it runs for whoever already may (RFC §5.4). The two axes share the admin screen
+and must not be confused: on the models view, "Enabled for all" is access,
+"Reasoning" is behaviour.
+
+### Absent row = OFF (RFC §5.6)
+
+Enabling a model and enabling its reasoning are two separate admin actions, in
+that order; the second is never implied by the first. A stored `false` and no
+row at all are indistinguishable by construction — the store's read side returns
+only enabled ids.
+
+**Consequence, deliberate:** a deployment that ran reasoning through
+`models_catalog.yaml` alone **stops reasoning at this upgrade** until an
+administrator switches it on (RFC §5.6.1). Release-noted, not silent. Chosen on
+safety grounds — `AGENT-THINKING-API-RFC.md` Amendment C measured 10/10 turns
+with duplicate tool calls on the profile this affects — and it puts the live
+per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §9).
+
+### Contract additions
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `CapabilityEnablementItem.thinking_profile_ids` | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all** |
+| `CapabilityEnablementItem.reasoning_enabled` | `GET /admin/capabilities` | Current activation; `false` when no row is stored |
+| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction |
+| `ExecutionPreparation.reasoning_enabled_model_ids` | prepare-execution | The activation snapshot the runtime enforces against |
+
+### Delivery to the runtime
+
+`ExecutionPreparation.reasoning_enabled_model_ids` → folded by the frontend onto
+`RuntimeContext.reasoning_enabled_model_ids` → `RoutedChatModelFactory` strips
+the reasoning settings for any model absent from it, at client construction
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.29). Resolved **once at session prep**, the
+same three-hop channel and lifecycle as `chat_default_profile_id`
+(`TEAM-ROUTING-POLICY-RFC.md` §8.2) — never a per-turn lookup. A session already
+open therefore keeps the setting it started with; the toggle takes effect from
+the next prepare-execution.
+
+### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
+
+Levels 3-4 shipped (`RUNTIME-EXECUTION-CONTRACT.md` §8.30). Reasoning is **not**
+a capability (RFC §15, Amendment A) — it was built as one and withdrawn before
+release, because an agent does not *use* reasoning the way it uses a tool.
+
+### Contract additions
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `reasoning_enabled` | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Level 3: does this agent offer the composer's reasoning toggle |
+| `reasoning_enabled` | `ManagedAgentInstanceSummary` | Current setting, so the edit and duplicate flows can hydrate it |
+| `reasoning_enabled` | `ManagedAgentTuning` | Where it is persisted — a plain agent property beside `role`/`description`, **not** a `capability_config` slice |
+| `reasoning_disabled` | `CapabilityDefaultOnResult` | True when switching this **model** off also switched its reasoning off (RFC §5.7, 2026-07-30) |
+
+`UpdateAgentInstanceRequest.reasoning_enabled` follows the same "omit means
+unchanged" convention as `role` and `usage_statement`, so a partial update such
+as the enable/disable toggle cannot silently switch an agent's reasoning offer
+off.
+
+**`reasoning_enabled` on the tuning is a security-relevant field, not a UI hint.**
+The runtime resolves it server-side through
+`GET /teams/{team_id}/agent-instances/{id}/runtime` and intersects it into the
+reasoning ceiling it enforces (`RUNTIME-EXECUTION-CONTRACT.md` §8.30, RFC §14.5).
+Dropping it from that binding response would silently re-open level 3.
+
+### Switching a model off switches its reasoning off (RFC §5.7)
+
+`PATCH /admin/capabilities/{id}/default-on` with `default_on: false` on a
+`kind="model"` capability now also clears a stored `reasoning_enabled` for that
+model, and reports it on `CapabilityDefaultOnResult.reasoning_disabled`. One
+direction only — enabling a model still never enables its reasoning (§5.4). No
+row is written when none existed: an absent row and a stored `false` are the same
+state, so the cascade must not stamp `false` rows across the table.
+
+### The composer control is emitted by the PLATFORM
+
+`prepare-execution` appends the `reasoning_toggle` descriptor itself
+(`_platform_reasoning_control`) instead of a capability producing it. Two
+consequences worth stating:
+
+1. **`ChatControlDescriptor.capability_id` now has a reserved value**,
+   `PLATFORM_CHAT_CONTROL_OWNER = "platform"`. Before this, every chat control
+   came from a capability (`AGENT-CAPABILITY-RFC.md` §3.3); that statement is no
+   longer true. The frontend needed no change — its registry already falls back
+   to the capability-agnostic stock kit by widget id when no plugin claims the
+   `(capability_id, widget)` pair.
+2. **The value does not travel back on `turn_options`.** It rides
+   `RuntimeContext.reasoning` like `search_policy` and `search_rag_scope`, which
+   is what a per-turn platform chat option has always used.
+
+### Addendum — REASON-01 Amendment B, the author seeds the toggle (2026-07-30, #2175)
+
+`params.default` on the emitted `reasoning_toggle` descriptor was hardcoded
+`False`; it is now the agent's own `reasoning_default_on` (RFC §16).
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `reasoning_default_on` | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Does a new conversation start with the composer's reasoning toggle already on |
+| `reasoning_default_on` | `ManagedAgentInstanceSummary` | Current setting, so the edit and duplicate flows hydrate it like `reasoning_enabled` |
+| `reasoning_default_on` | `ManagedAgentTuning` | Where it is persisted — beside `reasoning_enabled`, still not a `capability_config` slice |
+
+**This is a seed, not a gate, and the distinction is the contract.** §8's gates
+are evaluated first and unchanged: with the offer off, or no model reasoning
+platform-wide, **no descriptor is emitted at all** regardless of this field. A
+stored `true` under a withdrawn offer is inert, never a back door that leaves
+reasoning on for users.
+
+**The two reasoning fields never write each other.** `reasoning_enabled: false`
+does not clear `reasoning_default_on` — deliberately, so an author who withdraws
+the offer and later restores it recovers their default instead of silently
+reverting to off. Clients submit both fields independently; the "omit means
+unchanged" convention applies to each on `UpdateAgentInstanceRequest`.
+
+Unlike `reasoning_enabled`, this field is **not** security-relevant: it never
+reaches the runtime binding and cannot widen the enforced ceiling (levels 1-2 ∩
+level 3). It only decides where a switch the user still controls starts.
+
+### §8 diagnosability — the control is absent, never inert
+
+RFC §8 requires the composer control to be **absent** whenever an upstream gate
+is closed: four gates stand between a user and a reasoning turn and three are
+invisible from the chat page, so a present-but-dead toggle produces the support
+ticket "I turned reasoning on and nothing happened" with no way to tell which
+gate blocked. `_platform_reasoning_control` returns `None` when the agent does
+not offer reasoning, or when no model has its reasoning enabled platform-wide.
+
+**No catalog fetch is needed on this send path**, because the write path already
+guarantees the aptitude gate: `PATCH /admin/capabilities/{id}/reasoning` 409s
+(`ReasoningNotSupported`) for a model with no `supports_thinking` profile, so a
+stored enabled row can only ever name a reasoning-capable model.
+
+**Deliberately not narrowed to the profile the turn will route to.** Routing
+resolves a profile per *operation* at runtime while chat controls are computed
+once per session (RFC §12 q3). Erring toward under-hiding — showing a control a
+later operation might not honour — beats over-hiding one that would have worked.
+
+---
+
+## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
 
 **Gap found and closed.** `prepare_execution` (`product/service.py`) accepts
 an optional `session_id` and, when present, resolves that session's

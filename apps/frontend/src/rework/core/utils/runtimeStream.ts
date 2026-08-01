@@ -107,3 +107,30 @@ export function mergeRoutingPolicy(
       : {}),
   };
 }
+
+/**
+ * Fold the platform reasoning activation (resolved by control-plane
+ * prepare-execution, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5) onto a base
+ * runtime context — same "resolved once per session, forwarded unchanged per
+ * turn" contract as the two helpers above.
+ *
+ * Kept separate from `mergeRoutingPolicy` on purpose: this is not routing.
+ * Routing decides WHICH model answers; this decides whether that model reasons.
+ * The two are independent axes and folding them into one helper would suggest
+ * otherwise.
+ *
+ * Unlike the helpers above, an EMPTY list is forwarded rather than omitted.
+ * Empty is meaningful here — "no model reasons" — and it costs nothing to be
+ * explicit about it, where reading an absent key as "unrestricted" (the
+ * `usable_model_ids` convention) would be exactly backwards. The runtime treats
+ * absent and empty identically, so this is belt and braces, not a behaviour.
+ */
+export function mergeReasoningActivation(
+  base: Partial<RuntimeContext>,
+  reasoningEnabledModelIds: string[] | null | undefined,
+): RuntimeContext {
+  return {
+    ...base,
+    ...(reasoningEnabledModelIds != null ? { reasoning_enabled_model_ids: reasoningEnabledModelIds } : {}),
+  };
+}

@@ -145,6 +145,45 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
     return f"profile:{rc.chat_default_profile_id or 'none'}|rules:{rule_ids or 'none'}"
 
 
+@tool("demo.reasoning", description="Return the bound reasoning activation snapshot.")
+async def _demo_reasoning(ctx: ToolContext) -> str:
+    """
+    Return the platform reasoning activation bound to the current runtime context.
+
+    Why this exists:
+    - REASON-01 (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.5) ships the admin's
+      per-model reasoning toggle through the same three-hop channel the two
+      probes above cover, and `RuntimeContext` is rebuilt field-by-field in
+      `agent_app._iterate_runtime_event_payloads` — a field nobody names is
+      silently dropped. Both neighbours here exist because that already
+      happened twice in production.
+    - The blast radius is specific: `RoutedChatModelFactory` STRIPS the
+      reasoning settings for every model absent from this list (§5.6.2), so a
+      dropped field pins reasoning permanently off and makes the admin toggle
+      decorative.
+
+    How to use it:
+    - invoked by the reasoning regression agent through the runtime
+    """
+
+    rc = ctx.binding.runtime_context
+    ids = rc.reasoning_enabled_model_ids
+    return (
+        f"reasoning:{','.join(ids) if ids else 'none'}"
+        f"|turn:{'unset' if rc.reasoning is None else str(rc.reasoning).lower()}"
+    )
+
+
+class _ReasoningAgent(ReActAgent):
+    """Tiny agent that surfaces the bound reasoning activation through a tool."""
+
+    agent_id: str = "rags.sample.reasoning"
+    role: str = "Reasoning activation probe"
+    description: str = "Reports the reasoning activation snapshot it received."
+    system_prompt_template: str = "Use the demo_reasoning tool, then answer."
+    tools = (_demo_reasoning,)
+
+
 class _EchoAgent(ReActAgent):
     """
     Small authored agent used to validate pod runtime wiring.
@@ -672,6 +711,183 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
     echoed = " ".join(p.get("content", "") for p in tool_results)
     assert "profile:chat.anthropic.claude-sonnet" in echoed
     assert "rules:planning-to-haiku" in echoed
+
+
+def _run_managed_reasoning_turn(
+    monkeypatch, tmp_path, *, agent_reasoning_enabled: bool
+) -> str:
+    """Execute one managed-instance turn on `_ReasoningAgent` and return what the
+    probe tool echoed about the reasoning activation it was bound with.
+
+    Managed, not raw `agent_id`, because level 3 lives on the instance tuning
+    control-plane resolves server-side — a raw-id turn has no author and so has
+    no level 3 to test.
+    """
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload)
+            self.reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            return _FakeResponse(
+                {
+                    "agent_instance_id": "instance-reasoning",
+                    "template_agent_id": "rags.sample.reasoning",
+                    "owner_scope": "team",
+                    "owner_team_id": "fredlab",
+                    "enabled": True,
+                    "tuning": {
+                        "role": "Reasoning activation probe",
+                        "description": "Reports the activation it received.",
+                        "tags": [],
+                        "fields": [],
+                        # REASON-01 level 3, resolved server-side.
+                        "reasoning_enabled": agent_reasoning_enabled,
+                    },
+                }
+            )
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-reasoning-1",
+                        "name": "demo_reasoning",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _ReasoningAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-reasoning",
+                "input": "hello",
+                "session_id": "session-reasoning",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "team_id": "fredlab",
+                    "reasoning_enabled_model_ids": [
+                        "model__openai__mistral-small-latest"
+                    ],
+                    # Level 4: the user's per-question choice travels on the same
+                    # context, and is dropped by the same field-by-field rebuild
+                    # if nobody names it.
+                    "reasoning": True,
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    return " ".join(p.get("content", "") for p in tool_results)
+
+
+def test_execute_forwards_reasoning_activation_to_agent_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression: `runtime_context.reasoning_enabled_model_ids` must reach the
+    agent binding (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5).
+
+    Why this exists:
+    - the third field to travel the control-plane → frontend → runtime channel
+      the two tests above already guard, and the third chance for
+      `_iterate_runtime_event_payloads`'s field-by-field `RuntimeContext`
+      rebuild to silently drop it. It did, in the first cut of this feature.
+    - dropping it is not a degraded experience, it is a dead feature: the
+      factory strips reasoning settings for any model NOT in this list (§5.6.2),
+      so `None` here means no model ever reasons however the admin toggles it.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    echoed = _run_managed_reasoning_turn(
+        monkeypatch, tmp_path, agent_reasoning_enabled=True
+    )
+    # The tool echoed the bound activation — proving the field survived the
+    # request → RuntimeContext binding (not dropped → not "reasoning:none").
+    assert "reasoning:model__openai__mistral-small-latest" in echoed
+    assert "turn:true" in echoed
+
+
+def test_agent_with_reasoning_disabled_ignores_platform_activation(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression: an agent whose author left reasoning OFF must not reason, even
+    when the platform enabled the model and the request says so (REASON-01
+    level 3 — all four levels must hold, `MODEL-REASONING-ENABLEMENT-RFC.md` §3).
+
+    Why this exists:
+    - the shipped first cut gated only the *composer control* on level 3, so an
+      agent with the switch off showed no toggle and reasoned anyway: the
+      snapshot list rode the request untouched and the factory saw an open
+      ceiling. Silent, and invisible in the UI by construction.
+    - the fix must live pod-side, on the server-resolved tuning, not in what the
+      request carries: `reasoning_enabled_model_ids` and `reasoning` below are
+      both exactly what a client would send with the toggle on.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    echoed = _run_managed_reasoning_turn(
+        monkeypatch, tmp_path, agent_reasoning_enabled=False
+    )
+    assert "reasoning:none" in echoed
+    # Level 4 still travels — it is the user's answer, and it is not this level's
+    # job to rewrite it. The empty ceiling above is what makes the turn not reason.
+    assert "turn:true" in echoed
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(

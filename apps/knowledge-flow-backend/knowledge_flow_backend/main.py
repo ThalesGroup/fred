@@ -35,6 +35,7 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool, register_exception_handlers
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
@@ -72,6 +73,7 @@ from knowledge_flow_backend.features.resources.controller import ResourceControl
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
 from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.tree.controller import TreeController
@@ -137,6 +139,10 @@ def create_app() -> FastAPI:
         async with application_context.get_pg_async_engine().begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
 
+        # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
+        # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).
+        gc_diagnostics = install_gc_diagnostics()
+
         process_kpi_task = None
         db_pool_kpi_task = None
         interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
@@ -179,6 +185,7 @@ def create_app() -> FastAPI:
                 db_pool_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await db_pool_kpi_task
+            await gc_diagnostics.stop()
             await application_context.shutdown()
 
     app = FastAPI(
@@ -199,6 +206,10 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
+    # The tabular execution guard is reached from several features (tabular
+    # routes, document preview, summarize, corpus filesystem), so its two
+    # errors are mapped once here rather than per route.
+    register_tabular_exception_handlers(app)
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)

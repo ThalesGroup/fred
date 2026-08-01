@@ -53,6 +53,8 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
+
 _BASE_SYSTEM_PROMPT_EN = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
@@ -175,7 +177,11 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     )
 
     def policy(self) -> ReActPolicy:
-        return ReActPolicy(system_prompt_template=self.system_prompt_template)
+        return ReActPolicy(
+            system_prompt_template=self.system_prompt_template,
+            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
+            tool_selection=REASONING_SAFE_TOOL_SELECTION,
+        )
 
 
 GENERAL_ASSISTANT_AGENT = GeneralAssistantDefinition()

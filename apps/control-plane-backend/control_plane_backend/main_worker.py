@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from fred_core import build_log_store, log_setup
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.scheduler import SchedulerBackend
 
 from control_plane_backend.app.container import (
@@ -55,6 +56,9 @@ async def main() -> None:
 
     container = build_application_container(configuration)
     initialize_shared_stores(container)
+    # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
+    # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).
+    gc_diagnostics = install_gc_diagnostics()
     try:
         if not configuration.scheduler.enabled:
             logger.warning(
@@ -74,6 +78,7 @@ async def main() -> None:
             build_lifecycle_action_dependencies(container),
         )
     finally:
+        await gc_diagnostics.stop()
         await container.shutdown()
 
 

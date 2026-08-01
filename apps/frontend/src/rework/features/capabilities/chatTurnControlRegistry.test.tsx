@@ -89,3 +89,32 @@ describe("chatTurnControlRegistry (#1976)", () => {
     expect(resolved[1].Component).toBe(StubControl);
   });
 });
+
+describe("platform-owned controls (REASON-01 level 4)", () => {
+  it("ships a reasoning_toggle control in the stock kit", async () => {
+    // Without a stock-kit entry the registry silently skips unknown widget ids
+    // — forward-compatible by design, which is exactly why a missing entry
+    // would be invisible: the composer would simply never show the toggle and
+    // nothing would complain.
+    const { stockChatTurnControlKit } = await import("./stockKit");
+
+    expect(stockChatTurnControlKit.reasoning_toggle).toBeDefined();
+  });
+
+  it("resolves a descriptor owned by the PLATFORM rather than a capability", () => {
+    // Reasoning is not a capability (MODEL-REASONING-ENABLEMENT-RFC.md §7), so
+    // control-plane emits its descriptor with the reserved `platform` owner. No
+    // plugin claims that id, so resolution must fall through to the stock kit
+    // by widget id — if it did not, the composer row would silently never
+    // appear and the whole level-4 feature would be invisible.
+    const registry = buildChatTurnControlRegistry(
+      [{ id: "demo_echo", chatTurnControls: { demo_toggle: StockControl } }],
+      { search_policy: StockControl },
+    );
+
+    const resolved = resolveChatTurnControls([descriptor("platform", "search_policy")], registry);
+
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].capabilityId).toBe("platform");
+  });
+});

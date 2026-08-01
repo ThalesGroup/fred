@@ -51,6 +51,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
     },
+    patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+    },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
     },
@@ -283,6 +286,9 @@ export const {
     useSetCapabilityDefaultOnMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation:
     useSetCapabilityPersonalScopeMutation,
+  // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
+  usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation:
+    useSetModelReasoningMutation,
   // Fired on demand from the disable-confirmation dialog (lazy — not on render).
   useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
     useLazyCapabilityRevokeImpactQuery,

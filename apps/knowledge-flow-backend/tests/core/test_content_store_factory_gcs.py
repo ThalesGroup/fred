@@ -33,3 +33,27 @@ def test_gcs_content_store_factory_fails_fast_without_signing_email(app_context:
 
     with pytest.raises(ValueError, match="signing_service_account_email"):
         app_context.get_content_store()
+
+
+def test_get_content_store_builds_once_and_reuses_the_instance(app_context: ApplicationContext):
+    """`get_content_store()` must cache its instance like its siblings `get_file_store()`/
+    `get_log_store()` in the same class — each backend's __init__ builds a real client
+    (a GCS `storage.Client()`, in production, with its own auth + HTTP connection pool),
+    so rebuilding it on every call reloads that on every Temporal activity that touches
+    content storage, not just once per pod."""
+    first = app_context.get_content_store()
+    second = app_context.get_content_store()
+
+    assert first is second
+
+
+def test_get_embedder_builds_once_and_reuses_the_instance(app_context: ApplicationContext):
+    """`get_embedder()` was the one get_* factory in ApplicationContext without a cache
+    slot, unlike every sibling (get_file_store, get_content_store, ...) — it's called
+    per-activity from several scheduler activities (fast_store_vectors, delete_vectors,
+    ...), not just once at startup, so rebuilding the underlying provider client on
+    every call matters just like the content-store case above."""
+    first = app_context.get_embedder()
+    second = app_context.get_embedder()
+
+    assert first is second

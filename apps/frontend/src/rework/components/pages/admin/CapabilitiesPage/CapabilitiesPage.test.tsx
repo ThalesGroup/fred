@@ -47,6 +47,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useAdminCapabilitiesQuery: () => h.list,
   useListAllTeamsQuery: () => h.allTeams,
   useSetCapabilityDefaultOnMutation: () => [vi.fn(), { isLoading: false }],
+  useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
   useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
@@ -348,5 +349,20 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-0
     expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
     expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
     expect(html).toContain("rework.admin.capabilities.kindFilter.model");
+  });
+});
+
+describe("CapabilitiesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5)", () => {
+  it("does not render a reasoning column on the tools view", () => {
+    // The two axes share this screen and must not be confused: "Enabled for
+    // all" is access (per team, ReBAC), reasoning is how a model runs (global).
+    // A tool has no reasoning axis at all, so the column is absent entirely
+    // rather than rendered blank (§5.4).
+    h.list = {
+      data: { items: [cap({ id: "web_search", kind: "tool", thinking_profile_ids: ["irrelevant"] })] },
+      isLoading: false,
+      isError: false,
+    };
+    expect(render()).not.toContain("rework.admin.capabilities.col.reasoning");
   });
 });

@@ -1485,6 +1485,10 @@ async def test_team_agent_instances_returns_managed_identity(
             "description": "Managed echo agent",
             "role": "Echo Team Agent",
             "usage_statement": "",
+            # REASON-01 level 3 — a plain agent property, default off.
+            "reasoning_enabled": False,
+            # Amendment B — where the composer's toggle starts, also default off.
+            "reasoning_default_on": False,
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},
@@ -3007,6 +3011,7 @@ def _build_erasure_deps(
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]

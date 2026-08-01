@@ -14,10 +14,10 @@ common_model_settings:
   temperature: 0.0
 
 default_profile_by_capability:
-  chat: default.chat.mistral
-  language: default.language.mistral
+  chat: chat.mistral.small
+  language: language.mistral.small
 profiles:
-  - profile_id: default.chat.mistral
+  - profile_id: chat.mistral.medium
     capability: chat
     # Non-reasoning model: structured output (JSON) and tool loops are reliable.
     # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
@@ -29,7 +29,7 @@ profiles:
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
-  - profile_id: default.language.mistral
+  - profile_id: language.mistral.medium
     capability: language
     model:
       provider: openai
@@ -37,6 +37,34 @@ profiles:
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
+  - profile_id: chat.mistral.small
+    capability: chat
+    description: "Faster and lower-cost Mistral Small profile for everyday chat tasks."
+    # Declared aptitude, NOT activation (REASON-01 §4): this profile ships
+    # `reasoning_effort`, so it must say so — a reasoning setting without this
+    # flag fails at pod boot. Whether reasoning actually runs is the platform
+    # admin's per-model toggle (§5), which is OFF until someone turns it on.
+    # Note `language.mistral.small` below shares this (provider, name) and is
+    # deliberately NOT thinking-capable: aptitude is per profile.
+    supports_thinking: true
+    model:
+      provider: openai
+      name: mistral-small-latest
+      settings:
+        base_url: https://api.mistral.ai/v1
+        max_retries: 2
+        reasoning_effort: high
+
+  - profile_id: language.mistral.small
+    capability: language
+    description: "Faster and lower-cost Mistral Small profile for lightweight language tasks."
+    model:
+      provider: openai
+      name: mistral-small-latest
+      settings:
+        base_url: https://api.mistral.ai/v1
+        max_retries: 2
+
   - profile_id: default.chat.openai.prod
     capability: chat
     description: "Default balanced chat model for production conversations."

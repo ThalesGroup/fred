@@ -325,6 +325,225 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     assert messages[3].channel == Channel.final
 
 
+def test_write_turn_history_persists_reasoning_blocks() -> None:
+    """
+    A closed reasoning block must produce one ``Channel.thought`` row carrying
+    the accumulated text and the extras the chat UI renders from.
+
+    Why this test exists:
+    - reasoning was streamed to the UI but never persisted, so a page reload
+      erased the whole trace (RFC AGENT-THINKING-API §C.9 — surfacing was
+      specified, storage never was)
+    - the envelope must match what `useChatSse.ts` emits live, because
+      `traceUtils.thoughtExtras()` reads streamed and reloaded rows through one
+      path; a divergence here is invisible in tests but breaks the reload view
+    """
+    from fred_core.history.history_schema import Channel, Role
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    payloads = [
+        {
+            "kind": "thought_start",
+            "thought_id": "t1",
+            "phase": "planning",
+            "title": "Model reasoning",
+            "source": "model_native",
+        },
+        {"kind": "thought_delta", "thought_id": "t1", "delta": "I need the "},
+        {"kind": "thought_delta", "thought_id": "t1", "delta": "contract term."},
+        {
+            "kind": "tool_call",
+            "call_id": "c1",
+            "tool_name": "knowledge_search",
+            "arguments": {"query": "delay"},
+        },
+        {"kind": "tool_result", "call_id": "c1", "content": "Article 4.2"},
+        {
+            "kind": "thought_end",
+            "thought_id": "t1",
+            "conclusion": "Found it",
+            "duration_ms": 16400,
+        },
+        {"kind": "final", "content": "Three weeks."},
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s3",
+            user_id="carol",
+            request_message="what is the delay?",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    store.save.assert_awaited_once()
+    messages = store.save.call_args.kwargs["messages"]
+
+    thoughts = [m for m in messages if m.channel == Channel.thought]
+    assert len(thoughts) == 1, f"expected one thought row, got {len(thoughts)}"
+    thought = thoughts[0]
+
+    assert thought.role == Role.assistant
+    assert thought.parts[0].text == "I need the contract term."
+
+    extras = thought.metadata.extras
+    assert extras["thought_id"] == "t1"
+    assert extras["phase"] == "planning"
+    assert extras["title"] == "Model reasoning"
+    assert extras["source"] == "model_native"
+    assert extras["conclusion"] == "Found it"
+    assert extras["duration_ms"] == 16400
+    # A persisted block is complete — the live-only "still running" flag must
+    # never be stored, or the reloaded trace pulses forever.
+    assert "streaming_delta" not in extras
+
+    # The block closes only at the first answer delta, so it ends *after* the
+    # tool rows — but it must rank *before* them, as it did in the live stream.
+    tool_call_rank = next(m.rank for m in messages if m.channel == Channel.tool_call)
+    assert thought.rank < tool_call_rank
+
+
+def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:
+    """
+    ``tool_use`` blocks must not be persisted.
+
+    Why this test exists:
+    - the runtime opens one around every tool call (RFC Amendment A, Layer 1),
+      and the chat UI has hidden them since Amendment B because the tool
+      call/result combo row already conveys the same information
+    - persisting them would add up to `max_tool_calls_per_turn` (12) empty rows
+      per turn, and they would render as reasoning cards the live view never showed
+    """
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    payloads = [
+        {
+            "kind": "thought_start",
+            "thought_id": "tu1",
+            "phase": "tool_use",
+            "title": "Calling knowledge_search",
+            "source": "authored",
+        },
+        {
+            "kind": "tool_call",
+            "call_id": "c1",
+            "tool_name": "knowledge_search",
+            "arguments": {},
+        },
+        {"kind": "tool_result", "call_id": "c1", "content": "ok"},
+        {"kind": "thought_end", "thought_id": "tu1", "conclusion": "Done"},
+        {"kind": "final", "content": "Answered."},
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s4",
+            user_id="dave",
+            request_message="q",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert [m for m in messages if m.channel == Channel.thought] == []
+    # The skipped block must not consume a rank either — user, call, result, final.
+    assert [m.rank for m in messages] == [0, 1, 2, 3]
+
+
+def test_write_turn_history_persists_thought_left_open_by_a_truncated_turn() -> None:
+    """
+    A reasoning block the stream never closed must still be persisted.
+
+    Why this test exists:
+    - a crashed node or a dropped connection ends the turn without THOUGHT_END,
+      and the live UI closes such blocks itself on `final` (`useChatSse.ts`)
+    - without this flush, reasoning the user watched would vanish on reload
+      precisely on the turns where it is most useful to inspect
+    """
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    payloads = [
+        {
+            "kind": "thought_start",
+            "thought_id": "t9",
+            "phase": "planning",
+            "title": None,
+            "source": "model_native",
+        },
+        {"kind": "thought_delta", "thought_id": "t9", "delta": "half a thought"},
+        {"kind": "node_error", "error_message": "boom"},
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s5",
+            user_id="erin",
+            request_message="q",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    thoughts = [m for m in messages if m.channel == Channel.thought]
+    assert len(thoughts) == 1
+    assert thoughts[0].parts[0].text == "half a thought"
+    assert thoughts[0].metadata.extras["conclusion"] is None
+
+
+def test_write_turn_history_drops_empty_reasoning_blocks() -> None:
+    """
+    A block that carries neither text nor conclusion must produce no row.
+
+    Why this test exists:
+    - an empty ``Channel.thought`` row renders as a blank reasoning card, which
+      reads as a rendering bug rather than as "the model said nothing here"
+    """
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    payloads = [
+        {
+            "kind": "thought_start",
+            "thought_id": "t0",
+            "phase": "synthesis",
+            "title": None,
+            "source": "model_native",
+        },
+        {"kind": "thought_end", "thought_id": "t0"},
+        {"kind": "final", "content": "Answer."},
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s6",
+            user_id="frank",
+            request_message="q",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert [m for m in messages if m.channel == Channel.thought] == []
+
+
 # ---------------------------------------------------------------------------
 # Test 2: HistoryStorePort protocol compliance
 # ---------------------------------------------------------------------------

@@ -1195,3 +1195,137 @@ def test_allowed_chunk_keys_includes_chunk_kind():
     clean, dropped = sanitize_chunk_metadata({"chunk_uid": "x::pointer", "chunk_kind": "dataset_pointer"})
     assert clean["chunk_kind"] == "dataset_pointer"
     assert "chunk_kind" not in dropped
+
+
+@pytest.mark.asyncio
+async def test_query_mounts_only_the_datasets_the_sql_references(tmp_path):
+    """
+    Verify an unscoped query pays only for the datasets it actually reads.
+
+    Why this exists:
+    - Leaving `dataset_uids` empty selects every readable dataset, and every
+      selected dataset used to be mounted regardless of the SQL. On a remote
+      content store that is one Parquet metadata fetch per dataset before any
+      query runs, so an unscoped query on a large tenant was the cheapest way to
+      overload the pod (issue #2182 finding D).
+    """
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+    metadata_store = app_context.get_metadata_store()
+    content_store.clear()
+
+    for index in range(4):
+        await _ingest_csv(
+            tmp_path=tmp_path,
+            metadata_store=metadata_store,
+            document_uid=f"doc-{index}",
+            file_name=f"table-{index}.csv",
+            content=f"city,amount\nParis,{index}\n",
+        )
+
+    service = TabularService()
+    datasets = await service.list_datasets(_user())
+    assert len(datasets) == 4
+    target_alias = {dataset.document_uid: dataset.query_alias for dataset in datasets}["doc-2"]
+
+    mounted: list[list[str]] = []
+    original_mount = service._mount_datasets
+
+    def _record(*, connection, datasets, handle):
+        mounted.append([dataset.query_alias for dataset in datasets])
+        return original_mount(connection=connection, datasets=datasets, handle=handle)
+
+    service._mount_datasets = _record
+
+    # No dataset_uids at all: every dataset is authorized and selected, but only
+    # the one named in the SQL may be mounted.
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {target_alias}"))
+
+    assert response.rows == [{"amount": 2}]
+    assert mounted == [[target_alias]]
+    assert response.query_aliases == [target_alias]
+    assert response.dataset_uids == ["doc-2"]
+
+
+@pytest.mark.asyncio
+async def test_query_referencing_no_dataset_is_rejected(tmp_path):
+    """
+    Verify a query that reads no dataset is refused rather than executed.
+
+    Why this exists:
+    - A relation-free query is pointless on a tabular API, and it is also the
+      cheapest shape for a pure scalar-allocation attack, which DuckDB's
+      `memory_limit` does not bound (issue #2182). Rejecting it closes that
+      shape; it does not close the same expression with a FROM clause attached.
+    """
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    with pytest.raises(ValueError, match="references no authorized dataset"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT 1"))
+
+
+@pytest.mark.asyncio
+async def test_query_referencing_more_datasets_than_the_cap_is_rejected(tmp_path):
+    """
+    Verify the dataset cap is a hard error, never a silent truncation.
+
+    Why this exists:
+    - Silently dropping an alias would resurface as a confusing "unauthorized
+      dataset" error from `validate_read_query` instead of a clear message the
+      caller can act on.
+    """
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+    metadata_store = app_context.get_metadata_store()
+    content_store.clear()
+
+    for index in range(3):
+        await _ingest_csv(
+            tmp_path=tmp_path,
+            metadata_store=metadata_store,
+            document_uid=f"doc-wide-{index}",
+            file_name=f"wide-{index}.csv",
+            content="city\nParis\n",
+        )
+
+    service = TabularService()
+    service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
+    aliases = [dataset.query_alias for dataset in await service.list_datasets(_user())]
+    union_sql = " UNION ALL ".join(f"SELECT city FROM {alias}" for alias in aliases)
+
+    with pytest.raises(ValueError, match="above the limit of 2"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql=union_sql))
+
+
+@pytest.mark.asyncio
+async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path):
+    """Every online connection must carry explicit threads/memory/spill settings."""
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(sql=f"SELECT current_setting('threads') AS t, current_setting('temp_directory') AS d FROM {alias} LIMIT 1"),
+    )
+
+    assert response.rows == [{"t": service.tabular_config.query.duckdb_threads, "d": ""}]
