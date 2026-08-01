@@ -7,7 +7,6 @@ from sqlalchemy import (
     DateTime,
     Float,
     Integer,
-    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
@@ -15,6 +14,33 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
+
+
+class PromptCategoryRow(Base):
+    """ORM model for the ``prompt_category`` table.
+
+    Team-owned prompt categories: every team gets its own set (seeded with a
+    starter kit at team creation), independently created/renamed/deleted by
+    that team's editors — not a global, shared taxonomy.
+    """
+
+    __tablename__ = "prompt_category"
+    __table_args__ = (
+        UniqueConstraint("team_id", "name", name="uq_prompt_category_team_name"),
+    )
+
+    category_id: Mapped[str] = mapped_column(String, primary_key=True)
+    team_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
 
 
 class PromptRow(Base):
@@ -31,7 +57,7 @@ class PromptRow(Base):
     team_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    category_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     emoji: Mapped[str | None] = mapped_column(String(8), nullable=True)
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -51,23 +77,3 @@ class PromptRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
-
-
-class DefaultPromptUsageRow(Base):
-    """Usage counter for immutable platform-default prompts.
-
-    Default prompts are never stored in the ``prompt`` table (they are generated
-    at query time from in-memory specs), so their session_count cannot be tracked
-    in PromptRow. This table stores one counter per (team, category) pair and is
-    incremented atomically whenever a user activates a default prompt as their
-    chat context.
-
-    Primary key: (team_id, category) — one row per default prompt per team.
-    """
-
-    __tablename__ = "default_prompt_usage"
-    __table_args__ = (PrimaryKeyConstraint("team_id", "category"),)
-
-    team_id: Mapped[str] = mapped_column(String, nullable=False)
-    category: Mapped[str] = mapped_column(String(64), nullable=False)
-    session_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

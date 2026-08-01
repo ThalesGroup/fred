@@ -253,6 +253,108 @@ def test_pdf_processor_builds_extractor_only_once_per_config(monkeypatch: pytest
     assert build_calls == [("docling", 2)]
 
 
+def test_pdf_processor_builds_ocr_model_only_once_across_documents(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    """`_get_ocr_model` must reuse the same PaddleOCRmodel instance across documents
+    instead of rebuilding it (and reloading its two ONNX Runtime sessions) on every
+    single file — the OCR-loop equivalent of `_get_extractor`'s caching above."""
+    img_path = tmp_path / "img0.png"
+
+    class FakeExtractor:
+        def extract(self, file_path: Path, work_dir: str):
+            return (f"Before\n\n![]({img_path})\n\nAfter", [ImageTranscription(image_path=img_path)])
+
+    build_calls: list[None] = []
+
+    class FakeOcrModel:
+        def __init__(self):
+            build_calls.append(None)
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
+        lambda: SimpleNamespace(
+            vision_model=None,
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=False,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=True),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(processor, "_build_extractor", lambda *_: FakeExtractor())
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PaddleOCRmodel",
+        FakeOcrModel,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_use_ocr",
+        lambda model, images: [{"rec_texts": ["OCR extracted text"]}],
+    )
+
+    for i in range(3):
+        result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path / f"out{i}", f"doc-{i}")
+        assert Path(result["md_file"]).exists()
+
+    assert len(build_calls) == 1
+
+
+def test_pdf_processor_builds_image_describer_only_once_across_documents(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    """`_get_image_describer` must reuse the same describer instance across documents
+    instead of rebuilding it (and reloading its vision-model client) on every single
+    file — the image-describer equivalent of `_get_extractor`'s caching above."""
+    img_path = tmp_path / "img0.png"
+
+    class FakeExtractor:
+        def extract(self, file_path: Path, work_dir: str):
+            return (f"Before\n\n![]({img_path})\n\nAfter", [ImageTranscription(image_path=img_path)])
+
+    build_calls: list[None] = []
+
+    def fake_build_image_describer(cfg):
+        build_calls.append(None)
+        return MockImageDescriber()
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
+        lambda: SimpleNamespace(
+            vision_model=SimpleNamespace(name="fake-vision"),
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=True,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=False),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(processor, "_build_extractor", lambda *_: FakeExtractor())
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_image_describer",
+        fake_build_image_describer,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_use_image_describer",
+        lambda describer, img_t, ocr_r: "described",
+    )
+
+    for i in range(3):
+        result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path / f"out{i}", f"doc-{i}")
+        assert Path(result["md_file"]).exists()
+
+    assert len(build_calls) == 1
+
+
 def test_activity_in_activity_survives_to_thread_with_heartbeat():
     """`_extract_md` runs inside a Temporal activity but off the activity's own
     coroutine, via `to_thread_with_heartbeat` (asyncio.to_thread). `_pdf_kpi_timer`

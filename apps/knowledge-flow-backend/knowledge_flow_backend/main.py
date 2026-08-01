@@ -35,6 +35,7 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool, register_exception_handlers
+from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
@@ -138,6 +139,10 @@ def create_app() -> FastAPI:
         async with application_context.get_pg_async_engine().begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
 
+        # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
+        # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).
+        gc_diagnostics = install_gc_diagnostics()
+
         process_kpi_task = None
         db_pool_kpi_task = None
         interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
@@ -180,6 +185,7 @@ def create_app() -> FastAPI:
                 db_pool_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await db_pool_kpi_task
+            await gc_diagnostics.stop()
             await application_context.shutdown()
 
     app = FastAPI(

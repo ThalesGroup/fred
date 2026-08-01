@@ -1,0 +1,12 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.clear {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-2xs);
+  transform: translateY(-50%);
+}

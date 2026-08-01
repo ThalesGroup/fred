@@ -18,6 +18,8 @@ import styles from "./FilterChips.module.scss";
 export interface FilterChipsOption<T extends string = string> {
   id: T;
   label: string;
+  /** Shown right after the label (e.g. a per-category prompt count). */
+  count?: number;
 }
 
 export interface FilterChipsProps<T extends string = string> {
@@ -73,6 +75,7 @@ export default function FilterChips<T extends string = string>({
           onClick={() => onChange(value === opt.id ? null : opt.id)}
         >
           {opt.label}
+          {opt.count !== undefined && <span className={styles.count}>{opt.count}</span>}
         </button>
       ))}
       {hasMore && (
