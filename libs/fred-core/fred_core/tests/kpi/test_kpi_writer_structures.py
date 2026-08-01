@@ -37,10 +37,22 @@ def test_kpievent_labels_validates_to_a_concrete_list():
 def test_kpievent_construction_leaves_no_reference_cycles():
     """Regression test for the ValidatorIterator cycle itself: constructing many
     KPIEvents and dropping every reference must free them via plain refcounting
-    alone. Before the fix, gc.collect() had to reclaim real objects every time
-    (confirmed live: 0 uncollectable in gc.garbage, but never zero freed) — after
-    the fix, there's nothing left for a forced collection to do."""
+    alone, leaving nothing cyclic behind. Asserts on the specific types involved
+    (ValidatorIterator/KPIEvent) rather than a bare `gc.collect() == 0`, since an
+    unrelated cyclic object created elsewhere in the test process would otherwise
+    make this flaky. gc.DEBUG_SAVEALL is scoped to this one collection and cleared
+    up afterward so nothing stays pinned in gc.garbage."""
     gc.collect()
-    for i in range(200):
-        _make_event(i)
-    assert gc.collect() == 0
+    old_flags = gc.get_debug()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        for i in range(200):
+            _make_event(i)
+        gc.collect()
+        leaked_types = {type(obj).__name__ for obj in gc.garbage}
+    finally:
+        gc.garbage.clear()
+        gc.set_debug(old_flags)
+        gc.collect()
+    assert "ValidatorIterator" not in leaked_types
+    assert "KPIEvent" not in leaked_types

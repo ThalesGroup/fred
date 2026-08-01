@@ -53,8 +53,17 @@ def _current_rss_kb() -> int:
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1])
     except OSError:
-        pass
+        pass  # /proc unavailable (non-Linux) — -1 tells callers "unknown", not "zero"
     return -1
+
+
+def _format_rss_delta(before_kb: int, after_kb: int) -> str:
+    """Render an RSS before->after pair for logging. Guards against `_current_rss_kb()`'s
+    -1 "unknown" sentinel producing a misleading delta (e.g. `-1Ki -> 1234Ki` looking
+    like a 1235Ki drop)."""
+    if before_kb < 0 or after_kb < 0:
+        return f"{before_kb}Ki -> {after_kb}Ki (delta unknown, /proc unreadable)"
+    return f"{before_kb}Ki -> {after_kb}Ki (delta {before_kb - after_kb}Ki)"
 
 
 def _malloc_trim() -> bool:
@@ -82,14 +91,12 @@ def _collect_and_trim(label: str) -> None:
     trimmed = _malloc_trim()
     after_kb = _current_rss_kb()
     logger.warning(
-        "[GC][%s] collected=%d uncollectable=%d trimmed=%s RSS %dKi -> %dKi (delta %dKi)",
+        "[GC][%s] collected=%d uncollectable=%d trimmed=%s RSS %s",
         label,
         collected,
         uncollectable,
         trimmed,
-        before_kb,
-        after_kb,
-        before_kb - after_kb,
+        _format_rss_delta(before_kb, after_kb),
     )
 
 
@@ -113,13 +120,12 @@ def _collect_and_report_types(top_n: int = 20) -> None:
     trimmed = _malloc_trim()
     after_kb = _current_rss_kb()
     logger.warning(
-        "[GC][SIGUSR2] collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %dKi -> %dKi top_types=%s",
+        "[GC][SIGUSR2] collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %s top_types=%s",
         collected,
         garbage_count,
         freed_after_clear,
         trimmed,
-        before_kb,
-        after_kb,
+        _format_rss_delta(before_kb, after_kb),
         top_types,
     )
 
@@ -207,10 +213,15 @@ async def main() -> None:
 
     # Manual triggers, always available regardless of KF_WORKER_GC_INTERVAL_SEC below:
     # `kubectl exec <pod> -- kill -USR1 1` / `-USR2 1`. See _collect_and_trim and
-    # _collect_and_report_types.
+    # _collect_and_report_types. add_signal_handler is Unix-only and main-thread-only
+    # (NotImplementedError / RuntimeError otherwise) — this is a diagnostic convenience,
+    # not a requirement, so a platform/thread that can't register it just runs without it.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGUSR1, lambda: _collect_and_trim("SIGUSR1"))
-    loop.add_signal_handler(signal.SIGUSR2, _collect_and_report_types)
+    try:
+        loop.add_signal_handler(signal.SIGUSR1, lambda: _collect_and_trim("SIGUSR1"))
+        loop.add_signal_handler(signal.SIGUSR2, _collect_and_report_types)
+    except (NotImplementedError, RuntimeError) as exc:
+        logger.warning("[GC] SIGUSR1/SIGUSR2 manual triggers unavailable on this platform/thread: %s", exc)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
