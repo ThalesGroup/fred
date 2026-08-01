@@ -21,6 +21,8 @@ Cette section décrit chaque fonctionnalité en détail. Choisissez un thème :
   supplémentaires activables par équipe.
 - [Administrer son équipe](/help/fr/features/teams) — membres, réglages,
   routage, rétention, évaluations.
+- [Rôles et droits](/help/fr/features/roles) — qui peut faire quoi, dans une
+  équipe et à l'échelle de la plateforme.
 - [Suivi d'usage](/help/fr/features/usage) — consommation et statistiques.
 - [Console d'administration](/help/fr/features/admin) — surfaces réservées aux
   administrateurs de la plateforme.

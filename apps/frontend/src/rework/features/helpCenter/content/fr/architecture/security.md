@@ -59,7 +59,8 @@ Le modèle est **fail-closed** : un `team_id` manquant renvoie `403`.
 
 Les décisions d'exécution — choix du modèle, tools/MCP autorisés, prompts, agent,
 data scope — sont résolues à partir de **policies**, pas codées en dur.
-Toute exécution est **team-scoped** et autorisée.
+Toute exécution est **team-scoped** et autorisée. Le détail des rôles (team et
+plateforme) et de leurs droits est en [Rôles et droits](/help/fr/features/roles).
 
 ## Mode standalone (sans authentification)
 

@@ -44,15 +44,17 @@ Vous choisissez à la création :
 
 Au sein d'une équipe, chaque membre a un rôle qui définit ses droits :
 
-| Rôle               | Peut faire                                                    |
-| ------------------ | ------------------------------------------------------------- |
-| **Administrateur** | Tout, y compris gérer les membres et les réglages de l'équipe |
-| **Éditeur**        | Créer et modifier agents, prompts et ressources               |
-| **Analyste**       | Exploiter les agents et consulter les contenus                |
-| **Membre**         | Accès de base à l'équipe et à ses conversations               |
+| Rôle               | Peut faire                                              |
+| ------------------ | ------------------------------------------------------- |
+| **Administrateur** | Gérer les membres, leurs rôles et les réglages d'équipe |
+| **Éditeur**        | Créer et modifier agents, prompts et ressources         |
+| **Analyste**       | Créer et lancer des campagnes d'évaluation              |
+| **Membre**         | Utiliser les agents et prompts de l'équipe              |
 
-Un administrateur peut à tout moment inviter des personnes, changer leur rôle
-ou les retirer (voir [Administrer son équipe](/help/fr/features/teams)).
+Les rôles sont **cumulables** et le détail exact de chaque droit est en
+[Rôles et droits](/help/fr/features/roles). Un administrateur peut à tout moment
+inviter des personnes, changer leur rôle ou les retirer (voir
+[Administrer son équipe](/help/fr/features/teams)).
 
 Une fois dans une équipe, place à la
 [première conversation](/help/fr/getting-started/first-conversation).

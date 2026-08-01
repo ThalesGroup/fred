@@ -44,15 +44,17 @@ You choose at creation:
 
 Within a team, each member has a role that defines their permissions:
 
-| Role              | Can do                                                   |
-| ----------------- | -------------------------------------------------------- |
-| **Administrator** | Everything, including managing members and team settings |
-| **Editor**        | Create and edit agents, prompts, and resources           |
-| **Analyst**       | Use the agents and consult content                       |
-| **Member**        | Basic access to the team and its conversations           |
+| Role              | Can do                                         |
+| ----------------- | ---------------------------------------------- |
+| **Administrator** | Manage members, their roles, and team settings |
+| **Editor**        | Create and edit agents, prompts, and resources |
+| **Analyst**       | Create and run evaluation campaigns            |
+| **Member**        | Use the team's agents and prompts              |
 
-An administrator can, at any time, invite people, change their role, or remove
-them (see [Administering your team](/help/en/features/teams)).
+Roles are **cumulative**, and the exact detail of each permission is in
+[Roles & permissions](/help/en/features/roles). An administrator can, at any
+time, invite people, change their role, or remove them (see
+[Administering your team](/help/en/features/teams)).
 
 Once in a team, on to the
 [first conversation](/help/en/getting-started/first-conversation).

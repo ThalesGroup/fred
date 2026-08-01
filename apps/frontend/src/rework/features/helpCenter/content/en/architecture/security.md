@@ -57,7 +57,8 @@ The model is **fail-closed**: a missing `team_id` returns `403`.
 
 Execution decisions — model choice, allowed tools/MCP, prompts, agent, data
 scope — are resolved from **policies**, not hardcoded. All execution is
-**team-scoped** and authorized.
+**team-scoped** and authorized. The full breakdown of roles (team and platform)
+and their permissions is in [Roles & permissions](/help/en/features/roles).
 
 ## Standalone mode (no authentication)
 

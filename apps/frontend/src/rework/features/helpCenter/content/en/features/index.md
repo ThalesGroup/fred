@@ -21,6 +21,8 @@ This section covers each feature in detail. Pick a topic:
   you enable per team.
 - [Administering your team](/help/en/features/teams) — members, settings,
   routing, retention, evaluations.
+- [Roles & permissions](/help/en/features/roles) — who can do what, within a
+  team and across the platform.
 - [Usage tracking](/help/en/features/usage) — consumption and statistics.
 - [Admin console](/help/en/features/admin) — surfaces reserved for platform
   administrators.
