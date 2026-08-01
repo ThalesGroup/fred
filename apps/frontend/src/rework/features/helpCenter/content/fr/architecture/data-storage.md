@@ -1,27 +1,27 @@
 ---
-title: Les magasins de données
+title: Les data stores
 order: 30
 description: PostgreSQL, OpenSearch, object storage, Temporal, OpenFGA, Keycloak — rôle de chacun.
 icon: database
 ---
 
-# Les magasins de données
+# Les data stores
 
-Chaque magasin est spécialisé pour un type d'information. Aucun composant
+Chaque data store est spécialisé pour un type d'information. Aucun composant
 applicatif ne mélange ces responsabilités.
 
-| Magasin                 | Rôle                                                            |
-| ----------------------- | --------------------------------------------------------------- |
-| **`PostgreSQL`**        | État, sessions, historique de conversation, checkpoints d'agent |
-| **`OpenSearch`**        | Vector index pour le retrieval RAG                              |
-| **Object storage (S3)** | Documents d'origine et objets produits                          |
-| **`Temporal`**          | Orchestration durable des workflows (ingestion, tâches de fond) |
-| **`OpenFGA`**           | Moteur d'autorisation ReBAC (tuples de relations)               |
-| **`Keycloak`**          | Fournisseur d'identité OIDC, émission des JWT                   |
+| Data store              | Rôle                                                              |
+| ----------------------- | ----------------------------------------------------------------- |
+| **`PostgreSQL`**        | State, sessions, conversation history, agent checkpoints          |
+| **`OpenSearch`**        | Vector index pour le retrieval RAG                                |
+| **Object storage (S3)** | Documents d'origine et objets produits                            |
+| **`Temporal`**          | Durable orchestration des workflows (ingestion, background tasks) |
+| **`OpenFGA`**           | ReBAC authorization engine (relationship tuples)                  |
+| **`Keycloak`**          | Fournisseur d'identité OIDC, émission des JWT                     |
 
 ## PostgreSQL
 
-Le magasin d'état relationnel : teams, agent instances, prompts, sessions et
+Le state store relationnel : teams, agent instances, prompts, sessions et
 **historique**. Il porte aussi les **checkpoints** qui permettent au
 `fred-runtime` de restaurer l'état du graphe d'un agent entre deux tours (clé de
 continuité : la `session_id`).
@@ -34,22 +34,21 @@ retrouver les passages pertinents et de s'appuyer dessus.
 
 ## Object storage (S3-compatible)
 
-Le magasin d'objets pour les **documents d'origine** (déposés ou produits par les
+Le object store pour les **documents d'origine** (déposés ou produits par les
 agents). L'implémentation est S3-compatible : `MinIO` en configuration type,
 `SeaweedFS` en local, ou un stockage cloud (`GCS`) selon le déploiement.
 
 ## Temporal
 
-L'orchestrateur de **workflows durables**. Il porte l'ingestion documentaire et
-les tâches de cycle de vie, exécutées en arrière-plan sans bloquer le chemin de
-conversation — c'est le pilier du **découplage** (voir
+L'orchestrateur de **durable workflows**. Il porte l'document ingestion et
+les lifecycle tasks, exécutées en arrière-plan sans bloquer le conversation path — c'est le pilier du **découplage** (voir
 [Vue d'ensemble](/help/fr/architecture/index)).
 
 ## OpenFGA & Keycloak
 
-- **`OpenFGA`** — le moteur **ReBAC** : il stocke les tuples de relations et
+- **`OpenFGA`** — le **ReBAC** engine : il stocke les relationship tuples et
   répond aux checks d'autorisation (`CAN_USE_TEAM_AGENTS`…) exécutés côté pod.
-- **`Keycloak`** — le fournisseur d'identité **OIDC** : authentification des
+- **`Keycloak`** — l'identity provider **OIDC** : authentification des
   utilisateurs et émission des **JWT** présentés à chaque appel.
 
 Le détail du rôle de ces deux composants dans l'autorisation est en

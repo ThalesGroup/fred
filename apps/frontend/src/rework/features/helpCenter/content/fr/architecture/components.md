@@ -14,7 +14,7 @@ La plateforme est un ensemble de services déployables indépendamment
 
 `apps/frontend` — SPA React. Catalogue d'agents, UI de conversation, gestion des
 sessions. Il consomme les API `control-plane` et `knowledge-flow`, et ouvre le
-flux d'exécution (SSE) directement sur les pods agents.
+execution stream (SSE) directement sur les pods agents.
 
 ## control-plane-backend
 
@@ -27,22 +27,21 @@ flux d'exécution (SSE) directement sur les pods agents.
   de session — **sans émettre de capacité** (voir
   [Sécurité](/help/fr/architecture/security)) ;
 - l'application de la **governance** (policies de modèle, tools/MCP, prompts,
-  périmètre de données).
+  data scope).
 
-Il embarque également un worker `Temporal` pour ses tâches de fond.
+Il embarque également un worker `Temporal` pour ses background tasks.
 
 > **Découverte des pods (état actuel).** Les pods sont enregistrés via une liste
 > statique `runtime_catalog_sources` dans le `control-plane-backend`.
 
 ## knowledge-flow-backend
 
-`apps/knowledge-flow-backend` — les opérations de données longues :
+`apps/knowledge-flow-backend` — les long-running data operations :
 
-- **ingestion documentaire**, déclinée en trois profils de traitement
+- **document ingestion**, déclinée en trois profils de traitement
   (`fast`, `medium`, `rich`) ;
 - **vector retrieval** pour le RAG (index dans `OpenSearch`) ;
-- exécution durable sur **workflows `Temporal`** (jobs d'ingestion, tâches de
-  cycle de vie).
+- exécution durable sur **workflows `Temporal`** (jobs d'ingestion, lifecycle tasks).
 
 ## Agentic pods
 
@@ -50,11 +49,11 @@ Les pods agents exécutent la logique des agents. Ils sont tous traités à
 l'identique par le `control-plane` et par le routage ingress.
 
 - **`fred-agents`** (`apps/fred-agents`) — le pod fourni (_bundled_) :
-  capacités `general`, `rag`, `sql`, `sentinel`, harnais de test, compatibilité
+  capacités `general`, `rag`, `sql`, `sentinel`, test harness, compatibilité
   OpenAI. Construit sur `fred-runtime` + `fred-sdk`.
 - **`custom-agent-pod`** — un pod fourni par une équipe : n'importe quelle
-  logique d'agent, n'importe quels outils, n'importe quel provider de modèle.
-  L'équipe importe `fred-runtime` + `fred-sdk`, déploie un conteneur standard,
+  logique d'agent, n'importe quels outils, n'importe quel model provider.
+  L'équipe importe `fred-runtime` + `fred-sdk`, déploie un standard container,
   et l'enregistre dans `runtime_catalog_sources`.
 
 Chaque pod **authentifie et autorise lui-même** chaque requête (voir
@@ -62,8 +61,7 @@ Chaque pod **authentifie et autorise lui-même** chaque requête (voir
 
 ## Bibliothèques partagées
 
-- **`fred-runtime`** (`libs/fred-runtime`) — le moteur d'exécution : boucle
-  d'agent (ReAct / Deep) sur `LangGraph`, client `MCP`, HITL (human-in-the-loop),
+- **`fred-runtime`** (`libs/fred-runtime`) — l'execution engine : agent loop (ReAct / Deep) sur `LangGraph`, client `MCP`, HITL (human-in-the-loop),
   application `agent_app` du pod.
 - **`fred-sdk`** (`libs/fred-sdk`) — les contrats d'exécution et la
   compatibilité OpenAI. C'est la surface qu'un `custom-agent-pod` importe pour
@@ -79,4 +77,4 @@ Une équipe construit son pod en important `fred-runtime` + `fred-sdk`. Une fois
 le pod déployé et son `base_url` + `runtime_id` ajoutés à
 `runtime_catalog_sources`, le `control-plane` l'enrôle et l'ingress gagne une
 route `/runtime/{runtime_id}/`. Les agents vivent donc **hors du monorepo**, ce
-qui découple leur cycle de vie de celui de la plateforme.
+qui découple leur lifecycle de celui de la plateforme.

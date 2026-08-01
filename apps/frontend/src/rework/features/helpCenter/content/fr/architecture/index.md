@@ -1,15 +1,14 @@
 ---
 title: Vue d'ensemble
 order: 0
-description: Architecture logique de la plateforme, composants et flux d'exécution d'une requête.
+description: Architecture logique de la plateforme, composants et request flow d'exécution.
 icon: architecture
 ---
 
 # Architecture technique
 
 Cette section décrit l'**architecture logique** de la plateforme : les
-composants, leurs responsabilités, la façon dont ils communiquent, et le modèle
-de sécurité qui les relie.
+composants, leurs responsabilités, la façon dont ils communiquent, et le security model qui les relie.
 
 > **Public visé.** Contrairement au reste de ce centre d'aide, cette section
 > s'adresse à des profils techniques — ingénieurs IT, architectes, data
@@ -17,16 +16,15 @@ de sécurité qui les relie.
 > désignés par leur nom d'origine (`control-plane`, `knowledge-flow`,
 > `fred-agents`, `OpenFGA`, `Keycloak`…).
 
-## Vue logique
+## Logical view
 
-La plateforme se décompose en quatre plans, du poste client jusqu'aux magasins
-de données :
+La plateforme se décompose en quatre plans, du poste client jusqu'aux data stores :
 
 ```mermaid
 flowchart TB
   FE["frontend (React SPA)"]
 
-  subgraph plane["Plan applicatif"]
+  subgraph plane["Application plane"]
     CP["control-plane-backend"]
     KF["knowledge-flow-backend"]
   end
@@ -36,7 +34,7 @@ flowchart TB
     CA["custom-agent-pod (team-provided)"]
   end
 
-  subgraph infra["Magasins de données"]
+  subgraph infra["Data stores"]
     PG["PostgreSQL"]
     OS["OpenSearch"]
     OBJ["Object storage (S3)"]
@@ -62,15 +60,14 @@ flowchart TB
 ```
 
 - Le **frontend** parle au `control-plane` et au `knowledge-flow` pour tout ce
-  qui est catalogue, sessions et documents ; il ouvre en revanche le flux
-  d'exécution **directement** sur le pod agent (jamais relayé par le
+  qui est catalogue, sessions et documents ; il ouvre en revanche l'execution stream **directement** sur le pod agent (jamais relayé par le
   `control-plane`).
 - Le détail de chaque composant est en
   [Les composants](/help/fr/architecture/components).
 
-## Le flux d'une requête
+## Le request flow
 
-L'exécution d'un tour d'agent suit le **managed path** (le seul autorisé pour le
+L'exécution d'un agent turn suit le **managed path** (le seul autorisé pour le
 frontend en production). Trois participants : le navigateur, le
 `control-plane-backend`, et un pod `fred-runtime`.
 
@@ -89,8 +86,7 @@ sequenceDiagram
 ```
 
 Point clé : le `control-plane` résout **où** l'agent s'exécute (via
-`prepare-execution`) mais **n'émet aucune capacité** et ne relaie jamais le flux
-SSE. Le navigateur appelle le pod directement avec le **JWT Keycloak de
+`prepare-execution`) mais **n'émet aucune capacité** et ne relaie jamais le SSE stream. Le navigateur appelle le pod directement avec le **JWT Keycloak de
 l'utilisateur** ; le pod authentifie ce token et **autorise lui-même** chaque
 requête. Le détail du modèle est en
 [Sécurité & autorisation](/help/fr/architecture/security).
@@ -99,13 +95,12 @@ requête. Le détail du modèle est en
 
 Trois principes structurent ce découpage :
 
-- **Découplage.** Le chemin de conversation reste réactif pendant que
-  l'ingestion, l'évaluation et les traitements de fond s'exécutent durablement
+- **Découplage.** Le conversation path reste réactif pendant que
+  l'ingestion, l'évaluation et les background tasks s'exécutent durablement
   via `Temporal`.
 - **Governance policy-first.** Les décisions (modèle, tool/MCP, prompt, agent,
-  périmètre de données) sont résolues à partir de **policies**, pas codées en
+  data scope) sont résolues à partir de **policies**, pas codées en
   dur.
-- **Extensibilité.** Les agents sont construits et déployés dans leurs propres
-  dépôts ; le `control-plane` les découvre et route vers eux, sans dépendance au
+- **Extensibilité.** Les agents sont construits et déployés dans leurs propres repositories ; le `control-plane` les découvre et route vers eux, sans dépendance au
   monorepo. Un `custom-agent-pod` est, du point de vue de l'utilisateur,
   indiscernable des pods fournis.
