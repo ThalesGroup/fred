@@ -65,7 +65,7 @@ from control_plane_backend.capabilities.settings_store import (
 
 logger = logging.getLogger(__name__)
 
-_ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+ORG_REF = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
 
 
 class CapabilityNotFound(Exception):
@@ -177,9 +177,9 @@ async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
         return
     missing: list[str] = []
     for cap_id in catalog_entry.default_capability_ids:
-        personal_on = await _has_org_relation(rebac, cap_id, RelationType.PERSONAL_ON)
-        default_on = await _has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON)
-        personal_disabled = await _has_org_relation(
+        personal_on = await has_org_relation(rebac, cap_id, RelationType.PERSONAL_ON)
+        default_on = await has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON)
+        personal_disabled = await has_org_relation(
             rebac, cap_id, RelationType.PERSONAL_DISABLED
         )
         if not ((personal_on or default_on) and not personal_disabled):
@@ -193,7 +193,7 @@ async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
         )
 
 
-def _cap_ref(capability_id: str) -> RebacReference:
+def cap_ref(capability_id: str) -> RebacReference:
     return RebacReference(type=Resource.CAPABILITY, id=capability_id)
 
 
@@ -273,9 +273,9 @@ async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> No
 
     await rebac.add_relation(
         Relation(
-            subject=_ORG_REF,
+            subject=ORG_REF,
             relation=RelationType.ORGANIZATION,
-            resource=_cap_ref(capability_id),
+            resource=cap_ref(capability_id),
         )
     )
 
@@ -320,14 +320,14 @@ async def enable_capability_for_team(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.DISABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         )
     )
     await rebac.add_relation(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.ENABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         ),
         actor_uid=updated_by,
     )
@@ -365,14 +365,14 @@ async def disable_capability_for_team(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.ENABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         )
     )
     await rebac.add_relation(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.DISABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         ),
         actor_uid=updated_by,
     )
@@ -409,14 +409,14 @@ async def reset_capability_for_team(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.ENABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         )
     )
     await rebac.delete_relation(
         Relation(
             subject=_team_ref(team_id),
             relation=RelationType.DISABLED,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         )
     )
     if default_on:
@@ -664,9 +664,9 @@ async def set_capability_default_on(
         await ensure_capability_anchor(rebac, catalog_entry.id)
         await rebac.add_relation(
             Relation(
-                subject=_ORG_REF,
+                subject=ORG_REF,
                 relation=RelationType.DEFAULT_ON,
-                resource=_cap_ref(catalog_entry.id),
+                resource=cap_ref(catalog_entry.id),
             ),
             actor_uid=updated_by,
         )
@@ -674,15 +674,15 @@ async def set_capability_default_on(
 
     await rebac.delete_relation(
         Relation(
-            subject=_ORG_REF,
+            subject=ORG_REF,
             relation=RelationType.DEFAULT_ON,
-            resource=_cap_ref(catalog_entry.id),
+            resource=cap_ref(catalog_entry.id),
         )
     )
     # Teams with an explicit grant keep access; everyone else loses inherited
     # use — whether they used it as a tool or as a `kind="agent"` template
     # (2026-07-19, GitHub #2004 item 1).
-    enabled_teams = await _explicitly_enabled_team_ids(rebac, catalog_entry.id)
+    enabled_teams = await explicitly_enabled_team_ids(rebac, catalog_entry.id)
     suspended = 0
     for instance in await agent_instance_store.list_all():
         if str(instance.team_id) in enabled_teams:
@@ -749,13 +749,13 @@ async def set_capability_personal_scope(
     # `(personal_on OR default_on) AND NOT personal_disabled` — the FGA
     # `inherited` relation evaluated for a personal subject. `default_on` is a
     # constant across the write; only the two class tuples move.
-    was_on_class = await _has_org_relation(
+    was_on_class = await has_org_relation(
         rebac, catalog_entry.id, RelationType.PERSONAL_ON
     )
-    was_off_class = await _has_org_relation(
+    was_off_class = await has_org_relation(
         rebac, catalog_entry.id, RelationType.PERSONAL_DISABLED
     )
-    default_on = await _has_org_relation(
+    default_on = await has_org_relation(
         rebac, catalog_entry.id, RelationType.DEFAULT_ON
     )
     had_access = (was_on_class or default_on) and not was_off_class
@@ -793,14 +793,14 @@ async def _apply_personal_scope_tuples(
     state holds (at most one present). Idempotent."""
 
     on_relation = Relation(
-        subject=_ORG_REF,
+        subject=ORG_REF,
         relation=RelationType.PERSONAL_ON,
-        resource=_cap_ref(capability_id),
+        resource=cap_ref(capability_id),
     )
     disabled_relation = Relation(
-        subject=_ORG_REF,
+        subject=ORG_REF,
         relation=RelationType.PERSONAL_DISABLED,
-        resource=_cap_ref(capability_id),
+        resource=cap_ref(capability_id),
     )
     if want_on:
         await rebac.add_relation(on_relation, actor_uid=updated_by)
@@ -813,7 +813,7 @@ async def _apply_personal_scope_tuples(
         await rebac.delete_relation(disabled_relation)
 
 
-async def _has_org_relation(
+async def has_org_relation(
     rebac: RebacEngine, capability_id: str, relation: RelationType
 ) -> bool:
     """True when the singleton org holds `relation` on the capability (used to
@@ -822,7 +822,7 @@ async def _has_org_relation(
     from fred_core import RebacDisabledResult
 
     subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id),
+        cap_ref(capability_id),
         relation,
         Resource.ORGANIZATION,
     )
@@ -846,7 +846,7 @@ async def _suspend_personal_dependents(
     A per-space explicit `enabled` grant survives the class change (it keeps
     `can_use`), so those instances are never touched."""
 
-    enabled_teams = await _explicitly_enabled_team_ids(rebac, capability_id)
+    enabled_teams = await explicitly_enabled_team_ids(rebac, capability_id)
     suspended = 0
     for instance in await agent_instance_store.list_all():
         if not is_personal_team_id(str(instance.team_id)):
@@ -863,7 +863,7 @@ async def _suspend_personal_dependents(
     return suspended
 
 
-async def _explicitly_enabled_team_ids(
+async def explicitly_enabled_team_ids(
     rebac: RebacEngine, capability_id: str
 ) -> set[str]:
     """Team ids carrying an explicit `enabled` tuple on the capability.
@@ -875,7 +875,7 @@ async def _explicitly_enabled_team_ids(
     from fred_core import RebacDisabledResult
 
     subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id),
+        cap_ref(capability_id),
         RelationType.ENABLED,
         Resource.TEAM,
     )

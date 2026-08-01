@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 _CAPABILITY_ID_RE = re.compile(CAPABILITY_ID_PATTERN)
 
 
+def _union_profile_ids(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    seen: dict[str, None] = {}
+    for group in groups:
+        for profile_id in group:
+            seen[profile_id] = None
+    return tuple(seen)
+
+
 async def aggregate_capability_catalog(
     deps: ProductServiceDependencies,
 ) -> dict[str, CapabilityCatalogEntry]:
@@ -45,7 +53,16 @@ async def aggregate_capability_catalog(
 
     Best-effort: an unreachable pod is logged and skipped (its capabilities are
     simply absent this pass), never fatal. Later-registration wins on id
-    collision, matching the aggregation the product catalog already performs.
+    collision, matching the aggregation the product catalog already performs —
+    with one exception: for `kind="model"` entries, `model_profile_ids` and
+    `model_thinking_profile_ids` are unioned across pods rather than
+    overwritten (2026-08-01, GitHub #2191). A `(provider, name)` pair routed
+    by more than one pod, each with its own `profile_id` namespace, would
+    otherwise have the earlier pod's profile ids silently dropped —
+    `model_profile_ids`' own contract ("every profile_id sharing this entry's
+    (provider, name)") requires the union, and `routing_policy` validates a
+    team's chosen profile against exactly this map, so a dropped profile id
+    reads there as an unknown one even though it is still live.
     """
 
     # Lazy import breaks the product.service ↔ capabilities import cycle: the
@@ -137,5 +154,22 @@ async def aggregate_capability_catalog(
                     MODEL_CAPABILITY_NAMESPACE_PREFIX,
                 )
                 continue
+            existing = catalog.get(entry.id)
+            if (
+                existing is not None
+                and existing.kind == "model"
+                and entry.kind == "model"
+            ):
+                entry = entry.model_copy(
+                    update={
+                        "model_profile_ids": _union_profile_ids(
+                            existing.model_profile_ids, entry.model_profile_ids
+                        ),
+                        "model_thinking_profile_ids": _union_profile_ids(
+                            existing.model_thinking_profile_ids,
+                            entry.model_thinking_profile_ids,
+                        ),
+                    }
+                )
             catalog[entry.id] = entry
     return catalog

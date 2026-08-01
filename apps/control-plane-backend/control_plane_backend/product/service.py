@@ -618,6 +618,16 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
 _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset({"fred.github.self_test"})
 
 
+def capability_gate_exempt(source_agent_id: str) -> bool:
+    """True when `source_agent_id`'s template is exempt from the CAPAB-01
+    admission gate (see `_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS` above) —
+    i.e. its `template_capability_id` was never admitted and never carries a
+    `can_use` tuple, so it must not be treated as a dependency anywhere that
+    reads capability health/impact (GitHub #2191)."""
+
+    return source_agent_id in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+
+
 async def _agent_capabilities_for_source(
     base_url: str, runtime_id: str
 ) -> list[CapabilityCatalogEntry] | None:
@@ -711,11 +721,15 @@ async def _model_capabilities_for_source(
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
-        # Best-effort (see docstring): an unreachable pod is expected/handled,
-        # not a fault worth WARNING-level attention on every poll cycle it
-        # recurs. Also covers a pre-#2110 pod that doesn't advertise this
-        # route yet (404) — treated the same as unreachable, not fatal.
-        logger.debug(
+        # Best-effort (see docstring): never fatal, the caller treats `None`
+        # as empty. WARNING, not DEBUG (2026-08-01, GitHub #2191): this used
+        # to log at DEBUG, so a model-catalog outage was invisible at default
+        # log level while the tool fetch (`_available_capabilities_for_source`)
+        # logged the equivalent failure at WARNING — matching that level here
+        # too. Also covers a pre-#2110 pod that doesn't advertise this route
+        # yet (404), which is expected to be noisy exactly until every pod
+        # upgrades, same as any other "pod missing a route" warning.
+        logger.warning(
             "[capability-catalog] failed to fetch models catalog from %s: %s",
             base_url,
             exc,
@@ -1406,8 +1420,7 @@ async def list_agent_templates(
                 source.runtime_id, template.template_agent_id
             )
             if (
-                template.template_agent_id
-                not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+                not capability_gate_exempt(template.template_agent_id)
                 and usable_ids is not None
                 and template_cap_id not in usable_ids
             ):
@@ -2433,15 +2446,12 @@ async def enroll_agent_instance(
     #
     # An explicitly allowlisted internal harness template (e.g. self-test) is
     # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
-    # above (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`) — never any
-    # `public=False` template, which has its own, independent meaning.
-    if (
-        source_agent_id not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
-        and not await can_use_capability(
-            deps.team_dependencies.rebac,
-            team_id,
-            template_capability_id(source_runtime_id, source_agent_id),
-        )
+    # above (`capability_gate_exempt`) — never any `public=False` template,
+    # which has its own, independent meaning.
+    if not capability_gate_exempt(source_agent_id) and not await can_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        template_capability_id(source_runtime_id, source_agent_id),
     ):
         raise EnrollmentError(
             f"Template {request.template_id!r} was not found on runtime source "

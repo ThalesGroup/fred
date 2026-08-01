@@ -31,16 +31,20 @@ from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import RebacEngine, RelationType
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.capability.manifest import TeamScopePolicy
+from fred_sdk.contracts.capability.manifest import (
+    MODEL_CAPABILITY_NAMESPACE_PREFIX,
+    TeamScopePolicy,
+)
 
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     ReasoningNotSupported,
-    _cap_ref,
+    cap_ref,
     disable_capability_for_team,
     enable_capability_for_team,
     ensure_capability_anchor,
+    has_org_relation,
     is_template_capability_instance,
     reset_capability_for_team,
     revive_dependent_instances,
@@ -103,39 +107,54 @@ def _catalog_entry(
     return entry
 
 
+def _catalog_entry_for_revoke(
+    catalog: Mapping[str, CapabilityCatalogEntry], capability_id: str
+) -> CapabilityCatalogEntry:
+    """Like `_catalog_entry`, but for a REVOKE-direction write only (disable,
+    reset, or default-on turned OFF) — never for granting access.
+
+    `disable_capability_for_team` / `reset_capability_for_team` /
+    `set_capability_default_on(on=False)` only ever read `catalog_entry.id`
+    off the entry they're given (they delete tuples and suspend dependents by
+    id — they don't consult settings/team-scope). So for a `kind="model"` id
+    a fresh catalog fetch failed to re-advertise, a full entry isn't actually
+    needed to carry out the revoke; requiring one anyway means an admin
+    cannot revoke a live model grant for exactly as long as the model pod's
+    `/agents/models-catalog` endpoint is having trouble (2026-08-01, GitHub
+    #2191) — fail-OPEN on an authorization-management surface. `kind="tool"`/
+    `"agent"` ids are NOT given this fallback: their entries carry
+    `team_settings_fields` other write paths (e.g. a subsequent enable) rely
+    on, and their catalog absence already has other handling (health-unknown
+    suspension) this stub would bypass silently.
+    """
+
+    entry = catalog.get(capability_id)
+    if entry is not None:
+        return entry
+    if capability_id.startswith(MODEL_CAPABILITY_NAMESPACE_PREFIX):
+        return CapabilityCatalogEntry(
+            id=capability_id,
+            version="0",
+            name=capability_id,
+            description=capability_id,
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
+    raise CapabilityNotFound(
+        f"Capability {capability_id!r} is not advertised by any runtime pod."
+    )
+
+
 async def _teams_with_relation(
     rebac: RebacEngine, capability_id: str, relation: RelationType
 ) -> list[str]:
     subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id), relation, Resource.TEAM
+        cap_ref(capability_id), relation, Resource.TEAM
     )
     if isinstance(subjects, RebacDisabledResult):
         return []
     return sorted(ref.id for ref in subjects)
-
-
-async def _is_default_on(rebac: RebacEngine, capability_id: str) -> bool:
-    from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
-
-    subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id), RelationType.DEFAULT_ON, Resource.ORGANIZATION
-    )
-    if isinstance(subjects, RebacDisabledResult):
-        return False
-    return any(ref.id == ORGANIZATION_ID for ref in subjects)
-
-
-async def _has_org_relation(
-    rebac: RebacEngine, capability_id: str, relation: RelationType
-) -> bool:
-    from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
-
-    subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id), relation, Resource.ORGANIZATION
-    )
-    if isinstance(subjects, RebacDisabledResult):
-        return False
-    return any(ref.id == ORGANIZATION_ID for ref in subjects)
 
 
 async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> PersonalScope:
@@ -143,9 +162,9 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     (RFC §8.4). `enabled` wins if both are somehow present (matches the FGA
     setter, which never leaves both)."""
 
-    if await _has_org_relation(rebac, capability_id, RelationType.PERSONAL_ON):
+    if await has_org_relation(rebac, capability_id, RelationType.PERSONAL_ON):
         return "enabled"
-    if await _has_org_relation(rebac, capability_id, RelationType.PERSONAL_DISABLED):
+    if await has_org_relation(rebac, capability_id, RelationType.PERSONAL_DISABLED):
         return "disabled"
     return "default"
 
@@ -172,7 +191,7 @@ async def _build_enablement_item(
         disabled_team_ids,
         personal_scope,
     ) = await asyncio.gather(
-        _is_default_on(rebac, entry.id),
+        has_org_relation(rebac, entry.id, RelationType.DEFAULT_ON),
         _teams_with_relation(rebac, entry.id, RelationType.ENABLED),
         _teams_with_relation(rebac, entry.id, RelationType.DISABLED),
         _read_personal_scope(rebac, entry.id),
@@ -368,7 +387,7 @@ async def disable_team_capability(
     rebac = _rebac(deps)
     await _require_can_manage(rebac, user, capability_id)
     catalog = await aggregate_capability_catalog(deps)
-    entry = _catalog_entry(catalog, capability_id)
+    entry = _catalog_entry_for_revoke(catalog, capability_id)
     suspended = await disable_capability_for_team(
         rebac=rebac,
         settings_store=deps.get_team_capability_settings_store(),
@@ -399,8 +418,8 @@ async def reset_team_capability(
     rebac = _rebac(deps)
     await _require_can_manage(rebac, user, capability_id)
     catalog = await aggregate_capability_catalog(deps)
-    entry = _catalog_entry(catalog, capability_id)
-    default_on = await _is_default_on(rebac, capability_id)
+    entry = _catalog_entry_for_revoke(catalog, capability_id)
+    default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
     suspended = await reset_capability_for_team(
         rebac=rebac,
         agent_instance_store=deps.get_agent_instance_store(),
@@ -438,7 +457,15 @@ async def set_default_on(
     rebac = _rebac(deps)
     await _require_can_manage(rebac, user, capability_id)
     catalog = await aggregate_capability_catalog(deps)
-    entry = _catalog_entry(catalog, capability_id)
+    # Granting (on=True) needs the REAL entry — it reads `team_settings_fields`
+    # to enforce `DefaultOnNotAllowed`, which a stub can't safely fake. Turning
+    # default-on OFF is a revoke and only needs `.id` (see
+    # `_catalog_entry_for_revoke`).
+    entry = (
+        _catalog_entry(catalog, capability_id)
+        if default_on
+        else _catalog_entry_for_revoke(catalog, capability_id)
+    )
     suspended = await set_capability_default_on(
         rebac=rebac,
         agent_instance_store=deps.get_agent_instance_store(),
@@ -651,7 +678,7 @@ async def set_personal_scope(
     # during this call — only the two personal-class tuples do — so one read
     # covers both the before and after side of the access formula.
     scope_before = await _read_personal_scope(rebac, capability_id)
-    default_on = await _is_default_on(rebac, capability_id)
+    default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
     had_access = scope_before == "enabled" or (scope_before == "default" and default_on)
 
     suspended = await set_capability_personal_scope(

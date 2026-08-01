@@ -1154,6 +1154,270 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
 
 
 @pytest.mark.asyncio
+async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> None:
+    """GitHub #2191: two pods can advertise the same `kind="model"`
+    `(provider, name)` id with different `profile_ids` (each pod has its own
+    `models_catalog.yaml` profile namespace). Overwriting on collision would
+    silently drop the first pod's profile ids, and `routing_policy` validates
+    a team's chosen profile against this exact map — a dropped profile id
+    would then read as unknown even though it is still routable on the pod
+    that advertised it. The aggregation must union, never overwrite, for
+    `kind="model"` entries."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+
+    def _model_entry(profile_ids, thinking_profile_ids=()):
+        return CapabilityCatalogEntry(
+            id="model__openai__gpt-5.1",
+            version="1",
+            name="gpt-5.1",
+            description="gpt-5.1",
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(profile_ids),
+            model_thinking_profile_ids=tuple(thinking_profile_ids),
+        )
+
+    async def _fake_fetch(base_url: str):
+        return []
+
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return []
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return [_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
+        return [_model_entry(["chat.pod-b.gpt5"])]
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    entry = catalog["model__openai__gpt-5.1"]
+    # Both pods' profile ids survive — neither pod's registration wipes the
+    # other's, unlike a plain last-registration-wins overwrite.
+    assert set(entry.model_profile_ids) == {"chat.pod-a.gpt5", "chat.pod-b.gpt5"}
+    # pod-b never declared a thinking profile for this model; pod-a's must
+    # still carry through rather than being wiped by pod-b's registration.
+    assert entry.model_thinking_profile_ids == ("chat.pod-a.gpt5",)
+
+
+# ---------------------------------------------------------------------------
+# Revoke survives a stale/missing model catalog entry (GitHub #2191). A
+# kind="model" fetch failure must not fail-OPEN on the admin's ability to
+# revoke a live grant: disable/reset/default-off only ever need the
+# capability id, never full catalog metadata, to carry out a revoke.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_disable_team_capability_survives_missing_model_catalog_entry(
+    monkeypatch,
+) -> None:
+    """A model already `enabled` for a team must stay revocable even when the
+    aggregated catalog no longer advertises it (its pod's models-catalog fetch
+    is failing) — previously `CapabilityNotFound` blocked the disable outright."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+    rebac = _FakeRebac()
+    rebac.tuples.add(("team:team-a", "enabled", f"capability:{model_id}"))
+    store = _FakeAgentInstanceStore([])
+
+    async def _empty_catalog(_deps):
+        return {}  # the model fetch is failing — entry absent this pass
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _empty_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+    # Fetched by `disable_capability_for_team` and immediately discarded (the
+    # settings row is intentionally retained, never read on disable) — any
+    # object satisfies the call.
+    deps.get_team_capability_settings_store = lambda: None
+
+    result = await capability_service.disable_team_capability(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        team_id="team-a",
+        deps=deps,
+    )
+
+    assert result.enabled is False
+    assert ("team:team-a", "enabled", f"capability:{model_id}") not in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_reset_team_capability_survives_missing_model_catalog_entry(
+    monkeypatch,
+) -> None:
+    """Same fail-open fix as disable, for reset (drop to platform default)."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+    rebac = _FakeRebac()
+    rebac.tuples.add(("team:team-a", "enabled", f"capability:{model_id}"))
+    store = _FakeAgentInstanceStore([])
+
+    async def _empty_catalog(_deps):
+        return {}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _empty_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+
+    result = await capability_service.reset_team_capability(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        team_id="team-a",
+        deps=deps,
+    )
+
+    assert ("team:team-a", "enabled", f"capability:{model_id}") not in rebac.tuples
+    assert result.capability_id == model_id
+
+
+@pytest.mark.asyncio
+async def test_set_default_on_off_survives_missing_model_catalog_entry(
+    monkeypatch,
+) -> None:
+    """Same fail-open fix, for the platform-wide default-on OFF direction —
+    the ON direction must keep requiring the real entry (it reads
+    `team_settings_fields`), only tested here for the OFF/revoke side."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    model_id = "model__openai__gpt-5.1"
+    rebac = _FakeRebac()
+    rebac.tuples.add(
+        (f"organization:{ORGANIZATION_ID}", "default_on", f"capability:{model_id}")
+    )
+    store = _FakeAgentInstanceStore([])
+
+    class _EmptyReasoningStore:
+        async def list_enabled_model_ids(self) -> set[str]:
+            return set()
+
+    async def _empty_catalog(_deps):
+        return {}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _empty_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+    deps.get_model_reasoning_store = lambda: _EmptyReasoningStore()
+
+    result = await capability_service.set_default_on(
+        user=SimpleNamespace(uid="admin"),
+        capability_id=model_id,
+        default_on=False,
+        deps=deps,
+    )
+
+    assert result.default_on is False
+    assert (
+        f"organization:{ORGANIZATION_ID}",
+        "default_on",
+        f"capability:{model_id}",
+    ) not in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_disable_team_capability_still_404s_for_missing_non_model_entry(
+    monkeypatch,
+) -> None:
+    """The fallback is scoped to `kind="model"` ids only — a `kind="tool"`/
+    `"agent"` id missing from the catalog must keep raising `CapabilityNotFound`,
+    since those entries carry `team_settings_fields` other paths rely on and
+    already have their own health-unknown handling this stub would bypass."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+    rebac.tuples.add(("team:team-a", "enabled", "capability:doc_access"))
+    store = _FakeAgentInstanceStore([])
+
+    async def _empty_catalog(_deps):
+        return {}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _empty_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        rebac,
+        available_by_source={"runtime-a": frozenset()},
+        usable_ids=set(),
+    )
+    deps.get_team_capability_settings_store = lambda: None
+
+    with pytest.raises(capability_service.CapabilityNotFound):
+        await capability_service.disable_team_capability(
+            user=SimpleNamespace(uid="admin"),
+            capability_id="doc_access",
+            team_id="team-a",
+            deps=deps,
+        )
+
+
+@pytest.mark.asyncio
 async def test_default_on_toggle_rejects_required_settings() -> None:
     rebac = _FakeRebac()
     store = _FakeAgentInstanceStore([])
