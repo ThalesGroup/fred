@@ -42,14 +42,19 @@ If the field exists but is not yet exposed, extend the contract. Do not create a
 parallel type outside these files.
 
 **3. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
-covers the area, amend it rather than creating a new one. **RFCs are proposals,
-not verified truth** — each records intent at the time it was written (or
-amended) and its own `**Status:**` line, but it can still be superseded by a
-later decision that never made it back into the doc. Cross-check an RFC's
+covers the area, check whether the area is actually still open. **RFCs are
+scoped to open design questions and not-yet-built work only** (2026-08-01 —
+see "RFC vs. doc" below); if the RFC's content is already settled and shipped,
+amending it is the wrong move — fold that part into the relevant compact doc
+instead. **RFCs are proposals, not verified truth** — each records intent at
+the time it was written (or amended) and its own `**Status:**` line, but a
+`Status: ...pending sign-off` amendment can sit for weeks looking authoritative
+while being subtly wrong (an RFC read as "decided" is not the same as
+"validated" — this has bitten this repo at least once). Cross-check an RFC's
 design against the actual code and the frozen contract docs before treating it
 as current; if they diverge, the code and contract docs win — flag the
-divergence (or amend the RFC) rather than implementing what the RFC says over
-what's actually decided.
+divergence rather than implementing what the RFC says over what's actually
+decided.
 
 **4. Convergence check (before close-out)** — does the code match the GitHub
 issue's intent, and (if one exists) the RFC's? Fix divergence before closing.
@@ -60,10 +65,39 @@ surface that needs to stay current.
 
 ## Document workflow — what to write where
 
+### RFC vs. doc (2026-08-01)
+
+RFCs are not a permanent home for finished decisions — they exist only for
+**(a) a design question that is still genuinely open**, or **(b) work that is
+agreed but not yet built**. The moment a decision is settled — implemented,
+or clear enough that no alternative is really being weighed anymore — its
+durable "what/why" belongs in a **compact doc** (the relevant design/contract
+doc under `docs/swift/design/` or `docs/swift/platform/`, or a component doc),
+not in another dated RFC amendment.
+
+Why: an RFC that keeps accreting amendment blocks reads as more authoritative
+than it is. `Status: draft pending sign-off` looks the same on the page as
+`Status: team-approved` to a quick read, so both a developer and an assistant
+can mistake "written into the RFC" for "decided and validated" — including
+amendments that turned out, on later inspection, not to have been especially
+good ideas. Compact docs don't carry that ambiguity: if it's in the doc, it
+shipped and it's current.
+
+In practice: when Step 6 below says a design doc needs updating, write there
+first. Reach for `docs/swift/rfc/` only for the part that is still an open
+question or still-to-build — never to re-document something already decided.
+An existing RFC whose open questions have all closed should be trimmed back
+to nothing (or archived) once its content has been folded into a compact doc,
+not left growing.
+
 Decision tree for every piece of new content:
 
-    Design or API decision?
-      → write/amend RFC in docs/swift/rfc/. Stop until developer confirms.
+    Design or API decision that is still open / not yet built?
+      → write/amend an RFC in docs/swift/rfc/, scoped to the open part only.
+        Stop until developer confirms.
+    Design or API decision that is already settled or shipped?
+      → write/update the compact doc directly (design/contract doc, or the
+        relevant component doc). No RFC needed — note why in the close-out.
     New feature, endpoint, or component?
       → check for an existing GitHub issue (swift-golive / swift ga milestone).
         Stop until developer confirms.
@@ -76,10 +110,14 @@ Decision tree for every piece of new content:
 
 ### Task lifecycle (mandatory — steps cannot be skipped or reordered)
 
-**Step 1 — RFC first.** For any design or API decision: write a short RFC in
-`docs/swift/rfc/` (or amend existing). State: problem, proposed solution,
-alternatives considered, impact on existing contracts. Mechanical fixes (typo,
-missing agreed field) are exempt — state why.
+**Step 1 — RFC first, only while the design is still open.** For a design or
+API decision that is genuinely undecided (real alternatives still being
+weighed) or not yet built: write a short RFC in `docs/swift/rfc/` (or amend
+existing), scoped to that open part. State: problem, proposed solution,
+alternatives considered, impact on existing contracts. If the design is
+already settled/shipped — or is a mechanical fix (typo, missing agreed field)
+— skip the RFC and write/update the compact doc directly instead; state why
+in the close-out.
 
 **Step 2 — Backlog link (RFC-backed work only).** If Step 1 produced an RFC and
 a domain backlog file is still actively maintained for that area, link the RFC
@@ -120,7 +158,7 @@ reporting done.
 | New behaviour, API field, or contract change                      | Update spec table in the relevant design doc                                             |
 | Frozen contract touched (`execution.py`, `agent_app.py`, OpenAPI) | Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8` or `CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
-| RFC-backed item finished                                          | Update the RFC's `**Status:**` line, close the GitHub issue                              |
+| RFC-backed item finished, no open questions left                 | Fold the durable what/why into the relevant compact doc, trim the RFC to whatever (if anything) is still open, close the GitHub issue |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
@@ -266,7 +304,7 @@ Do not silently expand scope. Do not silently delete content.
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
-| Technical proposals                      | `docs/swift/rfc/`                                     |
+| Technical proposals — open questions / not-yet-built work only (settled decisions move to design docs, 2026-08-01) | `docs/swift/rfc/` |
 | Architecture entry point                 | `docs/ARCHITECTURE.html`                              |
 | Platform topology detail                 | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`         |
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
