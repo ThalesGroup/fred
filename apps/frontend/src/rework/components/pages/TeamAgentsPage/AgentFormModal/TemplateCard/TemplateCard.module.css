@@ -8,6 +8,7 @@
   background: transparent;
   padding: var(--spacing-m);
   width: 100%;
+  min-width: 0;
   min-height: 8rem;
   text-align: left;
 }
@@ -42,13 +43,19 @@
 }
 
 .name {
+  display: -webkit-box;
+  min-width: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: var(--primary);
   font: var(--font-body-large);
+  -webkit-box-orient: vertical;
 }
 
 .description {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  min-width: 0;
+  -webkit-line-clamp: 4;
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);
