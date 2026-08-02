@@ -141,25 +141,27 @@ export function TuningFieldRenderer({
     if (showPicker) {
       return (
         <div className={styles.promptPickerMode}>
-          <div className={styles.promptPickerHeader}>
-            <span className={styles.promptPickerLabel}>{label}</span>
-            <Button
-              color="on-surface"
-              variant="text"
-              size="small"
-              icon={{ category: "outlined", type: "edit" }}
-              onClick={() => setPickerExplicit(false)}
-              disabled={disabled}
-            >
-              {t("rework.teams.formAgent.promptField.writeFromScratch")}
-            </Button>
+          <div className={styles.promptPickerContainer}>
+            <div className={styles.promptPickerHeader}>
+              <span className={styles.promptPickerLabel}>{t("rework.teams.formAgent.promptField.libraryTitle")}</span>
+              <Button
+                color="on-surface-retreat"
+                variant="text"
+                size="small"
+                icon={{ category: "outlined", type: "close" }}
+                onClick={() => setPickerExplicit(false)}
+                disabled={disabled}
+              >
+                {t("rework.teams.formAgent.promptField.closeLibrary")}
+              </Button>
+            </div>
+            <PromptPicker
+              prompts={contextPrompts}
+              categories={promptCategories}
+              disabled={disabled || isLoadingDetail}
+              onSelect={handlePickPrompt}
+            />
           </div>
-          <PromptPicker
-            prompts={contextPrompts}
-            categories={promptCategories}
-            disabled={disabled || isLoadingDetail}
-            onSelect={handlePickPrompt}
-          />
           {error && <p className={styles.error}>{error}</p>}
         </div>
       );
@@ -170,7 +172,7 @@ export function TuningFieldRenderer({
         {hasLibrary && (
           <div className={styles.promptEditingHeader}>
             <Button
-              color="on-surface"
+              color="primary"
               variant="text"
               size="small"
               icon={{ category: "outlined", type: "edit_note" }}

@@ -2028,10 +2028,11 @@
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
         },
         "promptField": {
+          "closeLibrary": "Fermer la bibliothèque",
+          "libraryTitle": "Bibliothèque d'équipe",
           "pickFromLibrary": "Choisir depuis la bibliothèque",
           "removeTagAria": "Retirer {{tag}}",
-          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
-          "writeFromScratch": "Rédiger depuis zéro"
+          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags..."
         },
         "sections": {
           "aria": "Sections du formulaire",

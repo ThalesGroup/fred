@@ -2028,10 +2028,11 @@
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
         },
         "promptField": {
+          "closeLibrary": "Close library",
+          "libraryTitle": "Team library",
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
-          "tagsPlaceholder": "Type and press Enter to add tags...",
-          "writeFromScratch": "Write from scratch"
+          "tagsPlaceholder": "Type and press Enter to add tags..."
         },
         "sections": {
           "aria": "Form sections",

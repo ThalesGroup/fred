@@ -37,8 +37,18 @@
 }
 
 .promptPickerLabel {
+  padding-left: var(--spacing-xs);
   color: var(--on-surface);
   font: var(--font-label-large);
+}
+
+.promptPickerContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-s);
 }
 
 /* Editing mode: textarea is primary, picker is a secondary action */
