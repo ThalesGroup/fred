@@ -9,7 +9,7 @@ authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
   "fred-core>=3.4.0",
   "fred-sdk>=3.3.0",
-  "fred-runtime[app]>=3.3.0",
+  "fred-runtime[app]>=3.4.2",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=0.1.0",
