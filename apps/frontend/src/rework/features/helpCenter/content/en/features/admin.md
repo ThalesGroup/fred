@@ -22,7 +22,7 @@ see.
 
 - **Teams**: the overview of the platform's teams.
 - **Analytics**: usage indicators at the platform scale.
-- **Capabilities**: the capability catalog, their default and per-team
+- **Features**: the feature catalog, their default and per-team
   activation.
 - **Activity**: running tasks and processing history.
 - **Self-test**: checks that the platform is working correctly.

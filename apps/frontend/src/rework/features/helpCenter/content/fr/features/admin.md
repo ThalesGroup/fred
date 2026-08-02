@@ -22,7 +22,7 @@ Ouvrez le **menu profil** (en bas du panneau de navigation) puis
 
 - **Équipes** : la vue d'ensemble des équipes de la plateforme.
 - **Analytiques** : les indicateurs d'usage à l'échelle de la plateforme.
-- **Capacités** : le catalogue des capacités, leur activation par défaut et par
+- **Fonctionnalités** : le catalogue des fonctionnalités, leur activation par défaut et par
   équipe.
 - **Activité** : les tâches en cours et l'historique de traitement.
 - **Auto-test** : les vérifications de bon fonctionnement de la plateforme.

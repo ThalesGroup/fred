@@ -850,22 +850,22 @@
   "rework": {
     "admin": {
       "capabilities": {
-        "title": "Capacités",
-        "subtitle": "Catalogue des capacités de la plateforme : activation par équipe, valeurs par défaut et état.",
-        "loading": "Chargement des capacités…",
-        "loadError": "Impossible de charger le catalogue des capacités.",
-        "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
+        "title": "Fonctionnalités",
+        "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
+        "loading": "Chargement des fonctionnalités…",
+        "loadError": "Impossible de charger le catalogue des fonctionnalités.",
+        "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
         "manageTeams": "Gérer les équipes",
         "kindFilter": {
-          "tool": "Outils",
+          "tool": "Capacités",
           "agent": "Agents",
           "model": "Modèles",
-          "aria": "Filtrer par type de capacité"
+          "aria": "Filtrer par type de fonctionnalité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
         "col": {
-          "capability": "Capacité",
+          "capability": "Fonctionnalité",
           "enabledTeams": "Équipes activées",
           "defaultOn": "Activé pour tous",
           "health": "État",
@@ -886,12 +886,12 @@
           "suspended": "{{count}} suspendue(s)",
           "suspendedAction": "Afficher les {{count}} agent(s) suspendu(s), groupés par équipe",
           "unknown": "{{count}} inconnu(s)",
-          "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette capacité ne peut pas être déterminé pour le moment.",
+          "unknownHint": "Le pod d'exécution était injoignable ; l'état de cette fonctionnalité ne peut pas être déterminé pour le moment.",
           "healthy": "OK"
         },
         "suspendedDrawer": {
           "title": "{{name}} — agents suspendus",
-          "subtitle": "Agents que cette capacité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
@@ -900,7 +900,7 @@
         "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
         "defaultOffConfirm": {
           "title": "Désactiver l'activation par défaut ?",
-          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette capacité.",
+          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
           "confirm": "Désactiver",
           "cancel": "Annuler",
           "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
@@ -912,7 +912,7 @@
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",
-          "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette capacité actuellement.",
+          "subtitle": "Définissez l'accès de chaque équipe : activer avec réglages, désactiver explicitement, ou laisser le défaut de la plateforme. Les équipes estompées ne peuvent pas utiliser cette fonctionnalité actuellement.",
           "searchPlaceholder": "Rechercher une équipe...",
           "clearSearch": "Effacer la recherche",
           "teamsLoading": "Chargement des équipes…",
@@ -923,24 +923,24 @@
           "disable": "Désactiver",
           "cancel": "Annuler",
           "saveEnable": "Enregistrer et activer",
-          "enabledToast": "Capacité activée pour {{team}}.",
-          "enableError": "Impossible d'activer la capacité.",
-          "disabledToast": "Capacité désactivée pour {{team}}.",
+          "enabledToast": "Fonctionnalité activée pour {{team}}.",
+          "enableError": "Impossible d'activer la fonctionnalité.",
+          "disabledToast": "Fonctionnalité désactivée pour {{team}}.",
           "disabledSuspendedToast": "Désactivée pour {{team}} — {{count}} instance(s) suspendue(s).",
-          "disableError": "Impossible de désactiver la capacité.",
+          "disableError": "Impossible de désactiver la fonctionnalité.",
           "default": "Défaut",
           "defaultToast": "{{team}} suit désormais le défaut de la plateforme.",
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
-          "defaultError": "Impossible de remettre la capacité au défaut de la plateforme.",
+          "defaultError": "Impossible de remettre la fonctionnalité au défaut de la plateforme.",
           "rowControlAria": "Accès pour {{team}}",
           "personal": {
             "label": "Tous les espaces personnels",
             "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
             "enabledToast": "Activée pour tous les espaces personnels.",
-            "enableError": "Impossible d'activer la capacité pour les espaces personnels.",
+            "enableError": "Impossible d'activer la fonctionnalité pour les espaces personnels.",
             "disabledToast": "Désactivée pour tous les espaces personnels.",
             "disabledSuspendedToast": "Désactivée pour tous les espaces personnels — {{count}} instance(s) suspendue(s).",
-            "disableError": "Impossible de désactiver la capacité pour les espaces personnels.",
+            "disableError": "Impossible de désactiver la fonctionnalité pour les espaces personnels.",
             "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
             "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
             "defaultError": "Impossible de remettre le défaut des espaces personnels."
@@ -1495,7 +1495,7 @@
         },
         "menu": {
           "analytics": "Analytiques",
-          "capabilities": "Capacités",
+          "capabilities": "Fonctionnalités",
           "corpusAudit": "Audit du corpus",
           "migration": "Données plateforme",
           "selftest": "Auto-test",
@@ -1888,6 +1888,7 @@
           "aria": "Sections du formulaire",
           "general": "Général",
           "prompts": "Prompts",
+          "tools": "Capacités",
           "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",

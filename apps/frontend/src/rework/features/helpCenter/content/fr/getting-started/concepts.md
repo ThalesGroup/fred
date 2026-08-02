@@ -1,7 +1,7 @@
 ---
 title: Les concepts clés
 order: 20
-description: Équipe, agent, prompt, ressource, session, capacité — le vocabulaire de la plateforme.
+description: Équipe, agent, prompt, ressource, session, fonctionnalité, capacité — le vocabulaire de la plateforme.
 icon: school
 ---
 
@@ -52,11 +52,19 @@ l'historique des messages, les pièces jointes et les documents produits. Vous
 pouvez reprendre une session plus tard ou en démarrer une nouvelle à tout
 moment.
 
+## Fonctionnalité
+
+Une **fonctionnalité** est une fonction supplémentaire que les agents peuvent
+utiliser au-delà de la conversation — par exemple rédiger un document, remplir
+un modèle PowerPoint ou interroger des données tabulaires. Les fonctionnalités
+s'activent **par équipe** par un administrateur (voir
+[Console d'administration](/help/fr/features/admin)).
+
 ## Capacité
 
-Une **capacité** est une fonction supplémentaire qu'un agent peut mobiliser —
-par exemple rédiger un document, remplir un modèle PowerPoint ou interroger des
-données tabulaires. Les capacités s'activent par équipe.
+Une fois qu'une fonctionnalité est activée pour votre équipe, vos éditeurs
+peuvent l'activer pour un agent en particulier — elle devient alors l'une des
+**capacités** de cet agent (voir [Les agents](/help/fr/features/agents)).
 
 ## Comment tout s'articule
 
