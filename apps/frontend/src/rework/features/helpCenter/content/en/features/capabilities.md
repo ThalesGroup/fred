@@ -8,15 +8,17 @@ icon: extension
 # Agent capabilities
 
 A **capability** extends what an agent can do beyond conversation: draft a
-document, fill a template, query data… A capability is enabled **per team**,
-then attached to the agents that need it.
+document, fill a template, query data… Capabilities come from the platform's
+**feature catalog**: an administrator enables a feature for your team (see
+[Admin console](/help/en/features/admin)), then your team's editors can turn
+it on for the agents that need it, as one of that agent's capabilities.
 
 ## Enabling a capability
 
-Enabling capabilities is a team and platform matter. A capability not enabled
-for the team isn't available to its agents; if an active capability is later
-disabled, the agents that depend on it are **suspended** until it's restored
-(see [Agents](/help/en/features/agents)).
+Enabling a feature for your team is an administrator's job. A feature not
+enabled for the team isn't available to its agents as a capability; if an
+enabled feature is later disabled, the agents that depend on it are
+**suspended** until it's restored (see [Agents](/help/en/features/agents)).
 
 ## A few built-in capabilities
 

@@ -8,15 +8,20 @@ icon: extension
 # Les capacités des agents
 
 Une **capacité** étend ce qu'un agent sait faire au-delà de la conversation :
-rédiger un document, remplir un modèle, interroger des données… Une capacité
-s'active **par équipe**, puis se rattache aux agents qui en ont besoin.
+rédiger un document, remplir un modèle, interroger des données… Les capacités
+proviennent du **catalogue de fonctionnalités** de la plateforme : un
+administrateur active une fonctionnalité pour votre équipe (voir
+[Console d'administration](/help/fr/features/admin)), puis les éditeurs de
+votre équipe peuvent l'activer pour les agents qui en ont besoin, comme l'une
+des capacités de cet agent.
 
 ## Activer une capacité
 
-L'activation des capacités relève de l'équipe et de la plateforme. Une capacité
-non activée pour l'équipe n'est pas disponible pour ses agents ; si une capacité
-active est ensuite désactivée, les agents qui en dépendent sont **suspendus**
-jusqu'à son rétablissement (voir [Les agents](/help/fr/features/agents)).
+Activer une fonctionnalité pour votre équipe relève de l'administrateur. Une
+fonctionnalité non activée pour l'équipe n'est pas disponible pour ses agents
+en tant que capacité ; si une fonctionnalité active est ensuite désactivée,
+les agents qui en dépendent sont **suspendus** jusqu'à son rétablissement
+(voir [Les agents](/help/fr/features/agents)).
 
 ## Quelques capacités embarquées
 
