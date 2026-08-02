@@ -39,4 +39,14 @@ describe("PageHeader", () => {
     const withoutActions = renderToStaticMarkup(<PageHeader title="X" />);
     expect(withoutActions).not.toContain("<button");
   });
+
+  it("renders titleAction next to the title when given, omits it when not", () => {
+    const withTitleAction = renderToStaticMarkup(
+      <PageHeader title="X" titleAction={<button aria-label="More actions">more</button>} />,
+    );
+    expect(withTitleAction).toContain("More actions");
+
+    const withoutTitleAction = renderToStaticMarkup(<PageHeader title="X" />);
+    expect(withoutTitleAction).not.toContain("<button");
+  });
 });

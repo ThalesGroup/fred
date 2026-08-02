@@ -1729,6 +1729,7 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
+        "moreActions": "More actions",
         "search": {
           "ariaLabel": "Search for a member",
           "clearAriaLabel": "Clear search",
@@ -1888,6 +1889,7 @@
           "aria": "Form sections",
           "general": "General",
           "prompts": "Prompts",
+          "tools": "Tools",
           "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",

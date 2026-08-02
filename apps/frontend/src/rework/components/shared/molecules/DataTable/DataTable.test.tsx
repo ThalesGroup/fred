@@ -125,6 +125,18 @@ describe("DataTable", () => {
     expect(container.style.getPropertyValue("--datatable-row-height")).toBe("2.5rem");
   });
 
+  it("maps the size preset to its row-height CSS variable", () => {
+    render(<DataTable columns={columns} data={makeRows(3)} size="medium" />);
+    const mediumContainer = document.querySelector('[class*="datatable-container"]') as HTMLElement;
+    expect(mediumContainer.style.getPropertyValue("--datatable-row-height")).toBe("3rem");
+  });
+
+  it("lets an explicit rowHeight override the size preset", () => {
+    render(<DataTable columns={columns} data={makeRows(3)} size="medium" rowHeight="4rem" />);
+    const container = document.querySelector('[class*="datatable-container"]') as HTMLElement;
+    expect(container.style.getPropertyValue("--datatable-row-height")).toBe("4rem");
+  });
+
   it("shows a persistent footer with the total item count even when every row fits on one page", () => {
     render(<DataTable columns={columns} data={makeRows(10)} pageSize={20} />);
     expect(rowValues()).toHaveLength(10);

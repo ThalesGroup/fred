@@ -1729,6 +1729,7 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
+        "moreActions": "Plus d'actions",
         "search": {
           "ariaLabel": "Rechercher un membre",
           "clearAriaLabel": "Effacer la recherche",
@@ -1888,6 +1889,7 @@
           "aria": "Sections du formulaire",
           "general": "Général",
           "prompts": "Prompts",
+          "tools": "Outils",
           "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",
