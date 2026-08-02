@@ -61,21 +61,29 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
-    // Pre-bundle mermaid (and crawl its dynamically imported diagram chunks,
-    // e.g. flowDiagram) at startup. Without this, those sub-chunks are
-    // discovered mid-session, triggering a dep re-optimization + reload that
-    // invalidates the in-flight chunk hash and produces intermittent
-    // "error loading dynamically imported module" failures in MermaidBlock.
+    // ── mermaid diagram rendering (Help Center Architecture pages, chat) ──
+    // mermaid lazy-loads each diagram type (flowDiagram, …) via an internal
+    // dynamic import(). If mermaid is pre-bundled (`include`), those sub-chunks
+    // land in .vite/deps with a `?v=` hash that goes stale on any mid-session
+    // dep re-optimization → "error loading dynamically imported module".
+    // So mermaid is EXCLUDED: Vite serves it and its diagram modules as native
+    // ESM straight from node_modules, with no `?v=` optimize hash to break.
+    //
+    // But mermaid's CommonJS deps must still be pre-bundled for named-export
+    // interop — otherwise e.g. `@braintree/sanitize-url` is served raw and
+    // "doesn't provide an export named 'sanitizeUrl'", crashing the whole app
+    // (MermaidBlock is statically imported by MarkdownRenderer). The list below
+    // is mermaid's CJS deps reachable from the flowchart type we use.
     //
     // NOTE: `optimizeDeps` only affects the Vite DEV SERVER (esbuild pre-bundling
     // of CommonJS/lazy deps). It has NO effect on `npm run build` / production,
-    // where Rollup bundles everything ahead of time. So this list is purely a
-    // local dev-experience tweak — it is not needed and does nothing in prod.
+    // where Rollup bundles everything ahead of time.
     //
-    // react-dropzone is added here because it is lazy-loaded by MigrationPage;
-    // pre-bundling it avoids the same mid-session re-optimize + 504
-    // "Outdated Optimize Dep" reload dance when that route is first visited.
-    include: ["mermaid", "react-dropzone"],
+    // react-dropzone is pre-bundled because it is lazy-loaded by MigrationPage;
+    // this avoids the same mid-session re-optimize + 504 "Outdated Optimize Dep"
+    // reload dance when that route is first visited.
+    include: ["react-dropzone", "@braintree/sanitize-url", "dompurify", "khroma", "dayjs"],
+    exclude: ["mermaid"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",

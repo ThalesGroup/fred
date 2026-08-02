@@ -24,6 +24,7 @@ from fred_core.diagnostics import (
     collect_and_trim,
     current_rss_kb,
     install_gc_diagnostics,
+    live_object_census,
     malloc_trim,
 )
 from fred_core.diagnostics import gc_diagnostics as gcd
@@ -117,6 +118,7 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
         def __init__(self) -> None:
             self.other: "_Node | None" = None
 
+    expected_key = gcd._type_key(_Node())
     a, b = _Node(), _Node()
     a.other, b.other = b, a
     del a, b
@@ -125,7 +127,7 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
     try:
         report = collect_and_report_types(log=False)
         assert report.held_for_inspection >= 1
-        assert any(name == "_Node" for name, _count in report.top_types)
+        assert any(name == expected_key for name, _count in report.top_types)
         # Regression check: the function must drop its own reference to the
         # collected garbage before its final gc.collect(), or that collect()
         # can't actually free anything and freed_after_clear is always 0.
@@ -135,6 +137,181 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
         # the contract (no debug flags, no garbage) actually held afterward.
         assert gc.get_debug() == old_debug
         assert gc.garbage == []
+
+
+# ---------------------------------------------------------------------------
+# live_object_census
+# ---------------------------------------------------------------------------
+
+
+def test_live_object_census_returns_a_populated_result(caplog):
+    with caplog.at_level(logging.WARNING):
+        result = live_object_census(log=True)
+    assert result.total_objects > 0
+    assert result.total_bytes_shallow > 0
+    # Not hard-asserted at 0: some real-world type in the test process's own
+    # dependency graph could legitimately raise from __sizeof__. The
+    # non-zero case has its own dedicated, forced test below.
+    assert 0 <= result.sizing_failures <= result.total_objects
+    assert result.rss_kb is None or result.rss_kb > 0
+    assert result.top_by_count
+    assert result.top_by_size
+    assert any("[GC][census]" in r.message for r in caplog.records)
+
+
+def test_live_object_census_can_skip_logging():
+    result = live_object_census(log=False)
+    assert result.total_objects > 0
+
+
+def test_live_object_census_counts_reflect_a_known_live_object():
+    class _Marker:
+        pass
+
+    markers = [_Marker() for _ in range(50)]
+    try:
+        result = live_object_census(top_n=1000, log=False)
+        counts = dict(result.top_by_count)
+        # Derived via _type_key(), not hardcoded as "_Marker": the key is
+        # module-qualified (see _type_key's own tests), so a plain bare-name
+        # assertion here would silently stop matching if that ever changes.
+        expected_key = gcd._type_key(markers[0])
+        assert counts.get(expected_key, 0) >= 50
+    finally:
+        del markers
+
+
+def test_live_object_census_counts_sizing_failures_instead_of_swallowing_them(caplog):
+    # A handful of real-world types raise from __sizeof__ (or lack one) —
+    # simulate that instead of hoping to find one in the wild.
+    class _BrokenSizeof:
+        def __sizeof__(self):
+            raise RuntimeError("no sizeof for you")
+
+    broken = [_BrokenSizeof() for _ in range(10)]
+    try:
+        with caplog.at_level(logging.WARNING):
+            result = live_object_census(log=True)
+        assert result.sizing_failures >= 10
+        assert any(
+            "sizing_failures=" in r.message and "sizing_failures=0" not in r.message
+            for r in caplog.records
+        )
+    finally:
+        del broken
+
+
+def test_type_key_keeps_builtins_bare():
+    assert gcd._type_key({}) == "dict"
+    assert gcd._type_key(()) == "tuple"
+
+
+def test_type_key_disambiguates_same_named_classes_from_different_modules():
+    # The exact regression this exists for: two classes named identically,
+    # "defined in different modules" (simulated via __module__), must not
+    # collapse into one census key.
+    class Config:
+        pass
+
+    class _ConfigB:
+        pass
+
+    Config.__qualname__ = "Config"
+    _ConfigB.__name__ = "Config"
+    _ConfigB.__qualname__ = "Config"
+
+    Config.__module__ = "fake_module_a"
+    _ConfigB.__module__ = "fake_module_b"
+
+    key_a = gcd._type_key(Config())
+    key_b = gcd._type_key(_ConfigB())
+    assert key_a != key_b
+    assert key_a == "fake_module_a.Config"
+    assert key_b == "fake_module_b.Config"
+
+
+def test_type_key_qualifies_non_builtin_stdlib_types():
+    # Copilot review on #2199: the docstring previously said "builtins/stdlib
+    # types" stay bare, but the actual condition is __module__ == "builtins"
+    # only — a non-builtin stdlib type like collections.Counter must still be
+    # qualified, or a Counter and some hypothetical unrelated app-level
+    # "Counter" class would collide in a report exactly like the bug this
+    # module exists to prevent.
+    from collections import Counter as StdlibCounter
+
+    assert gcd._type_key(StdlibCounter()) == "collections.Counter"
+
+
+def test_type_key_for_class_survives_a_hostile_metaclass():
+    # chatgpt-codex-connector review on #2199: a class whose metaclass
+    # overrides __getattribute__ and raises on __module__/__qualname__
+    # access must not abort the whole census/report for every other
+    # ordinary object — it degrades to a placeholder instead.
+    class HostileMeta(type):
+        def __getattribute__(cls, name):
+            if name in ("__module__", "__qualname__", "__name__"):
+                # Deliberately non-standard (a real __getattribute__ should
+                # only ever raise AttributeError): getattr()'s own built-in
+                # fallback already covers a conforming implementation, so a
+                # plain AttributeError here wouldn't exercise the new
+                # try/except Exception in _type_key_for_class at all. This
+                # class exists specifically to prove that guard survives
+                # non-conforming real-world code too.
+                raise RuntimeError("nope")
+            return type.__getattribute__(cls, name)
+
+    class Hostile(metaclass=HostileMeta):
+        pass
+
+    key = gcd._type_key_for_class(Hostile)
+    assert key.startswith("<unknown-type id=")
+
+
+def test_live_object_census_caches_type_key_per_class(monkeypatch):
+    # chatgpt-codex-connector review on #2199: with ~1.3M tracked objects
+    # sharing a handful of types, _type_key_for_class() must be called at
+    # most once per distinct class, not once per instance.
+    calls: list[type] = []
+    real = gcd._type_key_for_class
+
+    def counting(cls):
+        calls.append(cls)
+        return real(cls)
+
+    monkeypatch.setattr(gcd, "_type_key_for_class", counting)
+    instances = [object() for _ in range(50)]
+    try:
+        result = gcd.live_object_census(log=False)
+        assert result.total_objects >= 50
+        assert calls.count(object) <= 1
+    finally:
+        del instances
+
+
+def test_shallow_fraction_of_rss_handles_unknown_rss():
+    assert gcd._shallow_fraction_of_rss(1000, None) == "RSS unknown"
+    assert gcd._shallow_fraction_of_rss(1000, 0) == "RSS unknown"
+
+
+def test_shallow_fraction_of_rss_computes_a_percentage():
+    # 1024 bytes shallow out of 1 KiB (1024 bytes) RSS -> 100%.
+    assert gcd._shallow_fraction_of_rss(1024, 1) == "100.0% of RSS"
+
+
+def test_sigusr2_handler_runs_both_diagnostics(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        gcd,
+        "collect_and_report_types",
+        lambda: calls.append("types"),
+    )
+    monkeypatch.setattr(
+        gcd,
+        "live_object_census",
+        lambda: calls.append("census"),
+    )
+    gcd._handle_sigusr2()
+    assert calls == ["types", "census"]
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useHref, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
@@ -39,6 +39,8 @@ export default function UserProfile() {
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Basename-aware href — the Help Center opens in its own tab (HELP-01).
+  const helpCenterHref = useHref("/help");
 
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
@@ -80,6 +82,15 @@ export default function UserProfile() {
                   icon={{ category: "outlined", type: "person" }}
                   label={t("rework.profileMenu.profile")}
                   onClick={() => goTo("/settings")}
+                />,
+                <MenuPopoverItem
+                  key="help-center"
+                  icon={{ category: "outlined", type: "help" }}
+                  label={t("rework.profileMenu.helpCenter")}
+                  onClick={() => {
+                    setOpen(false);
+                    window.open(helpCenterHref, "_blank", "noopener,noreferrer");
+                  }}
                 />,
               ],
               canAdmin || canObservePlatform

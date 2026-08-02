@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-writable-document"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fred agent capability: co-author a session-scoped Markdown document from chat (writable_document)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -11,7 +11,7 @@ dependencies = [
   "fred-sdk>=3.3.0",
   # fred-runtime supplies the pod config loader the store + Alembic env read to
   # build their async engine (`load_agent_pod_config().storage.postgres`).
-  "fred-runtime>=3.3.0",
+  "fred-runtime>=3.4.2",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",

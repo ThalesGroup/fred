@@ -36,6 +36,16 @@
   font-size: 20px;
 }
 
+.label {
+  // Fill the row and truncate: a long label ellipses on one line instead of
+  // wrapping to two and breaking the item's fixed height.
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .badge {
   display: inline-flex;
   justify-content: center;

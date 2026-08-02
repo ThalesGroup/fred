@@ -104,7 +104,35 @@ Each PR must explicitly confirm:
 - New external dependency tests marked as integration.
 - Documentation updated when behavior/rules changed.
 
-## 6) AI Assistant Instructions
+## 6) Python Dependency Version Pins
+
+Third-party packages sometimes ship a major version with no upper bound in
+their own dependency declaration — a fresh `uv lock`/`uv sync` can then pull
+a breaking release without any change on our side. This has bitten this repo
+once already (`mcp` 2.0.0, 2026-08-01, #2194 — `langchain-mcp-adapters`
+declared `mcp>=1.24.0` unbounded, and `mcp` 2.0.0 broke import at boot
+before any upstream release supported it).
+
+- If a module's `pyproject.toml` needs to cap a **transitive** dependency
+  (one it doesn't import directly), add it as an explicit direct dependency
+  with the bound, not a comment-only note — the resolver only respects
+  declared constraints. Example, `libs/fred-runtime/pyproject.toml`:
+  ```
+  "langchain-mcp-adapters>=0.2.1",
+  "mcp>=1.24.0,<2.0.0",  # caps the unbounded transitive constraint above
+  ```
+- State the reason and link the tracking issue/upstream issue in a comment
+  directly above the pin — the next reader (human or assistant) must be able
+  to tell whether the cap is still needed without archaeology.
+- Regenerating the module's `uv.lock` and running `make code-quality` /
+  `make test` after touching a pin is required before merge — pinning alone
+  does not prove the resolution still installs cleanly.
+- Before lifting a cap, confirm the upstream package that forced it has an
+  actual released (not draft/unmerged) version compatible with the newer
+  major — check the linked upstream issue/PR state, don't assume time alone
+  fixed it.
+
+## 7) AI Assistant Instructions
 
 When prompting an assistant, start with:
 
