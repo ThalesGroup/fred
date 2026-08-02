@@ -1989,6 +1989,10 @@
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
+        "capabilitiesInfo": {
+          "title": "What are these capabilities for?",
+          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created."
+        },
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
         "fields": {

@@ -28,6 +28,7 @@ import type {
 import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
+import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./AgentFormBody.module.css";
@@ -328,67 +329,72 @@ export function AgentFormBody({
             )}
             {effectiveSection === "prompts" && renderFieldList(promptFields)}
             {effectiveSection === "tools" && (
-              <ul className={styles.toolsList}>
-                {/* REASON-01 level 3 (Amendment C) — always offered, regardless
+              <>
+                <CapabilitiesInfoBanner />
+                <ul className={styles.toolsList}>
+                  {/* REASON-01 level 3 (Amendment C) — always offered, regardless
                     of the template's own capabilities, so it isn't gated behind
                     `capabilities.length > 0` like the ones below it. Same
                     CapabilityCard as every real capability; not one itself. */}
-                <CapabilityCard
-                  name={t("rework.teams.formAgent.fields.reasoning.label")}
-                  description={t("rework.teams.formAgent.fields.reasoning.hint")}
-                  checked={reasoningEnabled}
-                  disabled={isSubmitting}
-                  onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
-                  subForm={
-                    reasoningEnabled && (
-                      <SwitchRow
-                        label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
-                        description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
-                        checked={reasoningDefaultOn}
-                        onChange={onReasoningDefaultOnChange}
+                  <CapabilityCard
+                    name={t("rework.teams.formAgent.fields.reasoning.label")}
+                    description={t("rework.teams.formAgent.fields.reasoning.hint")}
+                    checked={reasoningEnabled}
+                    disabled={isSubmitting}
+                    onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
+                    subForm={
+                      reasoningEnabled && (
+                        <SwitchRow
+                          label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
+                          description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
+                          checked={reasoningDefaultOn}
+                          onChange={onReasoningDefaultOnChange}
+                        />
+                      )
+                    }
+                  />
+                  {capabilities.map((capability) => {
+                    const checked = selectedCapabilityIds.includes(capability.id);
+                    const configFields = capability.config_fields ?? [];
+                    const toggle = () => {
+                      const next = checked
+                        ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                        : [...selectedCapabilityIds, capability.id];
+                      onCapabilitySelectionChange(next);
+                    };
+                    return (
+                      <CapabilityCard
+                        key={capability.id}
+                        name={t(capability.name, { defaultValue: capability.name })}
+                        description={t(capability.description, { defaultValue: capability.description })}
+                        checked={checked}
+                        disabled={isSubmitting}
+                        onToggle={toggle}
+                        subForm={
+                          checked &&
+                          configFields.length > 0 && (
+                            <CapabilityConfigForm
+                              capability={capability}
+                              configFields={configFields}
+                              configValues={capabilityConfigValues[capability.id] ?? {}}
+                              disabled={isSubmitting}
+                              teamId={teamId}
+                              assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+                              onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                              onAssetFileChange={(slotKey, file) =>
+                                onCapabilityAssetFileChange(capability.id, slotKey, file)
+                              }
+                              onBlockingErrorChange={(message) =>
+                                onCapabilityBlockingErrorChange(capability.id, message)
+                              }
+                            />
+                          )
+                        }
                       />
-                    )
-                  }
-                />
-                {capabilities.map((capability) => {
-                  const checked = selectedCapabilityIds.includes(capability.id);
-                  const configFields = capability.config_fields ?? [];
-                  const toggle = () => {
-                    const next = checked
-                      ? selectedCapabilityIds.filter((id) => id !== capability.id)
-                      : [...selectedCapabilityIds, capability.id];
-                    onCapabilitySelectionChange(next);
-                  };
-                  return (
-                    <CapabilityCard
-                      key={capability.id}
-                      name={t(capability.name)}
-                      description={t(capability.description)}
-                      checked={checked}
-                      disabled={isSubmitting}
-                      onToggle={toggle}
-                      subForm={
-                        checked &&
-                        configFields.length > 0 && (
-                          <CapabilityConfigForm
-                            capability={capability}
-                            configFields={configFields}
-                            configValues={capabilityConfigValues[capability.id] ?? {}}
-                            disabled={isSubmitting}
-                            teamId={teamId}
-                            assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                            onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                            onAssetFileChange={(slotKey, file) =>
-                              onCapabilityAssetFileChange(capability.id, slotKey, file)
-                            }
-                            onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
-                          />
-                        )
-                      }
-                    />
-                  );
-                })}
-              </ul>
+                    );
+                  })}
+                </ul>
+              </>
             )}
             {effectiveSection === "commitments" && (
               <>
