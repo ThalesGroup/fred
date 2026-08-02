@@ -54,7 +54,9 @@ export function TuningFieldRenderer({
 }: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
-  const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
+  const descriptionKey = field.description_by_lang?.[lang] ?? field.description;
+  const fieldDescription = descriptionKey ? t(descriptionKey, { defaultValue: descriptionKey }) : undefined;
+  const fieldTitle = t(field.title, { defaultValue: field.title });
   const isPromptField = field.type === "prompt";
 
   // null = auto: picker shown when field is empty, textarea shown when field has value.
@@ -92,7 +94,7 @@ export function TuningFieldRenderer({
   if (field.ui?.visible_when && !allValues?.[field.ui.visible_when]) return null;
 
   const fieldValue = value ?? field.default ?? "";
-  const label = `${field.title}${field.required ? " *" : ""}`;
+  const label = `${fieldTitle}${field.required ? " *" : ""}`;
 
   if (field.enum && field.enum.length > 0) {
     return (
@@ -116,7 +118,7 @@ export function TuningFieldRenderer({
     return (
       <div className={styles.field}>
         <SwitchRow
-          label={field.title}
+          label={fieldTitle}
           description={fieldDescription ?? ""}
           checked={Boolean(fieldValue)}
           onChange={(checked) => onChange(field.key, checked)}
