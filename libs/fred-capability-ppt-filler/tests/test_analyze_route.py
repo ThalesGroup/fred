@@ -29,6 +29,7 @@ import pytest
 from deck_builders import IMAGE_NOTES, build_deck, build_table_deck
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from fred_capability_ppt_filler import capability as capability_mod
 from fred_capability_ppt_filler.capability import PptFillerCapability
 
 _PPTX_CONTENT_TYPE = (
@@ -171,6 +172,43 @@ def test_analyze_reports_image_location_error(client):
     assert response.status_code == status.HTTP_200_OK
     codes = {(e["code"], e["key"], e["slide"]) for e in response.json()["errors"]}
     assert ("image_key_invalid_location", "logo", 1) in codes
+
+
+def test_analyze_oversized_upload_returns_200_with_invalid_upload_error(
+    client, monkeypatch
+):
+    """An upload past the configured byte cap is rejected with the same 200
+    ``{schema, errors}`` contract as any other template error (#2183) —
+    never fed into parsing."""
+    monkeypatch.setattr(capability_mod, "MAX_TEMPLATE_UPLOAD_BYTES", 10)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    assert len(deck) > 10
+
+    response = _post_deck(client, deck)
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["schema"] == []
+    assert len(body["errors"]) == 1
+    error = body["errors"][0]
+    assert error["slide"] == 0
+    assert error["code"] == "invalid_upload"
+    assert "limit" in error["message"].lower()
+
+
+def test_analyze_busy_pod_returns_200_with_server_busy_error(client, monkeypatch):
+    """When the per-pod heavy-job bound is saturated, analyze fails fast with a
+    clear busy error instead of running (never queues)."""
+    monkeypatch.setattr(capability_mod, "acquire_heavy_job_slot", lambda: False)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+
+    response = _post_deck(client, deck)
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert body["schema"] == []
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["code"] == "server_busy"
 
 
 def test_analyze_does_not_report_folder_not_found(client):

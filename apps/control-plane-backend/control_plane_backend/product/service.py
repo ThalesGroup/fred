@@ -731,6 +731,12 @@ async def _model_capabilities_for_source(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            # REASON-01 §5.3 — the pod derives this subset from each profile's
+            # `supports_thinking`; control-plane carries it verbatim, exactly
+            # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
+            # then reads as "no reasoning-capable profile" and shows no
+            # reasoning control — the safe direction (§5.6).
+            model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -859,6 +865,85 @@ async def _resolve_chat_controls(
         for item in per_capability.get(cap_id, []):
             descriptors.append(ChatControlDescriptor.from_item(cap_id, item))
     return descriptors
+
+
+# REASON-01's composer widget id (§7). Reasoning is NOT a capability — it is a
+# property of how the model is called, not a tool an agent can use — so this
+# control has no owning capability and control-plane emits it directly.
+_REASONING_TOGGLE_WIDGET = "reasoning_toggle"
+
+# Reserved `ChatControlDescriptor.capability_id` for controls the PLATFORM
+# contributes rather than a capability. Before REASON-01 every chat control came
+# from a capability (`AGENT-CAPABILITY-RFC.md` §3.3); this is the first that does
+# not, and it needs an owner id because the field is required and the frontend
+# keys its plugin lookup on it. A reserved sentinel — never a real capability id,
+# so a plugin can never accidentally claim it and the stock-kit fallback (keyed
+# on widget id alone) resolves it.
+PLATFORM_CHAT_CONTROL_OWNER = "platform"
+
+
+def _platform_reasoning_control(
+    *,
+    reasoning_enabled: bool,
+    reasoning_default_on: bool,
+    reasoning_enabled_model_ids: Sequence[str],
+) -> ChatControlDescriptor | None:
+    """The composer's reasoning toggle, or `None` when a gate upstream is closed
+    (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
+
+    Emitted here, not by a capability, because reasoning is not a tool: an agent
+    does not "use" reasoning the way it uses document search, so putting it in
+    the capability/tool system would ask an author to enable it in the wrong
+    place. Level 3 is a plain agent property (`tuning.reasoning_enabled`, set in
+    the General section of the agent form) and this function is where it meets
+    the platform gate.
+
+    §8's diagnosability rule decides the return type. Three of the four gates are
+    invisible from the chat page, so a control that cannot do anything must be
+    **absent**, never present-and-inert — otherwise the predictable support
+    ticket is "I turned reasoning on and nothing happened" with no way to tell
+    which gate blocked:
+
+    - the agent's author did not offer it → no control;
+    - no model has its reasoning enabled platform-wide → no control.
+
+    `reasoning_default_on` (Amendment B) is read only once past those gates: it
+    decides where the emitted switch *starts*, never whether one is emitted.
+    An author who left the offer off but the default on gets no control — the
+    stored value simply stays inert until the offer comes back.
+
+    Checking "is any model's reasoning on?" also covers the aptitude gate,
+    because the write path already enforces it: `set_model_reasoning` refuses
+    (409 `ReasoningNotSupported`) a model with no `supports_thinking` profile, so
+    a stored enabled row can only ever name a reasoning-capable model. No catalog
+    fetch is needed on this send path.
+
+    Deliberately NOT narrowed to the profile this turn will route to: routing
+    resolves per *operation* at runtime while chat controls are computed once per
+    session (RFC §12 q3). Under-hiding — showing a control a later operation
+    might not honour — beats over-hiding one that would have worked.
+    """
+
+    if not reasoning_enabled:
+        return None
+    if not reasoning_enabled_model_ids:
+        logger.debug(
+            "[reasoning] no %s control: the agent offers it but no model has "
+            "its reasoning enabled platform-wide (REASON-01 §8)",
+            _REASONING_TOGGLE_WIDGET,
+        )
+        return None
+    return ChatControlDescriptor(
+        capability_id=PLATFORM_CHAT_CONTROL_OWNER,
+        widget=_REASONING_TOGGLE_WIDGET,
+        # Seeds the composer's initial value only (RFC §3.7) — the user can
+        # still flip it off for this question. Author-chosen since Amendment B
+        # (`tuning.reasoning_default_on`); it was hardcoded False before, and
+        # False remains the default because `AGENT-THINKING-API-RFC.md`
+        # Amendment C measured reasoning re-issuing duplicate tool calls in
+        # 10/10 turns on this stack. Starting ON is an author's opt-in.
+        params={"default": reasoning_default_on},
+    )
 
 
 def _validate_tuning_field_values(
@@ -2054,6 +2139,8 @@ def _record_to_summary(
         description=record.description,
         role=record.tuning.role,
         usage_statement=record.tuning.usage_statement,
+        reasoning_enabled=record.tuning.reasoning_enabled,
+        reasoning_default_on=record.tuning.reasoning_default_on,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2135,6 +2222,31 @@ def _to_session_attachment_summary(
     )
 
 
+def _record_owned_by_user(
+    record: SessionMetadataRecord, *, user_id: str, allow_unowned: bool
+) -> bool:
+    """
+    Whether ``record.user_id`` counts as belonging to ``user_id``.
+
+    Shared by `_get_owned_session_record` (attachment CRUD) and
+    `_session_usable_for_execution` (execution context) — both compare the
+    same nullable `user_id` column, but must apply different policies to a
+    row with no recorded owner (`user_id IS NULL`, e.g. a session created
+    before this column existed):
+
+    - `allow_unowned=True`: no owner recorded -> treat as accessible. Matches
+      attachment CRUD's historical behavior; an unowned legacy session
+      shouldn't lock its own uploader out of managing its attachments.
+    - `allow_unowned=False`: deny-by-default. `_session_usable_for_execution`
+      exists specifically to stop one session's data from leaking into
+      another user's execution (RUNTIME-07) — an unowned row gets no
+      benefit of the doubt there.
+    """
+    if record.user_id is None:
+        return allow_unowned
+    return record.user_id == user_id
+
+
 async def _get_owned_session_record(
     *,
     deps: ProductServiceDependencies,
@@ -2162,7 +2274,7 @@ async def _get_owned_session_record(
             f"Session {session_id!r} not found for team {team_id!r}.",
             http_status=404,
         )
-    if record.user_id is not None and record.user_id != user_id:
+    if not _record_owned_by_user(record, user_id=user_id, allow_unowned=True):
         raise SessionAttachmentRequestError(
             f"Session {session_id!r} is not owned by user {user_id!r}.",
             http_status=404,
@@ -2342,6 +2454,13 @@ async def enroll_agent_instance(
             "role": request.role or request.display_name,
             "description": request.description or request.display_name,
             "usage_statement": request.usage_statement,
+            # REASON-01 level 3 — a plain agent property set on the General
+            # section of the form, alongside role/description. Not a capability.
+            "reasoning_enabled": request.reasoning_enabled,
+            # Amendment B — where the composer's toggle starts on a new
+            # conversation. Stored even when the offer above is off: inert, but
+            # it survives the author toggling the offer off and back on.
+            "reasoning_default_on": request.reasoning_default_on,
         }
     )
     if request.tuning_field_values:
@@ -2588,6 +2707,22 @@ async def update_agent_instance(
             update={"usage_statement": request.usage_statement}
         )
 
+    if request.reasoning_enabled is not None:
+        # REASON-01 level 3, same "None means unchanged" convention as role and
+        # usage_statement above: a partial update (e.g. the enable/disable
+        # toggle) must not silently switch an agent's reasoning offer off.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"reasoning_enabled": request.reasoning_enabled}
+        )
+
+    if request.reasoning_default_on is not None:
+        # Amendment B, same "None means unchanged" convention. Independent of
+        # reasoning_enabled above on purpose: switching the offer off must not
+        # erase the author's default, so the two fields never write each other.
+        new_tuning = (new_tuning or record.tuning).model_copy(
+            update={"reasoning_default_on": request.reasoning_default_on}
+        )
+
     updated = await store.update(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -2760,6 +2895,53 @@ async def _resolve_context_prompt_text(
     return None
 
 
+def _session_usable_for_execution(
+    session_record: SessionMetadataRecord | None,
+    *,
+    team_id: TeamId,
+    user_id: str,
+    agent_instance_id: str,
+) -> bool:
+    """
+    Whether ``session_record`` may lend its context prompts to this execution.
+
+    Why this exists:
+    - `prepare_execution` used to load any `session_id` unchecked (a raw
+      primary-key fetch) and resolve its `context_prompt_ids` with no
+      ownership check at all — a caller could pass a foreign session_id and
+      have ITS context prompts influence a DIFFERENT user's/team's/agent's
+      execution. The sibling `get_session` already guards its own raw fetch
+      with a `team_id` check; `prepare_execution` never did.
+
+    How to use it:
+    - call right after loading the session record, before touching
+      `context_prompt_ids`
+
+    Ownership rule:
+    - the session must exist, and belong to the same team and the same user
+    - a session with no recorded owner (`user_id IS NULL`, e.g. predating
+      that column) is deny-by-default here — see `_record_owned_by_user`'s
+      `allow_unowned` doc for why this deliberately differs from the more
+      permissive attachment-CRUD ownership check
+    - `agent_instance_id` is only enforced when the session was actually
+      scoped to an instance at creation (it is optional on
+      `CreateSessionRequest`) — an agent-agnostic session matches any
+      instance the same user/team requests
+    """
+    if session_record is None:
+        return False
+    if str(session_record.team_id) != str(team_id):
+        return False
+    if not _record_owned_by_user(session_record, user_id=user_id, allow_unowned=False):
+        return False
+    if (
+        session_record.agent_instance_id is not None
+        and session_record.agent_instance_id != agent_instance_id
+    ):
+        return False
+    return True
+
+
 async def prepare_execution(
     *,
     user: KeycloakUser,
@@ -2842,7 +3024,25 @@ async def prepare_execution(
     context_prompt_text: str | None = None
     if session_id is not None:
         session_record = await deps.get_session_metadata_store().get(session_id)
-        if session_record is not None and session_record.context_prompt_ids:
+        if not _session_usable_for_execution(
+            session_record,
+            team_id=team_id,
+            user_id=user.uid,
+            agent_instance_id=agent_instance_id,
+        ):
+            # Deliberately the same error (message and status) whether the
+            # session_id is unknown or belongs to another user/team/agent
+            # instance — distinguishing the two would let a caller probe for
+            # the existence of a foreign session_id (finding: prior code
+            # loaded ANY session_id unchecked and fell back to "no context
+            # prompt" instead of rejecting, silently discarding an attacker's
+            # or a stale client's mismatched session rather than surfacing
+            # the mismatch).
+            raise ExecutionPreparationError(
+                f"Session {session_id!r} is not usable for this execution."
+            )
+        assert session_record is not None
+        if session_record.context_prompt_ids:
             # Resolve library prompts only within the caller's authorized scope:
             # the active team plus the caller's personal team (the same union the
             # context picker draws from — PROMPTS.md §4/§6).
@@ -2889,10 +3089,30 @@ async def prepare_execution(
     # #2118) — resolved once here at session prep, same lifecycle as
     # context_prompt_text above, NOT a per-turn lookup (that's how model
     # *authorization*/usable_model_ids works, deliberately not this).
+    # Second snapshot on the same lifecycle: the platform reasoning activation
+    # (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5), for the same
+    # reason — the runtime must not do a live lookup per turn. Deliberately NOT
+    # filtered against this team's usable models: reasoning is global, and the
+    # runtime keys on the model it actually resolves. Two independent reads, so
+    # gathered rather than chained — this is a user-facing send path.
     (
-        chat_default_profile_id,
-        operation_route_rules,
-    ) = await resolve_execution_routing_snapshot(team_id, deps)
+        (chat_default_profile_id, operation_route_rules),
+        reasoning_enabled_model_ids,
+    ) = await asyncio.gather(
+        resolve_execution_routing_snapshot(team_id, deps),
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
+    )
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_model_ids)
+    # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
+    # a capability — appended last so it sits after the capability-owned rows in
+    # the composer menu, and omitted entirely when a gate upstream is closed (§8).
+    reasoning_control = _platform_reasoning_control(
+        reasoning_enabled=instance.tuning.reasoning_enabled,
+        reasoning_default_on=instance.tuning.reasoning_default_on,
+        reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+    )
+    if reasoning_control is not None:
+        chat_controls = [*chat_controls, reasoning_control]
 
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
@@ -2907,6 +3127,7 @@ async def prepare_execution(
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
         operation_route_rules=operation_route_rules,
+        reasoning_enabled_model_ids=sorted_reasoning_model_ids,
     )
 
 

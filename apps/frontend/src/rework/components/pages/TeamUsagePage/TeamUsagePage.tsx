@@ -20,7 +20,6 @@ import {
   useDocumentsTotalQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
-  useTeamActivitySummaryQuery,
   useTokenUsageByAgentQuery,
   useTokenUsageByModelQuery,
   useTokenUsageOverTimeQuery,
@@ -39,8 +38,8 @@ import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
-import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
@@ -68,11 +67,13 @@ export default function TeamUsagePage() {
   // collaborative-team sections below while sitting in personal space, since
   // those flags would read exactly as they do for a real team_editor/admin.
   const elevated = hasElevatedTeamRole(capabilities) && !isPersonalTeam;
-  // §2.4/schema.fga: can_update_info is team_admin-only; can_update_resources
-  // (like can_update_agents) is team_editor-only — the two roles this page's
-  // additional sections are gated on.
-  const isTeamAdmin = capabilities.canUpdateInfo && !isPersonalTeam;
-  const isTeamEditor = capabilities.canUpdateResources && !isPersonalTeam;
+  // This page is majority team-scoped content for an elevated viewer (KPIs,
+  // charts, storage quota below) with only a "My usage" subsection at the
+  // bottom — calling it "My token usage" for that viewer was misleading (a
+  // team_admin reported it read as a personal-usage page while looking at
+  // team-wide data). Plain members/personal-team viewers only ever see the
+  // personal section, so the original title stays correct for them.
+  const pageTitle = elevated ? t("rework.teamUsage.team.pageTitle") : t("rework.teamUsage.title");
 
   // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
   // client-side TTL, does not re-fetch on every render" policy
@@ -162,14 +163,6 @@ export default function TeamUsagePage() {
     [teamStorageData],
   );
 
-  // team_admin's governance summary (§2.5) — team_id is required by this
-  // preset, so it only ever fires once both an elevated role and a team are
-  // resolved, same gate as every other team-scoped query above.
-  const { data: activitySummaryData, isLoading: activitySummaryIsLoading } = useTeamActivitySummaryQuery(teamArgs, {
-    skip: !isTeamAdmin || !teamId,
-    refetchOnMountOrArgChange: 300,
-  });
-
   const handleRangeChange = (range: TimeRange) => {
     setTimeRange(range);
   };
@@ -186,9 +179,7 @@ export default function TeamUsagePage() {
   if (serviceDown) {
     return (
       <div className={styles.page}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>{t("rework.teamUsage.title")}</h1>
-        </div>
+        <PageHeader title={pageTitle} />
         <ServiceNotice
           icon="cloud_off"
           title={t("rework.serviceNotice.controlPlane.title")}
@@ -201,45 +192,23 @@ export default function TeamUsagePage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>{t("rework.teamUsage.title")}</h1>
-        <div className={styles.headerControls}>
-          <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
-          <IconButton
-            color="primary"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "refresh" }}
-            onClick={handleRefresh}
-            disabled={overTimeIsFetching}
-            title={t("common.refresh")}
-          />
-        </div>
-      </div>
-
-      {isTeamAdmin && teamId && (
-        <Disclosure title={t("rework.teamUsage.team.adminSectionTitle")} defaultOpen>
-          <div className={styles.sectionStack}>
-            {activitySummaryData && !activitySummaryIsLoading && (
-              <p className={styles.activitySummary}>
-                {t(
-                  activitySummaryData.trend === "active"
-                    ? "rework.teamUsage.team.activitySummary.active"
-                    : "rework.teamUsage.team.activitySummary.quiet",
-                  { count: activitySummaryData.sessions_in_range },
-                )}
-              </p>
-            )}
-            <TaskActivity scope="team" teamId={teamId} />
-          </div>
-        </Disclosure>
-      )}
-
-      {isTeamEditor && teamId && (
-        <Disclosure title={t("rework.teamUsage.team.editorSectionTitle")} defaultOpen>
-          <TaskActivity scope="team" teamId={teamId} kind="ingestion" />
-        </Disclosure>
-      )}
+      <PageHeader
+        title={pageTitle}
+        actions={
+          <>
+            <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
+            <IconButton
+              color="primary"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "refresh" }}
+              onClick={handleRefresh}
+              disabled={overTimeIsFetching}
+              title={t("common.refresh")}
+            />
+          </>
+        }
+      />
 
       {elevated && teamId && (
         <Disclosure title={t("rework.teamUsage.team.sectionTitle")} defaultOpen>

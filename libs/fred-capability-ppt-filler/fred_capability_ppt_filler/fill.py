@@ -47,6 +47,7 @@ python-pptx).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -69,6 +70,10 @@ from PIL import Image, UnidentifiedImageError
 from pptx import Presentation
 from pydantic import BaseModel, Field, create_model
 
+from fred_capability_ppt_filler.concurrency import (
+    acquire_heavy_job_slot,
+    release_heavy_job_slot,
+)
 from fred_capability_ppt_filler.parser import apply_kept_notes_to_slide
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
@@ -98,6 +103,10 @@ _PDF_SUFFIX = ".pdf"
 # rejected by ``add_picture`` with "unsupported image format"; such images are
 # transcoded to PNG in-memory before embedding.
 _PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
+
+# Bounded concurrency for the image-bytes prefetch (#2183): a template with
+# many image fields must not fire an unbounded burst of document fetches.
+_IMAGE_PREFETCH_CONCURRENCY = 4
 
 # Top-level (non-slide) arg the model fills with a human-friendly name for the
 # output deck. Optional: when missing/blank we fall back to _OUTPUT_FILE_NAME.
@@ -346,17 +355,82 @@ def _looks_like_path_not_document_id(value: str) -> bool:
     return "/" in value or "\\" in value
 
 
-async def _place_images_on_slide(
+def _collect_image_fetch_candidates(
+    provided: Dict[str, object],
+    image_keys_by_slide: Dict[int, set[str]],
+) -> set[str]:
+    """Every document id worth prefetching before the sync fill phase (#2183).
+
+    Derived purely from the model-provided values and the persisted schema —
+    no ``.pptx`` needs to be open yet. Values that are empty or obviously not
+    a document id (:func:`_looks_like_path_not_document_id`) are skipped: the
+    thread-side pass reports those as validation errors without ever needing
+    fetched bytes.
+    """
+    document_uids: set[str] = set()
+    for field_name, slide_args in provided.items():
+        slide_number = _slide_number_from_field(field_name)
+        if slide_number is None:
+            continue
+        image_keys = image_keys_by_slide.get(slide_number, set())
+        if not image_keys:
+            continue
+        raw_values = _raw_values_for_slide(slide_args)
+        for key in image_keys:
+            raw_value = raw_values.get(key)
+            document_uid = (
+                raw_value.strip()
+                if isinstance(raw_value, str) and raw_value.strip()
+                else None
+            )
+            if document_uid is None or _looks_like_path_not_document_id(document_uid):
+                continue
+            document_uids.add(document_uid)
+    return document_uids
+
+
+async def _prefetch_image_bytes(
+    document_uids: set[str], services: RuntimeServices
+) -> Dict[str, object]:
+    """Fetch every candidate document's raw bytes concurrently, bounded (#2183).
+
+    Runs entirely on the event loop (I/O, not CPU) so the sync fill phase
+    below never has to ``await`` from inside a worker thread. Per-uid fetch
+    failures are captured as the exception itself rather than raised, so the
+    sync phase can still report them at the same per-key granularity as
+    before.
+    """
+    if not document_uids:
+        return {}
+    port = services.document_content
+    assert port is not None  # guarded by the caller (has_image_fields check)
+    semaphore = asyncio.Semaphore(_IMAGE_PREFETCH_CONCURRENCY)
+
+    async def _fetch_one(document_uid: str) -> Tuple[str, object]:
+        async with semaphore:
+            try:
+                raw_blob = await port.fetch_raw(document_uid)
+                return document_uid, raw_blob.content
+            except Exception as exc:  # noqa: BLE001 - surfaced per-key below
+                return document_uid, exc
+
+    results = await asyncio.gather(*(_fetch_one(uid) for uid in document_uids))
+    return dict(results)
+
+
+def _place_images_on_slide(
     *,
     slide,
     image_keys: set[str],
     raw_values: Dict[str, object],
-    services: RuntimeServices,
+    prefetched: Dict[str, object],
 ) -> Optional[str]:
     """Place chosen images (or remove empty image slots) on one slide.
 
     Returns ``None`` on success or an error message string to HARD-FAIL the
     whole fill (the agent's correctable mistake → re-pick), mirroring Kea.
+    Synchronous — runs inside the thread-offloaded fill worker (#2183); image
+    bytes are looked up in ``prefetched`` rather than fetched here.
     """
     anchors = list_image_anchors_on_slide(slide)
     anchors_by_key: Dict[str, List[ImageAnchor]] = {}
@@ -404,25 +478,21 @@ async def _place_images_on_slide(
                 "document id."
             )
 
-        port = services.document_content
-        if port is None:
-            # No platform port injected (e.g. a bare test harness). Fail LOUD
-            # rather than silently skipping the image (RFC §3.9).
-            raise RuntimeError(
-                "ppt_filler: RuntimeServices.document_content is not available "
-                "on this execution path."
-            )
-        try:
-            raw_blob = await port.fetch_raw(document_uid)
-            image_bytes = raw_blob.content
-        except Exception as exc:
+        fetched = prefetched.get(document_uid)
+        if fetched is None or isinstance(fetched, Exception):
             placeholder = f"{{{{{key}}}}}"
+            exc_repr = (
+                f"[{type(fetched).__name__}: {fetched}]"
+                if isinstance(fetched, Exception)
+                else "[not prefetched]"
+            )
             return (
                 f"Could not fetch the document '{document_uid}' you chose for "
-                f"the image field {placeholder} [{type(exc).__name__}: {exc}]. "
+                f"the image field {placeholder} {exc_repr}. "
                 "List the field's folder again with list_images_in_folder and "
                 "pick a valid image document."
             )
+        image_bytes = cast(bytes, fetched)
 
         # Validate the bytes ARE a usable image and read pixel dimensions for
         # the aspect ratio. Formats python-pptx cannot embed are transcoded to
@@ -466,6 +536,79 @@ async def _place_images_on_slide(
             _remove_anchor_shape(anchor)
 
     return None
+
+
+def _build_filled_deck(
+    template_bytes: bytes,
+    provided: Dict[str, object],
+    image_keys_by_slide: Dict[int, set[str]],
+    prefetched: Dict[str, object],
+) -> Tuple[Optional[bytes], Optional[str]]:
+    """Synchronous fill worker: open, traverse/replace, place images, strip
+    authoring notes, save. Runs off the event loop via ``asyncio.to_thread``
+    (#2183) — owns the ``Presentation`` object end to end; never hand a
+    mutable python-pptx object across threads.
+
+    Returns ``(filled_bytes, None)`` on success or ``(None, error_message)``
+    when an image field is rejected (the agent's correctable mistake — same
+    contract :func:`_place_images_on_slide` used to return directly). Any
+    other exception propagates to the caller, which wraps it uniformly.
+    """
+    presentation = Presentation(io.BytesIO(template_bytes))
+    slides = list(presentation.slides)
+    for field_name, slide_args in provided.items():
+        slide_number = _slide_number_from_field(field_name)
+        if slide_number is None:
+            continue
+        index = slide_number - 1
+        if index < 0 or index >= len(slides):
+            # The persisted schema references a slide the template no longer
+            # has; skip rather than crash.
+            logger.warning(
+                "[PPTFILL][TOOL] schema references slide %d but template has "
+                "only %d slides; skipping.",
+                slide_number,
+                len(slides),
+            )
+            continue
+        slide = slides[index]
+        raw_values = _raw_values_for_slide(slide_args)
+        image_keys = image_keys_by_slide.get(slide_number, set())
+
+        # Text keys: omitted -> empty string. IMAGE keys are preserved
+        # verbatim ({{key}}) so the image pass below can still locate each
+        # occurrence.
+        text_values = _text_values(raw_values, image_keys)
+
+        def value_for(
+            key: str,
+            _values: Dict[str, str] = text_values,
+            _image_keys: set[str] = image_keys,
+        ) -> str:
+            if key in _image_keys:
+                return f"{{{{{key}}}}}"
+            return _values.get(key, "")
+
+        replace_keys_on_slide(slide, value_for)
+
+        if image_keys:
+            error = _place_images_on_slide(
+                slide=slide,
+                image_keys=image_keys,
+                raw_values=raw_values,
+                prefetched=prefetched,
+            )
+            if error is not None:
+                return None, error
+
+    # Strip template-authoring notes from EVERY slide so the ``{{key}}:``
+    # descriptions never leak into the deliverable.
+    for slide in slides:
+        apply_kept_notes_to_slide(slide)
+
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue(), None
 
 
 def _build_list_images_tool(
@@ -642,70 +785,35 @@ def build_fill_tools(
             logger.exception("[PPTFILL][TOOL] template fetch FAILED -> %s", message)
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
-        # 2. Open the template and fill, per-slide. Text keys go through the
-        #    SHARED text traversal; image keys are placed as pictures via the
-        #    image-anchor traversal (or their empty slots removed).
+        # 2. Prefetch every candidate image's bytes concurrently (bounded),
+        #    BEFORE the sync phase below (#2183) — a thread worker cannot
+        #    ``await`` the document-content port.
+        image_document_uids = _collect_image_fetch_candidates(
+            provided, image_keys_by_slide
+        )
+        prefetched = await _prefetch_image_bytes(image_document_uids, services)
+
+        # 3. Open the template and fill, per-slide, entirely off the event
+        #    loop: one worker call owns the Presentation object end to end
+        #    (python-pptx/Pillow are synchronous, CPU-bound — #2183). Text
+        #    keys go through the SHARED text traversal; image keys are placed
+        #    as pictures via the image-anchor traversal (or their empty slots
+        #    removed). Bounded per pod so a burst of fills can't exhaust the
+        #    thread pool — over the bound we fail fast, never queue.
+        if not acquire_heavy_job_slot():
+            return (
+                "The server is busy filling other PowerPoint templates right "
+                "now. Please try again in a moment.",
+                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+            )
         try:
-            presentation = Presentation(io.BytesIO(template_bytes))
-            slides = list(presentation.slides)
-            for field_name, slide_args in provided.items():
-                slide_number = _slide_number_from_field(field_name)
-                if slide_number is None:
-                    continue
-                index = slide_number - 1
-                if index < 0 or index >= len(slides):
-                    # The persisted schema references a slide the template no
-                    # longer has; skip rather than crash.
-                    logger.warning(
-                        "[PPTFILL][TOOL] schema references slide %d but "
-                        "template has only %d slides; skipping.",
-                        slide_number,
-                        len(slides),
-                    )
-                    continue
-                slide = slides[index]
-                raw_values = _raw_values_for_slide(slide_args)
-                image_keys = image_keys_by_slide.get(slide_number, set())
-
-                # Text keys: omitted -> empty string. IMAGE keys are preserved
-                # verbatim ({{key}}) so the image pass below can still locate
-                # each occurrence.
-                text_values = _text_values(raw_values, image_keys)
-
-                def value_for(
-                    key: str,
-                    _values: Dict[str, str] = text_values,
-                    _image_keys: set[str] = image_keys,
-                ) -> str:
-                    if key in _image_keys:
-                        return f"{{{{{key}}}}}"
-                    return _values.get(key, "")
-
-                replace_keys_on_slide(slide, value_for)
-
-                if image_keys:
-                    error = await _place_images_on_slide(
-                        slide=slide,
-                        image_keys=image_keys,
-                        raw_values=raw_values,
-                        services=services,
-                    )
-                    if error is not None:
-                        logger.warning(
-                            "[PPTFILL][TOOL] image fill rejected -> %s", error
-                        )
-                        return error, ToolInvocationResult(
-                            tool_ref=_TOOL_REF, is_error=True
-                        )
-
-            # Strip template-authoring notes from EVERY slide so the
-            # ``{{key}}:`` descriptions never leak into the deliverable.
-            for slide in slides:
-                apply_kept_notes_to_slide(slide)
-
-            buffer = io.BytesIO()
-            presentation.save(buffer)
-            filled_bytes = buffer.getvalue()
+            filled_bytes, fill_error = await asyncio.to_thread(
+                _build_filled_deck,
+                template_bytes,
+                provided,
+                image_keys_by_slide,
+                prefetched,
+            )
         except Exception as exc:
             elapsed = time.monotonic() - started
             message = (
@@ -714,8 +822,15 @@ def build_fill_tools(
             )
             logger.exception("[PPTFILL][TOOL] fill FAILED -> %s", message)
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+        finally:
+            release_heavy_job_slot()
 
-        # 3. Write to the agent workspace (session-scoped path so outputs of
+        if fill_error is not None:
+            logger.warning("[PPTFILL][TOOL] image fill rejected -> %s", fill_error)
+            return fill_error, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+        assert filled_bytes is not None  # fill_error is None here
+
+        # 4. Write to the agent workspace (session-scoped path so outputs of
         #    different conversations never clobber each other) and build the
         #    durable download href.
         output_file_name = _sanitize_output_file_name(provided.get(_OUTPUT_NAME_FIELD))
@@ -746,7 +861,7 @@ def build_fill_tools(
             pptx_artifact.key,
         )
 
-        # 4. Best-effort PDF preview: convert the filled deck and write the PDF
+        # 5. Best-effort PDF preview: convert the filled deck and write the PDF
         #    beside the .pptx. Any failure (conversion unavailable/timeout,
         #    upload error) degrades to the plain download chip so a preview
         #    problem never costs the user the deck.

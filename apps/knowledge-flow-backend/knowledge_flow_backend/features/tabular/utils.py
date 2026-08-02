@@ -15,12 +15,38 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 import duckdb
 
 
-def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> str:
+@dataclass(frozen=True)
+class ValidatedReadQuery:
+    """
+    One validated read-only query plus the allowed relations it actually uses.
+
+    Why this exists:
+    - Validation already walks the DuckDB AST to reject unauthorized relations,
+      so it knows exactly which authorized aliases the query touches. Returning
+      that set lets the caller mount only those datasets instead of every
+      authorized one, which is the difference between one Parquet open and
+      several hundred on a large tenant.
+    - Parsing opens its own throwaway DuckDB connection, so recomputing the set
+      afterwards would double a non-trivial cost on the query hot path.
+
+    How to use:
+    - Use `sql` where the normalized query text is needed and
+      `referenced_relations` to narrow the mount set. `referenced_relations`
+      holds the caller's own spelling of the aliases (a subset of
+      `allowed_relations`), so it can be compared to dataset aliases directly.
+    """
+
+    sql: str
+    referenced_relations: frozenset[str]
+
+
+def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> ValidatedReadQuery:
     """
     Validate one read-only SQL query before execution.
 
@@ -32,13 +58,17 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
     - Call this before mounting the query in DuckDB.
     - Pass `allowed_relations` to ensure the query only references aliases that
       the current session is allowed to expose.
+    - Read `.sql` for the normalized text and `.referenced_relations` for the
+      authorized aliases the query actually references (empty when
+      `allowed_relations` is omitted, since nothing was matched against).
 
     Example:
     ```python
-    sql_text = validate_read_query(
+    validated = validate_read_query(
         "SELECT city FROM d_doc_sales LIMIT 10",
         allowed_relations={"d_doc_sales"},
     )
+    sql_text = validated.sql
     ```
     """
 
@@ -48,15 +78,17 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
 
     statement = _parse_read_statement(normalized)
 
+    referenced: frozenset[str] = frozenset()
     if allowed_relations is not None:
-        allowed_names = {_normalize_identifier(name) for name in allowed_relations}
+        allowed_by_normalized = {_normalize_identifier(name): name for name in allowed_relations}
         cte_names = collect_cte_names(statement)
         referenced_relations = collect_relation_names(statement)
-        disallowed_relations = sorted(relation_name for relation_name in referenced_relations if relation_name not in allowed_names and relation_name not in cte_names)
+        disallowed_relations = sorted(relation_name for relation_name in referenced_relations if relation_name not in allowed_by_normalized and relation_name not in cte_names)
         if disallowed_relations:
             raise ValueError(f"Query references unauthorized datasets: {', '.join(disallowed_relations)}")
+        referenced = frozenset(allowed_by_normalized[relation_name] for relation_name in referenced_relations if relation_name in allowed_by_normalized)
 
-    return normalized
+    return ValidatedReadQuery(sql=normalized, referenced_relations=referenced)
 
 
 def collect_cte_names(statement: dict[str, Any]) -> set[str]:
@@ -181,6 +213,11 @@ def _parse_read_statement(query: str) -> dict[str, Any]:
 
     parser_connection = duckdb.connect(database=":memory:")
     try:
+        # Parsing never executes a plan, but DuckDB still spins up its default
+        # thread pool sized from the *host's* CPU count, not the container's
+        # limit — measured at +8 OS threads per call on an 8-core machine. One
+        # thread is all a `json_serialize_sql` needs.
+        parser_connection.execute("SET threads=1")
         serialized = parser_connection.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
     finally:
         parser_connection.close()

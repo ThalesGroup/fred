@@ -12,41 +12,90 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
 import type { ChatMessage } from "../../../../../slices/agentic/agenticOpenApi";
-import { groupTraceEntries, thoughtSummaryLabel } from "../../../../utils/traceUtils";
+import type { TraceSummary } from "../../../../utils/traceUtils";
+import {
+  formatLatencyMs,
+  groupTraceEntries,
+  splitTraceEntries,
+  traceEntryKey,
+  traceSummary,
+} from "../../../../utils/traceUtils";
+import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
+import { ReasoningBlock } from "./ReasoningBlock/ReasoningBlock";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
 import styles from "./ThoughtTrace.module.css";
 
 interface ThoughtTraceProps {
   messages: ChatMessage[];
-  // When the final reply has arrived the trace auto-collapses; pass false while still streaming
+  // False while the turn is still streaming; the trace auto-collapses once true.
   done?: boolean;
 }
 
+/**
+ * Header text: "Reasoning 16.4s · 4 tools".
+ *
+ * Built from {@link traceSummary} rather than the old `thoughtSummaryLabel`,
+ * which announced "Thought for 856ms" — the sum of *tool* latencies — directly
+ * above a reasoning row reading 16.4s (#2172).
+ */
+function useSummaryLabel(summary: TraceSummary): string {
+  const { t } = useTranslation();
+
+  if (summary.running) return t("rework.chatTrace.thinking");
+
+  const parts: string[] = [];
+  if (summary.reasoningMs !== null) {
+    parts.push(t("rework.chatTrace.summaryReasoning", { duration: formatLatencyMs(summary.reasoningMs) }));
+  }
+  if (summary.toolCount > 0) {
+    parts.push(t("rework.chatTrace.summaryTools", { count: summary.toolCount }));
+    if (summary.reasoningMs === null && summary.toolMs > 0) parts.push(formatLatencyMs(summary.toolMs));
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : t("rework.chatTrace.details");
+}
+
 export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
+  const { t } = useTranslation();
   const entries = groupTraceEntries(messages);
-  const [expanded, setExpanded] = useState(true);
+  const { reasoning, steps } = splitTraceEntries(entries);
+  const summary = traceSummary(entries);
+  const label = useSummaryLabel(summary);
+  const { expanded, toggle } = useTraceExpansion(done);
 
   if (entries.length === 0) return null;
 
-  const summary = thoughtSummaryLabel(entries);
-
   return (
-    <div className={styles.root} aria-label="Agent reasoning trace">
-      <button className={styles.toggle} onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
-        <span className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}>›</span>
-        <span className={`${styles.summary} ${!done ? styles.summaryStreaming : ""}`}>{summary}</span>
+    <div className={styles.root} aria-label={t("rework.chatTrace.ariaLabel")}>
+      <button
+        type="button"
+        className={styles.toggle}
+        onClick={toggle}
+        aria-expanded={expanded}
+        title={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")}
+      >
+        <span className={styles.chevron} aria-hidden="true">
+          <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+        </span>
+        <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
       </button>
 
       {expanded && (
         <div className={styles.body}>
-          <div className={styles.guideline} aria-hidden="true" />
-          <div className={styles.entries}>
-            {entries.map((entry, i) => (
-              <TraceEntryRow key={i} entry={entry} />
-            ))}
-          </div>
+          <ReasoningBlock entries={reasoning} continues={steps.length > 0} />
+
+          {/* No section header: the step numbers already say what this list is,
+              and the header text was pure visual weight. */}
+          {steps.length > 0 && (
+            <div className={`${styles.entries} ${reasoning.length === 0 ? styles.entriesLeading : ""}`}>
+              {steps.map(({ entry, index }) => (
+                <TraceEntryRow key={traceEntryKey(entry)} entry={entry} index={index} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

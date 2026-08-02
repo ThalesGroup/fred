@@ -47,6 +47,11 @@ _CONTROL_PLANE_CLIENT_LIMITS = httpx.Limits(
     max_connections=50, max_keepalive_connections=20, keepalive_expiry=10.0
 )
 
+# Bounds the one-time connectivity check in initialize_sql() — asyncpg's own
+# connect timeout defaults to 60s, which would otherwise let a single boot
+# attempt hang well past what a readiness-driven operator expects.
+_SQL_BOOT_PING_TIMEOUT_S = 5.0
+
 
 # ---------------------------------------------------------------------------
 # TypedDicts for ring buffer entries
@@ -141,31 +146,64 @@ class PodApplicationContext:
         )
 
     async def initialize_sql(self) -> None:
-        """Build SQL engine, checkpointer, and history store (SQL-backed only)."""
+        """Build SQL engine, checkpointer, and history store.
+
+        Durable storage is mandatory for every fred-runtime pod — dev uses a
+        local SQLite file (`sqlite_path`), production uses Postgres, but both
+        are "durable", never "no storage". Any failure here (bad config,
+        unreachable/misconfigured Postgres) must abort pod startup so the
+        FastAPI lifespan never completes and Kubernetes never routes traffic
+        to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8 (dated entry)
+        for the incident this closes.
+        """
         from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
         from fred_core.users.store.postgres_user_store import init_user_store
+        from sqlalchemy import text
 
         from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
+        postgres_config = self.configuration.storage.postgres
+        engine = create_async_engine_from_config(postgres_config)
+
+        async def _ping() -> None:
+            # SQLAlchemy async engines are lazy — nothing above opened a real
+            # connection. Without this, an unreachable/misconfigured Postgres
+            # would pass initialize_sql() silently and only fail mid-turn.
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
         try:
-            engine = create_async_engine_from_config(
-                self.configuration.storage.postgres
-            )
-            init_user_store(engine)
-            checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
-            history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
-            self._sql_engine = engine
-            self._checkpointer = checkpointer
-            self._history_store = history_store
-            logger.info(
-                "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
+            await asyncio.wait_for(_ping(), timeout=_SQL_BOOT_PING_TIMEOUT_S)
+        except Exception as exc:
+            logger.error(
+                "[fred-runtime] SQL storage unreachable at startup — "
+                "dialect=%s host=%s port=%s database=%s error_type=%s",
                 engine.dialect.name,
+                postgres_config.host,
+                postgres_config.port,
+                postgres_config.database,
+                type(exc).__name__,
             )
-        except Exception:
-            logger.exception(
-                "[fred-runtime] Failed to initialize SQL storage — running stateless"
-            )
+            # This engine never reaches self._sql_engine on this path, so
+            # shutdown()'s own dispose() (below) can never reach it either —
+            # dispose it here or it leaks. Harmless today (the sole caller,
+            # agent_app.py's lifespan, has no retry and the process exits on
+            # this raise) but becomes a real leak the moment any retry/backoff
+            # wrapper is added around initialize_sql() or the lifespan.
+            await engine.dispose()
+            raise
+
+        init_user_store(engine)
+        checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
+        history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
+        self._sql_engine = engine
+        self._checkpointer = checkpointer
+        self._history_store = history_store
+        logger.info(
+            "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
+            engine.dialect.name,
+        )
 
     def start_metrics_exporter(self) -> None:
         """Start the Prometheus scrape endpoint when configured."""

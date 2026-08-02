@@ -37,6 +37,8 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
+
 
 class SentinelReActDefinition(ReActAgentDefinition):
     """
@@ -105,7 +107,11 @@ class SentinelReActDefinition(ReActAgentDefinition):
         - `policy = SentinelReActDefinition().policy()`
         """
 
-        return ReActPolicy(system_prompt_template=self.system_prompt_template)
+        return ReActPolicy(
+            system_prompt_template=self.system_prompt_template,
+            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
+            tool_selection=REASONING_SAFE_TOOL_SELECTION,
+        )
 
 
 SENTINEL_AGENT = SentinelReActDefinition()

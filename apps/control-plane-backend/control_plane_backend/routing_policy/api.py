@@ -24,6 +24,7 @@ from control_plane_backend.product.dependencies import (
     get_product_service_dependencies,
 )
 from control_plane_backend.routing_policy.schemas import (
+    AvailableModelProfileList,
     DuplicateOperationRuleError,
     ProfileNotUsableError,
     TeamRoutingPolicy,
@@ -32,6 +33,9 @@ from control_plane_backend.routing_policy.schemas import (
 )
 from control_plane_backend.routing_policy.service import (
     get_team_routing_policy as get_team_routing_policy_from_service,
+)
+from control_plane_backend.routing_policy.service import (
+    list_available_model_profiles as list_available_model_profiles_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     update_team_routing_policy as update_team_routing_policy_from_service,
@@ -76,6 +80,19 @@ async def get_team_routing_policy(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamRoutingPolicy:
     return await get_team_routing_policy_from_service(user, team_id, deps)
+
+
+@router.get(
+    "/teams/{team_id}/routing-policy/available-models",
+    response_model=AvailableModelProfileList,
+    summary="List model profiles this team is can_use-enabled for (routing-policy picker, TEAM-05.1, #2167)",
+)
+async def get_available_model_profiles(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> AvailableModelProfileList:
+    return await list_available_model_profiles_from_service(user, team_id, deps)
 
 
 @router.patch(

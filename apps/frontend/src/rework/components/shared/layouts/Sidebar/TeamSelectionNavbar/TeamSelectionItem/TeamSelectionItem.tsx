@@ -27,6 +27,11 @@ interface TeamSelectionItemProps {
   redirection: To;
   teamName: string;
   selected: boolean;
+  /** Dims this one avatar and blocks its click — for the team the user is
+   * already inside (e.g. its own settings), where clicking it would be a
+   * no-op. Never applied to the whole rail: other teams/personal space/
+   * marketplace must stay reachable regardless of which team is active. */
+  disabled?: boolean;
   imgUrl?: string;
   /** When set and there is no `imgUrl`, render coloured initials instead of the icon. */
   avatarName?: string;
@@ -43,6 +48,7 @@ export default function TeamSelectionItem({
   redirection,
   teamName,
   selected,
+  disabled = false,
   imgUrl,
   avatarName,
   avatarColor,
@@ -92,6 +98,7 @@ export default function TeamSelectionItem({
     <div
       className={styles.teamAvatarContainer}
       data-selected={selected}
+      data-disabled={disabled}
       ref={containerRef}
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
@@ -101,6 +108,11 @@ export default function TeamSelectionItem({
         className={styles.link}
         aria-label={teamName}
         aria-describedby={tooltipId}
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : undefined}
+        onClick={(e) => {
+          if (disabled) e.preventDefault();
+        }}
         onFocus={() => setIsVisible(true)}
         onBlur={() => setIsVisible(false)}
       >

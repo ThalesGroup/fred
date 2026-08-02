@@ -135,7 +135,8 @@ class RuntimeContext(BaseModel):
     - Group C (per-turn retrieval selections): selected_document_libraries_ids,
       selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
       include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids,
-      chat_default_profile_id, operation_route_rules.
+      chat_default_profile_id, operation_route_rules, reasoning_enabled_model_ids,
+      reasoning.
       These are the core fields — set by the frontend per turn, read by retrieval logic.
     - Group D (content/preferences): language, attachments_markdown. Will
       migrate to session preferences / identity over time.
@@ -188,6 +189,54 @@ class RuntimeContext(BaseModel):
             "chat_default_profile_id above. `None`, not `[]`, when unset — matches "
             "every other Group C list field so `model_dump(exclude_none=True)` "
             "(`to_legacy_context`) omits it for the common case of no team policy."
+        ),
+    )
+    reasoning_enabled_model_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            'kind="model" capability ids whose reasoning a platform admin has '
+            "switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), "
+            "resolved by control-plane at prepare-execution and forwarded "
+            "unchanged for the rest of the session — same channel and same "
+            "'not re-fetched per turn' contract as chat_default_profile_id "
+            "above. GLOBAL, not per team: this is an activation ('does this "
+            "model run with reasoning'), not a permission — per-team model "
+            "authorization is the separate, untouched `usable_model_ids` "
+            "(§5.1/§5.4).\n\n"
+            "OFF BY DEFAULT, and this is a real semantic difference from "
+            "`usable_model_ids`: there, `None` means 'unrestricted'; here "
+            "`None` and `[]` mean the same thing as any absent id — reasoning "
+            "does NOT run. A model reasons only by being named in this list "
+            "(§5.6). RoutedChatModelFactory enforces it by STRIPPING the "
+            "reasoning settings at client construction (§5.6.2).\n\n"
+            "As BOUND, this is the EFFECTIVE ceiling, not the raw platform "
+            "list: `agent_app` intersects it with level 3 (the agent's own "
+            "`AgentTuning.reasoning_enabled`, resolved server-side) before "
+            "building the RuntimeContext, so an agent whose author left "
+            "reasoning off carries an empty list whatever the request said "
+            "(§14.5). What the FRONTEND sends is the platform list alone — the "
+            "two differ on purpose, and the pod-side one is the one that counts."
+        ),
+    )
+    reasoning: bool | None = Field(
+        default=None,
+        description=(
+            "The user's per-question reasoning choice (REASON-01 level 4, "
+            "`MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer "
+            "toggle. Travels per turn on this context exactly like "
+            "`search_policy`/`search_rag_scope` — reasoning is a property of "
+            "the model call, not a tool, so it is a platform chat option and "
+            "NOT a capability's `turn_options` slice.\n\n"
+            "TRI-STATE, and the distinction matters:\n"
+            "- `None` — the agent does not offer the choice (its author left "
+            "reasoning off), so no per-question decision was made and levels "
+            "1-2 alone decide. This is the default and the pre-REASON-01 "
+            "behaviour.\n"
+            "- `False` — the agent offers it and the user left it off: the "
+            "turn must NOT reason, even on a model whose reasoning is enabled "
+            "platform-wide.\n"
+            "- `True` — the user asked for it. Permission to reason, never a "
+            "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
         ),
     )
 

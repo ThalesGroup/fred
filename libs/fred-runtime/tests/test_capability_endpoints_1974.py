@@ -211,10 +211,20 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         entries = response.json()[0]["available_capabilities"]
-        # Both in-tree capabilities self-register via `fred.capabilities` entry
-        # points and are advertised sorted by id (demo_echo tracer + the #1906
-        # document_access pilot).
-        assert [e["id"] for e in entries] == ["demo_echo", "document_access"]
+        # All in-tree capabilities self-register via `fred.capabilities` entry
+        # points and are advertised sorted by id (demo_echo tracer, the #1906
+        # document_access pilot, and document_summarize split out of it per
+        # RFC §10.1).
+        #
+        # Reasoning is deliberately NOT here: it is a property of how the model
+        # is called, not a tool an agent uses, so it is a plain agent field
+        # (`AgentTuning.reasoning_enabled`) plus a platform-emitted composer
+        # control — never a capability (REASON-01 §6/§7).
+        assert [e["id"] for e in entries] == [
+            "demo_echo",
+            "document_access",
+            "document_summarize",
+        ]
         entry = entries[0]
         assert entry["version"] == DemoEchoCapability.manifest.version
         assert entry["config_fields"][0]["key"] == "uppercase"

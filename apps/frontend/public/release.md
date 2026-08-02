@@ -1,3 +1,126 @@
+**v2.1.25** — 2026-08-01
+
+- **Summary**
+
+  Team editors can now organize their own prompt categories, and the Resources
+  page for team documents has been redesigned with sortable tables, bulk
+  actions, rename and download. Agents can offer step-by-step reasoning that
+  users switch on per question. Several reliability fixes prevent the app from
+  freezing or silently losing data under load, including three more PDF
+  ingestion memory leaks.
+
+- **Breaking changes**
+
+  - **Model reasoning is now off until an administrator turns it on.** Reasoning
+    used to be switched on in a deployment's model configuration file and applied
+    to everyone, invisibly, with a redeploy needed to change it. It is now a
+    toggle on each model row in **Admin → Capabilities → Models**. On upgrade,
+    every model starts with reasoning **off**, including any model that was
+    reasoning before — a platform administrator must switch it back on. Without
+    this step the symptom is "reasoning stopped working after the upgrade" with
+    no visible cause (#2166)
+
+- **Features**
+
+  - Admin → Capabilities → Models: each model that can reason now carries a
+    reasoning toggle, applying to every team at once, effective without a
+    redeploy. Models that cannot reason show no toggle — reasoning is a property
+    of the model, not something an administrator can grant. This is separate
+    from enabling a model for a team: enabling a model does not enable its
+    reasoning — but switching a model off does switch its reasoning off, so a
+    model re-enabled later never comes back reasoning unnoticed (#2166)
+  - Agents can now offer reasoning as a per-question choice. Turn **Reasoning**
+    on in the **General** tab when creating or editing an agent — next to its
+    name and description, not among its tools — and users get a **Reasoning**
+    switch in the chat composer's **+** menu to enable it for a single question.
+    It starts off on every question. The switch only appears when the model can
+    actually reason and an administrator has enabled its reasoning, never as a
+    control that silently does nothing (#2166)
+  - Team editors can create, rename, and delete their own prompt categories.
+    Every team starts with a ready-made set of categories and prompts instead of
+    sharing one fixed platform-wide list (#2174)
+  - Clicking a prompt now opens a read-only preview with a copy button, instead
+    of jumping straight into editing; editing stays one click away via the
+    pencil icon (#2174)
+  - The team Resources page's Corpus tab has been redesigned: browse folders
+    through a breadcrumb trail, sort and multi-select files, and see storage
+    usage broken down by file type (#2128)
+  - Multi-select in Resources: delete, exclude from search, or download several
+    files at once — a single file downloads directly, several download as a zip
+    (#2128, #2165)
+  - Renaming a file or folder in Resources now really renames it everywhere,
+    including the search index and the file preview, not just its display label
+    (#1864)
+  - Choosing a team's default or target model for routing is now a dropdown of
+    the team's enabled models instead of free text (#2167)
+
+- **Improvements**
+
+  - Agents are now capped at 12 tool calls per question. A model that gets stuck
+    repeating the same lookup now stops and answers with what it has, instead of
+    looping. Normal questions use far fewer calls and are unaffected (#2166)
+  - Agents are told explicitly not to repeat an identical tool call within a
+    question, which measurably reduces wasted lookups and latency with reasoning
+    models (#2166)
+  - Pages that used to show plain "Loading…" text now show a spinner (Prompts,
+    Team Agents, the admin capabilities matrix, the audit log)
+  - Heavy or unbounded queries on the tabular data feature no longer stall the
+    app for other users — they're now capped and time out gracefully instead of
+    blocking everyone behind them (#2190)
+  - The app no longer freezes indefinitely if the sign-in server stops
+    responding during a token refresh — it now recovers and prompts to sign in
+    again instead of hanging every subsequent request (#2185)
+
+- **Security**
+
+  - Document summarization is now a separate, admin-gated capability instead of
+    being bundled automatically with document access — a team admin must turn
+    it on before an agent can use it (#2180)
+  - Team routing policy settings are now only visible to team admins, editors,
+    and analysts, not every team member (#2167)
+  - Closed a gap where a chat session's saved prompts could be resolved without
+    confirming the request actually owns that session (#2185)
+
+- **Bug Fixes**
+
+  - Fixed a crash affecting every question sent to an agent with two or more
+    tool-using capabilities selected at once (#2185)
+  - Fixed the server silently starting up and serving conversations without
+    saving anything when its database was unreachable — it now fails to start
+    instead (#2185)
+  - Fixed the admin Capabilities page freezing (no visible scrollbar,
+    unresponsive) when toggling a switch, including a race where a fast
+    double-click on the same switch could trigger it (#2185)
+  - Uploading a file in an unsupported format used to fail silently with no
+    error message; it now shows the actual error (#2185)
+  - Fixed the bulk zip download in Resources failing silently with no error
+    message when it couldn't complete (#2185)
+  - Fixed a crash when renaming an existing folder in your personal or team
+    space (#2185)
+  - Fixed legacy Office file formats (.doc, .xls, .ppt, .odt and similar)
+    showing a generic icon instead of their proper file-type icon in Resources
+    (#2185)
+  - Fixed switching between conversations occasionally showing the previous
+    conversation's saved prompts for a moment (#2185)
+  - Fixed a failed "new conversation" creation permanently blocking that
+    conversation from sending a message again, with no visible error (#2185)
+  - The agent's reasoning now survives a page reload. Reasoning blocks were
+    displayed live but never saved, so reopening a conversation showed the tool
+    steps with the reasoning missing — as if the agent had thought nothing. Past
+    conversations are unaffected: reasoning is kept from now on, not
+    reconstructed backwards (#2166)
+  - Fixed the document picker in the message composer truncating long file
+    names (#2185)
+  - Fixed a memory leak where the ingestion pipeline rebuilt its cloud storage
+    connection on every operation instead of reusing one, adding up over many
+    documents (#2188)
+  - Fixed a memory leak in image-described PDF ingestion and in embedding
+    generation where their respective models were rebuilt per call instead of
+    being reused (#2188)
+  - Fixed a slow background memory leak affecting every service that emits
+    usage metrics (KPIs), caused by how a metric field was validated internally
+    — could very gradually grow a service's memory over long uptimes (#2188)
+
 **v2.1.24** — 2026-07-31
 
 - **Summary**

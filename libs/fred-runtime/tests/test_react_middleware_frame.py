@@ -52,6 +52,7 @@ from fred_runtime.react.react_model_adapter import (
     infer_react_model_operation_from_messages,
 )
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+from fred_runtime.support.thinking import RECALLED_REASONING_PREFIX
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -221,6 +222,47 @@ async def test_hygiene_transforms_model_input_without_rewriting_state() -> None:
         m for m in stored if isinstance(m, AIMessage) and isinstance(m.content, list)
     ]
     assert len(stored_list_content) == 1
+
+
+@pytest.mark.asyncio
+async def test_hygiene_replays_the_open_turn_reasoning_to_the_model() -> None:
+    """
+    The reasoning of the turn IN PROGRESS must reach the model as text.
+
+    Why this test exists:
+    - this pins a one-line wiring in `CheckpointHygieneMiddleware`
+      (`thread_reasoning_within_open_turn`, not `strip_reasoning_from_history`)
+      whose absence is invisible: the loop still works, it just silently
+      re-issues identical tool calls — measured 9/12 turns, 67 duplicate calls
+      on a bare prompt (RFC AGENT-THINKING-API §E.3)
+    - the sibling test above pins the other half: reasoning from a turn the user
+      already closed is still dropped
+    - the raw provider block must NOT be what travels: the model client drops
+      `thinking` blocks outright, so only the text form survives
+    """
+
+    model = ScriptedModel(script=[AIMessage(content="answer")])
+    agent = _build_agent(model, approval_enabled=False)
+
+    history: list[BaseMessage] = [
+        HumanMessage("q-new"),
+        AIMessage(
+            content=[
+                {"type": "thinking", "thinking": "I must look up the contract"},
+            ]
+        ),
+    ]
+    await agent.ainvoke({"messages": history}, _cfg("t-open-turn"))
+
+    replayed = [
+        m
+        for m in model.calls[0]
+        if isinstance(m, AIMessage) and RECALLED_REASONING_PREFIX in str(m.content)
+    ]
+    assert len(replayed) == 1, "the open turn's reasoning never reached the model"
+    assert "I must look up the contract" in str(replayed[0].content)
+    # Carried as plain text, never as the provider-native block the client drops.
+    assert isinstance(replayed[0].content, str)
 
 
 # ---------------------------------------------------------------------------

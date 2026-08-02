@@ -60,6 +60,14 @@ Run each from its own app directory at the monorepo root (`~/Fred/fred`), each i
 | `apps/control-plane-backend` | `make run` | 8222 | yes — `make run-worker` |
 | `apps/knowledge-flow-backend` | `make run` | 8111 | yes — `make run-worker` |
 | `apps/fred-agents` | `make run` | 8000 | no |
+| `apps/frontend` | `make run` | 5173 (Vite) | no |
+
+Start the frontend by default alongside the three backends — a plain `make run` (`vite`, HMR) with
+no `.env` to check first: `vite.config.ts`'s dev-server proxy already defaults
+`VITE_BACKEND_URL_FRED_AGENTS`/`_KNOWLEDGE`/`_CONTROL_PLANE`/`_EVALUATION` to
+`localhost:8000`/`8111`/`8222`/`8336` — exactly this stack's ports — so nothing needs pointing at
+anything. This is what makes the developer's "just start everything" ask a single uniform step
+instead of three backends plus a separately-reasoned-about frontend.
 
 **Agent evaluation adds a fourth app, in a separate sibling repo** —
 `~/Fred/fred-agent-evaluator/apps/fred-evaluation-backend` (not under `~/Fred/fred`). Include it
@@ -77,11 +85,13 @@ shared `app-logs-index`. Don't report either as broken; it's the app's own confi
 only live signal in this stack is its own stdout (Monitor it the same way as the other three) plus
 whatever it writes to Postgres/Temporal directly.
 
-That's up to 7 background processes when evaluation is in scope (4 APIs + 3 workers), or 5 when
-it isn't (3 APIs + 2 workers). Launch whichever set is in scope in parallel — independent Bash
-calls in one message — not sequentially. If the developer only cares about one slice (e.g. "just
-check ingestion KPIs"), ask which subset before launching all of them; don't pay the startup cost
-of backends that aren't part of this session's question.
+That's up to 8 background processes when evaluation is in scope (4 APIs + 3 workers + frontend),
+or 6 when it isn't (3 APIs + 2 workers + frontend). Launch whichever set is in scope in parallel —
+independent Bash calls in one message — not sequentially. If the developer only cares about one
+slice (e.g. "just check ingestion KPIs"), ask which subset before launching all of them; don't pay
+the startup cost of backends that aren't part of this session's question. The frontend is the one
+exception worth starting by default even for a narrow ask, since the developer needs it open to
+drive anything at all.
 
 `make run` installs deps first if needed (`run: dev run-local`) — the first launch after a
 `make clean` will be slower; don't mistake that startup delay for a hang.
@@ -187,8 +197,22 @@ without a concrete diff to back it.
 
 ## Ending the session
 
-Stop whichever background processes this session started (5 without evaluation in scope, 7 with
+Stop whichever background processes this session started (6 without evaluation in scope, 8 with
 `fred-evaluation-backend` included) when the developer is done — or when they start a `make clean`
 / infra wipe cycle (those invalidate the running `.venv`s and containers respectively) either in
 `~/Fred/fred` or, separately, in `~/Fred/fred-agent-evaluator`. Don't leave them running silently
 across an unrelated task.
+
+## Before starting anything — check for stale processes from a prior session
+
+Backends left running by an earlier session (this one or another Claude Code window) hold their
+ports and make `make run` fail with `OSError: [Errno 98] Address already in use` on the metrics
+port, or a similar bind failure on the API port. Before launching, check:
+
+    ss -ltnp | grep -E ':8222|:9222|:8111|:9111|:8000|:5173'
+
+If a port is already held, find the owning PID (`lsof -i :<port>` or the `ss` output's
+`users:((...,pid=...))`) and check whether its parent is a **still-running** Claude Code process
+(`ps -p <ppid> -o cmd`) before touching it — that could be another active session/window, not a
+leftover. Only kill (`kill -TERM`) processes confirmed stale (parent long-exited, or the developer
+confirms it's an abandoned run) rather than assuming every bound port is safe to clear.

@@ -557,6 +557,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setCapabilityPersonalScopeRequest,
       }),
     }),
+    patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: build.mutation<
+      PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiResponse,
+      PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/reasoning`,
+        method: "PATCH",
+        body: queryArg.setModelReasoningRequest,
+      }),
+    }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -572,6 +582,12 @@ const injectedRtkApi = api.injectEndpoints({
         method: "PATCH",
         body: queryArg.updateTeamRoutingPolicyRequest,
       }),
+    }),
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: build.query<
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse,
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
@@ -1283,6 +1299,12 @@ export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityI
   capabilityId: string;
   setCapabilityPersonalScopeRequest: SetCapabilityPersonalScopeRequest;
 };
+export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiResponse =
+  /** status 200 Successful Response */ ModelReasoningResult;
+export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg = {
+  capabilityId: string;
+  setModelReasoningRequest: SetModelReasoningRequest;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -1293,6 +1315,11 @@ export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchAp
 export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg = {
   teamId: string;
   updateTeamRoutingPolicyRequest: UpdateTeamRoutingPolicyRequest;
+};
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
+  teamId: string;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
@@ -1918,6 +1945,7 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_thinking_profile_ids?: string[];
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -1949,6 +1977,10 @@ export type ManagedAgentInstanceSummary = {
   role: string;
   /** User-authored intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) captured in the agent form's Engagement tab, used to screen for platform/organization risk (#2105). Empty for agents enrolled before #2105 until independently edited — required at creation and enforced by the agent edit form on save, but omittable on `UpdateAgentInstanceRequest` (like `role`) so partial updates such as the enable/disable toggle are unaffected. */
   usage_statement?: string;
+  /** Whether this agent offers the per-question reasoning toggle in its chat composer (REASON-01 level 3). A plain agent property edited in the General section of the agent form, NOT a capability — reasoning is a property of how the model is called, not a tool the agent can use. False for every agent enrolled before REASON-01 until independently edited. */
+  reasoning_enabled?: boolean;
+  /** Whether a new conversation with this agent starts with the composer's reasoning toggle already ON (REASON-01 Amendment B). Only meaningful while `reasoning_enabled` is true — with no toggle offered there is nothing to preselect. The user can still switch it off per question. */
+  reasoning_default_on?: boolean;
   status: "enabled" | "disabled";
   /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
   suspension_reason?: SuspensionReason | null;
@@ -2011,6 +2043,10 @@ export type CreateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
+  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). A plain agent property alongside role/description — NOT a capability, because reasoning is a property of how the model is called rather than a tool the agent can use. Defaults to False: enabling it only makes the composer toggle appear, and the user still has to flip it per question. */
+  reasoning_enabled?: boolean;
+  /** Start every new conversation with this agent's reasoning toggle already ON (REASON-01 Amendment B). Read only when `reasoning_enabled` is true; it seeds the composer's initial value and nothing more — the user can switch it off for any question. Defaults to False, the platform behaviour before this field existed. */
+  reasoning_default_on?: boolean;
 };
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
@@ -2041,6 +2077,10 @@ export type UpdateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
+  /** Offer the per-question reasoning toggle in this agent's chat composer (REASON-01 level 3). Omit to leave the current setting unchanged — same convention as `role`, so a partial update such as the enable/disable toggle is not forced to resupply it. */
+  reasoning_enabled?: boolean | null;
+  /** Start new conversations with the reasoning toggle already ON (REASON-01 Amendment B). Omit to leave the current setting unchanged. Written independently of `reasoning_enabled`: withdrawing the offer leaves this value stored but inert, so re-offering reasoning restores the author's original default. */
+  reasoning_default_on?: boolean | null;
 };
 export type BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost = {
   /** CreateAgentInstanceRequest as a JSON object string */
@@ -2147,6 +2187,16 @@ export type ManagedAgentTuning = {
   usage_statement?: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
+  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
+    
+    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
+  reasoning_enabled?: boolean;
+  /** When this agent offers reasoning, does a NEW conversation start with the composer toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control; the user can still flip it off per question — this decides where the switch starts, never where it stays.
+    
+    Meaningless unless `reasoning_enabled` is True: with the offer off no control is emitted at all, so no default can apply. The value is kept rather than reset in that case, so an author who turns the offer back on recovers their choice.
+    
+    Defaults to False, matching the hardcoded default this field replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured reasoning re-issuing duplicate tool calls on this stack, so starting ON is an opt-in an author makes deliberately. */
+  reasoning_default_on?: boolean;
   /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
   selected_capability_ids?: string[] | null;
   /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
@@ -2275,6 +2325,8 @@ export type ExecutionPreparation = {
   chat_default_profile_id?: string | null;
   /** Team's per-operation model-routing overrides, same resolution notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2). */
   operation_route_rules?: TeamOperationRouteRule[];
+  /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
+  reasoning_enabled_model_ids?: string[];
 };
 export type BootstrapPlatformAdminResponse = {
   /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
@@ -2319,6 +2371,10 @@ export type CapabilityEnablementItem = {
   health_unknown_instances?: number;
   /** The agents behind `suspended_instances`, named for the health-column drill-down (which agents, in which team). Same derivation as the count — one entry per (instance, this capability) the instance is broken by at rest. Empty for a healthy capability; carries `team_id` so the admin surface can group by team. */
   suspended_instance_details?: ImpactedInstanceSummary[];
+  /** For a `kind="model"` row: the models_catalog.yaml profile ids of this model that declare `supports_thinking` (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.3). Always empty for other kinds. **The admin row renders a reasoning control only when this is non-empty** — aptitude is not an administrator's choice, nobody can make a model reason that cannot. */
+  thinking_profile_ids?: string[];
+  /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
+  reasoning_enabled?: boolean;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -2355,6 +2411,8 @@ export type CapabilityDefaultOnResult = {
   suspended_instances?: number;
   /** Dependent instances revived by turning default-on ON (#1975). */
   revived_instances?: number;
+  /** True when switching this model OFF also switched its reasoning off (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.7). Reported so the admin sees the second state change instead of discovering it later in the row. */
+  reasoning_disabled?: boolean;
 };
 export type SetCapabilityDefaultOnRequest = {
   default_on: boolean;
@@ -2370,6 +2428,13 @@ export type CapabilityPersonalScopeResult = {
 export type SetCapabilityPersonalScopeRequest = {
   scope: "enabled" | "disabled" | "default";
 };
+export type ModelReasoningResult = {
+  capability_id: string;
+  reasoning_enabled: boolean;
+};
+export type SetModelReasoningRequest = {
+  reasoning_enabled: boolean;
+};
 export type TeamRoutingPolicy = {
   team_id: string;
   version: number;
@@ -2379,6 +2444,15 @@ export type TeamRoutingPolicy = {
 export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
   operation_rules?: TeamOperationRouteRule[];
+};
+export type AvailableModelProfile = {
+  profile_id: string;
+  capability_id: string;
+  /** i18n key, same as CapabilityCatalogEntry.name */
+  name: string;
+};
+export type AvailableModelProfileList = {
+  profiles?: AvailableModelProfile[];
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2808,9 +2882,12 @@ export const {
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
+  usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
+  useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

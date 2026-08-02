@@ -172,6 +172,70 @@ The runtime is **read-only DuckDB over Parquet**. It is not a SQLAlchemy layer
 over PostgreSQL/MySQL/SQLite (the pre-INGEST-04 `mcp-tabular` description wrongly
 claimed that; EXCEL-EXTRACTION §10 corrected it).
 
+### 6.6 Execution guardrails (amended 2026-07-31, issue #2182)
+
+Steps 1–5 above describe *what* is mounted. This subsection describes *how much*
+of it may run, and is load-bearing for go-live: before it, every DuckDB call ran
+synchronously on the FastAPI event loop, unbounded, on routes that are also MCP
+tools — so one caller could stall the pod for every other request.
+
+`features/tabular/execution.py` owns the guard. Four rules define the contract:
+
+1. **One operation, one worker thread.** `query_read`, `search_values` and the
+   preview frame read each run as a single synchronous job on a dedicated
+   `ThreadPoolExecutor` (`tabular-duckdb`), never on the event loop and never on
+   the shared default executor. A connection is created, used and closed on that
+   one thread. SQL validation runs inside the job because it opens its own
+   DuckDB connection.
+2. **Bounded admission.** `max_concurrent_queries` jobs run at once per process,
+   with `max_queued_queries` more allowed to wait; beyond that the caller gets
+   `503`. The bound is process-wide, not per `TabularService` instance — the
+   tabular controller and `ContentService` each build their own instance.
+3. **Bounded wall time.** A job exceeding `query_timeout_seconds` is aborted.
+   Abort is `connection.interrupt()` plus an explicit flag checked before each
+   mount, because `interrupt()` only affects a statement that is currently
+   executing — and, since DuckDB clears its interrupt flag when the next
+   statement starts, the abort is **re-issued a few times at short intervals**
+   so one landing between a worker's check and its `execute()` is not swallowed.
+   Without that retry a timed-out query runs to completion still holding its
+   slot. The slot is released when the worker thread actually returns, never
+   before. The budget clock starts at submit, so a job that never got a thread
+   is reported as capacity (`503`), not as a timeout (`504`).
+4. **Bounded resources per connection.** Every *online* connection sets
+   `threads`, `memory_limit`, and an empty `temp_directory`. The last is not
+   optional: without it DuckDB spills an over-budget operator to disk and
+   completes, so `memory_limit` bounds nothing and merely converts a memory
+   problem into an ephemeral-storage one. The throwaway connection
+   `_parse_read_statement` opens for `json_serialize_sql` (`utils.py`) sets
+   `threads=1` only: it never executes a plan, so it needs no memory budget, but
+   left unset it would spin up a thread pool sized from the host's CPU count
+   rather than the container's limit.
+5. **Over-budget is a caller error.** Because spilling is off,
+   `duckdb.OutOfMemoryException` is now reachable and maps to `400` with an
+   actionable message, not to `500`. Its text is dropped rather than redacted:
+   DuckDB names the configured limit and advises setting `temp_directory`,
+   neither of which belongs in an API response.
+
+**Selection is narrowed before mounting.** `validate_read_query` returns the
+authorized aliases the SQL actually references, and only those are mounted; a
+query referencing none is rejected with `400`. `max_selected_datasets` remains
+as a backstop for queries and is the primary bound for `search_values`, which
+has no SQL to narrow with and flags truncation through the existing
+`tables_truncated` field.
+
+One deviation from issue #2182, which asked to leave `searched_dataset_uids`
+alone: a workbook expands to one dataset per table, so the cap can slice through
+the middle of a document. A document that was cut is now **omitted** from
+`searched_dataset_uids`, because listing it would tell an agent "the value is
+not in this document" when tables of it were never opened — a wrong answer
+rather than a partial one. Documents skipped by the `max_matching_tables` break
+keep the original semantics.
+
+**Known limit — this guard does not bound peak process memory.** `memory_limit`
+governs DuckDB's buffer manager, not scalar-function allocation. A query such as
+`SELECT length(repeat('x', 1200000000))` allocates gigabytes, is not slowed by
+any timeout, and passes every check above. See §9.4.
+
 ---
 
 ## 7. Document kinds & the API surface
@@ -188,6 +252,17 @@ this contract:
 - `GET /tabular/documents/{uid}/markdown` → `TabularDocumentMarkdownResponse` (a
   spreadsheet's `output.md`; 404 when no `tabular_multi_v1`).
 - `POST /tabular/query` → read-only SQL over the mounted relations.
+- `POST /tabular/search` → keyword value-locator over the mounted relations.
+
+Both `POST` routes — **and `GET /markdown/{document_uid}`**, whose CSV preview
+renders from the same Parquet artifact and shares the same execution budget —
+return `503` when the process has no free DuckDB execution slot and `504` when a
+job exceeds its wall-clock budget (§6.6). These are deliberately distinct from
+`400`, which now covers three caller faults: invalid SQL, a query referencing no
+authorized dataset or too many of them, and a query over its memory budget. So
+overload, a slow query and a caller error stay separable in logs and alerts.
+None of this appears in the OpenAPI spec: the routes declare no `responses`
+block, so the generated frontend client is unaffected.
 
 Route behaviour, replacement of the dataset-centric routes, and the OpenAPI
 contract impact are owned by **EXCEL-EXTRACTION §10**; this RFC owns the
@@ -213,6 +288,9 @@ underlying artifact/alias/mounting model those routes expose.
 | 9.1 | **Statistic first-table-wins** — `read_dataset_frame` / `read_dataset_preview_frame` resolve a multi-table document to table 1 only; the Statistic MCP analyses just the first table of a workbook. Needs table-level addressing (alias or index) on the frame-read path. | open — tracked as **INGEST-05** |
 | 9.2 | **Cross-document alias collision** — `_claim_alias` renames on collision and logs; the served alias then diverges from the stored `output.md` catalog. Acceptable and observable; revisit only if it occurs in practice. | accepted |
 | 9.3 | **Contract versioning** — a `tabular_v2` / `tabular_multi_v2` would need a metadata migration or a dual-read window. No trigger yet. | deferred |
+| 9.4 | **Peak process memory is unbounded** — `memory_limit` governs DuckDB's buffer manager only. `SELECT length(repeat('x', 1200000000))` references no relation, passes read-only validation, mounts nothing, and allocates gigabytes faster than any timeout can react (measured: 796 MB RSS at a third of that size, with `memory_limit='256MB'`, `threads=1`, spilling disabled). Rejecting relation-free queries closes that exact shape but not the same expression with a `FROM` clause. A real bound needs the DuckDB job in a subprocess under `RLIMIT_AS`. | **open — P1**, follow-up to #2182 |
+| 9.5 | **Abort is best-effort for network I/O** — `interrupt()` aborts DuckDB execution in milliseconds but cannot unblock a socket read inside `httpfs` (measured: a worker blocked on a stalled read stayed blocked 5 s after `interrupt()`, until the read returned). A stalled object store therefore holds execution slots until the socket resolves, degrading tabular to `503`/`504` rather than wedging it, since slots are released when the thread returns. The bound is `httpfs`'s own defaults, measured with the extension loaded on 1.5.4: `http_timeout=30`, `http_retries=3`, `http_retry_backoff=4`, `http_retry_wait_ms=100` — so worst case is roughly 2 min per HTTP request, against a 30 s `query_timeout_seconds`. Not indefinite, but ~4× the configured budget and set by DuckDB rather than by deployment. All four are settable per connection alongside `threads`/`memory_limit`, which would tighten it; not done here because the remote path cannot be exercised offline. | open — follow-up to #2182 |
+| 9.6 | **Disabling spill turns some previously-succeeding queries into errors** — an over-budget sort or aggregate used to write to disk and return `200`; it now raises `OutOfMemoryException`, mapped to `400` with an actionable message (§6.6). This is the intended trade (a bounded failure beats an unbounded disk write) but it is a user-visible behaviour change for large queries that previously worked. | accepted |
 
 ---
 

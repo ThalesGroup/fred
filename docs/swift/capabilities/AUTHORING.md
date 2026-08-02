@@ -117,6 +117,16 @@ by declaring a part with a `Literal` `type` discriminator in `manifest.chat_part
 a Graph agent selecting a `middleware()`-only capability that left the default fails
 loudly at assembly (`CapabilityError`) rather than silently getting no tools.
 
+**Is it even a capability?** If the thing you want to add adjusts *how the model
+is called* rather than *what the model can call*, it is probably not one.
+Reasoning went through a full capability implementation before being withdrawn
+for exactly this reason (`MODEL-REASONING-ENABLEMENT-RFC.md` §15): an agent does
+not *use* reasoning the way it uses document search, so offering it in the Tools
+tab put the decision in the wrong mental model. It now ships as a plain agent
+field plus a platform-emitted chat control. Model-call parameters, per-turn
+platform options, and anything an author would not describe as "a thing this
+agent can do" belong outside the capability system.
+
 ---
 
 ## The three authoring lanes (RFC §7)

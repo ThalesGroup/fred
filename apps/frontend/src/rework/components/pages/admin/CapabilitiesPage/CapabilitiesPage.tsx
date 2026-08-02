@@ -26,21 +26,28 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAdminCapabilitiesQuery,
   useLazyCapabilityRevokeImpactQuery,
   useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
+  useSetModelReasoningMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
-import { enabledTeamCount, isCapabilityUnused as isUnused, personalSpaceCount } from "./capabilityEnablement";
+import {
+  enabledTeamCount,
+  hasReasoningControl,
+  isCapabilityUnused as isUnused,
+  personalSpaceCount,
+} from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -61,6 +68,8 @@ export default function CapabilitiesPage() {
   // every team, including ones they don't personally belong to (#1981).
   const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
+  // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
+  const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
 
   // Live impact preview fired on demand when the disable-confirmation dialog
   // opens — a platform-wide (no teamId) preview of what turning default-on off
@@ -73,6 +82,28 @@ export default function CapabilitiesPage() {
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
+  // Which row's mutation is in flight — NOT just a boolean. Disabling every
+  // switch off `isTogglingDefault` used to include the one the admin just
+  // clicked, which still holds native focus at that instant: yanking
+  // `disabled` onto a focused control forces the browser to blur it and,
+  // in Chromium, silently scrollIntoView() the nearest scroll container
+  // (here `html`, kept `overflow: hidden` in styles/index.css) — no visible
+  // scrollbar, no wheel response, only a reload undoes it. Excluding the
+  // in-flight row's own id from the disabled check keeps every *other*
+  // switch guarded against a concurrent submit without ever disabling the
+  // one element that's still focused.
+  const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
+  // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
+  // the same capability id. A rapid double-click on the same row (the
+  // always-undebounced "turn default-on on" path in onToggleDefault, below)
+  // fires two calls before React has re-rendered — a togglingCapabilityId
+  // state check alone can't see the first call's update in time. Without
+  // this, both calls' `finally` blocks race to clear the single
+  // togglingCapabilityId, and whichever resolves first can transiently
+  // re-disable the still-in-flight row's Switch while it's still focused —
+  // reintroducing the exact Chromium forced-blur bug the exclusion above
+  // was written to prevent.
+  const inFlightDefaultOnIdRef = useRef<string | null>(null);
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -88,6 +119,11 @@ export default function CapabilitiesPage() {
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (inFlightDefaultOnIdRef.current === capability.id) {
+      return;
+    }
+    inFlightDefaultOnIdRef.current = capability.id;
+    setTogglingCapabilityId(capability.id);
     try {
       const result = await setDefaultOn({
         capabilityId: capability.id,
@@ -103,8 +139,34 @@ export default function CapabilitiesPage() {
             : t("rework.admin.capabilities.defaultOffToast"),
         });
       }
+      // A model switched off takes its reasoning down with it (REASON-01 §5.7).
+      // Its own toast, in addition to the one above rather than instead of it:
+      // the row's reasoning switch flips on its own when the list refetches,
+      // and an unexplained state change on an admin screen reads as a bug.
+      if (result.reasoning_disabled) {
+        showWarn({ summary: t("rework.admin.capabilities.defaultOffReasoningToast") });
+      }
     } catch {
       showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
+    } finally {
+      inFlightDefaultOnIdRef.current = null;
+      setTogglingCapabilityId(null);
+    }
+  };
+
+  const applyReasoning = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    try {
+      await setModelReasoning({
+        capabilityId: capability.id,
+        setModelReasoningRequest: { reasoning_enabled: nextValue },
+      }).unwrap();
+      showSuccess({
+        summary: t(
+          nextValue ? "rework.admin.capabilities.reasoningOnToast" : "rework.admin.capabilities.reasoningOffToast",
+        ),
+      });
+    } catch {
+      showError({ summary: t("rework.admin.capabilities.reasoningToggleError") });
     }
   };
 
@@ -187,7 +249,7 @@ export default function CapabilitiesPage() {
         <div className={styles.centered}>
           <Switch
             checked={cap.default_on}
-            disabled={isTogglingDefault}
+            disabled={isTogglingDefault && togglingCapabilityId !== cap.id}
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
@@ -209,6 +271,40 @@ export default function CapabilitiesPage() {
         </div>
       ),
     },
+    // Reasoning activation (REASON-01 §5) — a models-only column, so it is
+    // absent entirely from the tool/agent views rather than rendered blank.
+    // The two axes share this screen and must not be confused: the default-on
+    // column above is "who may use this model at all" (ReBAC, per team); this
+    // one is "does it run with reasoning" (global, no subject, §5.4).
+    ...(kindFilter === "model"
+      ? [
+          {
+            label: t("rework.admin.capabilities.col.reasoning"),
+            size: "1fr",
+            cellRenderer: (cap: CapabilityEnablementItem) => {
+              // §5.3: no reasoning-capable profile means NO control at all, not
+              // a disabled one. Aptitude is declared in models_catalog.yaml —
+              // an administrator cannot make a model reason, and a greyed-out
+              // switch would suggest the opposite.
+              if (!hasReasoningControl(cap)) {
+                return <div className={styles.centered} />;
+              }
+              return (
+                <div className={styles.centered}>
+                  <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
+                    <Switch
+                      checked={cap.reasoning_enabled ?? false}
+                      disabled={isTogglingReasoning}
+                      onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
+                      aria-label={t("rework.admin.capabilities.col.reasoning")}
+                    />
+                  </Tooltip>
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
       // Wider than the other 1fr columns: the two reach badges (teams,
@@ -325,21 +421,22 @@ export default function CapabilitiesPage() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{t("rework.admin.capabilities.title")}</h1>
-        <p className={styles.subtitle}>{t("rework.admin.capabilities.subtitle")}</p>
-      </header>
-
-      <ButtonGroup
-        size="small"
-        color="primary"
-        variant="radio"
-        aria-label={t("rework.admin.capabilities.kindFilter.aria")}
-        selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
-        onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
-        items={KIND_FILTERS.map((kind) => ({
-          label: t(`rework.admin.capabilities.kindFilter.${kind}`),
-        }))}
+      <PageHeader
+        title={t("rework.admin.capabilities.title")}
+        subtitle={t("rework.admin.capabilities.subtitle")}
+        tabs={
+          <ButtonGroup
+            size="small"
+            color="primary"
+            variant="radio"
+            aria-label={t("rework.admin.capabilities.kindFilter.aria")}
+            selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
+            onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
+            items={KIND_FILTERS.map((kind) => ({
+              label: t(`rework.admin.capabilities.kindFilter.${kind}`),
+            }))}
+          />
+        }
       />
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}

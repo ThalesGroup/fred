@@ -417,6 +417,19 @@ export type RuntimeContext = {
   language?: string | null;
   /** Team-authored per-operation model-routing overrides (TEAM-ROUTING-POLICY-RFC.md §3/§8), same resolution/precedence notes as chat_default_profile_id above. `None`, not `[]`, when unset — matches every other Group C list field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. */
   operation_route_rules?: TeamOperationRouteRule[] | null;
+  /** The user's per-question reasoning choice (REASON-01 level 4, `MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer toggle. Travels per turn on this context exactly like `search_policy`/`search_rag_scope` — reasoning is a property of the model call, not a tool, so it is a platform chat option and NOT a capability's `turn_options` slice.
+    
+    TRI-STATE, and the distinction matters:
+    - `None` — the agent does not offer the choice (its author left reasoning off), so no per-question decision was made and levels 1-2 alone decide. This is the default and the pre-REASON-01 behaviour.
+    - `False` — the agent offers it and the user left it off: the turn must NOT reason, even on a model whose reasoning is enabled platform-wide.
+    - `True` — the user asked for it. Permission to reason, never a guarantee: level 2 remains a ceiling this cannot raise (§5.3). */
+  reasoning?: boolean | null;
+  /** kind="model" capability ids whose reasoning a platform admin has switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), resolved by control-plane at prepare-execution and forwarded unchanged for the rest of the session — same channel and same 'not re-fetched per turn' contract as chat_default_profile_id above. GLOBAL, not per team: this is an activation ('does this model run with reasoning'), not a permission — per-team model authorization is the separate, untouched `usable_model_ids` (§5.1/§5.4).
+    
+    OFF BY DEFAULT, and this is a real semantic difference from `usable_model_ids`: there, `None` means 'unrestricted'; here `None` and `[]` mean the same thing as any absent id — reasoning does NOT run. A model reasons only by being named in this list (§5.6). RoutedChatModelFactory enforces it by STRIPPING the reasoning settings at client construction (§5.6.2).
+    
+    As BOUND, this is the EFFECTIVE ceiling, not the raw platform list: `agent_app` intersects it with level 3 (the agent's own `AgentTuning.reasoning_enabled`, resolved server-side) before building the RuntimeContext, so an agent whose author left reasoning off carries an empty list whatever the request said (§14.5). What the FRONTEND sends is the platform list alone — the two differ on purpose, and the pod-side one is the one that counts. */
+  reasoning_enabled_model_ids?: string[] | null;
   refresh_token?: string | null;
   search_policy?: ("strict" | "hybrid" | "semantic") | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
@@ -694,6 +707,7 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
+  thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
   models: ModelCatalogEntry[];
@@ -891,6 +905,7 @@ export type CapabilityCatalogEntry = {
   id: string;
   kind?: "tool" | "agent" | "model";
   model_profile_ids?: string[];
+  model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
   route_base_url?: string | null;
@@ -940,6 +955,10 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
+  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
+    
+    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
+  reasoning_enabled?: boolean;
   /** The agent's mandatory role for discovery. */
   role: string;
   /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */

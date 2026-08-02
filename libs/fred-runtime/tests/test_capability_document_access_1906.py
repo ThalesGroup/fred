@@ -50,10 +50,6 @@ from fred_runtime.capabilities.document_access import (
     DocumentAccessConfig,
     narrow_scope_ids,
 )
-from fred_runtime.capabilities.document_access.capability import (
-    DEFAULT_SUMMARIZE_MAX_CHARS,
-    resolve_summarize_max_chars,
-)
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
@@ -74,8 +70,6 @@ from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
     DocumentSearchPort,
     DocumentSearchResult,
-    DocumentSummarizePort,
-    DocumentSummaryResult,
     DocumentTreePort,
     DocumentTreeResult,
     RuntimeServices,
@@ -191,39 +185,6 @@ class _FakeTreePort(DocumentTreePort):
             {
                 "working_directory": working_directory,
                 "library_tag_ids": library_tag_ids,
-                "max_chars": max_chars,
-            }
-        )
-        if self._error is not None:
-            raise self._error
-        return self._result
-
-
-class _FakeSummarizePort(DocumentSummarizePort):
-    """Fake `DocumentSummarizePort` recording the params it received."""
-
-    def __init__(
-        self,
-        result: DocumentSummaryResult | None = None,
-        error: Exception | None = None,
-    ) -> None:
-        self.calls: list[dict[str, Any]] = []
-        self._result = result or DocumentSummaryResult(
-            document_uid="u1", summary="the summary"
-        )
-        self._error = error
-
-    async def summarize(
-        self,
-        document_uid: str,
-        *,
-        instruction: str | None = None,
-        max_chars: int = 2000,
-    ) -> DocumentSummaryResult:
-        self.calls.append(
-            {
-                "document_uid": document_uid,
-                "instruction": instruction,
                 "max_chars": max_chars,
             }
         )
@@ -698,22 +659,20 @@ def test_adapter_keeps_binding_and_token_private(
 
 
 # ---------------------------------------------------------------------------
-# list_document_tree + summarize_document (#1906 follow-up)
+# list_document_tree (#1906 follow-up; summarize_document split out into its
+# own capability, document_summarize, RFC §10.1 — see
+# test_capability_document_summarize.py)
 # ---------------------------------------------------------------------------
 
 
-def _full_services(
-    tree: _FakeTreePort | None = None,
-    summarize: _FakeSummarizePort | None = None,
-) -> RuntimeServices:
+def _full_services(tree: _FakeTreePort | None = None) -> RuntimeServices:
     return RuntimeServices(
         document_search=_FakePort(hits=(_hit("d1"),)),
         document_tree=tree or _FakeTreePort(),
-        document_summarize=summarize or _FakeSummarizePort(),
     )
 
 
-def test_all_three_tools_registered_by_default() -> None:
+def test_both_tools_registered_by_default() -> None:
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap, identity=_identity(), services=_full_services(), config={}
@@ -721,15 +680,13 @@ def test_all_three_tools_registered_by_default() -> None:
     assert set(_capability_tools(cap, ctx)) == {
         "search_documents_using_vectorization",
         "list_document_tree",
-        "summarize_document",
     }
 
 
-def test_attachments_only_drops_the_tree_tool_but_keeps_summarize() -> None:
+def test_attachments_only_drops_the_tree_tool() -> None:
     """In attachments-only mode the corpus is out of scope by definition, and
     Swift has no session-attachment enumeration yet — the listing tool would
-    always show things the agent cannot search. Summarize stays: attachment
-    uids from search hits remain valid targets."""
+    always show things the agent cannot search."""
 
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
@@ -738,9 +695,7 @@ def test_attachments_only_drops_the_tree_tool_but_keeps_summarize() -> None:
         services=_full_services(),
         config={"search_attachments_only": True},
     )
-    tools = _capability_tools(cap, ctx)
-    assert "list_document_tree" not in tools
-    assert "summarize_document" in tools
+    assert "list_document_tree" not in _capability_tools(cap, ctx)
 
     # Inert without attachments (same rule as the search pinning): the tree
     # listing returns when the attach control is off.
@@ -813,126 +768,7 @@ async def test_tree_tool_failure_returns_is_error_result() -> None:
 
 
 @pytest.mark.asyncio
-async def test_summarize_tool_passes_instruction_and_returns_summary() -> None:
-    summarize_port = _FakeSummarizePort()
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=_full_services(summarize=summarize_port),
-        config={},
-    )
-
-    message = await _invoke_named_tool(
-        cap,
-        ctx,
-        "summarize_document",
-        {"document_uid": "u1", "instruction": "focus on risks"},
-    )
-
-    call = summarize_port.calls[0]
-    assert call["document_uid"] == "u1"
-    assert call["instruction"] == "focus on risks"
-    # No caller request, no config cap → built-in default.
-    assert call["max_chars"] == DEFAULT_SUMMARIZE_MAX_CHARS
-    assert message.content == "the summary"
-    assert message.artifact.tool_ref == "summarize_document"
-    assert message.artifact.is_error is False
-    # CAPAB-02: same reason as list_document_tree above — the summary text
-    # must also live in `blocks`, not only in `content`.
-    assert message.artifact.blocks[0].text == "the summary"
-
-
-@pytest.mark.asyncio
-async def test_summarize_config_cap_is_default_and_hard_bound() -> None:
-    summarize_port = _FakeSummarizePort()
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=_full_services(summarize=summarize_port),
-        config={"summarize_max_chars": 1000},
-    )
-
-    # Caller asks for more than the cap → clamped down to it.
-    await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u1", "max_chars": 4000}
-    )
-    assert summarize_port.calls[0]["max_chars"] == 1000
-
-    # Caller asks for nothing → the cap is the default.
-    await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": "u1"})
-    assert summarize_port.calls[1]["max_chars"] == 1000
-
-    # Caller asks under the cap → honored verbatim.
-    await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u1", "max_chars": 600}
-    )
-    assert summarize_port.calls[2]["max_chars"] == 600
-
-
-def test_resolve_summarize_max_chars_bounds() -> None:
-    # No cap: request honored, but clamped into the endpoint's wire bounds.
-    assert resolve_summarize_max_chars(None, None) == DEFAULT_SUMMARIZE_MAX_CHARS
-    assert resolve_summarize_max_chars(None, 50) == 200
-    assert resolve_summarize_max_chars(None, 50_000) == 20_000
-
-
-@pytest.mark.asyncio
-async def test_summarize_403_failure_teaches_uid_recovery() -> None:
-    """A 403/404 usually means the model passed a file NAME as the uid (seen
-    live 2026-07-21) — the error message must teach the recovery path so the
-    model retries with the real uid instead of echoing the failure."""
-
-    summarize_port = _FakeSummarizePort(
-        error=DocumentPortCallError("403 Forbidden", status_code=403)
-    )
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=_full_services(summarize=summarize_port),
-        config={},
-    )
-
-    message = await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "diff_main_swift.md"}
-    )
-
-    assert message.artifact.is_error is True
-    assert "opaque uid" in message.content
-    assert "list_document_tree" in message.content
-    # CAPAB-02: the recovery hint is appended to `message` AFTER
-    # `_document_tool_failure` already built the artifact — it must also
-    # land in `blocks`, or a Graph agent (which keeps only the artifact)
-    # loses exactly the guidance a model needs to self-correct.
-    assert message.artifact.blocks[0].text == message.content
-
-
-@pytest.mark.asyncio
-async def test_summarize_timeout_failure_names_the_document() -> None:
-    summarize_port = _FakeSummarizePort(
-        error=DocumentPortCallError("read timeout", timed_out=True)
-    )
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=_full_services(summarize=summarize_port),
-        config={},
-    )
-
-    message = await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u-42"}
-    )
-
-    assert message.artifact.is_error is True
-    assert "timed out" in message.content
-    assert "document_uid=u-42" in message.content
-
-
-@pytest.mark.asyncio
-async def test_missing_document_ports_fail_loud() -> None:
+async def test_missing_document_tree_port_fails_loud() -> None:
     """A missing platform port is a wiring bug, not an empty result."""
 
     cap = DocumentAccessCapability()
@@ -945,8 +781,6 @@ async def test_missing_document_ports_fail_loud() -> None:
 
     with pytest.raises(RuntimeError, match="document_tree"):
         await _invoke_named_tool(cap, ctx, "list_document_tree", {})
-    with pytest.raises(RuntimeError, match="document_summarize"):
-        await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": "u"})
 
 
 @pytest.mark.asyncio

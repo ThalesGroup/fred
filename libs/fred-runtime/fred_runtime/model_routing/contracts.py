@@ -96,6 +96,45 @@ class TeamRoutingProfileDriftError(RuntimeError):
 MatchValue: TypeAlias = str | tuple[str, ...]
 
 
+# Provider-passthrough keys inside `ModelConfiguration.settings` that turn
+# reasoning ON at the client (`MODEL-REASONING-ENABLEMENT-RFC.md` REASON-01).
+# One list, two consumers that must never disagree: `ModelProfile`'s boot
+# validator (§4.3 — declaring one of these without `supports_thinking` is an
+# authoring mistake) and `without_reasoning_settings` below, which removes
+# them when the platform toggle is off (§5.6.2). Adding a provider's key here
+# extends both at once; there is deliberately no second place to update.
+REASONING_SETTING_KEYS: frozenset[str] = frozenset({"reasoning_effort"})
+
+
+def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
+    """Return `model` with every `REASONING_SETTING_KEYS` entry removed from
+    `settings` (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.6.2).
+
+    Why removal and not "decline to add": `reasoning_effort` is already in the
+    YAML-authored settings by the time anything sees it, so a toggle that only
+    skips *adding* it would be decorative — the model would reason with the
+    toggle off. That exact failure is on record in-tree for `allow_parallel_calls`
+    (`AGENT-THINKING-API-RFC.md` §C.8, "Never reaches the model").
+
+    Returns the SAME object when there is nothing to strip. This runs on the
+    per-operation model-build path, and the overwhelmingly common case is a
+    profile with no reasoning setting at all — no copy, no allocation for it.
+    """
+
+    settings = model.settings
+    if not settings or REASONING_SETTING_KEYS.isdisjoint(settings):
+        return model
+    return model.model_copy(
+        update={
+            "settings": {
+                key: value
+                for key, value in settings.items()
+                if key not in REASONING_SETTING_KEYS
+            }
+        }
+    )
+
+
 def _validate_match_value(*, field_name: str, value: MatchValue | None) -> None:
     if value is None:
         return
@@ -192,6 +231,20 @@ class ModelProfile(FrozenModel):
     capability: ModelCapability
     model: ModelConfiguration
     description: str | None = None
+    supports_thinking: bool = Field(
+        default=False,
+        description=(
+            "Declared APTITUDE — does this profile's model support Thinking "
+            "(`MODEL-REASONING-ENABLEMENT-RFC.md` §4, level 1)? Not activation: "
+            "`supports_thinking: true` with no reasoning setting is legal and "
+            "means 'capable, shipped off'. Declared per profile, not per model, "
+            "because that is where the behaviour actually differs — the same "
+            "(provider, name) can be declared twice, reasoning in one profile "
+            "and not the other. Whether reasoning actually RUNS is level 2's "
+            "platform toggle (§5), delivered per model on "
+            "`RuntimeContext.reasoning_enabled_model_ids`."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_model(self) -> "ModelProfile":
@@ -202,6 +255,20 @@ class ModelProfile(FrozenModel):
         if not self.model.name or not self.model.name.strip():
             raise ValueError(
                 f"ModelProfile {self.profile_id!r} must define model.name."
+            )
+        # §4.3 — fail loud at pod boot rather than tolerate the inconsistency.
+        # A profile that ships a reasoning setting while denying the aptitude
+        # is always an authoring mistake, and silently tolerating it is exactly
+        # how the current untyped-passthrough situation arose: nothing in Fred
+        # would know the profile reasons, so the admin toggle (§5.3) would
+        # never appear for it and its reasoning could never be turned off.
+        declared = sorted(REASONING_SETTING_KEYS & set(self.model.settings or {}))
+        if declared and not self.supports_thinking:
+            raise ValueError(
+                f"ModelProfile {self.profile_id!r} declares reasoning setting(s) "
+                f"{declared} but supports_thinking is false. Set "
+                "'supports_thinking: true' on the profile (it declares the model's "
+                "aptitude), or remove the setting."
             )
         return self
 

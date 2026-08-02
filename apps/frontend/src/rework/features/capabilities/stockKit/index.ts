@@ -25,6 +25,7 @@ import type { CapabilityChatTurnControl } from "../types";
 import { AttachFilesControl } from "./AttachFilesControl";
 import { DocumentScopeControl } from "./DocumentScopeControl";
 import { RagScopeControl } from "./RagScopeControl";
+import { ReasoningControl } from "./ReasoningControl";
 import { SearchPolicyControl } from "./SearchPolicyControl";
 
 export const stockChatTurnControlKit: Record<string, CapabilityChatTurnControl> = {
@@ -32,4 +33,9 @@ export const stockChatTurnControlKit: Record<string, CapabilityChatTurnControl> 
   document_scope: DocumentScopeControl,
   search_policy: SearchPolicyControl,
   rag_scope: RagScopeControl,
+  // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): contributed by
+  // the `reasoning` capability, which has a static id and so COULD ship a
+  // plugin folder — it lives here because the row needs nothing
+  // capability-specific, just shared composer state like its neighbours.
+  reasoning_toggle: ReasoningControl,
 };

@@ -90,7 +90,7 @@
   }
 
   .datatable-cell {
-    height: var(--datatable-row-height, 3.75rem);
+    min-height: var(--datatable-row-height, 3.75rem);
   }
 }
 
@@ -100,7 +100,7 @@
   border-bottom: 1px solid var(--surface-container-highest);
   padding: 0 var(--spacing-s);
   min-width: 0;
-  height: var(--datatable-row-height, 3.5rem);
+  min-height: var(--datatable-row-height, 3.5rem);
   color: var(--on-surface);
   font: var(--font-body-medium);
 

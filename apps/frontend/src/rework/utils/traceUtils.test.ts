@@ -6,15 +6,21 @@ import {
   formatLatencyMs,
   groupTraceEntries,
   humanizeToolName,
+  isDocumentTreeTool,
   isTraceChannel,
   isFinalChannel,
+  isSummarizeDocumentTool,
   parseToolResultContent,
   primaryTextForEntry,
   secondaryTextForEntry,
+  splitTraceEntries,
   statusForEntry,
+  stripDocumentUids,
   textOf,
-  thoughtSummaryLabel,
+  toolCopyText,
+  toolDiscriminator,
   totalLatencyMs,
+  traceSummary,
 } from "./traceUtils";
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -53,7 +59,14 @@ function toolResultMsg(callId: string, content: string, ok = true, latencyMs?: n
 
 function thoughtMsg(
   text: string,
-  extras: { streaming_delta?: boolean; title?: string; conclusion?: string; phase?: string } = {},
+  extras: {
+    streaming_delta?: boolean;
+    title?: string;
+    conclusion?: string;
+    phase?: string;
+    duration_ms?: number;
+    source?: string;
+  } = {},
 ): ChatMessage {
   return msg({
     channel: "thought",
@@ -354,18 +367,144 @@ describe("totalLatencyMs", () => {
   });
 });
 
-// ── thoughtSummaryLabel ───────────────────────────────────────────────────────
+// ── splitTraceEntries ─────────────────────────────────────────────────────────
 
-describe("thoughtSummaryLabel", () => {
-  it("returns 'Thought…' when there is no latency", () => {
-    expect(thoughtSummaryLabel([])).toBe("Thought…");
+describe("splitTraceEntries", () => {
+  it("returns empty lanes for an empty trace", () => {
+    expect(splitTraceEntries([])).toEqual({ reasoning: [], steps: [] });
   });
 
-  it("includes formatted duration when latency is present", () => {
+  it("routes reasoning channels to the reasoning lane, never to the steps", () => {
+    const planning = thoughtMsg("thinking", { phase: "planning" });
+    const plan = msg({ channel: "plan", parts: [{ type: "text", text: "step 1" }] });
+    const observation = msg({ channel: "observation", parts: [{ type: "text", text: "noted" }] });
+    const lanes = splitTraceEntries([
+      { kind: "solo", message: planning },
+      { kind: "solo", message: plan },
+      { kind: "solo", message: observation },
+    ]);
+    expect(lanes.reasoning).toHaveLength(3);
+    expect(lanes.steps).toEqual([]);
+  });
+
+  it("numbers tool steps 1-based in arrival order", () => {
     const entries = [
-      { kind: "combo" as const, call: toolCallMsg("c1", "a"), result: toolResultMsg("c1", "r", true, 1500) },
+      { kind: "combo" as const, call: toolCallMsg("c1", "read_query"), result: toolResultMsg("c1", "{}", true, 100) },
+      { kind: "combo" as const, call: toolCallMsg("c2", "read_query"), result: toolResultMsg("c2", "{}", true, 200) },
     ];
-    expect(thoughtSummaryLabel(entries)).toBe("Thought for 1.5s");
+    const lanes = splitTraceEntries(entries);
+    expect(lanes.steps.map((s) => s.index)).toEqual([1, 2]);
+  });
+
+  it("keeps the reasoning block out of the step numbering", () => {
+    const planning = thoughtMsg("thinking", { phase: "planning" });
+    const call = toolCallMsg("c1", "search");
+    const result = toolResultMsg("c1", "found", true, 50);
+    const lanes = splitTraceEntries(groupTraceEntries([planning, call, result]));
+    expect(lanes.reasoning).toHaveLength(1);
+    expect(lanes.steps).toHaveLength(1);
+    expect(lanes.steps[0].index).toBe(1);
+  });
+
+  it("sequences notes and errors with the steps but leaves them unnumbered", () => {
+    const call = toolCallMsg("c1", "search");
+    const result = toolResultMsg("c1", "found", true, 50);
+    const failure = msg({ channel: "error", parts: [{ type: "text", text: "boom" }] });
+    const lanes = splitTraceEntries(groupTraceEntries([call, result, failure]));
+    expect(lanes.steps.map((s) => s.index)).toEqual([1, null]);
+  });
+});
+
+// ── traceSummary ──────────────────────────────────────────────────────────────
+
+describe("traceSummary", () => {
+  it("reports nothing for an empty trace", () => {
+    expect(traceSummary([])).toEqual({ reasoningMs: null, toolCount: 0, toolMs: 0, running: false });
+  });
+
+  it("takes the MAX reasoning duration, not the sum — nested blocks share wall-clock", () => {
+    const outer = thoughtMsg("outer", { phase: "planning", duration_ms: 16400 });
+    const inner = thoughtMsg("inner", { phase: "reflection", duration_ms: 1200 });
+    expect(
+      traceSummary([
+        { kind: "solo", message: outer },
+        { kind: "solo", message: inner },
+      ]).reasoningMs,
+    ).toBe(16400);
+  });
+
+  it("counts tools and sums their latency separately from the reasoning duration", () => {
+    const reasoning = thoughtMsg("thinking", { phase: "planning", duration_ms: 16400 });
+    const entries = [
+      { kind: "solo" as const, message: reasoning },
+      { kind: "combo" as const, call: toolCallMsg("c1", "a"), result: toolResultMsg("c1", "r", true, 148) },
+      { kind: "combo" as const, call: toolCallMsg("c2", "b"), result: toolResultMsg("c2", "r", true, 140) },
+    ];
+    expect(traceSummary(entries)).toEqual({ reasoningMs: 16400, toolCount: 2, toolMs: 288, running: false });
+  });
+
+  it("is running while a thought still streams", () => {
+    const streaming = thoughtMsg("partial…", { streaming_delta: true });
+    expect(traceSummary([{ kind: "solo", message: streaming }]).running).toBe(true);
+  });
+
+  it("is running while a tool call awaits its result", () => {
+    expect(traceSummary([{ kind: "combo", call: toolCallMsg("c1", "search") }]).running).toBe(true);
+  });
+});
+
+// ── toolDiscriminator ─────────────────────────────────────────────────────────
+
+describe("toolDiscriminator", () => {
+  it("reports the row count of a SQL result", () => {
+    const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }, { a: 2 }] }));
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
+      kind: "rows",
+      count: 2,
+    });
+  });
+
+  it("reports the hit count of a RAG result", () => {
+    const result = toolResultMsg("c1", JSON.stringify({ query: "cars", hits: [{}, {}, {}] }));
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "search"), result })).toEqual({
+      kind: "sources",
+      count: 3,
+    });
+  });
+
+  it("reports 0 rows for an empty SQL result instead of going bare", () => {
+    const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [] }));
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
+      kind: "rows",
+      count: 0,
+    });
+  });
+
+  it("reports 0 rows for a SQL result that carries an error", () => {
+    const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [], error: "syntax error" }));
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
+      kind: "rows",
+      count: 0,
+    });
+  });
+
+  it("reports 0 rows for a query whose result came back in an unreadable shape", () => {
+    const opaque = toolResultMsg("c1", "Tool error: binder error on column CA");
+    expect(
+      toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "mcp__knowledge_flow__read_query"), result: opaque }),
+    ).toEqual({
+      kind: "rows",
+      count: 0,
+    });
+  });
+
+  it("returns null for unrecognized, pending, failed and solo entries", () => {
+    const opaque = toolResultMsg("c1", "plain text");
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "x"), result: opaque })).toBeNull();
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "x") })).toBeNull();
+    const failed = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }] }), false);
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "x"), result: failed })).toBeNull();
+    expect(toolDiscriminator({ kind: "solo", message: thoughtMsg("thinking") })).toBeNull();
   });
 });
 
@@ -492,6 +631,58 @@ describe("asRagSearchResult", () => {
   it("does not misclassify a SQL result as a RAG result", () => {
     const sqlData = { sql_query: "SELECT 1", rows: [] };
     expect(asRagSearchResult(sqlData)).toBeNull();
+  });
+});
+
+describe("isSummarizeDocumentTool / isDocumentTreeTool", () => {
+  it("recognizes the exact first-party tool names only", () => {
+    expect(isSummarizeDocumentTool("summarize_document")).toBe(true);
+    expect(isSummarizeDocumentTool("list_document_tree")).toBe(false);
+    expect(isSummarizeDocumentTool("mcp__tavily__web_search")).toBe(false);
+
+    expect(isDocumentTreeTool("list_document_tree")).toBe(true);
+    expect(isDocumentTreeTool("summarize_document")).toBe(false);
+  });
+});
+
+describe("stripDocumentUids", () => {
+  it("removes a bracketed uid after a document name", () => {
+    expect(stripDocumentUids("report.pdf [doc-abc123] (2026-01-01)")).toBe("report.pdf (2026-01-01)");
+  });
+
+  it("strips uids on every line of a multi-line tree", () => {
+    const tree = ["Sales", "  report.pdf [doc-1] (2026-01-01)", "  HR", "    notes.docx [doc-2] (2026-02-02)"].join(
+      "\n",
+    );
+    expect(stripDocumentUids(tree)).toBe(
+      ["Sales", "  report.pdf (2026-01-01)", "  HR", "    notes.docx (2026-02-02)"].join("\n"),
+    );
+  });
+
+  it("leaves text with no bracketed uid unchanged", () => {
+    expect(stripDocumentUids("Sales\n  HR")).toBe("Sales\n  HR");
+  });
+});
+
+describe("toolCopyText", () => {
+  it("copies the raw summary text for summarize_document", () => {
+    const call = toolCallMsg("c1", "summarize_document", { document_uid: "doc-1" });
+    const result = toolResultMsg("c1", "This document is about...");
+    const entries = groupTraceEntries([call, result]);
+    expect(toolCopyText(entries[0])).toBe("This document is about...");
+  });
+
+  it("copies the uid-stripped tree text for list_document_tree", () => {
+    const call = toolCallMsg("c1", "list_document_tree", {});
+    const result = toolResultMsg("c1", "report.pdf [doc-1] (2026-01-01)");
+    const entries = groupTraceEntries([call, result]);
+    expect(toolCopyText(entries[0])).toBe("report.pdf (2026-01-01)");
+  });
+
+  it("falls back to the generic {action, status} payload when the tool call has no result yet", () => {
+    const call = toolCallMsg("c1", "summarize_document", {});
+    const entries = groupTraceEntries([call]);
+    expect(JSON.parse(toolCopyText(entries[0]) ?? "")).toEqual({ action: "Summarize Document", status: "running" });
   });
 });
 

@@ -185,8 +185,30 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
+As of REASON-01 (#2166) the same row grammar carries a **boolean** row for the first
+time: the `Reasoning` toggle (`stockKit/ReasoningControl.tsx`) shows On/Off inline in
+muted text like the value rows, but its trailing affordance is a checkbox glyph rather
+than a chevron, and clicking it flips the value in place instead of opening a
+sub-menu. The popover deliberately stays open so a user can flip it and keep
+composing. It is also the first row contributed by the **platform** rather than by a
+capability. It appears only when the agent's author turned Reasoning on in the form's
+General tab AND a platform admin enabled the model's reasoning — a closed upstream gate
+removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md` §8).
+
+As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
+constant: the agent form's General section grows a second switch nested under
+`Reasoning` — visible only while `Reasoning` is on, indented behind a left rule so it
+reads as a child rather than a peer — and it seeds the composer row's initial state for
+every new conversation. Nothing about the row itself changes: still a per-question
+choice the user can flip, still removed entirely when an upstream gate is closed. The
+form hint carries the cost of the opt-in (slower, may repeat tool calls on tool-using
+agents) so the decision is informed at the point it is made.
+
 #### Open UX issues
 
+- **Boolean-row affordance (REASON-01)** — the checkbox glyph reads correctly but is the
+  only non-chevron trailing icon in the menu. Decide whether boolean rows should instead
+  use a small switch, and whether the On/Off value text is redundant next to it.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
 - **Prompts row (PROMPT-05)** — the harmonized menu is shaped to accept a `Prompts` sub-row
@@ -212,20 +234,46 @@ shared molecule.
   monospace on a light background. May be too visually heavy for secondary UI. Consider
   lowercase with a subtler pill, or icon-only at narrow widths.
 
-- **Collapse behaviour** — the accordion collapses only when `done=true` is passed, which
-  is `!isStreaming` (set by `AssistantTurn`). During history load all turns arrive
-  simultaneously so all `ThoughtTrace` blocks start collapsed (past turns are not streaming).
-  Discuss: should past turns always be collapsed, or should the most recent one start open?
-
-- **Timeline guideline alignment** — the vertical guideline (`.guideline`) is positioned
-  at `left: 16px` in the parent but the dot in `TraceEntryRow` is in a grid column.
-  Verify the guideline visually threads through the dots on all viewport widths.
-
-- **Chevron legibility** — the `›` character used as chevron may render inconsistently
-  across operating systems. Consider replacing with an SVG icon from the existing `Icon`
-  atom.
+- **Reasoning preview length** — `ReasoningBlock` clamps the streaming preview to 2 lines.
+  Validate that 2 lines is the right budget for long model-native reasoning, or whether the
+  card should grow while streaming and clamp only once the block closes.
 
 #### Resolved
+
+- **Reasoning rendered as a tool step (2026-07-30, #2172)** — the trace was one flat list of
+  look-alike rows, so the model-native reasoning block sat as row #1 of the tool pile and
+  pulsed there for the whole turn (it is opened at the first reasoning token and closed only
+  at the first answer delta, so it holds the lowest rank throughout — it read as a tool stuck
+  in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
+  a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
+  `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
+  threaded by a single 1px timeline rail so the turn still reads as a process unfolding. See `AGENT-THINKING-API-RFC.md` Amendment D.
+
+- **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
+  sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
+  replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock (max,
+  not sum: the model-native block brackets the tool calls), tool count, tool latency, running
+  flag — which the component formats through i18n as e.g. "Reasoning 16.4s · 4 tools".
+
+- **Collapse behaviour (2026-07-30, #2172)** — `expanded` was initialised `true` and never
+  collapsed; `done` only drove the pulse animation, despite a comment claiming otherwise. The
+  block is now open while streaming, auto-collapsed once the turn is done, and an explicit
+  toggle is persisted in `localStorage` (`useTraceExpansion`, precedence rule unit-tested via
+  the pure `resolveTraceExpanded()`). The stored preference is snapshotted at mount so
+  toggling one turn does not retroactively flip every other trace on screen. This also settles
+  the history-load question: past turns follow the stored preference, defaulting to collapsed.
+
+- **Chevron legibility (2026-07-30)** — the `›` character is replaced by the `Icon` atom
+  (`expand_more` / `expand_less`).
+
+- **Timeline guideline alignment (2026-07-30)** — the guideline moved into `.entries` and is
+  positioned off the step-number column width, and `TraceEntryRow` always renders the number
+  slot (empty for unnumbered notes) so every status dot sits on the same vertical line.
+
+- **i18n (2026-07-30)** — the trace surface was hardcoded English inside a translated app.
+  Its static strings now live under `rework.chatTrace.*` (en + fr), including the reasoning
+  phase labels. Tool labels themselves stay English — they are generated by
+  `humanizeToolName()` from backend tool names (see #1774).
 
 - **Label chip style — partially (2026-06-18)** — thought rows now use subtle per-phase
   tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
@@ -241,6 +289,33 @@ shared molecule.
 
 ---
 
+### `ReasoningBlock`
+
+**Location:** `src/rework/components/shared/molecules/ThoughtTrace/ReasoningBlock/ReasoningBlock.tsx`
+**Status:** `Functional`
+
+The reasoning lane of a trace (#2172): one line per reasoning entry — sparkle marker on the
+timeline rail, phase label in small caps, duration, and a 2-line clamped preview of the
+streaming text. Clicking opens the existing `TraceDetailDrawer` for the full markdown.
+
+Deliberately not a `TraceEntryRow`: reasoning is not a tool step. Three weight decisions,
+all from developer review of the first cut, which was judged visually too heavy:
+
+- **No card chrome** — the first version had a bordered, filled card. Removed: the trace is
+  secondary UI and must stay lighter than the answer next to it.
+- **No phase pill** — the phase renders as plain small-caps retreat text, not the tinted
+  `phaseBadge` chip (the chip survives in `TraceDetailDrawer`, where it is the header).
+- **One label, not three** — a model-native block used to show a phase chip, the backend
+  title ("Model reasoning") and a "Model" chip. The title and chip are dropped for
+  `source="model_native"` (they say nothing the phase doesn't); authored titles are kept,
+  since an author wrote them.
+
+The marker aligns on `--trace-rail-x`, the rail geometry `ThoughtTrace` sets on `.body` and
+cascades to both lanes — so the rail threads the reasoning marker and every step dot with no
+per-component magic numbers.
+
+---
+
 ### `TraceEntryRow`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/TraceEntryRow/TraceEntryRow.tsx`
@@ -249,23 +324,26 @@ shared molecule.
 
 #### Open UX issues
 
-- **Grid column widths** — `grid-template-columns: 10px 20px auto 1fr` means the channel
-  label column (`auto`) can grow unbounded for long channel names. Consider `max-width` on
-  the label chip or a fixed column width.
-
-- **Primary text truncation** — text truncates with `text-overflow: ellipsis` at the grid
-  boundary. Confirm with designer whether one-line truncation is acceptable or whether two
-  lines are preferable for `thought` entries (which often have longer text).
-
-- **Secondary text (result summary)** — the `.secondary` grid row starts at column 4,
-  which visually aligns it under the primary text but skips the dot + index + label
-  columns. Confirm this is the intended layout.
-
-- **Hover-reveal index** — the index number appears on row hover. This is a subtle
-  affordance. Validate whether it is discoverable enough, or if a permanent light indicator
-  is better.
+- **Long tool labels** — humanized labels can be long ("Getting tabular documents schemas").
+  They ellipsis-truncate before the discriminator chip; validate the truncation point at
+  narrow widths.
 
 #### Resolved
+
+- **Step numbers + curated discriminator (2026-07-30, #2172)** — two calls to the same tool
+  rendered as byte-identical rows ("READING QUERY" ×2), because the redaction rule from
+  #1774/CHAT-13 shows neither the raw tool name nor the arguments. Rows now carry a permanent
+  1-based step number (replacing the hover-reveal index, which was too subtle) and, when the
+  result matches a recognised curated shape, a volume discriminator chip: `12 rows`
+  (`SqlQueryResult`) or `5 sources` (`RagSearchResult`), from `traceUtils.toolDiscriminator()`.
+  Only volume metadata is exposed — raw arguments and raw result content stay redacted.
+  Failed and unrecognised results get no chip; the red status dot already carries the failure.
+
+- **Row layout (2026-07-30)** — the two-row grid is replaced by a single flex line
+  `[n] ● label · discriminator … latency`, with latency trailing right. The second grid row
+  (which started at column 4 and skipped the dot/index columns) is gone, and with it the
+  primary-text-truncation question for thought entries: reasoning text now lives in
+  `ReasoningBlock`, not in this row.
 
 - **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up)** — thought rows now render
   the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`): planning→tertiary,
@@ -291,10 +369,12 @@ shared molecule.
   + SSE consumption) — a reasonable fast-follow, not required for the current fix since
   `content` already carries enough to render useful citations.
 
-- **Unrecognized-tool fallback still raw JSON** — only two content shapes are recognized
-  (SQL `{sql_query, rows, error}`, RAG `{query, hits}`); any other tool still falls back to
-  the redacted `{action, status, latency}` JSON view. Intentional (see Resolved below) but
-  the list of recognized shapes may need to grow as more tools are added.
+- **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
+  `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
+  (`summarize_document`, `list_document_tree`, see Resolved below) are recognized; any
+  other tool still falls back to the redacted `{action, status, latency}` JSON view.
+  Intentional (see Resolved below) but the list of recognized tools/shapes may need to
+  grow as more tools are added.
 
 #### Resolved
 
@@ -319,6 +399,19 @@ shared molecule.
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
   tool shape still falls back to the original redacted view — see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Curated views for `summarize_document` and `list_document_tree` (2026-07-31)** — these
+  two first-party document-capability tools return plain text (a prose summary / an
+  indented tree listing), not a JSON envelope, so they can't be recognized by content
+  shape like SQL/RAG — they're recognized by tool name instead (`isSummarizeDocumentTool`,
+  `isDocumentTreeTool` in `traceUtils.ts`), still a curated allowlist rather than a
+  blanket raw-text pass-through. `summarize_document` renders its summary through the
+  existing `MarkdownRenderer` (same treatment as reasoning text) instead of a JSON dump.
+  `list_document_tree` renders the tree in a plaintext `CodeBlock`, with the bracketed
+  internal `document_uid` after each entry stripped before display (`stripDocumentUids()`)
+  — the tool's own docstring already forbids the model from repeating that id to the end
+  user; the drawer now honors the same identifier-hygiene rule. The header copy action
+  copies the summary text / the uid-stripped tree text respectively.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
@@ -1389,23 +1482,84 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 
 Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
 (`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
-its own `Disclosure`) now sits below capability-gated team sections prepended above it, all
+its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
 in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
 `hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
 tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
-storage quota, conversations over time, and a most-active-agents breakdown. team_editor gets
-an ingestion-filtered Activités (`TaskActivity`) section; team_admin gets an unfiltered one plus
-a `team_activity_summary` trend line. Entry point is a new gear icon on the personal-space
-banner (`TeamContentNavbar.tsx`) — the same slot team settings uses, gated on `isPersonalTeam`
-instead of `canOpenTeamSettings` since the two are mutually exclusive.
+storage quota, conversations over time, and a most-active-agents breakdown. Entry point is a new
+gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same slot team settings
+uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the two are mutually
+exclusive.
+
+The page's `<h1>` is role-aware (2026-07-30 fix): "My token usage" for a plain member or anyone
+on a personal team (only the personal section ever renders for them), "Team usage" for an
+elevated viewer (admin/editor/analyst) — the original always-"My token usage" title read as
+mislabeled for an admin looking at a page that's majority team-scoped content.
+
+**Activités removed from this page (2026-07-30).** team_editor's ingestion-filtered and
+team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
+line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
+`/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
+nav rail, which additionally has ack support this embed never did. See
+`KPI-ANALYTICS-RFC.md` §2.8 and the `TaskActivity` entry below.
+
+The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
+`/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
+you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
+Activity/Evaluations/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
+match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
+(no sibling tabs to switch to) keeps the bare Back.
 
 #### Open UX issues
 
 - Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
   `AnalyticsPage` but haven't been checked against a live stack with real token data.
-- All new v3 sections default their `Disclosure` open — consistent with `TaskActivity`'s own
-  convention, but the page now has up to 4 stacked disclosures; revisit if that reads as dense
-  once seen with real data.
+
+---
+
+### `PageHeader`
+
+**Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
+**Status:** `Functional`
+
+The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
+`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+row below the title/actions row). This is the only place a page-level title should ever be
+rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
+title against `actions` when there's no subtitle; aligns to the top when there is one, so
+`actions` sits at the title's baseline instead of drifting toward the two-line block's middle.
+
+Extracted 2026-07-30 (commit `e01d0b47`) because `TeamUsagePage`, `TaskActivity`, and the team
+Evaluations view had each hand-rolled a slightly different heading level/subtitle placement.
+Extended 2026-07-31 with the `breadcrumb`/`tabs` slots and retrofitted onto every remaining
+admin-scope and team-admin-scope page in the same pass, so platform-admin and team-admin pages
+now share one consistent header pattern instead of diverging per page:
+
+| Page | Slots used |
+| --- | --- |
+| `TeamUsagePage` | title, actions (`TimeRangeSelector` + refresh) |
+| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle |
+| `Evaluations` (team Evaluations tab) | title, subtitle, actions |
+| `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
+| `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
+| `SelfTestPage` | title only |
+| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
+| `MigrationPage` (Platform data) | title, breadcrumb (Kea cutover link) |
+| `AdminTeamsPage` | title only (new — page previously had no page-level header) |
+| `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
+| `TeamSettingsParameters` | title only (new) |
+| `TeamSettingsRouting` | title only (new) |
+| `KeaMigrationPage` (temporary, unlisted) | title only — hardcoded French string kept as-is; this page has no i18n at all and is slated for deletion with the Kea cutover, so it was wrapped for visual consistency without doing a full i18n pass |
+
+Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
+visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
+filter, not a tab strip.
+
+#### Open UX issues
+
+- No lint rule enforces `PageHeader` usage — a new or edited page can still hand-roll a title.
+  Consider an eslint rule or code-review checklist item if regressions show up again.
 
 ---
 
@@ -1870,14 +2024,20 @@ including every `*_skipped` counter and `users_processed`, not just the
 granted/imported ones (AUTHZ-07 Step 3 close-out) — and the full warning list, open
 by default when warnings are present. A `failed` task renders `task.error` inline.
 
-New call sites (v3, OBSERV-02, 2026-07-26) — no component change, embedded as-is per
-§2.8: `AnalyticsPage`'s admin-only section (`scope="platform"`), `TeamUsagePage`'s
-team_editor section (`scope="team" kind="ingestion"`), and its team_admin section
-(`scope="team"`, unfiltered). Note: this organism's own rows have no ack/dismiss
-affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives
-in `TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a
-different, non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by`
-fields.
+Two call sites remain, both dedicated Activity surfaces rather than embeds inside another
+dashboard: `TasksPage` (`/admin/tasks`, `scope="platform"`) and `TeamSettingsPage`'s Activity tab
+(`/team/:teamId/settings/activity`, `scope="team"`). This organism's own rows have no ack/dismiss
+affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives in
+`TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a different,
+non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
+
+**Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
+`AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
+(`scope="team" kind="ingestion"`) and team_admin (`scope="team"`, unfiltered) sections briefly
+embedded this organism per KPI-ANALYTICS-RFC.md §2.8. Removed as a live-review finding: they
+duplicated the two dedicated surfaces above, one click away in the same nav rail, without this
+organism's missing ack affordance ever getting fixed for the duplicate. See
+`KPI-ANALYTICS-RFC.md` §2.8.
 
 #### Open UX issues
 
@@ -1888,8 +2048,9 @@ fields.
   populated at once.
 - **No ack affordance in this organism's own rows** — a platform/team admin reading
   Activités here has no one-click way to mark a failed/cancelled row seen; only the
-  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Worth revisiting
-  once this dashboard sees real usage — see `NOTES-OBSERV-02-FOLLOWUPS.md`.
+  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Lower urgency now
+  that the only two call sites are the dedicated Activity tabs, not a dashboard embed
+  seen incidentally.
 
 #### Resolved
 

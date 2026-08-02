@@ -1769,6 +1769,283 @@ team list is an open product question, not folded into this fix.
 passed/35 failed/0 error before, 205 passed/20 failed/0 error after — the
 remaining 20 are exclusively the `GET /teams` open question above.
 
+### 8.29 ✅ Reasoning is declared, projected, and enforceable — REASON-01 phase 1 (issue #2166, 2026-07-29)
+
+`MODEL-REASONING-ENABLEMENT-RFC.md` levels 1 and 2. Before this, reasoning was
+one untyped YAML line (`ModelConfiguration.settings.reasoning_effort`, an opaque
+`Dict[str, Any]`): nothing in Fred knew a profile reasoned, and changing it
+needed a redeploy.
+
+**Runtime contract changes:**
+
+1. **`ModelProfile.supports_thinking: bool = False`**
+   (`model_routing/contracts.py`) — declared APTITUDE, per profile. Additive
+   with a safe default, so every existing catalog keeps loading. Declaring a
+   reasoning setting *without* it now **fails at pod boot** with a named error
+   (RFC §4.3): the state is always an authoring mistake, and tolerating it
+   silently is what made the current situation invisible.
+2. **`_ModelCatalogEntry.thinking_profile_ids`** (`agent_app.py`,
+   `GET /agents/models-catalog`) — the `supports_thinking` subset of
+   `profile_ids`, derived inside the existing `(provider, name)` grouping
+   (RFC §5.3). Aptitude stays per profile, where it is true; the admin toggle
+   is keyed per model, where the capability id space is. Never authored twice.
+   Reaches control-plane on `CapabilityCatalogEntry.model_thinking_profile_ids`,
+   the same join `model_profile_ids` already carries.
+3. **`RuntimeContext.reasoning_enabled_model_ids: list[str] | None`**
+   (fred-sdk, Group C) — the platform admin's activation, snapshotted at session
+   prep and forwarded per turn, the same three-hop channel and lifecycle as
+   `chat_default_profile_id` (`TEAM-ROUTING-POLICY-RFC.md` §8.2). **Not** a
+   per-turn lookup.
+4. **`RoutedChatModelFactory.build_for_chat` strips reasoning settings**
+   (`model_routing/provider.py`) when the resolved model is absent from that
+   list — at CLIENT CONSTRUCTION, not by declining to add them (RFC §5.6.2).
+   The distinction is the whole point: `reasoning_effort` is already in
+   `settings` by then, so a toggle that only skipped *adding* it would be
+   decorative — the `allow_parallel_calls` failure recorded in
+   `AGENT-THINKING-API-RFC.md` §C.8, with an incident lever's name on it.
+   `tests/test_model_reasoning_enablement.py` proves it against the real
+   `ChatOpenAI` request payload, both directions.
+
+**Semantics worth reading twice:** `reasoning_enabled_model_ids` is
+**off by default** and is the OPPOSITE of `usable_model_ids` in this respect —
+there `None` means "unrestricted", here `None` and `[]` both mean "no model
+reasons" (RFC §5.6). A model reasons only by being named.
+
+**Not additive on upgrade.** A deployment running reasoning through YAML alone
+stops reasoning until an administrator switches it on (RFC §5.6.1) — on this
+branch that is `chat.mistral.small`, the current `chat` default. Release-noted,
+not silent. The safe direction, and deliberately so: `AGENT-THINKING-API-RFC.md`
+Amendment C measured 10/10 turns with duplicate tool calls on that exact
+profile, and a live per-model off switch is the only lever that stops a
+reasoning-induced incident without a redeploy (RFC §9).
+
+**Untouched**: per-team model authorization. Reasoning has no subject, so it is
+not a permission and writes no ReBAC tuple (RFC §5.1/§5.4). Levels 3 (per-agent
+config) and 4 (composer control) are phase 2 and not implemented here.
+
+---
+
+### 8.30 ✅ Per-agent and per-question reasoning — REASON-01 phase 2 (issue #2166, 2026-07-30)
+
+`MODEL-REASONING-ENABLEMENT-RFC.md` levels 3-4, plus its three §9 preconditions.
+Builds on §8.29 (levels 1-2); read that first.
+
+**Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
+§7 specified, and withdrawn before release: an agent does not *use* reasoning the
+way it uses a tool, so the Tools tab was the wrong place to enable it. What ships:
+
+| Level | Where it lives |
+| ----- | -------------- |
+| 3 — the agent offers it | `AgentTuning.reasoning_enabled` (fred-sdk) — a plain agent property, edited in the **General** section of the agent form |
+| 4 — the user chooses per question | `RuntimeContext.reasoning` — a platform chat option travelling per turn like `search_policy`/`search_rag_scope` |
+
+**`RuntimeContext.reasoning` is tri-state, and the distinction is load-bearing:**
+
+- `None` — the agent never offered the choice; levels 1-2 decide alone. The
+  default, and the pre-REASON-01 behaviour for every agent that does not opt in.
+- `False` — the agent offers it and the user declined: this turn must not reason
+  even on a model whose reasoning is enabled platform-wide.
+- `True` — permission, never a guarantee: level 2 stays a ceiling (§5.3).
+
+Collapsing `None` into `False` would silently suppress reasoning everywhere.
+
+**One enforcement point for every level.** `RoutedChatModelFactory.build_for_chat`
+strips the reasoning settings when `not platform_allows or turn_declined`, on
+`ModelConfiguration.settings` **before the client is built** — the same place and
+the same primitive (`without_reasoning_settings`) §8.29 already used for level 2.
+There is no second mechanism, no built client to patch, and nothing that can
+drift out of step with level 2.
+
+**Level 3 reaches that point as part of the ceiling, computed pod-side**
+(2026-07-30 fix, RFC §14.5). `_iterate_runtime_event_payloads` (`agent_app.py`)
+assembles `RuntimeContext.reasoning_enabled_model_ids` as `level 2 AND level 3`:
+
+```python
+reasoning_enabled_model_ids=(
+    ctx.get("reasoning_enabled_model_ids")
+    if tuning is not None and tuning.reasoning_enabled
+    else []
+),
+```
+
+The list rides the request; `tuning` is resolved server-side from the managed
+instance, so a client cannot open a gate the agent's author left shut. Absent
+tuning (agent-to-agent invocation) means no author enabled it — empty ceiling.
+Do not "simplify" this back to a straight `ctx.get(...)`: the first cut gated
+only the composer control on level 3, and agents with reasoning off reasoned
+anyway, invisibly, because the UI that would have shown it is precisely the
+toggle that was correctly hidden.
+
+This is why the RFC's §7.3 `.bind`-vs-`model_copy` question (and the probe that
+settled it, §12 q2) no longer applies: both were needed only because a capability
+middleware runs *after* the client exists. It is also why levels 3-4 are **not**
+ReAct-only as §7.1 accepted — with no `middleware()`-only capability, the boot
+rule that forced that exclusion does not apply, and a Graph agent's model call
+goes through the same factory.
+
+**§9 preconditions, all three closed:**
+
+1. `max_tool_calls_per_turn = 12` on all five ReAct agents
+   (`apps/fred-agents/fred_agents/tool_pacing.py`). `ToolCallLimitMiddleware` was
+   wired but inert since nothing set the value (`AGENT-THINKING-API-RFC.md` §C.8).
+   Applies to every turn, not only reasoning ones — RFC §14.4 explains why, and
+   why a capability-contributed cap would break `frame.py`'s documented
+   `after_model` ordering against the HITL gate.
+2. `TOOL_REPETITION_RULE` added to `build_runtime_tool_prompt_suffix`
+   (`react_tool_binding.py`). Amendment C §C.7 measured that the protection was
+   real but **accidental** — carried by the #2073 tool-failure suffix, with
+   nothing tying it to reasoning drift. Now explicit, greppable, and tied by two
+   tests in `test_react_prompting.py`.
+3. `ToolSelectionPolicy` docstrings corrected (`fred_sdk/contracts/models.py`):
+   the cap IS enforced (untrue since `frame.py` wired it), and
+   `allow_parallel_calls` is now documented as declarative-only.
+
+---
+
+### 8.31 ✅ Reasoning blocks are persisted to session history (2026-07-31)
+
+`AGENT-THINKING-API-RFC.md` specified how reasoning is *surfaced* and never what
+becomes of it afterwards — its own §C.9 names the gap. The consequence was
+user-visible: reasoning streamed into the trace, then vanished on page reload,
+because `_write_turn_history` (`agent_app.py`) mapped `tool_call`, `tool_result`,
+`awaiting_human`, `node_error` and `final`, and let all three `thought_*` kinds
+fall through. `Channel.thought` existed in the stored schema since fred-core and
+was written by nothing.
+
+**`thought_*` → one `Role.assistant / Channel.thought` row per reasoning block.**
+The envelope matches what the live stream builds client-side
+(`useChatSse.ts`) — same role, same channel, same `metadata.extras` keys
+(`thought_id`, `phase`, `title`, `source`, `conclusion`, `duration_ms`) — because
+the chat UI renders streamed and reloaded rows through one path
+(`traceUtils.thoughtExtras()`). Frontend, schema, DB column and read endpoint all
+already accepted this shape; only the writer was missing.
+
+Four rules, each of which is a bug if reversed:
+
+1. **The rank is reserved at `THOUGHT_START`, not at `THOUGHT_END`.** A
+   model-native block opens on the first reasoning token and closes only at the
+   first answer delta (§7.3), so it brackets every tool call of the turn. Ranking
+   it at close would file the reasoning *after* the tools it preceded, and a
+   reloaded trace would not match what the user watched.
+2. **`tool_use` blocks are not persisted.** The runtime opens one per tool call
+   (Amendment A, Layer 1) and the UI has hidden them since Amendment B — the
+   call/result combo row already carries what ran, how it went, how long it took.
+   Storing them would file up to `max_tool_calls_per_turn` (12) content-free rows
+   a turn.
+3. **`streaming_delta` is never stored.** It is the live "still running" flag; a
+   persisted block is complete and would otherwise pulse forever on reload.
+4. **Blocks left open by a truncated turn are still written** (the live UI closes
+   them itself on `final`), but a block with neither text nor conclusion is
+   dropped — an empty reasoning card reads as a rendering bug.
+
+`extras` is reached through `ChatMetadata.model_validate({...})`: it is not a
+declared field, `extra="allow"` exists for exactly this, and a keyword argument
+does not type-check.
+
+This is display persistence only. It does **not** change what is replayed to the
+model — see §C.9 and the note below.
+
+---
+
+### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`, 2026-07-27)
+
+**What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
+carries two new fields threaded from control-plane at session-prep time, the
+same three-hop channel `context_prompt_text` already uses (RFC §8.2):
+
+- `chat_default_profile_id: str | None` — the team's default chat model
+  profile, or `None` to fall through to the runtime's own default.
+- `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
+  `(rule_id, operation, purpose | None, target_profile_id)` overrides.
+
+Both are a **session-prep snapshot, not a per-turn lookup** (RFC §8.1) —
+resolved once by `routing_policy/service.py::resolve_execution_routing_snapshot`
+when `ExecutionPreparation` is built, not re-read from control-plane on every
+turn. `fred-runtime`'s `ModelRoutingResolver`
+(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
+fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
+already match — the static rules stay the ops escape hatch and always win
+(RFC §8.3). A referenced `target_profile_id` unknown to the pod fails closed
+(`ModelNotUsableError`), matching the write-time `can_use` validation
+control-plane already performed (RFC §7.2) — this is drift detection, not a
+second authorization gate (RFC §8.4).
+
+Product-surface companion to this contract change: `GET`/`PATCH
+/control-plane/v1/teams/{team_id}/routing-policy` (`team_editor` writes,
+`team_admin`+`team_editor`+`team_analyst` read — the read gate excludes a
+plain `team_member` as of the same-day #2167 follow-up, RFC §6) and, as of
+that same follow-up, `GET .../routing-policy/available-models` backing the
+frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
+
+---
+
+### 8.33 ✅ A pod whose durable SQL storage cannot be reached must never finish starting (2026-07-31)
+
+**What changed.** `PodApplicationContext.initialize_sql()`
+(`libs/fred-runtime/fred_runtime/app/context.py`) used to catch every
+exception from engine/checkpointer/history-store construction, log
+`"running stateless"`, and return — leaving `checkpointer`/`history_store`
+at `None` with no signal to the FastAPI lifespan. Because SQLAlchemy's async
+engine is lazy (construction never opens a connection), an unreachable or
+misconfigured Postgres passed silently: the pod finished startup, passed its
+`tcpSocket` readiness probe, and served conversation turns with no
+persistence — invisibly, and only for whichever replica lost the race.
+
+`initialize_sql()` now (1) lets construction failures (missing
+`FRED_POSTGRES_PASSWORD`, missing `host`/`database`/`username`) propagate
+instead of swallowing them, and (2) runs one bounded (5s) `SELECT 1` against
+the engine right after construction — the only point that actually proves
+connectivity — before wiring the checkpointer/history store. Either failure
+now aborts the FastAPI lifespan, so the pod process exits without ever
+reaching `Running`; Kubernetes never marks it `Ready` regardless of probe
+type, and the two other invariants already enforced in `agent_app.py`'s
+lifespan (checkpointer and history store must both come from the same
+`initialize_sql()` call, and neither may be set without the other) still
+hold on top of this.
+
+There is no supported "stateless" pod mode today — every real
+`AgentPodConfig.storage.postgres` (dev SQLite via `sqlite_path`, production
+Postgres) intends durable storage; SQLite-for-dev is a backend choice, not
+an opt-out. This change does not introduce one.
+
+**Not done, deliberately deferred:** dedicated `/healthz` + dependency-aware
+`/ready` HTTP endpoints (the pattern `knowledge-flow-backend` and
+`control-plane-backend` already use) and switching fred-agents' Helm probes
+from `tcpSocket` to `httpGet`. The fail-fast boot behavior above already
+satisfies the production invariant without either; closing the small
+residual race window (a `tcpSocket` probe could see the port briefly open
+during the ≤5s connectivity check before the process exits) is left as
+follow-up if it proves necessary in practice.
+
+---
+
+### 8.34 ✅ ReAct/Deep prompt composition no longer depends on the process-global runtime context (2026-07-31)
+
+**What changed.** `ReActRuntime.build_executor` and `DeepAgentRuntime.build_executor`
+(`libs/fred-runtime/fred_runtime/react/react_runtime.py`,
+`libs/fred-runtime/fred_runtime/deep/deep_runtime.py`) fetched the KPI writer
+via `get_runtime_context().get_kpi_writer()` — a bare process-global lookup —
+inline during executor construction, instead of through the existing
+`RuntimeServices` dependency-injection container both runtimes already
+receive. Any standalone unit test of `build_executor()` (not routed through
+`agent_app.py`'s lifespan-initialized global context) raised
+`RuntimeError: RuntimeContext has not been initialized.` `RuntimeServices`
+(`libs/fred-sdk/fred_sdk/contracts/runtime.py`) gains a `kpi_writer:
+BaseKPIWriter | None` field, populated in `agent_app.py`'s
+`_build_runtime_services` from the same `runtime_config.kpi_writer` already
+in scope there; both `build_executor` methods now read
+`self.services.kpi_writer` instead of the global. `kpi=None` is the
+pre-existing, already-`None`-safe default for every downstream KPI
+consumer (`TracingKpiMiddleware`, `ToolObservabilityMiddleware`,
+`build_tool_loop_compiled_react_agent`), so no behavior changed for any
+lifespan-initialized production request — only the composition path's
+testability changed. Confirmed by 3 previously-failing prompt-injection unit
+tests going green, deterministically, independent of test-file collection
+order (a `test_deep_agent_middleware.py` test was separately found to leak
+`set_runtime_context(...)` into the shared process-global for the rest of
+the pytest session with no teardown; that call is now unnecessary and was
+removed rather than patched with a reset).
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

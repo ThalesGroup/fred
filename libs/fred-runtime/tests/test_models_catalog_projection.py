@@ -36,12 +36,14 @@ def _profile(
     provider: str | None = "openai",
     name: str | None = "gpt-5.1",
     description: str | None = None,
+    supports_thinking: bool = False,
 ) -> ModelProfile:
     return ModelProfile(
         profile_id=profile_id,
         capability=capability,
         model=ModelConfiguration(provider=provider, name=name),
         description=description,
+        supports_thinking=supports_thinking,
     )
 
 
@@ -137,3 +139,61 @@ def test_entry_id_uses_the_shared_fred_sdk_helper() -> None:
 
 def test_empty_catalog_returns_no_entries() -> None:
     assert _project_model_catalog_entries(_catalog(())) == []
+
+
+# ---------------------------------------------------------------------------
+# thinking_profile_ids (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.3)
+# ---------------------------------------------------------------------------
+
+
+def test_thinking_profile_ids_is_the_supports_thinking_subset() -> None:
+    # The §5.3 case verbatim, and the reason aptitude is per profile: the same
+    # (provider, name) is declared twice — reasoning-capable as a chat profile,
+    # not as a language one. One model entry, one thinking profile.
+    catalog = _catalog(
+        (
+            _profile(
+                "chat.mistral.small",
+                capability=ModelCapability.CHAT,
+                name="mistral-small-latest",
+                supports_thinking=True,
+            ),
+            _profile(
+                "language.mistral.small",
+                capability=ModelCapability.LANGUAGE,
+                name="mistral-small-latest",
+            ),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert len(entries) == 1
+    assert entries[0].profile_ids == ["chat.mistral.small", "language.mistral.small"]
+    assert entries[0].thinking_profile_ids == ["chat.mistral.small"]
+
+
+def test_thinking_profile_ids_is_empty_when_no_profile_declares_aptitude() -> None:
+    # Empty is what makes the admin row show NO reasoning control at all
+    # (§5.3): aptitude is not an administrator's choice.
+    catalog = _catalog((_profile("p1"), _profile("p2", name="gpt-4o")))
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert all(entry.thinking_profile_ids == [] for entry in entries)
+
+
+def test_thinking_profile_ids_never_leaks_across_models() -> None:
+    catalog = _catalog(
+        (
+            _profile("thinker", name="gpt-5.1", supports_thinking=True),
+            _profile("plain", name="gpt-4o"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert {e.name: e.thinking_profile_ids for e in entries} == {
+        "gpt-5.1": ["thinker"],
+        "gpt-4o": [],
+    }

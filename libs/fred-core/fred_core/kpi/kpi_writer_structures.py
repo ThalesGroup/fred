@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -167,7 +167,11 @@ class KPIEvent(BaseModel):
     dims: Dims = Field(default_factory=dict)
     cost: Optional[Cost] = None
     quantities: Optional[Quantities] = None
-    labels: Iterable[str] = Field(default_factory=list)  # low-cardinality tags
+    # List, not Iterable: pydantic-core validates Iterable[str] lazily via a
+    # ValidatorIterator even when fed a concrete list, leaving a reference cycle on
+    # every construction (confirmed live, fredlab 2026-07-31). Every call site here
+    # already passes a materialized list, so nothing is lost. See ISSUE-010.
+    labels: List[str] = Field(default_factory=list)  # low-cardinality tags
     source: Optional[str] = None
     trace: Optional[Trace] = None
 

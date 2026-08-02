@@ -27,12 +27,17 @@ import {
   entryLabel,
   formatLatencyMs,
   genericToolPayload,
+  isDocumentTreeTool,
+  isSummarizeDocumentTool,
   parseToolResultContent,
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
+  stripDocumentUids,
   thoughtExtras,
   toolCopyText,
+  toolName,
+  toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
@@ -134,6 +139,29 @@ function RagToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
   );
 }
 
+/** Curated view for the on-demand document summarizer: the generated summary as prose. */
+function SummarizeDocumentDetail({ entry, text }: { entry: Extract<TraceEntry, { kind: "combo" }>; text: string }) {
+  return (
+    <div className={styles.detail}>
+      <ToolMeta entry={entry} />
+      <div className={styles.markdown}>
+        <MarkdownRenderer text={text} />
+      </div>
+    </div>
+  );
+}
+
+/** Curated view for the document tree listing: indented tree text, with the
+ *  bracketed internal document uids stripped (never shown to the end user). */
+function DocumentTreeDetail({ entry, text }: { entry: Extract<TraceEntry, { kind: "combo" }>; text: string }) {
+  return (
+    <div className={styles.detail}>
+      <ToolMeta entry={entry} />
+      <CodeBlock code={stripDocumentUids(text)} hideCopy />
+    </div>
+  );
+}
+
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const payload = genericToolPayload(entry);
@@ -151,6 +179,13 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
   if (sqlResult) return <SqlToolDetail entry={entry} data={sqlResult} />;
   const ragResult = asRagSearchResult(data);
   if (ragResult) return <RagToolDetail entry={entry} data={ragResult} />;
+  const name = toolName(entry.call);
+  if (entry.result && isSummarizeDocumentTool(name)) {
+    return <SummarizeDocumentDetail entry={entry} text={toolResultContent(entry.result)} />;
+  }
+  if (entry.result && isDocumentTreeTool(name)) {
+    return <DocumentTreeDetail entry={entry} text={toolResultContent(entry.result)} />;
+  }
   return <GenericToolDetail entry={entry} />;
 }
 

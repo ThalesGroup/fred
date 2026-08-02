@@ -414,24 +414,47 @@ compute both columns server-side alongside the raw token count, from the same
 static (file, dev-edited) for v1 — no admin UI to edit it (§2.9 found this
 RFC needs no new admin settings surface at all).
 
-### 2.8 — Activités: reusing the task bus, not building a fourth system (v3, new)
+### 2.8 — Activités: reusing the task bus, not building a fourth system (v3; embeds reverted 2026-07-30)
 
-**No new component.** Every "Activités" panel in §2.5 (platform-wide,
-team-scoped, ingestion-filtered) is the existing `TaskActivity` organism
+**Reverted (2026-07-30).** The embedded "Activités" panels this section
+originally described — `TaskActivity` inline inside `AnalyticsPage`'s
+admin-only section (`scope="platform"`) and inside `TeamUsagePage`'s
+team_editor (`scope="team" kind="ingestion"`) and team_admin
+(`scope="team"`, unfiltered, plus a `team_activity_summary` trend line)
+sections — have been removed. Live review found they duplicated the
+dedicated Activity surfaces that already exist one click away: `/admin/tasks`
+(`TasksPage`, `scope="platform"`) and `/team/:teamId/settings/activity`
+(`TeamSettingsPage`'s Activity tab, `scope="team"`) — both reachable from the
+same nav rail these dashboards sit in. An admin landing on Analytics or Team
+usage saw the same task rows twice, once here with no ack affordance (see the
+now-moot gap this section used to describe, `NOTES-OBSERV-02-FOLLOWUPS.md`
+#21) and once on the dedicated tab with full `TaskCard`/`TaskDetailPopover`
+ack support. Removing the embed is strictly a subtraction — no route, no
+component, no backend change — `TaskActivity` itself, `TasksPage`, and the
+Team Settings Activity tab are untouched. `AnalyticsPage`'s admin section
+keeps its storage-by-team chart and the models-governance link;
+`TeamUsagePage`'s team_editor section (which had nothing else in it) is gone
+entirely, and team_admin's section keeps its KPI tiles/charts, just without
+the trailing Activités subsection.
+
+**No new component (original v3 text, for the record).** Every "Activités"
+panel this section originally added was the existing `TaskActivity` organism
 (`apps/frontend/src/rework/components/shared/organisms/TaskActivity/TaskActivity.tsx`)
-— already built exactly to spec (`TASK-EVENT-STREAM-RFC.md` §3.4), already
-reused at both `scope="platform"` and `scope="team"`, driven entirely by
-props (`scope`, `teamId`, `kind`). This RFC adds zero new task-list UI.
+— already built exactly to spec (`TASK-EVENT-STREAM-RFC.md` §3.4), reused at
+both `scope="platform"` and `scope="team"`, driven entirely by props
+(`scope`, `teamId`, `kind`). That reasoning about not building a fourth
+system still holds — the correction above is about *where* to reuse it
+(the two dedicated tabs), not whether to build something new.
 
-**One real gap, fixed in its proper home.** The one piece these dashboards
-need that didn't already exist — a server-persisted "an admin has seen and
+**The ack-affordance gap referenced above is fixed in its proper home
+regardless of this reversal.** A server-persisted "an admin has seen and
 handled this" acknowledgement, visible to every other admin of that scope,
-not a per-browser flag — is a task-bus concern, not a KPI-analytics concern.
+not a per-browser flag, is a task-bus concern, not a KPI-analytics concern.
 It is specified and amended into `TASK-EVENT-STREAM-RFC.md` §2.10 (rev. 3),
 not here: new `acknowledged_at`/`acknowledged_by` columns on `task_run`, a
 `POST /tasks/{id}/ack` endpoint reusing the existing task-read authorization,
-and `TaskDetailPopover`/`TaskCard` wired to call it. This RFC's dashboards are
-simply a consumer of that fixed, shared mechanism.
+and `TaskDetailPopover`/`TaskCard` wired to call it — both dedicated Activity
+tabs get this; the (now-removed) embeds never did.
 
 **Known, pre-existing, out-of-scope divergence.** `TASK-EVENT-STREAM-RFC.md`
 §3.4 specifies Activity as a first-class nav item, a peer of Members/Settings.

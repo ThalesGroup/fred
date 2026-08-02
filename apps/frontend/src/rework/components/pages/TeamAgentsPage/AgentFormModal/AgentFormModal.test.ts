@@ -36,6 +36,8 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "  Guardian  ",
         description: "  Guardrails  ",
         usageStatement: "  Screens inbound requests for policy violations.  ",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
       },
@@ -47,6 +49,7 @@ describe("buildAgentFormSubmitPayload", () => {
       role: "Guardian",
       description: "Guardrails",
       usageStatement: "Screens inbound requests for policy violations.",
+      reasoningEnabled: false,
     });
   });
 
@@ -58,6 +61,8 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["ghost-cap"],
@@ -79,6 +84,8 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         // "gone" is not advertised; "unselected" is advertised but not ticked.
@@ -105,6 +112,8 @@ describe("buildAgentFormSubmitPayload", () => {
         role: "",
         description: "",
         usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: false,
         tuningValues: {},
         ...EMPTY_CAPABILITY_STATE,
         selectedCapabilityIds: ["knowledge-flow-mcp-text"],
@@ -120,6 +129,29 @@ describe("buildAgentFormSubmitPayload", () => {
     expect(payload.capabilityConfigValues).toEqual({
       "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
     });
+  });
+
+  it("carries the reasoning preselection even while the offer is off (REASON-01 Amendment B)", () => {
+    // The two reasoning fields are independent on purpose. If the payload
+    // builder dropped the preselection whenever the offer was off, an author
+    // who toggled the offer off and back on would silently lose their default —
+    // the backend keeps the value inert precisely so it survives that round trip.
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: "runtime:agent",
+        displayName: "Agent",
+        role: "",
+        description: "",
+        usageStatement: "",
+        reasoningEnabled: false,
+        reasoningDefaultOn: true,
+        tuningValues: {},
+        ...EMPTY_CAPABILITY_STATE,
+      },
+      makeCapabilityTemplate([]),
+    );
+
+    expect(payload).toMatchObject({ reasoningEnabled: false, reasoningDefaultOn: true });
   });
 });
 

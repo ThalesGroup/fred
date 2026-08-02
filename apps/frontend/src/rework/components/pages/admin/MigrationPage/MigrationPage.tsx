@@ -25,6 +25,7 @@ import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import {
   usePlatformStatsQuery,
   useResetPlatformMutation,
@@ -142,13 +143,18 @@ export default function MigrationPage() {
 
   return (
     <div className={styles.page}>
-      {/* KEA CUTOVER 2026 — quick link to the dedicated, unlisted dry-run page.
-          Deliberately not a nav entry, just a discreet link here so Dimitri/Sébastien
-          don't have to remember the URL — see KeaMigrationPage.tsx for why that page
-          itself stays off the nav. Delete this link with KeaMigrationPage/. */}
-      <Link to="/admin/kea-migration" className={styles.keaLink}>
-        {t("rework.tasks.migration.keaLink")}
-      </Link>
+      <PageHeader
+        title={t("rework.tasks.migration.title")}
+        breadcrumb={
+          // KEA CUTOVER 2026 — quick link to the dedicated, unlisted dry-run page.
+          // Deliberately not a nav entry, just a discreet link here so Dimitri/Sébastien
+          // don't have to remember the URL — see KeaMigrationPage.tsx for why that page
+          // itself stays off the nav. Delete this link with KeaMigrationPage/.
+          <Link to="/admin/kea-migration" className={styles.keaLink}>
+            {t("rework.tasks.migration.keaLink")}
+          </Link>
+        }
+      />
 
       <section className={styles.overview}>
         <div className={styles.overviewHeader}>

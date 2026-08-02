@@ -101,6 +101,21 @@ class AgentCapabilityDependencyNotSatisfied(Exception):
     http_status = 409
 
 
+class ReasoningNotSupported(Exception):
+    """A reasoning toggle was written against a capability that is not a model,
+    or is a model with no thinking-capable profile (REASON-01,
+    `MODEL-REASONING-ENABLEMENT-RFC.md` §5.3).
+
+    Rejected rather than stored: aptitude is declared in `models_catalog.yaml`
+    and an administrator cannot grant it. Silently accepting the row would
+    persist an activation that can never have an effect, and would put a
+    control in the admin UI that lies about what it does — precisely the
+    "decorative flag" failure §5.6.2 exists to prevent.
+    """
+
+    http_status = 409
+
+
 async def agent_capability_missing_dependencies(
     rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry, team_id: TeamId
 ) -> list[str]:

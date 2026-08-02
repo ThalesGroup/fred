@@ -48,6 +48,8 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
+from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
+
 _BASE_SYSTEM_PROMPT = """\
 You are a document-grounded assistant. Your answers must be grounded in \
 retrieved documents, not in your training knowledge.
@@ -123,7 +125,11 @@ class ReactRagMcpDefinition(ReActAgentDefinition):
     )
 
     def policy(self) -> ReActPolicy:
-        return ReActPolicy(system_prompt_template=self.system_prompt_template)
+        return ReActPolicy(
+            system_prompt_template=self.system_prompt_template,
+            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
+            tool_selection=REASONING_SAFE_TOOL_SELECTION,
+        )
 
 
 REACT_RAG_MCP_AGENT = ReactRagMcpDefinition()

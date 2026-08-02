@@ -19,6 +19,7 @@ import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -117,6 +118,7 @@ export default function AdminTeamsPage() {
 
   return (
     <div className={styles.adminTeamsPage}>
+      <PageHeader title={t("rework.adminTeams.title")} />
       <section className={styles.existingTeamsSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
         {allTeams && allTeams.length > 0 ? (

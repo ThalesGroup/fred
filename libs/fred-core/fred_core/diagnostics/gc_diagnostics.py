@@ -1,0 +1,456 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Cross-platform reference-cycle GC diagnostics for Fred pods.
+
+Why this module exists:
+- pydantic-core (and other C-extension libraries) can leave reference cycles
+  behind that plain refcounting never frees, only a forced `gc.collect()`
+  does. ISSUE-010 (fredlab, 2026-07-31) found exactly this: a lazily-validated
+  `Iterable[str]` pydantic field leaked a `ValidatorIterator` cycle on every
+  construction, platform-wide, via this very library's own KPI writer.
+  Diagnosing and mitigating that class of bug used to be hand-rolled once, in
+  knowledge-flow-worker only. This module makes it a one-line `install_gc_diagnostics()`
+  any Fred pod — ours or a third party's, built on fred-runtime or not — can
+  opt into.
+- macOS has neither `/proc` nor glibc's `malloc_trim`. Each capability here
+  degrades independently and truthfully (RSS still works, via `psutil`;
+  `malloc_trim` reports "unsupported") instead of crashing or silently lying.
+
+How to use it:
+    from fred_core.diagnostics import install_gc_diagnostics
+
+    handle = install_gc_diagnostics(periodic_interval_s=300)
+    ...
+    await handle.stop()  # during pod shutdown
+
+Manual triggers (best-effort, Unix + main-thread only — see install_gc_diagnostics):
+    kubectl exec <pod> -- kill -USR1 1   # collect_and_trim: one-line RSS delta
+    kubectl exec <pod> -- kill -USR2 1   # collect_and_report_types + live_object_census:
+                                          # uncollected-cycle types, then a full census
+                                          # of every reachable object (not just garbage)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import ctypes
+import ctypes.util
+import gc
+import logging
+import os
+import platform
+import signal
+import sys
+from collections import Counter
+from contextlib import suppress
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_INTERVAL_ENV_VAR = "FRED_GC_DIAGNOSTICS_INTERVAL_SEC"
+
+
+def current_rss_kb() -> int | None:
+    """Current resident set size, in KiB, right now — unlike
+    resource.getrusage().ru_maxrss (a peak since process start that never
+    decreases). Cross-platform (Linux/macOS/Windows) via `psutil`. Returns
+    None, never raises, if it can't be read (e.g. a sandboxed process)."""
+    try:
+        import psutil
+
+        return psutil.Process(os.getpid()).memory_info().rss // 1024
+    except Exception:
+        logger.debug("[fred-core][gc-diagnostics] RSS read failed", exc_info=True)
+        return None
+
+
+def malloc_trim() -> bool:
+    """Return freed pymalloc arenas to the OS via glibc's malloc_trim(0).
+    CPython's allocator doesn't do this on its own, so gc.collect() alone can
+    look like a no-op from `kubectl top`/Activity Monitor even after
+    genuinely freeing objects.
+
+    Linux/glibc-only — macOS's libSystem and musl libc (Alpine) have no
+    equivalent symbol. This is a safe no-op (returns False) everywhere else;
+    it never raises."""
+    if platform.system() != "Linux":
+        return False
+    try:
+        libc_path = ctypes.util.find_library("c")
+        if libc_path is None:
+            return False
+        libc = ctypes.CDLL(libc_path)
+        if not hasattr(libc, "malloc_trim"):
+            return False  # musl (Alpine): no malloc_trim symbol
+        libc.malloc_trim(0)
+        return True
+    except Exception:
+        logger.debug("[fred-core][gc-diagnostics] malloc_trim failed", exc_info=True)
+        return False
+
+
+def _format_rss_delta(before_kb: int | None, after_kb: int | None) -> str:
+    """Render an RSS before->after pair for logging, without producing a
+    misleading delta when either sample is unreadable (current_rss_kb()'s
+    None case — e.g. `None -> 1234Ki` should never read as a numeric drop)."""
+    if before_kb is None or after_kb is None:
+        return f"{before_kb}Ki -> {after_kb}Ki (delta unknown, RSS unreadable)"
+    return f"{before_kb}Ki -> {after_kb}Ki (delta {before_kb - after_kb}Ki)"
+
+
+@dataclass(frozen=True)
+class GCTrimResult:
+    label: str
+    collected: int
+    uncollectable: int
+    trimmed: bool
+    rss_before_kb: int | None
+    rss_after_kb: int | None
+
+
+def collect_and_trim(label: str = "manual", *, log: bool = True) -> GCTrimResult:
+    """Force a full GC cycle + malloc_trim(0). RSS drop -> reference-cycle
+    garbage (plain refcounting never frees it) or reclaimed arenas. RSS
+    unchanged -> either a real reference is still held, or the memory is
+    native (a C extension, e.g. onnxruntime/docling), outside gc's/
+    malloc_trim's reach."""
+    before_kb = current_rss_kb()
+    collected = gc.collect()
+    uncollectable = len(gc.garbage)
+    trimmed = malloc_trim()
+    after_kb = current_rss_kb()
+    result = GCTrimResult(label, collected, uncollectable, trimmed, before_kb, after_kb)
+    if log:
+        logger.warning(
+            "[GC][%s] collected=%d uncollectable=%d trimmed=%s RSS %s",
+            label,
+            collected,
+            uncollectable,
+            trimmed,
+            _format_rss_delta(before_kb, after_kb),
+        )
+    return result
+
+
+@dataclass(frozen=True)
+class GCTypeReport:
+    collected: int
+    held_for_inspection: int
+    freed_after_clear: int
+    trimmed: bool
+    rss_before_kb: int | None
+    rss_after_kb: int | None
+    top_types: tuple[tuple[str, int], ...]
+
+
+def _type_key_for_class(cls: type) -> str:
+    """Module-qualified type name for grouping in a report — plain
+    `cls.__name__` conflates unrelated classes that happen to share a short
+    name (e.g. two different `Config` classes in two different modules),
+    which is exactly the kind of ambiguity a diagnostic report must not
+    have. Builtins (`__module__ == "builtins"`, e.g. `dict`, `list`) stay
+    bare — no realistic collision there, and the prefix would just be noise
+    on the types that dominate every count. Everything else, including other
+    stdlib types (e.g. `collections.Counter`), is qualified.
+
+    Never raises: a class whose metaclass overrides `__getattribute__` and
+    breaks on `__module__`/`__qualname__` access falls back to an
+    id-based placeholder rather than aborting the whole scan — one hostile
+    type in a heap of millions of ordinary ones must not take the census
+    down with it."""
+    try:
+        module = getattr(cls, "__module__", None)
+        name = getattr(cls, "__qualname__", None) or getattr(cls, "__name__", None)
+        if not name:
+            return f"<unknown-type id={id(cls)}>"
+        if not module or module == "builtins":
+            return name
+        return f"{module}.{name}"
+    except Exception:
+        return f"<unknown-type id={id(cls)}>"
+
+
+def _type_key(obj: object) -> str:
+    """Module-qualified type name for a single object — see
+    _type_key_for_class() for the actual logic. Callers walking many
+    instances that share a handful of types (e.g. live_object_census's heap
+    scan) should call _type_key_for_class() directly with their own
+    per-class cache instead, to avoid redoing this work per instance."""
+    return _type_key_for_class(type(obj))
+
+
+def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeReport:
+    """Heavier variant of collect_and_trim: reports WHICH object types make up
+    the reference-cycle garbage, not just a count (this is how ISSUE-010 was
+    found live). gc.DEBUG_SAVEALL keeps this one collection's cyclic garbage
+    reachable via gc.garbage instead of destroying it immediately, so its
+    types can be inspected — then only the entries THIS call added are
+    cleared and re-collected, leaving any pre-existing gc.garbage contents
+    (and the previous debug flags) untouched even if collection raises."""
+    before_kb = current_rss_kb()
+    old_flags = gc.get_debug()
+    pre_existing_garbage_count = len(gc.garbage)
+    try:
+        gc.set_debug(gc.DEBUG_SAVEALL)
+        collected = gc.collect()
+    finally:
+        gc.set_debug(old_flags)
+
+    new_garbage = gc.garbage[pre_existing_garbage_count:]
+    top_types = tuple(Counter(_type_key(o) for o in new_garbage).most_common(top_n))
+    garbage_count = len(new_garbage)
+    del gc.garbage[pre_existing_garbage_count:]
+    # Drop our own reference too, or the collect() below can't free these.
+    del new_garbage
+    freed_after_clear = gc.collect()
+    trimmed = malloc_trim()
+    after_kb = current_rss_kb()
+    result = GCTypeReport(
+        collected=collected,
+        held_for_inspection=garbage_count,
+        freed_after_clear=freed_after_clear,
+        trimmed=trimmed,
+        rss_before_kb=before_kb,
+        rss_after_kb=after_kb,
+        top_types=top_types,
+    )
+    if log:
+        logger.warning(
+            "[GC][types] collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %s top_types=%s",
+            collected,
+            garbage_count,
+            freed_after_clear,
+            trimmed,
+            _format_rss_delta(before_kb, after_kb),
+            top_types,
+        )
+    return result
+
+
+@dataclass(frozen=True)
+class LiveObjectCensus:
+    total_objects: int
+    total_bytes_shallow: int
+    sizing_failures: int
+    rss_kb: int | None
+    top_by_count: tuple[tuple[str, int], ...]
+    top_by_size: tuple[tuple[str, int], ...]
+
+
+def _shallow_fraction_of_rss(total_bytes_shallow: int, rss_kb: int | None) -> str:
+    """Render what fraction of the process's real RSS this census's shallow
+    total accounts for, so the gap is quantified on every call instead of only
+    documented once in a docstring — see live_object_census()'s "not the full
+    live heap" caveat."""
+    if rss_kb is None or rss_kb <= 0:
+        return "RSS unknown"
+    return f"{total_bytes_shallow / (rss_kb * 1024) * 100:.1f}% of RSS"
+
+
+def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus:
+    """Census of every object the garbage collector currently tracks — not just
+    uncollected cycles (see collect_and_report_types for that). Answers "what's
+    actually reachable and heavy right now", which a low/zero
+    collect_and_report_types() result can't: gc.collect() only ever frees cyclic
+    garbage, never memory some live code is still genuinely holding a reference
+    to — the two are different bug classes with different symptoms here.
+
+    Three things this census can silently miss or mislead on, all surfaced
+    explicitly rather than left as a footnote:
+    - Sizes are sys.getsizeof() — SHALLOW, an object's own overhead, not what
+      it points to (a dict of huge values looks small; the values themselves
+      show up under their own type instead). top_by_count is often more
+      telling than top_by_size for exactly that reason. No third-party
+      deep-sizer (e.g. pympler) is used, to keep this module dependency-free.
+    - gc.get_objects() only tracks container-shaped objects that could join a
+      cycle — plain bytes/str/most native buffers (including, often, tensor
+      storage) are invisible here even at gigabyte scale. A real leak entirely
+      in that untracked memory would show as "census unchanged", which is why
+      the logged/returned total is compared against current_rss_kb(): a small
+      shallow-total-to-RSS ratio is the census itself telling you to look
+      elsewhere, not a clean bill of health.
+    - This is O(objects currently tracked) — millions on a real pod (~1.3M
+      seen live on fredlab) — and runs synchronously wherever it's called
+      from (e.g. the SIGUSR2 handler, on the event loop thread), taking real
+      wall-clock time (multiple seconds observed live). An on-demand
+      diagnostic, not something to call from a request path or a tight
+      periodic loop.
+
+    sizing_failures counts objects whose sys.getsizeof() raised (rare — a
+    handful of types lack or break __sizeof__); when non-zero,
+    total_bytes_shallow/top_by_size undercount by that many objects' worth.
+
+    Types are grouped by _type_key_for_class() (module-qualified, e.g.
+    "myapp.models.Config" — see its docstring for why bare __name__ isn't
+    enough), resolved once per distinct class and cached for the rest of the
+    walk rather than recomputed per instance."""
+    objects = gc.get_objects()
+    counts: Counter[str] = Counter()
+    sizes: Counter[str] = Counter()
+    sizing_failures = 0
+    # A real pod's ~1.3M tracked objects overwhelmingly share a handful of
+    # types (dict, str-holding wrappers, pydantic models, ...) — resolve each
+    # class's key once and reuse it, instead of redoing _type_key_for_class's
+    # getattr/format work per instance.
+    type_key_cache: dict[type, str] = {}
+    for obj in objects:
+        cls = type(obj)
+        name = type_key_cache.get(cls)
+        if name is None:
+            name = _type_key_for_class(cls)
+            type_key_cache[cls] = name
+        counts[name] += 1
+        try:
+            sizes[name] += sys.getsizeof(obj)
+        except Exception:
+            sizing_failures += 1
+    rss_kb = current_rss_kb()
+    result = LiveObjectCensus(
+        total_objects=len(objects),
+        total_bytes_shallow=sum(sizes.values()),
+        sizing_failures=sizing_failures,
+        rss_kb=rss_kb,
+        top_by_count=tuple(counts.most_common(top_n)),
+        top_by_size=tuple(sizes.most_common(top_n)),
+    )
+    if log:
+        logger.warning(
+            "[GC][census] total_objects=%d total_bytes_shallow=%d (%s) sizing_failures=%d top_by_count=%s top_by_size=%s",
+            result.total_objects,
+            result.total_bytes_shallow,
+            _shallow_fraction_of_rss(result.total_bytes_shallow, rss_kb),
+            sizing_failures,
+            result.top_by_count,
+            result.top_by_size,
+        )
+    return result
+
+
+async def _periodic_loop(interval_s: float) -> None:
+    while True:
+        await asyncio.sleep(interval_s)
+        collect_and_trim("periodic")
+
+
+def _periodic_interval_from_env(env_var: str) -> float:
+    raw = os.environ.get(env_var, "0")
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "[fred-core][gc-diagnostics] Invalid %s=%r, ignoring (periodic GC disabled)",
+            env_var,
+            raw,
+        )
+        return 0.0
+
+
+def _handle_sigusr2() -> None:
+    """SIGUSR2: run both heavier diagnostics back to back — the uncollected-cycle
+    type breakdown first (collect_and_report_types), then a full census of every
+    reachable object (live_object_census). The first answers "is anything still
+    leaking cyclic garbage"; the second answers "what's actually using memory
+    right now", regardless of the first's answer."""
+    collect_and_report_types()
+    live_object_census()
+
+
+class GCDiagnosticsHandle:
+    """Returned by install_gc_diagnostics(). Call `await handle.stop()` during
+    pod shutdown to cancel the periodic task cleanly; safe to call even when
+    no periodic task was started."""
+
+    def __init__(
+        self, *, signals_installed: bool, tasks: list[asyncio.Task[None]]
+    ) -> None:
+        self.signals_installed = signals_installed
+        self._tasks = tasks
+
+    async def stop(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        self._tasks.clear()
+
+
+def install_gc_diagnostics(
+    *,
+    loop: asyncio.AbstractEventLoop | None = None,
+    periodic_interval_s: float | None = None,
+    interval_env_var: str = DEFAULT_INTERVAL_ENV_VAR,
+    manual_signals: bool = True,
+) -> GCDiagnosticsHandle:
+    """One-call installer for a Fred pod's GC diagnostics. Call once during
+    pod startup (FastAPI lifespan / worker main()); call `await handle.stop()`
+    during shutdown.
+
+    - manual_signals=True (default): registers SIGUSR1 (-> collect_and_trim)
+      and SIGUSR2 (-> collect_and_report_types + live_object_census), e.g.
+      `kubectl exec <pod> -- kill -USR1 1`. Best-effort and never fatal: a
+      platform without these signals (Windows) or a loop/thread that can't
+      register asyncio signal handlers (also Windows, or not the main
+      thread) just skips this with a warning — the pod still starts. macOS
+      and Linux both support this normally.
+    - periodic_interval_s: seconds between automatic collect_and_trim() runs.
+      None (default) reads `interval_env_var` (FRED_GC_DIAGNOSTICS_INTERVAL_SEC
+      unless overridden — e.g. pass interval_env_var="KF_WORKER_GC_INTERVAL_SEC"
+      to preserve an existing app-specific opt-in). <= 0 disables it.
+    """
+    signals_installed = False
+    if manual_signals:
+        sigusr1 = getattr(signal, "SIGUSR1", None)
+        sigusr2 = getattr(signal, "SIGUSR2", None)
+        if sigusr1 is None or sigusr2 is None:
+            logger.warning(
+                "[fred-core][gc-diagnostics] SIGUSR1/SIGUSR2 not available on this "
+                "platform (%s) — manual triggers disabled",
+                platform.system(),
+            )
+        else:
+            try:
+                active_loop = loop or asyncio.get_running_loop()
+                active_loop.add_signal_handler(
+                    sigusr1, lambda: collect_and_trim("SIGUSR1")
+                )
+                active_loop.add_signal_handler(sigusr2, _handle_sigusr2)
+                signals_installed = True
+            except (NotImplementedError, RuntimeError) as exc:
+                logger.warning(
+                    "[fred-core][gc-diagnostics] SIGUSR1/SIGUSR2 manual triggers "
+                    "unavailable on this platform/thread: %s",
+                    exc,
+                )
+
+    interval_s = (
+        periodic_interval_s
+        if periodic_interval_s is not None
+        else _periodic_interval_from_env(interval_env_var)
+    )
+    tasks: list[asyncio.Task[None]] = []
+    if interval_s > 0:
+        try:
+            tasks.append(asyncio.create_task(_periodic_loop(interval_s)))
+        except RuntimeError as exc:
+            # No running event loop (e.g. called from sync startup code) —
+            # never fatal, same contract as the signal-registration branch above.
+            logger.warning("[fred-core][gc-diagnostics] periodic GC disabled: %s", exc)
+        else:
+            logger.warning(
+                "[fred-core][gc-diagnostics] periodic gc.collect()+malloc_trim() enabled every %ss",
+                interval_s,
+            )
+
+    return GCDiagnosticsHandle(signals_installed=signals_installed, tasks=tasks)

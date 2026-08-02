@@ -2132,7 +2132,8 @@ further step for untrusted authors (§6 non-goal). Both belong to a future RFC.
 
 | Feature | Exercises | Tier that unblocks it |
 | --- | --- | --- |
-| **#1906 document-access** (tree + summarize + rename) | multiple tools from one capability; static config-field scoping + a computed chat-turn narrowing control (§3.3); no new part/panel | Tier 0 (native middleware, after the Tier 2 migration) → **pilot**; polished by Tier 1 |
+| **#1906 document-access** (tree + rename) | multiple tools from one capability; static config-field scoping + a computed chat-turn narrowing control (§3.3); no new part/panel | Tier 0 (native middleware, after the Tier 2 migration) → **pilot**; polished by Tier 1 |
+| **document_summarize** | single-tool capability, own config, admin-gated opt-in per agent (per-call HITL approval designed but not yet active, #2179) | same Tier 0 pilot lineage as document-access |
 | **#1903 PPT filler** | `validate_config` + asset upload; dynamic tools; custom widget; custom part; side panel; analyze route on `router` | Tier 0/1 for the vertical; Tier 2 for native dynamic-tool middleware |
 | **#1905 WritableDocument** | `tables` + `router` (CRUD/export); `before_model` state edit (edit detection → system note); custom part; editor side panel | Tier 0/1 vertical; **Tier 2 makes the state-edit a clean middleware hook** |
 
@@ -2179,21 +2180,52 @@ config + turn scoping the builtin cannot express); the builtin/catalog path
 stays reachable for back-compat and its retirement is a follow-up. Documented in
 the capability docstring; do NOT wire both on one instance.
 
-**Shipped (2026-07-21): `list_document_tree` + `summarize_document`.** The
-Knowledge Flow endpoints landed (`POST /documents/tree`, ReBAC-scoped through
-`TagService` with `owner_filter`/`team_id`; synchronous
-`POST /documents/{uid}/summarize` with steerable `instruction` + `max_chars`,
-attachment text reconstructed from session vectors), and both tools are now
-registered on `DocumentAccessCapability`, wired through the new
-`RuntimeServices.document_tree` / `document_summarize` ports
-(RUNTIME-EXECUTION-CONTRACT §8.21). Failures surface as `is_error` tool
-results (timeout / HTTP status detail) via the SDK-typed
-`DocumentPortCallError`, never raised exceptions. The per-agent
-`summarize_max_chars` config field is both the default and a hard cap.
+**Shipped (2026-07-21): `list_document_tree`.** The Knowledge Flow tree
+endpoint landed (`POST /documents/tree`, ReBAC-scoped through `TagService`
+with `owner_filter`/`team_id`), registered on `DocumentAccessCapability`,
+wired through `RuntimeServices.document_tree` (RUNTIME-EXECUTION-CONTRACT
+§8.21). Failures surface as `is_error` tool results (timeout / HTTP status
+detail) via the SDK-typed `DocumentPortCallError`, never raised exceptions.
 Still deferred: pod-reachable **session-attachment enumeration** — the tree's
 trailing "Session attachments" section from Kea. Attachments remain a search
 scope only (`attachments_only`); accordingly the tree tool lists the corpus
 only and is not registered at all in attachments-only mode.
+
+**`summarize_document` is its own capability, `document_summarize`
+(`fred_runtime/capabilities/document_summarize/`, entry point
+`document_summarize`, #2180), not part of `document_access`.** Its
+invocation is decided purely by the LLM from the tool docstring, with no
+query-shaped signal to gate on — unlike `list_document_tree` (gated by
+`attachments_only`), there is no config condition that tells the runtime
+when this tool should even exist for an agent. Two independent controls were
+designed, neither redundant with the other, though only the first is active
+today:
+
+- **Admission (active)** — the capability is a separate, explicit
+  per-agent opt-in, left at the platform's safe default `team_scope`
+  (`ADMIN_GATED`): a team admin must explicitly enable it before any agent
+  in that team can even select it. An agent gets `summarize_document` only
+  if an admin selects `document_summarize` for it; selecting
+  `document_access` (search + tree) does not imply it. This is the sole
+  governance layer today.
+- **Execution (designed, not active — #2179 blocker)** —
+  `hitl_specs() -> [HitlSpec(tool="summarize_document", require=True)]`
+  (§5.4) would route every call through the platform HITL gate, a human
+  approving or cancelling before Knowledge Flow's synchronous
+  `POST /documents/{uid}/summarize` runs. Not declared today: ReAct V2's
+  HITL resume is broken end to end for every gated tool, not specific to
+  this capability (#2179 — `_validate_session_checkpoint_access` only
+  understands the legacy Graph runtime's hand-rolled checkpoint convention;
+  it mis-derives `checkpoint_id` from LangGraph's `Interrupt.id`, and even
+  once fixed would still reject on `runtime_kind != "graph_v2"`, a marker
+  ReAct V2 never sets). Shipping `require=True` today would mean every
+  approval attempt dead-ends in a 409 — strictly worse than no gate. Re-add
+  once #2179 is fixed.
+
+The per-instance `summarize_max_chars` config field (steerable `instruction`
++ `max_chars` on the underlying endpoint, attachment text reconstructed from
+session vectors), carried on `document_summarize`, is both the default and a
+hard cap, unchanged from when it lived on `document_access`.
 
 **Rename.** `mcp.servers.search_documents.name` → "Document access" (EN) /
 "Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`

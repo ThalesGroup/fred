@@ -134,6 +134,10 @@
       "name": "Document access",
       "description": "Search documents uploaded using semantic similarity (RAG)."
     },
+    "document_summarize": {
+      "name": "Document summarization",
+      "description": "Generate an on-demand summary of one document. Requires human approval before each call."
+    },
     "writable_document": {
       "name": "Writable document",
       "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
@@ -296,13 +300,18 @@
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
+      "reasoningRowLabel": "Reasoning",
       "selectLibraryFirst": "Select a library first."
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "dropFilesHere": "Drop files here",
     "errors": {
-      "missingContext": "Missing team or agent context in URL."
+      "missingContext": "Missing team or agent context in URL.",
+      "sessionSaveFailedSummary": "Conversation not saved",
+      "sessionSaveFailedDetail": "Could not save this conversation. Please try again.",
+      "contextPromptSaveFailedSummary": "Prompt selection not saved",
+      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again."
     },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
@@ -860,6 +869,7 @@
           "enabledTeams": "Enabled teams",
           "defaultOn": "Enabled for all",
           "health": "Health",
+          "reasoning": "Reasoning",
           "actions": "Actions"
         },
         "enabledTeams": {
@@ -935,7 +945,12 @@
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
             "defaultError": "Could not reset the personal-space default."
           }
-        }
+        },
+        "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
+        "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
+        "reasoningOffToast": "Reasoning disabled for this model.",
+        "reasoningOnToast": "Reasoning enabled for this model.",
+        "reasoningToggleError": "Could not change this model's reasoning setting."
       },
       "corpusAudit": {
         "title": "Corpus audit",
@@ -1082,7 +1097,6 @@
         "users": "Users"
       },
       "administration": {
-        "activitiesTitle": "Activités",
         "modelsGovernanceLink": "Manage models",
         "storageByTeam": {
           "empty": "No team is near its storage quota.",
@@ -1141,9 +1155,8 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "pageTitle": "Team usage",
         "sectionTitle": "Team usage",
-        "editorSectionTitle": "Activités (ingestion)",
-        "adminSectionTitle": "Activités",
         "membersLabel": "Members",
         "agentsLabel": "Agents",
         "documentsLabel": "Documents",
@@ -1159,10 +1172,6 @@
         "mostActiveAgents": {
           "title": "Most active agents",
           "valueLabel": "Conversations"
-        },
-        "activitySummary": {
-          "active": "{{count}} conversations in this period — active",
-          "quiet": "{{count}} conversations in this period — quiet"
         }
       }
     },
@@ -1184,6 +1193,29 @@
       "tokenPlaceholder": "Enter the bootstrap secret"
     },
     "cancel": "Cancel",
+    "chatTrace": {
+      "ariaLabel": "Agent reasoning trace",
+      "details": "Details",
+      "hide": "Hide the agent's reasoning and tool calls",
+      "openReasoning": "Open the full reasoning",
+      "phase": {
+        "observation": "Observation",
+        "planning": "Planning",
+        "reflection": "Reflection",
+        "synthesis": "Synthesis",
+        "tool_use": "Tool use"
+      },
+      "rows_one": "{{count}} row",
+      "rows_other": "{{count}} rows",
+      "running": "running…",
+      "show": "Show the agent's reasoning and tool calls",
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "summaryReasoning": "Reasoning {{duration}}",
+      "summaryTools_one": "{{count}} tool",
+      "summaryTools_other": "{{count}} tools",
+      "thinking": "Thinking…"
+    },
     "collapse": "Collapse",
     "create": "Create",
     "delete": "Delete",
@@ -1550,7 +1582,7 @@
         "launch": "Launch migration",
         "launching": "Launching...",
         "keaLink": "Kea → Swift cutover tools (temporary) →",
-        "title": "Platform migration",
+        "title": "Platform data",
         "import": {
           "title": "Import"
         },
@@ -1636,6 +1668,7 @@
       }
     },
     "adminTeams": {
+      "title": "Teams",
       "existingTeams": {
         "title": "Existing teams",
         "empty": "No teams yet.",
@@ -1722,11 +1755,12 @@
         "retention": "Retention"
       },
       "routing": {
+        "title": "Model routing",
         "defaultProfile": {
           "title": "Default chat model",
           "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
-          "placeholder": "e.g. default.chat.mistral"
+          "useDeploymentDefault": "Use deployment default"
         },
         "operationRules": {
           "title": "Operation overrides",
@@ -1734,12 +1768,16 @@
           "operation": "Operation",
           "purpose": "Purpose (optional)",
           "targetProfileId": "Profile id",
+          "targetProfilePlaceholder": "Select a model",
           "addRule": "Add rule"
         },
+        "profileUnavailable": "No longer enabled for this team",
+        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
         "save": "Save",
         "saveError": "Could not save the routing policy."
       },
       "parameters": {
+        "title": "Settings",
         "description": {
           "label": "Team description",
           "placeholder": "Help other users understand your team's role."
@@ -1825,6 +1863,14 @@
             "label": "Use case",
             "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
+          },
+          "reasoning": {
+            "label": "Reasoning",
+            "hint": "Let users turn the model's reasoning on for a single question, from the chat composer. Only appears when the model supports it and an administrator has enabled it."
+          },
+          "reasoningDefaultOn": {
+            "label": "Reasoning on by default",
+            "hint": "Every new conversation with this agent starts with the composer's reasoning toggle already on. Users can still switch it off per question. Reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
         "noTemplates": "No agent templates available — start a runtime pod.",
@@ -1842,7 +1888,6 @@
           "aria": "Form sections",
           "general": "General",
           "prompts": "Prompts",
-          "tools": "Tools",
           "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",
