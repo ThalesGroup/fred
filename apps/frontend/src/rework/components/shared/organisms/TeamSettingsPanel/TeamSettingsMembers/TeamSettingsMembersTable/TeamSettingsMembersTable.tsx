@@ -15,7 +15,7 @@
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import DataTable, { DataTableColumn, DataTableRowSize } from "@shared/molecules/DataTable/DataTable.tsx";
 import TeamRoleChips from "@shared/molecules/TeamRoleChips/TeamRoleChips.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -56,6 +56,8 @@ interface TeamSettingsMembersTableProps {
    * already fetches every member in one call, no backend pagination/search
    * to coordinate with. Ignored below 2 characters. */
   search: string;
+  /** Row height preset, forwarded to `DataTable`. Defaults to "medium" (48px). */
+  size?: DataTableRowSize;
 }
 
 const MIN_SEARCH_LENGTH = 2;
@@ -67,7 +69,7 @@ function matchesSearch(member: TeamMember, tokens: string[]): boolean {
   return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
 }
 
-export default function TeamSettingsMembersTable({ team, search }: TeamSettingsMembersTableProps) {
+export default function TeamSettingsMembersTable({ team, search, size = "medium" }: TeamSettingsMembersTableProps) {
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
@@ -244,6 +246,7 @@ export default function TeamSettingsMembersTable({ team, search }: TeamSettingsM
       rowKey={(member) => member.user.id}
       firstColumnInset
       pageSize={20}
+      size={size}
     />
   );
 }
