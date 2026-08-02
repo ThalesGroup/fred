@@ -155,6 +155,42 @@ class GCTypeReport:
     top_types: tuple[tuple[str, int], ...]
 
 
+def _type_key_for_class(cls: type) -> str:
+    """Module-qualified type name for grouping in a report — plain
+    `cls.__name__` conflates unrelated classes that happen to share a short
+    name (e.g. two different `Config` classes in two different modules),
+    which is exactly the kind of ambiguity a diagnostic report must not
+    have. Builtins (`__module__ == "builtins"`, e.g. `dict`, `list`) stay
+    bare — no realistic collision there, and the prefix would just be noise
+    on the types that dominate every count. Everything else, including other
+    stdlib types (e.g. `collections.Counter`), is qualified.
+
+    Never raises: a class whose metaclass overrides `__getattribute__` and
+    breaks on `__module__`/`__qualname__` access falls back to an
+    id-based placeholder rather than aborting the whole scan — one hostile
+    type in a heap of millions of ordinary ones must not take the census
+    down with it."""
+    try:
+        module = getattr(cls, "__module__", None)
+        name = getattr(cls, "__qualname__", None) or getattr(cls, "__name__", None)
+        if not name:
+            return f"<unknown-type id={id(cls)}>"
+        if not module or module == "builtins":
+            return name
+        return f"{module}.{name}"
+    except Exception:
+        return f"<unknown-type id={id(cls)}>"
+
+
+def _type_key(obj: object) -> str:
+    """Module-qualified type name for a single object — see
+    _type_key_for_class() for the actual logic. Callers walking many
+    instances that share a handful of types (e.g. live_object_census's heap
+    scan) should call _type_key_for_class() directly with their own
+    per-class cache instead, to avoid redoing this work per instance."""
+    return _type_key_for_class(type(obj))
+
+
 def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeReport:
     """Heavier variant of collect_and_trim: reports WHICH object types make up
     the reference-cycle garbage, not just a count (this is how ISSUE-010 was
@@ -173,7 +209,7 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
         gc.set_debug(old_flags)
 
     new_garbage = gc.garbage[pre_existing_garbage_count:]
-    top_types = tuple(Counter(type(o).__name__ for o in new_garbage).most_common(top_n))
+    top_types = tuple(Counter(_type_key(o) for o in new_garbage).most_common(top_n))
     garbage_count = len(new_garbage)
     del gc.garbage[pre_existing_garbage_count:]
     # Drop our own reference too, or the collect() below can't free these.
@@ -231,14 +267,13 @@ def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus
     garbage, never memory some live code is still genuinely holding a reference
     to — the two are different bug classes with different symptoms here.
 
-    Two things this census can silently miss, both surfaced explicitly rather
-    than left as a footnote:
+    Three things this census can silently miss or mislead on, all surfaced
+    explicitly rather than left as a footnote:
     - Sizes are sys.getsizeof() — SHALLOW, an object's own overhead, not what
       it points to (a dict of huge values looks small; the values themselves
       show up under their own type instead). top_by_count is often more
       telling than top_by_size for exactly that reason. No third-party
-      deep-sizer (e.g. pympler) is used, to keep this module dependency-free
-      and safe to run on a live pod without a second thought.
+      deep-sizer (e.g. pympler) is used, to keep this module dependency-free.
     - gc.get_objects() only tracks container-shaped objects that could join a
       cycle — plain bytes/str/most native buffers (including, often, tensor
       storage) are invisible here even at gigabyte scale. A real leak entirely
@@ -246,16 +281,36 @@ def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus
       the logged/returned total is compared against current_rss_kb(): a small
       shallow-total-to-RSS ratio is the census itself telling you to look
       elsewhere, not a clean bill of health.
+    - This is O(objects currently tracked) — millions on a real pod (~1.3M
+      seen live on fredlab) — and runs synchronously wherever it's called
+      from (e.g. the SIGUSR2 handler, on the event loop thread), taking real
+      wall-clock time (multiple seconds observed live). An on-demand
+      diagnostic, not something to call from a request path or a tight
+      periodic loop.
 
     sizing_failures counts objects whose sys.getsizeof() raised (rare — a
     handful of types lack or break __sizeof__); when non-zero,
-    total_bytes_shallow/top_by_size undercount by that many objects' worth."""
+    total_bytes_shallow/top_by_size undercount by that many objects' worth.
+
+    Types are grouped by _type_key_for_class() (module-qualified, e.g.
+    "myapp.models.Config" — see its docstring for why bare __name__ isn't
+    enough), resolved once per distinct class and cached for the rest of the
+    walk rather than recomputed per instance."""
     objects = gc.get_objects()
     counts: Counter[str] = Counter()
     sizes: Counter[str] = Counter()
     sizing_failures = 0
+    # A real pod's ~1.3M tracked objects overwhelmingly share a handful of
+    # types (dict, str-holding wrappers, pydantic models, ...) — resolve each
+    # class's key once and reuse it, instead of redoing _type_key_for_class's
+    # getattr/format work per instance.
+    type_key_cache: dict[type, str] = {}
     for obj in objects:
-        name = type(obj).__name__
+        cls = type(obj)
+        name = type_key_cache.get(cls)
+        if name is None:
+            name = _type_key_for_class(cls)
+            type_key_cache[cls] = name
         counts[name] += 1
         try:
             sizes[name] += sys.getsizeof(obj)
