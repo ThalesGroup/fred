@@ -3556,6 +3556,13 @@ async def promote_prompt(
         team_id=target_team_id,
         name=source.name,
         description=source.description,
+        # category_id is deliberately NOT copied: prompt categories are
+        # team-scoped rows (PROMPT-09), so the source category_id does not
+        # exist in target_team_id — carrying it over would point the copy at
+        # another team's category. emoji/tags are plain metadata with no team
+        # scope, so those do carry over.
+        emoji=source.emoji,
+        tags=source.tags,
         text=source.text,
         created_by=user.uid,
     )

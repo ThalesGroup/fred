@@ -117,6 +117,9 @@ def _make_prompt_record(
     team_id: str = "personal",
     name: str = "Daily brief",
     description: str | None = "Ops baseline",
+    category_id: str | None = None,
+    emoji: str | None = None,
+    tags: list[str] | None = None,
     text: str = "Today is {today}.",
     created_by: str | None = "internal-admin",
 ) -> PromptRecord:
@@ -125,6 +128,9 @@ def _make_prompt_record(
         team_id=TeamId(team_id),
         name=name,
         description=description,
+        category_id=category_id,
+        emoji=emoji,
+        tags=tags,
         text=text,
         created_by=created_by,
     )
@@ -7962,6 +7968,46 @@ async def test_promote_prompt_copies_to_target_team(
     assert len(store._records) == 2
     copy = next(r for r in store._records if str(r.team_id) == "bid-team")
     assert copy.text == "Today is {today}."
+
+
+@pytest.mark.asyncio
+async def test_promote_prompt_copies_emoji_and_tags_but_not_category_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: `promote_prompt` used to drop `emoji`/`tags` when
+    copying a prompt to another team (same bug class already fixed once on
+    `_prompt_record_to_detail`). `category_id` is deliberately excluded from
+    the copy instead — prompt categories are team-scoped (PROMPT-09), so the
+    source category_id would not resolve to anything in the target team."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    source = _make_prompt_record(
+        category_id="cat-writing", emoji="✍️", tags=["daily", "ops"]
+    )
+    store = _FakePromptStore([source])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/prompts/prompt-1/promote",
+            json={"target_team_id": "bid-team"},
+        )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["emoji"] == "✍️"
+    assert body["tags"] == ["daily", "ops"]
+    assert body["category_id"] is None
+    copy = next(r for r in store._records if str(r.team_id) == "bid-team")
+    assert copy.emoji == "✍️"
+    assert copy.tags == ["daily", "ops"]
+    assert copy.category_id is None
 
 
 @pytest.mark.asyncio
