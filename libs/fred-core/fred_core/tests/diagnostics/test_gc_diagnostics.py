@@ -230,6 +230,57 @@ def test_type_key_disambiguates_same_named_classes_from_different_modules():
     assert key_b == "fake_module_b.Config"
 
 
+def test_type_key_qualifies_non_builtin_stdlib_types():
+    # Copilot review on #2199: the docstring previously said "builtins/stdlib
+    # types" stay bare, but the actual condition is __module__ == "builtins"
+    # only — a non-builtin stdlib type like collections.Counter must still be
+    # qualified, or a Counter and some hypothetical unrelated app-level
+    # "Counter" class would collide in a report exactly like the bug this
+    # module exists to prevent.
+    from collections import Counter as StdlibCounter
+
+    assert gcd._type_key(StdlibCounter()) == "collections.Counter"
+
+
+def test_type_key_for_class_survives_a_hostile_metaclass():
+    # chatgpt-codex-connector review on #2199: a class whose metaclass
+    # overrides __getattribute__ and raises on __module__/__qualname__
+    # access must not abort the whole census/report for every other
+    # ordinary object — it degrades to a placeholder instead.
+    class HostileMeta(type):
+        def __getattribute__(cls, name):
+            if name in ("__module__", "__qualname__", "__name__"):
+                raise RuntimeError("nope")
+            return type.__getattribute__(cls, name)
+
+    class Hostile(metaclass=HostileMeta):
+        pass
+
+    key = gcd._type_key_for_class(Hostile)
+    assert key.startswith("<unknown-type id=")
+
+
+def test_live_object_census_caches_type_key_per_class(monkeypatch):
+    # chatgpt-codex-connector review on #2199: with ~1.3M tracked objects
+    # sharing a handful of types, _type_key_for_class() must be called at
+    # most once per distinct class, not once per instance.
+    calls: list[type] = []
+    real = gcd._type_key_for_class
+
+    def counting(cls):
+        calls.append(cls)
+        return real(cls)
+
+    monkeypatch.setattr(gcd, "_type_key_for_class", counting)
+    instances = [object() for _ in range(50)]
+    try:
+        result = gcd.live_object_census(log=False)
+        assert result.total_objects >= 50
+        assert calls.count(object) <= 1
+    finally:
+        del instances
+
+
 def test_shallow_fraction_of_rss_handles_unknown_rss():
     assert gcd._shallow_fraction_of_rss(1000, None) == "RSS unknown"
     assert gcd._shallow_fraction_of_rss(1000, 0) == "RSS unknown"
