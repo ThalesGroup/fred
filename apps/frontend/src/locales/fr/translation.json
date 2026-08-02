@@ -1889,6 +1889,7 @@
           "aria": "Sections du formulaire",
           "general": "Général",
           "prompts": "Prompts",
+          "tools": "Outils",
           "commitments": "Engagement"
         },
         "selectPlaceholder": "Sélectionner une option",
