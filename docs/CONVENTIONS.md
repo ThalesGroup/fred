@@ -18,6 +18,16 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
   migration direction without an RFC (see `docs/swift/rfc/`).
 - **No over-engineering.** No factory for a single implementation, no plugin system
   for a single case. Three similar lines is correct; premature abstraction is a bug.
+- **Converge on the existing pattern before adding a new one.** Before writing a new
+  function, look for its natural sibling already in the codebase (the existing
+  union/aggregate/list function it's the dual or extension of) and place the new
+  logic next to it, in the module that already owns that concern — not a new small
+  helper scattered elsewhere. When two surfaces expose the same underlying setting
+  or config (e.g. a listing/picker endpoint and its paired write-validation
+  endpoint), both must read from one shared computation, never two independently
+  derived views that can silently disagree — this matters most for anything exposed
+  as a setting/config choice in the UI, where a silent mismatch reads as a bug
+  ("the app offered this, then rejected it").
 
 ---
 
@@ -107,6 +117,10 @@ below are what to follow while writing the code, not just at review time.
   `@pytest.mark.integration` and excluded from `make test`.
 - **One test file per module.** `tests/test_<module>.py` mirrors `package/<module>.py`.
   Do not pile unrelated tests into a single file.
+- **Extend existing fixtures before adding new ones.** A new scenario for
+  already-tested behavior reuses the existing test file's fixtures/fakes; stand up a
+  new test file or a parallel fixture set only when the thing under test genuinely
+  has no existing home yet.
 - **`make code-quality && make test` must pass** before reporting any task done.
 
 ---
