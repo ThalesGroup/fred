@@ -20,11 +20,13 @@ Exports
         install_gc_diagnostics,
         collect_and_trim,
         collect_and_report_types,
+        live_object_census,
         current_rss_kb,
         malloc_trim,
         GCDiagnosticsHandle,
         GCTrimResult,
         GCTypeReport,
+        LiveObjectCensus,
     )
 """
 
@@ -33,10 +35,12 @@ from .gc_diagnostics import (
     GCDiagnosticsHandle,
     GCTrimResult,
     GCTypeReport,
+    LiveObjectCensus,
     collect_and_report_types,
     collect_and_trim,
     current_rss_kb,
     install_gc_diagnostics,
+    live_object_census,
     malloc_trim,
 )
 
@@ -45,9 +49,11 @@ __all__ = [
     "GCDiagnosticsHandle",
     "GCTrimResult",
     "GCTypeReport",
+    "LiveObjectCensus",
     "collect_and_report_types",
     "collect_and_trim",
     "current_rss_kb",
     "install_gc_diagnostics",
+    "live_object_census",
     "malloc_trim",
 ]

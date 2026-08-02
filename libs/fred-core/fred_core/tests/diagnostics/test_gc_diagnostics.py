@@ -24,6 +24,7 @@ from fred_core.diagnostics import (
     collect_and_trim,
     current_rss_kb,
     install_gc_diagnostics,
+    live_object_census,
     malloc_trim,
 )
 from fred_core.diagnostics import gc_diagnostics as gcd
@@ -135,6 +136,87 @@ def test_collect_and_report_types_leaves_nothing_pinned_in_gc_garbage():
         # the contract (no debug flags, no garbage) actually held afterward.
         assert gc.get_debug() == old_debug
         assert gc.garbage == []
+
+
+# ---------------------------------------------------------------------------
+# live_object_census
+# ---------------------------------------------------------------------------
+
+
+def test_live_object_census_returns_a_populated_result(caplog):
+    with caplog.at_level(logging.WARNING):
+        result = live_object_census(log=True)
+    assert result.total_objects > 0
+    assert result.total_bytes_shallow > 0
+    assert result.sizing_failures == 0
+    assert result.rss_kb is None or result.rss_kb > 0
+    assert result.top_by_count
+    assert result.top_by_size
+    assert any("[GC][census]" in r.message for r in caplog.records)
+
+
+def test_live_object_census_can_skip_logging():
+    result = live_object_census(log=False)
+    assert result.total_objects > 0
+
+
+def test_live_object_census_counts_reflect_a_known_live_object():
+    class _Marker:
+        pass
+
+    markers = [_Marker() for _ in range(50)]
+    try:
+        result = live_object_census(top_n=1000, log=False)
+        counts = dict(result.top_by_count)
+        assert counts.get("_Marker", 0) >= 50
+    finally:
+        del markers
+
+
+def test_live_object_census_counts_sizing_failures_instead_of_swallowing_them(caplog):
+    # A handful of real-world types raise from __sizeof__ (or lack one) —
+    # simulate that instead of hoping to find one in the wild.
+    class _BrokenSizeof:
+        def __sizeof__(self):
+            raise RuntimeError("no sizeof for you")
+
+    broken = [_BrokenSizeof() for _ in range(10)]
+    try:
+        with caplog.at_level(logging.WARNING):
+            result = live_object_census(log=True)
+        assert result.sizing_failures >= 10
+        assert any(
+            "sizing_failures=" in r.message and "sizing_failures=0" not in r.message
+            for r in caplog.records
+        )
+    finally:
+        del broken
+
+
+def test_shallow_fraction_of_rss_handles_unknown_rss():
+    assert gcd._shallow_fraction_of_rss(1000, None) == "RSS unknown"
+    assert gcd._shallow_fraction_of_rss(1000, 0) == "RSS unknown"
+
+
+def test_shallow_fraction_of_rss_computes_a_percentage():
+    # 1024 bytes shallow out of 1 KiB (1024 bytes) RSS -> 100%.
+    assert gcd._shallow_fraction_of_rss(1024, 1) == "100.0% of RSS"
+
+
+def test_sigusr2_handler_runs_both_diagnostics(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        gcd,
+        "collect_and_report_types",
+        lambda: calls.append("types"),
+    )
+    monkeypatch.setattr(
+        gcd,
+        "live_object_census",
+        lambda: calls.append("census"),
+    )
+    gcd._handle_sigusr2()
+    assert calls == ["types", "census"]
 
 
 # ---------------------------------------------------------------------------
