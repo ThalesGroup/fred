@@ -1888,6 +1888,7 @@
           "aria": "Form sections",
           "general": "General",
           "prompts": "Prompts",
+          "tools": "Capabilities",
           "commitments": "Commitments"
         },
         "selectPlaceholder": "Select an option",
