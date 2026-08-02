@@ -148,6 +148,8 @@ def test_live_object_census_returns_a_populated_result(caplog):
         result = live_object_census(log=True)
     assert result.total_objects > 0
     assert result.total_bytes_shallow > 0
+    assert result.sizing_failures == 0
+    assert result.rss_kb is None or result.rss_kb > 0
     assert result.top_by_count
     assert result.top_by_size
     assert any("[GC][census]" in r.message for r in caplog.records)
@@ -169,6 +171,36 @@ def test_live_object_census_counts_reflect_a_known_live_object():
         assert counts.get("_Marker", 0) >= 50
     finally:
         del markers
+
+
+def test_live_object_census_counts_sizing_failures_instead_of_swallowing_them(caplog):
+    # A handful of real-world types raise from __sizeof__ (or lack one) —
+    # simulate that instead of hoping to find one in the wild.
+    class _BrokenSizeof:
+        def __sizeof__(self):
+            raise RuntimeError("no sizeof for you")
+
+    broken = [_BrokenSizeof() for _ in range(10)]
+    try:
+        with caplog.at_level(logging.WARNING):
+            result = live_object_census(log=True)
+        assert result.sizing_failures >= 10
+        assert any(
+            "sizing_failures=" in r.message and "sizing_failures=0" not in r.message
+            for r in caplog.records
+        )
+    finally:
+        del broken
+
+
+def test_shallow_fraction_of_rss_handles_unknown_rss():
+    assert gcd._shallow_fraction_of_rss(1000, None) == "RSS unknown"
+    assert gcd._shallow_fraction_of_rss(1000, 0) == "RSS unknown"
+
+
+def test_shallow_fraction_of_rss_computes_a_percentage():
+    # 1024 bytes shallow out of 1 KiB (1024 bytes) RSS -> 100%.
+    assert gcd._shallow_fraction_of_rss(1024, 1) == "100.0% of RSS"
 
 
 def test_sigusr2_handler_runs_both_diagnostics(monkeypatch):

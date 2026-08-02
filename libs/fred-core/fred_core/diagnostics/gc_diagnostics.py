@@ -207,8 +207,20 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
 class LiveObjectCensus:
     total_objects: int
     total_bytes_shallow: int
+    sizing_failures: int
+    rss_kb: int | None
     top_by_count: tuple[tuple[str, int], ...]
     top_by_size: tuple[tuple[str, int], ...]
+
+
+def _shallow_fraction_of_rss(total_bytes_shallow: int, rss_kb: int | None) -> str:
+    """Render what fraction of the process's real RSS this census's shallow
+    total accounts for, so the gap is quantified on every call instead of only
+    documented once in a docstring — see live_object_census()'s "not the full
+    live heap" caveat."""
+    if rss_kb is None or rss_kb <= 0:
+        return "RSS unknown"
+    return f"{total_bytes_shallow / (rss_kb * 1024) * 100:.1f}% of RSS"
 
 
 def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus:
@@ -219,32 +231,52 @@ def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus
     garbage, never memory some live code is still genuinely holding a reference
     to — the two are different bug classes with different symptoms here.
 
-    Sizes are sys.getsizeof() — SHALLOW, an object's own overhead, not what it
-    points to (a dict of huge values looks small; the values themselves show up
-    under their own type instead). top_by_count is often more telling than
-    top_by_size for exactly that reason. No third-party deep-sizer (e.g.
-    pympler) is used, to keep this module dependency-free."""
+    Two things this census can silently miss, both surfaced explicitly rather
+    than left as a footnote:
+    - Sizes are sys.getsizeof() — SHALLOW, an object's own overhead, not what
+      it points to (a dict of huge values looks small; the values themselves
+      show up under their own type instead). top_by_count is often more
+      telling than top_by_size for exactly that reason. No third-party
+      deep-sizer (e.g. pympler) is used, to keep this module dependency-free
+      and safe to run on a live pod without a second thought.
+    - gc.get_objects() only tracks container-shaped objects that could join a
+      cycle — plain bytes/str/most native buffers (including, often, tensor
+      storage) are invisible here even at gigabyte scale. A real leak entirely
+      in that untracked memory would show as "census unchanged", which is why
+      the logged/returned total is compared against current_rss_kb(): a small
+      shallow-total-to-RSS ratio is the census itself telling you to look
+      elsewhere, not a clean bill of health.
+
+    sizing_failures counts objects whose sys.getsizeof() raised (rare — a
+    handful of types lack or break __sizeof__); when non-zero,
+    total_bytes_shallow/top_by_size undercount by that many objects' worth."""
     objects = gc.get_objects()
     counts: Counter[str] = Counter()
     sizes: Counter[str] = Counter()
+    sizing_failures = 0
     for obj in objects:
         name = type(obj).__name__
         counts[name] += 1
         try:
             sizes[name] += sys.getsizeof(obj)
         except Exception:
-            pass
+            sizing_failures += 1
+    rss_kb = current_rss_kb()
     result = LiveObjectCensus(
         total_objects=len(objects),
         total_bytes_shallow=sum(sizes.values()),
+        sizing_failures=sizing_failures,
+        rss_kb=rss_kb,
         top_by_count=tuple(counts.most_common(top_n)),
         top_by_size=tuple(sizes.most_common(top_n)),
     )
     if log:
         logger.warning(
-            "[GC][census] total_objects=%d total_bytes_shallow=%s top_by_count=%s top_by_size=%s",
+            "[GC][census] total_objects=%d total_bytes_shallow=%d (%s) sizing_failures=%d top_by_count=%s top_by_size=%s",
             result.total_objects,
             result.total_bytes_shallow,
+            _shallow_fraction_of_rss(result.total_bytes_shallow, rss_kb),
+            sizing_failures,
             result.top_by_count,
             result.top_by_size,
         )
