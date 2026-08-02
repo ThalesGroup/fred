@@ -258,15 +258,17 @@ describe("ManageCategoriesDialog", () => {
       '[aria-label*="deleteAria"][aria-label*="Communication"]',
     ) as HTMLButtonElement;
     expect(deleteCommunication.disabled).toBe(true);
-    // Tooltip content only mounts once hovered, and portals onto
-    // document.body rather than nesting under its trigger — see
-    // Tooltip.test.tsx. React delegates onMouseEnter from the bubbling
-    // "mouseover" native event, not the non-bubbling "mouseenter".
+    // Tooltip content only exists (portaled onto body) while the trigger is
+    // hovered — enter the wrapper before asserting on it.
+    const wrapper = deleteCommunication.closest('[class*="tooltip-wrapper"]') as HTMLElement;
     act(() => {
-      deleteCommunication.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      wrapper.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     });
-    const blockedTooltip = document.querySelector('[role="tooltip"]');
+    const blockedTooltip = document.body.querySelector('[role="tooltip"]');
     expect(blockedTooltip?.textContent).toBe("rework.promptCategories.manage.deleteBlocked");
+    act(() => {
+      wrapper.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+    });
 
     // "Analyse" has no prompts attached — delete stays enabled with the
     // normal per-category tooltip.

@@ -1238,10 +1238,35 @@
         "yourTeams": "Your teams"
       }
     },
+    "helpCenter": {
+      "title": "Help Center",
+      "languageAria": "Documentation language",
+      "sidebarAria": "Help Center navigation",
+      "copyPageLink": "Copy the page link",
+      "copyHeadingLink": "Copy the link to this paragraph",
+      "missingPage": "This page doesn't exist yet.",
+      "search": {
+        "placeholder": "Search the help…",
+        "ariaLabel": "Search the Help Center",
+        "clearAriaLabel": "Clear search",
+        "resultsAria": "Search results",
+        "noResults": "No results."
+      },
+      "sections": {
+        "gettingStarted": "Getting started",
+        "features": "Features",
+        "guides": "Guides & use cases",
+        "troubleshooting": "Troubleshooting",
+        "faq": "FAQ",
+        "architecture": "Technical architecture",
+        "changelog": "What's new"
+      }
+    },
     "profileMenu": {
       "adminBadge": "admin",
       "adminConsole": "Technical console",
       "contactSupport": "Contact support",
+      "helpCenter": "Help Center",
       "profile": "Profile"
     },
     "promptCategories": {

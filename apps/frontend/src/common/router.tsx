@@ -38,6 +38,7 @@ import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx"
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
@@ -92,6 +93,16 @@ const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
+// Lazy: the Help Center chunk carries its whole markdown corpus (HELP-01).
+const HelpCenterPage = lazy(() => import("@components/pages/HelpCenterPage/HelpCenterPage.tsx"));
+
+// Bare `/help` picks the content language from the app language, then the
+// page itself redirects to the first section.
+const HelpIndexRoute = () => {
+  const { i18n } = useTranslation();
+  const lang = i18n.language?.toLowerCase().startsWith("en") ? "en" : "fr";
+  return <Navigate to={`/help/${lang}`} replace />;
+};
 
 const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
@@ -338,6 +349,19 @@ export const routes: RouteObject[] = [
   {
     path: "/release-notes",
     element: <ReleaseNotesPage />,
+  },
+  {
+    // Help Center (HELP-01) — own tab, no app chrome, shareable URLs.
+    path: "/help",
+    element: <HelpIndexRoute />,
+  },
+  {
+    path: "/help/:lang/:sectionId?/:pageId?",
+    element: (
+      <SuspenseWrapper>
+        <HelpCenterPage />
+      </SuspenseWrapper>
+    ),
   },
   {
     // PPT Filler capability documentation — opened in a new tab from the

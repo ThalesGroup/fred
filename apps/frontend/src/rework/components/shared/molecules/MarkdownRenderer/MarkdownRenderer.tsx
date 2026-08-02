@@ -20,6 +20,7 @@ import remarkDirective from "remark-directive";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
+import { HeadingWithAnchor } from "./HeadingWithAnchor";
 import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
@@ -34,6 +35,10 @@ interface MarkdownRendererProps {
   /** Drop the prose reading-width cap so wide content (CSV tables) can fill the
    *  available width. Use in full-page previews, not in the chat transcript. */
   fullWidth?: boolean;
+  /** Give h2/h3 headings a slug `id` and a hover copy-link button so deep
+   *  links can target them — long-lived documents (Help Center articles),
+   *  not chat messages. */
+  headingAnchors?: boolean;
 }
 
 interface MdastNode {
@@ -161,7 +166,13 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
   [rehypeSanitize, sanitizeSchema],
 ];
 
-export function MarkdownRenderer({ text, onSourceClick, streaming = false, fullWidth = false }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  text,
+  onSourceClick,
+  streaming = false,
+  fullWidth = false,
+  headingAnchors = false,
+}: MarkdownRendererProps) {
   const { stableMarkdown, pendingFence } = useMemo(
     () => (streaming ? getStreamingMarkdownState(text) : { stableMarkdown: text, pendingFence: null }),
     [streaming, text],
@@ -200,8 +211,19 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false, fullW
         }
         return <sup {...props}>{children}</sup>;
       },
+      // h2/h3 → anchored headings (slug id + hover copy-link) when enabled
+      ...(headingAnchors
+        ? {
+            h2: ({ children }: { children?: React.ReactNode }) => (
+              <HeadingWithAnchor level={2}>{children}</HeadingWithAnchor>
+            ),
+            h3: ({ children }: { children?: React.ReactNode }) => (
+              <HeadingWithAnchor level={3}>{children}</HeadingWithAnchor>
+            ),
+          }
+        : {}),
     }),
-    [onSourceClick],
+    [onSourceClick, headingAnchors],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {

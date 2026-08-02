@@ -2325,6 +2325,53 @@ _(none)_
 
 ---
 
+## HELP-01 Help Center (#2189, 2026-07-31)
+
+### `HelpCenterPage` (+ `HelpSidebar`, `HelpArticle`)
+
+**Location:** `src/rework/components/pages/HelpCenterPage/`
+**Status:** `Functional`
+
+Standalone wiki-style documentation page (own tab, no app chrome) at
+`/help/:lang/:sectionId/:pageId`, rendered from the markdown corpus in
+`features/helpCenter/content/`. Two panes: navigation rail
+(`surface-container`, 32px `label-medium` section headers, `NavigationMenuItem`
+page items, `Separator` dividers) and the article column
+(`Breadcrumb` + copy-page-link `IconButton`, `MarkdownRenderer` with
+`headingAnchors`). fr/en switch as an xs `ButtonGroup` in the header, synced
+with the URL. Entry: profile menu item below "Profil" (icon `help`).
+
+### `MarkdownRenderer` `headingAnchors` + `HeadingWithAnchor`
+
+**Location:** `src/rework/components/shared/molecules/MarkdownRenderer/`
+**Status:** `Functional`
+
+Opt-in h2/h3 rendering with a slug `id` and a hover/focus-revealed copy-link
+button (xs icon `IconButton`, `link` → `check` feedback). Off by default —
+chat rendering unchanged.
+
+### `HelpSearch` (HELP-01.B)
+
+**Location:** `src/rework/components/pages/HelpCenterPage/HelpSearch.tsx`
+**Status:** `Functional`
+
+Global help search in the page header: a `SearchInput` (reused) with a
+results dropdown. The index (`features/helpCenter/search.ts`) is built
+client-side, lazily on the first keystroke, cached per language for the
+session — nothing runs until the user types. Weighted scoring (title >
+description > heading > body), AND semantics across terms, `<mark>`-highlighted
+snippet; a heading hit carries the heading's anchor so selecting the result
+lands on the exact section.
+
+#### Open UX issues
+
+- **Not yet design-reviewed** — sidebar density, header weight, article
+  measure, the anchor-button hover affordance, and the search dropdown
+  (result density, snippet length, keyboard navigation) need a designer pass
+  once real content lands (HELP-01.C).
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

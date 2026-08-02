@@ -101,6 +101,31 @@
   font: var(--font-title-medium);
 }
 
+/* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */
+
+/* When navigating to #fragment, the target heading lands below the Help
+   Center's ~57px header instead of behind it. 4rem clears the header with a
+   small gap. Only headingAnchors (Help Center) uses this class. */
+.anchoredHeading {
+  scroll-margin-top: 4rem;
+}
+
+/* Copy-link affordance: invisible until the heading is hovered or the button
+   itself is keyboard-focused — reading stays clean, sharing stays one hover
+   away. */
+.anchorAction {
+  display: inline-flex;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  margin-left: var(--spacing-2xs);
+}
+
+.anchoredHeading:hover .anchorAction,
+.anchorAction:focus-within {
+  opacity: 1;
+}
+
 /* ---- Lists ---- */
 
 .root :global(ul),
