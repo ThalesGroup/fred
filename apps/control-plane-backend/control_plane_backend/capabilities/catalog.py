@@ -173,3 +173,44 @@ async def aggregate_capability_catalog(
                 )
             catalog[entry.id] = entry
     return catalog
+
+
+async def universally_available_model_profile_ids(
+    deps: ProductServiceDependencies,
+) -> frozenset[str]:
+    """`model_profile_ids` present on every enabled, model-capable pod — the
+    intersection dual of `aggregate_capability_catalog`'s union above
+    (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9).
+
+    `aggregate_capability_catalog`'s union answers "does at least one pod
+    know this profile" — the right question for admission/enablement, where
+    a capability just needs to exist somewhere to be toggled on. A team
+    routing policy asks a different question: whichever pod ends up serving
+    a given turn must be able to resolve the chosen profile, or
+    `RoutedChatModelFactory.select` (fred-runtime) fails closed with
+    `TeamRoutingProfileDriftError`. Validating a routing-policy write against
+    this intersection instead of the union means a write that succeeds can
+    never drift-fail at runtime on some other pod.
+
+    Best-effort per pod, same fault tolerance as `aggregate_capability_catalog`:
+    an unreachable pod (or one that has registered no model) is simply
+    excluded from the intersection, never fatal.
+    """
+
+    # Lazy import for the same reason as `aggregate_capability_catalog` above
+    # — breaks the product.service <-> capabilities import cycle.
+    from control_plane_backend.product.service import _model_capabilities_for_source
+
+    per_pod_profile_ids: list[set[str]] = []
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        entries = await _model_capabilities_for_source(source.base_url)
+        if not entries:
+            continue
+        per_pod_profile_ids.append(
+            {profile_id for entry in entries for profile_id in entry.model_profile_ids}
+        )
+    if not per_pod_profile_ids:
+        return frozenset()
+    return frozenset(set.intersection(*per_pod_profile_ids))

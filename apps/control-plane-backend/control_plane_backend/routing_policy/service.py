@@ -38,7 +38,10 @@ from control_plane_backend.capabilities.authz import (
     can_use_capability,
     usable_capability_ids,
 )
-from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
+from control_plane_backend.capabilities.catalog import (
+    aggregate_capability_catalog,
+    universally_available_model_profile_ids,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,
@@ -144,6 +147,14 @@ async def _validate_write(
     referenced profile known to this deployment and `can_use`-enabled for
     `team_id`. Raises the first violation found rather than collecting all —
     matches `ModelRoutingPolicy`'s own fail-fast validators in fred-runtime.
+
+    "Known to this deployment" (§9: profile ids are deployment-global, not
+    pod-local) means present on *every* enabled, model-capable pod, not just
+    one — `UnknownProfileError` also covers a profile a single pod's YAML
+    still carries but the deployment as a whole no longer serves uniformly
+    (2026-08-02, MDL#2 follow-up to #2191). Validating against anything
+    looser would let a write succeed today and drift-fail at runtime on
+    whichever pod actually lacks it (`TeamRoutingProfileDriftError`).
     """
 
     rule_ids = [r.rule_id for r in request.operation_rules]
@@ -167,7 +178,10 @@ async def _validate_write(
         return
 
     profile_to_capability = await _profile_to_capability_id_map(deps)
-    unknown = sorted({p for p in referenced if p not in profile_to_capability})
+    universal = await universally_available_model_profile_ids(deps)
+    unknown = sorted(
+        {p for p in referenced if p not in profile_to_capability or p not in universal}
+    )
     if unknown:
         raise UnknownProfileError(profile_ids=unknown)
 
@@ -223,6 +237,11 @@ async def list_available_model_profiles(
     (team_admin/team_editor/team_analyst, #2167 follow-up) — this reads the
     team's own enablement state, not the platform-admin aggregate list gated
     on `capability#can_manage`.
+
+    Also filtered to `universally_available_model_profile_ids` (2026-08-02,
+    MDL#2) so this picker never offers a choice `_validate_write` would then
+    reject — the two must agree on what "available" means, or a team could
+    pick an option here and have the save fail.
     """
 
     team_id = await require_team_access(
@@ -231,6 +250,7 @@ async def list_available_model_profiles(
     await _require_elevated_team_role(user, team_id, deps)
     catalog = await aggregate_capability_catalog(deps)
     usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    universal = await universally_available_model_profile_ids(deps)
     profiles = [
         AvailableModelProfile(
             profile_id=profile_id, capability_id=entry.id, name=entry.name
@@ -238,6 +258,7 @@ async def list_available_model_profiles(
         for entry in catalog.values()
         if entry.kind == "model" and (usable is None or entry.id in usable)
         for profile_id in entry.model_profile_ids
+        if profile_id in universal
     ]
     profiles.sort(key=lambda p: p.profile_id)
     return AvailableModelProfileList(profiles=profiles)

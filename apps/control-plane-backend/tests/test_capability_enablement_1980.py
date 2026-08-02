@@ -1229,6 +1229,65 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     assert entry.model_thinking_profile_ids == ("chat.pod-a.gpt5",)
 
 
+@pytest.mark.asyncio
+async def test_universally_available_model_profile_ids_intersects_across_pods(
+    monkeypatch,
+) -> None:
+    """MDL#2 (2026-08-02, follow-up to #2191): the union above is right for
+    admission ("does at least one pod know this profile"), but a team routing
+    policy needs the opposite question answered — a profile only some pods
+    carry can drift-fail at runtime (`TeamRoutingProfileDriftError`) on
+    whichever pod lacks it. `universally_available_model_profile_ids` must
+    return only profile ids every pod agrees on."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_model_profile_ids,
+    )
+
+    def _model_entry(profile_ids):
+        return CapabilityCatalogEntry(
+            id="model__openai__gpt-5.1",
+            version="1",
+            name="gpt-5.1",
+            description="gpt-5.1",
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(profile_ids),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        # Both pods carry "chat.shared" — pod-a additionally carries a
+        # profile pod-b doesn't (e.g. a rollout in progress).
+        if base_url == "http://pod-a":
+            return [_model_entry(["chat.shared", "chat.pod-a-only"])]
+        return [_model_entry(["chat.shared"])]
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_model_profile_ids(deps)
+
+    assert universal == frozenset({"chat.shared"})
+
+
 # ---------------------------------------------------------------------------
 # Revoke survives a stale/missing model catalog entry (GitHub #2191). A
 # kind="model" fetch failure must not fail-OPEN on the admin's ability to

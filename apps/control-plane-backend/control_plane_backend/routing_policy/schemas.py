@@ -72,9 +72,12 @@ class ProfileNotUsableError(Exception):
 
 
 class UnknownProfileError(Exception):
-    """A routing-policy write references a `target_profile_id` this deployment's
-    aggregated model catalog has never advertised (typo, or a profile that
-    exists in one pod's YAML but not the one(s) actually reachable)."""
+    """A routing-policy write references a `target_profile_id` this
+    deployment does not serve uniformly: either no pod has ever advertised
+    it (typo), or only some pods have — a profile must be present on every
+    enabled, model-capable pod to be deployment-global (RFC §9), or it can
+    drift-fail at runtime on whichever pod actually lacks it
+    (2026-08-02, MDL#2)."""
 
     def __init__(self, *, profile_ids: list[str]) -> None:
         self.profile_ids = profile_ids
