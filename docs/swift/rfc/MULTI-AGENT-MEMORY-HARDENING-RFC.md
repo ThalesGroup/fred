@@ -2,20 +2,23 @@
 
 **Status**: Proposed
 
-**Tracks**: MEMORY-02, MEMORY-03, MEMORY-04, MEMORY-05
+**Tracks**: MEMORY-02, MEMORY-03, MEMORY-04, MEMORY-05, MEMORY-06
 
-**Current design**: [`../design/MULTI_AGENT_MEMORY.md`](../design/MULTI_AGENT_MEMORY.md)
+**Current design**: [`../design/MULTI_AGENT_MEMORY.md`](../design/MULTI_AGENT_MEMORY.md),
+[`../design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md) §14
+(agent-to-agent invocation invariants)
 
 ## Summary
 
 MEMORY-01 phases A-E shipped the core conversational memory contract. A code
-audit confirmed four remaining hardening gaps before the feature should be
+audit confirmed five remaining hardening gaps before the feature should be
 treated as fully closed:
 
 - checkpoint state is session-scoped, not agent-scoped;
 - remote agent invocation still uses a legacy request payload;
 - local agent invocation still builds the private execution request directly;
-- TeamAgent history append does not enforce the configured history cap.
+- TeamAgent history append does not enforce the configured history cap;
+- agent-to-agent invocation has no composition depth or cycle limit.
 
 This RFC narrows the remaining work into small implementation slices. It does
 not reopen the shipped SDK memory contract.
@@ -31,7 +34,9 @@ without an agent namespace.
 
 Result: two agents sharing one public session may load or overwrite the same
 completed or pending checkpoint state. This is especially risky for TeamAgent
-and callee agents, because both can run inside the same user conversation.
+and callee agents, because both can run inside the same user conversation —
+e.g. fred-rags's `apps/rags-agents` pod, where Eva invokes Tessa/Rico within
+one session.
 
 ### MEMORY-03 - Remote Execute-Contract Convergence
 
@@ -68,6 +73,18 @@ Result: local and HTTP execution can drift when execution metadata changes.
 
 Result: carry-forward and invocation seeding are capped, but completed TeamAgent
 state can grow past the configured limit.
+
+### MEMORY-06 - Agent Invocation Depth/Cycle Limit
+
+`GraphNodeContext.invoke_agent` (see `RUNTIME-EXECUTION-CONTRACT.md` §14) has
+no bound on composition depth and no cycle detection. Nothing today stops
+agent A invoking B invoking A, or an arbitrarily deep chain of callees.
+
+Result: a misconfigured or malicious agent graph can compose without limit —
+unbounded latency, cost, and (in a pathological case) an infinite loop.
+fred-rags's `apps/rags-agents` pod (Eva → Tessa/Rico, the "move to cloud"
+cloud-migration-assessment use case) is exactly the kind of multi-hop
+composition this guard needs to cover.
 
 ## Proposed Direction
 
@@ -135,12 +152,35 @@ Acceptance tests:
 - `conversation_history_max_turns = 0` behavior is either explicitly rejected or
   documented and tested.
 
+### F.5 Agent Invocation Depth/Cycle Limit
+
+Add a bounded composition guard to `AgentInvokerPort.invoke` (or the call site
+in `GraphNodeContext.invoke_agent`):
+
+- carry an invocation-depth counter through nested `invoke_agent` calls (e.g. in
+  `PortableContext.baggage` or a dedicated request field);
+- reject with a clean error (not an exception that crashes the turn) beyond a
+  fixed max depth (default 3, matching the sizing of existing multi-hop cases
+  such as fred-rags's Eva → Tessa/Rico);
+- detect direct cycles (an `agent_id` already present in the current
+  invocation chain) and reject those regardless of depth.
+
+Acceptance tests:
+
+- a 3-hop chain (A → B → C) within the default depth succeeds;
+- a chain exceeding the max depth is rejected cleanly, not via an unhandled
+  exception;
+- A → B → A is rejected as a cycle even if within the depth budget;
+- the existing fred-rags-style compositions (Eva → Tessa, Eva → Rico, Chronos →
+  Rico) are unaffected — depth 1 from the producer's perspective.
+
 ## Recommended Branch Order
 
 1. `fix/memory-agent-checkpoint-isolation`
 2. `fix/remote-agent-runtime-execute-contract`
 3. `refactor/local-agent-execute-projection`
 4. `fix/team-memory-history-cap`
+5. `fix/agent-invocation-depth-cycle-limit`
 
 ## Non-Goals
 
@@ -150,4 +190,7 @@ This RFC does not introduce:
 - a new public memory API;
 - callee-to-caller history merge;
 - a replacement checkpointer;
-- a change to public `session_id` ownership.
+- a change to public `session_id` ownership;
+- cross-pod or Temporal-native agent invocation (see
+  [`../design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md)
+  §14, "Note of intention" — deliberately separate, future work).

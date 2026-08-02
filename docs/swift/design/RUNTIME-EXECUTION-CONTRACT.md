@@ -2331,3 +2331,103 @@ No DeepEval, LiteLLM, or OpenTelemetry dependency is permitted in `fred-runtime`
 ### RFC reference
 
 `docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2
+
+---
+
+## 14. Agent-to-Agent Invocation — `invoke_agent`
+
+### Frozen surface
+
+One agent invokes another as a **bounded function call**, not a handoff: the
+caller passes a message (and optionally a typed output schema and a per-call
+retrieval scope), keeps control of its own turn, and gets a typed result back.
+There is no separate "handoff" primitive that transfers conversation control
+to a callee — composition is always caller-keeps-control.
+
+```
+GraphNodeContext.invoke_agent(
+    agent_id: str,
+    message: str,
+    *,
+    prior_turns: tuple[ConversationTurn, ...] = (),
+    output_schema: type[BaseModel] | None = None,
+    scope: InvocationScope | None = None,
+) -> AgentInvocationResult
+```
+
+`output_schema` and `scope` are optional and additive — every caller that
+never sets them keeps working unchanged.
+
+### Invariants — what is shared, what is not
+
+Every `AgentInvokerPort` implementation (today only `LocalRegistryAgentInvoker`)
+must uphold these, regardless of transport:
+
+- **Identity is delegated, never re-authenticated or elevated.** The callee
+  runs under the caller's own access token and `team_id`; ReBAC/document
+  permissions are enforced against that identity, not a fresh one.
+- **Scope narrows, never widens.** `InvocationScope` (`document_uids`,
+  `library_ids`, `search_policy`) can only restrict what the callee's
+  retrieval sees for that one call — it cannot grant access the caller's
+  identity doesn't already have.
+- **No shared mutable state.** The callee executes with its own fresh
+  graph/ReAct state — no shared object, no shared long-term memory. (Its
+  *checkpoint* isolation from the caller is a known gap — see below.)
+- **No shared tools.** The callee uses only its own declared tools/MCP
+  servers; the caller's tool access is never extended to it.
+- **History is opt-in and minimal.** `prior_turns` forwards a curated
+  `tuple[ConversationTurn, ...]` (`user_message`/`agent_response`/`agent_name`
+  only) — never the callee's internal message trace — and is empty by
+  default.
+- **Typed output is optional and bounded.** When `output_schema` is given, the
+  runtime forces and validates a schema-conformant result with a bounded
+  retry (2 attempts); on persistent mismatch the call still returns
+  (`structured=None`) rather than hanging.
+
+### Boundary — same pod only
+
+`invoke_agent` today only resolves agents registered in the calling pod's own
+in-process registry. This is a **deliberate, hard boundary**, not a
+placeholder: cross-pod/remote agent invocation is a **separate mechanism**,
+requiring its own security review, never an invisible extension of this one.
+See "Note of intention" below.
+
+### Known gaps (tracked, not yet closed)
+
+- **Composition depth / cycle limit.** Not implemented — nothing today
+  prevents agent A invoking B invoking A, or an unbounded invocation chain.
+  Tracked as MEMORY-06 in
+  [`../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md).
+- **Agent-scoped checkpoint isolation.** Checkpoint state is keyed by
+  `session_id` alone, not by agent — a caller and a callee sharing one
+  session can load or overwrite each other's checkpoint. Tracked as
+  MEMORY-02 in the same RFC (proposed fix: `checkpoint_ns` derived from the
+  executing agent, `thread_id` kept as `session_id`).
+
+### Real-world adopter — fred-rags "move to cloud"
+
+`fred-rags`'s `apps/rags-agents` pod (external repo) is a production consumer
+of the typed/scoped contract: its cloud-migration-assessment agents (`Eva`,
+`Chronos`) invoke sub-agents (`Tessa`, `Rico`) with `output_schema` +
+`InvocationScope(document_uids=...)` to extract structured facts scoped to
+specific documents, rather than free-text parsing and un-scoped retrieval. Its
+producer/callee agents run inside the same user session (the MEMORY-02
+scenario above) and its CMDB-trust-signals composition (Eva → Tessa) is
+exactly the kind of multi-hop call the missing depth/cycle guard (MEMORY-06)
+needs to cover.
+
+### Note of intention — remote/Temporal transport (future, separate)
+
+`AgentInvokerPort` and `AgentInvocationRequest`/`AgentInvocationResult` are
+already designed to be transport-independent — in-process, HTTP, and Temporal
+child workflow are all named in the contracts' own docstrings — and a full
+HTTP/SSE implementation (`RemoteSseAgentInvoker`) already exists in
+`fred-sdk`, unused by any pod today. Extending `invoke_agent` to cross-pod or
+durable/Temporal execution is intentionally **out of scope for the
+invariants above** and will get its own design pass when a concrete need
+appears (pod discovery/topology is covered separately by
+[`AGENTIC-POD-RFC.md`](../rfc/AGENTIC-POD-RFC.md)) — never an implicit
+relaxation of the same-pod boundary.
+
+See [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
+for the two open gaps (MEMORY-02, MEMORY-06).
