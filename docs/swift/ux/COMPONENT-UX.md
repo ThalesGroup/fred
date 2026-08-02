@@ -192,13 +192,17 @@ than a chevron, and clicking it flips the value in place instead of opening a
 sub-menu. The popover deliberately stays open so a user can flip it and keep
 composing. It is also the first row contributed by the **platform** rather than by a
 capability. It appears only when the agent's author turned Reasoning on in the form's
-General tab AND a platform admin enabled the model's reasoning — a closed upstream gate
-removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md` §8).
+Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
+gate removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md`
+§8). The offer itself lived in the General section until Amendment C (2026-08-02) moved
+it into the Capabilities tab, rendered through the same `CapabilityCard` component every
+real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
+even though the reasoning offer still isn't a capability underneath.
 
 As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
-constant: the agent form's General section grows a second switch nested under
-`Reasoning` — visible only while `Reasoning` is on, indented behind a left rule so it
-reads as a child rather than a peer — and it seeds the composer row's initial state for
+constant: the reasoning card grows a second switch nested under `Reasoning` in its own
+sub-form area — visible only while `Reasoning` is on, matching how a real capability's
+own boolean config field renders — and it seeds the composer row's initial state for
 every new conversation. Nothing about the row itself changes: still a per-question
 choice the user can flip, still removed entirely when an upstream gate is closed. The
 form hint carries the cost of the opt-in (slower, may repeat tool calls on tool-using

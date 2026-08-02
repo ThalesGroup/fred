@@ -5,16 +5,20 @@
 **Status:** **Implemented (2026-07-30)** — all four levels shipped, plus the
 three §9 preconditions. Phase 1 (levels 1-2) landed 2026-07-29; phase 2
 (levels 3-4) landed 2026-07-30. All design decisions resolved 2026-07-29.
+Amendment C (2026-08-02) relocated the level-3 form control; see below.
 
-**Read §15 first if you are here for levels 3-4.** Amendment A withdraws §7's
-central premise: reasoning is NOT a capability, so it is not in the agent's
-Tools tab and contributes no `turn_options`. §14 records three smaller places
-where the implementation had to deviate; §12 records the questions the work
-closed.
+**Read §15 first if you are here for levels 3-4, then §17.** Amendment A
+withdraws §7's central premise: reasoning is NOT a capability, so it
+contributes no `turn_options` and no capability middleware. §17 (Amendment C)
+later moved the level-3 toggle's on-screen location back into the (by then
+renamed) Capabilities tab without reopening that conclusion. §14 records three
+smaller places where the implementation had to deviate; §12 records the
+questions the work closed.
 **Tracking:** GitHub #2166, #2175 (Amendment B) — milestone `swift ga`
 **Date:** 2026-07-29 (implementation notes 2026-07-30)
-**Last amended:** 2026-07-30 — §16 (Amendment B): the agent author chooses
-whether the composer's reasoning toggle starts ON in a new conversation
+**Last amended:** 2026-08-02 — §17 (Amendment C): the level-3 toggle is
+displayed in the agent form's Capabilities tab, using the same card chrome as
+a real capability, following that tab's rename from Tools
 **Track:** model routing / capability authoring / chat composer
 
 ---
@@ -42,11 +46,13 @@ Frozen-contract entries: `RUNTIME-EXECUTION-CONTRACT.md` §8.29 / §8.30,
 > developer's decision (2026-07-30) before release — see **§15**. Reasoning is a
 > property of *how the model is called*, not a tool an agent uses, so putting it
 > in the tool picker asked authors to enable it in the wrong mental model. The
-> rows below describe what actually ships.
+> rows below describe what actually ships. **§17 (Amendment C, 2026-08-02)**
+> later moved this control's on-screen location into the Capabilities tab
+> (renamed from Tools) without reopening this conclusion — see that section.
 
 | RFC section | Built as |
 | ----------- | -------- |
-| §6 (level 3) | `AgentTuning.reasoning_enabled` / `ManagedAgentTuning.reasoning_enabled` — a plain agent property, edited in the **General** section of the agent form under name/role/description. No capability. Enforced pod-side by intersecting it into the level-2 ceiling (§14.5), not only by hiding the composer control |
+| §6 (level 3) | `AgentTuning.reasoning_enabled` / `ManagedAgentTuning.reasoning_enabled` — a plain agent property. Displayed in the agent form's **Capabilities tab** since §17 (Amendment C, 2026-08-02), using the same card chrome as a real capability; still no capability underneath. Enforced pod-side by intersecting it into the level-2 ceiling (§14.5), not only by hiding the composer control |
 | §5.7 | Switching a model off (default-on → off) switches its stored `reasoning_enabled` off with it; reported on `CapabilityDefaultOnResult.reasoning_disabled` |
 | §7 (level 4) | `RuntimeContext.reasoning` (tri-state `bool \| None`), a platform chat option travelling per turn exactly like `search_policy`/`search_rag_scope` — not a capability `turn_options` slice |
 | §7.3 | Not needed. Level 4 is enforced at the SAME point as level 2 (`build_for_chat`, on `ModelConfiguration.settings`), so there is no built client to patch and neither `.bind` nor `model_copy` is involved — see §15 |
@@ -788,7 +794,7 @@ policy or the RAG scope, both of which are platform chat options on
 
 | Level | Was (withdrawn) | Is |
 | ----- | --------------- | -- |
-| 3 — agent offers it | `ReasoningCapability.ConfigModel.reasoning_enabled`, ticked in the Tools tab | `AgentTuning.reasoning_enabled`, a plain agent property in the **General** section under name/role/description |
+| 3 — agent offers it | `ReasoningCapability.ConfigModel.reasoning_enabled`, ticked in the Tools tab | `AgentTuning.reasoning_enabled`, a plain agent property (displayed in the Capabilities tab since §17, Amendment C) |
 | 4 — user chooses per question | `TurnOptionsModel.reasoning`, via `turn_options[capability_id]` | `RuntimeContext.reasoning`, a platform chat option like `search_policy` |
 | Composer control | `chat_controls()` on the capability | `_platform_reasoning_control` — control-plane emits the descriptor directly |
 | Enforcement | a capability `awrap_model_call` patching the built client | the SAME `build_for_chat` point as level 2 |
@@ -846,8 +852,10 @@ channel, no new event, and no runtime change.
 
 One field, `reasoning_default_on`, on the same three surfaces as
 `reasoning_enabled` (`ManagedAgentTuning`, the create/update requests, the
-instance summary), rendered as a **second switch nested under the first** in the
-agent form's General section and shown only while the offer is on.
+instance summary), rendered as a **second switch nested under the first** and
+shown only while the offer is on — originally an indented row in the agent
+form's General section, now (§17, Amendment C) inside the reasoning card's own
+sub-form area in the Capabilities tab.
 
 | | `reasoning_enabled` (level 3) | `reasoning_default_on` (Amendment B) |
 | --- | --- | --- |
@@ -893,3 +901,51 @@ per-question choice. A preselected `True` reaches the runtime as a user `True` �
 correctly, because the user did send it and can flip it off before sending. What
 an author sets is the composer's starting position, never a per-turn override
 and never a ceiling; the ceiling remains levels 1-2 ∩ level 3 (§14.3, §14.5).
+
+---
+
+## 17. Amendment C — the toggle moves into the (renamed) Capabilities tab (2026-08-02)
+
+**Decided by the developer. A frontend-only reversal of §15's tab-placement
+argument — §15's backend conclusion (reasoning is not a capability: no
+`ConfigModel`, no `TurnOptionsModel`, no middleware, one enforcement point at
+`build_for_chat`) is untouched.**
+
+### What changed
+
+§15 moved the toggle out of the Tools tab because sitting "next to document
+access and MCP servers" implied reasoning was one more tool an agent uses.
+Since then the tab itself was renamed **Tools → Capabilities** (broader than
+"tool use" — it's now the agent's list of extra things it can do, of which
+document access and MCP servers are two examples). With the tab no longer
+named after "tools", the objection §15 recorded no longer applies verbatim,
+and the developer asked for the toggle to move back — visually — into that
+tab, rendered with the same card component every real capability uses.
+
+`CapabilityCard` (`AgentFormModal/CapabilityCard/CapabilityCard.tsx`) was
+generalized rather than given a reasoning-specific sibling: it now takes a
+plain `name`/`description`/`checked`/`onToggle` plus an optional `subForm`
+slot, so `AgentFormBody.tsx` can pass the reasoning offer's own translated
+strings and a `SwitchRow` (for the nested default-on toggle) as that slot,
+exactly the way it passes a template capability's translated `name`/
+`description` and a `CapabilityConfigForm` for its `config_fields`. One card
+component for the whole tab, not reasoning's own copy of it.
+
+### What did not change
+
+`AgentTuning.reasoning_enabled` / `ManagedAgentTuning.reasoning_enabled`
+remain plain agent properties, submitted and enforced exactly as §15/§16
+describe — this is a relocation of the form control, not a reversion to the
+§7 capability design. No `ConfigModel`, no `TurnOptionsModel`, no middleware,
+no ReAct-only restriction; enforcement stays the single `build_for_chat`
+point. `reasoning_default_on` (Amendment B) still nests under the offer, now
+inside `CapabilityCard`'s `subForm` area instead of an indented row in the
+General section.
+
+### Where it lives now
+
+| | Before (§15/§16) | Now (Amendment C) |
+| --- | --- | --- |
+| Tab | General section, under name/role/description | Capabilities tab, alongside the template's own capability cards |
+| Component | Two indented switch rows in `AgentFormBody.tsx` | The same `CapabilityCard` every real capability renders through, `name`/`description`/`subForm` supplied by `AgentFormBody.tsx`; `SwitchRow` for the nested default-on toggle |
+| Capabilities tab visibility | Hidden when the template advertises none | Always shown — the reasoning card no longer depends on `capabilities.length > 0` |

@@ -8,6 +8,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
+  cursor: pointer;
   background: var(--surface-container);
   padding: var(--spacing-xs) var(--spacing-m);
   user-select: none;
@@ -26,7 +27,6 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-3xs);
-  cursor: pointer;
   min-width: 0;
 }
 

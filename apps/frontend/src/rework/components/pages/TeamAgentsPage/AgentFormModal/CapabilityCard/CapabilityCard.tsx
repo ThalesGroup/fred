@@ -14,7 +14,7 @@
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { Fragment, type PropsWithChildren, useId, useState } from "react";
+import { Fragment, type PropsWithChildren, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -22,24 +22,49 @@ import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
 
 interface CapabilityCardProps {
-  capability: CapabilityCatalogEntry;
-  teamId?: string;
+  name: string;
+  description?: string;
   checked: boolean;
   disabled: boolean;
-  /** Per-capability config values keyed by the field's local key (matches config_fields[].key). */
-  configValues: Record<string, unknown>;
-  /** Pending asset files for this capability, keyed by AssetSlot.key (#1903). */
-  assetFiles: Record<string, File | undefined>;
   onToggle: () => void;
-  onConfigChange: (key: string, value: unknown) => void;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
-  onBlockingErrorChange: (message: string | null) => void;
+  /** Rendered inside the card's own sub-form shell (background/divider/padding)
+   *  when truthy — omit or pass `false` for a card with nothing to configure. */
+  subForm?: ReactNode;
 }
 
 /**
- * The active capability's `config_fields` form. A field whose `ui.widget`
- * resolves in the owning capability's plugin `configWidgets` renders through
- * the plugin's custom form widget (RFC §9 item 4, #1903) — a widget id is
+ * Generic toggle card for the agent form's Capabilities tab: a switch plus a
+ * name/description, and an optional sub-form area. Used for every entry in
+ * that tab — a template-provided capability (its `config_fields` rendered via
+ * {@link CapabilityConfigForm} as `subForm`) and the built-in reasoning offer
+ * (REASON-01, Amendment C — a `SwitchRow` as `subForm`) alike, so the tab has
+ * exactly one card component regardless of what's actually being toggled.
+ */
+export function CapabilityCard({ name, description, checked, disabled, onToggle, subForm }: CapabilityCardProps) {
+  return (
+    <li className={styles.card}>
+      {/* The whole header is the click target, padding included — <label>
+          wrapping the Switch as a descendant (same pattern as SwitchRow), not
+          a plain <div> whose padding sits outside a smaller inner <label>'s
+          box and swallows clicks near the card's edges. */}
+      <label className={styles.header}>
+        <Switch checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
+        <div className={styles.meta}>
+          <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{name}</span>
+          {description && <span className={styles.description}>{description}</span>}
+        </div>
+      </label>
+
+      {subForm && <div className={styles.subForm}>{subForm}</div>}
+    </li>
+  );
+}
+
+/**
+ * A template-provided capability's `config_fields` form, passed as
+ * {@link CapabilityCard}'s `subForm`. A field whose `ui.widget` resolves in
+ * the owning capability's plugin `configWidgets` renders through the
+ * plugin's custom form widget (RFC §9 item 4, #1903) — a widget id is
  * rendered at most once even when several fields name it. Remaining fields go
  * through the shared metadata-driven {@link TuningFieldRenderer}. Fields
  * sharing a `ui.group` form a visual section: a thin divider is drawn
@@ -48,7 +73,7 @@ interface CapabilityCardProps {
  * dangling dividers). Fields flagged `ui.advanced` render inside a collapsed
  * "Advanced settings" disclosure below the main section.
  */
-function CapabilityConfigForm({
+export function CapabilityConfigForm({
   capability,
   configFields,
   configValues,
@@ -122,14 +147,14 @@ function CapabilityConfigForm({
     });
 
   return (
-    <div className={styles.subForm}>
+    <>
       {renderGrouped(mainFields)}
       {advancedFields.length > 0 && (
         <AdvancedSection title={t("rework.teams.formAgent.advancedSettings")}>
           <div className={styles.advancedFields}>{renderGrouped(advancedFields)}</div>
         </AdvancedSection>
       )}
-    </div>
+    </>
   );
 }
 
@@ -148,49 +173,5 @@ function AdvancedSection({ title, children }: PropsWithChildren<{ title: string 
       </button>
       {open && children}
     </>
-  );
-}
-
-/**
- * One selectable capability in the agent Tools tab: a switch that activates
- * the capability plus, when active, its `config_fields` rendered through
- * {@link CapabilityConfigForm}.
- */
-export function CapabilityCard({
-  capability,
-  teamId,
-  checked,
-  disabled,
-  configValues,
-  assetFiles,
-  onToggle,
-  onConfigChange,
-  onAssetFileChange,
-  onBlockingErrorChange,
-}: CapabilityCardProps) {
-  const { t } = useTranslation();
-  const switchId = useId();
-  const configFields = capability.config_fields ?? [];
-  const hasOptions = checked && configFields.length > 0;
-  const displayName = t(capability.name);
-  const description = t(capability.description);
-
-  return (
-    <li className={`${styles.card} ${checked ? styles.cardActive : ""}`}>
-      <div className={styles.header}>
-        <Switch id={switchId} checked={checked} onChange={onToggle} disabled={disabled} aria-label={displayName} />
-        <label htmlFor={switchId} className={styles.meta}>
-          <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{displayName}</span>
-          {description && <span className={styles.description}>{description}</span>}
-        </label>
-      </div>
-
-      {hasOptions && (
-        <CapabilityConfigForm
-          {...{ capability, configFields, configValues, disabled, teamId, assetFiles, onConfigChange }}
-          {...{ onAssetFileChange, onBlockingErrorChange }}
-        />
-      )}
-    </li>
   );
 }
