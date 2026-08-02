@@ -547,7 +547,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -714,7 +714,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "3.4.1"
+version = "3.4.2"
 source = { editable = "../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -727,6 +727,7 @@ dependencies = [
     { name = "langchain-mcp-adapters" },
     { name = "langfuse" },
     { name = "langgraph" },
+    { name = "mcp" },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -748,6 +749,7 @@ requires-dist = [
     { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
     { name = "langfuse", specifier = ">=3.0.0" },
     { name = "langgraph", specifier = ">=1.2.9" },
+    { name = "mcp", specifier = ">=1.24.0,<2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
