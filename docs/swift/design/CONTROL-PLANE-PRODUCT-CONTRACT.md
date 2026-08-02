@@ -1539,7 +1539,10 @@ facts below are the canonical contract; design deliberation/history stays in
   then per tag, then per document (tag/document ids read before step 2 so a
   `tag#parent@tag` / `document#parent@tag` tuple never survives as an orphan
   once its own Postgres row is gone); (2) Postgres, one transaction —
-  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`.
+  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`,
+  `prompt_category` (2026-08-02: added — the starter-kit categories seeded at
+  team creation were left orphaned by earlier builds, breaking re-seeding for
+  a team id reused after a reset).
   Preserved identities: `platformbootstrap.completed_by` ∪ the caller. Every
   step is delete-if-exists/idempotent — a crash mid-run and a retry converge
   to the same end state. Object storage and vector embeddings are never
@@ -1847,6 +1850,10 @@ Every prompt returned by the API is now a real, persisted, editable team row
 - `DELETE` returns **409** while any prompt in the team still references the
   category — a hard block, never an automatic reassignment of the orphaned
   prompt(s)
+- `POST /teams/{team_id}/prompts/{prompt_id}/promote` (copy-by-value to
+  `target_team_id`) carries over `emoji`/`tags` but never `category_id` —
+  the source category belongs to the source team, so it cannot resolve in
+  the target team; the copy lands uncategorized (2026-08-02)
 
 **Team creation seeds a starter kit.** `create_team` now creates, right after
 the ReBAC bootstrap succeeds: 4 categories ("Création agent", "Analyse et
