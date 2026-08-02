@@ -621,7 +621,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "3.7.1"
+version = "3.7.2"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
