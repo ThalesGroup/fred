@@ -250,6 +250,13 @@ def test_type_key_for_class_survives_a_hostile_metaclass():
     class HostileMeta(type):
         def __getattribute__(cls, name):
             if name in ("__module__", "__qualname__", "__name__"):
+                # Deliberately non-standard (a real __getattribute__ should
+                # only ever raise AttributeError): getattr()'s own built-in
+                # fallback already covers a conforming implementation, so a
+                # plain AttributeError here wouldn't exercise the new
+                # try/except Exception in _type_key_for_class at all. This
+                # class exists specifically to prove that guard survives
+                # non-conforming real-world code too.
                 raise RuntimeError("nope")
             return type.__getattribute__(cls, name)
 
