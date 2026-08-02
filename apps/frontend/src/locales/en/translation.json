@@ -1729,6 +1729,7 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
+        "moreActions": "More actions",
         "search": {
           "ariaLabel": "Search for a member",
           "clearAriaLabel": "Clear search",

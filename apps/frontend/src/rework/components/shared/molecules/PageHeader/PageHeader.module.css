@@ -29,6 +29,13 @@
   min-width: 0;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
 .title {
   margin: 0;
   color: var(--on-surface);

@@ -18,6 +18,11 @@ import styles from "./PageHeader.module.css";
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
+  /** Optional icon button (e.g. a page-level "more" menu) rendered immediately
+   *  to the right of the `<h1>`, inside the title row — distinct from `actions`,
+   *  which renders as a separate block right-aligned at the far end of the
+   *  header. Omit to render nothing. */
+  titleAction?: ReactNode;
   actions?: ReactNode;
   /** Optional "you are here" trail or one-off link rendered above the title row. */
   breadcrumb?: ReactNode;
@@ -35,13 +40,16 @@ interface PageHeaderProps {
  * aligns to the top when there is one, so `actions` sits at the title's
  * baseline instead of drifting down toward the two-line block's middle.
  */
-export default function PageHeader({ title, subtitle, actions, breadcrumb, tabs }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, titleAction, actions, breadcrumb, tabs }: PageHeaderProps) {
   return (
     <div className={styles.wrapper}>
       {breadcrumb && <div className={styles.breadcrumb}>{breadcrumb}</div>}
       <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
         <div className={styles.titleBlock}>
-          <h1 className={styles.title}>{title}</h1>
+          <div className={styles.titleRow}>
+            <h1 className={styles.title}>{title}</h1>
+            {titleAction}
+          </div>
           {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
         </div>
         {actions && <div className={styles.actions}>{actions}</div>}
