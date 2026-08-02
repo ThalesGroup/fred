@@ -1,37 +1,25 @@
 .card {
-  transition: border-color 0.15s;
-  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   overflow: hidden;
   color: var(--on-surface);
 }
 
-.card:not(.cardActive):hover {
-  border-color: var(--outline);
-}
-
-.cardActive {
-  border-color: var(--primary);
-}
-
 .header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
-  /* Inset by the card's border-width so this full-bleed background's own
-     curve lines up with the border's inner edge — relying on the parent's
-     overflow: hidden alone to clip a square corner here leaves a visible
-     seam/thinning right on the arc, worse once :hover repaints the border.
-     All four corners when it's the only child (no config sub-form below);
-     top corners only when a sub-form follows. */
-  border-radius: calc(var(--radius-s) - 1px);
-  background: var(--surface-container-low);
-  padding: var(--spacing-s) var(--spacing-m);
+  gap: var(--spacing-m);
+  cursor: pointer;
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-m);
   user-select: none;
 }
 
-.header:not(:last-child) {
-  border-radius: calc(var(--radius-s) - 1px) calc(var(--radius-s) - 1px) 0 0;
+.header:hover {
+  /* Layers the standard on-surface/8% state tint on top of the header's own
+     surface-container fill, same token used for hover elsewhere
+     (state-on-surface-hover), via a second background layer rather than a
+     plain swap so the base tone still shows through underneath. */
+  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
 }
 
 .meta {
@@ -39,7 +27,6 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-3xs);
-  cursor: pointer;
   min-width: 0;
 }
 
@@ -48,10 +35,8 @@
   font: var(--font-body-large);
 }
 
-/* Emphasis only — same font metrics as .name so toggling never shifts the list */
 .nameActive {
   color: var(--primary);
-  font-weight: 600;
 }
 
 .description {
@@ -65,9 +50,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   border-top: 1px solid var(--outline-muted);
-  /* Same inset-radius reasoning as .header — this is always the card's
-     last child when present, so only the bottom corners need it. */
-  border-radius: 0 0 calc(var(--radius-s) - 1px) calc(var(--radius-s) - 1px);
   background: var(--surface-container);
   padding: var(--spacing-m);
 }

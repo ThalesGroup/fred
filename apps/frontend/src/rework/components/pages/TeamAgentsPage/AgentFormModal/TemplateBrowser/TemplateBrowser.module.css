@@ -30,12 +30,14 @@
 
 .grid {
   display: grid;
-  /* Fixed track width + auto-fit + justify-content: center, same pattern as
-     TeamAgentsPage's .agentList — with auto-fill's flexible minmax(…,1fr),
-     unfilled tracks still claim their share of the row (they just render
-     empty), so a single card stays pinned to the left instead of centering. */
-  grid-template-columns: repeat(auto-fit, 240px);
-  justify-content: center;
+  /* Exactly 2 equal-width columns, left-aligned (grid's own default flow —
+     no justify-content needed). minmax(0, …) rather than a bare 1fr keeps
+     the column from growing to an ellipsis-clamped card's untruncated
+     content width (see TemplateCard's `min-width: 0`). A lone card on the
+     last row simply occupies column 1 — it doesn't span/stretch since
+     nothing declares grid-column, unlike auto-fit which would have
+     collapsed the empty second track. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-m);
 }
 

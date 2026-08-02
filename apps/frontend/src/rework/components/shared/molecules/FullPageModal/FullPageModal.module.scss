@@ -10,6 +10,11 @@
   width: 100%;
   height: 100%;
   overflow-y: auto;
+  /* Always reserve the scrollbar's width, whether or not content actually
+     overflows — otherwise centered content (margin: auto) shifts left the
+     moment a scrollbar appears/disappears as the modal's own content grows
+     past the viewport height. */
+  scrollbar-gutter: stable;
 
   &[data-background="container"] {
     background: var(--surface-container);
