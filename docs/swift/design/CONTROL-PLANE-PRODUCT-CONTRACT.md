@@ -292,7 +292,7 @@ The control plane is a **pure proxy** for these values — it does not interpret
   Requiredness for pre-#2105 agents (whose stored value defaults to `""`)
   is enforced by the agent edit form blocking Save when empty, the same
   pattern already used for `display_name`, not by the API contract itself.
-- ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open. See RFC AGENT-CAPABILITY-RFC §3.3/§3.7.
+- ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
   agent tuning values at enrollment; keys constrained to
@@ -735,8 +735,7 @@ See `docs/swift/design/FILESYSTEM.md`.
 > Previously a `null` selection skipped the `can_use` ReBAC check entirely at
 > every layer (save, session prep, and the runtime's MCP-server activation),
 > letting a team obtain an admin-gated capability for free by submitting no
-> selection. See `AGENT-CAPABILITY-RFC.md` §8.1's dated fix note for the full
-> mechanism, including the required one-off backfill for instances persisted
+> selection. Fixed with a required one-off backfill for instances persisted
 > before this change.
 
 **Execution preparation:**
@@ -1191,8 +1190,7 @@ with "Reset platform". New authz-endpoint-matrix.yaml row for `POST
 
 ### Admin capability-enablement routes
 
-**2026-07-11 — Routes fixed (CAPAB-01 / RFC `AGENT-CAPABILITY-RFC.md` §8.5;
-backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
+**2026-07-11 — Routes fixed (CAPAB-01, backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
 capability enablement model. All routes are platform-admin-gated: the mutations
 check `capability#can_manage` (the capability is anchored first, idempotently);
 the aggregate list checks the equivalent `organization#can_manage_platform`.
@@ -1223,8 +1221,7 @@ feedback. Frontend consumes the generated hooks via the friendly aliases
 `useDisableTeamCapabilityMutation` / `useSetCapabilityDefaultOnMutation` in
 `controlPlaneApiEnhancements.ts`; the dashboard lives at `/admin/capabilities`.
 
-**2026-07-16 — personal-space class scope (CAPAB-01 / #1961, RFC
-`AGENT-CAPABILITY-RFC.md` §8.4 amendment).** The personal-space capability class
+**2026-07-16 — personal-space class scope (CAPAB-01 / #1961 amendment).** The personal-space capability class
 is now pure FGA runtime state, admin-toggleable like `default_on` — replacing the
 withdrawn config-only `platform.capabilities.personal_defaults` first-touch
 seeding. One new route (org-admin-gated on `capability#can_manage`, same as
@@ -1246,8 +1243,7 @@ personal-class position, which beats `default_on`. Frontend consumes the
 renders the class as a synthetic pinned "All personal spaces" first row and drops
 the admin's own personal team from the ordinary per-team rows.
 
-**2026-07-17 — agent templates join this surface (CAPAB-01, `AGENT-CAPABILITY-RFC.md`
-§8.6).** `CapabilityEnablementItem` and
+**2026-07-17 — agent templates join this surface (CAPAB-01).** `CapabilityEnablementItem` and
 `CapabilityCatalogEntry` gained `kind: "tool" | "agent"` (defaults `"tool"`,
 so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
@@ -1277,7 +1273,7 @@ shape or request/response change — enforcement now resolves through
 `platform_admin` instead of the retired `admin` relation.
 
 **2026-07-19 — `depends_on` gate for `kind="agent"` capabilities (GitHub
-#2004, CTRLP-14; design in `AGENT-CAPABILITY-RFC.md` §8.6).**
+#2004, CTRLP-14).**
 `CapabilityCatalogEntry` gained `default_capability_ids: tuple[str, ...]`
 (the template's default tool/MCP capabilities, empty for `kind="tool"`).
 `PUT /admin/capabilities/{capability_id}/teams/{team_id}` and
@@ -1288,6 +1284,76 @@ an agent whose tools aren't granted yet. `PATCH /teams/{team_id}/agent-instances
 now 403s once the instance's own template grant is revoked (previously only
 *tool* capability selections were re-checked on update; unenroll is still
 always allowed).
+
+**2026-07-26 — `kind="model"`, a third projection (CAPAB-01/OBSERV-02).**
+`CapabilityCatalogEntry`/`CapabilityEnablementItem.kind` widens to `"tool" |
+"agent" | "model"`. A model entry is a **catalog projection, not an authored
+manifest** — like `kind="agent"`, no one hand-writes a `kind="model"`
+`CapabilityManifest`; `models_catalog.yaml` (fred-agents, loaded by
+`fred_runtime.model_routing.catalog`) stays the sole source of truth for
+routing. Every mechanism already built for `kind="tool"`/`kind="agent"` —
+schema, `can_use`, the enablement write path, the admin dashboard — governs
+`kind="model"` uniformly; `CapabilitiesPage.tsx` needed only a widened
+`KIND_FILTERS` value and one i18n key, no `kind`-specific branch anywhere
+else (the team matrix, health column, and default-on toggle are all
+kind-agnostic).
+
+**Catalog projection, cross-pod.** `fred-runtime` exposes
+`GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
+per distinct `(provider, name)` pair — not per `profile_id` (a model used by
+both the `chat` and `language` capability is one enablement decision, the
+unit an admin actually reasons about) — and deriving the id itself
+(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+(`product/service.py::_model_capabilities_for_source`) fetches that endpoint
+per runtime source as a third catalog fetch alongside the existing tool and
+agent fetches (same best-effort contract — `None` on an unreachable pod),
+under the reserved-prefix collision guard `MODEL_CAPABILITY_NAMESPACE_PREFIX`
+(`model__`). **Multi-pod collision is a union, not last-write-wins**: on an id
+collision across pods, `aggregate_capability_catalog` unions
+`model_profile_ids`/`model_thinking_profile_ids` rather than letting the last
+pod fetched overwrite the entry (fixed 2026-08-01 — the original
+last-registration-wins shape silently dropped profiles from whichever pod
+lost the race).
+
+**`CapabilityCatalogEntry` is not a uniform shape across kinds — it is a
+tagged union in practice.** `model_profile_ids: tuple[str, ...]` and
+`model_thinking_profile_ids: tuple[str, ...]` (REASON-01, §33) are real
+fields carried **only** for `kind="model"` — empty for `tool`/`agent`, never
+the reverse. `config_fields`, `team_settings_fields`, `assets`, and
+`default_capability_ids` are conversely always empty for `kind="model"`.
+Treat `kind` as the discriminator when reading this type; a per-kind field
+being present or empty is the contract, not an implementation detail to
+paper over.
+
+**Runtime enforcement is fail-closed and differs by kind, deliberately.**
+`kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
+gates tool selection and template enrollment, and both suspend/revive
+dependent agent instances on revocation/grant (`enablement.py`, `impact.py`).
+`kind="model"` has no equivalent write-time surface (model choice is a
+per-turn runtime decision), so it enforces **per turn** instead:
+`usable_model_capability_ids(rebac, team_id)` — the pod's own local OpenFGA
+`ListObjects` query, computed once per turn at the same point
+`_authorize_execution_or_raise` runs (not inside model routing itself) —
+threads through `BoundRuntimeContext.usable_model_ids` (`None` = ReBAC
+disabled, no restriction; a non-`None` tuple = exactly what's allowed).
+`RoutedChatModelFactory.build_for_chat` checks the resolved model against it
+and fails closed (`ModelNotUsableError`), never silently substituting. The
+query itself lives in one place —
+`fred_core.security.rebac.capability_authz.usable_capability_ids` (moved
+2026-08-03; control-plane's `capabilities/authz.py` re-exports it,
+fred-runtime's `usable_model_capability_ids` wraps it with the
+ReBAC-disabled tolerance and `kind="model"`-prefix filter that are
+runtime-specific) — not two independently-maintained copies.
+
+**No auto-seeding migration, by design.** No team holds an explicit
+`can_use` grant on any `model__*` capability until a `platform_admin`
+opts one in via the existing kind-agnostic `PUT
+/admin/capabilities/{id}/default-on` (`team_scope` for `kind="model"` stays
+`ADMIN_GATED`, same as the other kinds). Consequence: on a deployment where
+ReBAC is already active for a team, the platform_admin must toggle
+default-on for the desired model(s) in the same deploy window ReBAC
+enforcement reaches that team, or that team's chat fails closed until the
+toggle is flipped — a deploy-runbook step, not a code gap.
 
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
@@ -1357,7 +1423,7 @@ teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writabl
 
 ### Multipart companion routes for agent saves that carry capability assets
 
-An asset-bearing capability (first: `ppt_filler`, AGENT-CAPABILITY-RFC §3.4)
+An asset-bearing capability (first: `ppt_filler`)
 needs its uploaded file to travel INSIDE the atomic agent save so the pod's
 `validate_config` can parse it, store the binary, and persist the derived
 config in one step. Two additive routes relay that multipart; the existing
@@ -2014,7 +2080,7 @@ consequences worth stating:
 
 1. **`ChatControlDescriptor.capability_id` now has a reserved value**,
    `PLATFORM_CHAT_CONTROL_OWNER = "platform"`. Before this, every chat control
-   came from a capability (`AGENT-CAPABILITY-RFC.md` §3.3); that statement is no
+   came from a capability (`docs/swift/capabilities/AUTHORING.md`); that statement is no
    longer true. The frontend needed no change — its registry already falls back
    to the capability-agnostic stock kit by widget id when no plugin claims the
    `(capability_id, widget)` pair.
@@ -2259,13 +2325,12 @@ itself and the two dedicated tabs are untouched; these dashboards link to
 them rather than re-render them. See `TASK-EVENT-STREAM-RFC.md` §2.10 for the
 task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
 Models-as-capability (`kind="model"` catalog projection, model-routing
-fail-closed enforcement) is specified in `AGENT-CAPABILITY-RFC.md` §8.7, not
-repeated here.
+fail-closed enforcement) is specified above, not repeated here.
 
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
 
 A team (or personal space) chooses which of the models already available to
-it (`can_use`-enabled per `AGENT-CAPABILITY-RFC.md` §8.7) is the default for
+it (`can_use`-enabled, see above) is the default for
 managed execution, and may override that default for specific operations
 (e.g. `planning`). This feature never grants new model access — it only lets
 the holder of existing access express a preference among it. Runtime-side
@@ -2291,7 +2356,7 @@ since two profiles can share one `(provider, name)`) is not currently
 `can_use`-enabled for the team, **and** rejects any profile not present on
 **every** enabled, model-capable pod
 (`capabilities/catalog.py::universally_available_model_profile_ids`,
-intersection — not the union `AGENT-CAPABILITY-RFC.md` §8.7's admission
+intersection — not the union this section's admission
 catalog uses, since whichever pod serves a turn must resolve the chosen
 profile or fail closed at runtime). The `available-models` picker (§ below)
 applies the same intersection filter, so it never offers what the write

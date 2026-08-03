@@ -2,7 +2,7 @@
 
 **Status:** Draft for team review. Model and MCP-server allowlisting are out
 of this RFC's scope — per-team/personal-space model enablement is governed
-by the models-as-capability system (`AGENT-CAPABILITY-RFC.md` §8.7, ReBAC
+by the models-as-capability system (`CONTROL-PLANE-PRODUCT-CONTRACT.md`, ReBAC
 `can_use` grants, `/admin/capabilities?kind=model`) and team routing binds
 against it directly (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37). This RFC's
 remaining scope — `storage`, `ingestion`, `size`, `deletion_retention`,
@@ -272,7 +272,7 @@ the violated field.
 ### 7.1 Managed-agent configuration
 
 A per-instance model selector is bounded by `can_use` capability enablement
-(`AGENT-CAPABILITY-RFC.md` §8.7), not by a field in this RFC.
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md`), not by a field in this RFC.
 
 Every selected MCP server ID must belong to `allowed_mcp_server_ids` when that
 allowlist is non-null.

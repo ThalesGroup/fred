@@ -1445,12 +1445,7 @@ neither `tools()` nor `middleware()`-based capabilities (`dt-agents/aegis`,
 agents (deterministic multi-step workflows, not just ReAct loops) had no way to reuse a
 shared capability like `document_access` — every Graph agent that needed the same
 document search had to hand-roll it via `declared_tool_refs`/`invoke_tool` instead. See
-RFC §3.2/§3.9 for the full design; `docs/swift/capabilities/AUTHORING.md` for the
-authoring-facing summary.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.1.
+`docs/swift/capabilities/AUTHORING.md` for the authoring-facing summary.
 
 ---
 
@@ -1498,10 +1493,6 @@ landing enforced this for the *tools it built*; these four gaps were in what fed
 mechanism (an undeclared incompatible capability, an artifact with nothing in it, an
 ambiguous tool identity, an unguarded sync path) — each one a way the "never silently
 degrade" rule could be violated without tripping any of the loud checks §8.22 added.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
 
 ---
 
@@ -1592,10 +1583,6 @@ universal, a diagnostic that vanished exactly when it mattered most, an event
 that misreported its own tool's answer, an adapter narrower than the contract
 it claims to implement, and a doc claim broader than the code beneath it.
 
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.4.
-
 ---
 
 ### 8.25 ✅ `execution_models` can no longer be silently forgotten; two more Graph diagnostics fixed (2026-07-23)
@@ -1647,10 +1634,6 @@ couldn't tell an author had never made that declaration at all, plus two
 more spots where a real diagnostic still silently evaporated on the one path
 (Graph) that only ever sees the artifact half of a tool's answer.
 
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
-
 ---
 
 ### 8.26 ✅ `execution_models` boot check closed on the VALUE, not the declaration; graph KPI status fixed (2026-07-23)
@@ -1682,10 +1665,6 @@ author writes the wrong value on purpose, not just when they forget to
 write anything. And a failing tool call must look like a failure
 everywhere it's recorded — the trace event (§8.24), the span (§8.25), and
 now the KPI metric a dashboard or alert would actually query.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9.
 
 ---
 

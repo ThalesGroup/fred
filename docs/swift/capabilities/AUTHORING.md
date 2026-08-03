@@ -4,7 +4,7 @@
 > here is defined in `fred-sdk` and worked end-to-end in one in-tree reference
 > capability. This page tells you *which* file to read and *when* — it never restates
 > a field. When the SDK surface changes, the SDK changes; this map does not need a
-> rewrite. (RFC [`AGENT-CAPABILITY-RFC.md`](../rfc/AGENT-CAPABILITY-RFC.md) §14.)
+> rewrite.
 >
 > Authoring a capability with an assistant? Use the **`add-fred-capability` Skill**
 > (`.claude/skills/add-fred-capability/`) — it is the executable form of this map.

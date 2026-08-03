@@ -2,7 +2,7 @@
 
 **Status: superseded as design source (2026-07-23).** This branch's work is complete
 and now documented as the platform's actual state in
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2/§3.9/§5.1 (design),
+`docs/swift/capabilities/AUTHORING.md` (design),
 `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22 (implementation record), and
 `docs/swift/capabilities/AUTHORING.md` (authoring guidance) — read those first. This
 file stays only as the compact implementation log a handful of docstrings point to by

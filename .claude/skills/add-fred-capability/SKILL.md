@@ -6,7 +6,7 @@ user-invocable: true
 
 Add a new Fred **capability** — one modular agent feature carried end to end by one
 object (declaration + `tools()`, its execution-model-agnostic runtime), not a feature
-scattered across the codebase (RFC `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §1–§2).
+scattered across the codebase.
 
 **The code is the spec; you are the map.** Read the live types and the in-tree pilot
 before writing anything; never restate a manifest field from memory — it drifts.

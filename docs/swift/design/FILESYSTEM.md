@@ -39,7 +39,7 @@ The UI labels are product names. The backend paths are implementation details.
 | Mon espace | `/teams/{team}/users/{uid}/...` | the owning user |
 | Espace d'equipe | `/teams/{team}/shared/...` | humans with team update permission |
 | Agents | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | the running agent for that user, via runtime adapter |
-| Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, AGENT-CAPABILITY-RFC §3.4) |
+| Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, see docs/swift/capabilities/AUTHORING.md) |
 
 Earlier target notes described a `/teams/{team}/resources/...` path; the current
 shipped implementation exposes corpus content through the separate `/corpus/...`
