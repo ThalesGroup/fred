@@ -16,17 +16,14 @@
 Pod-side "which models may this team use" — the runtime enforcement half of
 `kind="model"` capabilities (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
 
-**Deliberate small duplication, not a new pattern.** This mirrors
-`control_plane_backend/capabilities/authz.py::usable_capability_ids` (and its
-`_team_subject_and_context` helper) field-for-field — same OpenFGA relations,
-same personal-team contextual-edge handling, same `CAN_USE`/`Resource.CAPABILITY`
-check. It could not simply be imported: control-plane and fred-runtime are
-separate deployables with no shared import path for control-plane-local code.
-The right long-term fix is moving this query logic into `fred-core` (both
-services already depend on it) so there is exactly one copy; that is real,
-separate refactor scope against already-shipped, tested control-plane code,
-deliberately not attempted under this branch's time budget — tracked in
-`NOTES-OBSERV-02-FOLLOWUPS.md`.
+The team-subject `can_use` query itself
+(`fred_core.security.rebac.capability_authz.usable_capability_ids`) is shared
+with control-plane's `capabilities/authz.py`, which needs the exact same
+query for its own catalog-listing/agent-save checks (2026-08-03, RSK-B
+follow-up to #2191 — this file used to keep an independent, field-for-field
+copy; see `NOTES-OBSERV-02-FOLLOWUPS.md` #16 for why that existed). This
+module's own job is just the model-specific slice on top: tolerate `rebac is
+None`, and filter the result down to `kind="model"` ids.
 
 Why this needs to exist AT ALL, unlike every other capability kind: `kind="tool"`/
 `kind="agent"` enforcement happens entirely control-plane-side, at
@@ -41,37 +38,11 @@ knowable in advance, so the check has to happen where the resolution happens.
 
 from __future__ import annotations
 
-from fred_core import CapabilityPermission, RebacDisabledResult
-from fred_core.common import is_personal_team_id
-from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    RebacEngine,
-    RebacReference,
-    Relation,
-    RelationType,
+from fred_core import RebacEngine
+from fred_core.security.rebac.capability_authz import (
+    usable_capability_ids as _usable_capability_ids,
 )
 from fred_sdk.contracts.capability.manifest import MODEL_CAPABILITY_NAMESPACE_PREFIX
-
-
-def _team_subject_and_context(team_id: str) -> tuple[RebacReference, list[Relation]]:
-    """Team check subject + the contextual `organization#team` reverse edge.
-
-    Identical to control-plane's helper of the same name — see module
-    docstring for why this isn't a shared import.
-    """
-    team_ref = RebacReference(type=Resource.TEAM, id=team_id)
-    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
-    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
-    if is_personal_team_id(team_id):
-        context.append(
-            Relation(
-                subject=team_ref,
-                relation=RelationType.PERSONAL_TEAM,
-                resource=org_ref,
-            )
-        )
-    return team_ref, context
 
 
 async def usable_model_capability_ids(
@@ -90,15 +61,9 @@ async def usable_model_capability_ids(
     """
     if rebac is None or not rebac.enabled:
         return None
-    team_ref, context = _team_subject_and_context(team_id)
-    refs = await rebac.lookup_resources(
-        team_ref,
-        CapabilityPermission.CAN_USE,
-        Resource.CAPABILITY,
-        contextual_relations=context,
-    )
-    if isinstance(refs, RebacDisabledResult):
+    ids = await _usable_capability_ids(rebac, team_id)
+    if ids is None:
         return None
     return frozenset(
-        ref.id for ref in refs if ref.id.startswith(MODEL_CAPABILITY_NAMESPACE_PREFIX)
+        cid for cid in ids if cid.startswith(MODEL_CAPABILITY_NAMESPACE_PREFIX)
     )

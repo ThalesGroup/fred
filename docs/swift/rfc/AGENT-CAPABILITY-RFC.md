@@ -1965,14 +1965,16 @@ with both constraints:
   against it and **fails closed** — raises `ModelNotUsableError`, never
   silently substitutes — when the set is present and the model isn't in it.
 
-**Deliberate small duplication, not resolved here:** `usable_model_capability_ids`
-mirrors control-plane's `capabilities/authz.py::usable_capability_ids` field-
-for-field (same OpenFGA relations, same personal-team contextual-edge
-handling) because that control-plane module cannot be imported into
-fred-runtime (separate deployables). The correct long-term fix — move this
-query logic into `fred-core`, which both already depend on — is real,
-separate refactor scope against already-shipped, tested control-plane code;
-tracked in `NOTES-OBSERV-02-FOLLOWUPS.md`, not attempted under this branch.
+**✅ Duplication resolved 2026-08-03 (RSK-B, #2191 follow-up):**
+`usable_model_capability_ids` used to mirror control-plane's
+`capabilities/authz.py::usable_capability_ids` field-for-field because that
+control-plane module could not be imported into fred-runtime (separate
+deployables). The shared query now lives in
+`fred_core.security.rebac.capability_authz.usable_capability_ids` (both
+already depend on `fred-core`) — control-plane's `authz.py` re-exports it,
+`usable_model_capability_ids` wraps it with the `rebac is None` tolerance and
+`kind="model"`-prefix filter that are fred-runtime-specific. Exactly one copy
+of the query logic now.
 
 **✅ Deployment-sequencing hazard — resolved 2026-07-27 (no migration built):**
 today, no team holds an explicit `can_use` grant on any `model__*` capability
