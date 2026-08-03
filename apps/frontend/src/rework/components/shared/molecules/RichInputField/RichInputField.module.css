@@ -11,33 +11,39 @@
   display: flex;
   justify-content: center;
   /* Fade from transparent so the field appears to float above the thread */
-  background: linear-gradient(to bottom, transparent 0%, var(--surface-container-lowest) 40%);
+  background: linear-gradient(to bottom, transparent 0%, var(--surface-main) 40%);
   padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
 }
 
 .field {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-xs);
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
     box-shadow 120ms ease;
   box-shadow: var(--shadow-s);
-  border: 1px solid var(--outline-retreat);
-  border-radius: var(--radius-xl);
-  background: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-s);
   width: 100%;
   max-width: 720px;
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {
+  /* Small, subtle primary-tinted glow on top of the resting elevation shadow —
+     just enough to read as "active", not a full elevation change. */
+  box-shadow:
+    var(--shadow-s),
+    0 0 6px 1px color-mix(in srgb, var(--primary) 25%, transparent);
   border-color: var(--primary);
-  background: var(--surface-container-high);
+  background: var(--surface-container-highest);
 }
 
 .field:hover:not(:focus-within):not(:has(.textarea:disabled)) {
-  border-color: var(--outline);
+  border-color: var(--outline-retreat);
 }
 
 .field:has(.textarea:disabled) {
@@ -48,7 +54,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-2xs);
-  margin-bottom: var(--spacing-2xs);
 }
 
 .inlineRow {
@@ -64,7 +69,8 @@
   outline: none;
   border: none;
   background: transparent;
-  padding: var(--spacing-2xs) 0;
+  padding-right: var(--spacing-xs);
+  padding-left: var(--spacing-xs);
   width: 100%;
   min-height: 36px;
   max-height: 200px;
@@ -84,7 +90,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding-top: var(--spacing-2xs);
   min-height: 36px;
 }
 
@@ -115,6 +120,12 @@
   gap: var(--spacing-2xs);
 }
 
+/* Send / stop / voice are the shared IconButton atom; keep the subtle pop-in
+   as they appear (e.g. the send button when the draft becomes non-empty). */
+.actionGroup > button {
+  animation: sendBtnIn 120ms ease;
+}
+
 @keyframes sendBtnIn {
   from {
     transform: scale(0.7);
@@ -123,89 +134,5 @@
   to {
     transform: scale(1);
     opacity: 1;
-  }
-}
-
-.sendBtn {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  animation: sendBtnIn 120ms ease;
-  transition: opacity 120ms ease;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--radius-s);
-  background: var(--primary);
-  width: 32px;
-  height: 32px;
-  color: var(--on-primary);
-}
-
-/* Send button greys out when it cannot be used (e.g. attachments still uploading). */
-.sendBtn:disabled:not(.voiceBtn) {
-  cursor: default;
-  background: var(--state-surface-main-disabled);
-  color: var(--state-on-surface-disabled);
-}
-
-/* The voice button keeps its own palette; it just fades when disabled. */
-.voiceBtn:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
-
-.sendBtn:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.sendBtn:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.sendBtn .material-symbols-outlined {
-  font-size: 18px;
-}
-
-/* Filled square rendered via CSS — guaranteed fill regardless of icon font variant */
-.stopIcon {
-  display: block;
-  border-radius: 2px;
-  background: currentColor;
-  width: 11px;
-  height: 11px;
-}
-
-.voiceBtn {
-  background: var(--secondary-container);
-  color: var(--on-secondary-container);
-}
-
-.voiceBtnIdle {
-  background: var(--secondary-container);
-  color: var(--on-secondary-container);
-}
-
-.voiceBtnRecording {
-  background: var(--error-container);
-  color: var(--on-error-container);
-}
-
-.voiceBtnBusy {
-  background: var(--surface-container-highest);
-  color: var(--on-surface);
-}
-
-.spinningIcon {
-  animation: voiceSpin 1s linear infinite;
-}
-
-@keyframes voiceSpin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 }

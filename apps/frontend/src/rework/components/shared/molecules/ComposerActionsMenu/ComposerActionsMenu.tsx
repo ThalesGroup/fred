@@ -15,14 +15,27 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { type IconProps } from "@shared/atoms/Icon/Icon";
 import styles from "./ComposerActionsMenu.module.css";
 
 interface ComposerActionsMenuProps {
   disabled?: boolean;
+  /** Trigger glyph — defaults to the "add" (+) icon. */
+  icon?: IconProps;
+  /** aria-label for the trigger button; defaults to the add-menu string. */
+  openAriaLabel?: string;
+  /** aria-label for the opened popover; defaults to the add-menu string. */
+  dialogAriaLabel?: string;
   children?: ReactNode | ((controls: { closeMenu: () => void }) => ReactNode);
 }
 
-export function ComposerActionsMenu({ disabled = false, children }: ComposerActionsMenuProps) {
+export function ComposerActionsMenu({
+  disabled = false,
+  icon = { category: "outlined", type: "add" },
+  openAriaLabel,
+  dialogAriaLabel,
+  children,
+}: ComposerActionsMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,16 +68,19 @@ export function ComposerActionsMenu({ disabled = false, children }: ComposerActi
   return (
     <div ref={containerRef} className={styles.container} data-open={open}>
       <IconButton
-        color="on-surface"
         variant="icon"
         size="small"
-        icon={{ category: "outlined", type: "add" }}
-        aria-label={t("chatbot.composerActions.openAria")}
+        icon={icon}
+        aria-label={openAriaLabel ?? t("chatbot.composerActions.openAria")}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       />
       {open && (
-        <div className={styles.menu} role="dialog" aria-label={t("chatbot.composerActions.dialogAria")}>
+        <div
+          className={styles.menu}
+          role="dialog"
+          aria-label={dialogAriaLabel ?? t("chatbot.composerActions.dialogAria")}
+        >
           {children ? (
             <div className={styles.menuBody}>{typeof children === "function" ? children({ closeMenu }) : children}</div>
           ) : null}

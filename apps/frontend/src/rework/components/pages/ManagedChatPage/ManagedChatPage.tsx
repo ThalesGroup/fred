@@ -21,7 +21,6 @@ import { RichInputField } from "@shared/molecules/RichInputField/RichInputField"
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
-import { ContextPromptChips } from "@shared/molecules/ContextPromptChips/ContextPromptChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
@@ -36,6 +35,10 @@ import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  type ContextPromptSummary,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -134,13 +137,33 @@ export default function ManagedChatPage() {
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
   // The composer options menu always renders: even when an agent exposes no
-  // search options, the chat-context prompts row is always available (personal +
+  // search options, the prompt-library row is always available (personal +
   // team library + platform defaults).
 
-  // Attached chat-context prompts resolved to their summaries, in selection order.
-  const attachedContextPrompts = chat.contextPromptIds
-    .map((id) => chat.contextPrompts.find((prompt) => prompt.id === id))
-    .filter((prompt): prompt is (typeof chat.contextPrompts)[number] => prompt != null);
+  // Picking a library prompt inserts its content straight into the composer draft
+  // (it is not attached as a session-context chip). The prompt text lives on the
+  // full record, not the summary, so we fetch it on demand; personal-scope prompts
+  // are stored under the user's personal team, team-scope under the chat team.
+  const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  // Bumped alongside chat.setInput below to ask RichInputField to refocus with
+  // the caret at the end of the just-inserted prompt (batched into one render).
+  const [focusEndRequestId, setFocusEndRequestId] = useState(0);
+  const insertContextPrompt = async (prompt: ContextPromptSummary) => {
+    const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
+    if (!promptTeamId) return;
+    try {
+      const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
+      const text = detail.text?.trim();
+      if (!text) return;
+      chat.setInput(chat.input.trim().length > 0 ? `${chat.input}\n\n${text}` : text);
+      setFocusEndRequestId((n) => n + 1);
+    } catch {
+      showError({
+        summary: t("chatbot.contextPrompts.insertErrorSummary"),
+        detail: t("chatbot.contextPrompts.insertErrorDetail"),
+      });
+    }
+  };
 
   const reportVoiceInputError = (message: string) => {
     showError({
@@ -197,6 +220,28 @@ export default function ManagedChatPage() {
     if (files.length > 0) addAttachments(files, "drop");
   };
 
+  // Shared composer state read/written by every chat-turn control, mounted in
+  // both the "add" (primary) and "tune" (tools) popovers.
+  const composerState = {
+    teamId,
+    onAttach: () => fileInputRef.current?.click(),
+    selectedLibraryIds: chat.selectedLibraryIds,
+    onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
+    selectedDocumentUids: chat.selectedDocumentUids,
+    onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+    searchPolicy: chat.searchPolicy,
+    onSearchPolicyChange: chat.setSearchPolicy,
+    ragScope: chat.ragScope,
+    onRagScopeChange: chat.setRagScope,
+    reasoning: chat.reasoning,
+    onReasoningChange: chat.setReasoning,
+  };
+  // The "tune" button only appears when the agent exposes tool controls
+  // (search / scope / reasoning / document scope) — i.e. any chat control that
+  // isn't the attach action, which lives in the "add" menu.
+  const hasToolControls = chat.chatControls.some((control) => control.widget !== "attach_files");
+  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
+
   const composer = (
     <RichInputField
       value={chat.input}
@@ -209,49 +254,46 @@ export default function ManagedChatPage() {
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
       onVoiceInputError={reportVoiceInputError}
+      focusEndRequestId={focusEndRequestId}
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={
-        attachedContextPrompts.length > 0 || chat.attachments.length > 0 ? (
-          <>
-            {attachedContextPrompts.length > 0 && (
-              <ContextPromptChips
-                prompts={attachedContextPrompts}
-                onRemove={(id) => chat.setContextPrompts(chat.contextPromptIds.filter((existing) => existing !== id))}
-              />
-            )}
-            {chat.attachments.length > 0 && (
-              <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-            )}
-          </>
+        chat.attachments.length > 0 ? (
+          <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
         ) : undefined
       }
       leftSlot={
-        <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
-          {({ closeMenu }) => (
-            <ComposerControlSlot
-              chatControls={chat.chatControls}
-              onRequestClose={closeMenu}
-              composer={{
-                teamId,
-                onAttach: () => fileInputRef.current?.click(),
-                selectedLibraryIds: chat.selectedLibraryIds,
-                onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
-                selectedDocumentUids: chat.selectedDocumentUids,
-                onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
-                searchPolicy: chat.searchPolicy,
-                onSearchPolicyChange: chat.setSearchPolicy,
-                ragScope: chat.ragScope,
-                onRagScopeChange: chat.setRagScope,
-                reasoning: chat.reasoning,
-                onReasoningChange: chat.setReasoning,
-              }}
-              contextPrompts={chat.contextPrompts}
-              contextPromptIds={chat.contextPromptIds}
-              onContextPromptIdsChange={chat.setContextPrompts}
-            />
+        <>
+          <ComposerActionsMenu disabled={composerControlsDisabled}>
+            {({ closeMenu }) => (
+              <ComposerControlSlot
+                part="primary"
+                chatControls={chat.chatControls}
+                onRequestClose={closeMenu}
+                composer={composerState}
+                contextPrompts={chat.contextPrompts}
+                onInsertContextPrompt={insertContextPrompt}
+              />
+            )}
+          </ComposerActionsMenu>
+          {hasToolControls && (
+            <ComposerActionsMenu
+              disabled={composerControlsDisabled}
+              icon={{ category: "outlined", type: "tune" }}
+              openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
+              dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
+            >
+              {({ closeMenu }) => (
+                <ComposerControlSlot
+                  part="tools"
+                  chatControls={chat.chatControls}
+                  onRequestClose={closeMenu}
+                  composer={composerState}
+                />
+              )}
+            </ComposerActionsMenu>
           )}
-        </ComposerActionsMenu>
+        </>
       }
     />
   );

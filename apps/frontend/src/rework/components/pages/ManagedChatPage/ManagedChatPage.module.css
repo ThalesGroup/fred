@@ -5,7 +5,7 @@
   display: flex;
   position: relative;
   flex-direction: row;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
@@ -17,7 +17,7 @@
   position: relative;
   flex: 1 1 0;
   flex-direction: column;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   min-width: 0;
   height: 100%;
   overflow: hidden;
@@ -67,7 +67,7 @@
   left: 0;
   align-items: center;
   z-index: 2;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   padding: var(--spacing-xs) var(--spacing-s);
   pointer-events: none;
 }

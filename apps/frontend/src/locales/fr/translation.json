@@ -317,18 +317,11 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "ariaLabel": "Prompts attachés",
-      "removeAria": "Retirer {{name}}",
-      "rowLabel": "Prompts",
-      "title": "Prompts de contexte",
-      "activeCount": "{{count}} actifs",
-      "none": "Aucun",
+      "rowLabel": "Prompts de l'équipe",
+      "title": "Bibliothèque de prompts",
       "empty": "Aucun prompt disponible",
-      "uses": "▷ {{count}}",
-      "scope": {
-        "personal": "Personnel",
-        "team": "Équipe"
-      }
+      "insertErrorSummary": "Impossible d'insérer le prompt",
+      "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
       "processingDone": "Terminé",
@@ -340,7 +333,9 @@
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
-      "openAria": "Ouvrir les actions de conversation"
+      "openAria": "Ouvrir les actions de conversation",
+      "tuneDialogAria": "Réglages de conversation",
+      "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
     "composerSettings": {
       "attachFile": "Joindre un fichier",

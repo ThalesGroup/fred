@@ -170,6 +170,22 @@ Sub-menu rows are rows with a chevron whose anchored panel is rendered by the pa
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
 
+- **M3 alignment (2026-08-03)** — container corner moved from `--radius-m` to `--radius-s`
+  (the M3 menu/text-field/chip radius), and a picked row now carries the dedicated
+  `--state-on-surface-selected` state layer instead of reusing the transient
+  `--state-on-surface-hover`, so a selected option reads as chosen at rest. Token-only, no
+  content or row removed. Follow-up: the container border was dropped (the `--shadow-m`
+  elevation alone separates it from the background) and the group dividers now use
+  `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
+  and bleed full width (negative horizontal margins cancel the popover padding).
+
+- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
+  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
+  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
+  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
+  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
+  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+
 ---
 
 ### `SearchConfig`
@@ -596,6 +612,94 @@ _(none yet)_
 #### Resolved
 
 _(none yet)_
+
+---
+
+### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/atoms/Chip/`,
+`src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+Three related changes on the chat composer, all consolidating hand-rolled UI onto the shared
+library:
+
+- **`Chip` atom (new)** — a removable M3 input chip (`--radius-s`, neutral outline, no resting
+  shadow): optional leading visual, truncating label, optional secondary line, optional trailing
+  content, optional remove button, and a `tone="error"` that recolors the pill to the
+  error-container role. `AttachmentChips` renders this atom instead of duplicating pill markup —
+  it keeps only its own scroll row and its muted leading icon. (`ContextPromptChips` also used it
+  briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
+  entry below.)
+
+- **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
+  scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
+  disabled inherits the shared on-surface 12%/38% rule). Spec taken from the official M3 icon
+  button guidelines, mapped through the local scheme tokens.
+
+- **Composer action buttons** — the send/stop/voice buttons in `RichInputField` were hand-rolled
+  `<button>`s; they are now the shared `IconButton` atom (send/stop = `filled` `primary`, mic =
+  `tonal` `secondary`, recording = `tonal` `error`, transcribing = `tonal` with the `loading`
+  spinner). Consequence: the action buttons are now circular (the atom's shape) rather than the
+  previous rounded square; the subtle pop-in on appearance is preserved.
+
+- **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
+  and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
+  `--surface-main`.
+
+---
+
+### Prompt library → insert into composer (`ContextPromptPicker`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ContextPromptPicker/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+Picking a prompt in the composer's `Prompts` row now **inserts the prompt's content into the
+chat input** instead of attaching it as a session-context chip.
+
+- `ContextPromptPicker` went from a multi-select toggle (checkboxes, `selectedIds`/`onChange`) to
+  a one-shot action list (`onSelect(prompt)`, `role="menu"`/`menuitem`). Picking a row fetches the
+  full prompt (`GetTeamPrompt` — the `text` lives on the record, not the `ContextPromptSummary`),
+  appends it to the draft (`\n\n`-separated when the draft is non-empty), and closes the actions
+  popover. Scope resolves the owning team: `personal` → the user's personal team, `team` → the
+  chat team.
+- `RichInputField` now resizes the textarea on any external value change (not just clear), so
+  inserted (and voice-transcribed) text grows the box instead of being clipped at one row.
+- The context-prompt **chip** UI was removed: `ContextPromptChips` (molecule + test) is deleted,
+  and the composer no longer renders attached-prompt pills. The backend session-context channel
+  (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
+  — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
+  separate change, not done here.
+- Picker rows were simplified to name + description (+ score stars): the leading icon and the
+  usage count were removed. The picker's `MenuPopover` uses an 8px padding for this instance via
+  the `pickerSurface` className.
+
+---
+
+### Composer: split the actions menu into "add" + "tune" (2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ComposerActionsMenu/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+The composer now shows two trigger buttons side by side instead of one:
+
+- **Add** (`add` icon) — the attach action + the always-on prompt-library row.
+- **Tune** (`tune` icon, to its right) — the tool controls (document scope, search policy, RAG
+  scope, reasoning). It only renders when the agent exposes at least one such control.
+
+Both open the same `MenuPopover`-based popover. `ComposerActionsMenu` gained `icon` /
+`openAriaLabel` / `dialogAriaLabel` props (defaulting to the add-menu values), and
+`ComposerControlSlot` gained a `part: "primary" | "tools"` prop selecting which control groups it
+renders — so the two buttons reuse the same component. The two triggers are spaced by the
+composer's `commandSlot` gap.
 
 ---
 

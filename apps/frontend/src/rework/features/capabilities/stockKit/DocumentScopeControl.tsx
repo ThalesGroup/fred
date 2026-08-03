@@ -23,6 +23,7 @@
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { usePickerMenuMaxHeight } from "@shared/molecules/MenuPopover/usePickerMenuMaxHeight";
 import type { CapabilityChatTurnControlProps } from "../types";
@@ -91,17 +92,25 @@ export function DocumentScopeControl({
       />
 
       {open && (
-        <div className={styles.pickerMenu} role="dialog" aria-label={title} style={style}>
-          <div className={styles.pickerMenuBody}>
-            <DocumentLibraryScopePicker
-              teamId={composer.teamId}
-              selectedTagIds={effectiveLibraryIds}
-              onChange={composer.onSelectedLibraryIdsChange}
-              selectedDocumentUids={showDocuments ? composer.selectedDocumentUids : undefined}
-              onDocumentsChange={showDocuments ? composer.onSelectedDocumentUidsChange : undefined}
-              disableLibrarySelection={hasBoundLibraries}
-            />
-          </div>
+        <div className={styles.pickerAnchor} style={style}>
+          <MenuPopover
+            role="dialog"
+            aria-label={title}
+            className={styles.pickerSurface}
+            groups={[
+              [
+                <DocumentLibraryScopePicker
+                  key="picker"
+                  teamId={composer.teamId}
+                  selectedTagIds={effectiveLibraryIds}
+                  onChange={composer.onSelectedLibraryIdsChange}
+                  selectedDocumentUids={showDocuments ? composer.selectedDocumentUids : undefined}
+                  onDocumentsChange={showDocuments ? composer.onSelectedDocumentUidsChange : undefined}
+                  disableLibrarySelection={hasBoundLibraries}
+                />,
+              ],
+            ]}
+          />
         </div>
       )}
     </div>
