@@ -858,8 +858,7 @@ The full `VectorSearchHit` continues to be forwarded to the frontend via the
 
 The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
-requirements, and a "never reproduce URLs" guardrail. See
-`docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` for the full rationale.
+requirements, and a "never reproduce URLs" guardrail.
 
 ### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
 

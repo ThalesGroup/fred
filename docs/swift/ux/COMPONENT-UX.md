@@ -857,8 +857,8 @@ renders a `preview.markdownUnavailable` notice instead of the former literal
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
   continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
-- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08,
-  RAG-AGENT-QUALITY-RFC.md §5), unaffected by this component.
+- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
+  unaffected by this component.
 
 #### Resolved
 

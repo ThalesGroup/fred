@@ -1115,7 +1115,7 @@ zero change to existing agent definition files.
 ## §RUNTIME-06 — Rico RAG agent quality
 
 **ID:** RUNTIME-06  
-**RFC:** `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md`  
+**Design:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.7`  
 **Status:** `[x]` ✅ Complete — 2026-05-25
 
 ### Goal
@@ -1166,9 +1166,8 @@ noisy 20+ field JSON payload sent to the LLM.
 ## §RUNTIME-08 — Multimodal image read tool
 
 **ID:** RUNTIME-08  
-**RFC:** `docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md`  
-**Execution:** GitHub issue #1865  
-**Status:** `[ ]` Proposed — awaiting developer confirmation
+**Execution:** GitHub issue #1865 (closed, unimplemented — no code shipped)  
+**Status:** `[ ]` Dormant — no active implementation
 
 ### Goal
 

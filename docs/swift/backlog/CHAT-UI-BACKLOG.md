@@ -1267,8 +1267,8 @@ defaults after navigation, and half-streaming state on session switch.
 
 ## 9 Phase CHAT-08 — Source-to-document navigation
 
-> **ID:** `CHAT-08` — `docs/swift/data/id-legend.yaml`  
-> **RFC:** [`docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md`](../rfc/RAG-AGENT-QUALITY-RFC.md)  
+> **ID:** `CHAT-08`  
+> **Design:** [`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.7`](../design/RUNTIME-EXECUTION-CONTRACT.md)  
 > **Scope:** frontend only  
 > **Depends on:** RUNTIME-06 (Rico prompt + tool result pruning, independent but companion)
 
@@ -1288,8 +1288,8 @@ This phase registers that route and adds the "Open document" link.
 ### 9.2 Background
 
 Full rationale (why a route rather than a drawer callback, why no signed URLs are
-needed) lives in `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` §2.3 — not repeated here to
-avoid the two copies drifting apart.
+needed) lives in `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.7` — not repeated
+here to avoid the two copies drifting apart.
 
 ---
 
