@@ -63,6 +63,7 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityManifest,
     EmptyModel,
+    HitlSpec,
 )
 from fred_sdk.contracts.context import (
     ToolContentBlock,
@@ -318,3 +319,9 @@ class DocumentSummarizeCapability(
             return result.summary, artifact
 
         return [summarize_document]
+
+    def hitl_specs(self) -> Sequence[HitlSpec]:
+        # TEMPORARY, for manual verification of the #2179 fix on this branch
+        # only — revert before merge unless #2177 is deliberately picked up
+        # in the same change. See the module docstring for the full context.
+        return [HitlSpec(tool="summarize_document", require=True)]
