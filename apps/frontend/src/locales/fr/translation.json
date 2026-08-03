@@ -253,16 +253,11 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "rowLabel": "Prompts",
+      "rowLabel": "Prompts de l'équipe",
       "title": "Bibliothèque de prompts",
       "empty": "Aucun prompt disponible",
-      "uses": "▷ {{count}}",
       "insertErrorSummary": "Impossible d'insérer le prompt",
-      "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez.",
-      "scope": {
-        "personal": "Personnel",
-        "team": "Équipe"
-      }
+      "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
       "processingDone": "Terminé",

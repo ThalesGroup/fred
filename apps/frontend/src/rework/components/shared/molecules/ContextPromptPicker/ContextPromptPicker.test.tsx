@@ -32,17 +32,17 @@ describe("ContextPromptPicker", () => {
     expect(render([])).toContain("chatbot.contextPrompts.empty");
   });
 
-  it("renders scope groups in order personal → team", () => {
+  it("orders personal prompts before team prompts, with no scope labels", () => {
     const html = render([
       makePrompt({ id: "t1", name: "Team one", scope: "team" }),
       makePrompt({ id: "p1", name: "Personal one", scope: "personal" }),
     ]);
-    const personal = html.indexOf("chatbot.contextPrompts.scope.personal");
-    const team = html.indexOf("chatbot.contextPrompts.scope.team");
+    const personal = html.indexOf("Personal one");
+    const team = html.indexOf("Team one");
     expect(personal).toBeGreaterThanOrEqual(0);
     expect(personal).toBeLessThan(team);
-    expect(html).toContain("Personal one");
-    expect(html).toContain("Team one");
+    // Scope group labels were removed — the parent menu row already says "Team prompts".
+    expect(html).not.toContain("chatbot.contextPrompts.scope");
   });
 
   it("renders one action row per prompt with no selection checkbox", () => {
@@ -57,6 +57,12 @@ describe("ContextPromptPicker", () => {
     expect(html).not.toContain("data-selected");
   });
 
+  it("renders no leading icon and no usage count on rows", () => {
+    const html = render([makePrompt({ id: "p1", name: "A", scope: "personal", session_count: 7 })]);
+    expect(html).not.toContain('data-icon="edit_note"');
+    expect(html).not.toContain("chatbot.contextPrompts.uses");
+  });
+
   it("renders five stars with the rounded score filled, and none when score is null", () => {
     const scored = render([makePrompt({ id: "p1", name: "A", scope: "team", score: 3 })]);
     expect(countMatches(scored, /data-icon="star"/g)).toBe(5);
@@ -64,10 +70,5 @@ describe("ContextPromptPicker", () => {
 
     const unscored = render([makePrompt({ id: "p1", name: "A", scope: "team", score: null })]);
     expect(unscored).not.toContain('data-icon="star"');
-  });
-
-  it("always renders the edit_note icon (categories are team-owned, no per-category icon)", () => {
-    const html = render([makePrompt({ id: "p1", name: "A", scope: "personal", category_id: "cat-1" })]);
-    expect(html).toContain('data-icon="edit_note"');
   });
 });

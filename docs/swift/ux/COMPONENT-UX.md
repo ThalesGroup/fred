@@ -179,6 +179,13 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
+- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
+  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
+  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
+  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
+  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
+  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+
 ---
 
 ### `SearchConfig`
@@ -668,6 +675,9 @@ chat input** instead of attaching it as a session-context chip.
   (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
   — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
   separate change, not done here.
+- Picker rows were simplified to name + description (+ score stars): the leading icon and the
+  usage count were removed. The picker's `MenuPopover` uses an 8px padding for this instance via
+  the `pickerSurface` className.
 
 ---
 

@@ -15,7 +15,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import { hashColorIndex } from "@shared/utils/hashColorIndex.ts";
 import type { ContextPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ContextPromptPicker.module.css";
 
@@ -66,7 +65,6 @@ export function ContextPromptPicker({ prompts, onSelect }: ContextPromptPickerPr
         if (items.length === 0) return null;
         return (
           <div key={scope} className={styles.group}>
-            <div className={styles.groupLabel}>{t(`chatbot.contextPrompts.scope.${scope}`)}</div>
             {items.map((prompt) => (
               <button
                 key={prompt.id}
@@ -75,18 +73,14 @@ export function ContextPromptPicker({ prompts, onSelect }: ContextPromptPickerPr
                 className={styles.row}
                 onClick={() => onSelect(prompt)}
               >
-                <span className={styles.icon} data-color={hashColorIndex(prompt.id)} aria-hidden>
-                  <Icon category="outlined" type="edit_note" />
-                </span>
                 <span className={styles.text}>
                   <span className={styles.name}>{prompt.name}</span>
                   {prompt.description && <span className={styles.description}>{prompt.description}</span>}
-                  <span className={styles.meta}>
-                    {prompt.score != null && <ScoreStars score={prompt.score} />}
-                    <span className={styles.uses}>
-                      {t("chatbot.contextPrompts.uses", { count: prompt.session_count })}
+                  {prompt.score != null && (
+                    <span className={styles.meta}>
+                      <ScoreStars score={prompt.score} />
                     </span>
-                  </span>
+                  )}
                 </span>
               </button>
             ))}

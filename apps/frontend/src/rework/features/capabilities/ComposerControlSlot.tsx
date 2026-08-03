@@ -133,24 +133,27 @@ export function ComposerControlSlot({
             />
 
             {promptsOpen && (
-              <div
-                className={styles.pickerMenu}
-                role="dialog"
-                aria-label={t("chatbot.contextPrompts.title")}
-                style={promptsMenuStyle}
-              >
-                <div className={styles.pickerMenuBody}>
-                  <ContextPromptPicker
-                    prompts={contextPrompts}
-                    onSelect={(prompt) => {
-                      onInsertContextPrompt(prompt);
-                      // One-shot insert: close the picker and the whole actions
-                      // popover so the user lands back on the composed input.
-                      setOpenKey(null);
-                      onRequestClose?.();
-                    }}
-                  />
-                </div>
+              <div className={styles.pickerAnchor} style={promptsMenuStyle}>
+                <MenuPopover
+                  role="dialog"
+                  aria-label={t("chatbot.contextPrompts.title")}
+                  className={styles.pickerSurface}
+                  groups={[
+                    [
+                      <ContextPromptPicker
+                        key="picker"
+                        prompts={contextPrompts}
+                        onSelect={(prompt) => {
+                          onInsertContextPrompt(prompt);
+                          // One-shot insert: close the picker and the whole
+                          // actions popover so the user lands back on the input.
+                          setOpenKey(null);
+                          onRequestClose?.();
+                        }}
+                      />,
+                    ],
+                  ]}
+                />
               </div>
             )}
           </div>,

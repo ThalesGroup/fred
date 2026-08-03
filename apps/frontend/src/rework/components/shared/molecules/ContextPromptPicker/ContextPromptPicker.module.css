@@ -10,12 +10,6 @@
   gap: var(--spacing-3xs);
 }
 
-.groupLabel {
-  padding: 0 var(--spacing-2xs) var(--spacing-3xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
 .row {
   display: flex;
   align-items: flex-start;
@@ -24,8 +18,9 @@
   border: 1px solid transparent;
   border-radius: var(--radius-s);
   background: transparent;
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
   width: 100%;
+  max-width: 240px;
   text-align: left;
 }
 
@@ -38,45 +33,10 @@
   outline-offset: 2px;
 }
 
-.icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  border-radius: var(--radius-xs);
-  width: 1.75rem;
-  height: 1.75rem;
-  color: var(--on-surface-retreat);
-  font-size: 18px;
-
-  /* Fallback hash-palette — 5 semantic families, tokens only (matches PromptCard) */
-  &[data-color="0"] {
-    background: var(--info-container);
-    color: var(--info);
-  }
-  &[data-color="1"] {
-    background: var(--success-container);
-    color: var(--success);
-  }
-  &[data-color="2"] {
-    background: var(--secondary-container);
-    color: var(--secondary);
-  }
-  &[data-color="3"] {
-    background: var(--warning-container);
-    color: var(--warning);
-  }
-  &[data-color="4"] {
-    background: var(--error-container);
-    color: var(--error);
-  }
-}
-
 .text {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 
@@ -108,10 +68,6 @@
   display: inline-flex;
   color: var(--warning);
   font-size: 14px;
-}
-
-.uses {
-  color: var(--on-surface-retreat);
 }
 
 .empty {
