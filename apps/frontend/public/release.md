@@ -561,7 +561,7 @@
 - **Features**
 
   - Control-plane can now load team banner/logo assets from a native GCS bucket via Application Default Credentials / Workload Identity, in addition to the existing MinIO/S3-compatible and local filesystem backends (`content_storage.type: gcs`, control-plane-backend, fred-core, #2022)
-  - New `signing_service_account_email` config knob for control-plane's GCS content store — mints short-lived V4 signed URLs via IAM `signBlob` (keyless) so team banners/logos remain viewable in the browser, extending the signing mechanism already used for knowledge-flow's internal tabular Parquet reads (`docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md` §6)
+  - New `signing_service_account_email` config knob for control-plane's GCS content store — mints short-lived V4 signed URLs via IAM `signBlob` (keyless) so team banners/logos remain viewable in the browser, extending the signing mechanism already used for knowledge-flow's internal tabular Parquet reads (`docs/swift/design/DESIGN.md` §3)
 
 - **Bug Fixes**
 

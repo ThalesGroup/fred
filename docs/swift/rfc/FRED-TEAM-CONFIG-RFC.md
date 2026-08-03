@@ -4,7 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-23  
 **Area:** `control-plane-backend`, `frontend`, `fred-runtime`, `knowledge-flow-backend`  
-**Related:** `TEAM-PLATFORM-POLICY-RFC.md`, `TEAM-ROUTING-POLICY-RFC.md`,
+**Related:** `TEAM-PLATFORM-POLICY-RFC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37,
 `../design/PROMPTS.md`, `PROMPT-SYSTEM-HARDENING-RFC.md`
 
 ---
@@ -59,7 +59,7 @@ This RFC is design authority only.
 
 > **Terminology and scope correction (2026-07-10), read before the rest of this
 > RFC.** Two things changed since this RFC was drafted (2026-05-23), both from
-> `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` (AUTHZ-05):
+> AUTHZ-05 (see `platform/REBAC.md`):
 >
 > 1. **Rename** (§26): `owner` → `team_admin`, `manager` → `team_editor`,
 >    `member` → `team_member`. Below, "team owner"/"Owner" means `team_admin`;
@@ -470,7 +470,7 @@ implementation.
 This RFC is the umbrella contract. The implementation phase must also follow:
 
 1. [`TEAM-PLATFORM-POLICY-RFC.md`](./TEAM-PLATFORM-POLICY-RFC.md)
-2. [`TEAM-ROUTING-POLICY-RFC.md`](./TEAM-ROUTING-POLICY-RFC.md)
+2. Team routing policy (shipped): [`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
 3. Current prompt scope: [`PROMPTS.md`](../design/PROMPTS.md)
 4. Prompt hardening: [`PROMPT-SYSTEM-HARDENING-RFC.md`](./PROMPT-SYSTEM-HARDENING-RFC.md)
 

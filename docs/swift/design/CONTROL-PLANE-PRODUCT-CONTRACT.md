@@ -6,8 +6,7 @@
 > never an authorization token. Authorization happens at the agent pod (Keycloak JWT +
 > pod-side OpenFGA on `runtime_context.team_id`). Any `ExecutionGrant` / grant-issuance /
 > `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
-> (§13/D5) and [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2.
+> [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2 and §8.11.
 
 > ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
 > The shared team check `_validate_team_and_check_permission` now recognizes a **service
@@ -190,7 +189,6 @@ whenever `security.user.enabled` is false or `app.gcu_version` is unset, so no-C
 and standalone/dev deployments are never routed to the acceptance screen.
 `FrontendBootstrap.gcu_version` is kept as a post-auth informational mirror (control-plane
 CLI display) and must **not** be used to gate the UI. See
-`docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
 
 #### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-15)
@@ -222,15 +220,14 @@ disabled in this deployment — checked before the durable marker is written,
 since granting would otherwise be a silent no-op that still burns the
 one-time completion. Also refuses (503) if authentication (Keycloak/OIDC) is
 disabled in this deployment — checked even before the ReBAC guard, since a
-mocked identity would make the JWT proof meaningless. See
-`docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
-the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
-ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
-Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — replaces the config-seeded
+mocked identity would make the JWT proof meaningless (same shape as
+Kubernetes' cluster-admin bootstrap, ArgoCD's `argocd-initial-admin-secret`,
+Rancher's bootstrap password, and Keycloak's own `KC_BOOTSTRAP_ADMIN_*`
+variables) — replaces the config-seeded
 `platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
 from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
 role from deployment config anymore; the only other path is the declarative
-platform import (`PLATFORM-IMPORT-RFC.md` §10).
+platform import (§27).
 Endpoint authorization matrix entry:
 `docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
 
@@ -295,7 +292,7 @@ The control plane is a **pure proxy** for these values — it does not interpret
   Requiredness for pre-#2105 agents (whose stored value defaults to `""`)
   is enforced by the agent edit form blocking Save when empty, the same
   pattern already used for `display_name`, not by the API contract itself.
-- ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open. See RFC AGENT-CAPABILITY-RFC §3.3/§3.7.
+- ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
   agent tuning values at enrollment; keys constrained to
@@ -483,7 +480,7 @@ agent instance at `create_session` time, immutable, never returned by any API mo
 lets `ConversationErasureService` resolve the owning runtime for checkpoint/history erasure
 even after the session's `agent_instance_id` row is later deleted — resolving solely through
 the live instance row let an agent-instance deletion permanently block erasure of any session
-that had used it (issue #2089, `FRED-2.0.2-RGPD-READY-RFC.md` §7).
+that had used it (issue #2089, §35).
 
 Until control-plane session metadata is implemented, the sidebar omits session listing. The intentional placeholder (no session list in sidebar) is acceptable. Adding a session list before the backend is ready is not.
 
@@ -564,7 +561,7 @@ Planned purge surfaces:
 | All data for one session         | Combined call to both above _(pending)_                      |
 | Bulk purge by team / age         | `POST /agents/sessions/purge` with policy filter _(pending)_ |
 
-**`session_purge_queue` — deferred-delete scheduler (CTRLP-12 A5/A6):** Originally a legacy concept inherited from `agentic-backend`, not connected to the `session_history` table written by `fred-runtime`. CTRLP-12 A5 repurposes it as the *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The queue consumer must invoke `erase_session` at expiry (A6, pending). **Until A6 lands the consumer performs a metadata-only delete, so a configured delete-grace window does NOT yet fully erase at expiry** (see `CTRLP-12-QUALITY-REVIEW.md` blocker 2). Do not treat the queue as the retention mechanism until the consumer is wired to `erase_session`.
+**`session_purge_queue` — deferred-delete scheduler (CTRLP-12, §35):** The *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The lifecycle worker (`scheduler/lifecycle_actions.py`) invokes `erase_session` at expiry and marks the queue entry done only on `receipt.ok` — see §35 for the full contract.
 
 **Soft-deleted session read contract (CTRLP-12 A5):** During the deferred-delete window a soft-deleted conversation is hidden from the session *list* (`list_by_team` filters `deleted_at IS NULL`) but remains directly fetchable by id (`SessionMetadataStore.get` does not filter `deleted_at`) and its attachments remain listable — intentional, to support a bounded post-incident / evaluation read. The row is fully erased only at window expiry. `DELETE /teams/{id}/sessions/{session_id}` returns 404 for a missing or non-owned session.
 
@@ -704,9 +701,9 @@ See `docs/swift/design/FILESYSTEM.md`.
   - `mcp_servers` enriched with `display_name` from runtime MCP catalog
   - Optional `?include_non_public=true` query (default false) — honored **only for
     platform admins**; lists internal (`AgentDefinition.public=False`) templates that are
-    otherwise hidden from the create-agent catalog (see `AGENT-VISIBILITY-RFC.md`)
+    otherwise hidden from the create-agent catalog
 
-> **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** internal (`public=False`) agents are
+> **2026-06-25 (VALID-02):** internal (`public=False`) agents are
 > hidden from non-admins across control-plane paths. **Managed path** — listing honors
 > `include_non_public` only for admins; `enroll_agent_instance` resolves with the caller's
 > privilege, so a non-admin who guesses a hidden `template_id` gets 404, an admin may enroll.
@@ -738,8 +735,7 @@ See `docs/swift/design/FILESYSTEM.md`.
 > Previously a `null` selection skipped the `can_use` ReBAC check entirely at
 > every layer (save, session prep, and the runtime's MCP-server activation),
 > letting a team obtain an admin-gated capability for free by submitting no
-> selection. See `AGENT-CAPABILITY-RFC.md` §8.1's dated fix note for the full
-> mechanism, including the required one-off backfill for instances persisted
+> selection. Fixed with a required one-off backfill for instances persisted
 > before this change.
 
 **Execution preparation:**
@@ -1091,8 +1087,7 @@ removed fields; no other change). Frontend consumption pattern documented in
 
 ### `TeamMember.relation` (singular) → `relations` (list)
 
-**2026-07-12 — Decision (RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 7,
-§33-39):** a team member may now hold `team_admin`, `team_editor`, and
+**2026-07-12 — Decision:** a team member may now hold `team_admin`, `team_editor`, and
 `team_analyst` on the same team simultaneously (e.g. a small team's sole
 admin who is also its editor and evaluator) — the product's write path
 previously enforced exactly one role per user per team. `schema.fga` did not
@@ -1144,7 +1139,7 @@ TaskLogDetail | MigrationDetail | ErasureDetail | None`), typed per the
 sibling `kind` field exactly like the existing per-kind `TaskEvent` union.
 `None` for a kind with no detail model (`log`) or a task recorded before this
 field existed — backward compatible, no migration. Rationale and full
-backend/frontend design: `PLATFORM-IMPORT-RFC.md` §11,
+backend/frontend design: §27 above,
 `AUTHZ-MIGRATION-BACKLOG.md` Step 3.
 
 `MigrationDetail.result: MigrationResult | None = None` is populated only on
@@ -1172,7 +1167,7 @@ to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
 `ImportLaunchResponse.target` directly (no hand-built duplicate).
 
 **`POST /import-export/import` + new `POST /import-export/reset-full`
-(2026-07-24, MIGR-05.18, `PLATFORM-IMPORT-RFC.md` §9):** `POST
+(2026-07-24, MIGR-05.18):** `POST
 /import-export/import`'s multipart body gains an optional second field,
 `realm_file` (a standalone Keycloak realm export JSON), which — when present
 — the importer uses in place of the zip's own `keycloak/realm.json`. New
@@ -1195,8 +1190,7 @@ with "Reset platform". New authz-endpoint-matrix.yaml row for `POST
 
 ### Admin capability-enablement routes
 
-**2026-07-11 — Routes fixed (CAPAB-01 / RFC `AGENT-CAPABILITY-RFC.md` §8.5;
-backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
+**2026-07-11 — Routes fixed (CAPAB-01, backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
 capability enablement model. All routes are platform-admin-gated: the mutations
 check `capability#can_manage` (the capability is anchored first, idempotently);
 the aggregate list checks the equivalent `organization#can_manage_platform`.
@@ -1227,8 +1221,7 @@ feedback. Frontend consumes the generated hooks via the friendly aliases
 `useDisableTeamCapabilityMutation` / `useSetCapabilityDefaultOnMutation` in
 `controlPlaneApiEnhancements.ts`; the dashboard lives at `/admin/capabilities`.
 
-**2026-07-16 — personal-space class scope (CAPAB-01 / #1961, RFC
-`AGENT-CAPABILITY-RFC.md` §8.4 amendment).** The personal-space capability class
+**2026-07-16 — personal-space class scope (CAPAB-01 / #1961 amendment).** The personal-space capability class
 is now pure FGA runtime state, admin-toggleable like `default_on` — replacing the
 withdrawn config-only `platform.capabilities.personal_defaults` first-touch
 seeding. One new route (org-admin-gated on `capability#can_manage`, same as
@@ -1250,8 +1243,7 @@ personal-class position, which beats `default_on`. Frontend consumes the
 renders the class as a synthetic pinned "All personal spaces" first row and drops
 the admin's own personal team from the ordinary per-team rows.
 
-**2026-07-17 — agent templates join this surface (CAPAB-01, `AGENT-CAPABILITY-RFC.md`
-§8.6 / `AGENT-VISIBILITY-RFC.md` §7.5).** `CapabilityEnablementItem` and
+**2026-07-17 — agent templates join this surface (CAPAB-01).** `CapabilityEnablementItem` and
 `CapabilityCatalogEntry` gained `kind: "tool" | "agent"` (defaults `"tool"`,
 so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
@@ -1281,7 +1273,7 @@ shape or request/response change — enforcement now resolves through
 `platform_admin` instead of the retired `admin` relation.
 
 **2026-07-19 — `depends_on` gate for `kind="agent"` capabilities (GitHub
-#2004, CTRLP-14; design in `AGENT-CAPABILITY-RFC.md` §8.6).**
+#2004, CTRLP-14).**
 `CapabilityCatalogEntry` gained `default_capability_ids: tuple[str, ...]`
 (the template's default tool/MCP capabilities, empty for `kind="tool"`).
 `PUT /admin/capabilities/{capability_id}/teams/{team_id}` and
@@ -1293,11 +1285,81 @@ now 403s once the instance's own template grant is revoked (previously only
 *tool* capability selections were re-checked on update; unenroll is still
 always allowed).
 
+**2026-07-26 — `kind="model"`, a third projection (CAPAB-01/OBSERV-02).**
+`CapabilityCatalogEntry`/`CapabilityEnablementItem.kind` widens to `"tool" |
+"agent" | "model"`. A model entry is a **catalog projection, not an authored
+manifest** — like `kind="agent"`, no one hand-writes a `kind="model"`
+`CapabilityManifest`; `models_catalog.yaml` (fred-agents, loaded by
+`fred_runtime.model_routing.catalog`) stays the sole source of truth for
+routing. Every mechanism already built for `kind="tool"`/`kind="agent"` —
+schema, `can_use`, the enablement write path, the admin dashboard — governs
+`kind="model"` uniformly; `CapabilitiesPage.tsx` needed only a widened
+`KIND_FILTERS` value and one i18n key, no `kind`-specific branch anywhere
+else (the team matrix, health column, and default-on toggle are all
+kind-agnostic).
+
+**Catalog projection, cross-pod.** `fred-runtime` exposes
+`GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
+per distinct `(provider, name)` pair — not per `profile_id` (a model used by
+both the `chat` and `language` capability is one enablement decision, the
+unit an admin actually reasons about) — and deriving the id itself
+(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+(`product/service.py::_model_capabilities_for_source`) fetches that endpoint
+per runtime source as a third catalog fetch alongside the existing tool and
+agent fetches (same best-effort contract — `None` on an unreachable pod),
+under the reserved-prefix collision guard `MODEL_CAPABILITY_NAMESPACE_PREFIX`
+(`model__`). **Multi-pod collision is a union, not last-write-wins**: on an id
+collision across pods, `aggregate_capability_catalog` unions
+`model_profile_ids`/`model_thinking_profile_ids` rather than letting the last
+pod fetched overwrite the entry (fixed 2026-08-01 — the original
+last-registration-wins shape silently dropped profiles from whichever pod
+lost the race).
+
+**`CapabilityCatalogEntry` is not a uniform shape across kinds — it is a
+tagged union in practice.** `model_profile_ids: tuple[str, ...]` and
+`model_thinking_profile_ids: tuple[str, ...]` (REASON-01, §33) are real
+fields carried **only** for `kind="model"` — empty for `tool`/`agent`, never
+the reverse. `config_fields`, `team_settings_fields`, `assets`, and
+`default_capability_ids` are conversely always empty for `kind="model"`.
+Treat `kind` as the discriminator when reading this type; a per-kind field
+being present or empty is the contract, not an implementation detail to
+paper over.
+
+**Runtime enforcement is fail-closed and differs by kind, deliberately.**
+`kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
+gates tool selection and template enrollment, and both suspend/revive
+dependent agent instances on revocation/grant (`enablement.py`, `impact.py`).
+`kind="model"` has no equivalent write-time surface (model choice is a
+per-turn runtime decision), so it enforces **per turn** instead:
+`usable_model_capability_ids(rebac, team_id)` — the pod's own local OpenFGA
+`ListObjects` query, computed once per turn at the same point
+`_authorize_execution_or_raise` runs (not inside model routing itself) —
+threads through `BoundRuntimeContext.usable_model_ids` (`None` = ReBAC
+disabled, no restriction; a non-`None` tuple = exactly what's allowed).
+`RoutedChatModelFactory.build_for_chat` checks the resolved model against it
+and fails closed (`ModelNotUsableError`), never silently substituting. The
+query itself lives in one place —
+`fred_core.security.rebac.capability_authz.usable_capability_ids` (moved
+2026-08-03; control-plane's `capabilities/authz.py` re-exports it,
+fred-runtime's `usable_model_capability_ids` wraps it with the
+ReBAC-disabled tolerance and `kind="model"`-prefix filter that are
+runtime-specific) — not two independently-maintained copies.
+
+**No auto-seeding migration, by design.** No team holds an explicit
+`can_use` grant on any `model__*` capability until a `platform_admin`
+opts one in via the existing kind-agnostic `PUT
+/admin/capabilities/{id}/default-on` (`team_scope` for `kind="model"` stays
+`ADMIN_GATED`, same as the other kinds). Consequence: on a deployment where
+ReBAC is already active for a team, the platform_admin must toggle
+default-on for the desired model(s) in the same deploy window ReBAC
+enforcement reaches that team, or that team's chat fails closed until the
+toggle is flipped — a deploy-runbook step, not a code gap.
+
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
 **New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
 `list[UserSummary]`. Gated on `can_administer_members` for `team_id` (owner-only,
-no platform escalation — `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §24.7/§24.9).
+no platform escalation).
 `query` is required, `min_length=2`, enforced server-side. Returns Keycloak users
 matching the query, excluding anyone already holding any role on the team.
 
@@ -1361,7 +1423,7 @@ teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writabl
 
 ### Multipart companion routes for agent saves that carry capability assets
 
-An asset-bearing capability (first: `ppt_filler`, AGENT-CAPABILITY-RFC §3.4)
+An asset-bearing capability (first: `ppt_filler`)
 needs its uploaded file to travel INSIDE the atomic agent save so the pod's
 `validate_config` can parse it, store the binary, and persist the derived
 config in one step. Two additive routes relay that multipart; the existing
@@ -1453,8 +1515,7 @@ a notification system exists to route `request_only` asks to team admins.
 service-layer permission check now bypasses the admin-only
 "administer"-permission gate when the caller's own id equals the target
 (`user.uid == user_id` — a "leave team" call is the same request an admin
-would send to remove that member, just self-directed). Full design: RFC
-`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 9 (§43-46).
+would send to remove that member, just self-directed).
 
 Everything else about the operation is unchanged and applies identically to
 a self-removal:
@@ -1515,10 +1576,8 @@ already-hardcoded `permissions`) rather than a live ReBAC lookup — see
 
 ## 27. Contract Notes — MIGR-05, platform import/export/reset (finalized 2026-07-25)
 
-MIGR-05 (kea→swift configuration restore) is done — `PLATFORM-IMPORT-RFC.md` is
-now a short closed-out pointer to this section. The permanent, load-bearing
-facts below are the canonical contract; design deliberation/history stays in
-`git log -p -- docs/swift/rfc/PLATFORM-IMPORT-RFC.md`.
+MIGR-05 (kea→swift configuration restore) is done. The permanent, load-bearing
+facts below are the canonical contract.
 
 **Endpoints** (`/control-plane/v1/import-export/`, all `require_admin` +
 `CAN_MANAGE_PLATFORM`):
@@ -1670,8 +1729,7 @@ deliberately out of #1954's scope. See `KEA-MIGRATION-BACKLOG.md` §0bis.
 
 ## 28. Contract Notes — MIGR-07, corpus re-vectorization (finalized 2026-07-25)
 
-MIGR-07 backend is built (issue #2111) — `CORPUS-REVECTORIZE-RFC.md` is now a
-short closed-out pointer to this section. No knowledge-flow-backend equivalent
+MIGR-07 backend is built (issue #2111). No knowledge-flow-backend equivalent
 of this contract doc exists yet (checked `docs/swift/design/` and
 `docs/swift/platform/` — nothing covers corpus/ingestion endpoint contracts);
 this section is the interim canonical record for the shape below until one is
@@ -1902,7 +1960,7 @@ the category filter-chips row.
 
 ## 33. Contract Notes — REASON-01, per-model reasoning activation (2026-07-29, #2166)
 
-Level 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` (phase 1 = levels 1–2; levels
+Level 2 of REASON-01 (phase 1 = levels 1–2; levels
 3–4 are phase 2 and not in this change).
 
 ### New route
@@ -1945,7 +2003,7 @@ only enabled ids.
 **Consequence, deliberate:** a deployment that ran reasoning through
 `models_catalog.yaml` alone **stops reasoning at this upgrade** until an
 administrator switches it on (RFC §5.6.1). Release-noted, not silent. Chosen on
-safety grounds — `AGENT-THINKING-API-RFC.md` Amendment C measured 10/10 turns
+safety grounds — measured 10/10 turns
 with duplicate tool calls on the profile this affects — and it puts the live
 per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §9).
 
@@ -2022,7 +2080,7 @@ consequences worth stating:
 
 1. **`ChatControlDescriptor.capability_id` now has a reserved value**,
    `PLATFORM_CHAT_CONTROL_OWNER = "platform"`. Before this, every chat control
-   came from a capability (`AGENT-CAPABILITY-RFC.md` §3.3); that statement is no
+   came from a capability (`docs/swift/capabilities/AUTHORING.md`); that statement is no
    longer true. The frontend needed no change — its registry already falls back
    to the capability-agnostic stock kit by widget id when no plugin claims the
    `(capability_id, widget)` pair.
@@ -2076,6 +2134,18 @@ resolves a profile per *operation* at runtime while chat controls are computed
 once per session (RFC §12 q3). Erring toward under-hiding — showing a control a
 later operation might not honour — beats over-hiding one that would have worked.
 
+### Addendum — the toggle's form location is the Capabilities tab (2026-08-02)
+
+The level-3 offer toggle and Amendment B's `reasoning_default_on` render inside
+the agent form's **Capabilities tab** (renamed from Tools), through the same
+generalized `CapabilityCard` component every real capability uses (`name`/
+`description`/`checked`/`onToggle` plus an optional `subForm` slot for the
+nested default-on switch) — not a reasoning-specific component, and not the
+General section it lived in briefly beforehand. This is a form-placement
+change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
+plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
+middleware), enforced at the single `build_for_chat` point as before.
+
 ---
 
 ## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
@@ -2113,3 +2183,213 @@ to be safe in practice: the frontend's session-write barrier
 block `send()` until the session row is confirmed created, so by the time
 `prepare_execution` is called with a `session_id`, that session should
 already exist.
+
+---
+
+## 35. Contract Notes — CTRLP-12, conversation erasure & team-governed retention (2026-07-24)
+
+Deleting a conversation provably erases it across every store. A team may set a
+retention window during which a deleted conversation survives — hidden from
+users but available to the team for agent evaluation — after which it is
+automatically and provably erased by an authenticated background worker.
+
+**Erasure fan-out (`ConversationErasureService.erase_session`).** Store order
+is fixed by dependency: attachments/Knowledge-Flow and KPI first
+(independent), then the runtime **checkpoint before transcript** (the runtime
+proves checkpoint ownership via the transcript), then the `session_metadata`
+row **last** — so a retry can always re-resolve and finish. Returns an
+`ErasureReceipt` (per store: count, ok, error); `receipt.ok` is true only when
+every touched store erased cleanly. Idempotent and retry-safe: re-running
+after a partial failure converges to full erasure, no store left orphaned, no
+queue entry stuck.
+
+**Two delete modes, one path.** The delete button and the lifecycle worker
+both call `erase_session`. Immediate (default): the button runs full erasure
+now, using the caller's identity. Deferred (when the conversation's space has
+a window): the button hides the conversation (`session_metadata.deleted_at`)
+and enqueues a `USER_DELETED` purge-queue entry due at `now + window`; the
+lifecycle worker erases at expiry and marks the entry done only on
+`receipt.ok` — a partial receipt leaves it queued for a later, convergent
+retry.
+
+**Retention is team-governed and bounded.** `team_delete_grace` and
+`max_idle` are nullable columns on `team_metadata` (plus
+`retention_updated_by` for audit) — no separate table — read/written through
+the existing `GET`/`PATCH /teams/{id}`. Each value is clamped to a platform
+cap (`> cap` → 422); the cap is a ceiling, not a default window — a team that
+sets nothing deletes immediately. Personal-space conversations use a
+platform-set `personal_delete_grace` (security/post-incident, not
+user-shortenable). Retention round-trips through platform export/import
+(`team_metadata` is bundled); conversation/runtime delete state
+(`session_metadata.deleted_at`, checkpoint-owner rows) is explicitly excluded
+— conversations are never platform-migrated.
+
+**Server-initiated erasure is authenticated, never unauthenticated.** The
+expiry worker has no user token, so the control-plane mints a
+client-credentials service token for its own `control-plane` Keycloak service
+account. The runtime checkpoint-delete, runtime history-delete, and
+Knowledge-Flow delete endpoints recognize the org-level
+`can_manage_platform` permission and waive the per-user **ownership** check
+for that principal — authentication itself is never waived. This reuses the
+existing platform-admin permission; it forks no second bypass.
+
+**Runtime resolution survives agent-instance deletion (fixed 2026-07-24,
+issue #2089).** `session_metadata` carries an internal-only
+`source_runtime_id`, captured once at `create_session` time from the
+(then-certainly-live) agent instance. `_resolve_runtime_base_url` resolves the
+runtime from this stored column first, falling back to the live
+agent-instance lookup only for pre-migration rows. Before this fix, deleting
+an agent instance permanently orphaned erasure for every session that had
+used it — resolution went exclusively through the instance row, which
+`unenroll_agent_instance` (a local metadata delete) does not preserve and
+never tears down the corresponding runtime checkpoint/history data itself.
+
+**Member-removal erasure is observable (CTRLP-13, shipped).**
+`remove_team_member` enqueues each removed user's conversations
+(`LifecycleTrigger.MEMBER_REMOVED`) **and** calls `schedule_erasure_task`, so
+the erasure surfaces on the admin task/activity surface exactly like a
+user-initiated delete — no invisible scheduled work.
+
+**Open (tracked as GitHub issue #2151, P0):** `max_idle` is validated,
+clamped, stored, and displayed, but no sweeper enforces it yet — there is no
+`IDLE_EXPIRED` `LifecycleTrigger`, no enqueue pass, and no production writer
+for `last_activity_at`. The team-settings control for idle expiry does not
+yet do anything.
+
+**Evaluation authorization:** the evaluation endpoints enforce ReBAC —
+`CAN_READ` to view, `CAN_UPDATE_AGENTS` to create/cancel,
+`CAN_READ_CONVERSATIONS` to evaluate real conversations.
+
+**Identity stays pseudonymized:** stored `user_id` is the Keycloak `sub`; no
+email lands in any conversation store.
+
+## 36. Contract Notes — KPI preset endpoints & authorization (OBSERV-02) (2026-07-26)
+
+Product/business analytics (active users, sessions, agent usage, tokens,
+storage) live entirely in `fred-control-plane`, backed by the shared
+OpenSearch KPI store every user-facing backend writes to via a request
+middleware (`api.request_latency_ms`, dims `user_id`/`route`/`method`/
+`http_status`/`latency_ms`; no `team_id` or `groups` — team context is added
+only at domain-level `KPIWriter` call sites that already have a stable
+`team_id`, never parsed from the request body, which would break streaming
+endpoints). Infrastructure/ops metrics (CPU, memory, cluster health) stay in
+Grafana — explicitly out of scope here.
+
+**Endpoint:** `GET /control-plane/v1/kpi-presets/<name>` — each preset is a
+`PresetDef` auto-mounted by a registry (`control_plane_backend/kpi/`). The
+client sends only a preset name + safe typed parameters (date range,
+granularity, optional `team_id`); the backend owns all query logic and
+returns shaped data, never raw OpenSearch response objects. Presets are an
+explicit allow-list — an unknown name is 400.
+
+**Authorization scope is injected server-side, never client-controlled:**
+
+```
+Platform-wide preset, no team_id:      Check(user, can_observe_platform, organization)
+Platform-wide, admin-only widgets:     Check(user, can_manage_platform, organization)
+Team-scoped preset, team_id given:     Check(user, can_read_members, team:<team_id>)
+                                        → filter WHERE dims.team_id = team_id
+Personal preset:                       inject WHERE dims.user_id = requesting_user.uid
+                                        (no OpenFGA call needed)
+```
+
+`can_read_members` is already satisfied by `team_admin`/`team_editor`/
+`team_analyst`; a plain `team_member` is not — the team dashboard is not part
+of the plain-member experience (which still gets its own personal dashboard,
+`user_id`-scoped). Existing platform-wide presets gained an optional
+`team_id` parameter with this second authorization branch rather than being
+forked into parallel `team_*` handlers — one query shape, two scopes.
+
+**Green/cost metrics** ride the same token-usage presets, computed
+server-side from a static, hand-maintained `model_impact_factors.yaml`
+(`libs/fred-core`, keyed by `model_name`, `default` fallback row) alongside
+the raw token count in one query: CO₂e and kWh are shown everywhere token
+usage is shown (required columns); a $ estimate is optional/collapsible.
+Both are labeled "estimated" — not billing- or measurement-grade.
+
+**No new settings surface.** Storage quota
+(`TeamMetadata.max_resources_storage_size`/`current_resources_storage_size`)
+and retention (`team_delete_grace`/`max_idle`, §35) already existed before
+this work — the `storage_by_team` preset reads `TeamMetadataStore` directly,
+no new table or endpoint. The one narrow, non-blocking gap:
+`max_resources_storage_size` is not yet in `TeamMetadataPatch`, so there is
+no per-team UI override, only the platform-wide config default.
+
+**No embedded Activités panel (reverted 2026-07-30).** An earlier iteration
+embedded the `TaskActivity` organism inline in these dashboards
+(`AnalyticsPage`'s admin section, `TeamUsagePage`'s editor/admin sections).
+Live review found this duplicated the dedicated Activity surfaces one click
+away (`/admin/tasks`, `/team/:teamId/settings/activity`) with no
+acknowledgement affordance, so the embeds were removed — `TaskActivity`
+itself and the two dedicated tabs are untouched; these dashboards link to
+them rather than re-render them. See `TASK-EVENT-STREAM-RFC.md` §2.10 for the
+task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
+Models-as-capability (`kind="model"` catalog projection, model-routing
+fail-closed enforcement) is specified above, not repeated here.
+
+## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
+
+A team (or personal space) chooses which of the models already available to
+it (`can_use`-enabled, see above) is the default for
+managed execution, and may override that default for specific operations
+(e.g. `planning`). This feature never grants new model access — it only lets
+the holder of existing access express a preference among it. Runtime-side
+merge/fail-closed rules are `RUNTIME-EXECUTION-CONTRACT.md` §8.32; this
+section is the product/data/API contract.
+
+**Data model** (`TeamRoutingPolicy`): `team_id`, `version`,
+`chat_default_profile_id: str | None`, `operation_rules:
+list[TeamOperationRouteRule]` (`rule_id`, `operation`, `purpose: str | None`,
+`target_profile_id`). `rule_id` unique per team policy; `(operation,
+purpose)` unique per team policy. `null` `chat_default_profile_id` means "use
+the runtime catalog default."
+
+**Resolution (fixed, deterministic, no scoring):** an operation+purpose match
+wins, else an operation-only match (`purpose=null`), else
+`chat_default_profile_id` if set, else the runtime catalog default for
+capability `chat`.
+
+**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects
+any referenced profile whose derived capability id
+(`model_capability_id(provider, name)` — coarser-grained than a profile id,
+since two profiles can share one `(provider, name)`) is not currently
+`can_use`-enabled for the team, **and** rejects any profile not present on
+**every** enabled, model-capable pod
+(`capabilities/catalog.py::universally_available_model_profile_ids`,
+intersection — not the union this section's admission
+catalog uses, since whichever pod serves a turn must resolve the chosen
+profile or fail closed at runtime). The `available-models` picker (§ below)
+applies the same intersection filter, so it never offers what the write
+would reject.
+
+**Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
+plain `team_member` is denied); write — `team_editor` only.
+`team_admin`/`team_editor` are orthogonal, not hierarchical
+(`platform/REBAC.md`) — `team_admin` has zero write authority here and can
+only constrain indirectly via model enablement (a platform-admin lever). A
+personal team's owner already holds `team_editor` unconditionally, so the
+same endpoint serves personal spaces with no special-casing.
+
+**API:** `GET`/`PATCH /control-plane/v1/teams/{team_id}/routing-policy`
+(`PATCH` is a full typed replacement); `GET
+/teams/{team_id}/routing-policy/available-models` (#2167) — a team-facing
+read endpoint distinct from the platform-admin-only
+`CapabilityTeamMatrixDrawer` data, sharing the same `team_admin`/`team_editor`
+read gate and the same catalog-aggregation + `usable_capability_ids`
+building blocks the write path validates against.
+
+**Frontend:** one panel (team settings "Routing" entry, gated on
+`canUpdateResources`/`team_editor`, reused unconditionally for personal
+spaces), a picker for `chat_default_profile_id` scoped to enabled+universally-
+available profiles, and zero-or-more operation-rule rows with the same
+constraint per row. A profile referenced by a stored policy that has since
+become unavailable still renders as a selectable option, flagged rather than
+silently dropped. `team_admin` sees the same panel with inputs disabled
+(read-only), not a second component. Hidden entirely when the team has no
+enabled models beyond the deployment default.
+
+**Explicit non-goals (V1):** per-agent routing rules, per-user routing
+inside a shared multi-member team (distinct from personal-space support,
+which is just a team routing policy scoped to a one-member team), model
+temperature/timeout tuning, a per-message composer picker, direct
+`models_catalog.yaml` editing from the product.

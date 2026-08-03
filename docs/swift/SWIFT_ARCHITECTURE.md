@@ -161,9 +161,8 @@ This means: **do not open a PR from `develop` into `swift`**. If you want to bri
 
 | Document                                                                                        | What it covers                                                            |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`docs/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](./rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Original architecture RFC — motivation, transport reform, packaging model |
-| [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md)                                       | Fred Runtime Discovery Contract (FRDC) — Kubernetes-native pod discovery  |
-| [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./design/RUNTIME-EXECUTION-CONTRACT.md)           | Frozen execution contract — SSE framing, request/response shapes          |
+| [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md)                                       | Fred Runtime Discovery Contract (FRDC) — Kubernetes-native pod discovery, not yet implemented |
+| [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./design/RUNTIME-EXECUTION-CONTRACT.md)           | Frozen execution contract — SSE framing, request/response shapes, agent-to-agent invocation (§14) |
 | [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./design/CONTROL-PLANE-PRODUCT-CONTRACT.md)   | Control-plane product/session/admin API boundaries                        |
 | [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](../libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) | On-wire protocol reference for pod implementers                           |
 | [`docs/backlog/BACKLOG.md`](./backlog/BACKLOG.md)                                               | Migration phases 0–6 and current status                                   |

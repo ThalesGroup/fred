@@ -295,7 +295,7 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 
 ### EVAL-02 — Task-event adoption (standalone evaluator)
 
-RFC: [`AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md`](../rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md).
+Design: [`TASK-EVENT-STREAM-RFC.md`](../rfc/TASK-EVENT-STREAM-RFC.md) §5.
 Refines Phases 3–4 for the deployed reality: the evaluator ships as a **standalone service**
 (own `/evaluation/v1` surface), not inside the control-plane (EVAL-01 §8.3). The `/rework`
 evaluation UI is already built (Phase 4 UI) against a **bespoke** campaign SSE; this is the

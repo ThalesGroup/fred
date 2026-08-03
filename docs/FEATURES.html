@@ -1344,7 +1344,7 @@
         <tr><td>Service exposure</td><td>Standard Kubernetes <code>Service</code> (internal) + <code>Ingress</code>/<code>Gateway</code> (browser); runtime pods exposed at <code>/runtime/{runtime_id}</code> prefix</td></tr>
         <tr><td>Service discovery</td><td>Kubernetes DNS; no custom mesh or sidecar required</td></tr>
         <tr><td>Network policy</td><td>Standard <code>NetworkPolicy</code> primitives; each service is independently policy-able</td></tr>
-        <tr><td>Helm chart</td><td>Modernized chart per <code>FRED-CHART-MODERNIZATION-RFC.md</code>; values-driven deployment for all services</td></tr>
+        <tr><td>Helm chart</td><td>Values-driven deployment for all services</td></tr>
         <tr><td>Custom agent pods</td><td>Import <code>fred-runtime</code>, package as container, register runtime URL in <code>platform.runtime_catalog_sources</code>; no Fred core changes needed</td></tr>
       </tbody>
     </table>

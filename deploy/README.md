@@ -86,7 +86,7 @@ chart contract unchanged and supplies, per instance:
   Foundation/Apps boundary those names must satisfy);
 - the same fresh-install sequence as every other instance: empty Foundation → user
   self-registers in Keycloak → authenticated root bootstrap (this contract) → declarative
-  platform import (`PLATFORM-IMPORT-RFC.md` §10) — never a Swift-to-Swift upgrade path;
+  platform import (`CONTROL-PLANE-PRODUCT-CONTRACT.md §27`) — never a Swift-to-Swift upgrade path;
 - a recommendation (not enforced by Fred) to rotate or remove the Secret's bootstrap key
   once root bootstrap has completed, mirroring `KC_BOOTSTRAP_ADMIN_*`'s own operational
   hygiene note.

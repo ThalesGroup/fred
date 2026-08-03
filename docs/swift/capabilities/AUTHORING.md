@@ -4,7 +4,7 @@
 > here is defined in `fred-sdk` and worked end-to-end in one in-tree reference
 > capability. This page tells you *which* file to read and *when* — it never restates
 > a field. When the SDK surface changes, the SDK changes; this map does not need a
-> rewrite. (RFC [`AGENT-CAPABILITY-RFC.md`](../rfc/AGENT-CAPABILITY-RFC.md) §14.)
+> rewrite.
 >
 > Authoring a capability with an assistant? Use the **`add-fred-capability` Skill**
 > (`.claude/skills/add-fred-capability/`) — it is the executable form of this map.
@@ -129,7 +129,7 @@ loudly at assembly (`CapabilityError`) rather than silently getting no tools.
 **Is it even a capability?** If the thing you want to add adjusts *how the model
 is called* rather than *what the model can call*, it is probably not one.
 Reasoning went through a full capability implementation before being withdrawn
-for exactly this reason (`MODEL-REASONING-ENABLEMENT-RFC.md` §15): an agent does
+for exactly this reason (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33): an agent does
 not *use* reasoning the way it uses document search, so offering it in the Tools
 tab put the decision in the wrong mental model. It now ships as a plain agent
 field plus a platform-emitted chat control. Model-call parameters, per-turn

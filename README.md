@@ -706,7 +706,8 @@ Persistence options:
 
 - Architecture RFCs
   - [SDK V2 for industrial-grade agents](./docs/swift/rfc/SDK-V2-RFC.md)
-  - [Distributed agent architecture](./docs/swift/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md)
+  - [Agent-to-agent invocation — current contract](./docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md) (§14)
+  - [Multi-agent memory hardening](./docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
 
 - Knowledge Flow backend
   - [Knowledge Flow backend README](./apps/knowledge-flow-backend/README.md)

@@ -7,9 +7,8 @@
 > `runtime_context.team_id` for regular collaborative-team users (with the documented
 > intrinsic-personal and service-agent cases). The control-plane's `prepare-execution` resolves only *where* the
 > agent runs (URLs) and the session's context — never a capability. §0–§3 describe this model;
-> the dated entries in §8 record the abandoned signed-grant approach as history. See
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
-> (§13/D5) and the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
+> the dated entries in §8 (§8.9-§8.11) record the abandoned signed-grant approach as history.
+> See the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
 
 RFC links in this document preserve decision history only. This design document
 is the current authority for implemented runtime behavior.
@@ -831,11 +830,12 @@ HTTP 422 (`content … should be a valid string`; observed wire payload
 tool-loop model-call boundary (`support/tool_loop.py` `reasoner`): it collapses
 **assistant** (`AIMessage`) list-content to clean reasoning-free text (preserving
 `tool_calls` and metadata) before `model.ainvoke`, while leaving `HumanMessage`
-(multimodal/base64 image content) and `ToolMessage` untouched. This is intentionally
-a *collapse* rather than the "preserve full provider message internally" behaviour in
-RFC §7.3 — Mistral's OpenAI-compatible endpoint rejects the raw reasoning form, so
-the reasoning survives only as the streamed `THOUGHT_*` trace. The author override
-(`thought_config`, Layer 2) remains open.
+(multimodal/base64 image content) and `ToolMessage` untouched. **Superseded by §8.37 (2026-07-31):** this was originally an unconditional
+collapse on every replayed message. It now only strips reasoning across a
+*closed* turn boundary — reasoning inside an still-open tool loop is kept,
+re-homed as ordinary assistant text, so the model does not "forget" why it
+called a tool between loop steps. See §8.37 for the current contract. The
+author override (`thought_config`, Layer 2) remains open.
 
 ### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
 
@@ -858,8 +858,7 @@ The full `VectorSearchHit` continues to be forwarded to the frontend via the
 
 The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
 rewritten to add explicit `[N]` citation format rules, inline placement
-requirements, and a "never reproduce URLs" guardrail. See
-`docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` for the full rationale.
+requirements, and a "never reproduce URLs" guardrail.
 
 ### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
 
@@ -947,6 +946,10 @@ and **fail-closed startup** (Keycloak user + M2M + OpenFGA all required), enforc
 today by control-plane, fred-agents, and knowledge-flow. The multi-pod packaging
 (one Keycloak client/audience per agent) and the sessionless HTTPS/SSE transport
 introduced on the branch are retained.
+
+**Still open (deployment infra, no code gap):** NetworkPolicies (ingress→pod,
+pod→OpenFGA, pod→Keycloak, deny inter-agent) and end-to-end TLS to the pod are not
+yet in the chart; no GitHub issue tracks this specifically.
 
 ### 8.12 ✅ Global base prompt injected at runtime, not baked — RUNTIME-09 (June 2026)
 
@@ -1443,12 +1446,7 @@ neither `tools()` nor `middleware()`-based capabilities (`dt-agents/aegis`,
 agents (deterministic multi-step workflows, not just ReAct loops) had no way to reuse a
 shared capability like `document_access` — every Graph agent that needed the same
 document search had to hand-roll it via `declared_tool_refs`/`invoke_tool` instead. See
-RFC §3.2/§3.9 for the full design; `docs/swift/capabilities/AUTHORING.md` for the
-authoring-facing summary.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.1.
+`docs/swift/capabilities/AUTHORING.md` for the authoring-facing summary.
 
 ---
 
@@ -1496,10 +1494,6 @@ landing enforced this for the *tools it built*; these four gaps were in what fed
 mechanism (an undeclared incompatible capability, an artifact with nothing in it, an
 ambiguous tool identity, an unguarded sync path) — each one a way the "never silently
 degrade" rule could be violated without tripping any of the loud checks §8.22 added.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
 
 ---
 
@@ -1590,10 +1584,6 @@ universal, a diagnostic that vanished exactly when it mattered most, an event
 that misreported its own tool's answer, an adapter narrower than the contract
 it claims to implement, and a doc claim broader than the code beneath it.
 
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9, §5.4.
-
 ---
 
 ### 8.25 ✅ `execution_models` can no longer be silently forgotten; two more Graph diagnostics fixed (2026-07-23)
@@ -1645,10 +1635,6 @@ couldn't tell an author had never made that declaration at all, plus two
 more spots where a real diagnostic still silently evaporated on the one path
 (Graph) that only ever sees the artifact half of a tool's answer.
 
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.1, §3.2, §3.9.
-
 ---
 
 ### 8.26 ✅ `execution_models` boot check closed on the VALUE, not the declaration; graph KPI status fixed (2026-07-23)
@@ -1680,10 +1666,6 @@ author writes the wrong value on purpose, not just when they forget to
 write anything. And a failing tool call must look like a failure
 everywhere it's recorded — the trace event (§8.24), the span (§8.25), and
 now the KPI metric a dashboard or alert would actually query.
-
-### RFC reference
-
-`docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §3.2, §3.9.
 
 ---
 
@@ -1771,7 +1753,7 @@ remaining 20 are exclusively the `GET /teams` open question above.
 
 ### 8.29 ✅ Reasoning is declared, projected, and enforceable — REASON-01 phase 1 (issue #2166, 2026-07-29)
 
-`MODEL-REASONING-ENABLEMENT-RFC.md` levels 1 and 2. Before this, reasoning was
+Levels 1 and 2 of REASON-01 (declare aptitude, platform activation). Before this, reasoning was
 one untyped YAML line (`ModelConfiguration.settings.reasoning_effort`, an opaque
 `Dict[str, Any]`): nothing in Fred knew a profile reasoned, and changing it
 needed a redeploy.
@@ -1794,7 +1776,7 @@ needed a redeploy.
 3. **`RuntimeContext.reasoning_enabled_model_ids: list[str] | None`**
    (fred-sdk, Group C) — the platform admin's activation, snapshotted at session
    prep and forwarded per turn, the same three-hop channel and lifecycle as
-   `chat_default_profile_id` (`TEAM-ROUTING-POLICY-RFC.md` §8.2). **Not** a
+   `chat_default_profile_id` (§8.32 above). **Not** a
    per-turn lookup.
 4. **`RoutedChatModelFactory.build_for_chat` strips reasoning settings**
    (`model_routing/provider.py`) when the resolved model is absent from that
@@ -1802,7 +1784,7 @@ needed a redeploy.
    The distinction is the whole point: `reasoning_effort` is already in
    `settings` by then, so a toggle that only skipped *adding* it would be
    decorative — the `allow_parallel_calls` failure recorded in
-   `AGENT-THINKING-API-RFC.md` §C.8, with an incident lever's name on it.
+   an incident lever's name on it.
    `tests/test_model_reasoning_enablement.py` proves it against the real
    `ChatOpenAI` request payload, both directions.
 
@@ -1814,10 +1796,10 @@ reasons" (RFC §5.6). A model reasons only by being named.
 **Not additive on upgrade.** A deployment running reasoning through YAML alone
 stops reasoning until an administrator switches it on (RFC §5.6.1) — on this
 branch that is `chat.mistral.small`, the current `chat` default. Release-noted,
-not silent. The safe direction, and deliberately so: `AGENT-THINKING-API-RFC.md`
-Amendment C measured 10/10 turns with duplicate tool calls on that exact
-profile, and a live per-model off switch is the only lever that stops a
-reasoning-induced incident without a redeploy (RFC §9).
+not silent. The safe direction, and deliberately so: §8.37 measured 10/10
+turns with duplicate tool calls on that exact profile, and a live
+per-model off switch is the only lever that stops a reasoning-induced
+incident without a redeploy.
 
 **Untouched**: per-team model authorization. Reasoning has no subject, so it is
 not a permission and writes no ReBAC tuple (RFC §5.1/§5.4). Levels 3 (per-agent
@@ -1827,8 +1809,8 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 
 ### 8.30 ✅ Per-agent and per-question reasoning — REASON-01 phase 2 (issue #2166, 2026-07-30)
 
-`MODEL-REASONING-ENABLEMENT-RFC.md` levels 3-4, plus its three §9 preconditions.
-Builds on §8.29 (levels 1-2); read that first.
+Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
+tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the
@@ -1887,7 +1869,7 @@ goes through the same factory.
 
 1. `max_tool_calls_per_turn = 12` on all five ReAct agents
    (`apps/fred-agents/fred_agents/tool_pacing.py`). `ToolCallLimitMiddleware` was
-   wired but inert since nothing set the value (`AGENT-THINKING-API-RFC.md` §C.8).
+   wired but inert since nothing set the value (§8.37).
    Applies to every turn, not only reasoning ones — RFC §14.4 explains why, and
    why a capability-contributed cap would break `frame.py`'s documented
    `after_model` ordering against the HITL gate.
@@ -1904,7 +1886,7 @@ goes through the same factory.
 
 ### 8.31 ✅ Reasoning blocks are persisted to session history (2026-07-31)
 
-`AGENT-THINKING-API-RFC.md` specified how reasoning is *surfaced* and never what
+§8.6/§8.31 specify how reasoning is *surfaced* and never what
 becomes of it afterwards — its own §C.9 names the gap. The consequence was
 user-visible: reasoning streamed into the trace, then vanished on page reload,
 because `_write_turn_history` (`agent_app.py`) mapped `tool_call`, `tool_result`,
@@ -1947,35 +1929,31 @@ model — see §C.9 and the note below.
 
 ---
 
-### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`, 2026-07-27)
+### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
 **What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
 carries two new fields threaded from control-plane at session-prep time, the
-same three-hop channel `context_prompt_text` already uses (RFC §8.2):
+same three-hop channel `context_prompt_text` already uses:
 
 - `chat_default_profile_id: str | None` — the team's default chat model
   profile, or `None` to fall through to the runtime's own default.
 - `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
   `(rule_id, operation, purpose | None, target_profile_id)` overrides.
 
-Both are a **session-prep snapshot, not a per-turn lookup** (RFC §8.1) —
-resolved once by `routing_policy/service.py::resolve_execution_routing_snapshot`
-when `ExecutionPreparation` is built, not re-read from control-plane on every
+Both are a **session-prep snapshot, not a per-turn lookup** — resolved once
+by `routing_policy/service.py::resolve_execution_routing_snapshot` when
+`ExecutionPreparation` is built, not re-read from control-plane on every
 turn. `fred-runtime`'s `ModelRoutingResolver`
 (`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
 fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
-already match — the static rules stay the ops escape hatch and always win
-(RFC §8.3). A referenced `target_profile_id` unknown to the pod fails closed
+already match — the static rules stay the ops escape hatch and always win.
+A referenced `target_profile_id` unknown to the pod fails closed
 (`ModelNotUsableError`), matching the write-time `can_use` validation
-control-plane already performed (RFC §7.2) — this is drift detection, not a
-second authorization gate (RFC §8.4).
+control-plane already performed — this is drift detection, not a second
+authorization gate.
 
-Product-surface companion to this contract change: `GET`/`PATCH
-/control-plane/v1/teams/{team_id}/routing-policy` (`team_editor` writes,
-`team_admin`+`team_editor`+`team_analyst` read — the read gate excludes a
-plain `team_member` as of the same-day #2167 follow-up, RFC §6) and, as of
-that same follow-up, `GET .../routing-policy/available-models` backing the
-frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
+Product/data/API contract (data model, resolution algorithm, authorization,
+frontend surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
 
 ---
 
@@ -2075,6 +2053,80 @@ keep riding the client-forwarded context unchanged. The per-turn model
 authorized for, whatever routing profile it names — narrowing that further
 was assessed and rejected as disproportionate for what is a cost/comfort
 lever, not an access boundary.
+
+---
+
+### 8.36 ✅ Native `anthropic` model provider — RUNTIME-07 (2026-07-21)
+
+**What changed.** `fred-core`'s chat model factory gained a seventh
+`ModelProvider`, `anthropic` (`langchain_anthropic.ChatAnthropic`), alongside
+`azure-apim`, `azure-openai`, `ollama`, `openai`, `vertex-ai`, and
+`vertex-ai-model-garden`. It targets both direct Anthropic API access and an
+Anthropic-native gateway (e.g. a LiteLLM router exposing the Anthropic
+Messages API at a custom base URL) — previously the only path to such a
+gateway was shimming it through the `openai` provider against the wrong API
+surface (OpenAI Chat Completions instead of Anthropic Messages).
+
+**As-built auth (diverges from the original proposal):** a single
+`anthropic_api_key` accepts **either** `ANTHROPIC_API_KEY` or
+`ANTHROPIC_AUTH_TOKEN` (`os.getenv("ANTHROPIC_API_KEY") or
+os.getenv("ANTHROPIC_AUTH_TOKEN")`), sent as the standard `x-api-key` header
+in both cases. The originally proposed split — `ANTHROPIC_AUTH_TOKEN` forcing
+a distinct `Authorization: Bearer` header for gateway mode — was not built;
+one code path covers both direct-API and gateway deployments. `base_url`
+resolves from an explicit `settings.base_url`, else `ANTHROPIC_BASE_URL`, else
+the SDK default.
+
+**Unchanged:** `vertex-ai-model-garden` with `model_family: anthropic`
+(Google ADC auth) stays as a separate, still-supported path — this provider
+does not replace it. No frozen contract field changed; this is a new enum
+value and a new factory branch only.
+
+---
+
+### 8.37 ✅ Reasoning threads within an open tool loop; tool-loop safety guardrails (RUNTIME-04/05, 2026-07-31)
+
+**Supersedes §8.6's "collapse-only" description of `strip_reasoning_from_history`.**
+That helper originally stripped provider reasoning blocks from every replayed
+assistant message, unconditionally — safe against Mistral's HTTP 422 on
+replayed raw reasoning, but it also meant the model "forgot" its own
+reasoning between tool-loop steps and re-derived the same plan, re-issuing
+byte-identical tool calls (measured: 10/10 turns with a duplicate call on
+`mistral-small` + `reasoning_effort: high`, confirmed independently across
+re-measurements).
+
+**Fix — thread within the open turn, strip only across turn boundaries.**
+`CheckpointHygieneMiddleware` now calls
+`thread_reasoning_within_open_turn`: reasoning content is kept, re-homed as
+ordinary assistant text (prefixed `RECALLED_REASONING_PREFIX`), for any
+message still inside the current open tool loop; it is dropped only once
+the turn closes (`final` reached) — closed-turn reasoning is never replayed
+into a later turn's context. There is no protocol-level channel that marks
+re-homed reasoning as privileged — it is ordinary `content`, the same field
+a user-facing reply is written into, so any consumer reading a checkpointed
+transcript must not assume a stronger separation than a text prefix
+convention provides. Measured empty risk (0/8 trials) of the model
+narrating or repeating this recalled text back to the user, but the
+channel itself carries no guarantee against it.
+
+**Tool-loop safety guardrails, permanent (not reasoning-specific — apply to
+every ReAct turn):**
+
+- `max_tool_calls_per_turn = 12` on all five ReAct agents
+  (`fred_agents/tool_pacing.py`) — a real cap, not a documented-but-inert
+  default; hitting it degrades the answer (`exit_behavior="continue"`)
+  rather than erroring the turn.
+- `TOOL_REPETITION_RULE`, explicit and tested, in
+  `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) — previously
+  a symptom of the tool-failure-recovery suffix (unrelated issue #2073) was
+  the only thing suppressing repeat calls in production, with nothing
+  tying that protection to reasoning drift or guaranteeing it would survive
+  a rewording.
+
+**Not closed by this work:** reasoning continuity across a **Graph** agent's
+node boundaries (Graph authors use `context.thinking()` directly, a
+different execution model); token cost of re-homed reasoning (it now
+consumes context tokens the previous strip-everything behavior did not).
 
 ---
 
@@ -2331,3 +2383,103 @@ No DeepEval, LiteLLM, or OpenTelemetry dependency is permitted in `fred-runtime`
 ### RFC reference
 
 `docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2
+
+---
+
+## 14. Agent-to-Agent Invocation — `invoke_agent`
+
+### Frozen surface
+
+One agent invokes another as a **bounded function call**, not a handoff: the
+caller passes a message (and optionally a typed output schema and a per-call
+retrieval scope), keeps control of its own turn, and gets a typed result back.
+There is no separate "handoff" primitive that transfers conversation control
+to a callee — composition is always caller-keeps-control.
+
+```
+GraphNodeContext.invoke_agent(
+    agent_id: str,
+    message: str,
+    *,
+    prior_turns: tuple[ConversationTurn, ...] = (),
+    output_schema: type[BaseModel] | None = None,
+    scope: InvocationScope | None = None,
+) -> AgentInvocationResult
+```
+
+`output_schema` and `scope` are optional and additive — every caller that
+never sets them keeps working unchanged.
+
+### Invariants — what is shared, what is not
+
+Every `AgentInvokerPort` implementation (today only `LocalRegistryAgentInvoker`)
+must uphold these, regardless of transport:
+
+- **Identity is delegated, never re-authenticated or elevated.** The callee
+  runs under the caller's own access token and `team_id`; ReBAC/document
+  permissions are enforced against that identity, not a fresh one.
+- **Scope narrows, never widens.** `InvocationScope` (`document_uids`,
+  `library_ids`, `search_policy`) can only restrict what the callee's
+  retrieval sees for that one call — it cannot grant access the caller's
+  identity doesn't already have.
+- **No shared mutable state.** The callee executes with its own fresh
+  graph/ReAct state — no shared object, no shared long-term memory. (Its
+  *checkpoint* isolation from the caller is a known gap — see below.)
+- **No shared tools.** The callee uses only its own declared tools/MCP
+  servers; the caller's tool access is never extended to it.
+- **History is opt-in and minimal.** `prior_turns` forwards a curated
+  `tuple[ConversationTurn, ...]` (`user_message`/`agent_response`/`agent_name`
+  only) — never the callee's internal message trace — and is empty by
+  default.
+- **Typed output is optional and bounded.** When `output_schema` is given, the
+  runtime forces and validates a schema-conformant result with a bounded
+  retry (2 attempts); on persistent mismatch the call still returns
+  (`structured=None`) rather than hanging.
+
+### Boundary — same pod only
+
+`invoke_agent` today only resolves agents registered in the calling pod's own
+in-process registry. This is a **deliberate, hard boundary**, not a
+placeholder: cross-pod/remote agent invocation is a **separate mechanism**,
+requiring its own security review, never an invisible extension of this one.
+See "Note of intention" below.
+
+### Known gaps (tracked, not yet closed)
+
+- **Composition depth / cycle limit.** Not implemented — nothing today
+  prevents agent A invoking B invoking A, or an unbounded invocation chain.
+  Tracked as MEMORY-06 in
+  [`../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md).
+- **Agent-scoped checkpoint isolation.** Checkpoint state is keyed by
+  `session_id` alone, not by agent — a caller and a callee sharing one
+  session can load or overwrite each other's checkpoint. Tracked as
+  MEMORY-02 in the same RFC (proposed fix: `checkpoint_ns` derived from the
+  executing agent, `thread_id` kept as `session_id`).
+
+### Real-world adopter — fred-rags "move to cloud"
+
+`fred-rags`'s `apps/rags-agents` pod (external repo) is a production consumer
+of the typed/scoped contract: its cloud-migration-assessment agents (`Eva`,
+`Chronos`) invoke sub-agents (`Tessa`, `Rico`) with `output_schema` +
+`InvocationScope(document_uids=...)` to extract structured facts scoped to
+specific documents, rather than free-text parsing and un-scoped retrieval. Its
+producer/callee agents run inside the same user session (the MEMORY-02
+scenario above) and its CMDB-trust-signals composition (Eva → Tessa) is
+exactly the kind of multi-hop call the missing depth/cycle guard (MEMORY-06)
+needs to cover.
+
+### Note of intention — remote/Temporal transport (future, separate)
+
+`AgentInvokerPort` and `AgentInvocationRequest`/`AgentInvocationResult` are
+already designed to be transport-independent — in-process, HTTP, and Temporal
+child workflow are all named in the contracts' own docstrings — and a full
+HTTP/SSE implementation (`RemoteSseAgentInvoker`) already exists in
+`fred-sdk`, unused by any pod today. Extending `invoke_agent` to cross-pod or
+durable/Temporal execution is intentionally **out of scope for the
+invariants above** and will get its own design pass when a concrete need
+appears (pod discovery/topology, per `platform/PLATFORM_RUNTIME_MAP.md`, is
+still a manually-maintained static catalog, not yet auto-discovered) — never an
+implicit relaxation of the same-pod boundary.
+
+See [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
+for the two open gaps (MEMORY-02, MEMORY-06).

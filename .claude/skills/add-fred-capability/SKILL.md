@@ -6,7 +6,7 @@ user-invocable: true
 
 Add a new Fred **capability** — one modular agent feature carried end to end by one
 object (declaration + `tools()`, its execution-model-agnostic runtime), not a feature
-scattered across the codebase (RFC `docs/swift/rfc/AGENT-CAPABILITY-RFC.md` §1–§2).
+scattered across the codebase.
 
 **The code is the spec; you are the map.** Read the live types and the in-tree pilot
 before writing anything; never restate a manifest field from memory — it drifts.
@@ -45,11 +45,12 @@ Do not skip this. Open and skim:
 - **Not everything is a capability** — if the thing adjusts *how the model is
   called* rather than *what the model can call*, stop and reconsider. Reasoning
   was built as a full capability and then withdrawn
-  (`MODEL-REASONING-ENABLEMENT-RFC.md` §15): an agent does not *use* reasoning
+  (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33): an agent does not *use* reasoning
   the way it uses document search, so the Tools tab was the wrong home for it.
-  It ships instead as a plain agent field (`AgentTuning.reasoning_enabled`, in
-  the form's General section) plus a platform-emitted chat control. Model-call
-  parameters and per-turn platform options belong outside this system.
+  It ships instead as a plain agent field (`AgentTuning.reasoning_enabled`,
+  rendered in the Capabilities tab through the generic `CapabilityCard`) plus a
+  platform-emitted chat control. Model-call parameters and per-turn platform
+  options belong outside this system.
 - **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).

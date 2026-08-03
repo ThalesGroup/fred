@@ -1,20 +1,16 @@
 # RFC — Team Platform Policy
 
-**Status:** Draft for team review. **Partially superseded 2026-07-26:**
-`model_guardrails` (§3, §7.1 below) is no longer needed — the models-as-
-capability system shipped in #2110 (`AGENT-CAPABILITY-RFC.md` §8.7) already
-provides per-team/personal-space model enablement via ReBAC `can_use` grants,
-with a shipped UI (`/admin/capabilities?kind=model`) and fail-closed runtime
-enforcement. `TEAM-ROUTING-POLICY-RFC.md` §7 now binds against that
-enablement data directly instead of against this RFC's `model_guardrails`.
-Everything else here — `storage`, `ingestion`, `size`, `deletion_retention`,
-`tool_guardrails` — is unaffected and still fully unbuilt; this note changes
-nothing about them.
+**Status:** Draft for team review. Model and MCP-server allowlisting are out
+of this RFC's scope — per-team/personal-space model enablement is governed
+by the models-as-capability system (`CONTROL-PLANE-PRODUCT-CONTRACT.md`, ReBAC
+`can_use` grants, `/admin/capabilities?kind=model`) and team routing binds
+against it directly (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37). This RFC's
+remaining scope — `storage`, `ingestion`, `size`, `deletion_retention`,
+`tool_guardrails` — is still fully unbuilt.
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-23  
 **Area:** `control-plane-backend`, `knowledge-flow-backend`, `frontend`  
-**Related:** `FRED-TEAM-CONFIG-RFC.md`, `TEAM-ROUTING-POLICY-RFC.md` §7 (model
-guardrail supersession)
+**Related:** `FRED-TEAM-CONFIG-RFC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37
 
 ---
 
@@ -70,11 +66,6 @@ Not included in V1:
 
 ## 3. Data model
 
-**`model_guardrails`/`TeamModelGuardrails` below is superseded (2026-07-26,
-see header) by #2110's `kind="model"` capability enablement — do not
-implement it.** Kept in the model here only as the historical record of what
-it replaced; everything else in this class is still the target.
-
 ```python
 class TeamPlatformPolicy(BaseModel):
     team_id: TeamId
@@ -83,7 +74,6 @@ class TeamPlatformPolicy(BaseModel):
     ingestion: TeamIngestionPolicy
     size: TeamSizePolicy
     deletion_retention: UserDeletionRetentionPolicy
-    model_guardrails: TeamModelGuardrails  # superseded — see note above
     tool_guardrails: TeamToolGuardrails
 
 
@@ -106,10 +96,6 @@ class UserDeletionRetentionPolicy(BaseModel):
 class TeamIngestionPolicy(BaseModel):
     max_source_file_bytes: int
     max_batch_file_count: int
-
-
-class TeamModelGuardrails(BaseModel):
-    allowed_profile_ids: list[str] | None = None
 
 
 class TeamToolGuardrails(BaseModel):
@@ -165,12 +151,6 @@ class TeamToolGuardrails(BaseModel):
 
 - hard limit for one ingestion request containing multiple files
 
-`model_guardrails.allowed_profile_ids`
-
-- `null` means "no team-specific narrowing; use deployment defaults"
-- non-empty list means "team routing and agent configuration may only reference
-  these profile IDs"
-
 `tool_guardrails.allowed_mcp_server_ids`
 
 - `null` means "no team-specific narrowing; use deployment defaults"
@@ -212,11 +192,6 @@ size:
 deletion_retention:
   conversations_retention_days: 7
   documents_retention_days: 1
-model_guardrails:
-  allowed_profile_ids:
-    - default.chat.mistral
-    - chat.openai.gpt5mini
-    - chat.openai.gpt5
 tool_guardrails:
   allowed_mcp_server_ids:
     - mcp-knowledge-flow-mcp-text
@@ -233,8 +208,7 @@ This means:
   documents after 1 day
 - one ingestion source file cannot exceed 100 MB
 - one ingestion request cannot contain more than 20 files
-- routing policy and managed-agent configuration can only reference the listed
-  model profiles and MCP servers
+- managed-agent configuration can only reference the listed MCP servers
 
 ---
 
@@ -256,7 +230,7 @@ Business rule:
 
 (Terminology note: this RFC predates the AUTHZ-05 team-role rename —
 `owner`/`manager`/`member` are now `team_admin`/`team_editor`/`team_member`,
-RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §26. Updated here for consistency,
+per `platform/REBAC.md`. Updated here for consistency,
 2026-07-10.)
 
 ---
@@ -276,7 +250,6 @@ service.
 | `deletion_retention.*`                   | delete-user activity: drives `PurgeQueueStore` scheduling at task time     |
 | `ingestion.max_source_file_bytes`        | ingestion upload boundary before temp-file persistence                     |
 | `ingestion.max_batch_file_count`         | ingestion controller request validation                                    |
-| `model_guardrails.allowed_profile_ids`   | team routing policy writes and future managed-agent model selection writes |
 | `tool_guardrails.allowed_mcp_server_ids` | managed-agent create/update and runtime preparation validation             |
 
 ### 6.1 Rejection behavior
@@ -296,23 +269,15 @@ the violated field.
 
 ## 7. Interaction with existing and future surfaces
 
-### 7.1 Team routing policy — superseded 2026-07-26
+### 7.1 Managed-agent configuration
 
-~~Every profile referenced by `TeamRoutingPolicy` must belong to
-`model_guardrails.allowed_profile_ids` when that allowlist is non-null.~~
-See `TEAM-ROUTING-POLICY-RFC.md` §7: `TeamRoutingPolicy` now binds directly
-against `kind="model"` capability enablement (#2110) instead. This section is
-historical record only.
-
-### 7.2 Managed-agent configuration
-
-If a future per-instance model selector exists, it should be bounded the same
-way — by `can_use` capability enablement, not by `allowed_profile_ids`.
+A per-instance model selector is bounded by `can_use` capability enablement
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md`), not by a field in this RFC.
 
 Every selected MCP server ID must belong to `allowed_mcp_server_ids` when that
 allowlist is non-null.
 
-### 7.3 Prompt library
+### 7.2 Prompt library
 
 Prompt authoring is not directly constrained by platform policy in V1.
 
@@ -460,9 +425,8 @@ block, not the `regular` block. Key differences:
 
 ## 13. Team creation and initial policy assignment
 
-**Updated 2026-07-10 for consistency with the shipped implementation** (RFC
-`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §28, revised by Part 6 §29-32 /
-AUTHZ-05 review item 9). Team creation already exists and works differently
+**Updated 2026-07-10 for consistency with the shipped implementation** (per
+`platform/REBAC.md`, AUTHZ-05 review item 9). Team creation already exists and works differently
 from the original draft below: there is no Keycloak group — a team is a
 `team_metadata` row plus OpenFGA relations, full stop.
 

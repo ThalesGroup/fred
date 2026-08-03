@@ -5,7 +5,7 @@
 **Date:** 2026-06-26
 **ID:** AGENT-FILESYSTEM-HARDENING
 **Tracked items:** `FILES-04`, `FILES-05`; linked security dependency `RUNTIME-07`
-**Related docs:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`
+**Related docs:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.11
 
 ---
 
@@ -66,7 +66,7 @@ for `shared/` writes. This is the deferred G1b gap from FILES-04.
 > caller's **Keycloak JWT identity + the pod's verified execution scope** (the same
 > JWT+OpenFGA context the pod authorizes with), **not** from a control-plane-signed grant.
 > Any "signed execution grant" reference in F2/P1 below is obsolete — re-spec against the new
-> model in [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
+> model in `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.11.
 
 The filesystem should not invent a parallel identity system. The correct source of agent
 identity is the managed execution grant and runtime context. This RFC therefore depends

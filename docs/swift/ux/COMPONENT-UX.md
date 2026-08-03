@@ -209,8 +209,8 @@ sub-menu. The popover deliberately stays open so a user can flip it and keep
 composing. It is also the first row contributed by the **platform** rather than by a
 capability. It appears only when the agent's author turned Reasoning on in the form's
 Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md`
-§8). The offer itself lived in the General section until Amendment C (2026-08-02) moved
+gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
 it into the Capabilities tab, rendered through the same `CapabilityCard` component every
 real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
 even though the reasoning offer still isn't a capability underneath.
@@ -267,7 +267,7 @@ agents) so the decision is informed at the point it is made.
   in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
   a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
   `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
-  threaded by a single 1px timeline rail so the turn still reads as a process unfolding. See `AGENT-THINKING-API-RFC.md` Amendment D.
+  threaded by a single 1px timeline rail so the turn still reads as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
   sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
@@ -305,7 +305,7 @@ agents) so the decision is informed at the point it is made.
   The thought row is now filtered out entirely (`traceUtils.groupTraceEntries()`) — it was
   pure bookkeeping duplication, not agent reasoning. The combo row alone now carries the
   humanized tool label, the status dot, and (new) the real execution latency. See
-  `RUNTIME-EXECUTION-CONTRACT.md` §8.21 and `AGENT-THINKING-API-RFC.md` Amendment B.
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 ---
 
@@ -857,8 +857,8 @@ renders a `preview.markdownUnavailable` notice instead of the former literal
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
   continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
-- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08,
-  RAG-AGENT-QUALITY-RFC.md §5), unaffected by this component.
+- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
+  unaffected by this component.
 
 #### Resolved
 
@@ -1589,7 +1589,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 **Status:** `Functional`
 
 Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
 its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
 in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
 `hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
@@ -1609,7 +1609,7 @@ team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activit
 line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
 `/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
 nav rail, which additionally has ack support this embed never did. See
-`KPI-ANALYTICS-RFC.md` §2.8 and the `TaskActivity` entry below.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36 and the `TaskActivity` entry below.
 
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
@@ -2142,10 +2142,10 @@ non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
 (`scope="team" kind="ingestion"`) and team_admin (`scope="team"`, unfiltered) sections briefly
-embedded this organism per KPI-ANALYTICS-RFC.md §2.8. Removed as a live-review finding: they
+embedded this organism per `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36. Removed as a live-review finding: they
 duplicated the two dedicated surfaces above, one click away in the same nav rail, without this
 organism's missing ack affordance ever getting fixed for the duplicate. See
-`KPI-ANALYTICS-RFC.md` §2.8.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36.
 
 #### Open UX issues
 
