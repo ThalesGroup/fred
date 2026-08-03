@@ -228,7 +228,7 @@ variables) — replaces the config-seeded
 `platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
 from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
 role from deployment config anymore; the only other path is the declarative
-platform import (`PLATFORM-IMPORT-RFC.md` §10).
+platform import (§27).
 Endpoint authorization matrix entry:
 `docs/swift/platform/authz-endpoint-matrix.yaml` (`external_or_public`).
 
@@ -702,9 +702,9 @@ See `docs/swift/design/FILESYSTEM.md`.
   - `mcp_servers` enriched with `display_name` from runtime MCP catalog
   - Optional `?include_non_public=true` query (default false) — honored **only for
     platform admins**; lists internal (`AgentDefinition.public=False`) templates that are
-    otherwise hidden from the create-agent catalog (see `AGENT-VISIBILITY-RFC.md`)
+    otherwise hidden from the create-agent catalog
 
-> **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** internal (`public=False`) agents are
+> **2026-06-25 (VALID-02):** internal (`public=False`) agents are
 > hidden from non-admins across control-plane paths. **Managed path** — listing honors
 > `include_non_public` only for admins; `enroll_agent_instance` resolves with the caller's
 > privilege, so a non-admin who guesses a hidden `template_id` gets 404, an admin may enroll.
@@ -1141,7 +1141,7 @@ TaskLogDetail | MigrationDetail | ErasureDetail | None`), typed per the
 sibling `kind` field exactly like the existing per-kind `TaskEvent` union.
 `None` for a kind with no detail model (`log`) or a task recorded before this
 field existed — backward compatible, no migration. Rationale and full
-backend/frontend design: `PLATFORM-IMPORT-RFC.md` §11,
+backend/frontend design: §27 above,
 `AUTHZ-MIGRATION-BACKLOG.md` Step 3.
 
 `MigrationDetail.result: MigrationResult | None = None` is populated only on
@@ -1169,7 +1169,7 @@ to render the result; `launchPlatformImport.ts`/`MigrationPage.tsx` consume
 `ImportLaunchResponse.target` directly (no hand-built duplicate).
 
 **`POST /import-export/import` + new `POST /import-export/reset-full`
-(2026-07-24, MIGR-05.18, `PLATFORM-IMPORT-RFC.md` §9):** `POST
+(2026-07-24, MIGR-05.18):** `POST
 /import-export/import`'s multipart body gains an optional second field,
 `realm_file` (a standalone Keycloak realm export JSON), which — when present
 — the importer uses in place of the zip's own `keycloak/realm.json`. New
@@ -1248,7 +1248,7 @@ renders the class as a synthetic pinned "All personal spaces" first row and drop
 the admin's own personal team from the ordinary per-team rows.
 
 **2026-07-17 — agent templates join this surface (CAPAB-01, `AGENT-CAPABILITY-RFC.md`
-§8.6 / `AGENT-VISIBILITY-RFC.md` §7.5).** `CapabilityEnablementItem` and
+§8.6).** `CapabilityEnablementItem` and
 `CapabilityCatalogEntry` gained `kind: "tool" | "agent"` (defaults `"tool"`,
 so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
@@ -1511,10 +1511,8 @@ already-hardcoded `permissions`) rather than a live ReBAC lookup — see
 
 ## 27. Contract Notes — MIGR-05, platform import/export/reset (finalized 2026-07-25)
 
-MIGR-05 (kea→swift configuration restore) is done — `PLATFORM-IMPORT-RFC.md` is
-now a short closed-out pointer to this section. The permanent, load-bearing
-facts below are the canonical contract; design deliberation/history stays in
-`git log -p -- docs/swift/rfc/PLATFORM-IMPORT-RFC.md`.
+MIGR-05 (kea→swift configuration restore) is done. The permanent, load-bearing
+facts below are the canonical contract.
 
 **Endpoints** (`/control-plane/v1/import-export/`, all `require_admin` +
 `CAN_MANAGE_PLATFORM`):
@@ -1666,8 +1664,7 @@ deliberately out of #1954's scope. See `KEA-MIGRATION-BACKLOG.md` §0bis.
 
 ## 28. Contract Notes — MIGR-07, corpus re-vectorization (finalized 2026-07-25)
 
-MIGR-07 backend is built (issue #2111) — `CORPUS-REVECTORIZE-RFC.md` is now a
-short closed-out pointer to this section. No knowledge-flow-backend equivalent
+MIGR-07 backend is built (issue #2111). No knowledge-flow-backend equivalent
 of this contract doc exists yet (checked `docs/swift/design/` and
 `docs/swift/platform/` — nothing covers corpus/ingestion endpoint contracts);
 this section is the interim canonical record for the shape below until one is

@@ -14,7 +14,7 @@
 > settings. Temporal is an execution engine, **not** the audit substrate (§7).
 >
 > **What rev. 2 folds in (fewer RFCs, not more):**
-> - **EVAL-02** (`AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md`) → **retired to a tombstone.**
+> - **EVAL-02** → **folded in here.**
 >   Its deliverable — a *multi-source* Activity surface aggregating knowledge-flow +
 >   control-plane + evaluation producers — is the shared surface defined here (§3.4); its
 >   evaluator-side wiring folds into §5.
@@ -28,7 +28,7 @@
 > confirmed core (envelope, tables, endpoints, reconciliation) is unchanged; rev. 2 only
 > *adds* the audit dimension (§3.3–§3.6) and the shared surface (§3.4).
 >
-> **Amendment (2026-07-14, AUTHZ-07 Step 3 — `PLATFORM-IMPORT-RFC.md` §11).** Two additive,
+> **Amendment (2026-07-14, AUTHZ-07 Step 3).** Two additive,
 > backward-compatible contract changes, both documented in §2.1/§2.7 below: (1) `MigrationDetail`
 > gained an optional `result: MigrationResult | None` field — populated only on the terminal
 > `succeeded` event, `None` on every intermediate progress event exactly as before — so a
@@ -37,7 +37,8 @@
 > optional `detail` field, typed per `kind` the same way `TaskEvent.detail` already is, so the
 > last-persisted detail (already retained by `record_event`'s "keep the last non-null detail"
 > rule, §2.6) survives a reload instead of being dropped at the list-endpoint boundary. Neither
-> change adds a table, an endpoint, or a parallel model — see `PLATFORM-IMPORT-RFC.md` §11 for
+> change adds a table, an endpoint, or a parallel model — see
+> `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` for
 > the full rationale and the producer-side wiring (`import_export/api.py`).
 
 > **Amendment (2026-07-27) — rev. 4, per-service task persistence, rejects central ownership.**
@@ -63,7 +64,7 @@
 > The fix is infrastructure-only: give knowledge-flow the same dedicated database evaluation
 > already has, scoped **only** to `task_run`/`task_event_log` — knowledge-flow's `tag`/
 > `document_metadata` tables stay in the shared database, because control-plane's platform
-> import/export/reset (`PLATFORM-IMPORT-RFC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27/§31)
+> import/export/reset (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §27/§31)
 > genuinely needs them in the same atomic transaction as its own `agent_instance`/`team_metadata`/
 > `prompt` rows — task rows never participate in that transaction, so nothing requires them to be
 > co-located. See §2.9 (rewritten), §2.6, §3.4, §5, §6 and §7 below for the corrected design; the
@@ -655,7 +656,7 @@ function useTaskStream(taskId: string | null): {
 ## 5. Consumers
 
 - **Ingestion** (`kind = "ingestion"`, knowledge-flow). The `POST /upload-process-documents` NDJSON stream co-emits `task_id` and `document_uid` on the same line (the metadata row is created before the workflow is submitted), making the task linkable to its document row immediately. Ingestion panels consume `useTaskStream`; per-document live progress replaces polling. **Rev. 4 (corrects rev. 2 below):** knowledge-flow (API and worker) keeps owning its `task_run`/`task_event_log` tables and its own task SSE, in its own dedicated database (§2.9) — the frontend's ingestion panels subscribe to knowledge-flow directly, same as today. ~~Rev. 2 text (superseded, never built): "knowledge-flow (API and worker) records through `RemoteTaskClient` to control-plane; it no longer owns task tables or serves task SSE — the frontend subscribes to control-plane for ingestion progress."~~
-- **Migration / platform import** (`kind = "migration"`, control-plane, platform-owner only). The task/event contract supplies durable task registration, replayable SSE, typed `MigrationDetail`, and UI rendering. The current Kea-to-Swift business order is governed by [`KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md); the MIGR-05 backend workflow is governed by [`PLATFORM-IMPORT-RFC.md`](PLATFORM-IMPORT-RFC.md). Keep migration-specific step names in those documents, not in this shared task/event RFC.
+- **Migration / platform import** (`kind = "migration"`, control-plane, platform-owner only). The task/event contract supplies durable task registration, replayable SSE, typed `MigrationDetail`, and UI rendering. The current Kea-to-Swift business order is governed by [`KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md); the MIGR-05 backend workflow is governed by `CONTROL-PLANE-PRODUCT-CONTRACT.md §27`. Keep migration-specific step names in those documents, not in this shared task/event RFC.
 - **Evaluation** (`kind = "evaluation"`, standalone `fred-agent-evaluator`). Campaign progress counters only; target `{ type: "evaluation_campaign", id, label }`; team-scoped and readable by authorized team members (§3.2). Detail per `EvaluationDetail`. **Adoption (folded from EVAL-02; rev. 4 corrects the text below):** the evaluator owns its own `task_run`/`task_event_log` in its own already-dedicated database (provisioned 2026-07-07, `fred-deployment-factory` commit `86f2c3b`) and serves its own `/tasks` — the frontend queries it directly (`useListTasksEvaluationV1TasksGetQuery`, §2.9), exactly the pattern rev. 4 extends to knowledge-flow. This is, and was always, correct — the evaluator never needed `RemoteTaskClient` to avoid duplication, because it never shared a database with anyone. Task `succeeded` ≠ evaluation verdict — the task plane stays distinct from the evaluation-domain plane. See `AGENT-EVALUATION-RFC.md` (EVAL-01) §5. ~~Rev. 2 text (superseded, never built): "the evaluator records through `RemoteTaskClient` to control-plane and drops its bespoke `/campaigns/{id}/events` SSE — it does not mount its own `/tasks` surface; the frontend reads control-plane (single-source)."~~
 - **Erasure** (`kind = "erasure"`, control-plane; shipped CTRLP-12). Deferred conversation delete emits a future-dated `erasure` task (`scheduled_for = due_at`), advanced `pending → running → succeeded` by the lifecycle worker; a partial receipt stays `running` for retry, never `failed`. `ErasureDetail` carries `reason` + per-store counts, no content (§3.3). **CTRLP-13** extends the producer so member-removal and idle-expiry enqueues each emit a paired task (§3.5); the enforcement mechanics live in the RGPD RFC, the surfacing here.
 - **Deletion** (`kind = "deletion"`, control-plane; rev. 2). A principal/entity is removed — user-account deletion today (`DeletionDetail.subject = "user_account"`), extensible to team disband later. The task is emitted at the action site (`delete_user`) and may be immediately terminal for a synchronous op; `cascade_scheduled` counts the downstream `erasure` tasks the deletion spawns, giving an auditable "account deleted → N conversations erased" chain. This closes the last coverage gap in §3.5. `PurgeQueueStore` and `LifecycleManagerWorkflow` are unchanged; they gain a task emission, not a rewrite.

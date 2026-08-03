@@ -51,7 +51,7 @@ import after their first login. No kea `sub` is ever written as a Swift identity
 - **kea → swift** (later): identity & data assumptions hold unchanged; only **names map**
   (store `kea`→`fred`, index `kea-…`→`vector-index-mistral`).
   The **metadata transform** (agent `payload_json`→`agent_instance`, per-user personal teams,
-  UUID-only user-tuple filter) is swift-specific — see [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md).
+  UUID-only user-tuple filter) is swift-specific — see `CONTROL-PLANE-PRODUCT-CONTRACT.md §27`.
 
 **Correction, 2026-07-27 — bucket naming was wrong above.** The `kea-*`→unprefixed
 bucket-name mapping stated in earlier versions of this section was a **local rehearsal
@@ -92,7 +92,7 @@ instance), not the real convention. Confirmed today against the actual GCS layou
   as **explicit** OpenFGA relation tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
   — no Keycloak group backs it, and swift's `team_metadata.id` can still reuse a kea team's old
   group-id string (opaque to swift), but the **metadata** topic (MIGR-02/MIGR-05) must now write
-  `user→team` tuples explicitly for every migrated team — see `PLATFORM-IMPORT-RFC.md` §2/§4 for
+  `user→team` tuples explicitly for every migrated team — see `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` for
   the corrected plan. Concrete import
   mechanics (source-team enumeration, tuple-writing order) are not yet designed.
 
@@ -100,11 +100,11 @@ instance), not the real convention. Confirmed today against the actual GCS layou
 
 ## §0bis Platform import service (MIGR-05)
 
-Full contract: [`PLATFORM-IMPORT-RFC.md`](../rfc/PLATFORM-IMPORT-RFC.md) — swift-native path
+Full contract: `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` — swift-native path
 shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tracked below.
 
 - [x] **MIGR-05.01** — Bundle reader + manifest parse (`format_version 1`, kea + swift formats) — `import_export/bundle.py`
-- [x] **MIGR-05.02** — Atomic import service (FastAPI `BackgroundTask` + single SQLAlchemy transaction; **not** Temporal): validate manifest → import agents → tags → metadata, all-or-nothing rollback, idempotent by PK — `import_export/importer.py` + `api.py`. *(Temporal design preserved in RFC §5 for future scale; fresh-target preflight + verify superseded by idempotent-by-PK + reset.)*
+- [x] **MIGR-05.02** — Atomic import service (FastAPI `BackgroundTask` + single SQLAlchemy transaction; **not** Temporal): validate manifest → import agents → tags → metadata, all-or-nothing rollback, idempotent by PK — `import_export/importer.py` + `api.py`. *(A Temporal design for future scale was considered and dropped; fresh-target preflight + verify superseded by idempotent-by-PK + reset.)*
 - [x] **MIGR-05.03** — Agent transform: kea `payload_json`/`class_path` → swift `agent_instance` (+ `KEA_TO_SWIFT_TEMPLATE` catalog; IGNORED skipped, GAP warned) — `import_export/agent_map.py` (+tests)
 - [x] **MIGR-05.04** — OpenFGA tuple restore (2026-07-24, #1954) — `importer.py::transform_kea_tuples`,
   replacing the abandoned ops bulk-copy plan (Option A would have written kea relation names the
@@ -120,7 +120,7 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   MIGR-05.13 (`importer.py::_reset_transported_stages`) — the metadata-import phase is shared code,
   not swift-only, so this applies to both the swift-native and kea-import paths. *Still inert until
   MIGR-07's re-vectorize trigger actually consumes the reset — two ends of one flow.*
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §5
+  — RFC: `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` §5
 - [x] **MIGR-05.08** — Tags + document-metadata import phases (atomic, shared generic loop) — `import_export/importer.py`; new `fred_core/documents/tag_models.py` `TagRow`
 - [x] **MIGR-05.09** — Swift-native **export** (`GET /import-export/export`) + re-import branch (`source_platform=swift`, bypasses `agent_map`) — `import_export/exporter.py`
 - [x] **MIGR-05.10** — Atomic **reset** (`POST /import-export/reset`) — wipes agents+tags+metadata in one transaction; enables export → reset → import test cycles (object store / Keycloak / OpenFGA untouched)
@@ -131,7 +131,7 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   (`fred_runtime/app/agent_app.py`). `prompt_refs_json` is left unset: it has no consumer in the
   codebase, and kea agent prompts were never library entries. `role`/`description`/`tags`/
   `created_by` also transfer; v1 secondary per-node prompts are warned (no swift field).
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
+  — RFC: `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` §8
 - [x] **MIGR-05.12** — Platform-data stats dashboard (`GET /import-export/stats`): teams, members by
   role, agents, prompts; personal spaces (`personal-*`) aggregated into one row — `import_export/stats.py`
 - [x] **MIGR-05.13** — Manifest contract hardening: `SnapshotManifest` → Pydantic + enforced
@@ -141,10 +141,10 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   always-`[]` placeholder — `exporter.py`/`importer.py`. Also closed MIGR-05.07 (stage
   reconciliation) as a side effect, since it touched the same shared metadata-import phase. Tests:
   `tests/test_import_export_manifest.py` (5 new). — RFC:
-  [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §4–§5
+  `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` §4–§5
 - [x] **MIGR-05.14** — Kea bundle compatibility fixes (2026-07-24, #1954), found by running a real
   kea dump (2026-07-22) through the importer: (a) kea manifests predate `users_schema_version` →
-  defaulted to 1 for `source_platform != "swift"` only (RFC §4 amended); (b) the team table file is
+  defaulted to 1 for `source_platform != "swift"` only (contract amended); (b) the team table file is
   `teammetadata.jsonl` on the kea path (main's `EXPORT_TABLES` name) vs `team_metadata.jsonl`
   (swift-native) — the importer now asks for the right file per producer; (c) legacy
   `payload_json.type == "leader"` agent rows skipped. Tests: `tests/test_import_export_kea_bundle.py`.
@@ -153,7 +153,7 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   `personal-{author}`; YAML front-matter stripped (body only); `prompt_id` = kea `resource_id`
   (idempotent); `(team_id, name)` collisions suffixed; kinds `prompt`/`template` skipped with a
   warning; kea library tags (`chat-context`/`prompt`/`template`) filtered from the tag phase.
-  — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
+  — RFC: `CONTROL-PLANE-PRODUCT-CONTRACT.md §27` §8
 
 - [x] **MIGR-05.16** — Teams & platform roles from the bundled Keycloak realm export
   (2026-07-24, #1954). Every tuple-referenced team now gets a swift `teammetadata` row: name ←
@@ -194,7 +194,7 @@ shipped + hardened; kea-import path (this checklist's `[ ]` items) deferred, tra
   (c) per-user/team storage counters — run knowledge-flow's
   `alembic/backfill/backfill_storage_usage.py` post-import (add to runbook).
 
-**Open (cutover items — see RFC §8 follow-ups):**
+**Open (cutover items):**
 - Kea-side realm-export 403: `manage-realm` alone does not satisfy `partial-export?exportClients=true`
   (needs `view-clients`, or export without clients). Must be fixed on the kea source before the
   prod dump, else teams arrive unnamed and platform roles must be provisioned via `users.json`.
@@ -219,7 +219,7 @@ rewriting; team/tag reorganisation lives in metadata, never in object paths). ~2
 The **products** topic: embeddings and other derived artifacts are **rebuilt on the target**,
 not transported. Because `input/` **and** `output/` are mirrored together, only embeddings
 (OpenSearch `*-vector-index-mistral`) must be regenerated. Design:
-[`CORPUS-REVECTORIZE-RFC`](../rfc/CORPUS-REVECTORIZE-RFC.md) — redesign the **existing stubbed**
+[`CONTROL-PLANE-PRODUCT-CONTRACT.md §28`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md) — redesign the **existing stubbed**
 `/corpus/revectorize` endpoint onto a Temporal workflow over the existing `output_process` activity,
 streaming progress via the fred-core task/event API (reuses `IngestionDetail`).
 
@@ -228,7 +228,7 @@ streaming progress via the fred-core task/event API (reuses `IngestionDetail`).
 - [x] **MIGR-07.03** — Wire the `/corpus/revectorize` stub to start the workflow + `task_service.start`; incremental/full/force semantics
 - [ ] **MIGR-07.04** — Migration UI "Rebuild embeddings" final step (reuse task atoms); reconcile vector `_count` vs metadata row count
   — kea→swift delta: same embedding model → vectors compatible; index name maps
-  — RFC: [`CORPUS-REVECTORIZE-RFC`](../rfc/CORPUS-REVECTORIZE-RFC.md)
+  — Design: [`CONTROL-PLANE-PRODUCT-CONTRACT.md §28`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
 
 ---
 

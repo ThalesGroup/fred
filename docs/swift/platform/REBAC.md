@@ -343,5 +343,5 @@ security:
 > `platform_admin` is granted exclusively by `POST /control-plane/v1/bootstrap/platform-admin`
 > (self-promotion only, see §3.1.2 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`); every other
 > platform or team role is granted exclusively by the declarative platform import
-> (`PLATFORM-IMPORT-RFC.md` §10). No field in `security.rebac` configures a platform role
-> anymore.
+> (`CONTROL-PLANE-PRODUCT-CONTRACT.md §27`). No field in `security.rebac` configures a
+> platform role anymore.

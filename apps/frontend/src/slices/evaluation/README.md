@@ -8,7 +8,7 @@ RTK Query client for the evaluation backend.
 Unlike the control-plane / knowledge-flow slices — generated from **first-party**
 backends in this platform — this slice is generated from **`fred-agent-evaluator`**,
 a **separate repository** that lives under `ignored/` and deploys independently
-(see [RFC EVAL-02](../../../../../docs/swift/rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md)).
+(see [TASK-EVENT-STREAM-RFC.md §5](../../../../../docs/swift/rfc/TASK-EVENT-STREAM-RFC.md)).
 
 The evaluator's OpenAPI is the source of truth. We **vendor a snapshot** of it here as
 [`openapi.json`](./openapi.json) and generate the client from that snapshot.
