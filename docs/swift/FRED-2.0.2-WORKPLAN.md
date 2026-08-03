@@ -1,7 +1,7 @@
 # Fred 2.0.2 — Implementation Workplan (operational, not a contract)
 
-**This is the working checklist for building CTRLP-12.** It is *not* the RFC. The design
-& rationale live in [`rfc/FRED-2.0.2-RGPD-READY-RFC.md`](rfc/FRED-2.0.2-RGPD-READY-RFC.md);
+**This is the working checklist for building CTRLP-12.** The design & rationale live in
+[`design/CONTROL-PLANE-PRODUCT-CONTRACT.md §32`](design/CONTROL-PLANE-PRODUCT-CONTRACT.md);
 this file is just *how we build it, one reviewable step at a time*.
 
 ## How to use this (handoff protocol — read first)

@@ -480,7 +480,7 @@ agent instance at `create_session` time, immutable, never returned by any API mo
 lets `ConversationErasureService` resolve the owning runtime for checkpoint/history erasure
 even after the session's `agent_instance_id` row is later deleted — resolving solely through
 the live instance row let an agent-instance deletion permanently block erasure of any session
-that had used it (issue #2089, `FRED-2.0.2-RGPD-READY-RFC.md` §7).
+that had used it (issue #2089, §35).
 
 Until control-plane session metadata is implemented, the sidebar omits session listing. The intentional placeholder (no session list in sidebar) is acceptable. Adding a session list before the backend is ready is not.
 
@@ -561,7 +561,7 @@ Planned purge surfaces:
 | All data for one session         | Combined call to both above _(pending)_                      |
 | Bulk purge by team / age         | `POST /agents/sessions/purge` with policy filter _(pending)_ |
 
-**`session_purge_queue` — deferred-delete scheduler (CTRLP-12 A5/A6):** Originally a legacy concept inherited from `agentic-backend`, not connected to the `session_history` table written by `fred-runtime`. CTRLP-12 A5 repurposes it as the *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The queue consumer must invoke `erase_session` at expiry (A6, pending). **Until A6 lands the consumer performs a metadata-only delete, so a configured delete-grace window does NOT yet fully erase at expiry** (see `CTRLP-12-QUALITY-REVIEW.md` blocker 2). Do not treat the queue as the retention mechanism until the consumer is wired to `erase_session`.
+**`session_purge_queue` — deferred-delete scheduler (CTRLP-12, §35):** The *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The lifecycle worker (`scheduler/lifecycle_actions.py`) invokes `erase_session` at expiry and marks the queue entry done only on `receipt.ok` — see §35 for the full contract.
 
 **Soft-deleted session read contract (CTRLP-12 A5):** During the deferred-delete window a soft-deleted conversation is hidden from the session *list* (`list_by_team` filters `deleted_at IS NULL`) but remains directly fetchable by id (`SessionMetadataStore.get` does not filter `deleted_at`) and its attachments remain listable — intentional, to support a bounded post-incident / evaluation read. The row is fully erased only at window expiry. `DELETE /teams/{id}/sessions/{session_id}` returns 404 for a missing or non-owned session.
 
@@ -2105,3 +2105,147 @@ to be safe in practice: the frontend's session-write barrier
 block `send()` until the session row is confirmed created, so by the time
 `prepare_execution` is called with a `session_id`, that session should
 already exist.
+
+---
+
+## 35. Contract Notes — CTRLP-12, conversation erasure & team-governed retention (2026-07-24)
+
+Deleting a conversation provably erases it across every store. A team may set a
+retention window during which a deleted conversation survives — hidden from
+users but available to the team for agent evaluation — after which it is
+automatically and provably erased by an authenticated background worker.
+
+**Erasure fan-out (`ConversationErasureService.erase_session`).** Store order
+is fixed by dependency: attachments/Knowledge-Flow and KPI first
+(independent), then the runtime **checkpoint before transcript** (the runtime
+proves checkpoint ownership via the transcript), then the `session_metadata`
+row **last** — so a retry can always re-resolve and finish. Returns an
+`ErasureReceipt` (per store: count, ok, error); `receipt.ok` is true only when
+every touched store erased cleanly. Idempotent and retry-safe: re-running
+after a partial failure converges to full erasure, no store left orphaned, no
+queue entry stuck.
+
+**Two delete modes, one path.** The delete button and the lifecycle worker
+both call `erase_session`. Immediate (default): the button runs full erasure
+now, using the caller's identity. Deferred (when the conversation's space has
+a window): the button hides the conversation (`session_metadata.deleted_at`)
+and enqueues a `USER_DELETED` purge-queue entry due at `now + window`; the
+lifecycle worker erases at expiry and marks the entry done only on
+`receipt.ok` — a partial receipt leaves it queued for a later, convergent
+retry.
+
+**Retention is team-governed and bounded.** `team_delete_grace` and
+`max_idle` are nullable columns on `team_metadata` (plus
+`retention_updated_by` for audit) — no separate table — read/written through
+the existing `GET`/`PATCH /teams/{id}`. Each value is clamped to a platform
+cap (`> cap` → 422); the cap is a ceiling, not a default window — a team that
+sets nothing deletes immediately. Personal-space conversations use a
+platform-set `personal_delete_grace` (security/post-incident, not
+user-shortenable). Retention round-trips through platform export/import
+(`team_metadata` is bundled); conversation/runtime delete state
+(`session_metadata.deleted_at`, checkpoint-owner rows) is explicitly excluded
+— conversations are never platform-migrated.
+
+**Server-initiated erasure is authenticated, never unauthenticated.** The
+expiry worker has no user token, so the control-plane mints a
+client-credentials service token for its own `control-plane` Keycloak service
+account. The runtime checkpoint-delete, runtime history-delete, and
+Knowledge-Flow delete endpoints recognize the org-level
+`can_manage_platform` permission and waive the per-user **ownership** check
+for that principal — authentication itself is never waived. This reuses the
+existing platform-admin permission; it forks no second bypass.
+
+**Runtime resolution survives agent-instance deletion (fixed 2026-07-24,
+issue #2089).** `session_metadata` carries an internal-only
+`source_runtime_id`, captured once at `create_session` time from the
+(then-certainly-live) agent instance. `_resolve_runtime_base_url` resolves the
+runtime from this stored column first, falling back to the live
+agent-instance lookup only for pre-migration rows. Before this fix, deleting
+an agent instance permanently orphaned erasure for every session that had
+used it — resolution went exclusively through the instance row, which
+`unenroll_agent_instance` (a local metadata delete) does not preserve and
+never tears down the corresponding runtime checkpoint/history data itself.
+
+**Member-removal erasure is observable (CTRLP-13, shipped).**
+`remove_team_member` enqueues each removed user's conversations
+(`LifecycleTrigger.MEMBER_REMOVED`) **and** calls `schedule_erasure_task`, so
+the erasure surfaces on the admin task/activity surface exactly like a
+user-initiated delete — no invisible scheduled work.
+
+**Open (tracked as GitHub issue #2151, P0):** `max_idle` is validated,
+clamped, stored, and displayed, but no sweeper enforces it yet — there is no
+`IDLE_EXPIRED` `LifecycleTrigger`, no enqueue pass, and no production writer
+for `last_activity_at`. The team-settings control for idle expiry does not
+yet do anything.
+
+**Evaluation authorization:** the evaluation endpoints enforce ReBAC —
+`CAN_READ` to view, `CAN_UPDATE_AGENTS` to create/cancel,
+`CAN_READ_CONVERSATIONS` to evaluate real conversations.
+
+**Identity stays pseudonymized:** stored `user_id` is the Keycloak `sub`; no
+email lands in any conversation store.
+
+## 36. Contract Notes — KPI preset endpoints & authorization (OBSERV-02) (2026-07-26)
+
+Product/business analytics (active users, sessions, agent usage, tokens,
+storage) live entirely in `fred-control-plane`, backed by the shared
+OpenSearch KPI store every user-facing backend writes to via a request
+middleware (`api.request_latency_ms`, dims `user_id`/`route`/`method`/
+`http_status`/`latency_ms`; no `team_id` or `groups` — team context is added
+only at domain-level `KPIWriter` call sites that already have a stable
+`team_id`, never parsed from the request body, which would break streaming
+endpoints). Infrastructure/ops metrics (CPU, memory, cluster health) stay in
+Grafana — explicitly out of scope here.
+
+**Endpoint:** `GET /control-plane/v1/kpi-presets/<name>` — each preset is a
+`PresetDef` auto-mounted by a registry (`control_plane_backend/kpi/`). The
+client sends only a preset name + safe typed parameters (date range,
+granularity, optional `team_id`); the backend owns all query logic and
+returns shaped data, never raw OpenSearch response objects. Presets are an
+explicit allow-list — an unknown name is 400.
+
+**Authorization scope is injected server-side, never client-controlled:**
+
+```
+Platform-wide preset, no team_id:      Check(user, can_observe_platform, organization)
+Platform-wide, admin-only widgets:     Check(user, can_manage_platform, organization)
+Team-scoped preset, team_id given:     Check(user, can_read_members, team:<team_id>)
+                                        → filter WHERE dims.team_id = team_id
+Personal preset:                       inject WHERE dims.user_id = requesting_user.uid
+                                        (no OpenFGA call needed)
+```
+
+`can_read_members` is already satisfied by `team_admin`/`team_editor`/
+`team_analyst`; a plain `team_member` is not — the team dashboard is not part
+of the plain-member experience (which still gets its own personal dashboard,
+`user_id`-scoped). Existing platform-wide presets gained an optional
+`team_id` parameter with this second authorization branch rather than being
+forked into parallel `team_*` handlers — one query shape, two scopes.
+
+**Green/cost metrics** ride the same token-usage presets, computed
+server-side from a static, hand-maintained `model_impact_factors.yaml`
+(`libs/fred-core`, keyed by `model_name`, `default` fallback row) alongside
+the raw token count in one query: CO₂e and kWh are shown everywhere token
+usage is shown (required columns); a $ estimate is optional/collapsible.
+Both are labeled "estimated" — not billing- or measurement-grade.
+
+**No new settings surface.** Storage quota
+(`TeamMetadata.max_resources_storage_size`/`current_resources_storage_size`)
+and retention (`team_delete_grace`/`max_idle`, §35) already existed before
+this work — the `storage_by_team` preset reads `TeamMetadataStore` directly,
+no new table or endpoint. The one narrow, non-blocking gap:
+`max_resources_storage_size` is not yet in `TeamMetadataPatch`, so there is
+no per-team UI override, only the platform-wide config default.
+
+**No embedded Activités panel (reverted 2026-07-30).** An earlier iteration
+embedded the `TaskActivity` organism inline in these dashboards
+(`AnalyticsPage`'s admin section, `TeamUsagePage`'s editor/admin sections).
+Live review found this duplicated the dedicated Activity surfaces one click
+away (`/admin/tasks`, `/team/:teamId/settings/activity`) with no
+acknowledgement affordance, so the embeds were removed — `TaskActivity`
+itself and the two dedicated tabs are untouched; these dashboards link to
+them rather than re-render them. See `TASK-EVENT-STREAM-RFC.md` §2.10 for the
+task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
+Models-as-capability (`kind="model"` catalog projection, model-routing
+fail-closed enforcement) is specified in `AGENT-CAPABILITY-RFC.md` §8.7, not
+repeated here.

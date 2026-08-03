@@ -1831,7 +1831,7 @@ capability of `kind="agent"` in this exact same object space:
 
 ### 8.7 `kind="model"`: LLM models as capabilities (2026-07-25 amendment)
 
-**Motivation.** The OBSERV-02 dashboard finalization (`KPI-ANALYTICS-RFC.md` v3)
+**Motivation.** The OBSERV-02 dashboard finalization (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33)
 gives `platform_admin` a quotas/governance surface. Model choice belongs next
 to it: today a platform_admin has no way to turn a model on/off platform-wide
 or per team — model routing (`models_catalog.yaml`, §below) is entirely a

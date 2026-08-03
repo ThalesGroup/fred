@@ -1,7 +1,8 @@
 # OBSERV-02 v3 — follow-up notes (not this branch's scope)
 
-Working notes kept alongside issue #2110 while implementing `KPI-ANALYTICS-RFC.md`
-v3. Each entry below is something found *while building*, deliberately left out
+Working notes kept alongside issue #2110 while implementing the OBSERV-02 v3
+KPI dashboard work (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). Each entry below
+is something found *while building*, deliberately left out
 of this branch, and worth its own small GitHub issue later. Not a design doc —
 just enough context per entry to write that issue without re-deriving it.
 
@@ -30,7 +31,7 @@ than a rushed one. Deferred, `team_scopable=False`, comment in the file.
 
 ### 3. `active_users_over_time` / `unique_users_total` — architecturally blocked
 Sourced from `api.request_latency_ms` (the generic HTTP middleware KPI),
-which deliberately never carries `dims.team_id` (`KPI-ANALYTICS-RFC.md` §2.2
+which deliberately never carries `dims.team_id` (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33
 — team context can't safely come from request-body reads in middleware,
 breaks streaming). Team-scoping these for real would need a *new*,
 domain-level KPI event with proper team attribution — not a parameter
@@ -72,7 +73,7 @@ a peer of Members/Settings, at `/admin/activity` and `/teams/{id}/activity`.
 Shipped reality: `/admin/tasks` (not `/admin/activity`) and the team view
 nested inside Team Settings (`/team/:teamId/settings/activity`), not a
 sibling nav item. Pre-existing gap, unrelated to OBSERV-02's dashboard
-content — noted in `KPI-ANALYTICS-RFC.md` §2.8 as explicitly out of scope for
+content — noted as explicitly out of scope for
 this branch. Small, self-contained follow-up if the nav restructure is
 wanted.
 

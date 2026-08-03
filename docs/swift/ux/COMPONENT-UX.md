@@ -1589,7 +1589,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 **Status:** `Functional`
 
 Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
 its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
 in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
 `hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
