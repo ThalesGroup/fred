@@ -1609,7 +1609,7 @@ team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activit
 line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
 `/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
 nav rail, which additionally has ack support this embed never did. See
-`KPI-ANALYTICS-RFC.md` §2.8 and the `TaskActivity` entry below.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36 and the `TaskActivity` entry below.
 
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
@@ -2142,10 +2142,10 @@ non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
 (`scope="team" kind="ingestion"`) and team_admin (`scope="team"`, unfiltered) sections briefly
-embedded this organism per KPI-ANALYTICS-RFC.md §2.8. Removed as a live-review finding: they
+embedded this organism per `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36. Removed as a live-review finding: they
 duplicated the two dedicated surfaces above, one click away in the same nav rail, without this
 organism's missing ack affordance ever getting fixed for the duplicate. See
-`KPI-ANALYTICS-RFC.md` §2.8.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36.
 
 #### Open UX issues
 

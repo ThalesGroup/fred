@@ -1,7 +1,7 @@
 # OBSERV-02 v3 — follow-up notes (not this branch's scope)
 
 Working notes kept alongside issue #2110 while implementing the OBSERV-02 v3
-KPI dashboard work (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). Each entry below
+KPI dashboard work (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36). Each entry below
 is something found *while building*, deliberately left out
 of this branch, and worth its own small GitHub issue later. Not a design doc —
 just enough context per entry to write that issue without re-deriving it.
@@ -295,6 +295,6 @@ had no one-click way to acknowledge a failed row from there. Not fixed by adding
 an ack affordance: those embeds turned out to duplicate the dedicated
 `/admin/tasks` and `/team/:teamId/settings/activity` Activity tabs (which *do*
 have ack, via `TaskCard`/`TaskDetailPopover`) one click away in the same nav
-rail. Removed the embeds instead (`KPI-ANALYTICS-RFC.md` §2.8) — the gap this
+rail. Removed the embeds instead (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36) — the gap this
 item tracked no longer exists because the duplicate surface it was on doesn't
 either.
