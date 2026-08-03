@@ -7,7 +7,7 @@ filesystem (§12)**
 **Date:** 2026-06-18 (v2 amendment 2026-06-29)
 **ID:** DOC-TAGS
 **Scope:** swift `apps/knowledge-flow-backend` (data model + API) and the workspace UI
-**Related:** `KNOWLEDGE-FLOW-SIMILARITY-SEARCH-RFC.md` (KF-SIMILARITY-SEARCH — the
+**Related:** `docs/swift/design/DESIGN.md §4` (KF-SIMILARITY-SEARCH — the
 consumer), `KNOWLEDGE-WORKSPACE-REWORK-RFC.md` (FRONT-09 — the UI surface)
 **Contract impact:** additive — a **separate descriptive label field** on the
 document; the permission **tag** system is untouched. **Business tags are NOT a kind
