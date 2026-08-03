@@ -1,6 +1,6 @@
 # Help Center — Plan de contenu (matériau de travail)
 
-> Document de travail pour HELP-01.C (issue #2189, `HELP-CENTER-RFC.md`).
+> Document de travail pour HELP-01.C (issue #2189, voir `docs/swift/ux/COMPONENT-UX.md`).
 > À relire/annoter : barre, ajoute, réordonne, commente. Il sera supprimé
 > une fois les pages rédigées. Les slugs (en anglais) deviennent les noms
 > de fichiers/URLs ; les titres affichés sont traduits fr/en.
