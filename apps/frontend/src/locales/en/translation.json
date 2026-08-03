@@ -116,7 +116,15 @@
   },
   "capability": {
     "demo_echo": {
+      "name": "Demo echo",
+      "description": "Echoes back what you say, with an option to reply in uppercase.",
       "cardAria": "Demo capability card",
+      "fields": {
+        "uppercase": {
+          "title": "Uppercase",
+          "description": "Echo replies in uppercase."
+        }
+      },
       "panel": {
         "demo_notes": {
           "title": "Demo notes",
@@ -132,11 +140,67 @@
     },
     "document_access": {
       "name": "Document access",
-      "description": "Search documents uploaded using semantic similarity (RAG)."
+      "description": "Search documents uploaded using semantic similarity (RAG).",
+      "fields": {
+        "show_library_selection": {
+          "title": "Document library picker",
+          "description": "Show a document library selector in the chat interface."
+        },
+        "bind_libraries": {
+          "title": "Bind to specific libraries",
+          "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+        },
+        "library_tag_ids": {
+          "title": "Bound document libraries",
+          "description": "Restrict the chat library picker to this preselected set of document libraries."
+        },
+        "show_document_selection": {
+          "title": "Document picker",
+          "description": "Show a document selector in the chat interface."
+        },
+        "show_attach_files_control": {
+          "title": "File attachments",
+          "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
+        },
+        "search_attachments_only": {
+          "title": "Search in attachments only",
+          "description": "Restrict the agent's document search to the files attached to the conversation — the corpus is never searched."
+        },
+        "default_top_k": {
+          "title": "Default results",
+          "description": "How many hits to retrieve when the model omits top_k."
+        },
+        "min_source_score_ratio": {
+          "title": "Minimum source relevance ratio",
+          "description": "A hit must score at least this fraction of the best hit in the same search to be shown as a cited source. Only affects the human-facing Sources panel, never what the model itself can read."
+        },
+        "show_search_policy_control": {
+          "title": "Search policy picker in chat",
+          "description": "Allow users to switch the search policy from the chat interface. The configured search policy then acts as the picker's default instead of being enforced."
+        },
+        "search_policy": {
+          "title": "Default search policy",
+          "description": "Search strategy used when the user has not overridden it (enforced as-is when the picker is hidden)."
+        },
+        "show_rag_scope_control": {
+          "title": "RAG scope picker in chat",
+          "description": "Allow users to switch the RAG scope (corpus only / hybrid / general knowledge) from the chat interface."
+        },
+        "default_rag_scope": {
+          "title": "Default RAG scope",
+          "description": "Scope used when the user has not overridden it."
+        }
+      }
     },
     "document_summarize": {
       "name": "Document summarization",
-      "description": "Generate an on-demand summary of one document. Requires human approval before each call."
+      "description": "Generate an on-demand summary of one document. Requires human approval before each call.",
+      "fields": {
+        "summarize_max_chars": {
+          "title": "Summary length cap",
+          "description": "Default and hard maximum length (in characters) of summaries produced by the summarize_document tool. Leave empty to use the built-in default and honor the model's requested length."
+        }
+      }
     },
     "writable_document": {
       "name": "Writable document",
@@ -577,7 +641,47 @@
     "servers": {
       "corpus": {
         "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management.",
-        "name": "Corpus Management"
+        "name": "Corpus Management",
+        "fields": {
+          "chat_options": {
+            "libraries_selection": {
+              "title": "Document library picker",
+              "description": "Show a document library selector in the chat interface."
+            },
+            "libraries_binding": {
+              "title": "Bind to specific libraries",
+              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+            },
+            "bound_library_ids": {
+              "title": "Bound document libraries",
+              "description": "Restrict the chat library picker to this preselected set of document libraries."
+            },
+            "documents_selection": {
+              "title": "Document picker",
+              "description": "Show a document selector in the chat interface."
+            },
+            "attach_files": {
+              "title": "File attachments",
+              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
+            },
+            "search_policy_enabled": {
+              "title": "Search policy picker in chat",
+              "description": "Allow users to switch the search policy from the chat interface."
+            },
+            "search_policy": {
+              "title": "Default search policy",
+              "description": "Search strategy used when the user has not overridden it."
+            },
+            "search_rag_scope_enabled": {
+              "title": "RAG scope picker in chat",
+              "description": "Allow users to switch the RAG scope from the chat interface."
+            },
+            "search_rag_scope": {
+              "title": "Default RAG scope",
+              "description": "Scope used when the user has not overridden it."
+            }
+          }
+        }
       },
       "filesystem": {
         "description": "Allow your agent to access a filesystem (local or Minio)",
@@ -597,7 +701,47 @@
       },
       "search_documents": {
         "description": "Legacy semantic document search (pre-capability MCP path, no per-agent scoping). Superseded by the Document access capability — do not enable both on the same agent.",
-        "name": "Document search (legacy)"
+        "name": "Document search (legacy)",
+        "fields": {
+          "chat_options": {
+            "libraries_selection": {
+              "title": "Document library picker",
+              "description": "Show a document library selector in the chat interface."
+            },
+            "libraries_binding": {
+              "title": "Bind to specific libraries",
+              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+            },
+            "bound_library_ids": {
+              "title": "Bound document libraries",
+              "description": "Restrict the chat library picker to this preselected set of document libraries."
+            },
+            "documents_selection": {
+              "title": "Document picker",
+              "description": "Show a document selector in the chat interface."
+            },
+            "attach_files": {
+              "title": "File attachments",
+              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
+            },
+            "search_policy_enabled": {
+              "title": "Search policy picker in chat",
+              "description": "Allow users to switch the search policy from the chat interface."
+            },
+            "search_policy": {
+              "title": "Default search policy",
+              "description": "Search strategy used when the user has not overridden it."
+            },
+            "search_rag_scope_enabled": {
+              "title": "RAG scope picker in chat",
+              "description": "Allow users to switch the RAG scope from the chat interface."
+            },
+            "search_rag_scope": {
+              "title": "Default RAG scope",
+              "description": "Scope used when the user has not overridden it."
+            }
+          }
+        }
       },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
@@ -1845,6 +1989,10 @@
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
+        "capabilitiesInfo": {
+          "title": "What are these capabilities for?",
+          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created."
+        },
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
         "fields": {
@@ -1880,10 +2028,11 @@
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
         },
         "promptField": {
+          "closeLibrary": "Close library",
+          "libraryTitle": "Team library",
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
-          "tagsPlaceholder": "Type and press Enter to add tags...",
-          "writeFromScratch": "Write from scratch"
+          "tagsPlaceholder": "Type and press Enter to add tags..."
         },
         "sections": {
           "aria": "Form sections",

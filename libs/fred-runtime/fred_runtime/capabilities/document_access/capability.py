@@ -337,8 +337,8 @@ class DocumentAccessCapability(
             FieldSpec(
                 key="show_library_selection",
                 type="boolean",
-                title="Document library picker",
-                description="Show a document library selector in the chat interface.",
+                title="capability.document_access.fields.show_library_selection.title",
+                description="capability.document_access.fields.show_library_selection.description",
                 default=True,
                 # `ui.group` drives the form's visual sections: the renderer
                 # draws a thin divider whenever the group changes between two
@@ -348,11 +348,8 @@ class DocumentAccessCapability(
             FieldSpec(
                 key="bind_libraries",
                 type="boolean",
-                title="Bind to specific libraries",
-                description=(
-                    "Restrict this agent to a fixed set of document libraries "
-                    "chosen at configuration time."
-                ),
+                title="capability.document_access.fields.bind_libraries.title",
+                description="capability.document_access.fields.bind_libraries.description",
                 default=False,
                 ui=UIHints(group="scope"),
             ),
@@ -360,11 +357,8 @@ class DocumentAccessCapability(
                 key="library_tag_ids",
                 type="array",
                 item_type="string",
-                title="Bound document libraries",
-                description=(
-                    "Restrict the chat library picker to this preselected set "
-                    "of document libraries."
-                ),
+                title="capability.document_access.fields.library_tag_ids.title",
+                description="capability.document_access.fields.library_tag_ids.description",
                 # Library/document tree picker, only shown while the binding
                 # toggle above is on (the ids are ignored otherwise).
                 ui=UIHints(
@@ -376,39 +370,32 @@ class DocumentAccessCapability(
             FieldSpec(
                 key="show_document_selection",
                 type="boolean",
-                title="Document picker",
-                description="Show a document selector in the chat interface.",
+                title="capability.document_access.fields.show_document_selection.title",
+                description="capability.document_access.fields.show_document_selection.description",
                 default=True,
                 ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="show_attach_files_control",
                 type="boolean",
-                title="File attachments",
-                description=(
-                    "Allow users to attach files (PDF, images, text) to their "
-                    "messages in the chat interface."
-                ),
+                title="capability.document_access.fields.show_attach_files_control.title",
+                description="capability.document_access.fields.show_attach_files_control.description",
                 default=True,
                 ui=UIHints(group="scope"),
             ),
             FieldSpec(
                 key="search_attachments_only",
                 type="boolean",
-                title="Search in attachments only",
-                description=(
-                    "Restrict the agent's document search to the files "
-                    "attached to the conversation — the corpus is never "
-                    "searched."
-                ),
+                title="capability.document_access.fields.search_attachments_only.title",
+                description="capability.document_access.fields.search_attachments_only.description",
                 default=False,
                 ui=UIHints(group="scope", visible_when="show_attach_files_control"),
             ),
             FieldSpec(
                 key="default_top_k",
                 type="integer",
-                title="Default results",
-                description="How many hits to retrieve when the model omits top_k.",
+                title="capability.document_access.fields.default_top_k.title",
+                description="capability.document_access.fields.default_top_k.description",
                 default=8,
                 min=1,
                 ui=UIHints(group="retrieval", advanced=True),
@@ -416,13 +403,8 @@ class DocumentAccessCapability(
             FieldSpec(
                 key="min_source_score_ratio",
                 type="number",
-                title="Minimum source relevance ratio",
-                description=(
-                    "A hit must score at least this fraction of the best hit "
-                    "in the same search to be shown as a cited source. Only "
-                    "affects the human-facing Sources panel, never what the "
-                    "model itself can read."
-                ),
+                title="capability.document_access.fields.min_source_score_ratio.title",
+                description="capability.document_access.fields.min_source_score_ratio.description",
                 default=DEFAULT_MIN_SOURCE_SCORE_RATIO,
                 min=0.0,
                 max=1.0,
@@ -431,12 +413,8 @@ class DocumentAccessCapability(
             FieldSpec(
                 key="show_search_policy_control",
                 type="boolean",
-                title="Search policy picker in chat",
-                description=(
-                    "Allow users to switch the search policy from the chat "
-                    "interface. The configured search policy then acts as the "
-                    "picker's default instead of being enforced."
-                ),
+                title="capability.document_access.fields.show_search_policy_control.title",
+                description="capability.document_access.fields.show_search_policy_control.description",
                 default=True,
                 ui=UIHints(group="search_policy", advanced=True),
             ),
@@ -444,21 +422,15 @@ class DocumentAccessCapability(
                 key="search_policy",
                 type="select",
                 enum=list(_SEARCH_POLICIES),
-                title="Default search policy",
-                description=(
-                    "Search strategy used when the user has not overridden it "
-                    "(enforced as-is when the picker is hidden)."
-                ),
+                title="capability.document_access.fields.search_policy.title",
+                description="capability.document_access.fields.search_policy.description",
                 ui=UIHints(group="search_policy", advanced=True),
             ),
             FieldSpec(
                 key="show_rag_scope_control",
                 type="boolean",
-                title="RAG scope picker in chat",
-                description=(
-                    "Allow users to switch the RAG scope (corpus only / hybrid "
-                    "/ general knowledge) from the chat interface."
-                ),
+                title="capability.document_access.fields.show_rag_scope_control.title",
+                description="capability.document_access.fields.show_rag_scope_control.description",
                 default=True,
                 ui=UIHints(group="rag_scope", advanced=True),
             ),
@@ -466,8 +438,8 @@ class DocumentAccessCapability(
                 key="default_rag_scope",
                 type="select",
                 enum=list(_RAG_SCOPES),
-                title="Default RAG scope",
-                description="Scope used when the user has not overridden it.",
+                title="capability.document_access.fields.default_rag_scope.title",
+                description="capability.document_access.fields.default_rag_scope.description",
                 ui=UIHints(group="rag_scope", advanced=True),
             ),
         ],

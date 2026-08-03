@@ -116,7 +116,15 @@
   },
   "capability": {
     "demo_echo": {
+      "name": "Écho de démonstration",
+      "description": "Répète ce que vous dites en écho, avec une option pour répondre en majuscules.",
       "cardAria": "Carte de la capacité de démonstration",
+      "fields": {
+        "uppercase": {
+          "title": "Majuscules",
+          "description": "Renvoyer la réponse en majuscules."
+        }
+      },
       "panel": {
         "demo_notes": {
           "title": "Notes de démonstration",
@@ -132,11 +140,67 @@
     },
     "document_access": {
       "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG)."
+      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG).",
+      "fields": {
+        "show_library_selection": {
+          "title": "Sélecteur de bibliothèque de documents",
+          "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
+        },
+        "bind_libraries": {
+          "title": "Lier à des bibliothèques spécifiques",
+          "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
+        },
+        "library_tag_ids": {
+          "title": "Bibliothèques de documents liées",
+          "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
+        },
+        "show_document_selection": {
+          "title": "Sélecteur de document",
+          "description": "Afficher un sélecteur de document dans l'interface de discussion."
+        },
+        "show_attach_files_control": {
+          "title": "Pièces jointes",
+          "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
+        },
+        "search_attachments_only": {
+          "title": "Rechercher uniquement dans les pièces jointes",
+          "description": "Restreindre la recherche documentaire de l'agent aux fichiers joints à la conversation — le corpus n'est jamais interrogé."
+        },
+        "default_top_k": {
+          "title": "Résultats par défaut",
+          "description": "Nombre de résultats à récupérer lorsque le modèle omet top_k."
+        },
+        "min_source_score_ratio": {
+          "title": "Ratio de pertinence minimal des sources",
+          "description": "Un résultat doit obtenir au moins cette fraction du score du meilleur résultat de la même recherche pour apparaître comme source citée. N'affecte que le panneau Sources destiné aux utilisateurs, jamais ce que le modèle peut lire."
+        },
+        "show_search_policy_control": {
+          "title": "Sélecteur de politique de recherche dans le chat",
+          "description": "Permettre aux utilisateurs de changer la politique de recherche depuis l'interface de discussion. La politique de recherche configurée sert alors de valeur par défaut au sélecteur au lieu d'être imposée."
+        },
+        "search_policy": {
+          "title": "Politique de recherche par défaut",
+          "description": "Stratégie de recherche utilisée lorsque l'utilisateur ne l'a pas modifiée (imposée telle quelle lorsque le sélecteur est masqué)."
+        },
+        "show_rag_scope_control": {
+          "title": "Sélecteur de portée RAG dans le chat",
+          "description": "Permettre aux utilisateurs de changer la portée RAG (corpus uniquement / hybride / connaissances générales) depuis l'interface de discussion."
+        },
+        "default_rag_scope": {
+          "title": "Portée RAG par défaut",
+          "description": "Portée utilisée lorsque l'utilisateur ne l'a pas modifiée."
+        }
+      }
     },
     "document_summarize": {
       "name": "Résumé de document",
-      "description": "Génère à la demande le résumé d'un document. Nécessite une approbation humaine avant chaque appel."
+      "description": "Génère à la demande le résumé d'un document. Nécessite une approbation humaine avant chaque appel.",
+      "fields": {
+        "summarize_max_chars": {
+          "title": "Longueur maximale du résumé",
+          "description": "Longueur par défaut et maximale (en caractères) des résumés produits par l'outil summarize_document. Laisser vide pour utiliser la valeur par défaut intégrée et respecter la longueur demandée par le modèle."
+        }
+      }
     },
     "writable_document": {
       "name": "Document collaboratif",
@@ -577,7 +641,47 @@
     "servers": {
       "corpus": {
         "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)",
-        "name": "Gestion du corpus documentaire"
+        "name": "Gestion du corpus documentaire",
+        "fields": {
+          "chat_options": {
+            "libraries_selection": {
+              "title": "Sélecteur de bibliothèque de documents",
+              "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
+            },
+            "libraries_binding": {
+              "title": "Lier à des bibliothèques spécifiques",
+              "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
+            },
+            "bound_library_ids": {
+              "title": "Bibliothèques de documents liées",
+              "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
+            },
+            "documents_selection": {
+              "title": "Sélecteur de document",
+              "description": "Afficher un sélecteur de document dans l'interface de discussion."
+            },
+            "attach_files": {
+              "title": "Pièces jointes",
+              "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
+            },
+            "search_policy_enabled": {
+              "title": "Sélecteur de politique de recherche dans le chat",
+              "description": "Permettre aux utilisateurs de changer la politique de recherche depuis l'interface de discussion."
+            },
+            "search_policy": {
+              "title": "Politique de recherche par défaut",
+              "description": "Stratégie de recherche utilisée lorsque l'utilisateur ne l'a pas modifiée."
+            },
+            "search_rag_scope_enabled": {
+              "title": "Sélecteur de portée RAG dans le chat",
+              "description": "Permettre aux utilisateurs de changer la portée RAG depuis l'interface de discussion."
+            },
+            "search_rag_scope": {
+              "title": "Portée RAG par défaut",
+              "description": "Portée utilisée lorsque l'utilisateur ne l'a pas modifiée."
+            }
+          }
+        }
       },
       "filesystem": {
         "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)",
@@ -597,7 +701,47 @@
       },
       "search_documents": {
         "description": "Recherche documentaire sémantique historique (chemin MCP pré-capability, sans scoping par agent). Remplacée par la capability Accès aux documents — ne pas activer les deux sur le même agent.",
-        "name": "Recherche documentaire (historique)"
+        "name": "Recherche documentaire (historique)",
+        "fields": {
+          "chat_options": {
+            "libraries_selection": {
+              "title": "Sélecteur de bibliothèque de documents",
+              "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
+            },
+            "libraries_binding": {
+              "title": "Lier à des bibliothèques spécifiques",
+              "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
+            },
+            "bound_library_ids": {
+              "title": "Bibliothèques de documents liées",
+              "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
+            },
+            "documents_selection": {
+              "title": "Sélecteur de document",
+              "description": "Afficher un sélecteur de document dans l'interface de discussion."
+            },
+            "attach_files": {
+              "title": "Pièces jointes",
+              "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
+            },
+            "search_policy_enabled": {
+              "title": "Sélecteur de politique de recherche dans le chat",
+              "description": "Permettre aux utilisateurs de changer la politique de recherche depuis l'interface de discussion."
+            },
+            "search_policy": {
+              "title": "Politique de recherche par défaut",
+              "description": "Stratégie de recherche utilisée lorsque l'utilisateur ne l'a pas modifiée."
+            },
+            "search_rag_scope_enabled": {
+              "title": "Sélecteur de portée RAG dans le chat",
+              "description": "Permettre aux utilisateurs de changer la portée RAG depuis l'interface de discussion."
+            },
+            "search_rag_scope": {
+              "title": "Portée RAG par défaut",
+              "description": "Portée utilisée lorsque l'utilisateur ne l'a pas modifiée."
+            }
+          }
+        }
       },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
@@ -1845,6 +1989,10 @@
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",
+        "capabilitiesInfo": {
+          "title": "À quoi servent ces capacités ?",
+          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent."
+        },
         "createdBy": "Créé par {{user}}",
         "updatedBy": "Modifié par {{user}}",
         "fields": {
@@ -1880,10 +2028,11 @@
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
         },
         "promptField": {
+          "closeLibrary": "Fermer la bibliothèque",
+          "libraryTitle": "Bibliothèque d'équipe",
           "pickFromLibrary": "Choisir depuis la bibliothèque",
           "removeTagAria": "Retirer {{tag}}",
-          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
-          "writeFromScratch": "Rédiger depuis zéro"
+          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags..."
         },
         "sections": {
           "aria": "Sections du formulaire",

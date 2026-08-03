@@ -1,0 +1,101 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-s);
+  background: var(--eic-container);
+  overflow: hidden;
+  color: var(--eic-on-container);
+}
+
+.container[data-color="info"] {
+  --eic-container: var(--info-container);
+  --eic-on-container: var(--on-info-container);
+  --eic-hover: var(--state-on-info-container-hover);
+}
+
+.container[data-color="warning"] {
+  --eic-container: var(--warning-container);
+  --eic-on-container: var(--on-warning-container);
+  --eic-hover: var(--state-on-warning-container-hover);
+}
+
+.container[data-color="error"] {
+  --eic-container: var(--error-container);
+  --eic-on-container: var(--on-error-container);
+  --eic-hover: var(--state-on-error-container-hover);
+}
+
+.container[data-color="success"] {
+  --eic-container: var(--success-container);
+  --eic-on-container: var(--on-success-container);
+  --eic-hover: var(--state-on-success-container-hover);
+}
+
+.container[data-color="neutral"] {
+  --eic-container: var(--surface-container-high);
+  --eic-on-container: var(--on-surface-retreat);
+  --eic-hover: var(--state-on-surface-retreat-hover);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.header:hover {
+  background: var(--eic-hover);
+}
+
+.header:focus-visible {
+  outline: 2px solid var(--eic-on-container);
+  outline-offset: -2px;
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform var(--duration-short-4) var(--easing-standard);
+  font-size: 1.25rem;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font: var(--font-label-large);
+}
+
+/* max-height + overflow:hidden, not `display` toggling or `height: auto`:
+ * the former doesn't animate, the latter can't — this is the reliable way
+ * to animate a reveal that pushes the content below it (M3 "pusher"
+ * pattern). max-height is a generous cap above the real content height,
+ * not a pixel-accurate match. */
+.content {
+  transition: max-height var(--duration-short-4) var(--easing-standard);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.contentOpen {
+  max-height: 200px;
+}
+
+.body {
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-s);
+  font: var(--font-body-medium);
+}
