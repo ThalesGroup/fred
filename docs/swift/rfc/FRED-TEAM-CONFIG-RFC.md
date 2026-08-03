@@ -59,7 +59,7 @@ This RFC is design authority only.
 
 > **Terminology and scope correction (2026-07-10), read before the rest of this
 > RFC.** Two things changed since this RFC was drafted (2026-05-23), both from
-> `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` (AUTHZ-05):
+> AUTHZ-05 (see `platform/REBAC.md`):
 >
 > 1. **Rename** (§26): `owner` → `team_admin`, `manager` → `team_editor`,
 >    `member` → `team_member`. Below, "team owner"/"Owner" means `team_admin`;

@@ -2425,9 +2425,9 @@ HTTP/SSE implementation (`RemoteSseAgentInvoker`) already exists in
 `fred-sdk`, unused by any pod today. Extending `invoke_agent` to cross-pod or
 durable/Temporal execution is intentionally **out of scope for the
 invariants above** and will get its own design pass when a concrete need
-appears (pod discovery/topology is covered separately by
-[`AGENTIC-POD-RFC.md`](../rfc/AGENTIC-POD-RFC.md)) — never an implicit
-relaxation of the same-pod boundary.
+appears (pod discovery/topology, per `platform/PLATFORM_RUNTIME_MAP.md`, is
+still a manually-maintained static catalog, not yet auto-discovered) — never an
+implicit relaxation of the same-pod boundary.
 
 See [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
 for the two open gaps (MEMORY-02, MEMORY-06).

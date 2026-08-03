@@ -15,7 +15,6 @@ side-panel registries), `fred-core` (OpenFGA schema)
 - `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md` — the "tool declares its capabilities" principle this generalizes
 - `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md` — "allowed MCP servers per team", which Tier 3 extends to capabilities
 - `docs/swift/rfc/SDK-V2-RFC.md` — bounded-capability philosophy
-- `docs/swift/rfc/AGENTIC-POD-RFC.md` — pod topology this is scoped against
 - GitHub issues #1903 (PPT filler), #1905 (WritableDocument), #1906 (document-access) — the three port targets that motivate this
 - `docs/swift/platform/REBAC.md` — the OpenFGA model Tier 3 adds a type to
 

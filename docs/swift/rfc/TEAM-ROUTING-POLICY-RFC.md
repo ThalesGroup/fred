@@ -220,7 +220,7 @@ Result:
 ## 6. Authorization
 
 **Corrected 2026-07-10 for consistency with the shipped design** (renamed per
-`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §26; the write rule below was also
+`platform/REBAC.md`; the write rule below was also
 substantively wrong — see the note under Business rule).
 
 Read:

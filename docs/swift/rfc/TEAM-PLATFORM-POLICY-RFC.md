@@ -256,7 +256,7 @@ Business rule:
 
 (Terminology note: this RFC predates the AUTHZ-05 team-role rename —
 `owner`/`manager`/`member` are now `team_admin`/`team_editor`/`team_member`,
-RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §26. Updated here for consistency,
+per `platform/REBAC.md`. Updated here for consistency,
 2026-07-10.)
 
 ---
@@ -460,9 +460,8 @@ block, not the `regular` block. Key differences:
 
 ## 13. Team creation and initial policy assignment
 
-**Updated 2026-07-10 for consistency with the shipped implementation** (RFC
-`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §28, revised by Part 6 §29-32 /
-AUTHZ-05 review item 9). Team creation already exists and works differently
+**Updated 2026-07-10 for consistency with the shipped implementation** (per
+`platform/REBAC.md`, AUTHZ-05 review item 9). Team creation already exists and works differently
 from the original draft below: there is no Keycloak group — a team is a
 `team_metadata` row plus OpenFGA relations, full stop.
 

@@ -87,7 +87,7 @@ instance), not the real convention. Confirmed today against the actual GCS layou
 - **Migration note — teams are no longer Keycloak groups (2026-07-10).** This section previously
   asserted "a Keycloak group id = the team id" and "membership derives from Keycloak group claims,
   no `user→team` tuples to import." Both are now false for the swift target: AUTHZ-05 review item 9
-  (`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6, `platform/REBAC.md`) made a team a
+  (`platform/REBAC.md`) made a team a
   `team_metadata` row (independently generated id, plus a required `name` column) with membership
   as **explicit** OpenFGA relation tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
   — no Keycloak group backs it, and swift's `team_metadata.id` can still reuse a kea team's old

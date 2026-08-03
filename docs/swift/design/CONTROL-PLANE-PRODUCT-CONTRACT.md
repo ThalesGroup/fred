@@ -222,11 +222,10 @@ disabled in this deployment — checked before the durable marker is written,
 since granting would otherwise be a silent no-op that still burns the
 one-time completion. Also refuses (503) if authentication (Keycloak/OIDC) is
 disabled in this deployment — checked even before the ReBAC guard, since a
-mocked identity would make the JWT proof meaningless. See
-`docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 8 (§40-42) for
-the full design rationale (same shape as Kubernetes' cluster-admin bootstrap,
-ArgoCD's `argocd-initial-admin-secret`, Rancher's bootstrap password, and
-Keycloak's own `KC_BOOTSTRAP_ADMIN_*` variables) — replaces the config-seeded
+mocked identity would make the JWT proof meaningless (same shape as
+Kubernetes' cluster-admin bootstrap, ArgoCD's `argocd-initial-admin-secret`,
+Rancher's bootstrap password, and Keycloak's own `KC_BOOTSTRAP_ADMIN_*`
+variables) — replaces the config-seeded
 `platform_admin_subjects`/`platform_observer_subjects` path entirely (removed
 from `security.rebac` config, AUTHZ-07 Step 6). No path grants a platform
 role from deployment config anymore; the only other path is the declarative
@@ -1091,8 +1090,7 @@ removed fields; no other change). Frontend consumption pattern documented in
 
 ### `TeamMember.relation` (singular) → `relations` (list)
 
-**2026-07-12 — Decision (RFC `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 7,
-§33-39):** a team member may now hold `team_admin`, `team_editor`, and
+**2026-07-12 — Decision:** a team member may now hold `team_admin`, `team_editor`, and
 `team_analyst` on the same team simultaneously (e.g. a small team's sole
 admin who is also its editor and evaluator) — the product's write path
 previously enforced exactly one role per user per team. `schema.fga` did not
@@ -1297,7 +1295,7 @@ always allowed).
 
 **New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
 `list[UserSummary]`. Gated on `can_administer_members` for `team_id` (owner-only,
-no platform escalation — `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §24.7/§24.9).
+no platform escalation).
 `query` is required, `min_length=2`, enforced server-side. Returns Keycloak users
 matching the query, excluding anyone already holding any role on the team.
 
@@ -1453,8 +1451,7 @@ a notification system exists to route `request_only` asks to team admins.
 service-layer permission check now bypasses the admin-only
 "administer"-permission gate when the caller's own id equals the target
 (`user.uid == user_id` — a "leave team" call is the same request an admin
-would send to remove that member, just self-directed). Full design: RFC
-`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 9 (§43-46).
+would send to remove that member, just self-directed).
 
 Everything else about the operation is unchanged and applies identically to
 a self-removal:
