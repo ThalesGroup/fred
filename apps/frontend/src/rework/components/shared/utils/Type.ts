@@ -24,7 +24,7 @@ export type ButtonVariant = "filled" | "outlined" | "text";
  */
 export type ComponentSize = "medium" | "small" | "xs";
 
-export type IconButtonVariant = "filled" | "outlined" | "icon";
+export type IconButtonVariant = "filled" | "tonal" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
 const customIcons = ["customAgent"] as const;
@@ -152,6 +152,8 @@ export const materialIcons = [
   "quiz",
   "new_releases",
   "login",
+  "mic",
+  "stop",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

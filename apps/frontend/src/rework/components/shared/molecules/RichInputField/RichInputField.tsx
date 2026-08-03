@@ -14,6 +14,7 @@
 
 import { KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
 import styles from "./RichInputField.module.css";
 
@@ -90,7 +91,7 @@ export function RichInputField({
 
   valueRef.current = value;
 
-  const resize = () => {
+  const resize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     const preCollapseScrollTop = el.scrollTop;
@@ -110,9 +111,11 @@ export function RichInputField({
     // the scrollTop captured before the collapse instead, so the view only
     // moves when the browser's own caret-follow would have moved it anyway.
     el.scrollTop = overflowing ? preCollapseScrollTop : 0;
-  };
+  }, [maxHeight]);
 
-  // Reset height when value is cleared externally.
+  // Keep the box in sync with external value changes (cleared draft after send,
+  // a voice transcript, or a prompt inserted from the library): reset when empty,
+  // otherwise grow to fit so inserted text isn't clipped at one row.
   useEffect(() => {
     if (!value) {
       const el = textareaRef.current;
@@ -121,8 +124,10 @@ export function RichInputField({
         el.style.overflowY = "hidden";
         el.scrollTop = 0;
       }
+      return;
     }
-  }, [value]);
+    resize();
+  }, [value, resize]);
 
   // Re-focus after the assistant reply completes (disabled: true → false).
   useEffect(() => {
@@ -244,54 +249,58 @@ export function RichInputField({
 
   const defaultActionSlot = (
     <div className={styles.actionGroup}>
-      {canUseVoiceInput && (
-        <button
-          type="button"
-          className={`${styles.sendBtn} ${styles.voiceBtn} ${
-            voiceInputState === "recording"
-              ? styles.voiceBtnRecording
-              : voiceInputState === "transcribing"
-                ? styles.voiceBtnBusy
-                : styles.voiceBtnIdle
-          }`}
-          disabled={voiceControlDisabled && voiceInputState !== "recording"}
-          onClick={voiceInputState === "recording" ? stopRecording : () => void startRecording()}
-          aria-label={
-            voiceInputState === "recording"
-              ? t("chatbot.stopRecording")
-              : voiceInputState === "transcribing"
-                ? t("chatbot.transcribingAudio")
-                : t("chatbot.recordAudio")
-          }
-        >
-          {voiceInputState === "recording" ? (
-            <span className={styles.stopIcon} aria-hidden />
-          ) : (
-            <span
-              className={`material-symbols-outlined ${voiceInputState === "transcribing" ? styles.spinningIcon : ""}`}
-              aria-hidden
-            >
-              {voiceInputState === "transcribing" ? "progress_activity" : "mic"}
-            </span>
-          )}
-        </button>
-      )}
+      {canUseVoiceInput &&
+        // Voice control — a tonal icon button (M3 filled tonal): secondary at
+        // rest, error while recording, and a spinner via `loading` while the
+        // clip is being transcribed.
+        (voiceInputState === "recording" ? (
+          <IconButton
+            variant="tonal"
+            color="error"
+            size="small"
+            icon={{ category: "outlined", type: "stop", filled: true }}
+            onClick={stopRecording}
+            aria-label={t("chatbot.stopRecording")}
+          />
+        ) : voiceInputState === "transcribing" ? (
+          <IconButton
+            variant="tonal"
+            color="on-surface"
+            size="small"
+            loading
+            icon={{ category: "outlined", type: "mic" }}
+            aria-label={t("chatbot.transcribingAudio")}
+          />
+        ) : (
+          <IconButton
+            variant="tonal"
+            color="secondary"
+            size="small"
+            icon={{ category: "outlined", type: "mic" }}
+            disabled={voiceControlDisabled}
+            onClick={() => void startRecording()}
+            aria-label={t("chatbot.recordAudio")}
+          />
+        ))}
       {showStop ? (
-        <button type="button" className={styles.sendBtn} onClick={onInterrupt} aria-label={t("chatbot.stopResponse")}>
-          <span className={styles.stopIcon} aria-hidden />
-        </button>
+        <IconButton
+          variant="filled"
+          color="primary"
+          size="small"
+          icon={{ category: "outlined", type: "stop", filled: true }}
+          onClick={onInterrupt}
+          aria-label={t("chatbot.stopResponse")}
+        />
       ) : showSend ? (
-        <button
-          type="button"
-          className={styles.sendBtn}
+        <IconButton
+          variant="filled"
+          color="primary"
+          size="small"
+          icon={{ category: "outlined", type: "arrow_upward" }}
           onClick={onSend}
           disabled={sendDisabled}
           aria-label={t("chatbot.sendMessage")}
-        >
-          <span className="material-symbols-outlined" aria-hidden>
-            arrow_upward
-          </span>
-        </button>
+        />
       ) : null}
     </div>
   );
