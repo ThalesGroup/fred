@@ -49,6 +49,13 @@ interface RichInputFieldProps {
   voiceInputDisabled?: boolean;
   onVoiceInputError?: (message: string) => void;
   maxHeight?: number;
+  /**
+   * Bump this (e.g. a counter) whenever the caller has just set `value`
+   * programmatically (not from the user typing) and wants the field refocused
+   * with the caret at the end — e.g. after inserting a library prompt. Ignored
+   * on the initial render so mounting doesn't steal focus.
+   */
+  focusEndRequestId?: number;
 }
 
 type VoiceInputState = "idle" | "recording" | "transcribing";
@@ -80,6 +87,7 @@ export function RichInputField({
   voiceInputDisabled = false,
   onVoiceInputError,
   maxHeight = 200,
+  focusEndRequestId,
 }: RichInputFieldProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,6 +136,22 @@ export function RichInputField({
     }
     resize();
   }, [value, resize]);
+
+  // Refocus with the caret at the end after a caller-driven insertion (e.g. a
+  // library prompt). Skips the mount so mounting the field never steals focus;
+  // relies on `value` having already been committed to the DOM by the time this
+  // runs, since the caller updates both in the same render (React batches it).
+  const lastFocusEndRequestId = useRef(focusEndRequestId);
+  useEffect(() => {
+    const previous = lastFocusEndRequestId.current;
+    lastFocusEndRequestId.current = focusEndRequestId;
+    if (focusEndRequestId === undefined || focusEndRequestId === previous) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [focusEndRequestId]);
 
   // Re-focus after the assistant reply completes (disabled: true → false).
   useEffect(() => {
@@ -255,7 +279,7 @@ export function RichInputField({
         // while the clip is being transcribed.
         (voiceInputState === "recording" ? (
           <IconButton
-            variant="tonal"
+            variant="filled"
             color="error"
             size="small"
             icon={{ category: "outlined", type: "stop", filled: true }}
@@ -282,7 +306,8 @@ export function RichInputField({
         ))}
       {showStop ? (
         <IconButton
-          variant="icon"
+          variant="filled"
+          color="error"
           size="small"
           icon={{ category: "outlined", type: "stop", filled: true }}
           onClick={onInterrupt}

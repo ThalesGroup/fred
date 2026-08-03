@@ -74,9 +74,9 @@ export function ComposerControlSlot({
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const resolved = useMemo(() => resolveChatTurnControls(chatControls), [chatControls]);
-  // The former SearchConfig rendered the attach action alone in its own group,
-  // separated by a divider from the picker/policy/scope group. Preserve that
-  // layout by widget id (data-driven presence, not capability branching).
+  // Split by widget id (data-driven presence, not capability branching): attach
+  // goes in the "primary" menu alongside the prompts row, everything else in
+  // the "tools" menu — see `part` below.
   const attachControls = resolved.filter((entry) => entry.widget === "attach_files");
   const otherControls = resolved.filter((entry) => entry.widget !== "attach_files");
 
@@ -164,9 +164,11 @@ export function ComposerControlSlot({
 
   // "primary" holds the attach action + prompt row; "tools" holds the search /
   // scope / reasoning / document-scope controls — the composer mounts each part
-  // behind its own trigger button.
+  // behind its own trigger button. Attach + prompts share a single group (no
+  // divider between them) — unlike the former SearchConfig layout, this menu
+  // reads as one flat list of actions rather than two visually split groups.
   const groups =
-    part === "tools" ? [otherControls.map(renderControl)] : [attachControls.map(renderControl), [promptsRow]];
+    part === "tools" ? [otherControls.map(renderControl)] : [[...attachControls.map(renderControl), promptsRow]];
 
   return (
     <MenuPopover

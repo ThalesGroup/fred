@@ -5,10 +5,11 @@
 .popover {
   display: flex;
   flex-direction: column;
-  /* M3: menus float above content → mid-level elevation shadow (borderless,
-     the shadow alone separates it), extra-small container corner
-     (`--radius-s`, the menu/text-field/chip radius). */
+  /* M3: menus float above content → mid-level elevation shadow, extra-small
+     container corner (`--radius-s`, the menu/text-field/chip radius). Neutral
+     border → an `outline-*` token, never `on-surface`. */
   box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container-high);
   padding: var(--spacing-2xs);

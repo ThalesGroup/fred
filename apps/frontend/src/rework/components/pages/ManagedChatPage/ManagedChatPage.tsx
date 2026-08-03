@@ -145,6 +145,9 @@ export default function ManagedChatPage() {
   // full record, not the summary, so we fetch it on demand; personal-scope prompts
   // are stored under the user's personal team, team-scope under the chat team.
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  // Bumped alongside chat.setInput below to ask RichInputField to refocus with
+  // the caret at the end of the just-inserted prompt (batched into one render).
+  const [focusEndRequestId, setFocusEndRequestId] = useState(0);
   const insertContextPrompt = async (prompt: ContextPromptSummary) => {
     const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
     if (!promptTeamId) return;
@@ -153,6 +156,7 @@ export default function ManagedChatPage() {
       const text = detail.text?.trim();
       if (!text) return;
       chat.setInput(chat.input.trim().length > 0 ? `${chat.input}\n\n${text}` : text);
+      setFocusEndRequestId((n) => n + 1);
     } catch {
       showError({
         summary: t("chatbot.contextPrompts.insertErrorSummary"),
@@ -250,6 +254,7 @@ export default function ManagedChatPage() {
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
       onVoiceInputError={reportVoiceInputError}
+      focusEndRequestId={focusEndRequestId}
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={
