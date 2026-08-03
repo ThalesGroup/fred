@@ -2293,7 +2293,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
     deps = SimpleNamespace(
         get_agent_instance_store=lambda: instance_store,
         get_team_capability_settings_store=lambda: settings,
-        get_model_reasoning_store=lambda: _FakeReasoningStore(),
+        get_model_reasoning_store=_FakeReasoningStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2318,7 +2318,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
     instance_store = _FakeAgentInstanceStore([record])
     deps = SimpleNamespace(
         get_agent_instance_store=lambda: instance_store,
-        get_team_capability_settings_store=lambda: _FakeSettingsStore(),
+        get_team_capability_settings_store=_FakeSettingsStore,
         get_model_reasoning_store=lambda: _FakeReasoningStore(
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
