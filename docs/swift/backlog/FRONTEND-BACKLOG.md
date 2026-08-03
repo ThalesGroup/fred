@@ -443,7 +443,8 @@ so there is nothing to generate from yet.
 ## 19 Phase FRONT-13 — Unified Document Viewer With AI Assistant Panel
 
 **ID:** FRONT-13  **Owner:** Dimitri  **Status:** In progress — PDF wiring done, AI panel not started
-**RFC:** `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md`
+**RFC:** `docs/swift/rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md` (trimmed to the AI-panel remainder)
+**Execution:** GitHub issue [#2206](https://github.com/ThalesGroup/fred/issues/2206)
 **Depends on:** CHAT-08 (`/documents/:uid` route), FRONT-09.C/D (corpus preview drawer)
 
 Consolidate the two independent document-viewing flows (chat-citation
