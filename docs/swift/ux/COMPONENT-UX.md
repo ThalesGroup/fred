@@ -267,7 +267,7 @@ agents) so the decision is informed at the point it is made.
   in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
   a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
   `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
-  threaded by a single 1px timeline rail so the turn still reads as a process unfolding. See `AGENT-THINKING-API-RFC.md` Amendment D.
+  threaded by a single 1px timeline rail so the turn still reads as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
   sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
@@ -305,7 +305,7 @@ agents) so the decision is informed at the point it is made.
   The thought row is now filtered out entirely (`traceUtils.groupTraceEntries()`) — it was
   pure bookkeeping duplication, not agent reasoning. The combo row alone now carries the
   humanized tool label, the status dot, and (new) the real execution latency. See
-  `RUNTIME-EXECUTION-CONTRACT.md` §8.21 and `AGENT-THINKING-API-RFC.md` Amendment B.
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 ---
 

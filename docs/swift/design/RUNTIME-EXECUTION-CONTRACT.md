@@ -830,11 +830,12 @@ HTTP 422 (`content … should be a valid string`; observed wire payload
 tool-loop model-call boundary (`support/tool_loop.py` `reasoner`): it collapses
 **assistant** (`AIMessage`) list-content to clean reasoning-free text (preserving
 `tool_calls` and metadata) before `model.ainvoke`, while leaving `HumanMessage`
-(multimodal/base64 image content) and `ToolMessage` untouched. This is intentionally
-a *collapse* rather than the "preserve full provider message internally" behaviour in
-RFC §7.3 — Mistral's OpenAI-compatible endpoint rejects the raw reasoning form, so
-the reasoning survives only as the streamed `THOUGHT_*` trace. The author override
-(`thought_config`, Layer 2) remains open.
+(multimodal/base64 image content) and `ToolMessage` untouched. **Superseded by §8.37 (2026-07-31):** this was originally an unconditional
+collapse on every replayed message. It now only strips reasoning across a
+*closed* turn boundary — reasoning inside an still-open tool loop is kept,
+re-homed as ordinary assistant text, so the model does not "forget" why it
+called a tool between loop steps. See §8.37 for the current contract. The
+author override (`thought_config`, Layer 2) remains open.
 
 ### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
 
@@ -1783,7 +1784,7 @@ needed a redeploy.
    The distinction is the whole point: `reasoning_effort` is already in
    `settings` by then, so a toggle that only skipped *adding* it would be
    decorative — the `allow_parallel_calls` failure recorded in
-   `AGENT-THINKING-API-RFC.md` §C.8, with an incident lever's name on it.
+   an incident lever's name on it.
    `tests/test_model_reasoning_enablement.py` proves it against the real
    `ChatOpenAI` request payload, both directions.
 
@@ -1795,10 +1796,10 @@ reasons" (RFC §5.6). A model reasons only by being named.
 **Not additive on upgrade.** A deployment running reasoning through YAML alone
 stops reasoning until an administrator switches it on (RFC §5.6.1) — on this
 branch that is `chat.mistral.small`, the current `chat` default. Release-noted,
-not silent. The safe direction, and deliberately so: `AGENT-THINKING-API-RFC.md`
-Amendment C measured 10/10 turns with duplicate tool calls on that exact
-profile, and a live per-model off switch is the only lever that stops a
-reasoning-induced incident without a redeploy (RFC §9).
+not silent. The safe direction, and deliberately so: §8.37 measured 10/10
+turns with duplicate tool calls on that exact profile, and a live
+per-model off switch is the only lever that stops a reasoning-induced
+incident without a redeploy.
 
 **Untouched**: per-team model authorization. Reasoning has no subject, so it is
 not a permission and writes no ReBAC tuple (RFC §5.1/§5.4). Levels 3 (per-agent
@@ -1868,7 +1869,7 @@ goes through the same factory.
 
 1. `max_tool_calls_per_turn = 12` on all five ReAct agents
    (`apps/fred-agents/fred_agents/tool_pacing.py`). `ToolCallLimitMiddleware` was
-   wired but inert since nothing set the value (`AGENT-THINKING-API-RFC.md` §C.8).
+   wired but inert since nothing set the value (§8.37).
    Applies to every turn, not only reasoning ones — RFC §14.4 explains why, and
    why a capability-contributed cap would break `frame.py`'s documented
    `after_model` ordering against the HITL gate.
@@ -1885,7 +1886,7 @@ goes through the same factory.
 
 ### 8.31 ✅ Reasoning blocks are persisted to session history (2026-07-31)
 
-`AGENT-THINKING-API-RFC.md` specified how reasoning is *surfaced* and never what
+§8.6/§8.31 specify how reasoning is *surfaced* and never what
 becomes of it afterwards — its own §C.9 names the gap. The consequence was
 user-visible: reasoning streamed into the trace, then vanished on page reload,
 because `_write_turn_history` (`agent_app.py`) mapped `tool_call`, `tool_result`,
@@ -2080,6 +2081,52 @@ the SDK default.
 (Google ADC auth) stays as a separate, still-supported path — this provider
 does not replace it. No frozen contract field changed; this is a new enum
 value and a new factory branch only.
+
+---
+
+### 8.37 ✅ Reasoning threads within an open tool loop; tool-loop safety guardrails (RUNTIME-04/05, 2026-07-31)
+
+**Supersedes §8.6's "collapse-only" description of `strip_reasoning_from_history`.**
+That helper originally stripped provider reasoning blocks from every replayed
+assistant message, unconditionally — safe against Mistral's HTTP 422 on
+replayed raw reasoning, but it also meant the model "forgot" its own
+reasoning between tool-loop steps and re-derived the same plan, re-issuing
+byte-identical tool calls (measured: 10/10 turns with a duplicate call on
+`mistral-small` + `reasoning_effort: high`, confirmed independently across
+re-measurements).
+
+**Fix — thread within the open turn, strip only across turn boundaries.**
+`CheckpointHygieneMiddleware` now calls
+`thread_reasoning_within_open_turn`: reasoning content is kept, re-homed as
+ordinary assistant text (prefixed `RECALLED_REASONING_PREFIX`), for any
+message still inside the current open tool loop; it is dropped only once
+the turn closes (`final` reached) — closed-turn reasoning is never replayed
+into a later turn's context. There is no protocol-level channel that marks
+re-homed reasoning as privileged — it is ordinary `content`, the same field
+a user-facing reply is written into, so any consumer reading a checkpointed
+transcript must not assume a stronger separation than a text prefix
+convention provides. Measured empty risk (0/8 trials) of the model
+narrating or repeating this recalled text back to the user, but the
+channel itself carries no guarantee against it.
+
+**Tool-loop safety guardrails, permanent (not reasoning-specific — apply to
+every ReAct turn):**
+
+- `max_tool_calls_per_turn = 12` on all five ReAct agents
+  (`fred_agents/tool_pacing.py`) — a real cap, not a documented-but-inert
+  default; hitting it degrades the answer (`exit_behavior="continue"`)
+  rather than erroring the turn.
+- `TOOL_REPETITION_RULE`, explicit and tested, in
+  `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) — previously
+  a symptom of the tool-failure-recovery suffix (unrelated issue #2073) was
+  the only thing suppressing repeat calls in production, with nothing
+  tying that protection to reasoning drift or guaranteeing it would survive
+  a rewording.
+
+**Not closed by this work:** reasoning continuity across a **Graph** agent's
+node boundaries (Graph authors use `context.thinking()` directly, a
+different execution model); token cost of re-homed reasoning (it now
+consumes context tokens the previous strip-everything behavior did not).
 
 ---
 

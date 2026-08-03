@@ -1019,7 +1019,7 @@ without first extracting or tightening the specific seam you are touching.
 ## §RUNTIME-05 — ReAct Thought Surface
 
 **ID:** RUNTIME-05  
-**RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
+**Design:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.6`  
 **Status:** In progress — Layer 1 + Layer 2b + Layer 2c landed (2026-06-18). Layer 2 (`thought_config`) and Rico demo deferred to follow-up.
 
 **Execution:** GitHub issue [#1757](https://github.com/ThalesGroup/fred/issues/1757) / branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`

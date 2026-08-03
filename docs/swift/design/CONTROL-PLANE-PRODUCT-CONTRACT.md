@@ -2003,7 +2003,7 @@ only enabled ids.
 **Consequence, deliberate:** a deployment that ran reasoning through
 `models_catalog.yaml` alone **stops reasoning at this upgrade** until an
 administrator switches it on (RFC §5.6.1). Release-noted, not silent. Chosen on
-safety grounds — `AGENT-THINKING-API-RFC.md` Amendment C measured 10/10 turns
+safety grounds — measured 10/10 turns
 with duplicate tool calls on the profile this affects — and it puts the live
 per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §9).
 
