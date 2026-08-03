@@ -103,8 +103,8 @@ Do not spend migration time on:
 
 - [`CHAT-UI-BACKLOG.md`](./CHAT-UI-BACKLOG.md) — managed chat UI, attachments,
   rendering, and FILES-01 MCP filesystem work.
-- [`KNOWLEDGE-WORKSPACE-REWORK-RFC.md`](../rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md)
-  — FRONT-09 rework resource browser target.
+- [`RESOURCES-DASHBOARD.md`](../design/RESOURCES-DASHBOARD.md)
+  — FRONT-09 resource browser, as-built.
 - [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
   — control-plane product/session/admin contracts.
 - [`RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md)
@@ -231,8 +231,8 @@ Remaining: none — merged via PR #1750.
 
 ## 15 Phase FRONT-09 — Rework Knowledge Workspace
 
-**ID:** FRONT-09  **Owner:** Dimitri  **Status:** In progress — A/C/D landed 2026-06-18
-**RFC:** `docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md`
+**ID:** FRONT-09  **Owner:** Dimitri  **Status:** Done — see `RESOURCES-DASHBOARD.md`
+**Design:** `docs/swift/design/RESOURCES-DASHBOARD.md`
 **Execution:** branch `1772-...-kf-similarity-search` (TeamResourcesPage)
 
 Build a rework-native replacement for the old KnowledgeHub/resource/library
@@ -251,7 +251,7 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 > verification:** upload + reprocess paths against a running knowledge-flow
 > backend. Document **rename** shipped 2026-07-30 — real filename rename
 > (`PUT /document/metadata/{uid}/name`), not just the display-only title edit
-> this snapshot predates; see `DOCUMENT-RENAME-RFC.md`.
+> this snapshot predates; see `RESOURCES-DASHBOARD.md`.
 
 ### Scope
 
@@ -309,7 +309,7 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 #### FRONT-09.D — Mutations And Task Refresh
 
 - [x] Wire upload through the existing rework drawer/task pattern. _(`DocumentUploadDrawer`.)_
-- [x] Refresh the active folder/page after upload, delete, or reprocess. _(Rename now uses this same path, shipped 2026-07-30 — see `DOCUMENT-RENAME-RFC.md`; move stays deferred.)_
+- [x] Refresh the active folder/page after upload, delete, or reprocess. _(Rename now uses this same path, shipped 2026-07-30 — see `RESOURCES-DASHBOARD.md`; move stays deferred.)_
 - [ ] Preserve selection and scroll position when safe.
 - [x] Surface task progress without polling the whole library tree.
       _(`DocRow` reads `selectActiveTaskForTarget`.)_
