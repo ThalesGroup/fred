@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
-import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
-import type { Action } from "@shared/molecules/ActionBar/ActionBar";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
@@ -24,31 +27,44 @@ interface UserTurnProps {
 }
 
 export function UserTurn({ text, onEdit }: UserTurnProps) {
-  const actions: Action[] = [
-    {
-      id: "copy",
-      icon: "content_copy",
-      label: "Copy message",
-      onClick: () => {
-        navigator.clipboard.writeText(text).catch(() => {});
-      },
-    },
-    ...(onEdit
-      ? [
-          {
-            id: "edit",
-            icon: "edit",
-            label: "Edit message",
-            onClick: () => onEdit(text),
-          },
-        ]
-      : []),
-  ];
+  const { t } = useTranslation();
+  const { showSuccess } = useToast();
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard
+      .writeText(text)
+      // Short-lived confirmation — a copy is a trivial, self-evident action,
+      // so the toast just blinks the success and clears fast.
+      .then(() => showSuccess({ summary: t("chatbot.copyMessage.success"), duration: 2000 }))
+      .catch(() => {});
+  }, [text, showSuccess, t]);
 
   return (
     <div className={styles.turn}>
+      {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
+      <div className={styles.actions}>
+        {onEdit && (
+          <Tooltip text={t("chatbot.editMessage")}>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "edit" }}
+              aria-label={t("chatbot.editMessage")}
+              onClick={() => onEdit(text)}
+            />
+          </Tooltip>
+        )}
+        <Tooltip text={t("chatbot.copyMessage.tooltip")}>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "content_copy" }}
+            aria-label={t("chatbot.copyMessage.tooltip")}
+            onClick={handleCopy}
+          />
+        </Tooltip>
+      </div>
       <UserMessage text={text} />
-      <ActionBar actions={actions} className={styles.actions} />
     </div>
   );
 }

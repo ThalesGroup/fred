@@ -365,6 +365,11 @@
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
+    "copyMessage": {
+      "tooltip": "Copy message",
+      "success": "Message copied"
+    },
+    "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
     "errors": {
       "missingContext": "Missing team or agent context in URL.",
