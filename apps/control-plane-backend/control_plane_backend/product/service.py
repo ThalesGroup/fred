@@ -3205,17 +3205,18 @@ async def get_runtime_binding_for_team(
     # slices for the capabilities this instance actually selected (CAPAB-01 /
     # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
     selected = set(instance.tuning.selected_capability_ids or [])
-    all_team_settings = await deps.get_team_capability_settings_store().list_for_team(
-        team_id
+    # Independent reads (neither depends on the other's result) — run
+    # concurrently rather than stacking two sequential DB round trips on the
+    # per-turn runtime-binding path (2026-08-04, PR #2204 review).
+    all_team_settings, reasoning_enabled_model_ids = await asyncio.gather(
+        deps.get_team_capability_settings_store().list_for_team(team_id),
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
     team_capability_settings = {
         cap_id: settings
         for cap_id, settings in all_team_settings.items()
         if cap_id in selected
     }
-    reasoning_enabled_model_ids = (
-        await deps.get_model_reasoning_store().list_enabled_model_ids()
-    )
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
