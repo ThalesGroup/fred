@@ -257,7 +257,7 @@ export function RichInputField({
           <IconButton
             variant="tonal"
             color="error"
-            size="medium"
+            size="small"
             icon={{ category: "outlined", type: "stop", filled: true }}
             onClick={stopRecording}
             aria-label={t("chatbot.stopRecording")}
@@ -265,7 +265,7 @@ export function RichInputField({
         ) : voiceInputState === "transcribing" ? (
           <IconButton
             variant="icon"
-            size="medium"
+            size="small"
             loading
             icon={{ category: "outlined", type: "mic" }}
             aria-label={t("chatbot.transcribingAudio")}
@@ -273,7 +273,7 @@ export function RichInputField({
         ) : (
           <IconButton
             variant="icon"
-            size="medium"
+            size="small"
             icon={{ category: "outlined", type: "mic" }}
             disabled={voiceControlDisabled}
             onClick={() => void startRecording()}
@@ -283,7 +283,7 @@ export function RichInputField({
       {showStop ? (
         <IconButton
           variant="icon"
-          size="medium"
+          size="small"
           icon={{ category: "outlined", type: "stop", filled: true }}
           onClick={onInterrupt}
           aria-label={t("chatbot.stopResponse")}
@@ -292,7 +292,7 @@ export function RichInputField({
         <IconButton
           variant="filled"
           color="primary"
-          size="medium"
+          size="small"
           icon={{ category: "outlined", type: "arrow_upward" }}
           onClick={onSend}
           disabled={sendDisabled}

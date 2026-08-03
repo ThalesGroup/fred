@@ -69,7 +69,7 @@ export function ComposerActionsMenu({
     <div ref={containerRef} className={styles.container} data-open={open}>
       <IconButton
         variant="icon"
-        size="medium"
+        size="small"
         icon={icon}
         aria-label={openAriaLabel ?? t("chatbot.composerActions.openAria")}
         disabled={disabled}

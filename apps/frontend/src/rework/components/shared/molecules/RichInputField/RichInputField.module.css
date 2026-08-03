@@ -18,26 +18,32 @@
 .field {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-xs);
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
     box-shadow 120ms ease;
   box-shadow: var(--shadow-s);
-  border: 1px solid var(--outline-retreat);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
   background: var(--surface-container);
-  padding: var(--spacing-m);
+  padding: var(--spacing-s);
   width: 100%;
   max-width: 720px;
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {
+  /* Small, subtle primary-tinted glow on top of the resting elevation shadow —
+     just enough to read as "active", not a full elevation change. */
+  box-shadow:
+    var(--shadow-s),
+    0 0 6px 1px color-mix(in srgb, var(--primary) 25%, transparent);
   border-color: var(--primary);
   background: var(--surface-container-high);
 }
 
 .field:hover:not(:focus-within):not(:has(.textarea:disabled)) {
-  border-color: var(--outline);
+  border-color: var(--outline-retreat);
 }
 
 .field:has(.textarea:disabled) {
@@ -48,7 +54,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-2xs);
-  margin-bottom: var(--spacing-2xs);
 }
 
 .inlineRow {
@@ -64,7 +69,8 @@
   outline: none;
   border: none;
   background: transparent;
-  padding: var(--spacing-2xs) 0;
+  padding-right: var(--spacing-xs);
+  padding-left: var(--spacing-xs);
   width: 100%;
   min-height: 36px;
   max-height: 200px;
@@ -84,7 +90,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding-top: var(--spacing-2xs);
   min-height: 36px;
 }
 
