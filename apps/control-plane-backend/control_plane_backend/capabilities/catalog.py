@@ -192,9 +192,16 @@ async def universally_available_model_profile_ids(
     this intersection instead of the union means a write that succeeds can
     never drift-fail at runtime on some other pod.
 
-    Best-effort per pod, same fault tolerance as `aggregate_capability_catalog`:
-    an unreachable pod (or one that has registered no model) is simply
-    excluded from the intersection, never fatal.
+    Fails closed, unlike `aggregate_capability_catalog`'s best-effort skip: an
+    enabled pod that is genuinely unreachable (`_model_capabilities_for_source`
+    returns `None`) makes the whole result `frozenset()` rather than being
+    silently excluded — excluding it would let the *other* pods' common
+    profiles look "universal" while this one is down, which is exactly the
+    write-now-drift-later gap this function exists to close (2026-08-04,
+    PR #2204 review). A pod that answered but genuinely registers no model
+    (`[]`, e.g. a non-agent pod) is not the same thing and is excluded as
+    before — it never was model-capable, so it has no opinion to poison the
+    intersection with.
     """
 
     # Lazy import for the same reason as `aggregate_capability_catalog` above
@@ -206,6 +213,15 @@ async def universally_available_model_profile_ids(
         if not source.enabled:
             continue
         entries = await _model_capabilities_for_source(source.base_url)
+        if entries is None:
+            logger.warning(
+                "[capability-catalog] %s unreachable while computing universally "
+                "available model profiles — failing closed (no profile is "
+                "certified available this pass) rather than risk approving a "
+                "routing-policy write this pod cannot actually serve",
+                source.base_url,
+            )
+            return frozenset()
         if not entries:
             continue
         per_pod_profile_ids.append(

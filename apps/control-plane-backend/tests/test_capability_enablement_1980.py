@@ -1288,6 +1288,63 @@ async def test_universally_available_model_profile_ids_intersects_across_pods(
     assert universal == frozenset({"chat.shared"})
 
 
+@pytest.mark.asyncio
+async def test_universally_available_model_profile_ids_fails_closed_on_unreachable_pod(
+    monkeypatch,
+) -> None:
+    """PR #2204 review: an enabled pod that is genuinely unreachable
+    (`_model_capabilities_for_source` returns `None`, not `[]`) must not be
+    silently excluded from the intersection the way a reachable-but-empty pod
+    is — that would let the *other* pods' common profiles look "universal"
+    while this one is down, reintroducing the write-now-drift-later gap this
+    function exists to close. The whole result must be empty instead."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_model_profile_ids,
+    )
+
+    def _model_entry(profile_ids):
+        return CapabilityCatalogEntry(
+            id="model__openai__gpt-5.1",
+            version="1",
+            name="gpt-5.1",
+            description="gpt-5.1",
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(profile_ids),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return [_model_entry(["chat.shared"])]
+        return None  # pod-b is unreachable, distinct from "reachable, empty"
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_model_profile_ids(deps)
+
+    assert universal == frozenset()
+
+
 # ---------------------------------------------------------------------------
 # Revoke survives a stale/missing model catalog entry (GitHub #2191). A
 # kind="model" fetch failure must not fail-OPEN on the admin's ability to
