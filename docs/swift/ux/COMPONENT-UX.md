@@ -209,8 +209,8 @@ sub-menu. The popover deliberately stays open so a user can flip it and keep
 composing. It is also the first row contributed by the **platform** rather than by a
 capability. It appears only when the agent's author turned Reasoning on in the form's
 Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md`
-§8). The offer itself lived in the General section until Amendment C (2026-08-02) moved
+gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
 it into the Capabilities tab, rendered through the same `CapabilityCard` component every
 real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
 even though the reasoning offer still isn't a capability underneath.

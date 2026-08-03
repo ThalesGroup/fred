@@ -1773,7 +1773,7 @@ remaining 20 are exclusively the `GET /teams` open question above.
 
 ### 8.29 ✅ Reasoning is declared, projected, and enforceable — REASON-01 phase 1 (issue #2166, 2026-07-29)
 
-`MODEL-REASONING-ENABLEMENT-RFC.md` levels 1 and 2. Before this, reasoning was
+Levels 1 and 2 of REASON-01 (declare aptitude, platform activation). Before this, reasoning was
 one untyped YAML line (`ModelConfiguration.settings.reasoning_effort`, an opaque
 `Dict[str, Any]`): nothing in Fred knew a profile reasoned, and changing it
 needed a redeploy.
@@ -1829,8 +1829,8 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 
 ### 8.30 ✅ Per-agent and per-question reasoning — REASON-01 phase 2 (issue #2166, 2026-07-30)
 
-`MODEL-REASONING-ENABLEMENT-RFC.md` levels 3-4, plus its three §9 preconditions.
-Builds on §8.29 (levels 1-2); read that first.
+Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
+tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the

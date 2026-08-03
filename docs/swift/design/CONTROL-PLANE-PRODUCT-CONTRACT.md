@@ -1894,7 +1894,7 @@ the category filter-chips row.
 
 ## 33. Contract Notes — REASON-01, per-model reasoning activation (2026-07-29, #2166)
 
-Level 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` (phase 1 = levels 1–2; levels
+Level 2 of REASON-01 (phase 1 = levels 1–2; levels
 3–4 are phase 2 and not in this change).
 
 ### New route
@@ -2067,6 +2067,18 @@ stored enabled row can only ever name a reasoning-capable model.
 resolves a profile per *operation* at runtime while chat controls are computed
 once per session (RFC §12 q3). Erring toward under-hiding — showing a control a
 later operation might not honour — beats over-hiding one that would have worked.
+
+### Addendum — the toggle's form location is the Capabilities tab (2026-08-02)
+
+The level-3 offer toggle and Amendment B's `reasoning_default_on` render inside
+the agent form's **Capabilities tab** (renamed from Tools), through the same
+generalized `CapabilityCard` component every real capability uses (`name`/
+`description`/`checked`/`onToggle` plus an optional `subForm` slot for the
+nested default-on switch) — not a reasoning-specific component, and not the
+General section it lived in briefly beforehand. This is a form-placement
+change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
+plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
+middleware), enforced at the single `build_for_chat` point as before.
 
 ---
 
