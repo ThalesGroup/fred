@@ -103,7 +103,6 @@ export function SessionAttachmentsDrawer({
                   </span>
                   <span className={styles.rowButtons}>
                     <IconButton
-                      color="on-surface"
                       variant="icon"
                       size="xs"
                       icon={{ category: "outlined", type: "delete" }}

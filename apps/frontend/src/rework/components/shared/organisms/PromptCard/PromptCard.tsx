@@ -43,7 +43,6 @@ export default function PromptCard({ prompt, categoryName, canManage, onView, on
         <div className={styles.editOverlay}>
           <IconButton
             size="small"
-            color="on-surface"
             variant="icon"
             icon={{ category: "outlined", type: "edit" }}
             onClick={(e) => {

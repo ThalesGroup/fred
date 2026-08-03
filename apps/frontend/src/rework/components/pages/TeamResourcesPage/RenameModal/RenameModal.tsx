@@ -102,7 +102,6 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
                 {t("rework.resources.renameModal.title")}
               </p>
               <IconButton
-                color="on-surface"
                 variant="icon"
                 size="small"
                 icon={{ category: "outlined", type: "close" }}

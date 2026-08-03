@@ -101,7 +101,6 @@ export default function CodenameModal({ open, onClose, data }: Props) {
             <img src={`${base}${data.image}`} alt={data.codename} className={styles.image} />
             <div className={styles.closeButton}>
               <IconButton
-                color="on-surface"
                 variant="filled"
                 size="xs"
                 icon={{ category: "outlined", type: "close" }}

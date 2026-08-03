@@ -62,7 +62,6 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
         <span className={styles.spacer} />
         <span className={styles.count}>{t("chatbot.debugRaw.count", { count: displayed.length })}</span>
         <IconButton
-          color="on-surface"
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}

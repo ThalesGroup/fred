@@ -160,7 +160,6 @@ export default function MigrationPage() {
         <div className={styles.overviewHeader}>
           <span className={styles.overviewTitle}>{t("rework.tasks.migration.stats.title")}</span>
           <IconButton
-            color="on-surface"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "refresh", filled: false }}

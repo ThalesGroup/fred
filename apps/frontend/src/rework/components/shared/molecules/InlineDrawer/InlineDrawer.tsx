@@ -162,7 +162,6 @@ export function InlineDrawer({
             <div className={styles.headerActions}>
               {headerActions}
               <IconButton
-                color="on-surface"
                 variant="icon"
                 size="small"
                 icon={{ category: "outlined", type: "close" }}

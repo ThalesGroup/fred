@@ -52,7 +52,6 @@ export default function SearchField({
       {value && (
         <IconButton
           size="small"
-          color="on-surface"
           variant="icon"
           icon={{ category: "outlined", type: "close" }}
           onClick={(e) => {

@@ -127,7 +127,6 @@ export default function CreateFolderModal({
                 </p>
               </div>
               <IconButton
-                color="on-surface"
                 variant="icon"
                 size="small"
                 icon={{ category: "outlined", type: "close" }}
