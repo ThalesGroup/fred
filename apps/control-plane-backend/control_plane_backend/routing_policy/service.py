@@ -177,8 +177,17 @@ async def _validate_write(
     if not referenced:
         return
 
-    profile_to_capability = await _profile_to_capability_id_map(deps)
-    universal = await universally_available_model_profile_ids(deps)
+    # `_pod_catalog_fetch_scope` (product.service, lazy import to break the
+    # product.service <-> routing_policy import cycle) de-dupes the pod
+    # `/agents/models-catalog` fetch `_profile_to_capability_id_map` and
+    # `universally_available_model_profile_ids` would otherwise each make
+    # independently — the union and the intersection are two views over the
+    # exact same per-pod snapshot, so there is no reason to fetch it twice.
+    from control_plane_backend.product.service import _pod_catalog_fetch_scope
+
+    with _pod_catalog_fetch_scope():
+        profile_to_capability = await _profile_to_capability_id_map(deps)
+        universal = await universally_available_model_profile_ids(deps)
     unknown = sorted(
         {p for p in referenced if p not in profile_to_capability or p not in universal}
     )
@@ -248,9 +257,14 @@ async def list_available_model_profiles(
         user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
     )
     await _require_elevated_team_role(user, team_id, deps)
-    catalog = await aggregate_capability_catalog(deps)
+    # `_pod_catalog_fetch_scope` (see `_validate_write` for why) de-dupes the
+    # pod `/agents/models-catalog` fetch across these two catalog reads.
+    from control_plane_backend.product.service import _pod_catalog_fetch_scope
+
+    with _pod_catalog_fetch_scope():
+        catalog = await aggregate_capability_catalog(deps)
+        universal = await universally_available_model_profile_ids(deps)
     usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
-    universal = await universally_available_model_profile_ids(deps)
     profiles = [
         AvailableModelProfile(
             profile_id=profile_id, capability_id=entry.id, name=entry.name

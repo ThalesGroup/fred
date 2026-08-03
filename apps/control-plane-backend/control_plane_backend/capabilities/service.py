@@ -251,7 +251,7 @@ async def list_capability_enablement(
 
     # Lazy import breaks the product.service ↔ capabilities import cycle, same
     # reason `catalog.py`/`impact.py` defer their own product.service imports.
-    from control_plane_backend.product.service import _template_fetch_scope
+    from control_plane_backend.product.service import _pod_catalog_fetch_scope
 
     # These 4 steps are mutually independent (none consumes another's result),
     # so run them concurrently instead of one after another (#2089). Platform-
@@ -260,10 +260,10 @@ async def list_capability_enablement(
     # (#1975: one ReBAC `ListObjects` per team holding instances, `collect_instances`
     # names the broken agents inline so the health-column drill-down needs no
     # second endpoint) all fold into the same gather as the catalog fetch.
-    # `_template_fetch_scope()` de-dupes the pod `/agents/templates` fetch that
-    # `aggregate_capability_catalog` and `compute_capability_impact` would
-    # otherwise each make independently (#2089).
-    with _template_fetch_scope():
+    # `_pod_catalog_fetch_scope()` de-dupes the pod `/agents/templates` fetch
+    # that `aggregate_capability_catalog` and `compute_capability_impact`
+    # would otherwise each make independently (#2089).
+    with _pod_catalog_fetch_scope():
         (
             catalog,
             total_team_count,

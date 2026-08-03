@@ -373,41 +373,51 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
     )
 
 
-# Request-scoped memoization for `_fetch_runtime_templates` (#2089). Several
-# independent read paths inside one `GET /admin/capabilities` call
-# (`aggregate_capability_catalog`'s two fetches + `compute_capability_impact`'s
-# `_available_capability_ids_by_source`) each fetch the SAME pod's
-# `/agents/templates` with the SAME `include_non_public` flag — a real,
-# uncached HTTP round-trip every time. A `ContextVar` (not a parameter
-# threaded through every function in the chain — that would ripple the
-# signature into `aggregate_capability_catalog`, `compute_capability_impact`,
-# `_available_capabilities_for_source`, `_agent_capabilities_for_source`, and
+# Request-scoped memoization for `_fetch_runtime_templates` (#2089) and
+# `_model_capabilities_for_source` (2026-08-04, MDL-2 review follow-up).
+# Several independent read paths inside one call — `aggregate_capability_catalog`'s
+# tool/agent/model fetches, `compute_capability_impact`'s
+# `_available_capability_ids_by_source`, and (since MDL-2)
+# `routing_policy.service`'s `aggregate_capability_catalog` +
+# `universally_available_model_profile_ids` pair — each fetch the SAME pod's
+# `/agents/templates` or `/agents/models-catalog` with the same arguments — a
+# real, uncached HTTP round-trip every time. A `ContextVar` per fetch kind
+# (not a parameter threaded through every function in the chain — that would
+# ripple the signature into `aggregate_capability_catalog`,
+# `compute_capability_impact`, `_available_capabilities_for_source`,
+# `_agent_capabilities_for_source`, `_model_capabilities_for_source`, and
 # `_available_capability_ids_by_source`, breaking every test double that
 # monkeypatches one of those with a fixed signature) lets a caller opt one
-# request into de-duplication via `_template_fetch_scope()` without changing
-# any signature in the chain; callers that never enter the scope (every other
-# caller, and any test that mocks `_fetch_runtime_templates` wholesale) are
-# unaffected — `.get()` returns the default `None` and every fetch behaves
-# exactly as before.
+# request into de-duplication via `_pod_catalog_fetch_scope()` without
+# changing any signature in the chain; callers that never enter the scope
+# (every other caller, and any test that mocks a fetch function wholesale)
+# are unaffected — `.get()` returns the default `None` and every fetch
+# behaves exactly as before.
 _template_fetch_cache_var: contextvars.ContextVar[
     "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
 ] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
+_model_catalog_fetch_cache_var: contextvars.ContextVar[
+    "dict[str, asyncio.Future[list[CapabilityCatalogEntry] | None]] | None"
+] = contextvars.ContextVar("_model_catalog_fetch_cache_var", default=None)
 
 
 @contextlib.contextmanager
-def _template_fetch_scope():
-    """De-duplicate `_fetch_runtime_templates` calls made inside this scope (#2089).
+def _pod_catalog_fetch_scope():
+    """De-duplicate `_fetch_runtime_templates`/`_model_capabilities_for_source`
+    calls made inside this scope (#2089, MDL-2 follow-up).
 
     Storing the in-flight `Future` (not the eventual result) closes the race
     where two concurrent callers both miss the cache and both fetch — the
     second awaits the first's future instead of starting its own request.
     """
 
-    token = _template_fetch_cache_var.set({})
+    template_token = _template_fetch_cache_var.set({})
+    model_token = _model_catalog_fetch_cache_var.set({})
     try:
         yield
     finally:
-        _template_fetch_cache_var.reset(token)
+        _template_fetch_cache_var.reset(template_token)
+        _model_catalog_fetch_cache_var.reset(model_token)
 
 
 async def _fetch_runtime_templates(
@@ -692,6 +702,25 @@ async def _agent_capabilities_for_source(
 
 
 async def _model_capabilities_for_source(
+    base_url: str,
+) -> list[CapabilityCatalogEntry] | None:
+    """De-duplicating wrapper around `_model_capabilities_for_source_uncached`
+    (see `_pod_catalog_fetch_scope` above) — same cache-miss-fetches,
+    cache-hit-awaits-the-same-future shape as `_fetch_runtime_templates`."""
+
+    cache = _model_catalog_fetch_cache_var.get()
+    if cache is not None:
+        future = cache.get(base_url)
+        if future is None:
+            future = asyncio.ensure_future(
+                _model_capabilities_for_source_uncached(base_url)
+            )
+            cache[base_url] = future
+        return await future
+    return await _model_capabilities_for_source_uncached(base_url)
+
+
+async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> list[CapabilityCatalogEntry] | None:
     """
