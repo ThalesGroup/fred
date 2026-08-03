@@ -1,0 +1,43 @@
+/* Central simple dialog shell. Mirrors DuplicateAgentDialog's centred card with
+   a classic scrim; the action bar is separated by a top divider. */
+.overlay {
+  display: flex;
+  position: fixed;
+  justify-content: center;
+  align-items: center;
+  z-index: 1300;
+  inset: 0;
+  background-color: var(--scrim);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-s);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-high);
+  width: min(400px, 90vw);
+  color: var(--on-surface);
+}
+
+.titleContainer {
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.content {
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m);
+}

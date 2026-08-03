@@ -12,7 +12,7 @@
   justify-content: center;
   /* Fade from transparent so the field appears to float above the thread */
   background: linear-gradient(to bottom, transparent 0%, var(--surface-main) 40%);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
+  padding: 0 var(--spacing-l);
 }
 
 .field {
@@ -29,7 +29,9 @@
   background: var(--surface-container-high);
   padding: var(--spacing-s);
   width: 100%;
-  max-width: 720px;
+  /* Consumers can override via --composer-max-width (e.g. ManagedChatPage sets
+     it once so the chat top bar aligns to this exact width); 720px otherwise. */
+  max-width: var(--composer-max-width, 720px);
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {

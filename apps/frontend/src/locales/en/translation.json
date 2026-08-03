@@ -295,6 +295,7 @@
       "geoSummary_one": "Map data ({{count}} feature)",
       "geoSummary_other": "Map data ({{count}} features)"
     },
+    "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "attachFiles": "Attach files",
     "attachmentChip": {
       "ariaLabel": "Attached files",
@@ -386,6 +387,13 @@
       "loading": "Loading files...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
       "title": "Conversation files"
+    },
+    "sessionTitleEditor": {
+      "untitled": "Untitled conversation",
+      "editAria": "Rename: {{title}}",
+      "popupLabel": "Rename conversation",
+      "inputAria": "New conversation name",
+      "save": "Save"
     },
     "startConversationHint": "Send a message to start the conversation.",
     "startConversationVariantAnalyze": "What's on the agenda today, {{username}}?",
