@@ -4,7 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-23  
 **Area:** `control-plane-backend`, `frontend`, `fred-runtime`, `knowledge-flow-backend`  
-**Related:** `TEAM-PLATFORM-POLICY-RFC.md`, `TEAM-ROUTING-POLICY-RFC.md`,
+**Related:** `TEAM-PLATFORM-POLICY-RFC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37,
 `../design/PROMPTS.md`, `PROMPT-SYSTEM-HARDENING-RFC.md`
 
 ---
@@ -470,7 +470,7 @@ implementation.
 This RFC is the umbrella contract. The implementation phase must also follow:
 
 1. [`TEAM-PLATFORM-POLICY-RFC.md`](./TEAM-PLATFORM-POLICY-RFC.md)
-2. [`TEAM-ROUTING-POLICY-RFC.md`](./TEAM-ROUTING-POLICY-RFC.md)
+2. Team routing policy (shipped): [`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
 3. Current prompt scope: [`PROMPTS.md`](../design/PROMPTS.md)
 4. Prompt hardening: [`PROMPT-SYSTEM-HARDENING-RFC.md`](./PROMPT-SYSTEM-HARDENING-RFC.md)
 

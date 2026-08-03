@@ -78,10 +78,10 @@ nothing to switch (see §14.3). Adding one is a single YAML line plus an
   about whether reasoning is on.
 - `AGENT-THINKING-API-RFC.md` Amendment C (2026-07-29) — the measured behaviour of
   reasoning on a tool loop. §9 of this RFC is a direct consequence of it.
-- `TEAM-ROUTING-POLICY-RFC.md` §7 / §7.1 — owns "which models may this team use",
+- `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 — owns "which models may this team use",
   and owns the `(provider, name)` id granularity this RFC must live with.
 - `AGENT-CAPABILITY-RFC.md` §8.7 — owns the `kind="model"` capability projection.
-- `CHAT-COMPOSER-STATE-RFC.md` (CHAT-07, Implemented) — owns composer state.
+- `CHAT-COMPONENT-SPECS.md` §13 (CHAT-07, Implemented) — owns composer state.
 - `docs/swift/issues/ISSUE-005-reasoning-model-redundant-tool-calls.md`.
 
 ---
@@ -231,7 +231,7 @@ a per-team grant.
 This is worth stating precisely, because the natural instinct is to reach for the
 existing enablement system and that would be wrong here.
 
-`TEAM-ROUTING-POLICY-RFC.md` §7 (shipped, #2110) governs **who may use a model**:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 (shipped, #2110) governs **who may use a model**:
 ReBAC `can_use` grants on `model__<provider>__<name>`, per team, with a fail-closed
 runtime check (`ModelNotUsableError`, `model_routing/provider.py:217`). That system
 answers a different question and stays untouched.
@@ -246,7 +246,7 @@ seven-relation enablement lattice (`enabled`, `disabled`, `inherited`, `default_
 ### 5.2 The granularity constraint it must respect
 
 Model capability ids are keyed on `(provider, name)`; aptitude, per §4, is per
-profile. `TEAM-ROUTING-POLICY-RFC.md` §7.1 calls the coarser key *"an intentional,
+profile. `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 calls the coarser key *"an intentional,
 already-documented property of the capability system, not a gap this RFC needs to
 close"*, and ReBAC tuples are already written against those ids. **The id space is
 not negotiable** — so the admin toggle must be keyed on the model, and §5.3 is how
@@ -311,9 +311,9 @@ superseded. This level therefore needs one small piece of new persistence.
 
 **Delivery to the runtime** reuses the established channel rather than inventing
 one: the control-plane → runtime session-preparation snapshot
-(`ExecutionPreparation`), the same three-hop path `TEAM-ROUTING-POLICY-RFC.md`
-§8.2 specifies for routing policy. A per-turn live lookup is not needed and §8.1
-of that RFC already argues why.
+(`ExecutionPreparation`), the same three-hop path
+`RUNTIME-EXECUTION-CONTRACT.md` §8.32 specifies for routing policy. A per-turn
+live lookup is not needed for the same reason routing policy doesn't need one.
 
 ### 5.6 Default — off (decided 2026-07-29)
 

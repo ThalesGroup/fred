@@ -1796,7 +1796,7 @@ needed a redeploy.
 3. **`RuntimeContext.reasoning_enabled_model_ids: list[str] | None`**
    (fred-sdk, Group C) — the platform admin's activation, snapshotted at session
    prep and forwarded per turn, the same three-hop channel and lifecycle as
-   `chat_default_profile_id` (`TEAM-ROUTING-POLICY-RFC.md` §8.2). **Not** a
+   `chat_default_profile_id` (§8.32 above). **Not** a
    per-turn lookup.
 4. **`RoutedChatModelFactory.build_for_chat` strips reasoning settings**
    (`model_routing/provider.py`) when the resolved model is absent from that
@@ -1949,35 +1949,31 @@ model — see §C.9 and the note below.
 
 ---
 
-### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`, 2026-07-27)
+### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
 **What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
 carries two new fields threaded from control-plane at session-prep time, the
-same three-hop channel `context_prompt_text` already uses (RFC §8.2):
+same three-hop channel `context_prompt_text` already uses:
 
 - `chat_default_profile_id: str | None` — the team's default chat model
   profile, or `None` to fall through to the runtime's own default.
 - `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
   `(rule_id, operation, purpose | None, target_profile_id)` overrides.
 
-Both are a **session-prep snapshot, not a per-turn lookup** (RFC §8.1) —
-resolved once by `routing_policy/service.py::resolve_execution_routing_snapshot`
-when `ExecutionPreparation` is built, not re-read from control-plane on every
+Both are a **session-prep snapshot, not a per-turn lookup** — resolved once
+by `routing_policy/service.py::resolve_execution_routing_snapshot` when
+`ExecutionPreparation` is built, not re-read from control-plane on every
 turn. `fred-runtime`'s `ModelRoutingResolver`
 (`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
 fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
-already match — the static rules stay the ops escape hatch and always win
-(RFC §8.3). A referenced `target_profile_id` unknown to the pod fails closed
+already match — the static rules stay the ops escape hatch and always win.
+A referenced `target_profile_id` unknown to the pod fails closed
 (`ModelNotUsableError`), matching the write-time `can_use` validation
-control-plane already performed (RFC §7.2) — this is drift detection, not a
-second authorization gate (RFC §8.4).
+control-plane already performed — this is drift detection, not a second
+authorization gate.
 
-Product-surface companion to this contract change: `GET`/`PATCH
-/control-plane/v1/teams/{team_id}/routing-policy` (`team_editor` writes,
-`team_admin`+`team_editor`+`team_analyst` read — the read gate excludes a
-plain `team_member` as of the same-day #2167 follow-up, RFC §6) and, as of
-that same follow-up, `GET .../routing-policy/available-models` backing the
-frontend picker (`TEAM-ROUTING-POLICY-RFC.md` §13).
+Product/data/API contract (data model, resolution algorithm, authorization,
+frontend surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
 
 ---
 

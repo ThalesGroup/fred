@@ -2249,3 +2249,70 @@ task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
 Models-as-capability (`kind="model"` catalog projection, model-routing
 fail-closed enforcement) is specified in `AGENT-CAPABILITY-RFC.md` §8.7, not
 repeated here.
+
+## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
+
+A team (or personal space) chooses which of the models already available to
+it (`can_use`-enabled per `AGENT-CAPABILITY-RFC.md` §8.7) is the default for
+managed execution, and may override that default for specific operations
+(e.g. `planning`). This feature never grants new model access — it only lets
+the holder of existing access express a preference among it. Runtime-side
+merge/fail-closed rules are `RUNTIME-EXECUTION-CONTRACT.md` §8.32; this
+section is the product/data/API contract.
+
+**Data model** (`TeamRoutingPolicy`): `team_id`, `version`,
+`chat_default_profile_id: str | None`, `operation_rules:
+list[TeamOperationRouteRule]` (`rule_id`, `operation`, `purpose: str | None`,
+`target_profile_id`). `rule_id` unique per team policy; `(operation,
+purpose)` unique per team policy. `null` `chat_default_profile_id` means "use
+the runtime catalog default."
+
+**Resolution (fixed, deterministic, no scoring):** an operation+purpose match
+wins, else an operation-only match (`purpose=null`), else
+`chat_default_profile_id` if set, else the runtime catalog default for
+capability `chat`.
+
+**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects
+any referenced profile whose derived capability id
+(`model_capability_id(provider, name)` — coarser-grained than a profile id,
+since two profiles can share one `(provider, name)`) is not currently
+`can_use`-enabled for the team, **and** rejects any profile not present on
+**every** enabled, model-capable pod
+(`capabilities/catalog.py::universally_available_model_profile_ids`,
+intersection — not the union `AGENT-CAPABILITY-RFC.md` §8.7's admission
+catalog uses, since whichever pod serves a turn must resolve the chosen
+profile or fail closed at runtime). The `available-models` picker (§ below)
+applies the same intersection filter, so it never offers what the write
+would reject.
+
+**Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
+plain `team_member` is denied); write — `team_editor` only.
+`team_admin`/`team_editor` are orthogonal, not hierarchical
+(`platform/REBAC.md`) — `team_admin` has zero write authority here and can
+only constrain indirectly via model enablement (a platform-admin lever). A
+personal team's owner already holds `team_editor` unconditionally, so the
+same endpoint serves personal spaces with no special-casing.
+
+**API:** `GET`/`PATCH /control-plane/v1/teams/{team_id}/routing-policy`
+(`PATCH` is a full typed replacement); `GET
+/teams/{team_id}/routing-policy/available-models` (#2167) — a team-facing
+read endpoint distinct from the platform-admin-only
+`CapabilityTeamMatrixDrawer` data, sharing the same `team_admin`/`team_editor`
+read gate and the same catalog-aggregation + `usable_capability_ids`
+building blocks the write path validates against.
+
+**Frontend:** one panel (team settings "Routing" entry, gated on
+`canUpdateResources`/`team_editor`, reused unconditionally for personal
+spaces), a picker for `chat_default_profile_id` scoped to enabled+universally-
+available profiles, and zero-or-more operation-rule rows with the same
+constraint per row. A profile referenced by a stored policy that has since
+become unavailable still renders as a selectable option, flagged rather than
+silently dropped. `team_admin` sees the same panel with inputs disabled
+(read-only), not a second component. Hidden entirely when the team has no
+enabled models beyond the deployment default.
+
+**Explicit non-goals (V1):** per-agent routing rules, per-user routing
+inside a shared multi-member team (distinct from personal-space support,
+which is just a team routing policy scoped to a one-member team), model
+temperature/timeout tuning, a per-message composer picker, direct
+`models_catalog.yaml` editing from the product.
