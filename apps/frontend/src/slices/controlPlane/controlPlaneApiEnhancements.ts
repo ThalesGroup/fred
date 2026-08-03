@@ -200,6 +200,21 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
     },
+    // The composer's prompt selector reads this aggregated (personal + team)
+    // list. Provide per-prompt tags so editing a prompt in the library (which
+    // invalidates ControlPlanePrompt/<id>) refreshes the selector instead of
+    // serving the pre-edit name/description from cache — works for both
+    // personal- and team-scoped prompts since the tag is keyed by prompt id,
+    // not scope. The LIST tag covers team-scope adds/removes.
+    getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
+    },
     postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` }],
     },
