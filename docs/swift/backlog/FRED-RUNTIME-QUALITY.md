@@ -1218,8 +1218,7 @@ data in prompt text and without widening conversation/document ReBAC scope.
 ## §RUNTIME-09 — Global base prompt: runtime injection, not authoring-time bake
 
 **ID:** RUNTIME-09  
-**RFC:** `docs/swift/rfc/SDK-V2-RFC.md §18.4` (revised 2026-06-29)  
-**Contract:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12`  
+**Design:** `docs/swift/design/AGENT_DESIGN.md` (shared prompt bundles), `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12`  
 **Execution:** GitHub issue #1867  
 **Status:** `[x]` Implemented — awaiting review
 
