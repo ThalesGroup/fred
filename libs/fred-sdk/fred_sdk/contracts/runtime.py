@@ -577,6 +577,13 @@ class HistoryStorePort(Protocol):
         """Return the next available rank for a session (MAX(rank) + 1, or 0 if empty)."""
         ...
 
+    async def latest_exchange_id(self, session_id: str) -> str | None:
+        """Return the exchange_id of the most recently persisted row (highest
+        rank) for a session, or None if the session has no rows. A HITL
+        resume reuses this instead of minting a fresh exchange_id, so the
+        resumed turn's events still correlate with the interrupted turn's."""
+        ...
+
 
 class DocumentSearchResult(FrozenModel):
     """

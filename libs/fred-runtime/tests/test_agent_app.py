@@ -64,6 +64,7 @@ from fred_sdk.contracts.execution import (
     RuntimeExecuteRequest,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk.contracts.runtime import HistoryStorePort
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
 
@@ -1910,7 +1911,9 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
         agent_app_module,
         "get_runtime_context",
         lambda: SimpleNamespace(
-            config=SimpleNamespace(checkpointer=object(), audience=None)
+            config=SimpleNamespace(
+                checkpointer=object(), audience=None, history_store=None
+            )
         ),
     )
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -2213,6 +2216,169 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
 
     assert response.status_code == 200
     assert seen["messages"] == ()
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_reuses_previous_on_resume() -> None:
+    """
+    A HITL resume must reuse the interrupted turn's exchange_id, not mint a
+    fresh one — otherwise the pre-pause tool_call and the post-resume
+    tool_result carry different exchange_ids, and the chat UI's per-exchange
+    grouping (`toThreadMessages.ts`) can never reunite them: the trace step
+    stays "in progress" forever even though the tool result did arrive
+    (found via manual live testing of the #2179 fix).
+    """
+
+    class _FakeHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            assert session_id == "s1"
+            return "exchange-42"
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload={"choice_id": "proceed"},
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _FakeHistory()),
+    )
+
+    assert resolved == "exchange-42"
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_does_not_query_history_for_a_normal_turn() -> None:
+    """A normal (non-resume) turn always mints a fresh exchange_id and must
+    not pay for a history lookup it doesn't need."""
+
+    class _FailingHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            raise AssertionError("must not be queried for a normal turn")
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload=None,
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _FailingHistory()),
+    )
+
+    assert resolved
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_falls_back_when_nothing_persisted_yet() -> None:
+    """Defensive fallback: a resume against a session with no persisted
+    history yet (should not happen in practice) still gets a usable id
+    instead of `None` reaching the runtime."""
+
+    class _EmptyHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            return None
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload={"choice_id": "proceed"},
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _EmptyHistory()),
+    )
+
+    assert resolved
+
+
+def test_resume_reuses_exchange_id_from_the_interrupted_turn(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    End-to-end proof through the real SQL history store: the first (pausing)
+    call and the resume that completes it must persist under the SAME
+    exchange_id.
+    """
+
+    call_count = 0
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        nonlocal call_count
+        call_count += 1
+        _ = (definition, access_token, team_id, registry)
+        yield {"kind": "final", "sequence": 0, "content": f"turn-{call_count}"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        first = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-exchange-continuity",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert first.status_code == 200
+
+        stored_config = asyncio.run(
+            _write_react_v2_checkpoint(
+                checkpointer,
+                thread_id="session-exchange-continuity",
+                channel_values={"messages": []},
+            )
+        )
+        asyncio.run(
+            checkpointer.aput_writes(
+                stored_config,
+                [
+                    (
+                        "__interrupt__",
+                        {"value": {"question": "proceed?"}, "id": "irrelevant"},
+                    )
+                ],
+                task_id="task-1",
+            )
+        )
+
+        resume = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-exchange-continuity",
+                "checkpoint_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert resume.status_code == 200
+
+        history_store = get_runtime_context().config.history_store
+        assert history_store is not None
+        rows = asyncio.run(history_store.get("session-exchange-continuity"))
+
+    exchange_ids = {row.exchange_id for row in rows}
+    assert len(exchange_ids) == 1, (
+        f"expected one shared exchange_id across the interrupted turn and its "
+        f"resume, got {exchange_ids}"
+    )
 
 
 def test_no_security_resolves_personal_team_before_iterate(

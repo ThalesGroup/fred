@@ -432,3 +432,36 @@ class PostgresHistoryStore(BaseHistoryStore):
             )
             max_rank = result.scalar()
         return 0 if max_rank is None else max_rank + 1
+
+    async def latest_exchange_id(
+        self,
+        session_id: str,
+        session: AsyncSession | None = None,
+    ) -> str | None:
+        """
+        Return the ``exchange_id`` of the most recently persisted row for a
+        session (highest ``rank``), or ``None`` if the session has no rows.
+
+        Why this exists:
+        - a HITL resume is a continuation of the interrupted turn's exchange,
+          not a new one; the runtime needs a way to recover that exchange_id
+          from durable storage since the resume arrives as a brand new HTTP
+          request with no memory of it
+
+        How to use it:
+        - call on a resume request, keyed by the caller's session_id, instead
+          of minting a fresh exchange_id
+
+        Example:
+            previous = await store.latest_exchange_id(session_id="s1")
+            exchange_id = previous or str(uuid4())
+        """
+        await self._ensure_tables()
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(
+                select(SessionHistoryRow.exchange_id)
+                .where(SessionHistoryRow.session_id == session_id)
+                .order_by(SessionHistoryRow.rank.desc())
+                .limit(1)
+            )
+            return result.scalar()

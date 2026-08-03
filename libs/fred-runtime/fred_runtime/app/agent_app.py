@@ -2380,6 +2380,38 @@ def _emit_turn_completed(
         logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
 
 
+async def _resolve_exchange_id(
+    *,
+    resume_payload: Any | None,
+    session_id: str | None,
+    history_store: HistoryStorePort | None,
+) -> str:
+    """
+    Resolve the exchange_id for one turn.
+
+    Why this exists:
+    - a HITL resume is a continuation of the interrupted turn's exchange, not
+      a new one, but it arrives as a brand new HTTP request with no memory of
+      the exchange_id the paused turn used — minting a fresh one here (the
+      previous behavior) put the pre-pause tool_call and the post-resume
+      tool_result under two different exchange_ids, which the chat UI groups
+      by (`toThreadMessages.ts`), so the two could never be correlated and
+      the trace step never left "in progress"
+    - a normal turn (no resume) always gets a fresh exchange_id
+
+    How to use it:
+    - call once per turn, before `_iterate_runtime_event_payloads` and
+      `_write_turn_history`, exactly like the existing `str(uuid4())` call it
+      replaces
+    """
+
+    if resume_payload is not None and session_id and history_store is not None:
+        previous = await history_store.latest_exchange_id(session_id)
+        if previous:
+            return previous
+    return str(uuid4())
+
+
 async def _stream(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -2415,7 +2447,11 @@ async def _stream(
     ctx = request.context or {}
     session_id: str | None = ctx.get("session_id")
     user_id: str = ctx.get("user_id") or "unknown"
-    exchange_id = str(uuid4())
+    exchange_id = await _resolve_exchange_id(
+        resume_payload=request.resume_payload,
+        session_id=session_id,
+        history_store=get_runtime_context().config.history_store,
+    )
     turn_start = time.monotonic()
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
@@ -3966,7 +4002,11 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = str(uuid4())
+        exchange_id = await _resolve_exchange_id(
+            resume_payload=request.resume_payload,
+            session_id=request.effective_session_id(),
+            history_store=get_runtime_context().config.history_store,
+        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
@@ -4047,7 +4087,11 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = str(uuid4())
+        exchange_id = await _resolve_exchange_id(
+            resume_payload=request.resume_payload,
+            session_id=request.effective_session_id(),
+            history_store=get_runtime_context().config.history_store,
+        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
