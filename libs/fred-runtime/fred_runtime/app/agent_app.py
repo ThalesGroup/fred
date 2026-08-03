@@ -1689,6 +1689,20 @@ def _validate_resolved_team(
         )
 
 
+# LangGraph's fixed pending-write channel for an open `interrupt()` (native
+# ReAct V2 `create_agent()` graphs never stamp Fred's hand-rolled `graph_v2`
+# channel-value markers, so this is the only local signal that a checkpoint
+# is actually paused on human input rather than simply done). Hardcoded
+# rather than imported from `langgraph.constants.INTERRUPT`: that constant
+# itself is deprecated as of LangGraph 1.0 ("removed in V2.0") in favor of
+# the compiled graph's own `aget_state(...).tasks[].interrupts`, which is not
+# usable here — this function runs before the target agent's graph is
+# resolved/compiled. `test_react_v2_pending_interrupt_channel_matches_langgraph`
+# pins this literal against LangGraph's own constant so a version bump that
+# changes it fails a test instead of silently reopening this gap.
+_REACT_V2_INTERRUPT_CHANNEL = "__interrupt__"
+
+
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
 ) -> None:
@@ -1709,6 +1723,22 @@ async def _validate_session_checkpoint_access(
 
     Example:
     - `await _validate_session_checkpoint_access(request)`
+
+    ReAct V2 vs legacy Graph runtime:
+    - the legacy hand-rolled Graph runtime stamps `channel_values` with
+      `runtime_kind: "graph_v2"` / `pending` / `pending_checkpoint_id`
+      (`graph_runtime.py::_store_pending_checkpoint`) and its own
+      `checkpoint_id` is a real checkpointer-storage id, so it is validated
+      by exact lookup + exact id match, unchanged below.
+    - ReAct V2 (`create_agent()` + native `interrupt()`) never stamps those
+      markers, and the `checkpoint_id` its frontend echoes back is actually
+      LangGraph's `Interrupt.id` (a routing hash, not a storage id) — a
+      lookup by that id never matches a stored checkpoint. When the primary
+      lookup misses on a genuine resume attempt, fall back to the thread's
+      latest checkpoint (exactly what LangGraph's own `Command(resume=...)`
+      resolves against — see `react_message_codec.py`, which never passes a
+      `checkpoint_id` either) and confirm it is actually paused via the
+      `_REACT_V2_INTERRUPT_CHANNEL` pending-write signal.
     """
 
     needs_checkpoint_validation = (
@@ -1728,12 +1758,26 @@ async def _validate_session_checkpoint_access(
     if checkpointer is None:
         return
 
-    checkpoint = await load_checkpoint(
+    loaded = await load_checkpoint(
         checkpointer,
         thread_id=session_id,
         checkpoint_id=request.checkpoint_id,
     )
-    if checkpoint is None:
+    if (
+        loaded is None
+        and request.resume_payload is not None
+        and request.checkpoint_id is not None
+    ):
+        # The exact-id lookup above is the only path the legacy Graph runtime
+        # ever needs (its checkpoint_id is real). Retry against the thread's
+        # latest checkpoint only once that has failed, on a genuine resume
+        # attempt — this never changes behavior for the legacy runtime (its
+        # checkpoint_id always resolves on the first try) and is the only
+        # way a ReAct V2 resume (whose checkpoint_id can never resolve here)
+        # can be validated at all.
+        loaded = await load_checkpoint(checkpointer, thread_id=session_id)
+
+    if loaded is None:
         detail = (
             "No pending checkpoint was found for this session."
             if request.resume_payload is not None
@@ -1741,6 +1785,7 @@ async def _validate_session_checkpoint_access(
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
+    checkpoint, pending_writes = loaded
     channel_values = checkpoint.get("channel_values", {})
     if not isinstance(channel_values, dict):
         raise HTTPException(
@@ -1751,27 +1796,36 @@ async def _validate_session_checkpoint_access(
     if request.resume_payload is None:
         return
 
-    if channel_values.get("runtime_kind") != "graph_v2":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="checkpoint is not resumable through the graph runtime.",
-        )
-    if channel_values.get("pending") is not True:
+    if channel_values.get("runtime_kind") == "graph_v2":
+        if channel_values.get("pending") is not True:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="checkpoint is not waiting for resume.",
+            )
+        resolved_checkpoint_id = channel_values.get(
+            "pending_checkpoint_id"
+        ) or checkpoint.get("id")
+        if request.checkpoint_id is not None and (
+            not isinstance(resolved_checkpoint_id, str)
+            or resolved_checkpoint_id != request.checkpoint_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="checkpoint_id does not match the pending checkpoint for this session.",
+            )
+        return
+
+    # Not the legacy Graph runtime (ReAct V2, or the fallback lookup landed on
+    # some other non-graph_v2 checkpoint kind): the only local proof of a
+    # paused interrupt is a pending write on the fixed interrupt channel.
+    has_pending_interrupt = any(
+        channel == _REACT_V2_INTERRUPT_CHANNEL
+        for _task_id, channel, _value in pending_writes
+    )
+    if not has_pending_interrupt:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="checkpoint is not waiting for resume.",
-        )
-
-    resolved_checkpoint_id = channel_values.get(
-        "pending_checkpoint_id"
-    ) or checkpoint.get("id")
-    if request.checkpoint_id is not None and (
-        not isinstance(resolved_checkpoint_id, str)
-        or resolved_checkpoint_id != request.checkpoint_id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="checkpoint_id does not match the pending checkpoint for this session.",
         )
 
 

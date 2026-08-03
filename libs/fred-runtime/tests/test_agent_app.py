@@ -51,6 +51,7 @@ from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -64,6 +65,7 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from langchain_core.messages import AIMessage
+from langgraph.checkpoint.base import empty_checkpoint
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -1655,7 +1657,7 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
     ):
         _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": checkpoint_id or "cp-1", "channel_values": {}}
+        return {"id": checkpoint_id or "cp-1", "channel_values": {}}, []
 
     monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -1901,7 +1903,7 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
                 "pending": False,
                 "pending_checkpoint_id": "cp-1",
             },
-        }
+        }, []
 
     monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
     monkeypatch.setattr(
@@ -1938,6 +1940,184 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "checkpoint is not waiting for resume."
+
+
+async def _write_react_v2_checkpoint(
+    checkpointer, *, thread_id: str, channel_values: dict[str, Any]
+):
+    """
+    Write one ReAct-V2-shaped checkpoint through the real `FredSqlCheckpointer`
+    (the same `aput` production code uses, `graph_runtime.py::_store_pending_checkpoint`'s
+    non-legacy counterpart) — no `runtime_kind`/`pending` markers, since ReAct
+    V2's `create_agent()` never stamps those (#2179).
+    """
+
+    checkpoint = empty_checkpoint()
+    checkpoint_id = checkpoint["id"]
+    checkpoint["channel_values"] = channel_values
+    checkpoint["channel_versions"] = {key: checkpoint_id for key in channel_values}
+    return await checkpointer.aput(
+        checkpoint_config(thread_id=thread_id),
+        checkpoint,
+        {"source": "update", "step": 0, "parents": {}},
+        dict(checkpoint["channel_versions"]),
+    )
+
+
+def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression for #2179: a ReAct V2 checkpoint never carries `runtime_kind:
+    graph_v2`, and the `checkpoint_id` its frontend echoes back on resume is
+    actually LangGraph's `Interrupt.id` routing hash
+    (`react_stream_adapter.py:144`) — never a real stored checkpoint id, so
+    the primary exact-id lookup always misses. `_validate_session_checkpoint_access`
+    must fall back to the thread's latest checkpoint and accept the resume by
+    finding its pending `"__interrupt__"` write.
+
+    Written and read through the real `FredSqlCheckpointer` (SQLite), not a
+    mock — #2179 flagged the missing coverage as exactly this gap: no test
+    exercised a real write-then-read checkpoint round trip.
+    """
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        yield {"kind": "final", "sequence": 0, "content": "resumed"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        stored_config = asyncio.run(
+            _write_react_v2_checkpoint(
+                checkpointer,
+                thread_id="session-react-v2",
+                channel_values={"messages": []},
+            )
+        )
+        asyncio.run(
+            checkpointer.aput_writes(
+                stored_config,
+                [
+                    (
+                        "__interrupt__",
+                        {"value": {"question": "proceed?"}, "id": "irrelevant"},
+                    )
+                ],
+                task_id="task-1",
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-v2",
+                # LangGraph's Interrupt.id routing hash — never a real stored
+                # checkpoint id (#2179's root cause), deliberately NOT the
+                # checkpoint_id `_write_react_v2_checkpoint` actually stored.
+                "checkpoint_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 200
+
+
+def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    The mirror-negative of the acceptance test above: a ReAct V2 checkpoint
+    with no pending `"__interrupt__"` write (turn simply finished, nothing
+    waiting for approval) must still 409 — the fallback lookup must not
+    turn into "always accept a non-graph_v2 checkpoint".
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        asyncio.run(
+            _write_react_v2_checkpoint(
+                checkpointer,
+                thread_id="session-react-v2-done",
+                channel_values={"messages": []},
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-v2-done",
+                "checkpoint_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "checkpoint is not waiting for resume."
+
+
+def test_react_v2_interrupt_channel_constant_matches_langgraph() -> None:
+    """
+    Pins `agent_app._REACT_V2_INTERRUPT_CHANNEL` against LangGraph's own
+    value. Hardcoded rather than imported in production code because the
+    public `langgraph.constants.INTERRUPT` is itself deprecated ("removed in
+    V2.0") — this test is the tripwire: if a LangGraph upgrade changes or
+    removes that value, this fails loudly instead of silently reopening
+    #2179.
+    """
+
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        from langgraph.constants import INTERRUPT
+
+    assert agent_app_module._REACT_V2_INTERRUPT_CHANNEL == INTERRUPT
 
 
 def test_no_security_resolves_personal_team_before_iterate(
