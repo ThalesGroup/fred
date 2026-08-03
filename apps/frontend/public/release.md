@@ -1,3 +1,50 @@
+**v2.1.27** — 2026-08-03
+
+- **Summary**
+
+  The admin capabilities catalog is now called Features, and the agent form's
+  capability tab has a fresh look with an explanatory info banner and
+  reasoning built right in. The team members page gets a quicker search and a
+  tidier menu. Several reliability fixes tighten routing policy validation,
+  prompt promotion, and platform-wide reasoning control.
+
+- **Features**
+
+  - Admin → Capabilities is renamed to Features; the agent form's "Tools" tab
+    is renamed to "Capabilities" to match the capability cards it already
+    showed (#2201)
+  - The agent form's Capabilities tab now shows an explanatory info banner for
+    non-technical users, and per-agent reasoning now lives in that same tab
+    instead of the General section (#2202, #2203)
+  - Team members page: a smaller search field and a "more" menu that holds the
+    "Leave team" action, instead of a full-width button (#2200)
+
+- **Improvements**
+
+  - Agent creation form: cleaner template picker, capability cards, and toggle
+    switches (#2202)
+  - Prompt library picker in the agent form reads more clearly, with a
+    relabeled close action and a bordered "Team library" panel (#2203)
+  - Data tables, starting with the team members list, can now use a more
+    compact row height (#2200)
+
+- **Bug Fixes**
+
+  - Capability option labels in the agent form, such as document access and
+    summarization, now translate to French instead of always showing English
+    (#2203)
+  - Turning platform-wide reasoning off now takes effect immediately for
+    everyone, instead of staying on for the rest of an already-open session
+    (#2193)
+  - Promoting a prompt to another team now keeps its emoji and tags (#2195)
+  - Saving a team's model routing policy no longer accepts a model that isn't
+    actually available on every server, preventing routing failures that only
+    showed up later (#2197)
+  - Revoking a capability or model now correctly shows every agent it affects,
+    including agents built directly from that capability, and no longer
+    blocks admins from revoking a model during a temporary catalog outage
+    (#2191)
+
 **v2.1.26** — 2026-08-02
 
 - **Summary**
