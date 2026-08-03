@@ -269,7 +269,9 @@
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
-      "openAria": "Ouvrir les actions de conversation"
+      "openAria": "Ouvrir les actions de conversation",
+      "tuneDialogAria": "Réglages de conversation",
+      "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
     "composerSettings": {
       "attachFile": "Joindre un fichier",

@@ -250,32 +250,30 @@ export function RichInputField({
   const defaultActionSlot = (
     <div className={styles.actionGroup}>
       {canUseVoiceInput &&
-        // Voice control — a tonal icon button (M3 filled tonal): secondary at
-        // rest, error while recording, and a spinner via `loading` while the
-        // clip is being transcribed.
+        // Voice control — a plain icon button (default on-surface-retreat): mic
+        // at rest, a filled stop while recording, and a spinner via `loading`
+        // while the clip is being transcribed.
         (voiceInputState === "recording" ? (
           <IconButton
             variant="tonal"
             color="error"
-            size="small"
+            size="medium"
             icon={{ category: "outlined", type: "stop", filled: true }}
             onClick={stopRecording}
             aria-label={t("chatbot.stopRecording")}
           />
         ) : voiceInputState === "transcribing" ? (
           <IconButton
-            variant="tonal"
-            color="on-surface"
-            size="small"
+            variant="icon"
+            size="medium"
             loading
             icon={{ category: "outlined", type: "mic" }}
             aria-label={t("chatbot.transcribingAudio")}
           />
         ) : (
           <IconButton
-            variant="tonal"
-            color="secondary"
-            size="small"
+            variant="icon"
+            size="medium"
             icon={{ category: "outlined", type: "mic" }}
             disabled={voiceControlDisabled}
             onClick={() => void startRecording()}
@@ -284,9 +282,8 @@ export function RichInputField({
         ))}
       {showStop ? (
         <IconButton
-          variant="filled"
-          color="primary"
-          size="small"
+          variant="icon"
+          size="medium"
           icon={{ category: "outlined", type: "stop", filled: true }}
           onClick={onInterrupt}
           aria-label={t("chatbot.stopResponse")}
@@ -295,7 +292,7 @@ export function RichInputField({
         <IconButton
           variant="filled"
           color="primary"
-          size="small"
+          size="medium"
           icon={{ category: "outlined", type: "arrow_upward" }}
           onClick={onSend}
           disabled={sendDisabled}

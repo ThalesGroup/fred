@@ -269,7 +269,9 @@
     },
     "composerActions": {
       "dialogAria": "Chat actions",
-      "openAria": "Open chat actions"
+      "openAria": "Open chat actions",
+      "tuneDialogAria": "Chat settings",
+      "tuneOpenAria": "Open chat settings"
     },
     "composerSettings": {
       "attachFile": "Attach file",

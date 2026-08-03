@@ -216,6 +216,28 @@ export default function ManagedChatPage() {
     if (files.length > 0) addAttachments(files, "drop");
   };
 
+  // Shared composer state read/written by every chat-turn control, mounted in
+  // both the "add" (primary) and "tune" (tools) popovers.
+  const composerState = {
+    teamId,
+    onAttach: () => fileInputRef.current?.click(),
+    selectedLibraryIds: chat.selectedLibraryIds,
+    onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
+    selectedDocumentUids: chat.selectedDocumentUids,
+    onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+    searchPolicy: chat.searchPolicy,
+    onSearchPolicyChange: chat.setSearchPolicy,
+    ragScope: chat.ragScope,
+    onRagScopeChange: chat.setRagScope,
+    reasoning: chat.reasoning,
+    onReasoningChange: chat.setReasoning,
+  };
+  // The "tune" button only appears when the agent exposes tool controls
+  // (search / scope / reasoning / document scope) — i.e. any chat control that
+  // isn't the attach action, which lives in the "add" menu.
+  const hasToolControls = chat.chatControls.some((control) => control.widget !== "attach_files");
+  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
+
   const composer = (
     <RichInputField
       value={chat.input}
@@ -236,30 +258,37 @@ export default function ManagedChatPage() {
         ) : undefined
       }
       leftSlot={
-        <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
-          {({ closeMenu }) => (
-            <ComposerControlSlot
-              chatControls={chat.chatControls}
-              onRequestClose={closeMenu}
-              composer={{
-                teamId,
-                onAttach: () => fileInputRef.current?.click(),
-                selectedLibraryIds: chat.selectedLibraryIds,
-                onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
-                selectedDocumentUids: chat.selectedDocumentUids,
-                onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
-                searchPolicy: chat.searchPolicy,
-                onSearchPolicyChange: chat.setSearchPolicy,
-                ragScope: chat.ragScope,
-                onRagScopeChange: chat.setRagScope,
-                reasoning: chat.reasoning,
-                onReasoningChange: chat.setReasoning,
-              }}
-              contextPrompts={chat.contextPrompts}
-              onInsertContextPrompt={insertContextPrompt}
-            />
+        <>
+          <ComposerActionsMenu disabled={composerControlsDisabled}>
+            {({ closeMenu }) => (
+              <ComposerControlSlot
+                part="primary"
+                chatControls={chat.chatControls}
+                onRequestClose={closeMenu}
+                composer={composerState}
+                contextPrompts={chat.contextPrompts}
+                onInsertContextPrompt={insertContextPrompt}
+              />
+            )}
+          </ComposerActionsMenu>
+          {hasToolControls && (
+            <ComposerActionsMenu
+              disabled={composerControlsDisabled}
+              icon={{ category: "outlined", type: "tune" }}
+              openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
+              dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
+            >
+              {({ closeMenu }) => (
+                <ComposerControlSlot
+                  part="tools"
+                  chatControls={chat.chatControls}
+                  onRequestClose={closeMenu}
+                  composer={composerState}
+                />
+              )}
+            </ComposerActionsMenu>
           )}
-        </ComposerActionsMenu>
+        </>
       }
     />
   );

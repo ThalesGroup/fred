@@ -681,6 +681,28 @@ chat input** instead of attaching it as a session-context chip.
 
 ---
 
+### Composer: split the actions menu into "add" + "tune" (2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ComposerActionsMenu/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+The composer now shows two trigger buttons side by side instead of one:
+
+- **Add** (`add` icon) — the attach action + the always-on prompt-library row.
+- **Tune** (`tune` icon, to its right) — the tool controls (document scope, search policy, RAG
+  scope, reasoning). It only renders when the agent exposes at least one such control.
+
+Both open the same `MenuPopover`-based popover. `ComposerActionsMenu` gained `icon` /
+`openAriaLabel` / `dialogAriaLabel` props (defaulting to the add-menu values), and
+`ComposerControlSlot` gained a `part: "primary" | "tools"` prop selecting which control groups it
+renders — so the two buttons reuse the same component. The two triggers are spaced by the
+composer's `commandSlot` gap.
+
+---
+
 ### `ChatMessagesArea`
 
 **Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`

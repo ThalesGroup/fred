@@ -45,10 +45,17 @@ interface ComposerControlSlotProps {
   composer: ChatTurnControlComposerState;
   /** Closes the whole composer actions popover (the slot's parent owns it). */
   onRequestClose?: () => void;
-  /** Prompt library available in the composer (personal + team). */
-  contextPrompts: ContextPromptSummary[];
-  /** Picking a prompt inserts its content into the composer input (one-shot). */
-  onInsertContextPrompt: (prompt: ContextPromptSummary) => void;
+  /**
+   * Which slice of the composer controls to render, so the composer can split
+   * them across two trigger buttons:
+   *  - "primary" (default): the attach action + the always-on prompt-library row.
+   *  - "tools": the search / scope / reasoning / document-scope controls.
+   */
+  part?: "primary" | "tools";
+  /** Prompt library available in the composer (personal + team). "primary" only. */
+  contextPrompts?: ContextPromptSummary[];
+  /** Picking a prompt inserts its content into the composer input (one-shot). "primary" only. */
+  onInsertContextPrompt?: (prompt: ContextPromptSummary) => void;
 }
 
 const controlKey = (entry: ResolvedChatTurnControl): string => `${entry.capabilityId}:${entry.widget}`;
@@ -57,7 +64,8 @@ export function ComposerControlSlot({
   chatControls,
   composer,
   onRequestClose,
-  contextPrompts,
+  part = "primary",
+  contextPrompts = [],
   onInsertContextPrompt,
 }: ComposerControlSlotProps) {
   const { t } = useTranslation();
@@ -115,51 +123,56 @@ export function ComposerControlSlot({
     );
   };
 
+  // The always-on prompt-library row (PROMPT-05) and its anchored sub-menu.
+  const promptsRow = (
+    <div key="prompts" ref={promptsWrapRef} className={styles.rowWrap}>
+      <MenuPopoverItem
+        icon={{ category: "outlined", type: "auto_awesome" }}
+        label={t("chatbot.contextPrompts.rowLabel")}
+        trailingIcon="chevron_right"
+        aria-haspopup="dialog"
+        aria-expanded={promptsOpen}
+        onClick={() => setOpenKey((current) => (current === CONTEXT_PROMPTS_KEY ? null : CONTEXT_PROMPTS_KEY))}
+      />
+
+      {promptsOpen && (
+        <div className={styles.pickerAnchor} style={promptsMenuStyle}>
+          <MenuPopover
+            role="dialog"
+            aria-label={t("chatbot.contextPrompts.title")}
+            className={styles.pickerSurface}
+            groups={[
+              [
+                <ContextPromptPicker
+                  key="picker"
+                  prompts={contextPrompts}
+                  onSelect={(prompt) => {
+                    onInsertContextPrompt?.(prompt);
+                    // One-shot insert: close the picker and the whole actions
+                    // popover so the user lands back on the input.
+                    setOpenKey(null);
+                    onRequestClose?.();
+                  }}
+                />,
+              ],
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // "primary" holds the attach action + prompt row; "tools" holds the search /
+  // scope / reasoning / document-scope controls — the composer mounts each part
+  // behind its own trigger button.
+  const groups =
+    part === "tools" ? [otherControls.map(renderControl)] : [attachControls.map(renderControl), [promptsRow]];
+
   return (
     <MenuPopover
       ref={rootRef}
-      className={styles.controlSlotBox}
-      groups={[
-        attachControls.map(renderControl),
-        [
-          <div key="prompts" ref={promptsWrapRef} className={styles.rowWrap}>
-            <MenuPopoverItem
-              icon={{ category: "outlined", type: "auto_awesome" }}
-              label={t("chatbot.contextPrompts.rowLabel")}
-              trailingIcon="chevron_right"
-              aria-haspopup="dialog"
-              aria-expanded={promptsOpen}
-              onClick={() => setOpenKey((current) => (current === CONTEXT_PROMPTS_KEY ? null : CONTEXT_PROMPTS_KEY))}
-            />
-
-            {promptsOpen && (
-              <div className={styles.pickerAnchor} style={promptsMenuStyle}>
-                <MenuPopover
-                  role="dialog"
-                  aria-label={t("chatbot.contextPrompts.title")}
-                  className={styles.pickerSurface}
-                  groups={[
-                    [
-                      <ContextPromptPicker
-                        key="picker"
-                        prompts={contextPrompts}
-                        onSelect={(prompt) => {
-                          onInsertContextPrompt(prompt);
-                          // One-shot insert: close the picker and the whole
-                          // actions popover so the user lands back on the input.
-                          setOpenKey(null);
-                          onRequestClose?.();
-                        }}
-                      />,
-                    ],
-                  ]}
-                />
-              </div>
-            )}
-          </div>,
-        ],
-        otherControls.map(renderControl),
-      ]}
+      className={part === "tools" ? styles.controlSlotBox : styles.primaryMenuBox}
+      groups={groups}
     />
   );
 }
