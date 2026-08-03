@@ -1939,9 +1939,9 @@ reconcile with.
 
 **Implemented (2026-07-26).** Confirmed with the developer: live per-request
 OpenFGA checks are already this platform's standing security posture for
-execution authorization (`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` —
-"never cached", a control-plane-signed/cached grant was explicitly rejected
-there, Appendix A). The naive placement — a live check inside
+execution authorization (`RUNTIME-EXECUTION-CONTRACT.md` §8.11 — "never
+cached", a control-plane-signed/cached grant was explicitly rejected). The
+naive placement — a live check inside
 `ModelRoutingResolver` — would run it multiple times per turn (once per
 distinct `operation`: routing, planning, tool-call, …), which is genuinely
 hotter than the existing once-per-request posture. Resolved shape, consistent

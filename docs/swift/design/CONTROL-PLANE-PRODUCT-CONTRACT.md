@@ -6,8 +6,7 @@
 > never an authorization token. Authorization happens at the agent pod (Keycloak JWT +
 > pod-side OpenFGA on `runtime_context.team_id`). Any `ExecutionGrant` / grant-issuance /
 > `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
-> (§13/D5) and [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2.
+> [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2 and §8.11.
 
 > ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
 > The shared team check `_validate_team_and_check_permission` now recognizes a **service

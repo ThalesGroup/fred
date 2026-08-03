@@ -7,9 +7,8 @@
 > `runtime_context.team_id` for regular collaborative-team users (with the documented
 > intrinsic-personal and service-agent cases). The control-plane's `prepare-execution` resolves only *where* the
 > agent runs (URLs) and the session's context — never a capability. §0–§3 describe this model;
-> the dated entries in §8 record the abandoned signed-grant approach as history. See
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
-> (§13/D5) and the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
+> the dated entries in §8 (§8.9-§8.11) record the abandoned signed-grant approach as history.
+> See the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
 
 RFC links in this document preserve decision history only. This design document
 is the current authority for implemented runtime behavior.
@@ -946,6 +945,10 @@ and **fail-closed startup** (Keycloak user + M2M + OpenFGA all required), enforc
 today by control-plane, fred-agents, and knowledge-flow. The multi-pod packaging
 (one Keycloak client/audience per agent) and the sessionless HTTPS/SSE transport
 introduced on the branch are retained.
+
+**Still open (deployment infra, no code gap):** NetworkPolicies (ingress→pod,
+pod→OpenFGA, pod→Keycloak, deny inter-agent) and end-to-end TLS to the pod are not
+yet in the chart; no GitHub issue tracks this specifically.
 
 ### 8.12 ✅ Global base prompt injected at runtime, not baked — RUNTIME-09 (June 2026)
 
@@ -2074,6 +2077,34 @@ keep riding the client-forwarded context unchanged. The per-turn model
 authorized for, whatever routing profile it names — narrowing that further
 was assessed and rejected as disproportionate for what is a cost/comfort
 lever, not an access boundary.
+
+---
+
+### 8.36 ✅ Native `anthropic` model provider — RUNTIME-07 (2026-07-21)
+
+**What changed.** `fred-core`'s chat model factory gained a seventh
+`ModelProvider`, `anthropic` (`langchain_anthropic.ChatAnthropic`), alongside
+`azure-apim`, `azure-openai`, `ollama`, `openai`, `vertex-ai`, and
+`vertex-ai-model-garden`. It targets both direct Anthropic API access and an
+Anthropic-native gateway (e.g. a LiteLLM router exposing the Anthropic
+Messages API at a custom base URL) — previously the only path to such a
+gateway was shimming it through the `openai` provider against the wrong API
+surface (OpenAI Chat Completions instead of Anthropic Messages).
+
+**As-built auth (diverges from the original proposal):** a single
+`anthropic_api_key` accepts **either** `ANTHROPIC_API_KEY` or
+`ANTHROPIC_AUTH_TOKEN` (`os.getenv("ANTHROPIC_API_KEY") or
+os.getenv("ANTHROPIC_AUTH_TOKEN")`), sent as the standard `x-api-key` header
+in both cases. The originally proposed split — `ANTHROPIC_AUTH_TOKEN` forcing
+a distinct `Authorization: Bearer` header for gateway mode — was not built;
+one code path covers both direct-API and gateway deployments. `base_url`
+resolves from an explicit `settings.base_url`, else `ANTHROPIC_BASE_URL`, else
+the SDK default.
+
+**Unchanged:** `vertex-ai-model-garden` with `model_family: anthropic`
+(Google ADC auth) stays as a separate, still-supported path — this provider
+does not replace it. No frozen contract field changed; this is a new enum
+value and a new factory branch only.
 
 ---
 

@@ -9,7 +9,7 @@ original 2026-05-23 draft predates the models-as-capability system and
 proposed a second, parallel guardrail object
 (`TeamPlatformPolicy.model_guardrails`) and a per-turn snapshot contract that
 would now contradict the security posture
-`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already locked in. See §7 and §8
+`RUNTIME-EXECUTION-CONTRACT.md` §8.11 already locked in. See §7 and §8
 for what changed and why; §3, §5, §9, §10 are materially unchanged from the
 original.
 **Author:** Dimitri Tombroff  
@@ -368,7 +368,7 @@ assumption was wrong on inspection — `usable_model_ids` is in fact computed
 not snapshotted by control-plane at session prep. Two reasons, both specific
 to *authorization*, neither of which applies to routing *preference*:
 
-- `EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already rejected a
+- `RUNTIME-EXECUTION-CONTRACT.md` §8.11 already rejected a
   control-plane-signed/cached-grant design for capability authorization in
   favor of live per-request pod-side ReBAC checks — a security boundary must
   never be stale.

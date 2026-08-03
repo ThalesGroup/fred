@@ -228,8 +228,8 @@ which runs multiple times per turn — once per distinct `operation`: routing,
 planning, tool-call, …) would have been hotter than this platform's existing
 per-request security posture. Confirmed with the developer (mid-implementation
 discussion) that the fix is NOT a cache/TTL/push-sync mechanism — this
-platform's `EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already rejected a
-control-plane-signed/cached grant design (Appendix A) in favor of live,
+platform already rejected a control-plane-signed/cached grant design (see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.11) in favor of live,
 never-cached, per-request pod-side OpenFGA checks. The actual fix: compute
 `usable_model_capability_ids` ONCE per turn, at the same point the existing
 per-request check (`_authorize_execution_or_raise`) already runs, and thread
