@@ -45,10 +45,10 @@ interface ComposerControlSlotProps {
   composer: ChatTurnControlComposerState;
   /** Closes the whole composer actions popover (the slot's parent owns it). */
   onRequestClose?: () => void;
-  /** Chat-context prompts (PROMPT-05) — always-on, not capability-driven. */
+  /** Prompt library available in the composer (personal + team). */
   contextPrompts: ContextPromptSummary[];
-  contextPromptIds: string[];
-  onContextPromptIdsChange: (ids: string[]) => void;
+  /** Picking a prompt inserts its content into the composer input (one-shot). */
+  onInsertContextPrompt: (prompt: ContextPromptSummary) => void;
 }
 
 const controlKey = (entry: ResolvedChatTurnControl): string => `${entry.capabilityId}:${entry.widget}`;
@@ -58,8 +58,7 @@ export function ComposerControlSlot({
   composer,
   onRequestClose,
   contextPrompts,
-  contextPromptIds,
-  onContextPromptIdsChange,
+  onInsertContextPrompt,
 }: ComposerControlSlotProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -100,10 +99,6 @@ export function ComposerControlSlot({
     promptsWrapRef,
     PROMPTS_MENU_MAX_HEIGHT_PX,
   );
-  const promptsLabel =
-    contextPromptIds.length > 0
-      ? t("chatbot.contextPrompts.activeCount", { count: contextPromptIds.length })
-      : t("chatbot.contextPrompts.none");
 
   const renderControl = (entry: ResolvedChatTurnControl) => {
     const key = controlKey(entry);
@@ -131,7 +126,6 @@ export function ComposerControlSlot({
             <MenuPopoverItem
               icon={{ category: "outlined", type: "auto_awesome" }}
               label={t("chatbot.contextPrompts.rowLabel")}
-              value={promptsLabel}
               trailingIcon="chevron_right"
               aria-haspopup="dialog"
               aria-expanded={promptsOpen}
@@ -148,8 +142,13 @@ export function ComposerControlSlot({
                 <div className={styles.pickerMenuBody}>
                   <ContextPromptPicker
                     prompts={contextPrompts}
-                    selectedIds={contextPromptIds}
-                    onChange={onContextPromptIdsChange}
+                    onSelect={(prompt) => {
+                      onInsertContextPrompt(prompt);
+                      // One-shot insert: close the picker and the whole actions
+                      // popover so the user lands back on the composed input.
+                      setOpenKey(null);
+                      onRequestClose?.();
+                    }}
                   />
                 </div>
               </div>

@@ -21,7 +21,6 @@ import { RichInputField } from "@shared/molecules/RichInputField/RichInputField"
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
-import { ContextPromptChips } from "@shared/molecules/ContextPromptChips/ContextPromptChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
@@ -36,6 +35,10 @@ import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  type ContextPromptSummary,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -134,13 +137,29 @@ export default function ManagedChatPage() {
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
   // The composer options menu always renders: even when an agent exposes no
-  // search options, the chat-context prompts row is always available (personal +
+  // search options, the prompt-library row is always available (personal +
   // team library + platform defaults).
 
-  // Attached chat-context prompts resolved to their summaries, in selection order.
-  const attachedContextPrompts = chat.contextPromptIds
-    .map((id) => chat.contextPrompts.find((prompt) => prompt.id === id))
-    .filter((prompt): prompt is (typeof chat.contextPrompts)[number] => prompt != null);
+  // Picking a library prompt inserts its content straight into the composer draft
+  // (it is not attached as a session-context chip). The prompt text lives on the
+  // full record, not the summary, so we fetch it on demand; personal-scope prompts
+  // are stored under the user's personal team, team-scope under the chat team.
+  const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  const insertContextPrompt = async (prompt: ContextPromptSummary) => {
+    const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
+    if (!promptTeamId) return;
+    try {
+      const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
+      const text = detail.text?.trim();
+      if (!text) return;
+      chat.setInput(chat.input.trim().length > 0 ? `${chat.input}\n\n${text}` : text);
+    } catch {
+      showError({
+        summary: t("chatbot.contextPrompts.insertErrorSummary"),
+        detail: t("chatbot.contextPrompts.insertErrorDetail"),
+      });
+    }
+  };
 
   const reportVoiceInputError = (message: string) => {
     showError({
@@ -212,18 +231,8 @@ export default function ManagedChatPage() {
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={
-        attachedContextPrompts.length > 0 || chat.attachments.length > 0 ? (
-          <>
-            {attachedContextPrompts.length > 0 && (
-              <ContextPromptChips
-                prompts={attachedContextPrompts}
-                onRemove={(id) => chat.setContextPrompts(chat.contextPromptIds.filter((existing) => existing !== id))}
-              />
-            )}
-            {chat.attachments.length > 0 && (
-              <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-            )}
-          </>
+        chat.attachments.length > 0 ? (
+          <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
         ) : undefined
       }
       leftSlot={
@@ -247,8 +256,7 @@ export default function ManagedChatPage() {
                 onReasoningChange: chat.setReasoning,
               }}
               contextPrompts={chat.contextPrompts}
-              contextPromptIds={chat.contextPromptIds}
-              onContextPromptIdsChange={chat.setContextPrompts}
+              onInsertContextPrompt={insertContextPrompt}
             />
           )}
         </ComposerActionsMenu>

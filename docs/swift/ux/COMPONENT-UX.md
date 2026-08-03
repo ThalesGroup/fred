@@ -170,6 +170,15 @@ Sub-menu rows are rows with a chevron whose anchored panel is rendered by the pa
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
 
+- **M3 alignment (2026-08-03)** — container corner moved from `--radius-m` to `--radius-s`
+  (the M3 menu/text-field/chip radius), and a picked row now carries the dedicated
+  `--state-on-surface-selected` state layer instead of reusing the transient
+  `--state-on-surface-hover`, so a selected option reads as chosen at rest. Token-only, no
+  content or row removed. Follow-up: the container border was dropped (the `--shadow-m`
+  elevation alone separates it from the background) and the group dividers now use
+  `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
+  and bleed full width (negative horizontal margins cancel the popover padding).
+
 ---
 
 ### `SearchConfig`
@@ -596,6 +605,69 @@ _(none yet)_
 #### Resolved
 
 _(none yet)_
+
+---
+
+### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/atoms/Chip/`,
+`src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+Three related changes on the chat composer, all consolidating hand-rolled UI onto the shared
+library:
+
+- **`Chip` atom (new)** — a removable M3 input chip (`--radius-s`, neutral outline, no resting
+  shadow): optional leading visual, truncating label, optional secondary line, optional trailing
+  content, optional remove button, and a `tone="error"` that recolors the pill to the
+  error-container role. `AttachmentChips` renders this atom instead of duplicating pill markup —
+  it keeps only its own scroll row and its muted leading icon. (`ContextPromptChips` also used it
+  briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
+  entry below.)
+
+- **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
+  scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
+  disabled inherits the shared on-surface 12%/38% rule). Spec taken from the official M3 icon
+  button guidelines, mapped through the local scheme tokens.
+
+- **Composer action buttons** — the send/stop/voice buttons in `RichInputField` were hand-rolled
+  `<button>`s; they are now the shared `IconButton` atom (send/stop = `filled` `primary`, mic =
+  `tonal` `secondary`, recording = `tonal` `error`, transcribing = `tonal` with the `loading`
+  spinner). Consequence: the action buttons are now circular (the atom's shape) rather than the
+  previous rounded square; the subtle pop-in on appearance is preserved.
+
+- **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
+  and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
+  `--surface-main`.
+
+---
+
+### Prompt library → insert into composer (`ContextPromptPicker`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ContextPromptPicker/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+Picking a prompt in the composer's `Prompts` row now **inserts the prompt's content into the
+chat input** instead of attaching it as a session-context chip.
+
+- `ContextPromptPicker` went from a multi-select toggle (checkboxes, `selectedIds`/`onChange`) to
+  a one-shot action list (`onSelect(prompt)`, `role="menu"`/`menuitem`). Picking a row fetches the
+  full prompt (`GetTeamPrompt` — the `text` lives on the record, not the `ContextPromptSummary`),
+  appends it to the draft (`\n\n`-separated when the draft is non-empty), and closes the actions
+  popover. Scope resolves the owning team: `personal` → the user's personal team, `team` → the
+  chat team.
+- `RichInputField` now resizes the textarea on any external value change (not just clear), so
+  inserted (and voice-transcribed) text grows the box instead of being clipped at one row.
+- The context-prompt **chip** UI was removed: `ContextPromptChips` (molecule + test) is deleted,
+  and the composer no longer renders attached-prompt pills. The backend session-context channel
+  (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
+  — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
+  separate change, not done here.
 
 ---
 

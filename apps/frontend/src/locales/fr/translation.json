@@ -253,14 +253,12 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "ariaLabel": "Prompts attachés",
-      "removeAria": "Retirer {{name}}",
       "rowLabel": "Prompts",
-      "title": "Prompts de contexte",
-      "activeCount": "{{count}} actifs",
-      "none": "Aucun",
+      "title": "Bibliothèque de prompts",
       "empty": "Aucun prompt disponible",
       "uses": "▷ {{count}}",
+      "insertErrorSummary": "Impossible d'insérer le prompt",
+      "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez.",
       "scope": {
         "personal": "Personnel",
         "team": "Équipe"

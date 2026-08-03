@@ -23,20 +23,11 @@ type Scope = ContextPromptSummary["scope"];
 
 interface ContextPromptPickerProps {
   prompts: ContextPromptSummary[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  /** Picking a prompt inserts its content into the composer input (one-shot). */
+  onSelect: (prompt: ContextPromptSummary) => void;
 }
 
 const SCOPE_ORDER: Scope[] = ["personal", "team"];
-
-/**
- * Pure full-set toggle: remove an already-selected id, otherwise append it at the
- * end. Selection order is preserved (it drives `position` and concatenation order).
- * Exported for unit testing the selection logic without a DOM.
- */
-export function nextContextPromptSelection(selectedIds: string[], id: string): string[] {
-  return selectedIds.includes(id) ? selectedIds.filter((existing) => existing !== id) : [...selectedIds, id];
-}
 
 function ScoreStars({ score }: { score: number }) {
   const filled = Math.max(0, Math.min(5, Math.round(score)));
@@ -50,14 +41,13 @@ function ScoreStars({ score }: { score: number }) {
 }
 
 /**
- * Multi-select picker for chat-context prompts, grouped by scope
- * (personal / team / default) with a session-count-ordered list per group
- * (PROMPTS.md §5). Selection is a full ordered set; toggling appends on add and
- * drops on remove, preserving order.
+ * Prompt-library picker for the composer, grouped by scope (personal / team)
+ * with a session-count-ordered list per group (PROMPTS.md §5). Picking a prompt
+ * is a one-shot action: its content is inserted into the composer input (the
+ * caller fetches the full text), so rows are plain actions, not toggles.
  */
-export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextPromptPickerProps) {
+export function ContextPromptPicker({ prompts, onSelect }: ContextPromptPickerProps) {
   const { t } = useTranslation();
-  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const groups = useMemo(() => {
     const byScope: Record<Scope, ContextPromptSummary[]> = { personal: [], team: [] };
@@ -65,57 +55,41 @@ export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextP
     return byScope;
   }, [prompts]);
 
-  const toggle = (id: string) => {
-    if (selected.has(id)) {
-      onChange(selectedIds.filter((existing) => existing !== id));
-    } else {
-      onChange([...selectedIds, id]);
-    }
-  };
-
   if (prompts.length === 0) {
     return <p className={styles.empty}>{t("chatbot.contextPrompts.empty")}</p>;
   }
 
   return (
-    <div className={styles.picker} role="listbox" aria-multiselectable aria-label={t("chatbot.contextPrompts.title")}>
+    <div className={styles.picker} role="menu" aria-label={t("chatbot.contextPrompts.title")}>
       {SCOPE_ORDER.map((scope) => {
         const items = groups[scope];
         if (items.length === 0) return null;
         return (
           <div key={scope} className={styles.group}>
             <div className={styles.groupLabel}>{t(`chatbot.contextPrompts.scope.${scope}`)}</div>
-            {items.map((prompt) => {
-              const isSelected = selected.has(prompt.id);
-              return (
-                <button
-                  key={prompt.id}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  className={styles.row}
-                  data-selected={isSelected}
-                  onClick={() => toggle(prompt.id)}
-                >
-                  <span className={styles.icon} data-color={hashColorIndex(prompt.id)} aria-hidden>
-                    <Icon category="outlined" type="edit_note" />
-                  </span>
-                  <span className={styles.text}>
-                    <span className={styles.name}>{prompt.name}</span>
-                    {prompt.description && <span className={styles.description}>{prompt.description}</span>}
-                    <span className={styles.meta}>
-                      {prompt.score != null && <ScoreStars score={prompt.score} />}
-                      <span className={styles.uses}>
-                        {t("chatbot.contextPrompts.uses", { count: prompt.session_count })}
-                      </span>
+            {items.map((prompt) => (
+              <button
+                key={prompt.id}
+                type="button"
+                role="menuitem"
+                className={styles.row}
+                onClick={() => onSelect(prompt)}
+              >
+                <span className={styles.icon} data-color={hashColorIndex(prompt.id)} aria-hidden>
+                  <Icon category="outlined" type="edit_note" />
+                </span>
+                <span className={styles.text}>
+                  <span className={styles.name}>{prompt.name}</span>
+                  {prompt.description && <span className={styles.description}>{prompt.description}</span>}
+                  <span className={styles.meta}>
+                    {prompt.score != null && <ScoreStars score={prompt.score} />}
+                    <span className={styles.uses}>
+                      {t("chatbot.contextPrompts.uses", { count: prompt.session_count })}
                     </span>
                   </span>
-                  <span className={styles.check} aria-hidden>
-                    <Icon category="outlined" type={isSelected ? "check_box" : "check_box_outline_blank"} />
-                  </span>
-                </button>
-              );
-            })}
+                </span>
+              </button>
+            ))}
           </div>
         );
       })}

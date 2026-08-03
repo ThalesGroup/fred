@@ -33,11 +33,6 @@
   background: var(--state-on-surface-hover);
 }
 
-.row[data-selected="true"] {
-  border-color: var(--outline-variant);
-  background: var(--surface-container-highest);
-}
-
 .row:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -117,18 +112,6 @@
 
 .uses {
   color: var(--on-surface-retreat);
-}
-
-.check {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-self: center;
-  color: var(--on-surface-retreat);
-  font-size: 20px;
-}
-
-.row[data-selected="true"] .check {
-  color: var(--primary);
 }
 
 .empty {

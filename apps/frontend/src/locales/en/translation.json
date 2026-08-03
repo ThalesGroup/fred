@@ -253,14 +253,12 @@
       "copied": "Copied"
     },
     "contextPrompts": {
-      "ariaLabel": "Attached prompts",
-      "removeAria": "Remove {{name}}",
       "rowLabel": "Prompts",
-      "title": "Chat context prompts",
-      "activeCount": "{{count}} active",
-      "none": "None",
+      "title": "Prompt library",
       "empty": "No prompts available",
       "uses": "▷ {{count}}",
+      "insertErrorSummary": "Couldn't insert prompt",
+      "insertErrorDetail": "The prompt content could not be loaded. Please try again.",
       "scope": {
         "personal": "Personal",
         "team": "Team"
