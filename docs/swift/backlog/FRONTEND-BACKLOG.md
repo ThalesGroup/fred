@@ -103,8 +103,6 @@ Do not spend migration time on:
 
 - [`CHAT-UI-BACKLOG.md`](./CHAT-UI-BACKLOG.md) — managed chat UI, attachments,
   rendering, and FILES-01 MCP filesystem work.
-- [`FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`](../rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md)
-  — FRONT-08 auth config target.
 - [`KNOWLEDGE-WORKSPACE-REWORK-RFC.md`](../rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md)
   — FRONT-09 rework resource browser target.
 - [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
@@ -202,7 +200,7 @@ if a future migration slice needs additional primitives.
 ## 14 Phase FRONT-08 — Backend-Driven Frontend Auth Config
 
 **ID:** FRONT-08  **Owner:** Simon  **Status:** Done — merged (PR #1750, 2026-06-16)
-**RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`
+**Design:** `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`
 **Execution:** GitHub issue #1748 (closed)
 
 Goal: move the frontend "is user security enabled?" decision out of
@@ -358,7 +356,7 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 
 **ID:** FRONT-10  **Owner:** Dimitri  **Status:** Done (folded into the dev release)
 **Parent:** FRONT-08
-**RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7`
+**Design:** `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md §3.1`
 **Execution:** branch `1793-unified-virtual-filesystem`
 
 Problem: `GcuGuard` read the active `gcuVersion` from the authenticated

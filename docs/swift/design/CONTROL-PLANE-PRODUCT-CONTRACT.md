@@ -190,7 +190,6 @@ whenever `security.user.enabled` is false or `app.gcu_version` is unset, so no-C
 and standalone/dev deployments are never routed to the acceptance screen.
 `FrontendBootstrap.gcu_version` is kept as a post-auth informational mirror (control-plane
 CLI display) and must **not** be used to gate the UI. See
-`docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
 `docs/swift/platform/TERMS_OF_USE.md`.
 
 #### 3.1.2 Root platform-admin bootstrap (AUTHZ-07, added 2026-07-13, revised 2026-07-15)
