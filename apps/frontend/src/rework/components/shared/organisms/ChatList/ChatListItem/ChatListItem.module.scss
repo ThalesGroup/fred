@@ -4,8 +4,8 @@
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
-  border-radius: var(--radius-s);
-  padding: var(--spacing-xs) var(--spacing-2xs) var(--spacing-xs) var(--spacing-xs);
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
   min-height: 2.5rem;
   color: var(--on-surface);
   text-decoration: none;
@@ -24,7 +24,6 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-3xs);
   min-width: 0;
 }
 
