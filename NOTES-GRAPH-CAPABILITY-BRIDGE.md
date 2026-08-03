@@ -2,9 +2,9 @@
 
 **Status: superseded as design source (2026-07-23).** This branch's work is complete
 and now documented as the platform's actual state in
-`docs/swift/capabilities/AUTHORING.md` (design),
-`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22 (implementation record), and
-`docs/swift/capabilities/AUTHORING.md` (authoring guidance) — read those first. This
+`docs/swift/capabilities/AUTHORING.md` (design and authoring guidance) and
+`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.22 (implementation record)
+— read those first. This
 file stays only as the compact implementation log a handful of docstrings point to by
 phase number (`graph_runtime.py`, `document_access/capability.py`, `test_agent_app.py`,
 `test_graph_capability_bridge.py`, `test_test_assistant_document_scenario.py`,

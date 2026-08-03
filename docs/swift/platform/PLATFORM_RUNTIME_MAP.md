@@ -82,7 +82,7 @@ Full specification: [`CLI-CONVENTION.md`](CLI-CONVENTION.md).
 
 The current `runtime_catalog_sources` config is a static list maintained manually. A proposed follow-up — the **Fred Runtime Discovery Contract (FRDC v1)** — defines a Kubernetes-native auto-discovery mechanism using Service labels (`fred.io/runtime=true`) and annotations. When implemented, this would replace the static catalog with a reconciler loop that watches the Kubernetes API for labeled Services.
 
-**Current status:** Not yet implemented. The static catalog in `§5.1` is the authoritative production mechanism.
+**Current status:** Proposed. Not yet implemented. The static catalog in `§5.1` is the authoritative production mechanism. See [`docs/swift/rfc/AGENTIC-POD-RFC.md`](../rfc/AGENTIC-POD-RFC.md) for the full spec.
 
 ---
 

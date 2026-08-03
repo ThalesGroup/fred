@@ -31,7 +31,7 @@ than a rushed one. Deferred, `team_scopable=False`, comment in the file.
 
 ### 3. `active_users_over_time` / `unique_users_total` — architecturally blocked
 Sourced from `api.request_latency_ms` (the generic HTTP middleware KPI),
-which deliberately never carries `dims.team_id` (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33
+which deliberately never carries `dims.team_id` (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
 — team context can't safely come from request-body reads in middleware,
 breaks streaming). Team-scoping these for real would need a *new*,
 domain-level KPI event with proper team attribution — not a parameter
@@ -200,7 +200,7 @@ as, enforcement reaches that team. Skipping this step breaks all chat for
 that team until the toggle is flipped by hand through `CapabilitiesPage`
 (now filterable to `kind="model"` — "Frontend F5 — done" above) or the raw
 API. Documented as the
-resolved hazard (`CONTROL-PLANE-PRODUCT-CONTRACT.md`) — repeating it here
+resolved hazard (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §17) — repeating it here
 because forgetting the runbook step is exactly the kind of gap that's
 invisible in code review and only shows up as a production incident; a
 future auto-seeding migration remains a legitimate improvement if the manual

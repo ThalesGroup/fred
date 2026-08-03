@@ -87,8 +87,8 @@ A pod is registered in `control-plane-backend` via a **product entry** that maps
    - The control plane will forward `execute` and `stream` calls to that URL, injecting the user's JWT as `Authorization: Bearer`.
 4. The frontend and CLI discover the agent automatically through the control-plane product API — no frontend change needed.
 
-> Automatic Kubernetes-native pod discovery (via labels/annotations) is **not yet implemented**.  
-> Pod URLs are configured manually.
+> Automatic Kubernetes-native pod discovery (via labels/annotations) is defined in [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md) but is **not yet implemented**.  
+> Until then, pod URLs are configured manually.
 
 ---
 
@@ -161,6 +161,7 @@ This means: **do not open a PR from `develop` into `swift`**. If you want to bri
 
 | Document                                                                                        | What it covers                                                            |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md)                                       | Fred Runtime Discovery Contract (FRDC) — Kubernetes-native pod discovery, not yet implemented |
 | [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./design/RUNTIME-EXECUTION-CONTRACT.md)           | Frozen execution contract — SSE framing, request/response shapes, agent-to-agent invocation (§14) |
 | [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./design/CONTROL-PLANE-PRODUCT-CONTRACT.md)   | Control-plane product/session/admin API boundaries                        |
 | [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](../libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) | On-wire protocol reference for pod implementers                           |
