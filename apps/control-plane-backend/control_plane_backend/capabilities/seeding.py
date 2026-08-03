@@ -47,8 +47,8 @@ from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 
 from control_plane_backend.capabilities.enablement import (
-    _ORG_REF,
-    _cap_ref,
+    ORG_REF,
+    cap_ref,
     ensure_capability_anchor,
     team_settings_has_required_fields,
 )
@@ -60,7 +60,7 @@ async def _is_capability_registered(rebac: RebacEngine, capability_id: str) -> b
     """True once a capability has been anchored to the org (already seeded)."""
 
     subjects = await rebac.lookup_subjects(
-        _cap_ref(capability_id),
+        cap_ref(capability_id),
         RelationType.ORGANIZATION,
         Resource.ORGANIZATION,
     )
@@ -118,7 +118,7 @@ def _default_on_relation(capability_id: str):
     from fred_core.security.rebac.rebac_engine import Relation
 
     return Relation(
-        subject=_ORG_REF,
+        subject=ORG_REF,
         relation=RelationType.DEFAULT_ON,
-        resource=_cap_ref(capability_id),
+        resource=cap_ref(capability_id),
     )

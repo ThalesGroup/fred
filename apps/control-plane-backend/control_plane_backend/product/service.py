@@ -373,41 +373,51 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
     )
 
 
-# Request-scoped memoization for `_fetch_runtime_templates` (#2089). Several
-# independent read paths inside one `GET /admin/capabilities` call
-# (`aggregate_capability_catalog`'s two fetches + `compute_capability_impact`'s
-# `_available_capability_ids_by_source`) each fetch the SAME pod's
-# `/agents/templates` with the SAME `include_non_public` flag — a real,
-# uncached HTTP round-trip every time. A `ContextVar` (not a parameter
-# threaded through every function in the chain — that would ripple the
-# signature into `aggregate_capability_catalog`, `compute_capability_impact`,
-# `_available_capabilities_for_source`, `_agent_capabilities_for_source`, and
+# Request-scoped memoization for `_fetch_runtime_templates` (#2089) and
+# `_model_capabilities_for_source` (2026-08-04, MDL-2 review follow-up).
+# Several independent read paths inside one call — `aggregate_capability_catalog`'s
+# tool/agent/model fetches, `compute_capability_impact`'s
+# `_available_capability_ids_by_source`, and (since MDL-2)
+# `routing_policy.service`'s `aggregate_capability_catalog` +
+# `universally_available_model_profile_ids` pair — each fetch the SAME pod's
+# `/agents/templates` or `/agents/models-catalog` with the same arguments — a
+# real, uncached HTTP round-trip every time. A `ContextVar` per fetch kind
+# (not a parameter threaded through every function in the chain — that would
+# ripple the signature into `aggregate_capability_catalog`,
+# `compute_capability_impact`, `_available_capabilities_for_source`,
+# `_agent_capabilities_for_source`, `_model_capabilities_for_source`, and
 # `_available_capability_ids_by_source`, breaking every test double that
 # monkeypatches one of those with a fixed signature) lets a caller opt one
-# request into de-duplication via `_template_fetch_scope()` without changing
-# any signature in the chain; callers that never enter the scope (every other
-# caller, and any test that mocks `_fetch_runtime_templates` wholesale) are
-# unaffected — `.get()` returns the default `None` and every fetch behaves
-# exactly as before.
+# request into de-duplication via `_pod_catalog_fetch_scope()` without
+# changing any signature in the chain; callers that never enter the scope
+# (every other caller, and any test that mocks a fetch function wholesale)
+# are unaffected — `.get()` returns the default `None` and every fetch
+# behaves exactly as before.
 _template_fetch_cache_var: contextvars.ContextVar[
     "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
 ] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
+_model_catalog_fetch_cache_var: contextvars.ContextVar[
+    "dict[str, asyncio.Future[list[CapabilityCatalogEntry] | None]] | None"
+] = contextvars.ContextVar("_model_catalog_fetch_cache_var", default=None)
 
 
 @contextlib.contextmanager
-def _template_fetch_scope():
-    """De-duplicate `_fetch_runtime_templates` calls made inside this scope (#2089).
+def _pod_catalog_fetch_scope():
+    """De-duplicate `_fetch_runtime_templates`/`_model_capabilities_for_source`
+    calls made inside this scope (#2089, MDL-2 follow-up).
 
     Storing the in-flight `Future` (not the eventual result) closes the race
     where two concurrent callers both miss the cache and both fetch — the
     second awaits the first's future instead of starting its own request.
     """
 
-    token = _template_fetch_cache_var.set({})
+    template_token = _template_fetch_cache_var.set({})
+    model_token = _model_catalog_fetch_cache_var.set({})
     try:
         yield
     finally:
-        _template_fetch_cache_var.reset(token)
+        _template_fetch_cache_var.reset(template_token)
+        _model_catalog_fetch_cache_var.reset(model_token)
 
 
 async def _fetch_runtime_templates(
@@ -618,6 +628,16 @@ def template_capability_id(runtime_id: str, agent_id: str) -> str:
 _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS = frozenset({"fred.github.self_test"})
 
 
+def capability_gate_exempt(source_agent_id: str) -> bool:
+    """True when `source_agent_id`'s template is exempt from the CAPAB-01
+    admission gate (see `_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS` above) —
+    i.e. its `template_capability_id` was never admitted and never carries a
+    `can_use` tuple, so it must not be treated as a dependency anywhere that
+    reads capability health/impact (GitHub #2191)."""
+
+    return source_agent_id in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+
+
 async def _agent_capabilities_for_source(
     base_url: str, runtime_id: str
 ) -> list[CapabilityCatalogEntry] | None:
@@ -684,6 +704,25 @@ async def _agent_capabilities_for_source(
 async def _model_capabilities_for_source(
     base_url: str,
 ) -> list[CapabilityCatalogEntry] | None:
+    """De-duplicating wrapper around `_model_capabilities_for_source_uncached`
+    (see `_pod_catalog_fetch_scope` above) — same cache-miss-fetches,
+    cache-hit-awaits-the-same-future shape as `_fetch_runtime_templates`."""
+
+    cache = _model_catalog_fetch_cache_var.get()
+    if cache is not None:
+        future = cache.get(base_url)
+        if future is None:
+            future = asyncio.ensure_future(
+                _model_capabilities_for_source_uncached(base_url)
+            )
+            cache[base_url] = future
+        return await future
+    return await _model_capabilities_for_source_uncached(base_url)
+
+
+async def _model_capabilities_for_source_uncached(
+    base_url: str,
+) -> list[CapabilityCatalogEntry] | None:
     """
     Project one pod's routable models into `kind="model"` catalog entries
     (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
@@ -711,11 +750,15 @@ async def _model_capabilities_for_source(
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
-        # Best-effort (see docstring): an unreachable pod is expected/handled,
-        # not a fault worth WARNING-level attention on every poll cycle it
-        # recurs. Also covers a pre-#2110 pod that doesn't advertise this
-        # route yet (404) — treated the same as unreachable, not fatal.
-        logger.debug(
+        # Best-effort (see docstring): never fatal, the caller treats `None`
+        # as empty. WARNING, not DEBUG (2026-08-01, GitHub #2191): this used
+        # to log at DEBUG, so a model-catalog outage was invisible at default
+        # log level while the tool fetch (`_available_capabilities_for_source`)
+        # logged the equivalent failure at WARNING — matching that level here
+        # too. Also covers a pre-#2110 pod that doesn't advertise this route
+        # yet (404), which is expected to be noisy exactly until every pod
+        # upgrades, same as any other "pod missing a route" warning.
+        logger.warning(
             "[capability-catalog] failed to fetch models catalog from %s: %s",
             base_url,
             exc,
@@ -1406,8 +1449,7 @@ async def list_agent_templates(
                 source.runtime_id, template.template_agent_id
             )
             if (
-                template.template_agent_id
-                not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
+                not capability_gate_exempt(template.template_agent_id)
                 and usable_ids is not None
                 and template_cap_id not in usable_ids
             ):
@@ -2433,15 +2475,12 @@ async def enroll_agent_instance(
     #
     # An explicitly allowlisted internal harness template (e.g. self-test) is
     # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
-    # above (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`) — never any
-    # `public=False` template, which has its own, independent meaning.
-    if (
-        source_agent_id not in _CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS
-        and not await can_use_capability(
-            deps.team_dependencies.rebac,
-            team_id,
-            template_capability_id(source_runtime_id, source_agent_id),
-        )
+    # above (`capability_gate_exempt`) — never any `public=False` template,
+    # which has its own, independent meaning.
+    if not capability_gate_exempt(source_agent_id) and not await can_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        template_capability_id(source_runtime_id, source_agent_id),
     ):
         raise EnrollmentError(
             f"Template {request.template_id!r} was not found on runtime source "
@@ -3148,6 +3187,11 @@ async def get_runtime_binding_for_team(
       enforced by the runtime pod (Keycloak JWT + OpenFGA) AND by the caller of
       this function (team ReBAC at the endpoint), so the binding it returns is
       tenant-isolated by construction.
+    - Also resolves the current reasoning-enabled model set: the pod already
+      calls this once per turn for the instance/team settings above, so this
+      is the one place that can hand back a trustworthy reasoning toggle at no
+      extra round-trip cost — see
+      `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids`.
 
     How to use it:
     - call from the team-scoped resolution endpoint after a team ReBAC check
@@ -3161,8 +3205,12 @@ async def get_runtime_binding_for_team(
     # slices for the capabilities this instance actually selected (CAPAB-01 /
     # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
     selected = set(instance.tuning.selected_capability_ids or [])
-    all_team_settings = await deps.get_team_capability_settings_store().list_for_team(
-        team_id
+    # Independent reads (neither depends on the other's result) — run
+    # concurrently rather than stacking two sequential DB round trips on the
+    # per-turn runtime-binding path (2026-08-04, PR #2204 review).
+    all_team_settings, reasoning_enabled_model_ids = await asyncio.gather(
+        deps.get_team_capability_settings_store().list_for_team(team_id),
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3177,6 +3225,7 @@ async def get_runtime_binding_for_team(
         enabled=instance.enabled,
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
+        reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
     )
 
 
@@ -3537,6 +3586,13 @@ async def promote_prompt(
         team_id=target_team_id,
         name=source.name,
         description=source.description,
+        # category_id is deliberately NOT copied: prompt categories are
+        # team-scoped rows (PROMPT-09), so the source category_id does not
+        # exist in target_team_id — carrying it over would point the copy at
+        # another team's category. emoji/tags are plain metadata with no team
+        # scope, so those do carry over.
+        emoji=source.emoji,
+        tags=source.tags,
         text=source.text,
         created_by=user.uid,
     )

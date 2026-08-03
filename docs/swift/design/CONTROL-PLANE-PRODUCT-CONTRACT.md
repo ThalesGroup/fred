@@ -1539,7 +1539,10 @@ facts below are the canonical contract; design deliberation/history stays in
   then per tag, then per document (tag/document ids read before step 2 so a
   `tag#parent@tag` / `document#parent@tag` tuple never survives as an orphan
   once its own Postgres row is gone); (2) Postgres, one transaction —
-  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`.
+  `agent_instance`, `tag`, `document_metadata`, `team_metadata`, `prompt`,
+  `prompt_category` (2026-08-02: added — the starter-kit categories seeded at
+  team creation were left orphaned by earlier builds, breaking re-seeding for
+  a team id reused after a reset).
   Preserved identities: `platformbootstrap.completed_by` ∪ the caller. Every
   step is delete-if-exists/idempotent — a crash mid-run and a retry converge
   to the same end state. Object storage and vector embeddings are never
@@ -1847,6 +1850,10 @@ Every prompt returned by the API is now a real, persisted, editable team row
 - `DELETE` returns **409** while any prompt in the team still references the
   category — a hard block, never an automatic reassignment of the orphaned
   prompt(s)
+- `POST /teams/{team_id}/prompts/{prompt_id}/promote` (copy-by-value to
+  `target_team_id`) carries over `emoji`/`tags` but never `category_id` —
+  the source category belongs to the source team, so it cannot resolve in
+  the target team; the copy lands uncategorized (2026-08-02)
 
 **Team creation seeds a starter kit.** `create_team` now creates, right after
 the ReBAC bootstrap succeeds: 4 categories ("Création agent", "Analyse et
@@ -1953,14 +1960,24 @@ per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §
 
 ### Delivery to the runtime
 
-`ExecutionPreparation.reasoning_enabled_model_ids` → folded by the frontend onto
-`RuntimeContext.reasoning_enabled_model_ids` → `RoutedChatModelFactory` strips
-the reasoning settings for any model absent from it, at client construction
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.29). Resolved **once at session prep**, the
-same three-hop channel and lifecycle as `chat_default_profile_id`
-(`TEAM-ROUTING-POLICY-RFC.md` §8.2) — never a per-turn lookup. A session already
-open therefore keeps the setting it started with; the toggle takes effect from
-the next prepare-execution.
+`ExecutionPreparation.reasoning_enabled_model_ids` is still returned at session
+prep, for the frontend to render the composer control's initial state. It is
+**not**, however, what the runtime enforces against per turn (updated
+2026-08-01): `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids` — resolved
+fresh on every turn's own `GET /teams/{team_id}/agent-instances/{id}/runtime`
+call, from the same store — is what `RoutedChatModelFactory` strips reasoning
+settings against. The runtime-binding call already happens once per turn to
+resolve the instance's tuning and team-capability settings, so this piggybacks
+on it rather than adding a new round trip. This closes a gap where a session
+that stayed open past an admin's platform-wide toggle would keep reasoning
+active for the rest of that session: the enforced value is now current as of
+the next turn, not the next session.
+
+`chat_default_profile_id`/`operation_route_rules` are unaffected by this
+change and remain resolved once at session prep and forwarded by the frontend
+unchanged — routing-profile choice is a cost/comfort lever already bounded by
+the per-turn model authorization check, not an admin control, so the same
+freshness requirement does not apply to it.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 

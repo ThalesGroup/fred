@@ -225,7 +225,13 @@ def _stub_team_lookup(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture(autouse=True)
 def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     """Stub the aggregated model catalog so validation tests control exactly
-    which profile_ids/capability ids exist, without a real runtime pod fetch."""
+    which profile_ids/capability ids exist, without a real runtime pod fetch.
+
+    Also stubs `universally_available_model_profile_ids` to the full set of
+    profile_ids in `catalog` by default — i.e. "every pod agrees", so every
+    existing test keeps its original no-drift baseline. Tests that need to
+    simulate a pod-coverage gap (MDL#2) override this stub directly.
+    """
 
     catalog = {
         "model__openai__gpt-5": _model_entry(
@@ -235,12 +241,25 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
             "model__openai__gpt-4o", ["chat.openai.gpt4o"]
         ),
     }
+    universal = frozenset(
+        profile_id
+        for entry in catalog.values()
+        for profile_id in entry.model_profile_ids
+    )
 
     async def _fake_aggregate(deps):
         return catalog
 
+    async def _fake_universal(deps):
+        return universal
+
     monkeypatch.setattr(
         routing_policy_service, "aggregate_capability_catalog", _fake_aggregate
+    )
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_model_profile_ids",
+        _fake_universal,
     )
     return catalog
 
@@ -342,6 +361,33 @@ async def test_unknown_profile_id_rejected() -> None:
             _user(), TeamId("team-1"), request, deps
         )
     assert exc_info.value.profile_ids == ["ghost.profile"]
+
+
+@pytest.mark.asyncio
+async def test_profile_missing_from_some_pods_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MDL#2 regression: a profile can be in the aggregated (unioned) catalog
+    — some pod advertises it — while being absent from another pod's own
+    `models_catalog.yaml`. Writing a policy that references it must be
+    rejected at write time, not left to fail at runtime on whichever pod
+    lacks it (`TeamRoutingProfileDriftError`)."""
+
+    async def _fake_universal(deps):
+        return frozenset({"chat.openai.gpt4o"})  # chat.openai.gpt5 missing on some pod
+
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_model_profile_ids",
+        _fake_universal,
+    )
+    deps = _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll())
+    request = UpdateTeamRoutingPolicyRequest(chat_default_profile_id="chat.openai.gpt5")
+    with pytest.raises(UnknownProfileError) as exc_info:
+        await routing_policy_service.update_team_routing_policy(
+            _user(), TeamId("team-1"), request, deps
+        )
+    assert exc_info.value.profile_ids == ["chat.openai.gpt5"]
 
 
 class _FakeRebacDenyAll:
@@ -494,6 +540,34 @@ async def test_available_models_empty_when_no_capability_usable(monkeypatch) -> 
     )
 
     assert result.profiles == []
+
+
+@pytest.mark.asyncio
+async def test_available_models_excludes_profile_missing_from_some_pods(
+    monkeypatch,
+) -> None:
+    """MDL#2: the picker must never offer a choice the write-path would then
+    reject — both read from `universally_available_model_profile_ids`."""
+
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    async def _fake_universal(deps):
+        return frozenset({"chat.openai.gpt4o"})
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_model_profile_ids",
+        _fake_universal,
+    )
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt4o"]
 
 
 # ---------------------------------------------------------------------------

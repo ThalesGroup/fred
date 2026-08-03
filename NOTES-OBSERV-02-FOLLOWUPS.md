@@ -205,18 +205,22 @@ invisible in code review and only shows up as a production incident; a
 future auto-seeding migration remains a legitimate improvement if the manual
 step proves error-prone, but is not required for this to ship.
 
-### 16. `usable_capability_ids` is now duplicated once (control-plane + fred-runtime)
-`fred_runtime/model_routing/authz.py::usable_model_capability_ids` mirrors
-`control_plane_backend/capabilities/authz.py::usable_capability_ids`
+### 16. ✅ RESOLVED 2026-08-03 (RSK-B, #2191 follow-up) — `usable_capability_ids` duplication moved into fred-core
+`fred_runtime/model_routing/authz.py::usable_model_capability_ids` used to
+mirror `control_plane_backend/capabilities/authz.py::usable_capability_ids`
 field-for-field (same OpenFGA relations, same personal-team contextual-edge
-handling) because control-plane's module cannot be imported into
-fred-runtime — separate deployables, no shared import path. The correct fix
-is moving this query logic into `fred-core` (both packages already depend
-on it) so there is exactly one copy. Real, separate refactor scope against
-already-shipped, tested control-plane code — deliberately not attempted
-under this branch's time budget. Whoever picks this up: the two functions
-must be kept in sync by hand until then; a schema.fga change to the
-`capability` type's `can_use` relation needs updating in both places.
+handling) because control-plane's module could not be imported into
+fred-runtime — separate deployables, no shared import path. Fixed by moving
+the query logic (and its `_team_subject_and_context` helper, renamed
+`team_capability_subject_and_context`) into
+`fred_core.security.rebac.capability_authz` — both packages already depend
+on `fred-core`. Control-plane's `authz.py` re-exports the fred-core function
+under the same name (zero call-site changes across its ~10 callers);
+fred-runtime's `usable_model_capability_ids` is now a thin wrapper adding
+only its own `rebac is None` tolerance and `kind="model"`-prefix filter.
+Exactly one copy of the query logic from here on — a future schema.fga
+change to the `capability` type's `can_use` relation only needs updating
+in one place.
 
 ### 17. Hot-path design decision, for the record
 The naive placement (a live ReBAC check inside `ModelRoutingResolver`,

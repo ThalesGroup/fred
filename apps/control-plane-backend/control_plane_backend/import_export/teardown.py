@@ -17,11 +17,11 @@
 CONTROL-PLANE-PRODUCT-CONTRACT.md §27. Wipes OpenFGA (every tuple touching a
 non-preserved user, plus every team/tag/document tuple regardless of whether
 a matching Postgres row still exists) and Postgres (agent_instance, tag,
-document_metadata, team_metadata, prompt) back to the point right after root
-bootstrap. Object storage, vector embeddings, and Keycloak are never touched —
-Fred does not own Keycloak identity lifecycle; identity is resolved by
-username against a live target Keycloak, never created or destroyed by this
-migration tooling (see `docs/swift/ops/KEA_SWIFT_CUTOVER.md`).
+document_metadata, team_metadata, prompt, prompt_category) back to the point
+right after root bootstrap. Object storage, vector embeddings, and Keycloak
+are never touched — Fred does not own Keycloak identity lifecycle; identity is
+resolved by username against a live target Keycloak, never created or
+destroyed by this migration tooling (see `docs/swift/ops/KEA_SWIFT_CUTOVER.md`).
 
 The team/tag/document sweep is deliberately type-level
 (`delete_all_relations_of_type`), not id-driven from Postgres: an id-driven
@@ -53,7 +53,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
-from control_plane_backend.models.prompt_models import PromptRow
+from control_plane_backend.models.prompt_models import PromptCategoryRow, PromptRow
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.service import list_users
 
@@ -69,6 +69,7 @@ class TeardownReport:
     documents_deleted: int = 0
     teams_deleted: int = 0
     prompts_deleted: int = 0
+    prompt_categories_deleted: int = 0
 
 
 async def resolve_preserved_uids(caller: KeycloakUser, engine: AsyncEngine) -> set[str]:
@@ -140,15 +141,20 @@ async def run_teardown(
             prompts_result = await session.execute(
                 delete(PromptRow).execution_options(synchronize_session=False)
             )
+            prompt_categories_result = await session.execute(
+                delete(PromptCategoryRow).execution_options(synchronize_session=False)
+            )
     report.agents_deleted = getattr(agents_result, "rowcount", 0)
     report.tags_deleted = getattr(tags_result, "rowcount", 0)
     report.documents_deleted = getattr(docs_result, "rowcount", 0)
     report.teams_deleted = getattr(teams_result, "rowcount", 0)
     report.prompts_deleted = getattr(prompts_result, "rowcount", 0)
+    report.prompt_categories_deleted = getattr(prompt_categories_result, "rowcount", 0)
 
     logger.warning(
         "[import-export] reset-rebac by %s: preserved=%s teams_wiped=%d "
-        "agents=%d tags=%d documents=%d teams_rows=%d prompts=%d",
+        "agents=%d tags=%d documents=%d teams_rows=%d prompts=%d "
+        "prompt_categories=%d",
         caller.uid,
         report.preserved_uids,
         report.team_ids_wiped,
@@ -157,5 +163,6 @@ async def run_teardown(
         report.documents_deleted,
         report.teams_deleted,
         report.prompts_deleted,
+        report.prompt_categories_deleted,
     )
     return report

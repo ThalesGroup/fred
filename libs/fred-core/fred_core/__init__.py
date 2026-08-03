@@ -94,6 +94,10 @@ from fred_core.security.oidc import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.rebac.capability_authz import (
+    team_capability_subject_and_context,
+    usable_capability_ids,
+)
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -206,6 +210,8 @@ __all__ = [
     "RebacPermission",
     "RebacDisabledResult",
     "RebacEngine",
+    "team_capability_subject_and_context",
+    "usable_capability_ids",
     "OpenFgaRebacEngine",
     "OpenFgaRebacConfig",
     "rebac_factory",

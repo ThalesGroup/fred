@@ -151,16 +151,14 @@ async def _demo_reasoning(ctx: ToolContext) -> str:
     Return the platform reasoning activation bound to the current runtime context.
 
     Why this exists:
-    - REASON-01 (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.5) ships the admin's
-      per-model reasoning toggle through the same three-hop channel the two
-      probes above cover, and `RuntimeContext` is rebuilt field-by-field in
-      `agent_app._iterate_runtime_event_payloads` — a field nobody names is
-      silently dropped. Both neighbours here exist because that already
-      happened twice in production.
-    - The blast radius is specific: `RoutedChatModelFactory` STRIPS the
-      reasoning settings for every model absent from this list (§5.6.2), so a
-      dropped field pins reasoning permanently off and makes the admin toggle
-      decorative.
+    - the admin's per-model reasoning toggle ships through the same
+      three-hop channel the two probes above cover, and `RuntimeContext` is
+      rebuilt field-by-field in `agent_app._iterate_runtime_event_payloads` —
+      a field nobody names is silently dropped. Both neighbours here exist
+      because that already happened twice in production.
+    - The blast radius is specific: model routing strips the reasoning
+      settings for every model absent from this list, so a dropped field
+      pins reasoning permanently off and makes the admin toggle decorative.
 
     How to use it:
     - invoked by the reasoning regression agent through the runtime
@@ -760,9 +758,16 @@ def _run_managed_reasoning_turn(
                         "description": "Reports the activation it received.",
                         "tags": [],
                         "fields": [],
-                        # REASON-01 level 3, resolved server-side.
+                        # The agent author's own switch, resolved server-side.
                         "reasoning_enabled": agent_reasoning_enabled,
                     },
+                    # The trusted, control-plane-resolved reasoning snapshot —
+                    # deliberately different from whatever the request below
+                    # claims, so a test that still reads the request's copy
+                    # instead of this one fails loudly.
+                    "reasoning_enabled_model_ids": [
+                        "model__openai__mistral-small-latest"
+                    ],
                 }
             )
 
@@ -809,8 +814,11 @@ def _run_managed_reasoning_turn(
                 "runtime_context": {
                     "user_id": "alice",
                     "team_id": "fredlab",
+                    # Deliberately a DIFFERENT model id than the one the fake
+                    # control-plane response carries above — the pod must use
+                    # control-plane's answer, never this client-supplied copy.
                     "reasoning_enabled_model_ids": [
-                        "model__openai__mistral-small-latest"
+                        "model__spoofed__should-be-ignored"
                     ],
                     # Level 4: the user's per-question choice travels on the same
                     # context, and is dropped by the same field-by-field rebuild
@@ -836,16 +844,19 @@ def test_execute_forwards_reasoning_activation_to_agent_binding(
 ) -> None:
     """
     Regression: `runtime_context.reasoning_enabled_model_ids` must reach the
-    agent binding (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5).
+    agent binding, sourced from control-plane's own runtime-binding response —
+    never from the client-supplied request context.
 
     Why this exists:
-    - the third field to travel the control-plane → frontend → runtime channel
-      the two tests above already guard, and the third chance for
-      `_iterate_runtime_event_payloads`'s field-by-field `RuntimeContext`
-      rebuild to silently drop it. It did, in the first cut of this feature.
-    - dropping it is not a degraded experience, it is a dead feature: the
-      factory strips reasoning settings for any model NOT in this list (§5.6.2),
-      so `None` here means no model ever reasons however the admin toggles it.
+    - dropping the field entirely is not a degraded experience, it is a dead
+      feature: model routing strips reasoning settings for any model NOT in
+      this list, so an empty list here means no model ever reasons however
+      the admin toggles it. `_iterate_runtime_event_payloads` rebuilds
+      `RuntimeContext` field-by-field, so a field that's not named is
+      silently dropped — this one dropped in an earlier cut of this feature.
+    - the request below deliberately sends a DIFFERENT, bogus model id than
+      the fake control-plane response — this only passes if the pod uses
+      control-plane's answer and ignores the client's.
 
     How to use it:
     - run via the default offline `make test` suite in `fred-runtime`
@@ -855,7 +866,8 @@ def test_execute_forwards_reasoning_activation_to_agent_binding(
         monkeypatch, tmp_path, agent_reasoning_enabled=True
     )
     # The tool echoed the bound activation — proving the field survived the
-    # request → RuntimeContext binding (not dropped → not "reasoning:none").
+    # control-plane → RuntimeContext binding (not dropped → not "reasoning:none")
+    # and that it came from control-plane, not the client's bogus request value.
     assert "reasoning:model__openai__mistral-small-latest" in echoed
     assert "turn:true" in echoed
 
@@ -865,17 +877,16 @@ def test_agent_with_reasoning_disabled_ignores_platform_activation(
 ) -> None:
     """
     Regression: an agent whose author left reasoning OFF must not reason, even
-    when the platform enabled the model and the request says so (REASON-01
-    level 3 — all four levels must hold, `MODEL-REASONING-ENABLEMENT-RFC.md` §3).
+    when the platform enabled the model and the request says so.
 
     Why this exists:
-    - the shipped first cut gated only the *composer control* on level 3, so an
-      agent with the switch off showed no toggle and reasoned anyway: the
-      snapshot list rode the request untouched and the factory saw an open
-      ceiling. Silent, and invisible in the UI by construction.
-    - the fix must live pod-side, on the server-resolved tuning, not in what the
-      request carries: `reasoning_enabled_model_ids` and `reasoning` below are
-      both exactly what a client would send with the toggle on.
+    - an earlier cut gated only the *composer control* on the author's switch,
+      so an agent with the switch off showed no toggle and reasoned anyway:
+      the snapshot list rode the request untouched and model routing saw an
+      open ceiling. Silent, and invisible in the UI by construction.
+    - the fix must live pod-side, on the server-resolved tuning, not in what
+      the request carries: `reasoning_enabled_model_ids` and `reasoning` below
+      are both exactly what a client would send with the toggle on.
 
     How to use it:
     - run via the default offline `make test` suite in `fred-runtime`

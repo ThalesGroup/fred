@@ -161,6 +161,32 @@ async def test_unreachable_pod_returns_none_not_raises(
 
 
 @pytest.mark.asyncio
+async def test_unreachable_pod_logs_at_warning_not_debug(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """GitHub #2191: this used to log at DEBUG, so a model-catalog outage was
+    invisible at default log level while the sibling tool fetch
+    (`_available_capabilities_for_source`) logs the equivalent failure at
+    WARNING — matching that level here closes the visibility gap."""
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        raise httpx.ConnectError(
+            "connection refused", request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    with caplog.at_level("WARNING", logger="control_plane_backend.product.service"):
+        entries = await _model_capabilities_for_source("http://pod")
+
+    assert entries is None
+    assert any(
+        record.levelname == "WARNING" and "models catalog" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_pod_on_pre_2110_code_without_the_route_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

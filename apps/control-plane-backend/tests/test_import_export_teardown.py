@@ -4,10 +4,10 @@
 identity and the calling operator, (b) wipe every OpenFGA tuple touching a
 non-preserved user, a team, a tag, or a document while never touching
 Keycloak — no `tag#parent@tag` / `document#parent@tag` tuple survives its own
-Postgres row being wiped, (c) wipe the five Postgres tables `POST /reset`
-never touches on its own (`team_metadata`, `prompt`) plus the three it
-already did, and (d) be safe to call twice in a row (a retry after a partial
-prior run must not raise).
+Postgres row being wiped, (c) wipe the six Postgres tables `POST /reset`
+never touches on its own (`team_metadata`, `prompt`, `prompt_category`) plus
+the three it already did, and (d) be safe to call twice in a row (a retry
+after a partial prior run must not raise).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from control_plane_backend.import_export.teardown import (
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.bootstrap_models import PlatformBootstrapRow
-from control_plane_backend.models.prompt_models import PromptRow
+from control_plane_backend.models.prompt_models import PromptCategoryRow, PromptRow
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import UserSummary
 from fred_core import KeycloakUser, RebacReference, Resource
@@ -111,10 +111,18 @@ async def _seed(engine: AsyncEngine, *, completed_by: str | None) -> None:
         session.add(DocumentMetadataRow(document_uid="doc-1"))
         session.add(TeamMetadataRow(id=TEAM_ID, name="fredlab"))
         session.add(
+            PromptCategoryRow(
+                category_id="cat-1",
+                team_id=TEAM_ID,
+                name="Category 1",
+            )
+        )
+        session.add(
             PromptRow(
                 prompt_id="prompt-1",
                 team_id=TEAM_ID,
                 name="Prompt 1",
+                category_id="cat-1",
                 text="hello",
             )
         )
@@ -130,6 +138,7 @@ async def _row_counts(engine: AsyncEngine) -> dict[str, int]:
             ("documents", DocumentMetadataRow),
             ("teams", TeamMetadataRow),
             ("prompts", PromptRow),
+            ("prompt_categories", PromptCategoryRow),
         ):
             counts[label] = (
                 await session.execute(select(func.count()).select_from(model))
@@ -191,6 +200,13 @@ async def test_resolve_preserved_uids_no_bootstrap_row_yet(tmp_path: Path) -> No
 async def test_run_teardown_preserves_identities_wipes_everything_else(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Regression test: `run_teardown` used to delete `PromptRow` but never
+    `PromptCategoryRow`, so every prior rehearsal cycle left that team's
+    starter-kit categories behind as orphans. A team re-provisioned with the
+    same id (e.g. a Kea→Swift rehearsal reset) then failed to re-seed its
+    starter kit: `_seed_starter_kit`'s category creates collided with the
+    orphaned rows on the `(team_id, name)` unique constraint, and the failure
+    was silently swallowed, leaving the team with an empty prompt library."""
     engine = await _make_engine(tmp_path, "teardown-full.sqlite3")
     try:
         await _seed(engine, completed_by=ROOT_UID)
@@ -239,7 +255,9 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
             "documents": 0,
             "teams": 0,
             "prompts": 0,
+            "prompt_categories": 0,
         }
+        assert report.prompt_categories_deleted == 1
 
         # The bootstrap row itself is never touched by any teardown step.
         store = PlatformBootstrapStore(engine)

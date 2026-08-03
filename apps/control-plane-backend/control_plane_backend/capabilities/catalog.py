@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 _CAPABILITY_ID_RE = re.compile(CAPABILITY_ID_PATTERN)
 
 
+def _union_profile_ids(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    seen: dict[str, None] = {}
+    for group in groups:
+        for profile_id in group:
+            seen[profile_id] = None
+    return tuple(seen)
+
+
 async def aggregate_capability_catalog(
     deps: ProductServiceDependencies,
 ) -> dict[str, CapabilityCatalogEntry]:
@@ -45,7 +53,16 @@ async def aggregate_capability_catalog(
 
     Best-effort: an unreachable pod is logged and skipped (its capabilities are
     simply absent this pass), never fatal. Later-registration wins on id
-    collision, matching the aggregation the product catalog already performs.
+    collision, matching the aggregation the product catalog already performs —
+    with one exception: for `kind="model"` entries, `model_profile_ids` and
+    `model_thinking_profile_ids` are unioned across pods rather than
+    overwritten (2026-08-01, GitHub #2191). A `(provider, name)` pair routed
+    by more than one pod, each with its own `profile_id` namespace, would
+    otherwise have the earlier pod's profile ids silently dropped —
+    `model_profile_ids`' own contract ("every profile_id sharing this entry's
+    (provider, name)") requires the union, and `routing_policy` validates a
+    team's chosen profile against exactly this map, so a dropped profile id
+    reads there as an unknown one even though it is still live.
     """
 
     # Lazy import breaks the product.service ↔ capabilities import cycle: the
@@ -137,5 +154,79 @@ async def aggregate_capability_catalog(
                     MODEL_CAPABILITY_NAMESPACE_PREFIX,
                 )
                 continue
+            existing = catalog.get(entry.id)
+            if (
+                existing is not None
+                and existing.kind == "model"
+                and entry.kind == "model"
+            ):
+                entry = entry.model_copy(
+                    update={
+                        "model_profile_ids": _union_profile_ids(
+                            existing.model_profile_ids, entry.model_profile_ids
+                        ),
+                        "model_thinking_profile_ids": _union_profile_ids(
+                            existing.model_thinking_profile_ids,
+                            entry.model_thinking_profile_ids,
+                        ),
+                    }
+                )
             catalog[entry.id] = entry
     return catalog
+
+
+async def universally_available_model_profile_ids(
+    deps: ProductServiceDependencies,
+) -> frozenset[str]:
+    """`model_profile_ids` present on every enabled, model-capable pod — the
+    intersection dual of `aggregate_capability_catalog`'s union above
+    (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9).
+
+    `aggregate_capability_catalog`'s union answers "does at least one pod
+    know this profile" — the right question for admission/enablement, where
+    a capability just needs to exist somewhere to be toggled on. A team
+    routing policy asks a different question: whichever pod ends up serving
+    a given turn must be able to resolve the chosen profile, or
+    `RoutedChatModelFactory.select` (fred-runtime) fails closed with
+    `TeamRoutingProfileDriftError`. Validating a routing-policy write against
+    this intersection instead of the union means a write that succeeds can
+    never drift-fail at runtime on some other pod.
+
+    Fails closed, unlike `aggregate_capability_catalog`'s best-effort skip: an
+    enabled pod that is genuinely unreachable (`_model_capabilities_for_source`
+    returns `None`) makes the whole result `frozenset()` rather than being
+    silently excluded — excluding it would let the *other* pods' common
+    profiles look "universal" while this one is down, which is exactly the
+    write-now-drift-later gap this function exists to close (2026-08-04,
+    PR #2204 review). A pod that answered but genuinely registers no model
+    (`[]`, e.g. a non-agent pod) is not the same thing and is excluded as
+    before — it never was model-capable, so it has no opinion to poison the
+    intersection with.
+    """
+
+    # Lazy import for the same reason as `aggregate_capability_catalog` above
+    # — breaks the product.service <-> capabilities import cycle.
+    from control_plane_backend.product.service import _model_capabilities_for_source
+
+    per_pod_profile_ids: list[set[str]] = []
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        entries = await _model_capabilities_for_source(source.base_url)
+        if entries is None:
+            logger.warning(
+                "[capability-catalog] %s unreachable while computing universally "
+                "available model profiles — failing closed (no profile is "
+                "certified available this pass) rather than risk approving a "
+                "routing-policy write this pod cannot actually serve",
+                source.base_url,
+            )
+            return frozenset()
+        if not entries:
+            continue
+        per_pod_profile_ids.append(
+            {profile_id for entry in entries for profile_id in entry.model_profile_ids}
+        )
+    if not per_pod_profile_ids:
+        return frozenset()
+    return frozenset(set.intersection(*per_pod_profile_ids))

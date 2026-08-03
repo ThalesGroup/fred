@@ -22,15 +22,14 @@ is the plain catalog server id now (#1988, supersedes the `mcp:<id>` bypass),
 so it is an ordinary `capability` object in the FGA type and is scoped here
 like any other.
 
-The check SUBJECT IS THE TEAM the agent belongs to, never the browsing user:
-enablement is a per-team fact, and a user-subject check would answer "is this
-user in ANY enabled team", leaking a capability enabled for one of the user's
-teams into every team context they browse (and letting them save it there).
-The user's membership in the team is enforced by the route (`get_team_by_id`)
-before these helpers run. Each check injects the derived
-`organization:fred#team@team:<id>` reverse edge as a CONTEXTUAL tuple so the
-`default_on` path resolves for team subjects — every team belongs to the
-singleton organization, so the edge is never persisted.
+`_team_subject_and_context`/`usable_capability_ids` are re-exported from
+`fred_core.security.rebac.capability_authz` (2026-08-03, RSK-B follow-up to
+#2191) rather than defined here: fred-runtime's `model_routing/authz.py`
+needs the exact same team-subject query for its own `can_use` check and used
+to keep an independent, field-for-field-identical copy of both — moved into
+`fred-core` (both packages already depend on it) so there is exactly one
+copy. `can_use_capability` stays here — control-plane-only, no fred-runtime
+caller.
 """
 
 from __future__ import annotations
@@ -38,63 +37,19 @@ from __future__ import annotations
 import logging
 from typing import Iterable, Sequence
 
-from fred_core import CapabilityPermission, RebacDisabledResult
-from fred_core.common import TeamId, is_personal_team_id
+from fred_core import CapabilityPermission
+from fred_core.common import TeamId
 from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    RebacEngine,
-    RebacReference,
-    Relation,
-    RelationType,
+from fred_core.security.rebac.capability_authz import (
+    team_capability_subject_and_context as _team_subject_and_context,
 )
+from fred_core.security.rebac.capability_authz import (
+    usable_capability_ids as usable_capability_ids,
+)
+from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 
 logger = logging.getLogger(__name__)
-
-
-def _team_subject_and_context(
-    team_id: TeamId,
-) -> tuple[RebacReference, list[Relation]]:
-    """Team check subject + the contextual `organization#team` reverse edge.
-
-    For a PERSONAL space (`personal-{uid}`) the personal-only
-    `organization#personal_team` edge is injected too, so the personal-space
-    capability class (`personal_on`/`personal_disabled`, RFC §8.4) resolves for
-    that subject and no regular team ever picks up the class position.
-    """
-
-    team_ref = RebacReference(type=Resource.TEAM, id=str(team_id))
-    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
-    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
-    if is_personal_team_id(str(team_id)):
-        context.append(
-            Relation(
-                subject=team_ref,
-                relation=RelationType.PERSONAL_TEAM,
-                resource=org_ref,
-            )
-        )
-    return team_ref, context
-
-
-async def usable_capability_ids(rebac: RebacEngine, team_id: TeamId) -> set[str] | None:
-    """Capability ids one team's agents may use (`ListObjects` — RFC §8.1).
-
-    Returns None when ReBAC is disabled, signalling "no scoping" so the caller
-    leaves the catalog unfiltered (everything is public in that mode).
-    """
-
-    team_ref, context = _team_subject_and_context(team_id)
-    refs = await rebac.lookup_resources(
-        team_ref,
-        CapabilityPermission.CAN_USE,
-        Resource.CAPABILITY,
-        contextual_relations=context,
-    )
-    if isinstance(refs, RebacDisabledResult):
-        return None
-    return {ref.id for ref in refs}
 
 
 async def can_use_capability(
@@ -107,7 +62,7 @@ async def can_use_capability(
     everything.
     """
 
-    team_ref, context = _team_subject_and_context(team_id)
+    team_ref, context = _team_subject_and_context(str(team_id))
     return await rebac.has_permission(
         team_ref,
         CapabilityPermission.CAN_USE,

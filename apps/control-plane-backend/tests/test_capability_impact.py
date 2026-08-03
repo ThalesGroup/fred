@@ -37,6 +37,7 @@ import pytest
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capabilities import enablement as enablement_mod
 from control_plane_backend.capabilities import impact as impact_mod
+from control_plane_backend.product.service import template_capability_id
 from test_main import _FakeAgentInstanceStore, _make_record
 
 
@@ -47,11 +48,13 @@ def _record_with(
     selected: list[str],
     suspension_reason: str | None = None,
     source_runtime_id: str = "runtime-a",
+    source_agent_id: str = "rags.sample.echo",
 ):
     record = _make_record(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
         source_runtime_id=source_runtime_id,
+        source_agent_id=source_agent_id,
     )
     record.tuning = record.tuning.model_copy(
         update={"selected_capability_ids": selected}
@@ -62,7 +65,7 @@ def _record_with(
 
 class _NoOpRebac:
     """Stands in for `ReBAC` in tests that never exercise a real lookup — the
-    platform-wide preview now reads `_explicitly_enabled_team_ids`, so a bare
+    platform-wide preview now reads `explicitly_enabled_team_ids`, so a bare
     `object()` no longer suffices as the `rebac` stand-in."""
 
     async def lookup_subjects(self, *_args: object, **_kwargs: object) -> list:
@@ -214,6 +217,96 @@ async def test_impact_reports_unreachable_pod_as_unknown_not_broken(
 
 
 # ---------------------------------------------------------------------------
+# Agent-template dependents (GitHub #2191) — an instance IS an instance of a
+# kind="agent" template capability; that id is never in
+# `selected_capability_ids`, so it was invisible to this module until now.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_impact_attributes_agent_template_capability_denied(
+    monkeypatch,
+) -> None:
+    """An instance that selects NO tool capabilities still breaks when its OWN
+    template capability is denied — previously invisible, since only
+    `selected_capability_ids` was ever checked."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="templated",
+                team_id="team-a",
+                selected=[],
+                source_runtime_id="runtime-a",
+                source_agent_id="rags.sample.echo",
+            )
+        ]
+    )
+    template_id = template_capability_id("runtime-a", "rags.sample.echo")
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset()},
+        usable_by_team={"team-a": set()},  # template itself denied
+    )
+
+    result = await impact_mod.compute_capability_impact(_deps_with(store))
+
+    assert result[template_id].suspended_instances == 1
+
+
+@pytest.mark.asyncio
+async def test_impact_gate_exempt_template_never_counted_broken(monkeypatch) -> None:
+    """The internal self-test harness template is exempt from the CAPAB-01
+    gate — it never carries a `can_use` tuple, so it must never be reported as
+    broken just because its (never-granted) template id is absent from
+    `usable_ids`."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="harness",
+                team_id="team-a",
+                selected=[],
+                source_agent_id="fred.github.self_test",
+            )
+        ]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset()},
+        usable_by_team={"team-a": set()},
+    )
+
+    result = await impact_mod.compute_capability_impact(_deps_with(store))
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_impact_unreachable_pod_skips_template_dependency_too(
+    monkeypatch,
+) -> None:
+    """Unreachable pod ⇒ UNKNOWN for the template dependency too, same rule as
+    a selected tool capability — never reported as broken on a transient
+    outage."""
+
+    store = _FakeAgentInstanceStore(
+        [_record_with(agent_instance_id="templated", team_id="team-a", selected=[])]
+    )
+    template_id = template_capability_id("runtime-a", "rags.sample.echo")
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": None},
+        usable_by_team={"team-a": set()},
+    )
+
+    result = await impact_mod.compute_capability_impact(_deps_with(store))
+
+    assert result[template_id].suspended_instances == 0
+    assert result[template_id].skipped_unreachable == 1
+
+
+# ---------------------------------------------------------------------------
 # Revoke preview — forward-looking, excludes the already-broken
 # ---------------------------------------------------------------------------
 
@@ -294,7 +387,7 @@ async def test_preview_default_off_excludes_explicitly_enabled_teams(
         return {"team-explicit"}
 
     monkeypatch.setattr(
-        enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
+        enablement_mod, "explicitly_enabled_team_ids", _fake_explicitly_enabled
     )
 
     result = await impact_mod.preview_revoke_impact(
@@ -332,7 +425,7 @@ async def test_preview_single_team_disable_ignores_explicit_enabled_exclusion(
         return {"team-explicit"}
 
     monkeypatch.setattr(
-        enablement_mod, "_explicitly_enabled_team_ids", _fake_explicitly_enabled
+        enablement_mod, "explicitly_enabled_team_ids", _fake_explicitly_enabled
     )
 
     result = await impact_mod.preview_revoke_impact(
@@ -341,6 +434,41 @@ async def test_preview_single_team_disable_ignores_explicit_enabled_exclusion(
 
     assert result.suspended_instances == 1
     assert {i.agent_instance_id for i in result.instances} == {"explicit"}
+
+
+@pytest.mark.asyncio
+async def test_preview_revoke_includes_agent_template_instances(monkeypatch) -> None:
+    """Previewing the revoke of a `kind="agent"` template capability must
+    include instances that ARE that template — not just instances that
+    selected it as a tool (GitHub #2191: before this fix, revoking a
+    kind="agent" capability always previewed "0 agents affected" because the
+    filter only ever checked `selected_capability_ids`, which never contains a
+    template's own id)."""
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="templated",
+                team_id="team-a",
+                selected=[],
+                source_runtime_id="runtime-a",
+                source_agent_id="rags.sample.echo",
+            )
+        ]
+    )
+    template_id = template_capability_id("runtime-a", "rags.sample.echo")
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset()},
+        usable_by_team={"team-a": {template_id}},  # works today
+    )
+
+    result = await impact_mod.preview_revoke_impact(
+        _deps_with(store), capability_id=template_id, team_id=None
+    )
+
+    assert result.suspended_instances == 1
+    assert {i.agent_instance_id for i in result.instances} == {"templated"}
 
 
 # ---------------------------------------------------------------------------

@@ -94,16 +94,47 @@ async def _usable_ids_by_team(
     }
 
 
+def _instance_template_capability_id(instance: AgentInstanceRecord) -> str | None:
+    """The `kind="agent"` template capability id `instance` is itself an
+    instance of, or `None` when its template is gate-exempt (2026-08-01,
+    GitHub #2191).
+
+    Mirrors the write-side predicate `enablement.is_template_capability_instance`
+    — this module previously derived impact/health from
+    `selected_capability_ids` alone, which never contains a template's own id
+    (only tool capabilities an instance activated are selected), so an admin
+    revoking a `kind="agent"` capability saw "0 agents affected" while its
+    instances were, in fact, about to be suspended.
+    """
+
+    from control_plane_backend.product.service import (
+        capability_gate_exempt,
+        template_capability_id,
+    )
+
+    if capability_gate_exempt(instance.source_agent_id):
+        return None
+    return template_capability_id(instance.source_runtime_id, instance.source_agent_id)
+
+
 def _broken_capability_ids(
     instance: AgentInstanceRecord,
     usable_ids: set[str] | None,
     available_ids: frozenset[str] | None,
 ) -> list[str]:
-    """The instance's selected capabilities that are NOT currently usable.
+    """The instance's dependencies that are NOT currently usable: its selected
+    tool capabilities, plus — unless gate-exempt — the `kind="agent"` template
+    capability the instance is itself an instance of.
 
-    A capability is broken for this instance when the team lacks `can_use` on it
+    A selected TOOL capability is broken when the team lacks `can_use` on it
     OR its pod no longer advertises it — the two independent failure modes
-    behind `capability_access_revoked` and `capability_unavailable`.
+    behind `capability_access_revoked` and `capability_unavailable`. The
+    instance's OWN template capability id is broken on the `can_use` axis
+    only: `available_ids` is the pod's advertised SELECTABLE tool/capability
+    set, which never contains an agent template's own id by construction
+    (see `_instance_template_capability_id`), so checking it there would
+    always read "missing" — matching `enablement.revive_dependent_instances`'s
+    template branch, which checks the same single axis.
 
     `usable_ids=None` (ReBAC disabled) skips the authorization half;
     `available_ids=None` (unreachable pod) must be handled by the CALLER, which
@@ -111,13 +142,20 @@ def _broken_capability_ids(
     reached with a known pod set.
     """
 
-    selected = instance.tuning.selected_capability_ids or []
     broken: list[str] = []
-    for cap_id in selected:
+    for cap_id in instance.tuning.selected_capability_ids or []:
         denied = usable_ids is not None and cap_id not in usable_ids
         missing = available_ids is not None and cap_id not in available_ids
         if denied or missing:
             broken.append(cap_id)
+
+    template_cap_id = _instance_template_capability_id(instance)
+    if (
+        template_cap_id is not None
+        and usable_ids is not None
+        and template_cap_id not in usable_ids
+    ):
+        broken.append(template_cap_id)
     return broken
 
 
@@ -165,9 +203,16 @@ async def compute_capability_impact(
         if available_ids is None:
             # Pod unreachable — the sweep would skip this instance rather than
             # suspend it, so its impact is UNKNOWN. Attribute the skip to each
-            # selected capability so the caller can say "unknown", not "fine".
+            # selected capability, and to the instance's own template
+            # capability (if any), so the caller can say "unknown", not "fine"
+            # for either kind.
             for cap_id in instance.tuning.selected_capability_ids or []:
                 impact.setdefault(cap_id, CapabilityImpact()).skipped_unreachable += 1
+            template_cap_id = _instance_template_capability_id(instance)
+            if template_cap_id is not None:
+                impact.setdefault(
+                    template_cap_id, CapabilityImpact()
+                ).skipped_unreachable += 1
             continue
 
         broken = _broken_capability_ids(
@@ -244,7 +289,8 @@ async def preview_revoke_impact(
     """
 
     from control_plane_backend.capabilities.enablement import (
-        _explicitly_enabled_team_ids,
+        explicitly_enabled_team_ids,
+        is_template_capability_instance,
     )
     from control_plane_backend.product.service import (
         _available_capability_ids_by_source,
@@ -256,14 +302,20 @@ async def preview_revoke_impact(
         if team_id is not None
         else await instance_store.list_all()
     )
-    # Only instances that actually selected the capability can be affected.
+    # Only instances that actually depend on the capability can be affected:
+    # selected it as a tool, or ARE an instance of it as a `kind="agent"`
+    # template (2026-08-01, GitHub #2191 — previously only the former was
+    # checked, so revoking a `kind="agent"` capability always previewed as
+    # "0 agents affected" even though its instances were about to be
+    # suspended).
     instances = [
         instance
         for instance in instances
         if capability_id in (instance.tuning.selected_capability_ids or [])
+        or is_template_capability_instance(instance, capability_id)
     ]
     if team_id is None and instances:
-        enabled_team_ids = await _explicitly_enabled_team_ids(
+        enabled_team_ids = await explicitly_enabled_team_ids(
             deps.team_dependencies.rebac, capability_id
         )
         instances = [

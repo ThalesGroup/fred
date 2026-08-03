@@ -783,3 +783,14 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # selected capabilities. The pod carries each slice to its capability as
     # `CapabilityContext.team_settings` — it never enters an LLM tool signature.
     team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Which models currently have reasoning switched on, resolved fresh on this
+    # call rather than trusted from the caller. Routing-profile choice
+    # (elsewhere in the request) stays client-forwarded because it's a
+    # frugality/comfort lever already bounded by the per-turn model
+    # authorization check; the reasoning toggle is different — it's an admin
+    # kill switch, and a stale or tampered client-forwarded value could keep
+    # reasoning on past the moment an admin switched it off. This endpoint is
+    # already called once per turn for the instance/team-settings resolution
+    # above, so adding this list costs one extra cheap store read, not a new
+    # round trip.
+    reasoning_enabled_model_ids: list[str] = Field(default_factory=list)

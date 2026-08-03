@@ -324,9 +324,21 @@ already exposes (the same one `CapabilitiesPage`/`CapabilityTeamMatrixDrawer`
 already query to show what's enabled). No new enablement check is invented;
 this RFC only adds a new *caller* of the existing one.
 
+It also rejects any profile id not present on **every** enabled,
+model-capable pod (`capabilities/catalog.py::universally_available_model_profile_ids`,
+2026-08-02, MDL#2 — see §9). §7.1's aggregated catalog unions profile ids
+across pods for admission purposes ("does at least one pod know this
+profile"), which is the wrong question here: whichever pod ends up serving a
+turn must resolve the chosen profile, or it fails closed at runtime (§8.4).
+Validating against the intersection instead of the union means a write that
+succeeds can never drift-fail later on a pod that lacks it. The
+`available-models` picker (§13) applies the same filter, so it never offers
+an option the write would then reject.
+
 Rejected in V1:
 
 - a routing policy that references a profile the team is not allowed to use
+- a routing policy that references a profile not deployed on every pod
 
 ---
 
@@ -477,6 +489,12 @@ control-plane storage.
 
 This RFC does not allow team routing policies to reference raw provider/model
 pairs directly.
+
+Until 2026-08-02 this was a naming convention only — write-time validation
+(§7.2) checked a profile id against the union of every pod's catalog, so a
+profile registered on only one pod still passed as "known". §7.2 now
+enforces the "deployment-global" claim for real: a profile must be on every
+pod to be writable into a team's policy.
 
 ---
 
