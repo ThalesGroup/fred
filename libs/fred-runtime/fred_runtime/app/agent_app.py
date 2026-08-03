@@ -2995,18 +2995,21 @@ async def _iterate_runtime_event_payloads(
             executor = await runtime.get_executor()
             # On HITL resume, messages are ignored by the codec — the graph
             # resumes from its checkpointed interrupt via Command(resume=...).
+            # ReActInput.validate_messages requires at least one (user)
+            # message, a contract normal turns must satisfy but a resume
+            # never can (there is no new user turn) — bypass it with
+            # model_construct, exactly like the Graph agent branch above.
             # On a normal turn, the user message is the only input.
-            react_input = ReActInput(
-                messages=(
-                    ()
-                    if request.resume_payload is not None
-                    else (
+            if request.resume_payload is not None:
+                react_input = ReActInput.model_construct(messages=())
+            else:
+                react_input = ReActInput(
+                    messages=(
                         ReActMessage(
                             role=ReActMessageRole.USER, content=request.message
                         ),
-                    )
-                ),
-            )
+                    ),
+                )
             async for event in executor.stream(react_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):

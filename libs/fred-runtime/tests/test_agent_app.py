@@ -2120,6 +2120,101 @@ def test_react_v2_interrupt_channel_constant_matches_langgraph() -> None:
     assert agent_app_module._REACT_V2_INTERRUPT_CHANNEL == INTERRUPT
 
 
+def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> None:
+    """
+    Regression for the bug found immediately behind #2179's checkpoint fix
+    (live-tested manually): `_iterate_runtime_event_payloads` builds
+    `ReActInput(messages=())` unconditionally on a HITL resume
+    (`agent_app.py`, "messages are ignored by the codec"), but
+    `ReActInput.validate_messages` (`react_contract.py`) rejects an empty
+    tuple — every ReAct V2 resume crashed with `ReActInput.messages must
+    contain at least one message` the instant #2179's checkpoint 409 was
+    fixed and this line became reachable for the first time. Fixed by
+    bypassing validation with `model_construct` on resume, mirroring the
+    Graph-agent branch just above it, which already did this.
+
+    Uses a fake `AgentRuntime`/`Executor` (not a fake chat model) so this
+    exercises the exact `react_input` object `_iterate_runtime_event_payloads`
+    builds and passes to `executor.stream(...)`, without depending on
+    LangGraph's own interrupt/resume mechanics.
+    """
+
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
+    from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
+
+    seen: dict[str, object] = {}
+
+    class _RecordingExecutor(Executor[ReActInput, ReActOutput]):
+        async def invoke(self, input_model, config):  # noqa: ANN001
+            raise NotImplementedError
+
+        async def stream(self, input_model, config):  # noqa: ANN001
+            seen["messages"] = input_model.messages
+            yield FinalRuntimeEvent(content="resumed")
+
+    class _FakeReActRuntime(
+        AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
+    ):
+        def __init__(self, *, definition, services, capability_block=None):
+            super().__init__(definition=definition, services=services)
+            _ = capability_block
+
+        async def build_executor(self, binding: BoundRuntimeContext):
+            return _RecordingExecutor()
+
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", _FakeReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        stored_config = asyncio.run(
+            _write_react_v2_checkpoint(
+                checkpointer,
+                thread_id="session-react-input-resume",
+                channel_values={"messages": []},
+            )
+        )
+        asyncio.run(
+            checkpointer.aput_writes(
+                stored_config,
+                [
+                    (
+                        "__interrupt__",
+                        {"value": {"question": "proceed?"}, "id": "irrelevant"},
+                    )
+                ],
+                task_id="task-1",
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-input-resume",
+                "checkpoint_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert seen["messages"] == ()
+
+
 def test_no_security_resolves_personal_team_before_iterate(
     monkeypatch, tmp_path
 ) -> None:
