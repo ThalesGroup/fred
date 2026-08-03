@@ -1,7 +1,7 @@
 ---
 title: Key concepts
 order: 20
-description: Team, agent, prompt, resource, session, capability — the platform's vocabulary.
+description: Team, agent, prompt, resource, session, feature, capability — the platform's vocabulary.
 icon: school
 ---
 
@@ -49,11 +49,18 @@ A **session** (or conversation) is an exchange with an agent. It keeps the
 message history, attachments, and produced documents. You can resume a session
 later or start a new one at any time.
 
+## Feature
+
+A **feature** is an extra function agents can use beyond conversation — for
+example drafting a document, filling a PowerPoint template, or querying
+tabular data. Features are enabled **per team** by an administrator (see
+[Admin console](/help/en/features/admin)).
+
 ## Capability
 
-A **capability** is an extra function an agent can call on — for example
-drafting a document, filling a PowerPoint template, or querying tabular data.
-Capabilities are enabled per team.
+Once a feature is enabled for your team, your editors can turn it on for a
+specific agent — it then becomes one of that agent's **capabilities** (see
+[Agents](/help/en/features/agents)).
 
 ## How it all fits together
 

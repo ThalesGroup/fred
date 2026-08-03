@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import Button from "@shared/atoms/Button/Button.tsx";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider.tsx";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
@@ -26,15 +26,19 @@ import {
   useRemoveTeamMemberMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
-interface LeaveTeamButtonProps {
+interface TeamSettingsMembersMenuProps {
   team: TeamWithPermissions;
 }
 
+type MembersMenuAction = "leave";
+
 /**
- * AUTHZ-09 self-service "leave team" action. Disabled for the last remaining
+ * Page-level "more" menu for the team members page, rendered next to the
+ * title via `PageHeader`'s `titleAction` slot. Currently holds the AUTHZ-09
+ * self-service "leave team" action; disabled for the last remaining
  * team_admin (the "at least one admin" invariant, shared with #1985).
  */
-export default function LeaveTeamButton({ team }: LeaveTeamButtonProps) {
+export default function TeamSettingsMembersMenu({ team }: TeamSettingsMembersMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -75,15 +79,27 @@ export default function LeaveTeamButton({ team }: LeaveTeamButtonProps) {
   };
 
   return (
-    <Button
-      color="error"
-      variant="filled"
-      size="medium"
-      disabled={isLastAdmin}
-      title={isLastAdmin ? t("rework.teamSettings.leaveTeam.lastAdminTooltip") : undefined}
-      onClick={handleLeaveTeam}
-    >
-      {t("rework.teamSettings.navigation.leaveTeam")}
-    </Button>
+    <IconButtonMenu<MembersMenuAction>
+      iconButton={{
+        color: "on-surface-retreat",
+        variant: "icon",
+        size: "medium",
+        icon: { category: "outlined", type: "more_vert" },
+        "aria-label": t("rework.teamSettings.members.moreActions"),
+        title: t("rework.teamSettings.members.moreActions"),
+      }}
+      options={[
+        {
+          key: "leave",
+          value: "leave",
+          label: t("rework.teamSettings.navigation.leaveTeam"),
+          icon: { category: "outlined", type: "logout" },
+          destructive: true,
+          disabled: isLastAdmin,
+          description: isLastAdmin ? t("rework.teamSettings.leaveTeam.lastAdminTooltip") : undefined,
+        },
+      ]}
+      onSelect={() => handleLeaveTeam()}
+    />
   );
 }

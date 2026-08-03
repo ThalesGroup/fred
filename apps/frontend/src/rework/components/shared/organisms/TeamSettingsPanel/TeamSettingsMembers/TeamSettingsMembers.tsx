@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
-import LeaveTeamButton from "./LeaveTeamButton/LeaveTeamButton.tsx";
+import TeamSettingsMembersMenu from "./TeamSettingsMembersMenu/TeamSettingsMembersMenu.tsx";
 import AddTeamMembersDialog from "./AddTeamMembersDialog/AddTeamMembersDialog.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -40,6 +40,7 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
     <div className={styles["team-settings-members-container"]}>
       <PageHeader
         title={t("rework.teamSettings.members.title")}
+        titleAction={<TeamSettingsMembersMenu team={team} />}
         actions={
           <>
             <div className={styles["team-settings-members-search"]}>
@@ -49,9 +50,9 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
                 placeholder={t("rework.teamSettings.members.search.placeholder")}
                 ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
                 clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
+                size="small"
               />
             </div>
-            <LeaveTeamButton team={team} />
             {can_administer_members && (
               <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
                 {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}

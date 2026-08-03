@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Switch from "@shared/atoms/Switch/Switch.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -29,7 +28,9 @@ import type {
 import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
+import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
+import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
+import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./AgentFormBody.module.css";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
@@ -205,9 +206,8 @@ export function AgentFormBody({
   const generalFields = visibleFields.filter((f) => routeField(f) === "general");
 
   const visibleSections = SECTION_ORDER.filter((s) => {
-    if (s === "tools") return capabilities.length > 0;
     if (s === "prompts") return promptFields.length > 0;
-    return true; // general and commitments always have content
+    return true; // general, tools (always has the reasoning card), and commitments always have content
   });
 
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
@@ -324,81 +324,77 @@ export function AgentFormBody({
                   maxLength={500}
                   disabled={isSubmitting}
                 />
-                {/*
-                  REASON-01 level 3. Deliberately HERE and not in the Tools tab:
-                  reasoning is a property of how this agent's model is called,
-                  not a tool it can use, so asking an author to enable it among
-                  the tools would put the decision in the wrong mental model.
-                */}
-                <div className={styles.switchRow}>
-                  <Switch
-                    checked={reasoningEnabled}
-                    disabled={isSubmitting}
-                    onChange={() => onReasoningEnabledChange(!reasoningEnabled)}
-                    aria-label={t("rework.teams.formAgent.fields.reasoning.label")}
-                  />
-                  <div className={styles.switchText}>
-                    <span className={styles.switchLabel}>{t("rework.teams.formAgent.fields.reasoning.label")}</span>
-                    <span className={styles.switchHint}>{t("rework.teams.formAgent.fields.reasoning.hint")}</span>
-                  </div>
-                </div>
-                {/*
-                  REASON-01 Amendment B — where the composer's switch STARTS in a
-                  new conversation. Rendered only while the offer above is on:
-                  a preselection for a toggle nobody is shown is unanswerable,
-                  and hiding it is what makes the nesting read as "and then".
-                  The stored value survives hiding, so withdrawing the offer and
-                  restoring it later does not silently lose this choice.
-                */}
-                {reasoningEnabled && (
-                  <div className={`${styles.switchRow} ${styles.switchRowNested}`}>
-                    <Switch
-                      checked={reasoningDefaultOn}
-                      disabled={isSubmitting}
-                      onChange={() => onReasoningDefaultOnChange(!reasoningDefaultOn)}
-                      aria-label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
-                    />
-                    <div className={styles.switchText}>
-                      <span className={styles.switchLabel}>
-                        {t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
-                      </span>
-                      <span className={styles.switchHint}>
-                        {t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
-                      </span>
-                    </div>
-                  </div>
-                )}
                 {renderFieldList(generalFields)}
               </>
             )}
             {effectiveSection === "prompts" && renderFieldList(promptFields)}
-            {effectiveSection === "tools" && capabilities.length > 0 && (
-              <ul className={styles.toolsList}>
-                {capabilities.map((capability) => {
-                  const checked = selectedCapabilityIds.includes(capability.id);
-                  const toggle = () => {
-                    const next = checked
-                      ? selectedCapabilityIds.filter((id) => id !== capability.id)
-                      : [...selectedCapabilityIds, capability.id];
-                    onCapabilitySelectionChange(next);
-                  };
-                  return (
-                    <CapabilityCard
-                      key={capability.id}
-                      capability={capability}
-                      teamId={teamId}
-                      checked={checked}
-                      disabled={isSubmitting}
-                      configValues={capabilityConfigValues[capability.id] ?? {}}
-                      assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                      onToggle={toggle}
-                      onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                      onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(capability.id, slotKey, file)}
-                      onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
-                    />
-                  );
-                })}
-              </ul>
+            {effectiveSection === "tools" && (
+              <>
+                <CapabilitiesInfoBanner />
+                <ul className={styles.toolsList}>
+                  {/* REASON-01 level 3 (Amendment C) — always offered, regardless
+                    of the template's own capabilities, so it isn't gated behind
+                    `capabilities.length > 0` like the ones below it. Same
+                    CapabilityCard as every real capability; not one itself. */}
+                  <CapabilityCard
+                    name={t("rework.teams.formAgent.fields.reasoning.label")}
+                    description={t("rework.teams.formAgent.fields.reasoning.hint")}
+                    checked={reasoningEnabled}
+                    disabled={isSubmitting}
+                    onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
+                    subForm={
+                      reasoningEnabled && (
+                        <SwitchRow
+                          label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
+                          description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
+                          checked={reasoningDefaultOn}
+                          onChange={onReasoningDefaultOnChange}
+                        />
+                      )
+                    }
+                  />
+                  {capabilities.map((capability) => {
+                    const checked = selectedCapabilityIds.includes(capability.id);
+                    const configFields = capability.config_fields ?? [];
+                    const toggle = () => {
+                      const next = checked
+                        ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                        : [...selectedCapabilityIds, capability.id];
+                      onCapabilitySelectionChange(next);
+                    };
+                    return (
+                      <CapabilityCard
+                        key={capability.id}
+                        name={t(capability.name, { defaultValue: capability.name })}
+                        description={t(capability.description, { defaultValue: capability.description })}
+                        checked={checked}
+                        disabled={isSubmitting}
+                        onToggle={toggle}
+                        subForm={
+                          checked &&
+                          configFields.length > 0 && (
+                            <CapabilityConfigForm
+                              capability={capability}
+                              configFields={configFields}
+                              configValues={capabilityConfigValues[capability.id] ?? {}}
+                              disabled={isSubmitting}
+                              teamId={teamId}
+                              assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+                              onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                              onAssetFileChange={(slotKey, file) =>
+                                onCapabilityAssetFileChange(capability.id, slotKey, file)
+                              }
+                              onBlockingErrorChange={(message) =>
+                                onCapabilityBlockingErrorChange(capability.id, message)
+                              }
+                            />
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              </>
             )}
             {effectiveSection === "commitments" && (
               <>

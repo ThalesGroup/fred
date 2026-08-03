@@ -162,8 +162,8 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
             FieldSpec(
                 key="uppercase",
                 type="boolean",
-                title="Uppercase",
-                description="Echo replies in uppercase.",
+                title="capability.demo_echo.fields.uppercase.title",
+                description="capability.demo_echo.fields.uppercase.description",
                 default=False,
             )
         ],

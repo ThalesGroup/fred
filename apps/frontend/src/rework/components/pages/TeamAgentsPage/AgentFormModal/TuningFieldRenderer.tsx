@@ -54,7 +54,9 @@ export function TuningFieldRenderer({
 }: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
-  const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
+  const descriptionKey = field.description_by_lang?.[lang] ?? field.description;
+  const fieldDescription = descriptionKey ? t(descriptionKey, { defaultValue: descriptionKey }) : undefined;
+  const fieldTitle = t(field.title, { defaultValue: field.title });
   const isPromptField = field.type === "prompt";
 
   // null = auto: picker shown when field is empty, textarea shown when field has value.
@@ -92,7 +94,7 @@ export function TuningFieldRenderer({
   if (field.ui?.visible_when && !allValues?.[field.ui.visible_when]) return null;
 
   const fieldValue = value ?? field.default ?? "";
-  const label = `${field.title}${field.required ? " *" : ""}`;
+  const label = `${fieldTitle}${field.required ? " *" : ""}`;
 
   if (field.enum && field.enum.length > 0) {
     return (
@@ -116,7 +118,7 @@ export function TuningFieldRenderer({
     return (
       <div className={styles.field}>
         <SwitchRow
-          label={field.title}
+          label={fieldTitle}
           description={fieldDescription ?? ""}
           checked={Boolean(fieldValue)}
           onChange={(checked) => onChange(field.key, checked)}
@@ -139,25 +141,27 @@ export function TuningFieldRenderer({
     if (showPicker) {
       return (
         <div className={styles.promptPickerMode}>
-          <div className={styles.promptPickerHeader}>
-            <span className={styles.promptPickerLabel}>{label}</span>
-            <Button
-              color="on-surface"
-              variant="text"
-              size="small"
-              icon={{ category: "outlined", type: "edit" }}
-              onClick={() => setPickerExplicit(false)}
-              disabled={disabled}
-            >
-              {t("rework.teams.formAgent.promptField.writeFromScratch")}
-            </Button>
+          <div className={styles.promptPickerContainer}>
+            <div className={styles.promptPickerHeader}>
+              <span className={styles.promptPickerLabel}>{t("rework.teams.formAgent.promptField.libraryTitle")}</span>
+              <Button
+                color="on-surface-retreat"
+                variant="text"
+                size="small"
+                icon={{ category: "outlined", type: "close" }}
+                onClick={() => setPickerExplicit(false)}
+                disabled={disabled}
+              >
+                {t("rework.teams.formAgent.promptField.closeLibrary")}
+              </Button>
+            </div>
+            <PromptPicker
+              prompts={contextPrompts}
+              categories={promptCategories}
+              disabled={disabled || isLoadingDetail}
+              onSelect={handlePickPrompt}
+            />
           </div>
-          <PromptPicker
-            prompts={contextPrompts}
-            categories={promptCategories}
-            disabled={disabled || isLoadingDetail}
-            onSelect={handlePickPrompt}
-          />
           {error && <p className={styles.error}>{error}</p>}
         </div>
       );
@@ -168,7 +172,7 @@ export function TuningFieldRenderer({
         {hasLibrary && (
           <div className={styles.promptEditingHeader}>
             <Button
-              color="on-surface"
+              color="primary"
               variant="text"
               size="small"
               icon={{ category: "outlined", type: "edit_note" }}

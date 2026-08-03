@@ -77,6 +77,15 @@ authoritative rules. In one line each:
   `ui.visible_when="<sibling_key>"` hides the field while that sibling's
   effective value is falsy — display-only, the stored value is kept, so the
   capability must still handle the field's value when its gate is off.
+  `FieldSpec.title`/`description`, like `manifest.name`/`description`, are
+  **i18n keys** (`capability.<id>.fields.<field_key>.title`/`.description`),
+  resolved by `TuningFieldRenderer` via `t()` — never plain text. Add the
+  matching entries to both `apps/frontend/src/locales/{en,fr}/translation.json`
+  in the same change (`document_access`/`demo_echo` are the worked examples).
+  A widget-owned field (`ui.widget` resolving in the plugin's `configWidgets`,
+  e.g. `ppt_filler_template`) is the one exception — the generic renderer
+  never displays its title/description, so the plugin owns that field's
+  strings under its own key namespace instead.
 - **`StoredConfigModel`** — what the platform *persists* after `validate_config`
   enrichment; defaults to `ConfigModel` (RFC §3.2, §3.8).
 - **`TurnOptionsModel`** — typed chat-time values from a chat control; `EmptyModel` if

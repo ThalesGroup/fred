@@ -117,6 +117,7 @@ export const materialIcons = [
   "edit_calendar",
   "expand_less",
   "expand_more",
+  "keyboard_arrow_down",
   "map",
   "graphic_eq",
   "extension",

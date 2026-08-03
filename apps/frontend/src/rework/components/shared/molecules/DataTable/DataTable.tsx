@@ -22,6 +22,13 @@ import { OptionModel } from "@models/Option.model.ts";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
 
+export type DataTableRowSize = "medium" | "small";
+
+const ROW_HEIGHT_BY_SIZE: Record<DataTableRowSize, string> = {
+  medium: "3rem" /* 48px */,
+  small: "2.5rem" /* 40px */,
+};
+
 export type SortDirection = "asc" | "desc";
 export interface SortState {
   columnLabel: string;
@@ -53,8 +60,14 @@ interface DataTableProps<T> {
   firstColumnInset?: boolean;
   /** Overrides the row height (header + body, both become equal) — e.g.
    *  "2.5rem" for a denser table. Omit to keep each row type's own default
-   *  height, unaffected — other DataTable call sites don't opt in. */
+   *  height, unaffected — other DataTable call sites don't opt in. Takes
+   *  precedence over `size` when both are given. */
   rowHeight?: string;
+  /** Named row-height presets ("medium" = 48px, "small" = 40px), applied the
+   *  same way as `rowHeight` (header + body become equal). Omit to keep each
+   *  row type's own default height, unaffected — other DataTable call sites
+   *  don't opt in. */
+  size?: DataTableRowSize;
   /** Enables pagination and sets the initial rows-per-page (should be one of
    *  `ROWS_PER_PAGE_OPTIONS`). Omit to render every row with no pagination
    *  bar (default) — existing call sites are unaffected. Ignored when
@@ -130,6 +143,7 @@ export default function DataTable<T>({
   backgroundColor = "var(--surface-container)",
   firstColumnInset = false,
   rowHeight,
+  size,
   pageSize,
   serverPagination,
   rowKey,
@@ -241,6 +255,7 @@ export default function DataTable<T>({
 
   const containerClasses = [styles["datatable-container"]];
   if (firstColumnInset) containerClasses.push(styles["first-column-inset"]);
+  const resolvedRowHeight = rowHeight ?? (size ? ROW_HEIGHT_BY_SIZE[size] : undefined);
 
   return (
     <div
@@ -249,7 +264,7 @@ export default function DataTable<T>({
         {
           "--grid-layout": tableGridLayout,
           "--datatable-background-color": backgroundColor,
-          ...(rowHeight ? { "--datatable-row-height": rowHeight } : {}),
+          ...(resolvedRowHeight ? { "--datatable-row-height": resolvedRowHeight } : {}),
         } as React.CSSProperties
       }
     >

@@ -184,13 +184,8 @@ class DocumentSummarizeCapability(
             FieldSpec(
                 key="summarize_max_chars",
                 type="integer",
-                title="Summary length cap",
-                description=(
-                    "Default and hard maximum length (in characters) of "
-                    "summaries produced by the summarize_document tool. Leave "
-                    "empty to use the built-in default and honor the model's "
-                    "requested length."
-                ),
+                title="capability.document_summarize.fields.summarize_max_chars.title",
+                description="capability.document_summarize.fields.summarize_max_chars.description",
                 min=200,
                 max=20_000,
                 ui=UIHints(group="retrieval", advanced=True),

@@ -1,0 +1,33 @@
+/*
+  Motion — Material 3 easing curves and duration scale.
+  See the front-end-ux-ui skill's material-3-reference.md for the
+  recommended easing/duration pairing per transition type.
+*/
+
+:root {
+  /* Easing */
+  --easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
+
+  /* Durations */
+  --duration-short-1: 50ms;
+  --duration-short-2: 100ms;
+  --duration-short-3: 150ms;
+  --duration-short-4: 200ms;
+  --duration-medium-1: 250ms;
+  --duration-medium-2: 300ms;
+  --duration-medium-3: 350ms;
+  --duration-medium-4: 400ms;
+  --duration-long-1: 450ms;
+  --duration-long-2: 500ms;
+  --duration-long-3: 550ms;
+  --duration-long-4: 600ms;
+  --duration-extra-long-1: 700ms;
+  --duration-extra-long-2: 800ms;
+  --duration-extra-long-3: 900ms;
+  --duration-extra-long-4: 1000ms;
+}

@@ -1,3 +1,17 @@
+**v2.1.26** — 2026-08-02
+
+- **Summary**
+
+  Fred now ships with an in-app Help Center: a searchable, wiki-style
+  documentation space covering getting started, features, guides,
+  troubleshooting, FAQ, and platform architecture, in French and English.
+
+- **Features**
+
+  - New Help Center, opened from the profile menu: browse documentation by
+    section, search across every page, and copy a direct link to any article
+    or paragraph (#2192)
+
 **v2.1.25** — 2026-08-01
 
 - **Summary**
