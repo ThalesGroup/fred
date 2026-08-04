@@ -136,6 +136,12 @@
   white-space: nowrap;
 }
 
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
 .topBarActions {
   display: flex;
   align-items: center;

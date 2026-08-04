@@ -28,6 +28,7 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
@@ -132,6 +133,22 @@ export default function ManagedChatPage() {
     chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
 
   const attachmentsCount = chat.persistedAttachments.length;
+
+  const conversationTokenUsage = useMemo(
+    () =>
+      chat.threadMessages.reduce(
+        (acc, m) => {
+          if (m.tokenUsage) {
+            acc.input_tokens += m.tokenUsage.input_tokens;
+            acc.output_tokens += m.tokenUsage.output_tokens;
+            acc.total_tokens += m.tokenUsage.total_tokens;
+          }
+          return acc;
+        },
+        { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+      ),
+    [chat.threadMessages],
+  );
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
@@ -349,28 +366,33 @@ export default function ManagedChatPage() {
                 )}
                 <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
               </div>
-              <div className={styles.topBarActions}>
-                {attachmentsCount > 0 && (
-                  <button
-                    type="button"
-                    className={styles.conversationFilesButton}
-                    onClick={() =>
-                      setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                    }
-                  >
-                    <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                    <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                  </button>
+              <div className={styles.topBarRight}>
+                {conversationTokenUsage.total_tokens > 0 && (
+                  <TokenUsageBadge usage={conversationTokenUsage} variant="stacked" />
                 )}
-                {isAdmin && (
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "build" }}
-                    aria-label={t("chatbot.toggleDebugDrawer")}
-                    onClick={() => setDebugOpen((v) => !v)}
-                  />
-                )}
+                <div className={styles.topBarActions}>
+                  {attachmentsCount > 0 && (
+                    <button
+                      type="button"
+                      className={styles.conversationFilesButton}
+                      onClick={() =>
+                        setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                      }
+                    >
+                      <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                      <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <IconButton
+                      variant="icon"
+                      size="small"
+                      icon={{ category: "outlined", type: "build" }}
+                      aria-label={t("chatbot.toggleDebugDrawer")}
+                      onClick={() => setDebugOpen((v) => !v)}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
