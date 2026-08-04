@@ -38,7 +38,8 @@
 
    The segment still stops at the marker (`.row:last-child` rule above): a tail
    hanging below the last dot read as a broken line, not as progress. */
-.row_pending::before {
+.row_pending::before,
+.row_awaiting_confirmation::before {
   animation: railFlow 1.2s linear infinite;
   background: linear-gradient(to bottom, var(--outline-variant) 0%, var(--primary) 50%, var(--outline-variant) 100%);
   background-size: 100% 200%;
@@ -90,7 +91,8 @@
 .dot_error {
   background: var(--error);
 }
-.dot_pending {
+.dot_pending,
+.dot_awaiting_confirmation {
   animation: pulse 1.2s ease-in-out infinite;
   background: var(--warning);
 }

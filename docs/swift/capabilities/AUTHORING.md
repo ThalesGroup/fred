@@ -101,6 +101,50 @@ only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is t
 
 ---
 
+## Evolving a capability's config — additive vs breaking (RFC §3.8, §3.9)
+
+Every persisted `capability_config` slice is stamped `{"schema_version":
+manifest.version, "config": {...}}` at save time. `resolve_stored_config`
+(`fred_runtime/capabilities/assembly.py`) reads it back: version matches →
+plain `StoredConfigModel.model_validate(...)`; version differs → the
+capability's `upgrade_config()` hook runs lazily, once, at read time — never a
+mass row migration. This is a **separate mechanism** from the Alembic table
+migrations described under "Registration, boot invariants, tables" below
+(RFC §7.1): that's for a capability's *owned SQL tables*, this is for the
+*stored config JSON blob* every capability has.
+
+- **Adding an optional field with a default** — the common case, free: leave
+  `manifest.version` unchanged, no `upgrade_config` override needed. An old
+  stored slice missing the new key validates fine; Pydantic fills the
+  default. Proof pattern: `test_default_upgrade_hook_validates_additive_old_shape`
+  (`libs/fred-runtime/tests/test_capability_selection_1974.py`) — the
+  default `upgrade_config` (plain `StoredConfigModel` validation) is
+  correct for this case, nothing to write.
+- **Removing, renaming, or retyping a field** — a real breaking change: bump
+  `manifest.version` **and** override `upgrade_config(stored, from_version)`
+  to map the old shape onto the new one. Copy the pattern from
+  `GreeterCapability` in the same test file (lines ~75-99) — a worked
+  `salutation` → `greeting` rename, with its own round-trip test
+  (`test_version_mismatch_runs_upgrade_hook_lazily`). Write an equivalent
+  test for your own migration; there is no other way to prove it works.
+- **If `upgrade_config` is missing or raises** for a real mismatch, the
+  failure surfaces as the named `CapabilityConfigInvalidError` → the
+  `capability_config_invalid` suspension reason (RFC §3.9) — the agent is
+  suspended with an actionable message ("reset its parameters and re-save"),
+  never a silent misbehavior or a crash. Still worth avoiding by preferring
+  the additive path whenever the change allows it — a suspension is visible
+  and disruptive to whoever owns that agent instance.
+- **Current policy, pre-GA:** `manifest.version` stays unbumped ("config-surface
+  changes land without bumps" — see `document_summarize/capability.py`) while
+  the platform has no real production installs to protect. No in-tree
+  capability has ever shipped a non-default `upgrade_config()` — the
+  mechanism is proven by the `GreeterCapability` test fixture, not by real
+  capability code. Before GA, dry-run at least one real breaking change
+  through this path deliberately, rather than discovering rough edges the
+  first time it actually matters.
+
+---
+
 ## Requirement → hook (RFC §5.1)
 
 Map a runtime need to a primitive; do not invent a new hook. The first row runs on
@@ -209,9 +253,11 @@ and `apps/frontend/.prettierignore`). Never hand-edit them.
 Unit-test the capability in isolation (see `libs/fred-runtime/tests/test_capability_*`):
 register it and call `registry.validate()` to prove it passes the boot invariant; exercise
 `validate_config`, `chat_controls`, and each tool with a stubbed `RuntimeServices` port
-(a bare harness may inject `None` — fail loud, as `document_access` does). Run
-`make test` + `make code-quality` in `libs/fred-runtime` (and `libs/fred-sdk` if you
-touched the contract surface) — green before you claim done.
+(a bare harness may inject `None` — fail loud, as `document_access` does). Shipped a
+breaking config change (removed/renamed/retyped a field)? Add a `resolve_stored_config`
+round-trip test for the `upgrade_config` path too — see "Evolving a capability's config"
+above. Run `make test` + `make code-quality` in `libs/fred-runtime` (and `libs/fred-sdk`
+if you touched the contract surface) — green before you claim done.
 
 ---
 

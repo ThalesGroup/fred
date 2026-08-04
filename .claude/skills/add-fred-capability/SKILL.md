@@ -91,6 +91,12 @@ config, turn options, and services reach the tool through the middleware closure
 **never** enter `CapabilityContext`; platform access is only through typed
 `RuntimeServices` ports. `document_access` is the reference for all of this.
 
+**Adding a field to an already-shipped `ConfigModel`?** If it's optional with a default,
+you're done — no version bump, no migration code, old stored configs just get the default.
+Only a removed/renamed/retyped field needs `manifest.version` bumped plus an
+`upgrade_config()` override. See AUTHORING.md's "Evolving a capability's config" section
+for the full rule and the `GreeterCapability` test pattern to copy.
+
 ---
 
 ## Step 3 — Map each runtime need to a hook (RFC §5.1)

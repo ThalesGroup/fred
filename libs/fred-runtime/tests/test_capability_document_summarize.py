@@ -15,11 +15,12 @@
 """
 `DocumentSummarizeCapability` (RFC §10.1) — split out of the #1906
 `document_access` pilot (2026-07-31, #2180) so `summarize_document` is an
-explicit, admin-gated per-agent opt-in. Its #2177 HITL gate is deliberately
-NOT active yet — ReAct V2 HITL resume is broken end to end (#2179). Covers:
-registration, the admin-gated `team_scope` default, the (currently empty)
-HITL declaration, and the tool behavior moved verbatim from
-`test_capability_document_access_1906.py`.
+explicit, admin-gated per-agent opt-in. Its #2177 HITL gate pauses for
+approval by default, configurable per instance via `require_confirmation`
+(#2179's ReAct V2 HITL resume dead-end blocked this until it was fixed).
+Covers: registration, the admin-gated `team_scope` default, the HITL
+declaration and its per-instance toggle, and the tool behavior moved
+verbatim from `test_capability_document_access_1906.py`.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GRO
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
+    HitlGateRequest,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
@@ -157,18 +159,50 @@ def test_team_scope_defaults_to_admin_gated() -> None:
 
 
 # ---------------------------------------------------------------------------
-# HITL declaration (RFC §5.4) — deliberately absent for now (#2179)
+# HITL declaration (RFC §5.4) — gated by default, per-instance configurable
 # ---------------------------------------------------------------------------
 
 
-def test_summarize_document_is_not_hitl_gated_yet() -> None:
-    """ReAct V2 HITL resume is broken end to end (#2179): every approval
-    would dead-end in a 409, strictly worse than no gate at all. Admission
-    control (ADMIN_GATED) is the sole governance layer until #2179 is fixed
-    and `hitl_specs()` is re-added — pin this so re-adding it is a deliberate
-    change, not a silent regression back into the broken state."""
+def _hitl_gate_request(config: DocumentSummarizeConfig) -> HitlGateRequest:
+    ctx = build_capability_context(
+        DocumentSummarizeCapability(),
+        identity=_identity(),
+        services=_services(),
+        config=config,
+    )
+    return HitlGateRequest(
+        tool_call={"name": "summarize_document", "args": {}, "id": "call-1"},
+        tool=None,
+        context=ctx,
+    )
 
-    assert list(DocumentSummarizeCapability().hitl_specs()) == []
+
+def test_summarize_document_declares_a_configurable_hitl_gate() -> None:
+    """#2177: `require=False` + a `when` predicate, not a hardcoded
+    `require=True` — the gate is decided from the resolved instance config at
+    gate time (`_confirmation_required`), not fixed at declaration time."""
+
+    specs = list(DocumentSummarizeCapability().hitl_specs())
+    assert len(specs) == 1
+    assert specs[0].tool == "summarize_document"
+    assert specs[0].require is False
+    assert specs[0].when is not None
+
+
+def test_summarize_document_is_hitl_gated_by_default() -> None:
+    spec = list(DocumentSummarizeCapability().hitl_specs())[0]
+    assert spec.when is not None
+    assert spec.when(_hitl_gate_request(DocumentSummarizeConfig())) is True
+
+
+def test_summarize_document_confirmation_can_be_disabled_per_instance() -> None:
+    """An admin who already trusts this agent's usage can turn the gate off —
+    admission control (ADMIN_GATED) remains the outer layer regardless."""
+
+    spec = list(DocumentSummarizeCapability().hitl_specs())[0]
+    assert spec.when is not None
+    request = _hitl_gate_request(DocumentSummarizeConfig(require_confirmation=False))
+    assert spec.when(request) is False
 
 
 # ---------------------------------------------------------------------------

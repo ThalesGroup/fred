@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
-import type { AwaitingHumanEvent } from "../../../../slices/agentic/agenticOpenApi";
+import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -48,7 +48,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
-  const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
+  const [pendingHitl, setPendingHitl] = useState<RuntimeAwaitingHumanEvent | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   // Ordered chat-context prompts attached to this session (PROMPT-05). Source of
   // truth is the control-plane session; hydrated from sessionData and persisted
@@ -504,7 +504,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   ]);
 
   const handleHitlAnswer = useCallback(
-    (answer: string | boolean, freeText?: string) => {
+    (answer: string | boolean | undefined, freeText?: string) => {
       if (!pendingHitl) return;
       setPendingHitl(null);
       sendHitlResume(pendingHitl, answer, freeText);

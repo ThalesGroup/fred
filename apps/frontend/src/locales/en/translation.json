@@ -194,8 +194,12 @@
     },
     "document_summarize": {
       "name": "Document summarization",
-      "description": "Generate an on-demand summary of one document. Requires human approval before each call.",
+      "description": "Generate an on-demand summary of one document. Requires your approval before each summary by default.",
       "fields": {
+        "require_confirmation": {
+          "title": "Require confirmation",
+          "description": "Pause for your proceed/cancel approval before each summary. On by default; turn off only for an agent whose usage you already trust."
+        },
         "summarize_max_chars": {
           "title": "Summary length cap",
           "description": "Default and hard maximum length (in characters) of summaries produced by the summarize_document tool. Leave empty to use the built-in default and honor the model's requested length."
@@ -1347,6 +1351,7 @@
     "cancel": "Cancel",
     "chatTrace": {
       "ariaLabel": "Agent reasoning trace",
+      "awaitingConfirmation": "awaiting confirmation…",
       "details": "Details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",

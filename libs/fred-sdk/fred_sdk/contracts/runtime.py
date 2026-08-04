@@ -89,10 +89,19 @@ class ExecutionConfig(FrozenModel):
     Per-run execution options resolved by the chat/session layer.
 
     Practical meaning:
-    - `session_id` / `checkpoint_id`: resume the right conversation state.
-      session_id is the single public-facing conversation identity. Internally
-      it is passed as LangGraph's `thread_id` — that mapping is an
-      implementation detail and must not leak into any public API or CLI.
+    - `session_id`: resume the right conversation state. The single
+      public-facing conversation identity. Internally it is passed as
+      LangGraph's `thread_id` — that mapping is an implementation detail and
+      must not leak into any public API or CLI.
+    - `checkpoint_id`: a real checkpointer-storage identifier, used by the
+      legacy Graph V2 runtime to resume from a specific graph snapshot.
+      Never populated by ReAct V2 — see `interrupt_id`.
+    - `interrupt_id`: LangGraph's own `Interrupt.id` for the ReAct V2 HITL
+      occurrence being resumed (#2216). Threaded into
+      `Command(resume={interrupt_id: resume_payload})` — LangGraph's native
+      targeted resume form — so the graph itself only applies the decision
+      to the task whose `Interrupt.id` matches. Never populated for the
+      legacy Graph V2 runtime — see `checkpoint_id`.
     - `adapter_config`: optional adapter-specific config passthrough when one runtime
       bridge needs extra execution metadata.
     - `max_steps`: hard stop against runaway loops.
@@ -102,6 +111,7 @@ class ExecutionConfig(FrozenModel):
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
     session_id: str | None = None
     checkpoint_id: str | None = None
+    interrupt_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
     stream_intermediate_events: bool = True
@@ -203,12 +213,43 @@ class HumanChoiceOption(FrozenModel):
     default: bool = False
 
 
+class PendingToolCall(FrozenModel):
+    """
+    One tool call awaiting approval within a HITL confirmation prompt.
+
+    A single `HumanInputRequest` can gate more than one tool call at once
+    (RFC AGENT-CAPABILITY §5.4 batching, #2177): the model may emit several
+    calls to the same gated tool in one turn (e.g. summarizing every document
+    in a folder), and the gate gives all of them a single, combined interrupt
+    rather than one confirmation per call — proceed/cancel already applies to
+    the whole set atomically (cancelling any one already skips the entire
+    batch), so asking once carries the same guarantee with none of the
+    click-through friction.
+    """
+
+    tool_call_id: str = ""
+    tool_name: str = Field(..., min_length=1)
+    args_preview: str = ""
+
+
 class HumanInputRequest(FrozenModel):
     """
     Structured question shown to the user when runtime needs input.
 
     Use this model to represent business questions (choice, free text, or
     both). The UI renders this object directly.
+
+    Resume identity (#2216) — two distinct fields, never used as aliases
+    for each other:
+    - `checkpoint_id`: a real checkpointer-storage identifier. Populated
+      only by the legacy Graph V2 runtime (`graph_runtime.py`), which
+      validates it by exact lookup against a stored checkpoint.
+    - `interrupt_id`: LangGraph's own `Interrupt.id` for this HITL
+      occurrence. Populated only by the ReAct V2 runtime
+      (`react_stream_adapter.py`). The frontend echoes it back verbatim on
+      resume; the backend requires an exact match against the currently
+      pending interrupt and threads it into LangGraph's targeted
+      `Command(resume={interrupt_id: ...})` form.
     """
 
     stage: str | None = None
@@ -218,6 +259,11 @@ class HumanInputRequest(FrozenModel):
     free_text: bool = False
     metadata: dict[str, JsonScalar] = Field(default_factory=dict)
     checkpoint_id: str | None = None
+    interrupt_id: str | None = None
+    # Populated by the tool-approval gate (`build_tool_approval_request`);
+    # empty for non-tool-approval human input (e.g. a plain business
+    # question). See `PendingToolCall` for why this is a tuple, not one call.
+    pending_calls: tuple[PendingToolCall, ...] = ()
 
 
 class AwaitingHumanRuntimeEvent(RuntimeEventBase):
@@ -575,6 +621,13 @@ class HistoryStorePort(Protocol):
 
     async def next_rank(self, session_id: str) -> int:
         """Return the next available rank for a session (MAX(rank) + 1, or 0 if empty)."""
+        ...
+
+    async def latest_exchange_id(self, session_id: str) -> str | None:
+        """Return the exchange_id of the most recently persisted row (highest
+        rank) for a session, or None if the session has no rows. A HITL
+        resume reuses this instead of minting a fresh exchange_id, so the
+        resumed turn's events still correlate with the interrupted turn's."""
         ...
 
 

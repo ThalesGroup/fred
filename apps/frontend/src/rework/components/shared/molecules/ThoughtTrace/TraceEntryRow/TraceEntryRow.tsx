@@ -30,21 +30,24 @@ interface TraceEntryRowProps {
   entry: TraceEntry;
   /** 1-based tool step number. Null for notes/errors, which are not steps. */
   index?: number | null;
+  /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
+  pendingToolCallIds?: readonly string[] | null;
 }
 
 function DotStatus({ status }: { status: TraceStatus }) {
   return <span className={`${styles.dot} ${styles[`dot_${status}`]}`} aria-label={status} />;
 }
 
-export function TraceEntryRow({ entry, index = null }: TraceEntryRowProps) {
+export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: TraceEntryRowProps) {
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
-  const status = statusForEntry(entry);
+  const status = statusForEntry(entry, pendingToolCallIds);
   const label = entryLabel(entry);
   const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";
+  const isAwaitingConfirmation = status === "awaiting_confirmation";
 
   // Curated volume metadata (never raw args/content) so two calls to the same
   // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
@@ -79,8 +82,13 @@ export function TraceEntryRow({ entry, index = null }: TraceEntryRowProps) {
 
       {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
 
-      <span className={`${styles.primary} ${isPending ? styles.primaryPending : ""}`}>
-        {primary || (isPending ? t("rework.chatTrace.running") : "")}
+      <span className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""}`}>
+        {primary ||
+          (isAwaitingConfirmation
+            ? t("rework.chatTrace.awaitingConfirmation")
+            : isPending
+              ? t("rework.chatTrace.running")
+              : "")}
       </span>
 
       {secondary && <span className={styles.secondary}>{secondary}</span>}

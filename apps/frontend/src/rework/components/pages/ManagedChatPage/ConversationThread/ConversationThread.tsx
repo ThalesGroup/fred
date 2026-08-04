@@ -16,7 +16,7 @@
 // Lives under pages/ so it may import from shared/organisms freely.
 
 import type { ReactNode, RefObject } from "react";
-import type { AwaitingHumanEvent } from "../../../../../slices/agentic/agenticOpenApi";
+import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
@@ -25,12 +25,12 @@ import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessage
 
 interface ConversationThreadProps {
   messages: ThreadMessage[];
-  pendingHitl: AwaitingHumanEvent | null;
+  pendingHitl: RuntimeAwaitingHumanEvent | null;
   isLoading: boolean;
   isStreaming: boolean;
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
-  onHitlAnswer: (answer: string | boolean, freeText?: string) => void;
+  onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
 }
 
 export function ConversationThread({
@@ -43,6 +43,13 @@ export function ConversationThread({
   onHitlAnswer,
 }: ConversationThreadProps) {
   const turnKey = messages.filter((m) => m.role === "user").length;
+  // The pending tool call(s) this HITL prompt gates, if the runtime reported
+  // any (see build_tool_approval_request's HumanInputRequest.pending_calls —
+  // #2177: one prompt can batch several calls at once) — lets the trace row
+  // for each of those tools render "awaiting confirmation" instead of
+  // "running" while the prompt below is still unanswered.
+  const pendingToolCallIds =
+    pendingHitl?.payload.pending_calls?.map((c) => c.tool_call_id).filter((id): id is string => !!id) ?? null;
 
   return (
     <ChatMessagesArea
@@ -58,7 +65,7 @@ export function ConversationThread({
           return <UserTurn key={msg.id} text={msg.text} />;
         }
         if (msg.role === "hitl_request") {
-          const frozenEvent: AwaitingHumanEvent = {
+          const frozenEvent: RuntimeAwaitingHumanEvent = {
             session_id: "",
             exchange_id: msg.id,
             payload: { question: msg.text, choices: msg.hitlChoices, title: msg.hitlTitle },
@@ -74,6 +81,7 @@ export function ConversationThread({
             uiParts={msg.uiParts}
             tokenUsage={msg.tokenUsage}
             isStreaming={msg.isStreaming}
+            pendingToolCallIds={pendingToolCallIds}
           />
         );
       })}

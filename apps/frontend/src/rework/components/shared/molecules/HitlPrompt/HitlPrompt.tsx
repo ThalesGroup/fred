@@ -15,22 +15,17 @@
 import { useState } from "react";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
-import type { AwaitingHumanEvent } from "../../../../../slices/agentic/agenticOpenApi";
+import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
-  event: AwaitingHumanEvent;
-  onAnswer: (answer: string | boolean, freeText?: string) => void;
+  event: RuntimeAwaitingHumanEvent;
+  onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
   readonly?: boolean;
 }
 
 export function HitlPrompt({ event, onAnswer, readonly = false }: HitlPromptProps) {
-  const payload = event.payload as {
-    title?: string | null;
-    question?: string | null;
-    choices?: { id: string; label: string }[] | null;
-    free_text?: boolean | null;
-  };
+  const payload = event.payload;
 
   const [freeText, setFreeText] = useState("");
 
