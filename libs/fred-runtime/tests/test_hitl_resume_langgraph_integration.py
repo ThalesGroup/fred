@@ -53,11 +53,11 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_model_adapter import (
     REACT_MODEL_OPERATION_ROUTING,
     infer_react_model_operation_from_messages,
 )
-from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
