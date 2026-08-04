@@ -30,7 +30,7 @@ interface ConversationThreadProps {
   isStreaming: boolean;
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
-  onHitlAnswer: (answer: string | boolean, freeText?: string) => void;
+  onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
 }
 
 export function ConversationThread({

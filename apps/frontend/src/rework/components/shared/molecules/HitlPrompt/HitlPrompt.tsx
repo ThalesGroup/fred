@@ -20,7 +20,7 @@ import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
-  onAnswer: (answer: string | boolean, freeText?: string) => void;
+  onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
   readonly?: boolean;
 }
 

@@ -504,7 +504,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   ]);
 
   const handleHitlAnswer = useCallback(
-    (answer: string | boolean, freeText?: string) => {
+    (answer: string | boolean | undefined, freeText?: string) => {
       if (!pendingHitl) return;
       setPendingHitl(null);
       sendHitlResume(pendingHitl, answer, freeText);
