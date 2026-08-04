@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
@@ -137,6 +138,7 @@ interface UseChatAttachmentsParams {
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { notifyApiError } = useApiErrorToast();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<ReadonlySet<string>>(new Set());
 
@@ -199,10 +201,15 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           next.delete(attachmentId);
           return next;
         });
+        notifyApiError(error, {
+          summary: t("chatbot.errors.attachmentDeleteFailedSummary"),
+          fallbackDetail: t("chatbot.errors.attachmentDeleteFailedDetail"),
+          forbiddenDetail: t("chatbot.errors.attachmentDeleteForbiddenDetail"),
+        });
         throw error;
       }
     },
-    [deletePersistedAttachmentMutation, sessionId, teamId],
+    [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId],
   );
 
   const addFiles = useCallback(
