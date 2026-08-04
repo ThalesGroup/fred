@@ -216,6 +216,7 @@
 
 .initialComposer {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   padding: 0 var(--spacing-l);
   width: 100%;
