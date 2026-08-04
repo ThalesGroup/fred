@@ -45,19 +45,24 @@ def _setup_test_schema() -> None:
 
 @pytest.fixture(autouse=True)
 def _clear_module_level_caches() -> None:
-    """Reset the #2148 team-membership/user-summary caches before every test.
+    """Reset the #2148/#2181 relation/user-summary caches before every test.
 
-    Both `control_plane_backend.teams.service._TEAM_RELATIONS_CACHE` and
-    `control_plane_backend.users.service._USER_SUMMARY_CACHE` are
+    `control_plane_backend.teams.service._TEAM_RELATIONS_CACHE`,
+    `control_plane_backend.capabilities.enablement._CAPABILITY_RELATIONS_CACHE`,
+    and `control_plane_backend.users.service._USER_SUMMARY_CACHE` are
     module-level singletons with a real TTL (45s / 5min) — without this, a
     test asserting a real fan-out call count (e.g.
-    `test_teams_bulk_membership_call_count.py`) could silently pass fewer
-    calls than expected because an earlier test in the same session already
-    warmed the cache for an overlapping team/user id (both use predictable
-    ids like `team-0`, `team-1`, ...).
+    `test_teams_bulk_membership_call_count.py`,
+    `test_capability_relations_cache_2181.py`) could silently pass fewer calls
+    than expected because an earlier test in the same session already warmed
+    the cache for an overlapping team/capability id (both use predictable ids
+    like `team-0`, `corp_drive`, ...).
     """
+    from control_plane_backend.capabilities import enablement as capabilities_enablement
     from control_plane_backend.teams import service as teams_service
     from control_plane_backend.users import service as users_service
 
     teams_service._TEAM_RELATIONS_CACHE.clear()
+    capabilities_enablement._CAPABILITY_RELATIONS_CACHE.clear()
+    capabilities_enablement._CAPABILITY_RELATIONS_LAST_INVALIDATED.clear()
     users_service._USER_SUMMARY_CACHE.clear()
