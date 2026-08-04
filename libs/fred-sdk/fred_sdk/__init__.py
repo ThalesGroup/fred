@@ -118,6 +118,7 @@ from fred_sdk.contracts.models import (
 from fred_sdk.contracts.runtime import (
     HumanChoiceOption,
     HumanInputRequest,
+    PendingToolCall,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtKind,
@@ -235,6 +236,7 @@ __all__ = [
     "WorkspaceFileNotFound",
     "HumanInputRequest",
     "HumanChoiceOption",
+    "PendingToolCall",
     "ThoughtKind",
     "ThoughtStartEvent",
     "ThoughtDeltaEvent",

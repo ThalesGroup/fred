@@ -194,8 +194,12 @@
     },
     "document_summarize": {
       "name": "Résumé de document",
-      "description": "Génère à la demande le résumé d'un document. Nécessite une approbation humaine avant chaque appel.",
+      "description": "Génère à la demande le résumé d'un document. Nécessite par défaut votre approbation avant chaque résumé.",
       "fields": {
+        "require_confirmation": {
+          "title": "Confirmation requise",
+          "description": "Met en pause avant chaque résumé pour recueillir votre approbation (continuer/annuler). Activé par défaut ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
+        },
         "summarize_max_chars": {
           "title": "Longueur maximale du résumé",
           "description": "Longueur par défaut et maximale (en caractères) des résumés produits par l'outil summarize_document. Laisser vide pour utiliser la valeur par défaut intégrée et respecter la longueur demandée par le modèle."
@@ -1339,6 +1343,7 @@
     "cancel": "Annuler",
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
+      "awaitingConfirmation": "en attente de confirmation…",
       "details": "Détails",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",

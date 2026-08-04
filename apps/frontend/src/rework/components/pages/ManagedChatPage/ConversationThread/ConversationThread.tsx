@@ -43,6 +43,15 @@ export function ConversationThread({
   onHitlAnswer,
 }: ConversationThreadProps) {
   const turnKey = messages.filter((m) => m.role === "user").length;
+  // The pending tool call(s) this HITL prompt gates, if the runtime reported
+  // any (see build_tool_approval_request's HumanInputRequest.pending_calls —
+  // #2177: one prompt can batch several calls at once) — lets the trace row
+  // for each of those tools render "awaiting confirmation" instead of
+  // "running" while the prompt below is still unanswered.
+  const pendingToolCallIds =
+    (pendingHitl?.payload as { pending_calls?: { tool_call_id?: string | null }[] } | undefined)?.pending_calls
+      ?.map((c) => c.tool_call_id)
+      .filter((id): id is string => !!id) ?? null;
 
   return (
     <ChatMessagesArea
@@ -74,6 +83,7 @@ export function ConversationThread({
             uiParts={msg.uiParts}
             tokenUsage={msg.tokenUsage}
             isStreaming={msg.isStreaming}
+            pendingToolCallIds={pendingToolCallIds}
           />
         );
       })}

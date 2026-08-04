@@ -267,6 +267,25 @@ describe("statusForEntry", () => {
     const result = toolResultMsg("c1", "boom", false);
     expect(statusForEntry({ kind: "combo", call, result })).toBe("error");
   });
+
+  it("returns 'awaiting_confirmation' for a combo whose call_id is in the pending HITL id list", () => {
+    const call = toolCallMsg("c1", "summarize_document");
+    expect(statusForEntry({ kind: "combo", call }, ["c1"])).toBe("awaiting_confirmation");
+  });
+
+  it("returns 'awaiting_confirmation' for EACH call batched into one HITL prompt (#2177)", () => {
+    expect(statusForEntry({ kind: "combo", call: toolCallMsg("c1", "summarize_document") }, ["c1", "c2", "c3"])).toBe(
+      "awaiting_confirmation",
+    );
+    expect(statusForEntry({ kind: "combo", call: toolCallMsg("c2", "summarize_document") }, ["c1", "c2", "c3"])).toBe(
+      "awaiting_confirmation",
+    );
+  });
+
+  it("returns 'pending' for a combo with no result yet when a DIFFERENT call is pending confirmation", () => {
+    const call = toolCallMsg("c1", "search");
+    expect(statusForEntry({ kind: "combo", call }, ["c-other"])).toBe("pending");
+  });
 });
 
 // ── primaryTextForEntry ───────────────────────────────────────────────────────
@@ -419,7 +438,13 @@ describe("splitTraceEntries", () => {
 
 describe("traceSummary", () => {
   it("reports nothing for an empty trace", () => {
-    expect(traceSummary([])).toEqual({ reasoningMs: null, toolCount: 0, toolMs: 0, running: false });
+    expect(traceSummary([])).toEqual({
+      reasoningMs: null,
+      toolCount: 0,
+      toolMs: 0,
+      running: false,
+      awaitingConfirmation: false,
+    });
   });
 
   it("takes the MAX reasoning duration, not the sum — nested blocks share wall-clock", () => {
@@ -440,7 +465,13 @@ describe("traceSummary", () => {
       { kind: "combo" as const, call: toolCallMsg("c1", "a"), result: toolResultMsg("c1", "r", true, 148) },
       { kind: "combo" as const, call: toolCallMsg("c2", "b"), result: toolResultMsg("c2", "r", true, 140) },
     ];
-    expect(traceSummary(entries)).toEqual({ reasoningMs: 16400, toolCount: 2, toolMs: 288, running: false });
+    expect(traceSummary(entries)).toEqual({
+      reasoningMs: 16400,
+      toolCount: 2,
+      toolMs: 288,
+      running: false,
+      awaitingConfirmation: false,
+    });
   });
 
   it("is running while a thought still streams", () => {
@@ -450,6 +481,34 @@ describe("traceSummary", () => {
 
   it("is running while a tool call awaits its result", () => {
     expect(traceSummary([{ kind: "combo", call: toolCallMsg("c1", "search") }]).running).toBe(true);
+  });
+
+  it("is running, and awaitingConfirmation, while a tool call is gated behind an unanswered HITL prompt", () => {
+    const entries = [{ kind: "combo" as const, call: toolCallMsg("c1", "summarize_document") }];
+    expect(traceSummary(entries, ["c1"])).toEqual({
+      reasoningMs: null,
+      toolCount: 1,
+      toolMs: 0,
+      running: true,
+      awaitingConfirmation: true,
+    });
+  });
+
+  it("is awaitingConfirmation for a batch of several calls gated by ONE combined HITL prompt (#2177)", () => {
+    const entries = [
+      { kind: "combo" as const, call: toolCallMsg("c1", "summarize_document") },
+      { kind: "combo" as const, call: toolCallMsg("c2", "summarize_document") },
+      { kind: "combo" as const, call: toolCallMsg("c3", "summarize_document") },
+    ];
+    const summary = traceSummary(entries, ["c1", "c2", "c3"]);
+    expect(summary.awaitingConfirmation).toBe(true);
+    expect(summary.running).toBe(true);
+    expect(summary.toolCount).toBe(3);
+  });
+
+  it("does not mark awaitingConfirmation for an unrelated pending call_id", () => {
+    const entries = [{ kind: "combo" as const, call: toolCallMsg("c1", "summarize_document") }];
+    expect(traceSummary(entries, ["c-other"]).awaitingConfirmation).toBe(false);
   });
 });
 

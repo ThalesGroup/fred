@@ -203,6 +203,25 @@ class HumanChoiceOption(FrozenModel):
     default: bool = False
 
 
+class PendingToolCall(FrozenModel):
+    """
+    One tool call awaiting approval within a HITL confirmation prompt.
+
+    A single `HumanInputRequest` can gate more than one tool call at once
+    (RFC AGENT-CAPABILITY §5.4 batching, #2177): the model may emit several
+    calls to the same gated tool in one turn (e.g. summarizing every document
+    in a folder), and the gate gives all of them a single, combined interrupt
+    rather than one confirmation per call — proceed/cancel already applies to
+    the whole set atomically (cancelling any one already skips the entire
+    batch), so asking once carries the same guarantee with none of the
+    click-through friction.
+    """
+
+    tool_call_id: str = ""
+    tool_name: str = Field(..., min_length=1)
+    args_preview: str = ""
+
+
 class HumanInputRequest(FrozenModel):
     """
     Structured question shown to the user when runtime needs input.
@@ -218,6 +237,10 @@ class HumanInputRequest(FrozenModel):
     free_text: bool = False
     metadata: dict[str, JsonScalar] = Field(default_factory=dict)
     checkpoint_id: str | None = None
+    # Populated by the tool-approval gate (`build_tool_approval_request`);
+    # empty for non-tool-approval human input (e.g. a plain business
+    # question). See `PendingToolCall` for why this is a tuple, not one call.
+    pending_calls: tuple[PendingToolCall, ...] = ()
 
 
 class AwaitingHumanRuntimeEvent(RuntimeEventBase):

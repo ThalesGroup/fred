@@ -2078,6 +2078,61 @@ lever, not an access boundary.
 
 ---
 
+### 8.36 ✅ `HumanInputRequest.pending_calls` — batched HITL confirmation + trace correlation (2026-08-03)
+
+**Problem, part 1 (trace correlation).** A HITL-gated tool call's
+`ToolCallRuntimeEvent` streams the instant the ReAct model node commits its
+`AIMessage.tool_calls` — a separate, earlier LangGraph step than
+`FredHitlMiddleware.aafter_model`'s own `interrupt()`. The chat UI's
+`statusForEntry()` had no way to tell that call apart from one already
+executing: both are a `tool_call` with no `tool_result` yet, so the trace row
+read "running…" (and the trace header "Thinking…") before the user had even
+seen, let alone answered, the "Confirm tool execution" prompt (found
+live-testing `document_access`'s `summarize_document` gate, #2177).
+
+**Problem, part 2 (one prompt per call).** The original gate raised one
+`interrupt()` per gated tool call, sequentially — so "summarize every
+document in this folder" meant one confirmation click per document. This was
+pure friction, not extra safety: cancelling any ONE call already skipped the
+WHOLE batch (`FredHitlMiddleware`'s established cancel semantics — no tool of
+the batch executes), so the outcome was already all-or-nothing regardless of
+how many times the human was asked.
+
+**What changed.** `FredHitlMiddleware.aafter_model` now runs in two passes:
+collect every tool call the gate decides needs approval (`GatedToolCall`,
+`fred_runtime/react/middleware/hitl.py`), then raise exactly ONE combined
+`interrupt()` covering all of them — proceed executes the whole batch,
+cancel skips it entirely, identical semantics to before, asked once instead
+of N times.
+
+`HumanInputRequest` gains a new field, `pending_calls:
+tuple[PendingToolCall, ...]` (`fred_sdk/contracts/runtime.py`) — one entry
+per gated call (`tool_call_id`, `tool_name`, `args_preview`), replacing the
+single-call `metadata.tool_name`/`tool_args_preview` keys entirely (no other
+caller read them — grepped clean before removing). This IS a wire-shape
+change (a new typed field, not an addition to the open `metadata` bag), so
+both `libs/fred-runtime`'s OpenAPI spec and the frontend's generated
+`runtimeOpenApi.ts` were regenerated (`make update-runtime-api`) — see the
+new `PendingToolCall` type there.
+
+The approval `question`/`title` text is generic ("Confirm 3 tool
+executions"/lists the N tool names) rather than merging per-call
+`HitlSpec.question` overrides (#1973) — no in-tree capability sets one today,
+and there is no sound way to combine N arbitrary override sentences; a
+capability's override still applies verbatim whenever its call is the only
+one gated.
+
+`useChatSse.ts`'s `awaiting_human` handler forwards `request.pending_calls`
+into the frontend's `AwaitingHumanEvent.payload` (the legacy `HitlPayload`
+type already has an open `[key: string]: any` index signature, so no change
+needed there). The trace-status derivation
+(`traceUtils.statusForEntry`/`traceSummary`) takes `pendingToolCallIds:
+string[]` instead of a single id, so every call in a batch reads "awaiting
+confirmation" simultaneously, not just the first. See `COMPONENT-UX.md`'s
+`TraceEntryRow` entry for the UI side.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

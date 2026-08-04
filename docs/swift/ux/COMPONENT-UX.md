@@ -334,6 +334,23 @@ per-component magic numbers.
 
 #### Resolved
 
+- **Tool step showed "running" before the HITL confirmation was even answered, and one
+  confirmation was asked per document instead of once for the whole folder (2026-08-03)** —
+  a HITL-gated tool call (`document_access`'s `summarize_document` in particular) rendered its
+  trace row as `running…` (pending status, same as any in-flight call) the instant the model
+  proposed it, well before the user had answered the "Confirm tool execution" prompt: the
+  backend streams the `ToolCallRuntimeEvent` when the model node commits, a separate and
+  earlier graph step than the HITL gate that pauses for approval, and the two are otherwise
+  indistinguishable to `statusForEntry()` (no result yet either way). Separately, asking to
+  summarize N documents meant N sequential confirmation prompts — pure friction, since
+  cancelling any one already skipped the whole batch (#2177).
+  `TraceStatus` gains `awaiting_confirmation`; `HumanInputRequest.pending_calls` (a real typed
+  field now, replacing an interim `metadata.tool_call_id` — see `RUNTIME-EXECUTION-CONTRACT.md`
+  §8.36) carries every gated call's id in ONE combined prompt, so `statusForEntry`/`traceSummary`
+  take a `pendingToolCallIds: string[]` and every row in a batch reads "awaiting confirmation…"
+  (same amber pulse as `pending`) simultaneously, not just the first. The trace header follows
+  suit via `TraceSummary.awaitingConfirmation`.
+
 - **Step numbers + curated discriminator (2026-07-30, #2172)** — two calls to the same tool
   rendered as byte-identical rows ("READING QUERY" ×2), because the redaction rule from
   #1774/CHAT-13 shows neither the raw tool name nor the arguments. Rows now carry a permanent

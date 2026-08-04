@@ -14,6 +14,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
@@ -134,6 +135,7 @@ export function useChatSse(
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
   const dispatch = useDispatch();
+  const { i18n } = useTranslation();
 
   const abortRef = useRef<AbortController | null>(null);
   // Synchronous reentrancy lock for the preflight phase of send() (token
@@ -156,6 +158,16 @@ export function useChatSse(
   // once someone else owns the slot.
   const preflightOwnerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  // The current turn's exchange_id, set once by send() and only ever read
+  // (never overwritten) by sendHitlResume — a HITL resume continues the same
+  // exchange as the turn that got interrupted, not a new one. Without this,
+  // each sendHitlResume minted its own fresh id, so the tool_call emitted
+  // before the pause and the tool_result the resume produced landed under
+  // two different exchange_ids — toThreadMessages buckets trace entries by
+  // exchange_id before groupTraceEntries can pair a call with its result by
+  // call_id, so the two could never be reunited: the trace step stayed "in
+  // progress" forever even after the result had actually arrived.
+  const currentExchangeIdRef = useRef<string | null>(null);
   const thoughtBufsRef = useRef<
     Map<
       string,
@@ -379,6 +391,10 @@ export function useChatSse(
               stage: event.request.stage ?? null,
               checkpoint_id: event.request.checkpoint_id ?? null,
               metadata: event.request.metadata ?? null,
+              // Tool calls this prompt gates (#2177 batching — one combined
+              // interrupt can cover several calls at once). Lets the trace
+              // correlate every one of them, not just a single call_id.
+              pending_calls: event.request.pending_calls ?? null,
             },
           };
           onAwaitingHuman?.(hitl);
@@ -664,10 +680,20 @@ export function useChatSse(
 
         // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
         // team carried in runtime_context (no signed grant). Always include team_id.
+        // `language` rides the same way: it drives backend-rendered copy (e.g.
+        // FredHitlMiddleware's approval prompt), which otherwise defaults to
+        // English regardless of the UI's own locale — read live off i18next
+        // (not memoized) so a mid-session language switch takes effect on the
+        // very next turn, matching the existing pattern for voice transcription
+        // (ManagedChatPage.tsx's handleTranscribeAudio).
         effectiveContext = mergeReasoningActivation(
           mergeRoutingPolicy(
             mergeContextPromptText(
-              { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
+              {
+                ...(runtimeContext ?? {}),
+                team_id: canonicalizeRuntimeTeamId(teamId),
+                language: i18n.language?.split("-")[0] || undefined,
+              },
               prep.context_prompt_text,
             ),
             prep.chat_default_profile_id,
@@ -676,6 +702,7 @@ export function useChatSse(
           prep.reasoning_enabled_model_ids,
         );
         exchangeId = uuidv4();
+        currentExchangeIdRef.current = exchangeId;
         effectiveSessionId = sessionId ?? "draft";
       } catch (err) {
         // Was previously unguarded: a rejection here (e.g. an unknown/foreign
@@ -756,6 +783,7 @@ export function useChatSse(
       onTurnStarted,
       flushPendingWrites,
       applyPreparation,
+      i18n,
     ],
   );
 
@@ -806,7 +834,11 @@ export function useChatSse(
       applyPreparation(prep);
 
       const sessionId = pending.session_id;
-      const exchangeId = uuidv4();
+      // Reuse the interrupted turn's exchange_id — see currentExchangeIdRef's
+      // definition above. Falls back to a fresh id only if a resume somehow
+      // fires with no turn ever recorded (defensive; should not happen since
+      // an AwaitingHumanEvent can only follow a send() that set the ref).
+      const exchangeId = currentExchangeIdRef.current ?? uuidv4();
       const hitlPayload = pending.payload as {
         choices?: { id: string }[];
         checkpoint_id?: string | null;
@@ -823,7 +855,14 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
-            runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
+            // `language` matters here too: a resumed turn can reach a fresh
+            // gated tool call of its own (the model replans and requests more
+            // approval-needing tools within the same resumed stream) — see
+            // the matching comment in send() above.
+            runtime_context: {
+              team_id: canonicalizeRuntimeTeamId(teamId),
+              language: i18n.language?.split("-")[0] || undefined,
+            },
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
@@ -846,7 +885,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation],
+    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation, i18n],
   );
 
   // Eager prep (RFC §3.7): call prepare-execution at chat open — not only

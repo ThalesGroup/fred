@@ -489,6 +489,11 @@ export type HumanChoiceOption = {
   id: string;
   label: string;
 };
+export type PendingToolCall = {
+  args_preview?: string;
+  tool_call_id?: string;
+  tool_name: string;
+};
 export type HumanInputRequest = {
   checkpoint_id?: string | null;
   choices?: HumanChoiceOption[];
@@ -496,6 +501,7 @@ export type HumanInputRequest = {
   metadata?: {
     [key: string]: string | number | number | boolean | null;
   };
+  pending_calls?: PendingToolCall[];
   question?: string | null;
   stage?: string | null;
   title?: string | null;

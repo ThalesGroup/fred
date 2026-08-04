@@ -65,6 +65,12 @@ vi.mock("react-redux", () => ({
   useDispatch: () => dispatchMock,
 }));
 
+// Fixed UI locale so language-forwarding tests are deterministic — no other
+// test in this file inspects request bodies, so a fixed value here is safe.
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ i18n: { language: "fr-FR" } }),
+}));
+
 vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: {
     ensureFreshToken: vi.fn(async () => true),
@@ -523,6 +529,46 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(latest.messages).toHaveLength(1);
     expect(latest.messages[0].parts[0]).toMatchObject({ type: "text", text: "world" });
     expect(latest.waitResponse).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  // Backend-rendered copy (e.g. FredHitlMiddleware's approval prompt) reads
+  // runtime_context.language — it silently defaulted to English regardless of
+  // the UI's own locale because nothing ever sent it. Fixed by reading the
+  // live i18next language (mocked to "fr-FR" for this file, see the
+  // react-i18next mock above) into every request's runtime_context.
+  it("send() forwards the UI language into runtime_context", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.runtime_context.language).toBe("fr");
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() forwards the UI language into runtime_context", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+    const pendingHitl: AwaitingHumanEvent = {
+      type: "awaiting_human",
+      session_id: "session-1",
+      exchange_id: "exch-1",
+      payload: { checkpoint_id: "cp-1" },
+    };
+
+    await act(async () => {
+      await latest.sendHitlResume(pendingHitl, "proceed");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.runtime_context.language).toBe("fr");
     fetchSpy.mockRestore();
   });
 });
