@@ -32,7 +32,7 @@ up" cycle) before starting any backend. Known ports, for when you need to query 
 | Service | Port | Notes |
 |---|---|---|
 | Keycloak | 8080 | |
-| OpenSearch | 9200 | Dashboards UI on 5601 |
+| OpenSearch | 9200 | **HTTPS only, with basic auth** — a plain `http://localhost:9200` gets no reply at all (curl exit 52), it is not merely "not up". Use `curl -sk -u admin:<pass> https://localhost:9200/...` (`-k` because the compose stack's cert is self-signed). Default creds come from `docker-compose-opensearch.yml`'s `OPENSEARCH_ADMIN`/`OPENSEARCH_ADMIN_PASSWORD` env vars (falls back to `admin` / `Azerty123_` if unset in `fred-deployment-factory/docker/.env`) — check that file rather than assuming the fallback still holds. Dashboards UI on 5601. |
 | Temporal | 7233 (gRPC) | Web UI on 8233 |
 | Grafana | 3002 | if the developer has it up — not part of `make docker-up` by default |
 
@@ -114,7 +114,7 @@ session if it's been a while — it's the target spec, not always the current di
    records must appear here and **only** here — if you see one land in OpenSearch's generic
    log index, that's a bug (`StoreEmitHandler` is supposed to hard-drop `AUDIT_LOGGER_NAME`
    records).
-2. **OpenSearch** (`curl localhost:9200/app-logs-index/_search`, or Dashboards on 5601) — the
+2. **OpenSearch** (`curl -sk -u admin:<pass> https://localhost:9200/app-logs-index/_search`, or Dashboards on 5601) — the
    generic durable app-log store, fed by the same root logger as stdout via `StoreEmitHandler`.
    Fine for anything except audit content and raw prompt/response/tool-argument text (never
    supposed to appear in either stream — check for it if you're chasing a content-leak report).

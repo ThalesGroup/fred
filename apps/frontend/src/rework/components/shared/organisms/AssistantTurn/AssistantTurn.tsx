@@ -36,9 +36,19 @@ interface AssistantTurnProps {
   uiParts: RawUiPart[];
   tokenUsage?: TokenUsage | null;
   isStreaming: boolean;
+  /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
+  pendingToolCallIds?: readonly string[] | null;
 }
 
-export function AssistantTurn({ text, traceMessages, sources, uiParts, tokenUsage, isStreaming }: AssistantTurnProps) {
+export function AssistantTurn({
+  text,
+  traceMessages,
+  sources,
+  uiParts,
+  tokenUsage,
+  isStreaming,
+  pendingToolCallIds,
+}: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
@@ -68,7 +78,17 @@ export function AssistantTurn({ text, traceMessages, sources, uiParts, tokenUsag
   return (
     <div className={styles.turn}>
       {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
-      {traceMessages.length > 0 && <ThoughtTrace messages={traceMessages} done={!isStreaming} />}
+      {/* pendingToolCallIds is forwarded regardless of isStreaming: the SSE
+          stream itself ends the instant the backend pauses for HITL approval
+          (the interrupt closes the response), so isStreaming/waitResponse is
+          already false by the time the confirmation prompt is showing — the
+          exact moment this status needs to apply. Safe unconditionally: it
+          can only ever match a combo entry that both shares one of these
+          globally-unique call_ids AND still has no result, which a genuinely
+          completed historical turn never does. */}
+      {traceMessages.length > 0 && (
+        <ThoughtTrace messages={traceMessages} done={!isStreaming} pendingToolCallIds={pendingToolCallIds} />
+      )}
 
       <AssistantMessage
         text={text}

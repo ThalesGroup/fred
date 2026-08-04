@@ -28,17 +28,14 @@ Why this module exists:
   `document_uid` this tool's caller needs), but there is no runtime coupling:
   the uid can equally come from the conversation's attached-files list.
 
-Deliberately NOT declaring `hitl_specs()` (RFC §5.4) yet, even though a
-per-call HITL gate was the original design (admission + approval, defense in
-depth): ReAct V2's HITL resume is currently broken end to end for EVERY
-gated tool, not specific to this one (#2179 — `_validate_session_checkpoint_access`
-only understands the legacy Graph runtime's hand-rolled checkpoint
-convention; ReAct V2's native LangGraph checkpoint never matches it).
-Shipping with `require=True` today would mean every approval attempt dead-
-ends in a 409 — strictly worse than no gate at all. Re-add
-`hitl_specs() -> [HitlSpec(tool="summarize_document", require=True)]` once
-#2179 is fixed; admission control (`ADMIN_GATED` below) is the sole
-governance layer until then.
+`hitl_specs()` (RFC §5.4) gates `summarize_document` behind human approval by
+default — defense in depth alongside admission control (`ADMIN_GATED` below):
+admission decides whether an agent can select this tool at all, HITL decides
+whether each individual call still needs a human's proceed/cancel. The gate
+is configurable per agent instance via `require_confirmation` (default
+`True`), not hardcoded — an admin who has already reviewed and trusts this
+agent's usage can turn it off. (#2179, ReAct V2 HITL resume dead-ending in a
+409, blocked this until it was fixed — see `RUNTIME-EXECUTION-CONTRACT.md`.)
 
 Doctrine (RFC §3.5, §3.8, §10) — same as `document_access`:
 - the capability reaches the platform ONLY through the typed
@@ -63,6 +60,8 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityManifest,
     EmptyModel,
+    HitlGateRequest,
+    HitlSpec,
 )
 from fred_sdk.contracts.context import (
     ToolContentBlock,
@@ -154,13 +153,16 @@ def _document_tool_failure(
 class DocumentSummarizeConfig(BaseModel):
     """
     Agent-creation / stored config of the document-summarize capability
-    (RFC §3.2). The single field mirrors what `document_access` used to carry
-    for this tool.
+    (RFC §3.2, #2177).
     """
 
     # Per-agent default AND hard cap for summarize_document's summary length
     # (chars). None = built-in default, caller's request honored verbatim.
     summarize_max_chars: int | None = Field(default=None, ge=200, le=20_000)
+    # Whether summarize_document pauses for human proceed/cancel before each
+    # call (RFC §5.4). Defaults to on — an admin who trusts this agent's
+    # usage can turn it off per instance; see `hitl_specs()`.
+    require_confirmation: bool = True
 
 
 class DocumentSummarizeCapability(
@@ -181,6 +183,14 @@ class DocumentSummarizeCapability(
         description="capability.document_summarize.description",
         icon="summarize",
         config_fields=[
+            FieldSpec(
+                key="require_confirmation",
+                type="boolean",
+                title="capability.document_summarize.fields.require_confirmation.title",
+                description="capability.document_summarize.fields.require_confirmation.description",
+                default=True,
+                ui=UIHints(group="safety"),
+            ),
             FieldSpec(
                 key="summarize_max_chars",
                 type="integer",
@@ -318,3 +328,32 @@ class DocumentSummarizeCapability(
             return result.summary, artifact
 
         return [summarize_document]
+
+    def hitl_specs(self) -> Sequence[HitlSpec]:
+        """
+        `summarize_document` is gated by default, per instance configurable
+        (#2177) — `require=False` defers to `_confirmation_required` instead
+        of hardcoding the decision, the same `when`-predicate mechanism
+        `document_access` already relies on for its own conditional scope
+        fields (RFC §5.4). The predicate reads the resolved instance config
+        fresh at gate time (`request.context.config`), so it always reflects
+        the CURRENT `require_confirmation` value, not whatever was true when
+        `hitl_specs()` itself was called (assembly time, no per-turn context
+        yet).
+        """
+
+        return [
+            HitlSpec(
+                tool="summarize_document",
+                require=False,
+                when=_confirmation_required,
+            )
+        ]
+
+
+def _confirmation_required(request: HitlGateRequest) -> bool:
+    """Whether this agent instance still wants a human's proceed/cancel
+    before `summarize_document` runs — the resolved `require_confirmation`
+    config value (default `True`, see `DocumentSummarizeConfig`)."""
+
+    return bool(request.context.config.require_confirmation)

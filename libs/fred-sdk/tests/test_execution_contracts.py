@@ -302,6 +302,82 @@ def test_to_legacy_context_resume_action() -> None:
 
 
 # ---------------------------------------------------------------------------
+# interrupt_id — distinct from checkpoint_id, never aliased (#2216)
+# ---------------------------------------------------------------------------
+
+
+def test_interrupt_id_defaults_to_none_and_is_independent_of_checkpoint_id() -> None:
+    req = RuntimeExecuteRequest(agent_id="my-agent", input="hello")
+    assert req.interrupt_id is None
+    assert req.checkpoint_id is None
+
+
+def test_checkpoint_id_alone_is_accepted_graph_v2_shape() -> None:
+    # Legacy Graph V2 resume: checkpoint_id set, interrupt_id absent.
+    req = RuntimeExecuteRequest(
+        agent_id="my-agent",
+        input="",
+        resume_payload={"choice_id": "ok"},
+        checkpoint_id="cp-1",
+    )
+    assert req.checkpoint_id == "cp-1"
+    assert req.interrupt_id is None
+
+
+def test_interrupt_id_alone_is_accepted_react_v2_shape() -> None:
+    # ReAct V2 resume: interrupt_id set, checkpoint_id absent.
+    req = RuntimeExecuteRequest(
+        agent_id="my-agent",
+        input="",
+        resume_payload={"choice_id": "ok"},
+        interrupt_id="interrupt-a",
+    )
+    assert req.interrupt_id == "interrupt-a"
+    assert req.checkpoint_id is None
+
+
+def test_checkpoint_id_and_interrupt_id_together_is_rejected() -> None:
+    # #2216: the two fields identify two different runtimes' resume — a
+    # request naming both is malformed, not "extra detail", and must be
+    # rejected at the wire boundary rather than silently prioritized.
+    with pytest.raises(Exception, match="mutually exclusive"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent",
+            input="",
+            resume_payload={"choice_id": "ok"},
+            checkpoint_id="cp-1",
+            interrupt_id="interrupt-a",
+        )
+
+
+def test_interrupt_id_without_resume_payload_is_rejected() -> None:
+    with pytest.raises(Exception, match="interrupt_id is only valid together"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent", input="hello", interrupt_id="interrupt-a"
+        )
+
+
+def test_to_legacy_context_carries_interrupt_id_when_set() -> None:
+    req = RuntimeExecuteRequest(
+        agent_id="my-agent",
+        input="",
+        session_id="sess-react-v2",
+        interrupt_id="interrupt-a",
+        resume_payload={"choice_id": "proceed"},
+        runtime_context=RuntimeContext(user_id="alice"),
+    )
+    ctx = req.to_legacy_context()
+    assert ctx["interrupt_id"] == "interrupt-a"
+    assert "checkpoint_id" not in ctx  # never populated together
+
+
+def test_to_legacy_context_omits_interrupt_id_when_unset() -> None:
+    req = RuntimeExecuteRequest(agent_id="my-agent", input="hello")
+    ctx = req.to_legacy_context()
+    assert "interrupt_id" not in ctx
+
+
+# ---------------------------------------------------------------------------
 # TurnPersistedEvent — included in RuntimeEvent union
 # ---------------------------------------------------------------------------
 

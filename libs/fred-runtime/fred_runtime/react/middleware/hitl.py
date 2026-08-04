@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +32,7 @@ from fred_sdk.contracts.models import ToolApprovalPolicy
 from fred_sdk.contracts.runtime import (
     HumanChoiceOption,
     HumanInputRequest,
+    PendingToolCall,
 )
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.agents.middleware.types import hook_config
@@ -91,85 +92,208 @@ def _is_french_language(language: str | None) -> bool:
     return language.strip().lower().replace("_", "-").startswith("fr")
 
 
+@dataclass(frozen=True)
+class GatedToolCall:
+    """One tool call the gate decided needs human approval, collected before
+    the single combined interrupt is raised (#2177 batching, see
+    `PendingToolCall`)."""
+
+    tool_call_id: str | None
+    tool_name: str
+    tool_args: dict[str, object]
+    # The capability `HitlSpec.question` override (#1973), if any. Used
+    # verbatim only in the single-call case — see `build_tool_approval_request`.
+    question: str | None
+
+
+def _humanize_tool_name(name: str) -> str:
+    """
+    Display form of a raw tool name for a human-facing approval prompt:
+    "Summarize Document", not the bare `summarize_document` identifier — a
+    snake_case function name is an internal detail, not something to show the
+    person deciding whether to approve it. Deliberately a plain title-case
+    (no verb/provider-aware humanization like the frontend's
+    `humanizeToolName()` in traceUtils.ts): that richer logic lives client-side
+    for the trace UI, and duplicating it here for a one-line approval prompt
+    would outweigh the benefit. Tool names are inherently English identifiers,
+    so — matching the trace UI's own convention — this stays in English even
+    inside the French copy below.
+    """
+
+    return name.replace("_", " ").strip().title()
+
+
+def _single_call_question(call: GatedToolCall, *, is_fr: bool) -> str:
+    if call.question:
+        return call.question
+    display_name = _humanize_tool_name(call.tool_name)
+    if is_fr:
+        return (
+            f"L'agent souhaite exécuter « {display_name} ». "
+            "Cette action peut modifier un état ou déclencher une action externe. "
+            "Voulez-vous continuer ?"
+        )
+    return (
+        f"The agent wants to execute {display_name}. "
+        "This may modify state or trigger an external action. "
+        "Do you want to continue?"
+    )
+
+
+def _describe_batch(calls: Sequence[GatedToolCall]) -> str:
+    """
+    Human-readable, deduplicated tool listing for a batched approval prompt:
+    "Summarize Document (×3)", not "summarize_document, summarize_document,
+    summarize_document" — repeating the same raw identifier N times says
+    nothing the trace's own step count doesn't already say, and reads as
+    noise on top of exposing an internal name.
+    """
+
+    order: list[str] = []
+    counts: dict[str, int] = {}
+    for c in calls:
+        if c.tool_name not in counts:
+            order.append(c.tool_name)
+        counts[c.tool_name] = counts.get(c.tool_name, 0) + 1
+    return ", ".join(
+        _humanize_tool_name(name) + (f" (×{counts[name]})" if counts[name] > 1 else "")
+        for name in order
+    )
+
+
+def _batch_question(calls: Sequence[GatedToolCall], *, is_fr: bool) -> str:
+    # Per-call `HitlSpec.question` overrides are deliberately not merged here:
+    # no in-tree capability sets one today (only `require=True`), and there is
+    # no sound way to combine N arbitrary override sentences into one — the
+    # override still applies verbatim whenever it is the ONLY gated call.
+    names = _describe_batch(calls)
+    if is_fr:
+        return (
+            f"L'agent souhaite exécuter {len(calls)} actions : {names}. "
+            "Ces actions peuvent modifier un état ou déclencher des actions externes. "
+            "Voulez-vous continuer ?"
+        )
+    return (
+        f"The agent wants to execute {len(calls)} actions: {names}. "
+        "These may modify state or trigger external actions. "
+        "Do you want to continue?"
+    )
+
+
 def build_tool_approval_request(
     *,
     binding: BoundRuntimeContext,
-    tool_name: str,
-    tool_args: dict[str, object],
-    question: str | None = None,
+    calls: Sequence[GatedToolCall],
 ) -> HumanInputRequest:
     """
-    Build the human approval prompt for one pending tool execution.
+    Build the human approval prompt gating one or more pending tool calls.
 
     Why this exists:
     - the HITL gate needs one structured human question when approval is
       enabled; this payload is a frozen wire contract with the frontend
       (`AwaitingHumanRuntimeEvent.request`) — do not change its shape
+    - `calls` may hold more than one entry (#2177 batching): the model can
+      emit several calls to the same gated tool in one turn (e.g. summarizing
+      every document in a folder), and proceed/cancel already applies to the
+      whole set atomically — `aafter_model` raises exactly one combined
+      interrupt for all of them instead of one prompt per call
 
     How to use:
-    - call from the approval gate with the current tool name and args
-    - `question` is the capability `HitlSpec.question` override (#1973):
-      used verbatim in place of the default copy (the capability owns its
-      i18n); title, choices, and wire shape stay unchanged
+    - call from the approval gate with every `GatedToolCall` needing approval
+      in this turn (never empty — the caller only invokes this when at least
+      one call needs approval)
+    - each call's own `tool_call_id`/`tool_name`/args preview rides in
+      `HumanInputRequest.pending_calls` so the frontend trace can correlate
+      each gated `ToolCallRuntimeEvent` with this same prompt — the model
+      node commits and streams those events before this gate ever runs
+      (separate graph step), so without this the UI cannot tell "awaiting
+      your confirmation" apart from "already executing"
     """
 
-    if _is_french_language(binding.runtime_context.language):
-        return HumanInputRequest(
-            stage="tool_approval",
-            title="Confirmer l'exécution de l'outil",
-            question=question
-            or (
-                f"L'agent souhaite exécuter `{tool_name}`. "
-                "Cette action peut modifier un état ou déclencher une action externe. "
-                "Veux-tu continuer ?"
-            ),
-            choices=(
-                HumanChoiceOption(
-                    id="proceed",
-                    label="Continuer",
-                    description="Exécuter cet outil maintenant.",
-                    default=True,
-                ),
-                HumanChoiceOption(
-                    id="cancel",
-                    label="Annuler",
-                    description="Ne pas exécuter cet outil et laisser l'agent se replanifier.",
-                ),
-            ),
-            free_text=True,
-            metadata={
-                "tool_name": tool_name,
-                "tool_args_preview": _truncate_for_human_review(tool_args),
-            },
+    if not calls:
+        raise ValueError(
+            "build_tool_approval_request() requires at least one GatedToolCall; "
+            "the caller must only invoke this when the gate has decided at "
+            "least one call needs approval."
         )
 
-    return HumanInputRequest(
-        stage="tool_approval",
-        title="Confirm tool execution",
-        question=question
-        or (
-            f"The agent wants to execute `{tool_name}`. "
-            "This may modify state or trigger an external action. "
-            "Do you want to continue?"
-        ),
-        choices=(
+    is_fr = _is_french_language(binding.runtime_context.language)
+    pending_calls = tuple(
+        PendingToolCall(
+            tool_call_id=call.tool_call_id or "",
+            tool_name=call.tool_name,
+            args_preview=_truncate_for_human_review(call.tool_args),
+        )
+        for call in calls
+    )
+    question = (
+        _single_call_question(calls[0], is_fr=is_fr)
+        if len(calls) == 1
+        else _batch_question(calls, is_fr=is_fr)
+    )
+
+    if is_fr:
+        title = (
+            "Confirmer l'exécution de l'outil"
+            if len(calls) == 1
+            else f"Confirmer l'exécution de {len(calls)} outils"
+        )
+        choices = (
+            HumanChoiceOption(
+                id="proceed",
+                label="Continuer",
+                description="Exécuter cet outil maintenant."
+                if len(calls) == 1
+                else "Exécuter ces outils maintenant.",
+                default=True,
+            ),
+            HumanChoiceOption(
+                id="cancel",
+                label="Annuler",
+                description="Ne pas exécuter cet outil et laisser l'agent se replanifier."
+                if len(calls) == 1
+                else "Ne pas exécuter ces outils et laisser l'agent se replanifier.",
+            ),
+        )
+    else:
+        title = (
+            "Confirm tool execution"
+            if len(calls) == 1
+            else f"Confirm {len(calls)} tool executions"
+        )
+        choices = (
             HumanChoiceOption(
                 id="proceed",
                 label="Proceed",
-                description="Run this tool now.",
+                description="Run this tool now."
+                if len(calls) == 1
+                else "Run these tools now.",
                 default=True,
             ),
             HumanChoiceOption(
                 id="cancel",
                 label="Cancel",
-                description="Do not run this tool; let the agent replan.",
+                description="Do not run this tool; let the agent replan."
+                if len(calls) == 1
+                else "Do not run these tools; let the agent replan.",
             ),
-        ),
-        free_text=True,
-        metadata={
-            "tool_name": tool_name,
-            "tool_args_preview": _truncate_for_human_review(tool_args),
-        },
+        )
+
+    return HumanInputRequest(
+        stage="tool_approval",
+        title=title,
+        question=question,
+        choices=choices,
+        # Deliberately False (P1): a free-text answer here has nowhere to go
+        # — this gate only distinguishes cancel vs not-cancel
+        # (_is_cancelled_human_decision), and the legacy free-text/"notes"
+        # injection into the graph was already dead code before ReAct V2
+        # (see this function's docstring). Showing the box anyway silently
+        # discarded whatever the human typed and treated it as an implicit
+        # "proceed" — confusing, not a real second input path. Revisit once
+        # there is an actual consumer for free-text tool-approval answers.
+        free_text=False,
+        pending_calls=pending_calls,
     )
 
 
@@ -199,8 +323,11 @@ class FredHitlMiddleware(AgentMiddleware):
 
     Why this exists:
     - risky tool calls must pause for human approval with Fred's localized
-      `HumanInputRequest` payload, one `interrupt()` per gated call,
-      sequentially — the wire format and resume flow are frozen contracts
+      `HumanInputRequest` payload — the wire format and resume flow are frozen
+      contracts. All gated calls from one model turn share a SINGLE combined
+      `interrupt()` (#2177 batching): proceed/cancel already applies to the
+      whole batch atomically (see below), so a folder-wide "summarize every
+      document" no longer means one confirmation click per document
     - filesystem tool calls are deterministically re-anchored against the
       current browsing state before execution (and before the approval preview,
       so the human reviews the real arguments)
@@ -309,32 +436,48 @@ class FredHitlMiddleware(AgentMiddleware):
         tool_calls = getattr(last, "tool_calls", None) or []
         if not tool_calls:
             return None
+
+        # Pass 1: filesystem rewrite (every call, gated or not) + collect
+        # every call the gate decides needs approval. Rewriting must still
+        # happen for ungated calls too — unchanged from before batching.
+        gated: list[GatedToolCall] = []
         for tc in tool_calls:
             name = tc.get("name") if isinstance(tc, dict) else None
             raw_args = tc.get("args") if isinstance(tc, dict) else {}
             args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
-            if name:
-                rewritten = rewrite_filesystem_tool_arguments(
-                    name,
-                    dict(args),
-                    messages=messages,
-                    available_tool_names=self._available_tool_names,
-                )
-                if rewritten != args:
-                    args = rewritten
-                    tc["args"] = args
+            call_id = tc.get("id") if isinstance(tc, dict) else None
             if not name:
                 continue
+            rewritten = rewrite_filesystem_tool_arguments(
+                name,
+                dict(args),
+                messages=messages,
+                available_tool_names=self._available_tool_names,
+            )
+            if rewritten != args:
+                args = rewritten
+                tc["args"] = args
             needs_approval, question = self._gate_decision(name, tc)
             if needs_approval:
-                request = build_tool_approval_request(
-                    binding=self._binding,
-                    tool_name=name,
-                    tool_args=args,
-                    question=question,
+                gated.append(
+                    GatedToolCall(
+                        tool_call_id=call_id,
+                        tool_name=name,
+                        tool_args=args,
+                        question=question,
+                    )
                 )
-                decision = interrupt(request.model_dump(mode="json"))
-                if _is_cancelled_human_decision(decision):
-                    # Skip the whole tool batch and let the model replan.
-                    return {"jump_to": "model"}
+
+        # Pass 2: exactly one combined interrupt for every call that needs
+        # approval — proceed/cancel already applies to the whole batch
+        # atomically (a cancel skips ALL of it, gated or not — see below),
+        # so a partial per-call answer was never meaningful even before this.
+        if not gated:
+            return None
+        request = build_tool_approval_request(binding=self._binding, calls=gated)
+        decision = interrupt(request.model_dump(mode="json"))
+        if _is_cancelled_human_decision(decision):
+            # Skip the whole tool batch (gated and ungated calls alike) and
+            # let the model replan.
+            return {"jump_to": "model"}
         return None

@@ -1313,6 +1313,12 @@ def run_interactive_chat(
                 req = hitl.get("request") or {}
                 choices = req.get("choices") or []
                 free_text = req.get("free_text", False)
+                # #2216: exactly one of these is ever set on a real pending
+                # request — checkpoint_id for the legacy Graph V2 runtime,
+                # interrupt_id (LangGraph's own Interrupt.id) for ReAct V2.
+                # Echoed back verbatim on resume; never aliased for each other.
+                resume_checkpoint_id = req.get("checkpoint_id")
+                resume_interrupt_id = req.get("interrupt_id")
                 if free_text:
                     try:
                         answer = input("Your answer: ").strip()
@@ -1349,6 +1355,8 @@ def run_interactive_chat(
                     verbose=verbose,
                     stream=(current_mode == "stream"),
                     color_enabled=color_enabled,
+                    checkpoint_id=resume_checkpoint_id,
+                    interrupt_id=resume_interrupt_id,
                     resume_payload=resume_value,
                     inline_tuning=current_inline_tuning or None,
                 )

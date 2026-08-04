@@ -83,7 +83,8 @@
 /* In-progress dots pulse by fading their own colour toward
    surface-container-low, never through opacity — opacity would let the
    timeline rail show through the dot underneath it. */
-.dot_pending {
+.dot_pending,
+.dot_awaiting_confirmation {
   --pulse-color: var(--warning);
   animation: pulse 1.2s ease-in-out infinite;
   background: var(--warning);

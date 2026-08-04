@@ -49,9 +49,10 @@ The frame, in `create_agent` middleware list order:
        Placed next to TracingKpiMiddleware (same job, the other axis: model
        calls vs tool calls).
     7. FredHitlMiddleware            — `after_model`: filesystem tool-argument
-       rewrite + the human tool-approval gate (RFC §5.4). Sequential per-call
-       `interrupt()`s with the legacy `HumanInputRequest` payload; cancel jumps
-       back to the model without executing tools.
+       rewrite + the human tool-approval gate (RFC §5.4). ONE combined
+       `interrupt()` per turn covering every gated call at once (#2177
+       batching) with the `HumanInputRequest` payload; cancel jumps back to
+       the model without executing any tool of the batch.
     8. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
        `after_model` hooks run in REVERSE list order, so the limit blocks

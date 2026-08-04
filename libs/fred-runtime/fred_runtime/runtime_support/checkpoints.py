@@ -30,11 +30,12 @@ from collections.abc import Mapping
 from typing import Protocol, cast
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 
 
 class CheckpointTupleLike(Protocol):
     checkpoint: Checkpoint
+    pending_writes: list[PendingWrite] | None
 
 
 class AsyncCheckpointReader(Protocol):
@@ -71,7 +72,18 @@ async def load_checkpoint(
     thread_id: str,
     checkpoint_id: str | None = None,
     checkpoint_ns: str = "",
-) -> Checkpoint | None:
+) -> tuple[Checkpoint, list[PendingWrite]] | None:
+    """
+    Load one checkpoint together with its pending (unresolved) writes.
+
+    Why pending_writes is returned alongside the checkpoint:
+    - a LangGraph-native `interrupt()` (ReAct V2's `create_agent()` graphs)
+      never stamps Fred's hand-rolled `graph_v2` channel-value markers; the
+      only trace it leaves is a pending write on the fixed `"__interrupt__"`
+      channel for the task that paused. Callers that need to tell "waiting on
+      human input" apart from "turn is simply done" for a non-graph_v2
+      checkpoint must inspect this list.
+    """
     if checkpointer is None:
         return None
     checkpoint_tuple = await checkpointer.aget_tuple(
@@ -83,4 +95,4 @@ async def load_checkpoint(
     )
     if checkpoint_tuple is None:
         return None
-    return checkpoint_tuple.checkpoint
+    return checkpoint_tuple.checkpoint, list(checkpoint_tuple.pending_writes or [])

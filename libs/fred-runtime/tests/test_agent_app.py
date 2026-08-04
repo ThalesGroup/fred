@@ -27,6 +27,7 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.routing import APIRoute
@@ -51,6 +52,7 @@ from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -58,12 +60,15 @@ from fred_sdk.contracts.context import (
     InvocationScope,
     PortableContext,
     PortableEnvironment,
+    RuntimeContext,
 )
 from fred_sdk.contracts.execution import (
     RuntimeExecuteRequest,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk.contracts.runtime import HistoryStorePort
 from langchain_core.messages import AIMessage
+from langgraph.checkpoint.base import empty_checkpoint
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -1655,7 +1660,7 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
     ):
         _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": checkpoint_id or "cp-1", "channel_values": {}}
+        return {"id": checkpoint_id or "cp-1", "channel_values": {}}, []
 
     monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -1901,14 +1906,16 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
                 "pending": False,
                 "pending_checkpoint_id": "cp-1",
             },
-        }
+        }, []
 
     monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
         lambda: SimpleNamespace(
-            config=SimpleNamespace(checkpointer=object(), audience=None)
+            config=SimpleNamespace(
+                checkpointer=object(), audience=None, history_store=None
+            )
         ),
     )
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -1938,6 +1945,1288 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "checkpoint is not waiting for resume."
+
+
+async def _write_react_v2_checkpoint(
+    checkpointer, *, thread_id: str, channel_values: dict[str, Any]
+):
+    """
+    Write one ReAct-V2-shaped checkpoint through the real `FredSqlCheckpointer`
+    (the same `aput` production code uses, `graph_runtime.py::_store_pending_checkpoint`'s
+    non-legacy counterpart) — no `runtime_kind`/`pending` markers, since ReAct
+    V2's `create_agent()` never stamps those (#2179).
+    """
+
+    checkpoint = empty_checkpoint()
+    checkpoint_id = checkpoint["id"]
+    checkpoint["channel_values"] = channel_values
+    checkpoint["channel_versions"] = {key: checkpoint_id for key in channel_values}
+    return await checkpointer.aput(
+        checkpoint_config(thread_id=thread_id),
+        checkpoint,
+        {"source": "update", "step": 0, "parents": {}},
+        dict(checkpoint["channel_versions"]),
+    )
+
+
+async def _write_react_v2_interrupt(
+    checkpointer,
+    *,
+    thread_id: str,
+    interrupt_id: str,
+    task_id: str = "task-1",
+    channel_values: dict[str, Any] | None = None,
+):
+    """
+    Write one ReAct-V2 checkpoint with a pending `"__interrupt__"` write
+    carrying `interrupt_id` as LangGraph's own `Interrupt.id` (#2216) — the
+    id `_validate_session_checkpoint_access` now requires an exact match
+    against before accepting a resume. Mirrors the real production shape
+    closely enough for `_pending_react_v2_interrupt_id` to read it back
+    (`{"value": ..., "id": ...}`, matching the dict-shaped branch that
+    function handles alongside real `Interrupt` dataclass instances).
+    """
+
+    stored_config = await _write_react_v2_checkpoint(
+        checkpointer,
+        thread_id=thread_id,
+        channel_values=channel_values or {"messages": []},
+    )
+    await checkpointer.aput_writes(
+        stored_config,
+        [("__interrupt__", {"value": {"question": "proceed?"}, "id": interrupt_id})],
+        task_id=task_id,
+    )
+    return stored_config
+
+
+async def _hitl_claim_rows(checkpointer) -> list:
+    """All rows currently in `checkpoint_hitl_claim`, for asserting a
+    setup/pre-invocation failure left no claim behind (#2216)."""
+    from sqlalchemy import select
+
+    async with checkpointer.store.begin() as conn:
+        return list(
+            (await conn.execute(select(checkpointer.hitl_claim_table))).fetchall()
+        )
+
+
+def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression for #2179: a ReAct V2 checkpoint never carries `runtime_kind:
+    graph_v2`, and the `checkpoint_id` its frontend echoes back on resume is
+    actually LangGraph's `Interrupt.id` — never a real stored checkpoint id,
+    so the primary exact-id lookup always misses. `_validate_session_checkpoint_access`
+    must fall back to the thread's latest checkpoint and accept the resume by
+    finding its pending `"__interrupt__"` write whose `Interrupt.id` matches
+    the client-supplied `checkpoint_id` (#2216 tightened this from "any
+    pending interrupt" to an exact id match).
+
+    Written and read through the real `FredSqlCheckpointer` (SQLite), not a
+    mock — #2179 flagged the missing coverage as exactly this gap: no test
+    exercised a real write-then-read checkpoint round trip.
+    """
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        yield {"kind": "final", "sequence": 0, "content": "resumed"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer,
+                thread_id="session-react-v2",
+                interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-v2",
+                # LangGraph's Interrupt.id — never a real stored checkpoint
+                # id (#2179's root cause) — but exactly the id the pending
+                # write above carries (#2216's exact-match requirement).
+                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 200
+
+
+def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    The mirror-negative of the acceptance test above: a ReAct V2 checkpoint
+    with no pending `"__interrupt__"` write (turn simply finished, nothing
+    waiting for approval) must still 409 — the fallback lookup must not
+    turn into "always accept a non-graph_v2 checkpoint".
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        asyncio.run(
+            _write_react_v2_checkpoint(
+                checkpointer,
+                thread_id="session-react-v2-done",
+                channel_values={"messages": []},
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-v2-done",
+                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "checkpoint is not waiting for resume."
+
+
+def test_react_v2_interrupt_channel_constant_matches_langgraph() -> None:
+    """
+    Pins `agent_app._REACT_V2_INTERRUPT_CHANNEL` against LangGraph's own
+    value. Hardcoded rather than imported in production code because the
+    public `langgraph.constants.INTERRUPT` is itself deprecated ("removed in
+    V2.0") — this test is the tripwire: if a LangGraph upgrade changes or
+    removes that value, this fails loudly instead of silently reopening
+    #2179.
+    """
+
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        from langgraph.constants import INTERRUPT
+
+    assert agent_app_module._REACT_V2_INTERRUPT_CHANNEL == INTERRUPT
+
+
+def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> None:
+    """
+    Regression for the bug found immediately behind #2179's checkpoint fix
+    (live-tested manually): `_iterate_runtime_event_payloads` builds
+    `ReActInput(messages=())` unconditionally on a HITL resume
+    (`agent_app.py`, "messages are ignored by the codec"), but
+    `ReActInput.validate_messages` (`react_contract.py`) rejects an empty
+    tuple — every ReAct V2 resume crashed with `ReActInput.messages must
+    contain at least one message` the instant #2179's checkpoint 409 was
+    fixed and this line became reachable for the first time. Fixed by
+    bypassing validation with `model_construct` on resume, mirroring the
+    Graph-agent branch just above it, which already did this.
+
+    Uses a fake `AgentRuntime`/`Executor` (not a fake chat model) so this
+    exercises the exact `react_input` object `_iterate_runtime_event_payloads`
+    builds and passes to `executor.stream(...)`, without depending on
+    LangGraph's own interrupt/resume mechanics.
+    """
+
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
+    from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
+
+    seen: dict[str, object] = {}
+
+    class _RecordingExecutor(Executor[ReActInput, ReActOutput]):
+        async def invoke(self, input_model, config):  # noqa: ANN001
+            raise NotImplementedError
+
+        async def stream(self, input_model, config):  # noqa: ANN001
+            seen["messages"] = input_model.messages
+            yield FinalRuntimeEvent(content="resumed")
+
+    class _FakeReActRuntime(
+        AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
+    ):
+        def __init__(self, *, definition, services, capability_block=None):
+            super().__init__(definition=definition, services=services)
+            _ = capability_block
+
+        async def build_executor(self, binding: BoundRuntimeContext):
+            return _RecordingExecutor()
+
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", _FakeReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer,
+                thread_id="session-react-input-resume",
+                interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-react-input-resume",
+                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert seen["messages"] == ()
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_reuses_previous_on_resume() -> None:
+    """
+    A HITL resume must reuse the interrupted turn's exchange_id, not mint a
+    fresh one — otherwise the pre-pause tool_call and the post-resume
+    tool_result carry different exchange_ids, and the chat UI's per-exchange
+    grouping (`toThreadMessages.ts`) can never reunite them: the trace step
+    stays "in progress" forever even though the tool result did arrive
+    (found via manual live testing of the #2179 fix).
+    """
+
+    class _FakeHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            assert session_id == "s1"
+            return "exchange-42"
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload={"choice_id": "proceed"},
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _FakeHistory()),
+    )
+
+    assert resolved == "exchange-42"
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_does_not_query_history_for_a_normal_turn() -> None:
+    """A normal (non-resume) turn always mints a fresh exchange_id and must
+    not pay for a history lookup it doesn't need."""
+
+    class _FailingHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            raise AssertionError("must not be queried for a normal turn")
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload=None,
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _FailingHistory()),
+    )
+
+    assert resolved
+
+
+@pytest.mark.asyncio
+async def test_resolve_exchange_id_falls_back_when_nothing_persisted_yet() -> None:
+    """Defensive fallback: a resume against a session with no persisted
+    history yet (should not happen in practice) still gets a usable id
+    instead of `None` reaching the runtime."""
+
+    class _EmptyHistory:
+        async def latest_exchange_id(self, session_id: str) -> str | None:
+            return None
+
+    resolved = await agent_app_module._resolve_exchange_id(
+        resume_payload={"choice_id": "proceed"},
+        session_id="s1",
+        history_store=cast(HistoryStorePort, _EmptyHistory()),
+    )
+
+    assert resolved
+
+
+def test_resume_reuses_exchange_id_from_the_interrupted_turn(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    End-to-end proof through the real SQL history store: the first (pausing)
+    call and the resume that completes it must persist under the SAME
+    exchange_id.
+    """
+
+    call_count = 0
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        nonlocal call_count
+        call_count += 1
+        _ = (definition, access_token, team_id, registry)
+        yield {"kind": "final", "sequence": 0, "content": f"turn-{call_count}"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        first = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-exchange-continuity",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert first.status_code == 200
+
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer,
+                thread_id="session-exchange-continuity",
+                interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
+            )
+        )
+
+        resume = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-exchange-continuity",
+                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert resume.status_code == 200
+
+        history_store = get_runtime_context().config.history_store
+        assert history_store is not None
+        rows = asyncio.run(history_store.get("session-exchange-continuity"))
+
+    exchange_ids = {row.exchange_id for row in rows}
+    assert len(exchange_ids) == 1, (
+        f"expected one shared exchange_id across the interrupted turn and its "
+        f"resume, got {exchange_ids}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# #2216 P1 — HITL resume bound to a unique interrupt occurrence
+# ---------------------------------------------------------------------------
+
+
+def _make_counting_fake_iterate():
+    """
+    Shared fake `_iterate_runtime_event_payloads` for tests that only
+    exercise the READ-ONLY early gate (`_validate_session_checkpoint_access`
+    — the interrupt_id exact-match check): records every call's
+    `interrupt_id` so a test can assert exactly which (and how many)
+    resumes reached the runtime — a request rejected by that gate never
+    reaches this function at all.
+
+    Do NOT use this for tests that need the durable single-use CLAIM to be
+    exercised (replay-after-success, concurrent duplicates): the claim is
+    acquired deep inside the real `_iterate_runtime_event_payloads`, so
+    faking that whole function out bypasses it entirely. Use
+    `_make_counting_react_runtime` instead for those — it fakes only
+    `ReActRuntime`/`Executor`, leaving the real claim code path intact.
+    """
+
+    calls: list[str | None] = []
+
+    async def _fake(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        calls.append(request.interrupt_id)
+        yield {"kind": "final", "sequence": 0, "content": f"turn-{len(calls)}"}
+
+    return _fake, calls
+
+
+def _make_counting_react_runtime():
+    """
+    Controllable `ReActRuntime`/`Executor` double that lets the REAL claim
+    acquisition code in `_iterate_runtime_event_payloads` run (unlike
+    `_make_counting_fake_iterate`, which bypasses that whole function).
+    `calls` records one entry per actual `executor.stream(...)` — the real
+    proof that a rejected or duplicate resume never executes the tool loop.
+    """
+
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
+    from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
+
+    calls: list[int] = []
+
+    class _RecordingExecutor(Executor[ReActInput, ReActOutput]):
+        async def invoke(self, input_model, config):  # noqa: ANN001
+            raise NotImplementedError
+
+        async def stream(self, input_model, config):  # noqa: ANN001
+            calls.append(len(calls) + 1)
+            yield FinalRuntimeEvent(content=f"resumed-{len(calls)}")
+
+    class _RecordingReActRuntime(
+        AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
+    ):
+        def __init__(self, *, definition, services, capability_block=None):
+            super().__init__(definition=definition, services=services)
+            _ = capability_block
+
+        async def build_executor(self, binding: BoundRuntimeContext):
+            return _RecordingExecutor()
+
+    return _RecordingReActRuntime, calls
+
+
+def test_resume_stale_response_cannot_approve_a_later_interrupt(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 P1 — the sequential stale-response attack:
+    1. interrupt A is pending and gets resumed with its own id.
+    2. the thread later reaches interrupt B — a DIFFERENT id.
+    3. a delayed/duplicated response carrying A's stale id must be rejected
+       (409) without ever reaching the runtime — B stays pending.
+    4. resuming with B's own id succeeds and reaches the runtime exactly
+       once.
+    """
+
+    fake_iterate, calls = _make_counting_fake_iterate()
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-stale-attack"
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        # 1. interrupt A is pending; resume it with its own id.
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+            )
+        )
+        resume_a = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert resume_a.status_code == 200
+        assert calls == ["interrupt-a"]
+
+        # 2. the thread later reaches interrupt B — a different id.
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-b"
+            )
+        )
+        assert "interrupt-a" != "interrupt-b"
+
+        # 3. a stale/duplicated response for A must be rejected — and must
+        # never reach the runtime (B's tool has not executed).
+        stale_resume = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert stale_resume.status_code == 409
+        assert stale_resume.json()["detail"] == (
+            "interrupt_id does not match the pending HITL request for this session."
+        )
+        assert calls == ["interrupt-a"]  # unchanged — B never executed
+
+        # 4. resuming with B's own id succeeds, exactly once.
+        resume_b = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-b",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert resume_b.status_code == 200
+        assert calls == ["interrupt-a", "interrupt-b"]
+
+
+def test_resume_replay_after_success_does_not_execute_again(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 P1 — once an interrupt occurrence has been resumed successfully,
+    replaying the SAME response (same interrupt_id) must not execute the
+    tool a second time.
+
+    The interrupt_id match check alone would NOT catch this: nothing in
+    this fake advances the underlying checkpoint, so the replay still
+    matches the (unchanged) pending interrupt at the early, read-only gate.
+    It is the durable single-use CLAIM — acquired deep inside
+    `_iterate_runtime_event_payloads`, immediately before invocation — that
+    actually rejects it. That is also why the replay surfaces as a
+    `RuntimeErrorEvent` (HTTP 200, kind="execution_error") rather than a
+    clean 409: by the time the claim step runs, the streaming endpoint's
+    response has already started (see `_claim_hitl_resume_before_invocation`'s
+    docstring). Uses `_make_counting_react_runtime`, NOT
+    `_make_counting_fake_iterate`, specifically so the real claim code path
+    is exercised instead of bypassed.
+    """
+
+    RecordingReActRuntime, calls = _make_counting_react_runtime()
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", RecordingReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-replay"
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+            )
+        )
+        payload = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "interrupt_id": "interrupt-a",
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+
+        first = client.post("/pod/v1/agents/execute", json=payload)
+        assert first.status_code == 200
+        assert first.json().get("kind") == "final"
+        assert calls == [1]
+
+        replay = client.post("/pod/v1/agents/execute", json=payload)
+
+    assert replay.status_code == 200
+    assert replay.json().get("kind") == "execution_error"
+    assert replay.json().get("message") == "This HITL request is already being resumed."
+    assert calls == [1]  # unchanged — no second execution
+
+
+@pytest.mark.parametrize(
+    "interrupt_id",
+    [
+        pytest.param(None, id="missing"),
+        pytest.param("", id="empty"),
+        pytest.param("not-a-real-interrupt-id", id="malformed"),
+        pytest.param("a" * 32, id="unknown-but-well-formed"),
+    ],
+)
+def test_resume_rejects_non_matching_interrupt_id_variants(
+    monkeypatch, tmp_path, interrupt_id
+) -> None:
+    """
+    #2216 P1 fail-closed matrix: missing, empty, malformed, or simply
+    unknown `interrupt_id` values must all be rejected the same way as a
+    genuinely stale one — never treated as "some interrupt is pending, so
+    let it through" (the pre-#2216 behavior).
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-invalid-input"
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-real"
+            )
+        )
+
+        body: dict[str, Any] = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+        if interrupt_id is not None:
+            body["interrupt_id"] = interrupt_id
+
+        response = client.post("/pod/v1/agents/execute", json=body)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "interrupt_id does not match the pending HITL request for this session."
+    )
+
+
+def test_resume_rejects_token_belonging_to_another_thread(
+    monkeypatch, tmp_path
+) -> None:
+    """A token that is genuinely valid — but for a DIFFERENT thread's
+    pending interrupt — must not resume this thread's own pending
+    interrupt."""
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id="session-thread-a", interrupt_id="interrupt-a"
+            )
+        )
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id="session-thread-b", interrupt_id="interrupt-b"
+            )
+        )
+
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-thread-a",
+                "interrupt_id": "interrupt-b",  # belongs to thread B, not A
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "interrupt_id does not match the pending HITL request for this session."
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_resumes_have_exactly_one_winner(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 P1 — two simultaneous resume requests for the SAME pending
+    interrupt: the atomic claim (`_claim_hitl_resume_before_invocation`,
+    which `_iterate_runtime_event_payloads` calls immediately before
+    invoking the graph) must let exactly one through and reject every
+    other one, deterministically (first writer wins), never both.
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    with TestClient(app):
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        await _write_react_v2_interrupt(
+            checkpointer, thread_id="session-concurrent", interrupt_id="interrupt-a"
+        )
+
+        async def _attempt():
+            try:
+                claim = await agent_app_module._claim_hitl_resume_before_invocation(
+                    session_id="session-concurrent", interrupt_id="interrupt-a"
+                )
+                return "ok" if claim is not None else "none"
+            except RuntimeError:
+                return "rejected"
+
+        results = await asyncio.gather(*[_attempt() for _ in range(5)])
+
+    assert results.count("ok") == 1
+    assert results.count("rejected") == 4
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 — end to end through the real HTTP surface, not just the claim
+    primitive: two GENUINELY concurrent `/agents/execute` requests
+    resuming the SAME pending interrupt must result in
+    `executor.stream(...)` — the tool loop itself — running at most once.
+
+    Uses `httpx.AsyncClient` over `ASGITransport` (real concurrent
+    coroutines racing the same running app), not two `TestClient` calls
+    (synchronous, cannot overlap) and not two separate `create_agent_app`
+    instances (`get_runtime_context()` is a single process-wide global —
+    see `test_concurrent_claims_across_separate_checkpointer_instances_have_one_winner`
+    in `test_sql_checkpointer_hitl_claim.py` for the cross-replica proof at
+    the layer that constraint actually allows testing).
+    """
+
+    RecordingReActRuntime, calls = _make_counting_react_runtime()
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", RecordingReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-dup-http-concurrent"
+
+    with TestClient(app):
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        await _write_react_v2_interrupt(
+            checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+        )
+
+        payload = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "interrupt_id": "interrupt-a",
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as async_client:
+            responses = await asyncio.gather(
+                async_client.post("/pod/v1/agents/execute", json=payload),
+                async_client.post("/pod/v1/agents/execute", json=payload),
+            )
+
+    kinds = sorted(r.json().get("kind") for r in responses)
+    assert [r.status_code for r in responses] == [200, 200]
+    assert kinds == ["execution_error", "final"]
+    assert calls == [1]  # the tool loop ran exactly once
+
+
+def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 — a runtime construction failure happens BEFORE the claim is ever
+    acquired (the claim is acquired as late as possible, immediately
+    before `executor.stream(...)` — see
+    `_claim_hitl_resume_before_invocation`'s docstring and
+    `_validate_session_checkpoint_access`'s read-only guarantee). A setup
+    failure must therefore leave no claim row behind at all, so an
+    immediate retry (once the failure condition clears) succeeds without
+    waiting out any TTL.
+    """
+
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
+    from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
+
+    attempt = 0
+
+    class _FlakyReActRuntime(
+        AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
+    ):
+        def __init__(self, *, definition, services, capability_block=None):
+            super().__init__(definition=definition, services=services)
+            _ = capability_block
+
+        async def build_executor(self, binding: BoundRuntimeContext):
+            nonlocal attempt
+            attempt += 1
+            if attempt == 1:
+                raise RuntimeError("forced setup failure")
+
+            class _RecordingExecutor(Executor[ReActInput, ReActOutput]):
+                async def invoke(self, input_model, config):  # noqa: ANN001
+                    raise NotImplementedError
+
+                async def stream(self, input_model, config):  # noqa: ANN001
+                    yield FinalRuntimeEvent(content="resumed")
+
+            return _RecordingExecutor()
+
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", _FlakyReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-setup-failure"
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+            )
+        )
+        payload = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "interrupt_id": "interrupt-a",
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+
+        first = client.post("/pod/v1/agents/execute", json=payload)
+        # The runtime construction failure surfaces as a RuntimeErrorEvent
+        # payload (see `_iterate_runtime_event_payloads`'s outer except), not
+        # an HTTP error — the terminal-payload contract for a mid-turn
+        # failure on the non-streaming endpoint.
+        assert first.status_code == 200
+        assert first.json().get("kind") == "execution_error"
+
+        claim_rows = asyncio.run(_hitl_claim_rows(checkpointer))
+        assert claim_rows == []  # setup failed before any claim was acquired
+
+        retry = client.post("/pod/v1/agents/execute", json=payload)
+
+    assert retry.status_code == 200
+    assert retry.json().get("kind") == "final"
+    assert attempt == 2
+
+
+def test_resume_start_failure_releases_the_claim_for_a_retry(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 — if `astart_hitl_resume` itself fails (a transient DB error)
+    while the caller still legitimately holds 'claimed' status,
+    `_claim_hitl_resume_before_invocation` releases the row so a retry
+    does not have to wait out the TTL. Forces the failure by monkeypatching
+    `FredSqlCheckpointer.astart_hitl_resume` to raise exactly once.
+    """
+
+    RecordingReActRuntime, calls = _make_counting_react_runtime()
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", RecordingReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    real_astart = agent_app_module.FredSqlCheckpointer.astart_hitl_resume
+    attempts = 0
+
+    async def _flaky_astart(self, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("forced transient DB failure")
+        return await real_astart(self, **kwargs)
+
+    monkeypatch.setattr(
+        agent_app_module.FredSqlCheckpointer, "astart_hitl_resume", _flaky_astart
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-start-failure"
+
+    with TestClient(app) as client:
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        asyncio.run(
+            _write_react_v2_interrupt(
+                checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+            )
+        )
+        payload = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "interrupt_id": "interrupt-a",
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+
+        first = client.post("/pod/v1/agents/execute", json=payload)
+        assert first.status_code == 200
+        assert first.json().get("kind") == "execution_error"
+        assert calls == []  # never reached executor.stream(...)
+
+        claim_rows = asyncio.run(_hitl_claim_rows(checkpointer))
+        assert claim_rows == []  # released, not left stranded
+
+        retry = client.post("/pod/v1/agents/execute", json=payload)
+
+    assert retry.status_code == 200
+    assert retry.json().get("kind") == "final"
+    assert calls == [1]
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 item 3 — a cancelled turn (task cancellation, an SSE/browser
+    disconnect, or the frontend's `AbortController` firing) after the claim
+    reaches 'started' but before the turn finishes must NOT release or
+    steal the claim. This is the documented, deliberate safety-first
+    limitation (see `FredSqlCheckpointer.aclaim_hitl_resume`'s "Explicitly
+    NOT guaranteed" section): a 'started' row has no automatic recovery —
+    the occurrence stays permanently claimed until an operator purges the
+    thread. Proves both halves of that limitation directly:
+    (a) the claim row is still 'started', completely unchanged, after
+    cancellation, and
+    (b) a duplicate resume attempt for the same occurrence cannot enter the
+    executor while that claim is held.
+
+    `/agents/execute` consumes `_iterate_runtime_event_payloads` with a
+    plain `[payload async for payload in ...]` in the SAME task as the ASGI
+    request handling (no shielding, no background task) — so cancelling
+    the outer coroutine that's `await`ing the HTTP call (exactly what
+    happens when `httpx.ASGITransport` runs the app in-process) delivers a
+    real `asyncio.CancelledError` at whatever point the generator is
+    currently suspended, which is the same mechanism a real client
+    disconnect or `AbortController` ultimately triggers server-side.
+    """
+
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
+    from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
+
+    calls: list[int] = []
+    started_running = asyncio.Event()
+
+    class _HangingExecutor(Executor[ReActInput, ReActOutput]):
+        async def invoke(self, input_model, config):  # noqa: ANN001
+            raise NotImplementedError
+
+        async def stream(self, input_model, config):  # noqa: ANN001
+            calls.append(len(calls) + 1)
+            started_running.set()
+            # Never set — blocks forever, simulating a genuinely in-flight
+            # invocation. The claim is already 'started' by the time this
+            # runs (`_iterate_runtime_event_payloads` acquires it BEFORE
+            # entering `executor.stream(...)`).
+            await asyncio.Event().wait()
+            yield FinalRuntimeEvent(content="unreachable")  # pragma: no cover
+
+    class _HangingReActRuntime(
+        AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
+    ):
+        def __init__(self, *, definition, services, capability_block=None):
+            super().__init__(definition=definition, services=services)
+            _ = capability_block
+
+        async def build_executor(self, binding: BoundRuntimeContext):
+            return _HangingExecutor()
+
+    monkeypatch.setattr(agent_app_module, "ReActRuntime", _HangingReActRuntime)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    session_id = "session-cancel-mid-invocation"
+
+    with TestClient(app):
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+        await _write_react_v2_interrupt(
+            checkpointer, thread_id=session_id, interrupt_id="interrupt-a"
+        )
+        payload = {
+            "agent_id": "rags.sample.echo",
+            "input": "",
+            "session_id": session_id,
+            "interrupt_id": "interrupt-a",
+            "resume_payload": {"choice_id": "proceed"},
+            "runtime_context": {"user_id": "alice"},
+        }
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as async_client:
+            request_task = asyncio.ensure_future(
+                async_client.post("/pod/v1/agents/execute", json=payload)
+            )
+            await asyncio.wait_for(started_running.wait(), timeout=5.0)
+
+            request_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request_task
+
+            assert calls == [1]  # the executor started exactly once
+
+            claim_rows = await _hitl_claim_rows(checkpointer)
+            assert len(claim_rows) == 1
+            assert claim_rows[0].status == "started"  # not released, not consumed
+
+            # A duplicate resume attempt must not enter the executor while
+            # the claim from the cancelled attempt is still held.
+            duplicate = await async_client.post("/pod/v1/agents/execute", json=payload)
+
+    assert duplicate.status_code == 200
+    assert duplicate.json().get("kind") == "execution_error"
+    assert (
+        duplicate.json().get("message") == "This HITL request is already being resumed."
+    )
+    assert calls == [1]  # the duplicate never reached the executor
+
+    # The claim is still 'started', exactly as it was right after
+    # cancellation — nothing about a rejected duplicate attempt changes it.
+    claim_rows = await _hitl_claim_rows(checkpointer)
+    assert len(claim_rows) == 1
+    assert claim_rows[0].status == "started"
+
+
+def test_normal_react_turn_without_resume_is_unaffected(monkeypatch, tmp_path) -> None:
+    """#2216 non-regression: a plain ReAct turn with no interrupt at all
+    must complete normally — the new checkpoint/claim logic is only reached
+    when `resume_payload` is set."""
+
+    fake_iterate, calls = _make_counting_fake_iterate()
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-normal-turn",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert calls == [None]
+
+
+@pytest.mark.asyncio
+async def test_normal_turn_does_not_query_the_checkpointer(monkeypatch) -> None:
+    """#2216 non-regression: `_validate_session_checkpoint_access` must
+    return immediately (no checkpointer lookup at all) for a turn that sets
+    neither `checkpoint_id` nor `resume_payload` — matching the existing
+    fast-path contract this function has always had."""
+
+    def _boom():
+        raise AssertionError(
+            "a normal turn must not touch get_runtime_context() at all"
+        )
+
+    request = RuntimeExecuteRequest(
+        agent_id="rags.sample.echo",
+        input="hello",
+        session_id="session-normal-fastpath",
+        runtime_context=RuntimeContext(user_id="alice"),
+    )
+
+    monkeypatch.setattr(agent_app_module, "get_runtime_context", _boom)
+    await agent_app_module._validate_session_checkpoint_access(request)
+
+
+def test_execute_rejects_checkpoint_id_and_interrupt_id_together(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    #2216 — `checkpoint_id` (legacy Graph V2) and `interrupt_id` (ReAct V2)
+    are mutually exclusive on the wire contract itself
+    (`RuntimeExecuteRequest._validate_execution_target`), so a request
+    naming both fails FastAPI's request-body validation (422) before
+    `_validate_session_checkpoint_access` — or any checkpointer lookup — is
+    ever reached.
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-both-ids",
+                "checkpoint_id": "cp-1",
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 422
 
 
 def test_no_security_resolves_personal_team_before_iterate(

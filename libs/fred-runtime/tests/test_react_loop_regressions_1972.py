@@ -20,7 +20,7 @@ so the migration can be proven equivalent against reality rather than against
 its own reimplementation:
 
 - the HITL interrupt payload (`HumanInputRequest`, EN + FR) byte-for-byte,
-  sequential per-call interrupts, and the `Command(resume=...)` flow
+  one combined interrupt per gated batch (#2177), and the `Command(resume=...)` flow
 - dangling-tool-call sanitize on a poisoned checkpoint (OpenAI 400 guard)
 - provider reasoning-strip on replayed history (Mistral 422 guard)
 - history trim to the human boundary
@@ -220,7 +220,7 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
     "stage": "tool_approval",
     "title": "Confirm tool execution",
     "question": (
-        "The agent wants to execute `update_ticket`. "
+        "The agent wants to execute Update Ticket. "
         "This may modify state or trigger an external action. "
         "Do you want to continue?"
     ),
@@ -238,21 +238,26 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
             "default": False,
         },
     ],
-    "free_text": True,
-    "metadata": {
-        "tool_name": "update_ticket",
-        "tool_args_preview": '{"ticket_id": "INC-42"}',
-    },
+    "free_text": False,
+    "metadata": {},
     "checkpoint_id": None,
+    "interrupt_id": None,
+    "pending_calls": [
+        {
+            "tool_call_id": "c-1",
+            "tool_name": "update_ticket",
+            "args_preview": '{"ticket_id": "INC-42"}',
+        }
+    ],
 }
 
 _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
     "stage": "tool_approval",
     "title": "Confirmer l'exécution de l'outil",
     "question": (
-        "L'agent souhaite exécuter `update_ticket`. "
+        "L'agent souhaite exécuter « Update Ticket ». "
         "Cette action peut modifier un état ou déclencher une action externe. "
-        "Veux-tu continuer ?"
+        "Voulez-vous continuer ?"
     ),
     "choices": [
         {
@@ -268,12 +273,17 @@ _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
             "default": False,
         },
     ],
-    "free_text": True,
-    "metadata": {
-        "tool_name": "update_ticket",
-        "tool_args_preview": '{"ticket_id": "INC-42"}',
-    },
+    "free_text": False,
+    "metadata": {},
     "checkpoint_id": None,
+    "interrupt_id": None,
+    "pending_calls": [
+        {
+            "tool_call_id": "c-1",
+            "tool_name": "update_ticket",
+            "args_preview": '{"ticket_id": "INC-42"}',
+        }
+    ],
 }
 
 
@@ -307,7 +317,9 @@ async def test_hitl_interrupt_payload_english_byte_for_byte() -> None:
     ]
     assert len(parsed) == 1
     assert parsed[0].stage == "tool_approval"
-    assert parsed[0].metadata["tool_name"] == "update_ticket"
+    assert len(parsed[0].pending_calls) == 1
+    assert parsed[0].pending_calls[0].tool_name == "update_ticket"
+    assert parsed[0].pending_calls[0].tool_call_id == "c-1"
 
 
 @pytest.mark.asyncio
@@ -341,7 +353,11 @@ async def test_hitl_resume_proceed_executes_tool_and_answers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hitl_sequential_interrupts_one_per_gated_call() -> None:
+async def test_hitl_batches_multiple_gated_calls_into_one_interrupt() -> None:
+    """#2177: N gated calls from the same model turn (e.g. summarizing every
+    document in a folder) raise exactly ONE combined interrupt, not one
+    confirmation per call — a single proceed then runs all of them."""
+
     model = RecordingModel(
         script=[
             AIMessage(
@@ -349,34 +365,124 @@ async def test_hitl_sequential_interrupts_one_per_gated_call() -> None:
                 tool_calls=[
                     _tool_call("update_ticket", {"ticket_id": "INC-1"}, "c-1"),
                     _tool_call("update_ticket", {"ticket_id": "INC-2"}, "c-2"),
+                    _tool_call("update_ticket", {"ticket_id": "INC-3"}, "c-3"),
                 ],
             ),
-            AIMessage(content="both updated"),
+            AIMessage(content="all three updated"),
         ]
     )
     agent = _compile_agent(model, always_require_tools=("update_ticket",))
 
     first = await _drive(
-        agent, {"messages": [HumanMessage("update INC-1 and INC-2")]}, "t-seq"
+        agent, {"messages": [HumanMessage("update INC-1, INC-2 and INC-3")]}, "t-batch"
     )
-    first_values = _raw_interrupt_values(first)
-    assert len(first_values) == 1
-    first_payload = cast(dict[str, Any], first_values[0])
-    assert first_payload["metadata"]["tool_args_preview"] == '{"ticket_id": "INC-1"}'
+    values = _raw_interrupt_values(first)
+    assert len(values) == 1  # exactly one interrupt, not three
+    payload = cast(dict[str, Any], values[0])
+    assert payload["title"] == "Confirm 3 tool executions"
+    # Repeated calls to the SAME tool are deduplicated in the question text —
+    # "Update Ticket, Update Ticket, Update Ticket" says nothing the trace's
+    # own step count doesn't already say, and the raw tool name never shows.
+    assert "Update Ticket (×3)" in payload["question"]
+    assert "update_ticket" not in payload["question"]
+    assert [c["tool_call_id"] for c in payload["pending_calls"]] == [
+        "c-1",
+        "c-2",
+        "c-3",
+    ]
+    assert [c["args_preview"] for c in payload["pending_calls"]] == [
+        '{"ticket_id": "INC-1"}',
+        '{"ticket_id": "INC-2"}',
+        '{"ticket_id": "INC-3"}',
+    ]
 
-    second = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-seq")
-    second_values = _raw_interrupt_values(second)
-    assert len(second_values) == 1
-    second_payload = cast(dict[str, Any], second_values[0])
-    assert second_payload["metadata"]["tool_args_preview"] == '{"ticket_id": "INC-2"}'
-
-    third = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-seq")
-    assert _raw_interrupt_values(third) == []
-    tool_messages = [m for m in _update_messages(third) if isinstance(m, ToolMessage)]
+    second = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-batch")
+    assert (
+        _raw_interrupt_values(second) == []
+    )  # a single proceed clears the whole batch
+    tool_messages = [m for m in _update_messages(second) if isinstance(m, ToolMessage)]
     assert sorted(str(m.content) for m in tool_messages) == [
         "updated INC-1",
         "updated INC-2",
+        "updated INC-3",
     ]
+
+
+@pytest.mark.asyncio
+async def test_hitl_batch_question_dedups_repeats_but_keeps_distinct_tools() -> None:
+    """A mixed batch (some tool called more than once, another called once)
+    groups the repeats and keeps first-seen order, rather than either
+    collapsing everything into one bucket or spelling out every repeat."""
+
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("update_ticket", {"ticket_id": "INC-1"}, "c-1"),
+                    _tool_call("get_info", {"topic": "fred"}, "c-2"),
+                    _tool_call("update_ticket", {"ticket_id": "INC-2"}, "c-3"),
+                ],
+            ),
+        ]
+    )
+    agent = _compile_agent(model, always_require_tools=("update_ticket", "get_info"))
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("update two tickets and look up fred")]},
+        "t-mixed-batch",
+    )
+
+    values = _raw_interrupt_values(updates)
+    assert len(values) == 1
+    payload = cast(dict[str, Any], values[0])
+    assert "Update Ticket (×2), Get Info" in payload["question"]
+
+
+def test_build_tool_approval_request_rejects_empty_calls() -> None:
+    """The caller (`aafter_model`) only ever invokes this with at least one
+    gated call — pin that as an explicit, loud precondition rather than
+    letting a future caller violate it silently (found in PR review)."""
+
+    from fred_runtime.react.middleware.hitl import build_tool_approval_request
+
+    with pytest.raises(ValueError, match="at least one"):
+        build_tool_approval_request(binding=_binding(), calls=[])
+
+
+@pytest.mark.asyncio
+async def test_hitl_cancel_on_a_batch_skips_every_call_not_just_one() -> None:
+    """The same atomic guarantee `test_hitl_resume_cancel_skips_tool_batch`
+    covers for one call already held for N before batching (a cancel skipped
+    the WHOLE batch even when it was asked about sequentially) — this pins it
+    now that the batch is asked about once instead of N times."""
+
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("update_ticket", {"ticket_id": "INC-4"}, "c-1"),
+                    _tool_call("update_ticket", {"ticket_id": "INC-5"}, "c-2"),
+                ],
+            ),
+            AIMessage(content="okay, I will not touch either ticket"),
+        ]
+    )
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
+
+    await _drive(
+        agent, {"messages": [HumanMessage("update INC-4 and INC-5")]}, "t-batch-cancel"
+    )
+    updates = await _drive(
+        agent, Command(resume={"choice_id": "cancel"}), "t-batch-cancel"
+    )
+
+    messages = _update_messages(updates)
+    assert [m for m in messages if isinstance(m, ToolMessage)] == []
+    finals = [m for m in messages if isinstance(m, AIMessage) and m.content]
+    assert [m.content for m in finals] == ["okay, I will not touch either ticket"]
 
 
 @pytest.mark.asyncio
@@ -431,7 +537,7 @@ async def test_hitl_operator_policy_gates_named_tool() -> None:
     values = _raw_interrupt_values(updates)
     assert len(values) == 1
     payload = cast(dict[str, Any], values[0])
-    assert payload["metadata"]["tool_name"] == "get_info"
+    assert [c["tool_name"] for c in payload["pending_calls"]] == ["get_info"]
 
 
 @pytest.mark.asyncio
@@ -718,3 +824,63 @@ async def test_latest_tool_outputs_attached_to_response_metadata() -> None:
     final = result["messages"][-1]
     assert isinstance(final, AIMessage)
     assert final.response_metadata["tools"]["get_info"] == "info about fred"
+
+
+# ---------------------------------------------------------------------------
+# FRED narrow Interrupt.id invariant (#2216 P1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids() -> None:
+    """
+    LangGraph's `Interrupt.id` is NOT universally occurrence-unique — two
+    `interrupt()` calls within the SAME task share an id, matched by call
+    order instead (`test_langgraph_interrupt_id_semantics.py` pins that
+    upstream fact directly). #2216's fix relies on a narrower, FRED-specific
+    claim instead: `FredHitlMiddleware.aafter_model` never raises more than
+    one `interrupt()` per task (exactly one call site, gated by `if not
+    gated: return None` — no loop), so two DISTINCT FRED HITL occurrences —
+    reached via two separate resumes on the same thread — always land in
+    different tasks and therefore always get different ids.
+
+    Proven here against FRED's real, supported HITL flow
+    (`build_tool_loop_compiled_react_agent`, the same production tool loop
+    `_compile_agent` wraps for every other test in this file), not a toy
+    graph: interrupt A (approve ticket INC-1), resume A, interrupt B
+    (approve ticket INC-2) — B's id must differ from A's.
+    """
+
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("update_ticket", {"ticket_id": "INC-1"}, "c-1")],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("update_ticket", {"ticket_id": "INC-2"}, "c-2")],
+            ),
+            AIMessage(content="both done"),
+        ]
+    )
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
+
+    first = await _drive(
+        agent, {"messages": [HumanMessage("update INC-1 then INC-2")]}, "t-two-ids"
+    )
+
+    def _interrupt_id(updates: list[object]) -> str:
+        for update in updates:
+            if isinstance(update, dict) and "__interrupt__" in update:
+                raw = update["__interrupt__"]
+                first_entry = raw[0] if isinstance(raw, (list, tuple)) else raw
+                return getattr(first_entry, "id")
+        raise AssertionError("no interrupt found in updates")
+
+    interrupt_id_a = _interrupt_id(first)
+
+    second = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-two-ids")
+    interrupt_id_b = _interrupt_id(second)
+
+    assert interrupt_id_a != interrupt_id_b

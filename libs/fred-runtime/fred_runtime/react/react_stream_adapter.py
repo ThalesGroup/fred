@@ -118,6 +118,19 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
     - the Fred runtime wants one stable `HumanInputRequest` object regardless of
       the SDK shape
 
+    `interrupt_id` (#2216): populated from the wrapping `Interrupt.id` — a
+    hash of the interrupted task's checkpoint namespace. NOT universally
+    occurrence-unique (two `interrupt()` calls within the SAME LangGraph
+    task share it — see `test_langgraph_interrupt_id_semantics.py`); FRED
+    relies on the narrower fact that `FredHitlMiddleware` has exactly one
+    `interrupt()` call site, so two DISTINCT FRED HITL occurrences always
+    land in different tasks and get different ids (proven by
+    `test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`).
+    See RUNTIME-EXECUTION-CONTRACT.md §8.39 for the full identity model.
+    This is a DIFFERENT field from `HumanInputRequest.checkpoint_id`, which
+    this function never sets — that field is populated only by the legacy
+    Graph V2 runtime with a real checkpointer-storage id.
+
     How to use:
     - pass one update payload from the compiled agent stream
 
@@ -133,7 +146,7 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
 
     raw_interrupt = update[key]
     payload_obj: object
-    checkpoint_id: str | None = None
+    interrupt_id: str | None = None
     if isinstance(raw_interrupt, list):
         if not raw_interrupt:
             raise RuntimeError("Runtime emitted an empty interrupt list.")
@@ -142,35 +155,25 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
     if isinstance(raw_interrupt, tuple):
         if len(raw_interrupt) == 2:
             payload_obj = raw_interrupt[0]
-            checkpoint_id = getattr(raw_interrupt[1], "id", None) or getattr(
-                raw_interrupt[1], "checkpoint_id", None
-            )
+            interrupt_id = getattr(raw_interrupt[1], "id", None)
         elif len(raw_interrupt) == 1:
             first = raw_interrupt[0]
             payload_obj = getattr(first, "value", first)
-            checkpoint_id = getattr(first, "id", None) or getattr(
-                first, "checkpoint_id", None
-            )
+            interrupt_id = getattr(first, "id", None)
         else:
             raise RuntimeError(
                 f"Runtime emitted an unsupported interrupt tuple length: {len(raw_interrupt)}."
             )
     elif isinstance(raw_interrupt, dict):
         payload_obj = raw_interrupt.get("value", raw_interrupt)
-        raw_checkpoint_id = (
-            raw_interrupt.get("checkpoint_id")
-            or raw_interrupt.get("id")
-            or raw_interrupt.get("interrupt_id")
-        )
-        if isinstance(raw_checkpoint_id, str) and raw_checkpoint_id.strip():
-            checkpoint_id = raw_checkpoint_id
+        raw_interrupt_id = raw_interrupt.get("id")
+        if isinstance(raw_interrupt_id, str) and raw_interrupt_id.strip():
+            interrupt_id = raw_interrupt_id
     else:
         payload_obj = getattr(raw_interrupt, "value", raw_interrupt)
-        raw_checkpoint_id = getattr(raw_interrupt, "id", None) or getattr(
-            raw_interrupt, "checkpoint_id", None
-        )
-        if isinstance(raw_checkpoint_id, str) and raw_checkpoint_id.strip():
-            checkpoint_id = raw_checkpoint_id
+        raw_interrupt_id = getattr(raw_interrupt, "id", None)
+        if isinstance(raw_interrupt_id, str) and raw_interrupt_id.strip():
+            interrupt_id = raw_interrupt_id
 
     try:
         request = HumanInputRequest.model_validate(payload_obj)
@@ -179,8 +182,8 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
             "Runtime emitted an invalid HITL payload. "
             "Expected HumanInputRequest-compatible data."
         ) from exc
-    if checkpoint_id is not None:
-        request = request.model_copy(update={"checkpoint_id": checkpoint_id})
+    if interrupt_id is not None:
+        request = request.model_copy(update={"interrupt_id": interrupt_id})
     return request
 
 

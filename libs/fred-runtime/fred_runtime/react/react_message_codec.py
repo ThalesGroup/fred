@@ -250,6 +250,26 @@ def graph_input_from_react_input(
     - resume calls use LangGraph `Command`, while fresh calls use a message payload
     - the runtime should prepare that shape once in one adapter helper
 
+    Resume targeting, mandatory (#2216 P1):
+    - a ReAct V2 resume always uses LangGraph's targeted map form
+      `Command(resume={interrupt_id: payload})`, never the scalar
+      `Command(resume=payload)` form. LangGraph resolves a map key against
+      the pending task's own `Interrupt.id`
+      (`pregel/_algo.py::_scratchpad`'s `namespace_hash` match) and simply
+      re-raises the SAME interrupt when no task's id matches — it never
+      applies the resume value to a DIFFERENT interrupt. This is defense in
+      depth on top of the exact-id check
+      `agent_app._validate_session_checkpoint_access` already performed:
+      that check and this invocation are two separate operations, so if the
+      pending interrupt somehow changed in between, the map form still
+      cannot let a decision for interrupt A resume interrupt B.
+    - `config.interrupt_id` is expected to already be the validated
+      `Interrupt.id` for every ReAct V2 caller — this codec is exclusively
+      used by the ReAct V2 runtime (`react_runtime.py`), never the legacy
+      Graph V2 runtime. A resume without it fails closed: there is no
+      scalar fallback, because a scalar resume gives LangGraph no identity
+      to match against at all.
+
     How to use:
     - pass the Fred input model plus execution config before invoking the graph
 
@@ -258,7 +278,13 @@ def graph_input_from_react_input(
     """
 
     if config.resume_payload is not None:
-        return Command(resume=config.resume_payload)
+        if not config.interrupt_id:
+            raise RuntimeError(
+                "ReAct V2 resume requires config.interrupt_id (LangGraph's "
+                "Interrupt.id for the pending occurrence); refusing to "
+                "resume via the unscoped scalar Command(resume=...) form."
+            )
+        return Command(resume={config.interrupt_id: config.resume_payload})
     return {
         "messages": [
             to_langchain_message(message, sanitize_tool_name=sanitize_tool_name)

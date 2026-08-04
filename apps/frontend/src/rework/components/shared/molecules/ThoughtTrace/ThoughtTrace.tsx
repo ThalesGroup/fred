@@ -32,6 +32,8 @@ interface ThoughtTraceProps {
   messages: ChatMessage[];
   // False while the turn is still streaming; the trace auto-collapses once true.
   done?: boolean;
+  /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
+  pendingToolCallIds?: readonly string[] | null;
 }
 
 /**
@@ -44,6 +46,7 @@ interface ThoughtTraceProps {
 function useSummaryLabel(summary: TraceSummary): string {
   const { t } = useTranslation();
 
+  if (summary.awaitingConfirmation) return t("rework.chatTrace.awaitingConfirmation");
   if (summary.running) return t("rework.chatTrace.thinking");
 
   const parts: string[] = [];
@@ -58,11 +61,11 @@ function useSummaryLabel(summary: TraceSummary): string {
   return parts.length > 0 ? parts.join(" · ") : t("rework.chatTrace.details");
 }
 
-export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
+export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
   const { t } = useTranslation();
   const entries = groupTraceEntries(messages);
   const { reasoning, steps } = splitTraceEntries(entries);
-  const summary = traceSummary(entries);
+  const summary = traceSummary(entries, pendingToolCallIds);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
 
@@ -92,7 +95,12 @@ export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
           {steps.length > 0 && (
             <div className={`${styles.entries} ${reasoning.length === 0 ? styles.entriesLeading : ""}`}>
               {steps.map(({ entry, index }) => (
-                <TraceEntryRow key={traceEntryKey(entry)} entry={entry} index={index} />
+                <TraceEntryRow
+                  key={traceEntryKey(entry)}
+                  entry={entry}
+                  index={index}
+                  pendingToolCallIds={pendingToolCallIds}
+                />
               ))}
             </div>
           )}

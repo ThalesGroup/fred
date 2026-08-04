@@ -542,7 +542,7 @@ async def test_hitl_require_gates_and_proceed_resumes() -> None:
     assert "__interrupt__" in res
     payload = res["__interrupt__"][0].value
     assert payload["question"] == "Run the gadget?"
-    assert payload["metadata"]["tool_name"] == "demo_gadget"
+    assert payload["pending_calls"][0]["tool_name"] == "demo_gadget"
     assert GADGET_RUNS == []
 
     res = await agent.ainvoke(Command(resume={"choice_id": "proceed"}), cfg)

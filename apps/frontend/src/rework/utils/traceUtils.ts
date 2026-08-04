@@ -33,7 +33,7 @@ export type TraceEntry =
   | { kind: "solo"; message: ChatMessage }
   | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
-export type TraceStatus = "pending" | "ok" | "error" | "streaming";
+export type TraceStatus = "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
 
 export function isTraceChannel(channel: Channel): boolean {
   return TRACE_CHANNELS.includes(channel);
@@ -495,7 +495,18 @@ export function tokenUsageForEntry(entry: TraceEntry): TokenUsage | null {
   return null;
 }
 
-export function statusForEntry(entry: TraceEntry): TraceStatus {
+/**
+ * `pendingToolCallIds` are the `call_id`s of every tool call currently gated
+ * behind ONE unanswered HITL confirmation prompt (#2177: a single prompt can
+ * cover several calls at once — e.g. summarizing every document in a folder
+ * — so this is a list, not one id). The backend streams a tool call's
+ * `ToolCallRuntimeEvent` the moment the model proposes it — a separate,
+ * earlier graph step than the HITL gate that pauses for approval — so a
+ * gated call always arrives with no result yet, indistinguishable from one
+ * already executing unless the caller tells us which call_ids are actually
+ * still waiting on the human.
+ */
+export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly string[] | null): TraceStatus {
   if (entry.kind === "solo") {
     const extras = entry.message.metadata?.extras as { streaming_delta?: boolean } | undefined;
     if (extras?.streaming_delta) return "streaming";
@@ -503,7 +514,10 @@ export function statusForEntry(entry: TraceEntry): TraceStatus {
     return "ok";
   }
   // combo
-  if (!entry.result) return "pending";
+  if (!entry.result) {
+    if (pendingToolCallIds?.includes(toolCallId(entry.call))) return "awaiting_confirmation";
+    return "pending";
+  }
   return toolResultOk(entry.result) ? "ok" : "error";
 }
 
@@ -668,8 +682,10 @@ export type TraceSummary = {
   toolCount: number;
   /** Sum of tool execution latencies. */
   toolMs: number;
-  /** Something is still streaming or awaiting a result. */
+  /** Something is still streaming, awaiting a result, or awaiting confirmation. */
   running: boolean;
+  /** At least one tool call is paused behind an unanswered HITL prompt. */
+  awaitingConfirmation: boolean;
 };
 
 /**
@@ -681,8 +697,10 @@ export type TraceSummary = {
  * summing would count the same wall-clock twice. The former
  * `thoughtSummaryLabel()` had the opposite flaw — it advertised "Thought for
  * 856ms" while summing tool latencies only, next to a 16.4s reasoning row.
+ *
+ * `pendingToolCallIds` — see {@link statusForEntry}.
  */
-export function traceSummary(entries: TraceEntry[]): TraceSummary {
+export function traceSummary(entries: TraceEntry[], pendingToolCallIds?: readonly string[] | null): TraceSummary {
   const { reasoning, steps } = splitTraceEntries(entries);
 
   let reasoningMs: number | null = null;
@@ -693,10 +711,9 @@ export function traceSummary(entries: TraceEntry[]): TraceSummary {
   }
 
   const toolCount = steps.filter((s) => s.entry.kind === "combo").length;
-  const running = entries.some((e) => {
-    const status = statusForEntry(e);
-    return status === "streaming" || status === "pending";
-  });
+  const statuses = entries.map((e) => statusForEntry(e, pendingToolCallIds));
+  const running = statuses.some((s) => s === "streaming" || s === "pending" || s === "awaiting_confirmation");
+  const awaitingConfirmation = statuses.some((s) => s === "awaiting_confirmation");
 
-  return { reasoningMs, toolCount, toolMs: totalLatencyMs(entries), running };
+  return { reasoningMs, toolCount, toolMs: totalLatencyMs(entries), running, awaitingConfirmation };
 }

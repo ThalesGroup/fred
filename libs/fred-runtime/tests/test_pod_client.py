@@ -187,6 +187,7 @@ class TestExecute:
         assert body["runtime_context"] == {"user_id": "u1"}
         assert "agent_instance_id" not in body
         assert "checkpoint_id" not in body
+        assert "interrupt_id" not in body
         assert "resume_payload" not in body
         assert "inline_tuning" not in body
 
@@ -207,8 +208,18 @@ class TestExecute:
         )
         assert body["agent_instance_id"] == "inst-1"
         assert body["checkpoint_id"] == "chk-1"
+        assert "interrupt_id" not in body
         assert body["resume_payload"] == {"step": 2}
         assert body["inline_tuning"] == {"prompts.system": "override"}
+
+    def test_interrupt_id_included_when_provided(self) -> None:
+        # #2216 — the ReAct V2 HITL resume identifier, forwarded
+        # independently of (never together with, in real use) checkpoint_id.
+        body, _ = self._capture_execute(
+            interrupt_id="interrupt-a", resume_payload={"choice_id": "proceed"}
+        )
+        assert body["interrupt_id"] == "interrupt-a"
+        assert "checkpoint_id" not in body
 
     def test_non_dict_response_raises(self) -> None:
         c = _client(lambda r: _json_response(["not", "a", "dict"]))
@@ -317,6 +328,23 @@ class TestIterStreamEvents:
         )
         body = capture.last_json()
         assert body["inline_tuning"] == {"settings.verbose": True}
+
+    def test_interrupt_id_forwarded(self) -> None:
+        # #2216 — the streaming path must forward interrupt_id exactly like
+        # the terminal-JSON `execute()` path.
+        capture = _Capture(_sse_response({"kind": "final"}))
+        c = _client(capture)
+        c.stream_events(
+            agent_id="a",
+            message="m",
+            session_id="s",
+            user_id="u",
+            interrupt_id="interrupt-a",
+            resume_payload={"choice_id": "proceed"},
+        )
+        body = capture.last_json()
+        assert body["interrupt_id"] == "interrupt-a"
+        assert "checkpoint_id" not in body
 
     def test_http_error_propagates(self) -> None:
         c = _client(lambda r: httpx.Response(401))
