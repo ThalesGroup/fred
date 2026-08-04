@@ -643,6 +643,9 @@ export type ToolCallRuntimeEvent = {
   call_id: string;
   kind?: "tool_call";
   sequence?: number;
+  token_usage?: {
+    [key: string]: number;
+  } | null;
   tool_name: string;
 };
 export type ToolResultRuntimeEvent = {

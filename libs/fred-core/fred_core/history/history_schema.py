@@ -396,12 +396,16 @@ def make_tool_call(
     call_id: str,
     name: str,
     args: Dict[str, Any],
+    *,
+    token_usage: Optional[Dict[str, int]] = None,
 ) -> ChatMessage:
     """
     Build a tool-call record message.
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
+    - ``token_usage``: the model call that decided to make this tool call
+      (TRACE-01), same shape as ``ToolCallRuntimeEvent.token_usage``
     """
     return ChatMessage(
         session_id=session_id,
@@ -411,6 +415,9 @@ def make_tool_call(
         role=Role.assistant,
         channel=Channel.tool_call,
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
+        metadata=ChatMetadata(token_usage=ChatTokenUsage(**token_usage))
+        if token_usage
+        else ChatMetadata(),
     )
 
 

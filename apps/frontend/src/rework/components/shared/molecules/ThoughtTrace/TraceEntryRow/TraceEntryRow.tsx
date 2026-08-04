@@ -20,9 +20,11 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
+  tokenUsageForEntry,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
+import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import phaseStyles from "../phaseBadge.module.css";
 import styles from "./TraceEntryRow.module.css";
 
@@ -44,6 +46,7 @@ export function TraceEntryRow({ entry, index = null }: TraceEntryRowProps) {
   const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
+  const tokenUsage = tokenUsageForEntry(entry);
   const isPending = status === "pending";
 
   // Curated volume metadata (never raw args/content) so two calls to the same
@@ -88,6 +91,8 @@ export function TraceEntryRow({ entry, index = null }: TraceEntryRowProps) {
       </span>
 
       {secondary && <span className={styles.secondary}>{secondary}</span>}
+
+      {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
     </div>
   );
 }

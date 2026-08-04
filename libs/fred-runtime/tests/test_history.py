@@ -163,6 +163,7 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "call_id": "c1",
             "tool_name": "demo.echo",
             "arguments": {"text": "hi"},
+            "token_usage": {"input_tokens": 20, "output_tokens": 3, "total_tokens": 23},
         },
         {
             "kind": "tool_result",
@@ -205,6 +206,12 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[1].channel == Channel.tool_call
     assert messages[1].parts[0].name == "demo.echo"
     assert messages[1].rank == 1
+    # TRACE-01: usage of the model call that decided this tool call must
+    # survive into the persisted record, not just the live SSE payload —
+    # otherwise the chat trace loses its per-step token figure on reload.
+    assert messages[1].metadata.token_usage.input_tokens == 20
+    assert messages[1].metadata.token_usage.output_tokens == 3
+    assert messages[1].metadata.token_usage.total_tokens == 23
 
     # Row 2 — tool result record
     assert messages[2].role == Role.tool

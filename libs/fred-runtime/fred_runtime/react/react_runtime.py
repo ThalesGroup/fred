@@ -484,6 +484,20 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         continue
 
                     if isinstance(message, AIMessage) and message.tool_calls:
+                        # The usage of the model call that decided to make these
+                        # tool calls — attached per-call to ToolCallRuntimeEvent
+                        # (TRACE-01) so the trace UI can show tokens per step.
+                        # When one AIMessage requests several tools in parallel,
+                        # every one of them gets this same total: it is the cost
+                        # of the one decision that produced them, not a per-tool
+                        # split (providers don't expose a per-tool breakdown).
+                        # Deliberately not folded into `last_token_usage`: that
+                        # rolling variable feeds FinalRuntimeEvent and changing
+                        # its semantics is a separate, explicitly out-of-scope
+                        # follow-up (see TRACE-TOKEN-USAGE-RFC.md §2.1).
+                        _, tool_call_token_usage, _ = _runtime_metadata_from_message(
+                            message
+                        )
                         for tool_call in message.tool_calls:
                             name = str(tool_call.get("name") or "")
                             call_id = str(tool_call.get("id") or "")
@@ -504,6 +518,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
                                 ),
+                                token_usage=tool_call_token_usage,
                             )
                             sequence += 1
                         continue

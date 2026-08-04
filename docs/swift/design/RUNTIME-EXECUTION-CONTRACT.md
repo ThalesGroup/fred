@@ -2130,6 +2130,48 @@ consumes context tokens the previous strip-everything behavior did not).
 
 ---
 
+### 8.38 ✅ `ToolCallRuntimeEvent.token_usage` — per-step token usage in the chat trace (TRACE-01, issue #2217, 2026-08-04)
+
+**New optional field.** `ToolCallRuntimeEvent` (`fred_sdk.contracts.runtime`)
+gains `token_usage: dict[str, int] | None = None` — the usage of the model
+call that decided to make that tool call, not a per-tool split. Additive,
+backward-compatible: only ever *constructed* with kwargs by the two
+producers (`react_runtime.py`, `graph_runtime.py`); no consumer in the
+monorepo re-parses it via `.model_validate()`, so `FrozenModel`'s
+`extra="forbid"` never gets a chance to reject it.
+
+**Both execution engines, symmetric fix:**
+
+- ReAct (`react_runtime.py:486-518`): captured directly off the
+  tool-deciding `AIMessage` via `_runtime_metadata_from_message`, once per
+  message (not per parallel tool call).
+- Graph (`graph_runtime.py:627-636`, `701-710`): the node's own
+  `_last_token_usage` (whatever `record_model_metadata` last recorded on
+  that node) is attached at `invoke_tool`/`invoke_runtime_tool` time — a
+  graph node can call several models before invoking a tool, so this is the
+  most recent one, not necessarily that exact call's own usage.
+
+**Live stream and persisted history both carry it — deliberately, not just
+the SSE payload.** Every turn is written to the history store at the end of
+the exchange (`_write_turn_history` → `make_tool_call`,
+`fred_core.history.history_schema`); that persisted `ChatMessage.metadata`
+is what a page refresh or session reopen reads (`useSessionHistory.ts`), a
+different path from the live SSE stream. Wiring only the live event would
+have made the figure vanish on refresh for a conversation created the same
+day — corrected during implementation, see
+`docs/swift/rfc/TRACE-TOKEN-USAGE-RFC.md` §2.1.
+
+**Out of scope (unchanged by this entry):** conversations whose history was
+already persisted *before* this shipped — no retroactive backfill; the
+separate `ThoughtRecord` eval-harness format; and a pre-existing,
+independently-tracked bug where `FinalRuntimeEvent.token_usage` (and
+anything summing it, e.g. the chat top-bar total) reflects only the
+**last** model call of a multi-tool-round-trip exchange, not the true sum
+(per-provider `usage_metadata` is per-call, not cumulative) — see the RFC's
+§1 for detail.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

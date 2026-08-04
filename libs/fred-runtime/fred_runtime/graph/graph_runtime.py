@@ -629,6 +629,11 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_ref,
                 call_id=call_id,
                 arguments=payload,
+                # Usage of the most recent model call recorded on this node
+                # (TRACE-01) — the same value `last_model_metadata` reads, not
+                # necessarily this specific call's own usage: a graph node can
+                # invoke several models before invoking a tool.
+                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -703,6 +708,8 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_name,
                 call_id=call_id,
                 arguments=arguments,
+                # See invoke_tool() above — same caveat applies.
+                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(

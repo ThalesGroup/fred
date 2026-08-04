@@ -328,6 +328,15 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
+            metadata: event.token_usage
+              ? {
+                  token_usage: {
+                    input_tokens: event.token_usage["input_tokens"] ?? 0,
+                    output_tokens: event.token_usage["output_tokens"] ?? 0,
+                    total_tokens: event.token_usage["total_tokens"] ?? 0,
+                  },
+                }
+              : undefined,
           });
           break;
         }
