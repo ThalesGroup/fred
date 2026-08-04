@@ -384,7 +384,10 @@
       "sessionSaveFailedSummary": "Conversation non enregistrée",
       "sessionSaveFailedDetail": "Impossible d'enregistrer cette conversation. Veuillez réessayer.",
       "contextPromptSaveFailedSummary": "Sélection de prompts non enregistrée",
-      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer."
+      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
+      "attachmentDeleteFailedSummary": "Fichier non supprimé",
+      "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
+      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier."
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
