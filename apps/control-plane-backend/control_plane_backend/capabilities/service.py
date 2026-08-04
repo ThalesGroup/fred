@@ -29,7 +29,12 @@ from typing import Any, Mapping
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import RebacEngine, RelationType
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    RebacEngine,
+    Relation,
+    RelationType,
+)
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
@@ -41,9 +46,11 @@ from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     ReasoningNotSupported,
     cap_ref,
+    capability_relation_subjects,
     disable_capability_for_team,
     enable_capability_for_team,
     ensure_capability_anchor,
+    get_capability_relations_cached,
     has_org_relation,
     is_template_capability_instance,
     reset_capability_for_team,
@@ -146,27 +153,41 @@ def _catalog_entry_for_revoke(
     )
 
 
-async def _teams_with_relation(
-    rebac: RebacEngine, capability_id: str, relation: RelationType
-) -> list[str]:
-    subjects = await rebac.lookup_subjects(
-        cap_ref(capability_id), relation, Resource.TEAM
-    )
-    if isinstance(subjects, RebacDisabledResult):
-        return []
-    return sorted(ref.id for ref in subjects)
+def _fold_personal_scope(
+    relations: list[Relation] | RebacDisabledResult,
+) -> PersonalScope:
+    """Derive the personal-space class tri-state from the two org-subject
+    tuples (RFC §8.4), folded from an already-fetched relation set. `enabled`
+    wins if both are somehow present (matches the FGA setter, which never
+    leaves both)."""
+
+    if ORGANIZATION_ID in capability_relation_subjects(
+        relations, RelationType.PERSONAL_ON, Resource.ORGANIZATION
+    ):
+        return "enabled"
+    if ORGANIZATION_ID in capability_relation_subjects(
+        relations, RelationType.PERSONAL_DISABLED, Resource.ORGANIZATION
+    ):
+        return "disabled"
+    return "default"
 
 
 async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> PersonalScope:
-    """Derive the personal-space class tri-state from the two org-subject tuples
-    (RFC §8.4). `enabled` wins if both are somehow present (matches the FGA
-    setter, which never leaves both)."""
+    """Derive the personal-space class tri-state for one capability (RFC §8.4).
 
-    if await has_org_relation(rebac, capability_id, RelationType.PERSONAL_ON):
-        return "enabled"
-    if await has_org_relation(rebac, capability_id, RelationType.PERSONAL_DISABLED):
-        return "disabled"
-    return "default"
+    #2181: its only caller left is `set_personal_scope`'s peek-before-mutate
+    (`scope_before`, used to detect the access-transition that decides
+    whether to revive suspended dependents) — a write-path decision, so this
+    deliberately does NOT go through `get_capability_relations_cached` (see
+    `has_org_relation`'s docstring for why: caching here would risk acting on
+    up to 45s-stale state from another replica's write, for no benefit to the
+    read-only listing path, which never calls this). Still `list_direct_
+    relations` (a `Read`), not `lookup_subjects` (`ListUsers`) — cheaper per
+    call even uncached.
+    """
+
+    relations = await rebac.list_direct_relations(cap_ref(capability_id))
+    return _fold_personal_scope(relations)
 
 
 async def _build_enablement_item(
@@ -178,24 +199,31 @@ async def _build_enablement_item(
     impact: Mapping[str, CapabilityImpact],
     reasoning_enabled_ids: frozenset[str],
 ) -> CapabilityEnablementItem:
-    """Build one row's ReBAC-derived fields (#2089).
+    """Build one row's ReBAC-derived fields.
 
-    The 4 lookups below are independent `lookup_subjects` reads on different
-    relations of the same capability — gathering them turns 4 sequential
-    OpenFGA round-trips per row into 1.
+    #2089: originally 4 concurrent `lookup_subjects` reads per row. #2181
+    follow-up: `enabled`/`disabled` team grants and `default_on`/personal-scope
+    org markers all live on the SAME literal tuple set for this capability, so
+    they no longer need 4 separate OpenFGA round-trips (5, counting
+    `_read_personal_scope`'s own pair) — one cached `list_direct_relations`
+    Read (`get_capability_relations_cached`) is fetched ONCE here and folded
+    locally, the same "fetch once, derive many" shape `_bulk_team_membership`/
+    `_fold_team_role_relations` already use for teams. Fetching once (instead
+    of gathering several calls that would each independently race the same
+    cache key) also avoids a per-row thundering herd on a cold cache.
     """
 
-    (
-        default_on,
-        enabled_team_ids,
-        disabled_team_ids,
-        personal_scope,
-    ) = await asyncio.gather(
-        has_org_relation(rebac, entry.id, RelationType.DEFAULT_ON),
-        _teams_with_relation(rebac, entry.id, RelationType.ENABLED),
-        _teams_with_relation(rebac, entry.id, RelationType.DISABLED),
-        _read_personal_scope(rebac, entry.id),
+    relations = await get_capability_relations_cached(rebac, entry.id)
+    default_on = ORGANIZATION_ID in capability_relation_subjects(
+        relations, RelationType.DEFAULT_ON, Resource.ORGANIZATION
     )
+    enabled_team_ids = sorted(
+        capability_relation_subjects(relations, RelationType.ENABLED, Resource.TEAM)
+    )
+    disabled_team_ids = sorted(
+        capability_relation_subjects(relations, RelationType.DISABLED, Resource.TEAM)
+    )
+    personal_scope = _fold_personal_scope(relations)
     entry_impact = impact.get(entry.id)
     return CapabilityEnablementItem(
         id=entry.id,
@@ -281,7 +309,11 @@ async def list_capability_enablement(
         )
     reasoning_enabled_ids = frozenset(reasoning_enabled_ids)
     # Per-row ReBAC reads are independent across rows too (#2089) — gather
-    # every row's build instead of awaiting them one at a time.
+    # every row's build instead of awaiting them one at a time. #2181: each
+    # row's build is now also a single cached `list_direct_relations` Read
+    # (see `_build_enablement_item`) instead of several `lookup_subjects`
+    # calls, so this outer gather now bounds ~87 concurrent Reads on a cold
+    # cache (0 on a warm one) rather than ~175 concurrent ListUsers calls.
     items = list(
         await asyncio.gather(
             *(
@@ -305,7 +337,6 @@ async def _require_manage_any(rebac: RebacEngine, user: KeycloakUser) -> None:
     """Org-admin gate for the aggregate list (equivalent to `can_manage`)."""
 
     from fred_core import OrganizationPermission
-    from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 
     await rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID

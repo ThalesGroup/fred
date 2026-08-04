@@ -33,9 +33,10 @@ here so the RFC invariants hold in exactly one spot:
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Literal, Mapping
+import time
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping
 
-from fred_core.common import TeamId, is_personal_team_id
+from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -62,6 +63,14 @@ from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
+
+if TYPE_CHECKING:
+    # Only ever imported lazily at runtime (see `has_org_relation`/
+    # `capability_relation_subjects` below) to avoid a `fred_core` import
+    # cycle; a `TYPE_CHECKING`-guarded import is enough for the type
+    # annotations that reference it (`__future__` annotations mean the
+    # annotation is never evaluated at runtime either way).
+    from fred_core import RebacDisabledResult
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +340,7 @@ async def enable_capability_for_team(
         ),
         actor_uid=updated_by,
     )
+    invalidate_capability_relations_cache(catalog_entry.id)
     logger.info(
         "[capability-enablement] enabled capability=%s team=%s by=%s",
         catalog_entry.id,
@@ -376,6 +386,7 @@ async def disable_capability_for_team(
         ),
         actor_uid=updated_by,
     )
+    invalidate_capability_relations_cache(catalog_entry.id)
     del settings_store  # settings row is intentionally retained (re-enable restores)
     return await suspend_dependent_instances(
         agent_instance_store=agent_instance_store,
@@ -419,6 +430,7 @@ async def reset_capability_for_team(
             resource=cap_ref(catalog_entry.id),
         )
     )
+    invalidate_capability_relations_cache(catalog_entry.id)
     if default_on:
         return 0
     return await suspend_dependent_instances(
@@ -670,6 +682,7 @@ async def set_capability_default_on(
             ),
             actor_uid=updated_by,
         )
+        invalidate_capability_relations_cache(catalog_entry.id)
         return 0
 
     await rebac.delete_relation(
@@ -679,6 +692,7 @@ async def set_capability_default_on(
             resource=cap_ref(catalog_entry.id),
         )
     )
+    invalidate_capability_relations_cache(catalog_entry.id)
     # Teams with an explicit grant keep access; everyone else loses inherited
     # use — whether they used it as a tool or as a `kind="agent"` template
     # (2026-07-19, GitHub #2004 item 1).
@@ -811,24 +825,131 @@ async def _apply_personal_scope_tuples(
     else:  # default → clear both
         await rebac.delete_relation(on_relation)
         await rebac.delete_relation(disabled_relation)
+    invalidate_capability_relations_cache(capability_id)
+
+
+_CAPABILITY_RELATIONS_CACHE_TTL_SECONDS = 45
+_CAPABILITY_RELATIONS_CACHE: ThreadSafeLRUCache[
+    str, tuple[float, list[Relation] | RebacDisabledResult]
+] = ThreadSafeLRUCache(max_size=2000)
+# Mirrors `teams/service.py`'s `_TEAM_RELATIONS_LAST_INVALIDATED` (#2160
+# review): a read in flight when a write invalidates must not resurrect the
+# pre-write snapshot it already had in hand — see the race-guard comment in
+# `get_capability_relations_cached` below.
+_CAPABILITY_RELATIONS_LAST_INVALIDATED: ThreadSafeLRUCache[str, float] = (
+    ThreadSafeLRUCache(max_size=2000)
+)
+
+
+def invalidate_capability_relations_cache(capability_id: str) -> None:
+    """Drop the cached `list_direct_relations` result for one capability
+    (#2181).
+
+    Every relation-mutating call in this module (enable/disable/reset a
+    team's grant, the default-on toggle, the personal-scope toggle) calls
+    this right after its write succeeds, mirroring `teams/service.py`'s
+    `invalidate_team_relations_cache`.
+    """
+
+    _CAPABILITY_RELATIONS_CACHE.delete(capability_id)
+    _CAPABILITY_RELATIONS_LAST_INVALIDATED.set(capability_id, time.time())
+
+
+async def get_capability_relations_cached(
+    rebac: RebacEngine, capability_id: str
+) -> "list[Relation] | RebacDisabledResult":
+    """Cached `list_direct_relations(capability:<capability_id>)`, TTL-bounded
+    (#2181, follow-up to #2089).
+
+    #2089 made `GET /admin/capabilities`'s per-row ReBAC reads concurrent but
+    did not reduce their count: each row still fired up to 5 individual
+    `lookup_subjects` (OpenFGA `ListUsers`) round-trips — `enabled`/`disabled`
+    team grants plus `default_on`/`personal_on`/`personal_disabled` org
+    markers — for ~87 catalog capabilities, ~175 calls per page load. All 5
+    answers live on the SAME literal tuple set (this one capability as
+    object, no relation filter), so — mirroring `_bulk_team_membership`'s
+    #2065/#2148 fix for the equivalent team-membership fan-out — one exact
+    `list_direct_relations` `Read` per capability replaces them all; callers
+    fold the returned tuples locally (`capability_relation_subjects`) instead
+    of letting OpenFGA filter server-side. Layered with the same short TTL
+    (45s) write-invalidated cache shape as `_get_team_relations_cached`.
+
+    Race guard, identical to `_get_team_relations_cached`: `read_started_at`
+    is captured before the `await`; if `invalidate_capability_relations_cache`
+    ran for this capability at or after that moment, the freshly fetched
+    result is provably stale and is returned without being published into the
+    cache, so a concurrent write's invalidation is never silently undone for
+    a full TTL.
+    """
+
+    read_started_at = time.time()
+    cached = _CAPABILITY_RELATIONS_CACHE.get(capability_id)
+    if cached is not None:
+        expires_at, relations = cached
+        if expires_at > read_started_at:
+            return relations
+        _CAPABILITY_RELATIONS_CACHE.delete(capability_id)
+
+    relations = await rebac.list_direct_relations(cap_ref(capability_id))
+
+    last_invalidated = _CAPABILITY_RELATIONS_LAST_INVALIDATED.get(capability_id)
+    if last_invalidated is not None and last_invalidated >= read_started_at:
+        return relations
+
+    _CAPABILITY_RELATIONS_CACHE.set(
+        capability_id,
+        (read_started_at + _CAPABILITY_RELATIONS_CACHE_TTL_SECONDS, relations),
+    )
+    return relations
+
+
+def capability_relation_subjects(
+    relations: "list[Relation] | RebacDisabledResult",
+    relation: RelationType,
+    subject_type: Resource,
+) -> set[str]:
+    """Fold one capability's already-fetched relation set down to the subject
+    ids holding `relation`, filtered to `subject_type` (#2181) — the
+    local-filter counterpart of a `lookup_subjects` call, over a
+    `list_direct_relations` result. Empty when ReBAC is disabled."""
+
+    from fred_core import RebacDisabledResult
+
+    if isinstance(relations, RebacDisabledResult):
+        return set()
+    return {
+        rel.subject.id
+        for rel in relations
+        if rel.relation == relation and rel.subject.type == subject_type
+    }
 
 
 async def has_org_relation(
     rebac: RebacEngine, capability_id: str, relation: RelationType
 ) -> bool:
     """True when the singleton org holds `relation` on the capability (used to
-    read back the class/default-on org-subject markers)."""
+    read back the class/default-on org-subject markers).
 
-    from fred_core import RebacDisabledResult
+    #2181: every remaining caller of this function is a write-path
+    peek-before-mutate decision (`reset_team_capability`'s suspend/revive
+    branch, `set_personal_scope`'s access-transition detection, the
+    `depends_on` dependency gate, `set_capability_personal_scope`'s
+    had_access/has_access peek) — the read-only listing path
+    (`_build_enablement_item`) fetches and folds the relation set directly and
+    never calls this. Deliberately NOT routed through
+    `get_capability_relations_cached`: those decisions must see the current
+    OpenFGA state, not a state up to 45s stale from another replica's write —
+    caching here would buy the listing endpoint nothing (it doesn't call this)
+    while risking a wrong suspend/revive/reject call under concurrent
+    multi-replica admin actions. Still backed by `list_direct_relations`
+    (a `Read`) rather than `lookup_subjects` (`ListUsers`) — cheaper per call
+    even uncached (#2065's finding: `Read` is the cheaper primitive).
+    """
 
-    subjects = await rebac.lookup_subjects(
-        cap_ref(capability_id),
-        relation,
-        Resource.ORGANIZATION,
+    relations = await rebac.list_direct_relations(cap_ref(capability_id))
+    return ORGANIZATION_ID in capability_relation_subjects(
+        relations, relation, Resource.ORGANIZATION
     )
-    if isinstance(subjects, RebacDisabledResult):
-        return False
-    return any(ref.id == ORGANIZATION_ID for ref in subjects)
 
 
 async def _suspend_personal_dependents(

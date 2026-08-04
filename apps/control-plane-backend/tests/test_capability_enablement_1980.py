@@ -125,6 +125,36 @@ class _FakeRebac:
                 out.append(RebacReference(type=subject_type, id=user.split(":", 1)[1]))
         return out
 
+    async def list_direct_relations(
+        self, resource, *, subject=None, consistency_token=None
+    ):
+        """#2181: `has_org_relation`/`_read_personal_scope`/`_build_enablement_item`
+        now read the exact-object `Read` shape instead of `lookup_subjects` —
+        same recorded `self.tuples` state, filtered locally exactly like
+        `capability_relation_subjects` does against the real engine."""
+        if not self._enabled:
+            return RebacDisabledResult()
+        obj = f"{resource.type.value}:{resource.id}"
+        out = []
+        for user, rel, o in self.tuples:
+            if o != obj:
+                continue
+            subject_type_str, subject_id = user.split(":", 1)
+            if subject is not None and (
+                subject.type.value != subject_type_str or subject.id != subject_id
+            ):
+                continue
+            out.append(
+                Relation(
+                    subject=RebacReference(
+                        type=Resource(subject_type_str), id=subject_id
+                    ),
+                    relation=RelationType(rel),
+                    resource=resource,
+                )
+            )
+        return out
+
     async def lookup_resources(
         self, subject, permission, resource_type, *, contextual_relations=None
     ):
