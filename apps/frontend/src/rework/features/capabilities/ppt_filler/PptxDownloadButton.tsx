@@ -59,7 +59,6 @@ export default function PptxDownloadButton({
   return (
     <Tooltip text={label}>
       <IconButton
-        color="on-surface"
         variant="icon"
         size="small"
         icon={{ category: "outlined", type: "download" }}

@@ -183,7 +183,6 @@ export function DocRow({
                 // animation below plays every time the icon swaps.
                 <span key={searchable ? "searchable" : "excluded"} className={styles.searchableToggle}>
                   <IconButton
-                    color="on-surface"
                     variant="icon"
                     size="xs"
                     icon={{ category: "outlined", type: searchable ? "visibility" : "visibility_off" }}
@@ -198,7 +197,6 @@ export function DocRow({
               )}
               {onDownload && (
                 <IconButton
-                  color="on-surface"
                   variant="icon"
                   size="xs"
                   icon={{ category: "outlined", type: "download" }}
@@ -212,7 +210,6 @@ export function DocRow({
               )}
               {onDelete && (
                 <IconButton
-                  color="on-surface"
                   variant="icon"
                   size="xs"
                   icon={{ category: "outlined", type: "delete" }}

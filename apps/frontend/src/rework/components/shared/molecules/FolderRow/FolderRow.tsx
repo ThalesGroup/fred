@@ -95,7 +95,6 @@ export function FolderRow({
           <span className={styles.actions}>
             {onUpload && (
               <IconButton
-                color="on-surface"
                 variant="icon"
                 size="xs"
                 icon={{ category: "outlined", type: "attach_file" }}
@@ -109,7 +108,6 @@ export function FolderRow({
             )}
             {onCreateSubfolder && (
               <IconButton
-                color="on-surface"
                 variant="icon"
                 size="xs"
                 icon={{ category: "outlined", type: "create_new_folder" }}

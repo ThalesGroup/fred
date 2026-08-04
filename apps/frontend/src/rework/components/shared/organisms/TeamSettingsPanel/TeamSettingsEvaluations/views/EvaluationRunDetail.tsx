@@ -595,7 +595,6 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
         </span>
         <span className={styles.spacer} />
         <IconButton
-          color="on-surface"
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
@@ -603,7 +602,6 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
           onClick={handleCopy}
         />
         <IconButton
-          color="on-surface"
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: "download" }}

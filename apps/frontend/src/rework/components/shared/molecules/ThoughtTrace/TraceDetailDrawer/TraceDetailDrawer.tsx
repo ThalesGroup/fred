@@ -206,7 +206,6 @@ function CopyHeaderAction({ text }: { text: string }) {
 
   return (
     <IconButton
-      color="on-surface"
       variant="icon"
       size="small"
       icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}

@@ -11,10 +11,10 @@
 .user {
   align-self: flex-end;
   border-radius: var(--radius-m);
-  background: var(--surface-container-high);
+  background: var(--secondary-container);
   padding: var(--spacing-s) var(--spacing-m);
   max-width: 65%;
-  color: var(--on-surface);
+  color: var(--on-secondary-container);
 }
 
 /* Assistant reply: full-width text block, no bubble chrome.

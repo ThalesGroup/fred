@@ -61,7 +61,6 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
         <TaskStateBadge state={task.state} showLabel={false} size="sm" />
         {needsAttention && (
           <IconButton
-            color="on-surface"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "close" }}
@@ -106,7 +105,6 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
               <span className={styles.warningBadge}>⚠ {task.warnings.length}</span>
             </Tooltip>
             <IconButton
-              color="on-surface"
               variant="icon"
               size="small"
               icon={{

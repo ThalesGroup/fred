@@ -254,7 +254,6 @@ export function DocumentUploadDrawer({
               )}
             </div>
             <IconButton
-              color="on-surface"
               variant="icon"
               size="xs"
               icon={{ category: "outlined", type: "close" }}
@@ -310,7 +309,6 @@ export function DocumentUploadDrawer({
                       </span>
                       <span className={styles.fileSize}>{formatBytes(f.size)}</span>
                       <IconButton
-                        color="on-surface"
                         variant="icon"
                         size="xs"
                         icon={{ category: "outlined", type: "close" }}

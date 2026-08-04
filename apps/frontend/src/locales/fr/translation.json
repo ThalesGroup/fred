@@ -295,6 +295,7 @@
       "geoSummary_one": "Données cartographiques ({{count}} entité)",
       "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },
+    "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
       "ariaLabel": "Fichiers joints",
@@ -364,6 +365,11 @@
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
+    "copyMessage": {
+      "tooltip": "Copier le message",
+      "success": "Message copié"
+    },
+    "editMessage": "Modifier le message",
     "dropFilesHere": "Déposez les fichiers ici",
     "errors": {
       "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL.",
@@ -386,6 +392,13 @@
       "loading": "Chargement des fichiers...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
       "title": "Fichiers de conversation"
+    },
+    "sessionTitleEditor": {
+      "untitled": "Conversation sans titre",
+      "editAria": "Renommer : {{title}}",
+      "popupLabel": "Renommer la conversation",
+      "inputAria": "Nouveau nom de la conversation",
+      "save": "Enregistrer"
     },
     "startConversationHint": "Envoyez un message pour démarrer la conversation.",
     "startConversationVariantAnalyze": "Quel est le programme aujourd'hui, {{username}} ?",

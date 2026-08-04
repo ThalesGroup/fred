@@ -12,29 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import Button from "@shared/atoms/Button/Button";
+import { KeyboardEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextInput from "@shared/atoms/TextInput/TextInput";
-import styles from "./SessionTitleEditor.module.css";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 
 interface SessionTitleEditorProps {
   title: string;
   onCommit: (title: string) => void;
   maxLength?: number;
-  placeholder?: string;
 }
 
-export function SessionTitleEditor({
-  title,
-  onCommit,
-  maxLength = 120,
-  placeholder = "Untitled conversation",
-}: SessionTitleEditorProps) {
+export function SessionTitleEditor({ title, onCommit, maxLength = 120 }: SessionTitleEditorProps) {
+  const { t } = useTranslation();
+  const placeholder = t("chatbot.sessionTitleEditor.untitled");
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const openPopup = () => {
+  const openDialog = () => {
     setDraft(title);
     setOpen(true);
   };
@@ -46,63 +42,40 @@ export function SessionTitleEditor({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && draft.trim()) {
       e.preventDefault();
       commit();
     }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-    }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
   return (
-    <div className={styles.wrapper} ref={wrapperRef}>
-      <button
-        type="button"
-        className={styles.display}
-        onClick={openPopup}
-        aria-label={`Rename: ${title || placeholder}`}
+    <>
+      <IconButton
+        variant="icon"
+        size="small"
+        icon={{ category: "outlined", type: "edit" }}
+        aria-label={t("chatbot.sessionTitleEditor.editAria", { title: title || placeholder })}
         aria-expanded={open}
-      >
-        <span className={styles.text}>{title || placeholder}</span>
-        <span className={`${styles.editIcon} material-symbols-outlined`} aria-hidden>
-          edit
-        </span>
-      </button>
+        onClick={openDialog}
+      />
 
-      {open && (
-        <div className={styles.popup} role="dialog" aria-label="Rename conversation">
-          <p className={styles.popupLabel}>Rename conversation</p>
-          <TextInput
-            value={draft}
-            maxLength={maxLength}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-label="New conversation name"
-          />
-          <div className={styles.popupActions}>
-            <Button color="on-surface" variant="text" size="small" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button color="primary" variant="filled" size="small" onClick={commit}>
-              Save
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+      <Dialog
+        open={open}
+        title={t("chatbot.sessionTitleEditor.popupLabel")}
+        confirmLabel={t("chatbot.sessionTitleEditor.save")}
+        confirmDisabled={!draft.trim()}
+        onConfirm={commit}
+        onCancel={() => setOpen(false)}
+      >
+        <TextInput
+          value={draft}
+          maxLength={maxLength}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          aria-label={t("chatbot.sessionTitleEditor.inputAria")}
+        />
+      </Dialog>
+    </>
   );
 }

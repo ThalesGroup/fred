@@ -12,7 +12,7 @@
   justify-content: center;
   /* Fade from transparent so the field appears to float above the thread */
   background: linear-gradient(to bottom, transparent 0%, var(--surface-main) 40%);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
+  padding: 0 var(--spacing-l);
 }
 
 .field {
@@ -29,7 +29,9 @@
   background: var(--surface-container-high);
   padding: var(--spacing-s);
   width: 100%;
-  max-width: 720px;
+  /* Consumers can override via --composer-max-width (e.g. ManagedChatPage sets
+     it once so the chat top bar aligns to this exact width); 720px otherwise. */
+  max-width: var(--composer-max-width, 720px);
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {
@@ -65,7 +67,12 @@
 
 .textarea {
   display: block;
-  flex: 1;
+  /* flex-basis must be `auto` (not the `0%` that plain `flex: 1` sets) so the
+     inline height JS assigns in resize() governs the main-axis size in the
+     column layout — otherwise flex-basis:0 pins it to min-height (one line)
+     and the auto-grow never takes. In the compact inline row this still grows
+     to fill the width (grow: 1). */
+  flex: 1 1 auto;
   outline: none;
   border: none;
   background: transparent;
@@ -90,7 +97,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  min-height: 36px;
 }
 
 .bottomLeft {

@@ -76,7 +76,6 @@ export default function TablePagination({
           </>
         )}
         <IconButton
-          color="on-surface"
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "first_page" }}
@@ -85,7 +84,6 @@ export default function TablePagination({
           onClick={onFirst}
         />
         <IconButton
-          color="on-surface"
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "chevron_left" }}
@@ -97,7 +95,6 @@ export default function TablePagination({
           {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
         </span>
         <IconButton
-          color="on-surface"
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "chevron_right" }}
@@ -106,7 +103,6 @@ export default function TablePagination({
           onClick={onNext}
         />
         <IconButton
-          color="on-surface"
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "last_page" }}

@@ -331,36 +331,47 @@ export default function ManagedChatPage() {
               </div>
             </div>
           )}
-          {/* Session title — floats top-left, zero layout impact */}
+          {/* Session title bar — full-width surface; the inner row is capped to
+              the composer field width so title and composer stay aligned. */}
           <div className={styles.topBar}>
-            <div className={styles.topBarTitle}>
-              {chat.sessionId && chat.sessionTitle != null && (
-                <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-              )}
-            </div>
-            <div className={styles.topBarActions}>
-              {attachmentsCount > 0 && (
-                <button
-                  type="button"
-                  className={styles.conversationFilesButton}
-                  onClick={() =>
-                    setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                  }
-                >
-                  <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                  <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                </button>
-              )}
-              {isAdmin && (
-                <IconButton
-                  color="on-surface"
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "build" }}
-                  aria-label={t("chatbot.toggleDebugDrawer")}
-                  onClick={() => setDebugOpen((v) => !v)}
-                />
-              )}
+            <div className={styles.topBarInner}>
+              <div className={styles.topBarTitle}>
+                {chat.sessionId && chat.sessionTitle != null && (
+                  <div className={styles.topBarTitleRow}>
+                    <span className={styles.titleLabel}>
+                      {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                    </span>
+                    {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
+                    <span className={styles.editButtonSlot}>
+                      <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                    </span>
+                  </div>
+                )}
+                <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+              </div>
+              <div className={styles.topBarActions}>
+                {attachmentsCount > 0 && (
+                  <button
+                    type="button"
+                    className={styles.conversationFilesButton}
+                    onClick={() =>
+                      setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                    }
+                  >
+                    <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                    <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+                  </button>
+                )}
+                {isAdmin && (
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "build" }}
+                    aria-label={t("chatbot.toggleDebugDrawer")}
+                    onClick={() => setDebugOpen((v) => !v)}
+                  />
+                )}
+              </div>
             </div>
           </div>
 
@@ -371,7 +382,10 @@ export default function ManagedChatPage() {
             {isInitialState ? (
               <div className={styles.initialStage}>
                 <ManagedChatWelcome />
-                <div className={styles.initialComposer}>{composer}</div>
+                <div className={styles.initialComposer}>
+                  {composer}
+                  <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                </div>
               </div>
             ) : (
               <ConversationThread
@@ -385,7 +399,12 @@ export default function ManagedChatPage() {
             )}
           </div>
 
-          {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
+          {!isInitialState && (
+            <div className={styles.inputOverlay}>
+              {composer}
+              <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+            </div>
+          )}
         </div>
 
         {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the

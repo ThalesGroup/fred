@@ -53,7 +53,6 @@ export function MarkdownPreviewModal({
               {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
             </div>
             <IconButton
-              color="on-surface"
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "close" }}
