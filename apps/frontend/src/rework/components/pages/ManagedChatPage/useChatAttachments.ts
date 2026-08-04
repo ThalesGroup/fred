@@ -206,7 +206,10 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           fallbackDetail: t("chatbot.errors.attachmentDeleteFailedDetail"),
           forbiddenDetail: t("chatbot.errors.attachmentDeleteForbiddenDetail"),
         });
-        throw error;
+        // Both call sites (chip removal, drawer delete) invoke this with `void`
+        // and don't await it -- the error is already surfaced via the toast
+        // above and local state is already rolled back, so don't rethrow: an
+        // unawaited rejection here becomes an unhandled promise rejection.
       }
     },
     [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId],
