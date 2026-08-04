@@ -210,6 +210,13 @@ def build_tool_approval_request(
       your confirmation" apart from "already executing"
     """
 
+    if not calls:
+        raise ValueError(
+            "build_tool_approval_request() requires at least one GatedToolCall; "
+            "the caller must only invoke this when the gate has decided at "
+            "least one call needs approval."
+        )
+
     is_fr = _is_french_language(binding.runtime_context.language)
     pending_calls = tuple(
         PendingToolCall(

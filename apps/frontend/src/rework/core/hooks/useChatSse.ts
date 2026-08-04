@@ -158,16 +158,6 @@ export function useChatSse(
   // once someone else owns the slot.
   const preflightOwnerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
-  // The current turn's exchange_id, set once by send() and only ever read
-  // (never overwritten) by sendHitlResume — a HITL resume continues the same
-  // exchange as the turn that got interrupted, not a new one. Without this,
-  // each sendHitlResume minted its own fresh id, so the tool_call emitted
-  // before the pause and the tool_result the resume produced landed under
-  // two different exchange_ids — toThreadMessages buckets trace entries by
-  // exchange_id before groupTraceEntries can pair a call with its result by
-  // call_id, so the two could never be reunited: the trace step stayed "in
-  // progress" forever even after the result had actually arrived.
-  const currentExchangeIdRef = useRef<string | null>(null);
   const thoughtBufsRef = useRef<
     Map<
       string,
@@ -702,7 +692,6 @@ export function useChatSse(
           prep.reasoning_enabled_model_ids,
         );
         exchangeId = uuidv4();
-        currentExchangeIdRef.current = exchangeId;
         effectiveSessionId = sessionId ?? "draft";
       } catch (err) {
         // Was previously unguarded: a rejection here (e.g. an unknown/foreign
@@ -834,11 +823,19 @@ export function useChatSse(
       applyPreparation(prep);
 
       const sessionId = pending.session_id;
-      // Reuse the interrupted turn's exchange_id — see currentExchangeIdRef's
-      // definition above. Falls back to a fresh id only if a resume somehow
-      // fires with no turn ever recorded (defensive; should not happen since
-      // an AwaitingHumanEvent can only follow a send() that set the ref).
-      const exchangeId = currentExchangeIdRef.current ?? uuidv4();
+      // Reuse the interrupted turn's exchange_id straight from the event that
+      // reported it — `pending` is the exact `AwaitingHumanEvent` this resume
+      // answers, so its own `exchange_id` is authoritative by construction,
+      // unlike a ref that a later, unrelated send() could have overwritten
+      // (or that a stale closure could read before it was ever set). A HITL
+      // resume continues the same exchange as the interrupted turn, not a
+      // new one — otherwise the pre-pause tool_call and the post-resume
+      // tool_result would land under two different exchange_ids and the
+      // trace step would stay "in progress" forever, even after the result
+      // had actually arrived (toThreadMessages buckets trace entries by
+      // exchange_id before groupTraceEntries can pair a call with its result
+      // by call_id).
+      const exchangeId = pending.exchange_id;
       const hitlPayload = pending.payload as {
         choices?: { id: string }[];
         checkpoint_id?: string | null;

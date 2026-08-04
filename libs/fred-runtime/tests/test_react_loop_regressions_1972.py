@@ -438,6 +438,17 @@ async def test_hitl_batch_question_dedups_repeats_but_keeps_distinct_tools() -> 
     assert "Update Ticket (×2), Get Info" in payload["question"]
 
 
+def test_build_tool_approval_request_rejects_empty_calls() -> None:
+    """The caller (`aafter_model`) only ever invokes this with at least one
+    gated call — pin that as an explicit, loud precondition rather than
+    letting a future caller violate it silently (found in PR review)."""
+
+    from fred_runtime.react.middleware.hitl import build_tool_approval_request
+
+    with pytest.raises(ValueError, match="at least one"):
+        build_tool_approval_request(binding=_binding(), calls=[])
+
+
 @pytest.mark.asyncio
 async def test_hitl_cancel_on_a_batch_skips_every_call_not_just_one() -> None:
     """The same atomic guarantee `test_hitl_resume_cancel_skips_tool_batch`

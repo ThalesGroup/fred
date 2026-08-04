@@ -1697,7 +1697,7 @@ def _validate_resolved_team(
 # itself is deprecated as of LangGraph 1.0 ("removed in V2.0") in favor of
 # the compiled graph's own `aget_state(...).tasks[].interrupts`, which is not
 # usable here — this function runs before the target agent's graph is
-# resolved/compiled. `test_react_v2_pending_interrupt_channel_matches_langgraph`
+# resolved/compiled. `test_react_v2_interrupt_channel_constant_matches_langgraph`
 # pins this literal against LangGraph's own constant so a version bump that
 # changes it fails a test instead of silently reopening this gap.
 _REACT_V2_INTERRUPT_CHANNEL = "__interrupt__"
