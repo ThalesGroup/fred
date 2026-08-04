@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
@@ -40,7 +40,10 @@ interface AssistantTurnProps {
   pendingToolCallIds?: readonly string[] | null;
 }
 
-export function AssistantTurn({
+// Memoized: sibling turns in a long thread must not re-render on unrelated
+// parent renders (e.g. a composer keystroke, or a streaming delta on a
+// different message) — see #2221.
+export const AssistantTurn = memo(function AssistantTurn({
   text,
   traceMessages,
   sources,
@@ -133,4 +136,4 @@ export function AssistantTurn({
       )}
     </div>
   );
-}
+});
