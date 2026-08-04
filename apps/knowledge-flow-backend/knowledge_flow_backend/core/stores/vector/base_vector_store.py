@@ -106,17 +106,28 @@ class BaseVectorStore(ABC):
         """Optional capability: fetch raw chunk data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw chunks.")
 
-    def owns_session_document(self, document_uid: str, user_id: str) -> bool:
-        """True if `document_uid` has at least one session-scoped chunk owned by `user_id`.
+    def may_delete_session_document(self, document_uid: str, user_id: str) -> bool:
+        """True if `user_id` may delete `document_uid` as a session-scoped attachment.
 
-        Backed by `get_chunks_for_document`; fails closed (returns False rather
-        than raising) when the store can't fetch chunks by document, so callers
-        that gate access on this treat an unsupported backend as "not owned".
+        True when the user owns at least one chunk of the document, OR the
+        document has no chunks at all. The empty case matters for retry
+        safety: deleting a session document's vectors is itself idempotent
+        (deleting nothing is a no-op), so if an earlier delete attempt already
+        removed every chunk before failing on a later cleanup step, a retry
+        must still be allowed to reach that step rather than being denied
+        forever because there is nothing left to prove ownership over.
+
+        Fails closed (returns False) when chunks exist but none belong to
+        `user_id`, or when the backend can't fetch chunks by document at all
+        (an unsupported backend can't distinguish "nothing to delete" from
+        "someone else's document").
         """
         try:
             chunks = self.get_chunks_for_document(document_uid)
         except NotImplementedError:
             return False
+        if not chunks:
+            return True
         return any(is_own_session_chunk(c, user_id) for c in chunks)
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:

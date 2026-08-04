@@ -103,11 +103,14 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     ReBAC check can never resolve to True for them, denying even the uploader.
     Ownership is instead proven the same way ``summarize_document`` already
     proves it for reads on this same document class: via the chunk's own
-    ``scope``/``user_id`` metadata (``base_vector_store.owns_session_document``).
+    ``scope``/``user_id`` metadata (``base_vector_store.may_delete_session_document``),
+    which also allows a document with no chunks left at all — so a retry after
+    an earlier attempt already deleted the vectors but failed on a later
+    cleanup step can still converge instead of being denied forever.
     """
     if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
         return
-    if await asyncio.to_thread(vector_store.owns_session_document, document_uid, user.uid):
+    if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
         return
     raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
 

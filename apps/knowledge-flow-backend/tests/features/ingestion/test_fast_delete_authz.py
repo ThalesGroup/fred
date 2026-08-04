@@ -21,7 +21,10 @@ reads on this document class).
 These tests pin the authorization decision:
 - an admin (holds can_manage_platform) skips the per-document ownership check;
 - a non-admin owner (their own session-scoped chunks exist) passes;
-- a non-admin non-owner is refused.
+- a non-admin non-owner is refused;
+- a document with no chunks at all is allowed (idempotent no-op), so a retry
+  after an earlier attempt already deleted the vectors but failed on a later
+  cleanup step can still converge.
 Authentication itself is enforced by the endpoint dependency and is not waived.
 """
 
@@ -57,39 +60,50 @@ class _FakeRebac:
 
 
 class _FakeVectorStore:
-    """Records the ownership check the authorizer makes."""
+    """Records the delete-authorization check the authorizer makes."""
 
-    def __init__(self, *, owns_document: bool) -> None:
-        self._owns_document = owns_document
-        self.ownership_checked = False
+    def __init__(self, *, may_delete: bool) -> None:
+        self._may_delete = may_delete
+        self.checked = False
 
-    def owns_session_document(self, document_uid: str, user_id: str) -> bool:
-        self.ownership_checked = True
+    def may_delete_session_document(self, document_uid: str, user_id: str) -> bool:
+        self.checked = True
         assert document_uid == "doc-1"
-        return self._owns_document
+        return self._may_delete
 
 
 @pytest.mark.asyncio
 async def test_platform_admin_bypasses_document_ownership() -> None:
     rebac = _FakeRebac(is_platform_admin=True)
-    vector_store = _FakeVectorStore(owns_document=False)
+    vector_store = _FakeVectorStore(may_delete=False)
     # Admin: allowed even though it owns nothing, and the ownership check is skipped.
     await _authorize_fast_ingest_delete(rebac, _user(), "doc-1", vector_store)
-    assert vector_store.ownership_checked is False
+    assert vector_store.checked is False
 
 
 @pytest.mark.asyncio
 async def test_non_admin_owner_passes_ownership_check() -> None:
     rebac = _FakeRebac(is_platform_admin=False)
-    vector_store = _FakeVectorStore(owns_document=True)
+    vector_store = _FakeVectorStore(may_delete=True)
     await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
-    assert vector_store.ownership_checked is True
+    assert vector_store.checked is True
 
 
 @pytest.mark.asyncio
 async def test_non_admin_non_owner_is_refused() -> None:
     rebac = _FakeRebac(is_platform_admin=False)
-    vector_store = _FakeVectorStore(owns_document=False)
+    vector_store = _FakeVectorStore(may_delete=False)
     with pytest.raises(AuthorizationError):
         await _authorize_fast_ingest_delete(rebac, _user("mallory"), "doc-1", vector_store)
-    assert vector_store.ownership_checked is True
+    assert vector_store.checked is True
+
+
+@pytest.mark.asyncio
+async def test_retry_after_vectors_already_deleted_converges() -> None:
+    """A retry that reaches this check after an earlier attempt already deleted
+    every chunk (but failed on a later cleanup step) must not be denied forever
+    just because there is nothing left to prove ownership over."""
+    rebac = _FakeRebac(is_platform_admin=False)
+    vector_store = _FakeVectorStore(may_delete=True)
+    await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
+    assert vector_store.checked is True

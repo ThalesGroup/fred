@@ -40,16 +40,23 @@ class _FakeChunkStore(BaseVectorStore):
         return self._chunks
 
 
-def test_owns_session_document_true_when_a_chunk_matches():
+def test_may_delete_session_document_true_when_a_chunk_matches():
     store = _FakeChunkStore([{"metadata": {"scope": "session", "user_id": "alice"}}])
-    assert store.owns_session_document("doc-1", "alice") is True
+    assert store.may_delete_session_document("doc-1", "alice") is True
 
 
-def test_owns_session_document_false_for_different_user():
+def test_may_delete_session_document_false_for_different_user():
     store = _FakeChunkStore([{"metadata": {"scope": "session", "user_id": "mallory"}}])
-    assert store.owns_session_document("doc-1", "alice") is False
+    assert store.may_delete_session_document("doc-1", "alice") is False
 
 
-def test_owns_session_document_fails_closed_when_unsupported():
+def test_may_delete_session_document_true_when_no_chunks_left():
+    """Idempotent-retry case: an earlier delete already removed every chunk,
+    so there is nothing left to prove ownership over -- must not deny forever."""
+    store = _FakeChunkStore([])
+    assert store.may_delete_session_document("doc-1", "alice") is True
+
+
+def test_may_delete_session_document_fails_closed_when_unsupported():
     store = _FakeChunkStore(unsupported=True)
-    assert store.owns_session_document("doc-1", "alice") is False
+    assert store.may_delete_session_document("doc-1", "alice") is False
