@@ -60,14 +60,18 @@ class _FakeRebac:
 
 
 class _FakeVectorStore:
-    """Records the delete-authorization check the authorizer makes."""
+    """Records the delete-authorization check the authorizer makes, including
+    the exact user_id it was asked to check -- a wrong-identifier bug (e.g.
+    forwarding username instead of uid) would otherwise still pass these tests."""
 
     def __init__(self, *, may_delete: bool) -> None:
         self._may_delete = may_delete
         self.checked = False
+        self.checked_user_id: str | None = None
 
     def may_delete_session_document(self, document_uid: str, user_id: str) -> bool:
         self.checked = True
+        self.checked_user_id = user_id
         assert document_uid == "doc-1"
         return self._may_delete
 
@@ -87,6 +91,7 @@ async def test_non_admin_owner_passes_ownership_check() -> None:
     vector_store = _FakeVectorStore(may_delete=True)
     await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
     assert vector_store.checked is True
+    assert vector_store.checked_user_id == "alice"
 
 
 @pytest.mark.asyncio
@@ -96,6 +101,7 @@ async def test_non_admin_non_owner_is_refused() -> None:
     with pytest.raises(AuthorizationError):
         await _authorize_fast_ingest_delete(rebac, _user("mallory"), "doc-1", vector_store)
     assert vector_store.checked is True
+    assert vector_store.checked_user_id == "mallory"
 
 
 @pytest.mark.asyncio
