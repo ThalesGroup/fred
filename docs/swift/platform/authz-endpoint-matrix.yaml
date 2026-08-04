@@ -273,17 +273,17 @@ operations:
     method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy
     review_status: approved
-    required_permission: can_read_members+elevated_team_role # TEAM-05, #2118, narrowed #2167 follow-up, TEAM-ROUTING-POLICY-RFC.md §6 — can_read_members (team_member) proves membership/team-existence, then service.py's own _require_elevated_team_role narrows to team_admin/team_editor/team_analyst (plain team_member denied)
+    required_permission: can_read_members+elevated_team_role # TEAM-05, #2118, narrowed #2167 follow-up, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — can_read_members (team_member) proves membership/team-existence, then service.py's own _require_elevated_team_role narrows to team_admin/team_editor/team_analyst (plain team_member denied)
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/teams/{team_id}/routing-policy
     review_status: approved
-    required_permission: can_update_resources # TEAM-05, #2118, TEAM-ROUTING-POLICY-RFC.md §6 — team_editor only, team_admin has zero write authority (hard cross-write rule)
+    required_permission: can_update_resources # TEAM-05, #2118, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — team_editor only, team_admin has zero write authority (hard cross-write rule)
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/available-models
     review_status: approved
-    required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, TEAM-ROUTING-POLICY-RFC.md §13 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
+    required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances

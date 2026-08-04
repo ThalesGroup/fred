@@ -45,6 +45,24 @@
       }
     }
 
+    // M3 filled tonal icon button: `secondary-container`-style container with
+    // `on-secondary-container` icon (mapped through the scheme's container /
+    // on-container roles), and a state layer in the on-container color — the
+    // official tonal spec, not a local approximation. Disabled state is the
+    // shared `.btn:disabled` rule below (on-surface 12% / text 38%).
+    &.btn-tonal {
+      --btn-background: #{map.get($scheme, "container")};
+      --btn-text-color: #{map.get($scheme, "on-container")};
+
+      &:hover:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "on-container-hover")};
+      }
+
+      &:active:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "on-container-pressed")};
+      }
+    }
+
     &.btn-outlined {
       // M3: the outlined variant's border is always the neutral `outline`
       // token, regardless of `color` — only the icon/state-layer take the

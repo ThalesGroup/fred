@@ -8,10 +8,7 @@ the old always-expanded MUI tree (`KnowledgeHub`) and the later per-tab single-l
 browsers (`TeamFilesystemBrowser`/`AgentFilesystemBrowser`), both fully retired.
 
 **As-built record.** This doc describes the shipped shape only — no workplan checklists,
-no commit hashes, no change history. For the "why" behind a specific decision, see the
-originating RFCs: `KNOWLEDGE-WORKSPACE-REWORK-RFC.md` (FRONT-09, product model and
-performance rationale) and `DOCUMENT-RENAME-RFC.md` (real vs. cosmetic rename). Tracked
-under GitHub issue #2128.
+no commit hashes, no change history. Tracked under GitHub issue #2128.
 
 ## Product model
 
@@ -58,9 +55,19 @@ preview + "more" actions cell.
   `FileTypeBucket` grouping (PDF/Texte/PPT/Excel/Autres) used by the usage-stats cards, so
   a given extension reads the same color everywhere on the page.
 - **Rename:** every tab supports it through one shared `RenameModal`. Corpus document
-  rename is a *real* rename (`DOCUMENT-RENAME-RFC.md`) — it locks the extension and
-  propagates best-effort to the vector index; folder rename and `/fs` rename are plain
-  metadata/filesystem operations with no extension lock.
+  rename (`PUT /document/metadata/{document_uid}/name`, operation_id `rename_document`)
+  is a *real* rename: it writes `Identity.document_name` and clears `title` (so a stale
+  cosmetic title can never re-mask the new name), gated on `DocumentPermission.UPDATE`,
+  human-only (no agent/MCP tool). It **locks the extension** (400 if the new name's
+  extension differs) and **rejects on collision** (409, checked against sibling documents
+  in the same tags) rather than auto-suffixing — the user stays in control of the final
+  name. `document_uid`, storage keys, and embeddings never change; chunk **metadata**'s
+  `document_name` field (a separate, denormalized copy of the display name kept alongside
+  the embedding) is patched best-effort across all 5 vector backends, and the in-app
+  preview/download `Content-Disposition` header reads the DB record instead of the stored
+  blob's own (stale) name. `canonical_name`/`version` (the "name (1)" draft-version
+  machinery) are left untouched by a rename — a known, non-corrupting edge case. Folder
+  rename and `/fs` rename are plain metadata/filesystem operations with no extension lock.
 - **Bulk actions** (row-selection checkbox column): delete, download (client-side ZIP for
   2+ files, direct download for one), and — Corpus only — exclude/include from search.
   Selection is scoped to the current page.
@@ -74,12 +81,34 @@ Files-by-type histogram + size-by-type stacked bar, both bucketed via fred-core'
 espace/Espace d'équipe (recursive file listing under that path, bucketed by extension).
 Agents has no stats source — its root is virtual, not one `/fs` path.
 
+## Performance contract
+
+The frontend must obey these rules — none of them are optional as the corpus grows:
+
+- never fetch all documents for a team only to render one folder; never fetch all
+  resources of a kind for routine rendering; never request `limit=10000` in this page
+- do not prefetch every folder's first page on initial mount
+- load folder counts through summary endpoints, not by loading file rows
+- cache pages per `teamId + folderId + query + filters + sort`
+- abort or ignore stale requests when users switch folders quickly
+- render only the current page; virtualize only if a page size above 200 is
+  intentionally supported later
+- a completed task refreshes the current folder/page, not the whole tree, unless the
+  task changed folder membership
+
+Initial budgets: opening the workspace with 500 files across folders costs one
+tree-summary request + one document page; switching folder costs one document page
+request; search within a folder is a debounced request with no tree refetch; an upload
+completing costs one current-folder page refresh + one storage-usage refresh; toggling
+retrievable costs an optimistic row update + single row/page invalidation.
+
 ## Known, accepted limitations
 
 - Search is a client-side filter over the current page's already-loaded rows, not a
   library-wide query — a real backend `query`/`sort` contract exists for Corpus
   (`POST /documents/metadata/browse`) but isn't wired to a UI control yet; the other
-  three tabs have no equivalent `/fs` search contract at all.
+  three tabs have no equivalent `/fs` search contract at all. Deferred until real usage
+  data justifies the backend work.
 - Bulk download zips client-side (every file's blob round-trips through the browser
   before zipping) — fine at today's usage, revisit with a server-side streaming-zip
   endpoint if that changes.
@@ -88,3 +117,10 @@ Agents has no stats source — its root is virtual, not one `/fs` path.
   unstarted instrumentation work, not a Resources UI gap.
 - The "by AI" provenance badge (agent-generated files) never appears on Corpus rows —
   ingestion is never agent-driven in the current provenance model.
+
+## Open product questions
+
+- Should chat contexts and templates stay outside this workspace (as today, e.g.
+  `PromptsPage` for prompts) or move into a dedicated rework page per kind?
+- Should "Mon espace" become part of the MCP filesystem view (FILES-01) instead of the
+  document-library/tag model it uses today?

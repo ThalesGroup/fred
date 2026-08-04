@@ -23,7 +23,6 @@ interface TogglePanelButtonProps extends Omit<ComponentPropsWithoutRef<"button">
 export function TogglePanelButton({ open, ...props }: TogglePanelButtonProps) {
   return (
     <IconButton
-      color="on-surface"
       variant="icon"
       size="small"
       icon={{ category: "outlined", type: open ? "chevron_right" : "chevron_left" }}

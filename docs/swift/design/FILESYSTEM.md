@@ -39,7 +39,7 @@ The UI labels are product names. The backend paths are implementation details.
 | Mon espace | `/teams/{team}/users/{uid}/...` | the owning user |
 | Espace d'equipe | `/teams/{team}/shared/...` | humans with team update permission |
 | Agents | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | the running agent for that user, via runtime adapter |
-| Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, AGENT-CAPABILITY-RFC §3.4) |
+| Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, see docs/swift/capabilities/AUTHORING.md) |
 
 Earlier target notes described a `/teams/{team}/resources/...` path; the current
 shipped implementation exposes corpus content through the separate `/corpus/...`
@@ -137,6 +137,33 @@ Stable document reads use:
 
 Corpus binaries are not served by `/fs/download`; they continue to use the
 content/document APIs.
+
+### Business labels vs. scope tags
+
+A document can carry two structurally unrelated kinds of "tag" — never merged:
+
+| | Fred **tag** (scope) | **Business label** (descriptive) |
+| --- | --- | --- |
+| Answers | who may see the document | what the document is |
+| Backed by | the permission tag system (ReBAC, libraries) | `DocumentMetadata.labels: list[str]` |
+| Changing it | a security event | a harmless metadata edit |
+| Hierarchy | hierarchical (folders/libraries) | flat, many-to-many |
+
+Labels are a plain metadata field — the single source of truth, nothing
+denormalized into the vector index. A label is resolved to its document set at
+query time (`GET /documents/by-label/{label}`), then that set is used wherever
+a document-scoped operation needs a target (e.g. the similarity search's
+document targeting, `DESIGN.md §4`) — never by baking the label into indexed
+chunk metadata, which would go stale between reindexes. REST surface: `POST`/
+`DELETE /documents/{uid}/labels/{label}`, `GET /documents/labels`,
+`GET /documents/by-label/{label}` — assigning/removing a label only checks the
+document's UPDATE access, never a ReBAC check on the label itself, since a
+label carries no access semantics.
+
+Not built: a managed label-*definitions* table (rename/describe a label
+globally, team-scoped vocabularies) and any agent/filesystem exposure of
+labels (a proposed `/corpus/by-label/{label}/` read-only virtual directory) —
+both remain future work with no open GitHub issue.
 
 ## Access Surfaces
 

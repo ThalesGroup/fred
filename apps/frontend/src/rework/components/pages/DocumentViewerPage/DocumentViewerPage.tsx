@@ -59,7 +59,6 @@ export default function DocumentViewerPage() {
     <div className={styles.page}>
       <header className={styles.topBar}>
         <IconButton
-          color="on-surface"
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: "arrow_back" }}
@@ -69,7 +68,6 @@ export default function DocumentViewerPage() {
         <span className={styles.title}>{title}</span>
         {hasInfo && (
           <IconButton
-            color="on-surface"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "info" }}

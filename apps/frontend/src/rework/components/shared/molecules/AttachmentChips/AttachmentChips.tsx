@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { ChatAttachment } from "@rework/types/attachments";
+import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
 import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
 import { useEffect, useRef } from "react";
@@ -79,26 +80,16 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
   return (
     <div ref={scrollRef} className={styles.chips} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
       {attachments.map((attachment) => (
-        <span key={attachment.id} className={styles.chip} data-status={attachment.status}>
-          <span className={styles.icon} aria-hidden>
-            <Icon category="outlined" type={attachment.isImage ? "image" : "attach_file"} />
-          </span>
-          <span className={styles.text}>
-            <span className={styles.name} title={attachment.name}>
-              {attachment.name}
-            </span>
-            {attachment.taskIds.length === 0 && <span className={styles.meta}>{fileLabel(attachment, t)}</span>}
-          </span>
-          <AttachmentTaskStatus taskIds={attachment.taskIds} />
-          <button
-            type="button"
-            className={styles.remove}
-            onClick={() => onRemove(attachment.id)}
-            aria-label={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
-          >
-            <Icon category="outlined" type="close" />
-          </button>
-        </span>
+        <Chip
+          key={attachment.id}
+          tone={attachment.status === "error" ? "error" : "default"}
+          leading={<Icon category="outlined" type={attachment.isImage ? "image" : "attach_file"} />}
+          label={attachment.name}
+          secondary={attachment.taskIds.length === 0 ? fileLabel(attachment, t) : undefined}
+          trailing={<AttachmentTaskStatus taskIds={attachment.taskIds} />}
+          onRemove={() => onRemove(attachment.id)}
+          removeAriaLabel={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
+        />
       ))}
     </div>
   );

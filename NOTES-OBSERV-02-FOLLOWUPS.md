@@ -1,7 +1,8 @@
 # OBSERV-02 v3 — follow-up notes (not this branch's scope)
 
-Working notes kept alongside issue #2110 while implementing `KPI-ANALYTICS-RFC.md`
-v3. Each entry below is something found *while building*, deliberately left out
+Working notes kept alongside issue #2110 while implementing the OBSERV-02 v3
+KPI dashboard work (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36). Each entry below
+is something found *while building*, deliberately left out
 of this branch, and worth its own small GitHub issue later. Not a design doc —
 just enough context per entry to write that issue without re-deriving it.
 
@@ -30,7 +31,7 @@ than a rushed one. Deferred, `team_scopable=False`, comment in the file.
 
 ### 3. `active_users_over_time` / `unique_users_total` — architecturally blocked
 Sourced from `api.request_latency_ms` (the generic HTTP middleware KPI),
-which deliberately never carries `dims.team_id` (`KPI-ANALYTICS-RFC.md` §2.2
+which deliberately never carries `dims.team_id` (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
 — team context can't safely come from request-body reads in middleware,
 breaks streaming). Team-scoping these for real would need a *new*,
 domain-level KPI event with proper team attribution — not a parameter
@@ -72,7 +73,7 @@ a peer of Members/Settings, at `/admin/activity` and `/teams/{id}/activity`.
 Shipped reality: `/admin/tasks` (not `/admin/activity`) and the team view
 nested inside Team Settings (`/team/:teamId/settings/activity`), not a
 sibling nav item. Pre-existing gap, unrelated to OBSERV-02's dashboard
-content — noted in `KPI-ANALYTICS-RFC.md` §2.8 as explicitly out of scope for
+content — noted as explicitly out of scope for
 this branch. Small, self-contained follow-up if the nav restructure is
 wanted.
 
@@ -199,7 +200,7 @@ as, enforcement reaches that team. Skipping this step breaks all chat for
 that team until the toggle is flipped by hand through `CapabilitiesPage`
 (now filterable to `kind="model"` — "Frontend F5 — done" above) or the raw
 API. Documented as the
-resolved hazard in `AGENT-CAPABILITY-RFC.md` §8.7 — repeating it here
+resolved hazard (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §17) — repeating it here
 because forgetting the runbook step is exactly the kind of gap that's
 invisible in code review and only shows up as a production incident; a
 future auto-seeding migration remains a legitimate improvement if the manual
@@ -228,8 +229,8 @@ which runs multiple times per turn — once per distinct `operation`: routing,
 planning, tool-call, …) would have been hotter than this platform's existing
 per-request security posture. Confirmed with the developer (mid-implementation
 discussion) that the fix is NOT a cache/TTL/push-sync mechanism — this
-platform's `EXECUTION-GRANT-SECURITY-HARDENING-RFC.md` already rejected a
-control-plane-signed/cached grant design (Appendix A) in favor of live,
+platform already rejected a control-plane-signed/cached grant design (see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.11) in favor of live,
 never-cached, per-request pod-side OpenFGA checks. The actual fix: compute
 `usable_model_capability_ids` ONCE per turn, at the same point the existing
 per-request check (`_authorize_execution_or_raise`) already runs, and thread
@@ -294,6 +295,6 @@ had no one-click way to acknowledge a failed row from there. Not fixed by adding
 an ack affordance: those embeds turned out to duplicate the dedicated
 `/admin/tasks` and `/team/:teamId/settings/activity` Activity tabs (which *do*
 have ack, via `TaskCard`/`TaskDetailPopover`) one click away in the same nav
-rail. Removed the embeds instead (`KPI-ANALYTICS-RFC.md` §2.8) — the gap this
+rail. Removed the embeds instead (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36) — the gap this
 item tracked no longer exists because the duplicate surface it was on doesn't
 either.

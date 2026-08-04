@@ -170,6 +170,22 @@ Sub-menu rows are rows with a chevron whose anchored panel is rendered by the pa
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
 
+- **M3 alignment (2026-08-03)** — container corner moved from `--radius-m` to `--radius-s`
+  (the M3 menu/text-field/chip radius), and a picked row now carries the dedicated
+  `--state-on-surface-selected` state layer instead of reusing the transient
+  `--state-on-surface-hover`, so a selected option reads as chosen at rest. Token-only, no
+  content or row removed. Follow-up: the container border was dropped (the `--shadow-m`
+  elevation alone separates it from the background) and the group dividers now use
+  `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
+  and bleed full width (negative horizontal margins cancel the popover padding).
+
+- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
+  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
+  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
+  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
+  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
+  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+
 ---
 
 ### `SearchConfig`
@@ -193,8 +209,8 @@ sub-menu. The popover deliberately stays open so a user can flip it and keep
 composing. It is also the first row contributed by the **platform** rather than by a
 capability. It appears only when the agent's author turned Reasoning on in the form's
 Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`MODEL-REASONING-ENABLEMENT-RFC.md`
-§8). The offer itself lived in the General section until Amendment C (2026-08-02) moved
+gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
 it into the Capabilities tab, rendered through the same `CapabilityCard` component every
 real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
 even though the reasoning offer still isn't a capability underneath.
@@ -251,7 +267,7 @@ agents) so the decision is informed at the point it is made.
   in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
   a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
   `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
-  threaded by a single 1px timeline rail so the turn still reads as a process unfolding. See `AGENT-THINKING-API-RFC.md` Amendment D.
+  threaded by a single 1px timeline rail so the turn still reads as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
   sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
@@ -289,7 +305,7 @@ agents) so the decision is informed at the point it is made.
   The thought row is now filtered out entirely (`traceUtils.groupTraceEntries()`) — it was
   pure bookkeeping duplication, not agent reasoning. The combo row alone now carries the
   humanized tool label, the status dot, and (new) the real execution latency. See
-  `RUNTIME-EXECUTION-CONTRACT.md` §8.21 and `AGENT-THINKING-API-RFC.md` Amendment B.
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 ---
 
@@ -616,6 +632,94 @@ _(none yet)_
 
 ---
 
+### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/atoms/Chip/`,
+`src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+Three related changes on the chat composer, all consolidating hand-rolled UI onto the shared
+library:
+
+- **`Chip` atom (new)** — a removable M3 input chip (`--radius-s`, neutral outline, no resting
+  shadow): optional leading visual, truncating label, optional secondary line, optional trailing
+  content, optional remove button, and a `tone="error"` that recolors the pill to the
+  error-container role. `AttachmentChips` renders this atom instead of duplicating pill markup —
+  it keeps only its own scroll row and its muted leading icon. (`ContextPromptChips` also used it
+  briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
+  entry below.)
+
+- **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
+  scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
+  disabled inherits the shared on-surface 12%/38% rule). Spec taken from the official M3 icon
+  button guidelines, mapped through the local scheme tokens.
+
+- **Composer action buttons** — the send/stop/voice buttons in `RichInputField` were hand-rolled
+  `<button>`s; they are now the shared `IconButton` atom (send/stop = `filled` `primary`, mic =
+  `tonal` `secondary`, recording = `tonal` `error`, transcribing = `tonal` with the `loading`
+  spinner). Consequence: the action buttons are now circular (the atom's shape) rather than the
+  previous rounded square; the subtle pop-in on appearance is preserved.
+
+- **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
+  and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
+  `--surface-main`.
+
+---
+
+### Prompt library → insert into composer (`ContextPromptPicker`, 2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ContextPromptPicker/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+Picking a prompt in the composer's `Prompts` row now **inserts the prompt's content into the
+chat input** instead of attaching it as a session-context chip.
+
+- `ContextPromptPicker` went from a multi-select toggle (checkboxes, `selectedIds`/`onChange`) to
+  a one-shot action list (`onSelect(prompt)`, `role="menu"`/`menuitem`). Picking a row fetches the
+  full prompt (`GetTeamPrompt` — the `text` lives on the record, not the `ContextPromptSummary`),
+  appends it to the draft (`\n\n`-separated when the draft is non-empty), and closes the actions
+  popover. Scope resolves the owning team: `personal` → the user's personal team, `team` → the
+  chat team.
+- `RichInputField` now resizes the textarea on any external value change (not just clear), so
+  inserted (and voice-transcribed) text grows the box instead of being clipped at one row.
+- The context-prompt **chip** UI was removed: `ContextPromptChips` (molecule + test) is deleted,
+  and the composer no longer renders attached-prompt pills. The backend session-context channel
+  (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
+  — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
+  separate change, not done here.
+- Picker rows were simplified to name + description (+ score stars): the leading icon and the
+  usage count were removed. The picker's `MenuPopover` uses an 8px padding for this instance via
+  the `pickerSurface` className.
+
+---
+
+### Composer: split the actions menu into "add" + "tune" (2026-08-03)
+
+**Location:** `src/rework/components/shared/molecules/ComposerActionsMenu/`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+The composer now shows two trigger buttons side by side instead of one:
+
+- **Add** (`add` icon) — the attach action + the always-on prompt-library row.
+- **Tune** (`tune` icon, to its right) — the tool controls (document scope, search policy, RAG
+  scope, reasoning). It only renders when the agent exposes at least one such control.
+
+Both open the same `MenuPopover`-based popover. `ComposerActionsMenu` gained `icon` /
+`openAriaLabel` / `dialogAriaLabel` props (defaulting to the add-menu values), and
+`ComposerControlSlot` gained a `part: "primary" | "tools"` prop selecting which control groups it
+renders — so the two buttons reuse the same component. The two triggers are spaced by the
+composer's `commandSlot` gap.
+
+---
+
 ### `ChatMessagesArea`
 
 **Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`
@@ -770,8 +874,8 @@ renders a `preview.markdownUnavailable` notice instead of the former literal
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
   continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
-- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08,
-  RAG-AGENT-QUALITY-RFC.md §5), unaffected by this component.
+- **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
+  unaffected by this component.
 
 #### Resolved
 
@@ -1502,7 +1606,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 **Status:** `Functional`
 
 Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`KPI-ANALYTICS-RFC.md` §2.5 Page 2, 2026-07-26): the personal section (unchanged, wrapped in
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
 its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
 in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
 `hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
@@ -1522,7 +1626,7 @@ team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activit
 line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
 `/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
 nav rail, which additionally has ack support this embed never did. See
-`KPI-ANALYTICS-RFC.md` §2.8 and the `TaskActivity` entry below.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36 and the `TaskActivity` entry below.
 
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
@@ -2055,10 +2159,10 @@ non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
 (`scope="team" kind="ingestion"`) and team_admin (`scope="team"`, unfiltered) sections briefly
-embedded this organism per KPI-ANALYTICS-RFC.md §2.8. Removed as a live-review finding: they
+embedded this organism per `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36. Removed as a live-review finding: they
 duplicated the two dedicated surfaces above, one click away in the same nav rail, without this
 organism's missing ack affordance ever getting fixed for the duplicate. See
-`KPI-ANALYTICS-RFC.md` §2.8.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36.
 
 #### Open UX issues
 

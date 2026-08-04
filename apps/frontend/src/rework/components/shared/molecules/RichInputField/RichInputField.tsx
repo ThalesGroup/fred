@@ -14,6 +14,7 @@
 
 import { KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
 import styles from "./RichInputField.module.css";
 
@@ -48,6 +49,13 @@ interface RichInputFieldProps {
   voiceInputDisabled?: boolean;
   onVoiceInputError?: (message: string) => void;
   maxHeight?: number;
+  /**
+   * Bump this (e.g. a counter) whenever the caller has just set `value`
+   * programmatically (not from the user typing) and wants the field refocused
+   * with the caret at the end — e.g. after inserting a library prompt. Ignored
+   * on the initial render so mounting doesn't steal focus.
+   */
+  focusEndRequestId?: number;
 }
 
 type VoiceInputState = "idle" | "recording" | "transcribing";
@@ -79,6 +87,7 @@ export function RichInputField({
   voiceInputDisabled = false,
   onVoiceInputError,
   maxHeight = 200,
+  focusEndRequestId,
 }: RichInputFieldProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -90,7 +99,7 @@ export function RichInputField({
 
   valueRef.current = value;
 
-  const resize = () => {
+  const resize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     const preCollapseScrollTop = el.scrollTop;
@@ -110,9 +119,11 @@ export function RichInputField({
     // the scrollTop captured before the collapse instead, so the view only
     // moves when the browser's own caret-follow would have moved it anyway.
     el.scrollTop = overflowing ? preCollapseScrollTop : 0;
-  };
+  }, [maxHeight]);
 
-  // Reset height when value is cleared externally.
+  // Keep the box in sync with external value changes (cleared draft after send,
+  // a voice transcript, or a prompt inserted from the library): reset when empty,
+  // otherwise grow to fit so inserted text isn't clipped at one row.
   useEffect(() => {
     if (!value) {
       const el = textareaRef.current;
@@ -121,8 +132,26 @@ export function RichInputField({
         el.style.overflowY = "hidden";
         el.scrollTop = 0;
       }
+      return;
     }
-  }, [value]);
+    resize();
+  }, [value, resize]);
+
+  // Refocus with the caret at the end after a caller-driven insertion (e.g. a
+  // library prompt). Skips the mount so mounting the field never steals focus;
+  // relies on `value` having already been committed to the DOM by the time this
+  // runs, since the caller updates both in the same render (React batches it).
+  const lastFocusEndRequestId = useRef(focusEndRequestId);
+  useEffect(() => {
+    const previous = lastFocusEndRequestId.current;
+    lastFocusEndRequestId.current = focusEndRequestId;
+    if (focusEndRequestId === undefined || focusEndRequestId === previous) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [focusEndRequestId]);
 
   // Re-focus after the assistant reply completes (disabled: true → false).
   useEffect(() => {
@@ -244,54 +273,56 @@ export function RichInputField({
 
   const defaultActionSlot = (
     <div className={styles.actionGroup}>
-      {canUseVoiceInput && (
-        <button
-          type="button"
-          className={`${styles.sendBtn} ${styles.voiceBtn} ${
-            voiceInputState === "recording"
-              ? styles.voiceBtnRecording
-              : voiceInputState === "transcribing"
-                ? styles.voiceBtnBusy
-                : styles.voiceBtnIdle
-          }`}
-          disabled={voiceControlDisabled && voiceInputState !== "recording"}
-          onClick={voiceInputState === "recording" ? stopRecording : () => void startRecording()}
-          aria-label={
-            voiceInputState === "recording"
-              ? t("chatbot.stopRecording")
-              : voiceInputState === "transcribing"
-                ? t("chatbot.transcribingAudio")
-                : t("chatbot.recordAudio")
-          }
-        >
-          {voiceInputState === "recording" ? (
-            <span className={styles.stopIcon} aria-hidden />
-          ) : (
-            <span
-              className={`material-symbols-outlined ${voiceInputState === "transcribing" ? styles.spinningIcon : ""}`}
-              aria-hidden
-            >
-              {voiceInputState === "transcribing" ? "progress_activity" : "mic"}
-            </span>
-          )}
-        </button>
-      )}
+      {canUseVoiceInput &&
+        // Voice control — a plain icon button (default on-surface-retreat): mic
+        // at rest, a filled stop while recording, and a spinner via `loading`
+        // while the clip is being transcribed.
+        (voiceInputState === "recording" ? (
+          <IconButton
+            variant="filled"
+            color="error"
+            size="small"
+            icon={{ category: "outlined", type: "stop", filled: true }}
+            onClick={stopRecording}
+            aria-label={t("chatbot.stopRecording")}
+          />
+        ) : voiceInputState === "transcribing" ? (
+          <IconButton
+            variant="icon"
+            size="small"
+            loading
+            icon={{ category: "outlined", type: "mic" }}
+            aria-label={t("chatbot.transcribingAudio")}
+          />
+        ) : (
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "mic" }}
+            disabled={voiceControlDisabled}
+            onClick={() => void startRecording()}
+            aria-label={t("chatbot.recordAudio")}
+          />
+        ))}
       {showStop ? (
-        <button type="button" className={styles.sendBtn} onClick={onInterrupt} aria-label={t("chatbot.stopResponse")}>
-          <span className={styles.stopIcon} aria-hidden />
-        </button>
+        <IconButton
+          variant="filled"
+          color="error"
+          size="small"
+          icon={{ category: "outlined", type: "stop", filled: true }}
+          onClick={onInterrupt}
+          aria-label={t("chatbot.stopResponse")}
+        />
       ) : showSend ? (
-        <button
-          type="button"
-          className={styles.sendBtn}
+        <IconButton
+          variant="filled"
+          color="primary"
+          size="small"
+          icon={{ category: "outlined", type: "arrow_upward" }}
           onClick={onSend}
           disabled={sendDisabled}
           aria-label={t("chatbot.sendMessage")}
-        >
-          <span className="material-symbols-outlined" aria-hidden>
-            arrow_upward
-          </span>
-        </button>
+        />
       ) : null}
     </div>
   );

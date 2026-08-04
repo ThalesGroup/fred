@@ -158,7 +158,6 @@ export default function AdminTeamsPage() {
                 <li key={user.id} className={styles.adminChip}>
                   <span>{`${user.first_name} ${user.last_name}`}</span>
                   <IconButton
-                    color="on-surface"
                     variant="icon"
                     size="small"
                     icon={{ category: "outlined", type: "close" }}

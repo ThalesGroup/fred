@@ -74,7 +74,6 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
               return (
                 <IconButton
                   key={key}
-                  color="on-surface"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "edit_note" }}

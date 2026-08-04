@@ -90,13 +90,11 @@ issue #1950.
 
 Going further — shipping the pymupdf-touching processors as a fully separate,
 out-of-tree installable plugin package, so the code isn't even in this repo
-— requires a real plugin/extension contract. That contract is what
-`INGEST-01` ([`EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md`](rfc/EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md),
-currently draft, status `not_started`) is designing; today's `class_path`/
-`suffix` YAML mapping is only a "proto-plugin system" per that RFC's own gap
-analysis. No bespoke plugin mechanism is being built for pymupdf alone — this
-follow-up rides on `INGEST-01` once it is confirmed and implemented, expected
-no earlier than the `swift ga` milestone (2026-09-30).
+— requires a real plugin/extension contract, which does not exist yet: today's
+`class_path`/`suffix` YAML mapping is only a "proto-plugin system". No bespoke
+plugin mechanism is being built for pymupdf alone — this follow-up waits on
+that contract being designed, expected no earlier than the `swift ga`
+milestone (2026-09-30).
 
 An Artifex commercial license remains a fallback option if the migration to
 `docling`/`pypdf` turns out to regress extraction quality unacceptably — not

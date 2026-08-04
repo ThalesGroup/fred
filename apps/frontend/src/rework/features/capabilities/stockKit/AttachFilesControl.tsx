@@ -28,7 +28,6 @@ export function AttachFilesControl({ composer, onRequestClose }: CapabilityChatT
     <MenuPopoverItem
       icon={{ category: "outlined", type: "attach_file" }}
       label={t("chatbot.attachFiles")}
-      trailingIcon="add"
       onClick={() => {
         composer.onAttach();
         onRequestClose?.();

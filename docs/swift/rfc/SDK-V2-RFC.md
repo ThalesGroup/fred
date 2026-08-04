@@ -1,6 +1,8 @@
 # RFC: Fred SDK V2 for Industrial-Grade Agent Authoring
 
-- Status: Draft
+- Status: Draft — philosophy/direction only; the decided, shipped part (agent
+  template taxonomy, locked MCP servers) lives in
+  `docs/swift/design/AGENT_DESIGN.md`
 - Authors: Dimitri Tombroff
 - Intended audience: Fred maintainers, SDK contributors, agent authors, platform architects
 - Scope: Agent authoring model, runtime constraints, author-facing abstractions
@@ -467,125 +469,10 @@ Fred SDK V2 should continue toward:
 
 ---
 
-## 18. Agent template taxonomy (decided 2026-05-22)
-
-Fred distinguishes two categories of ReAct agents exposed in an agentic pod. This
-distinction is user-facing and must be reflected in naming, UX, and documentation.
-
-### 18.1 Generic assistant
-
-One generic assistant per pod. It carries no pre-wired MCP servers and no
-opinionated system prompt. Its purpose is to give operators a blank slate they can
-configure freely at enrollment time: pick the tools they want from the full catalog,
-write or import any system prompt.
-
-Properties in code:
-
-- `default_mcp_servers = ()` — no servers pre-selected
-- `system_prompt_template` — minimal default, fully overridable via `prompts.system` FieldSpec
-- all catalog servers are available for the operator to activate at enrollment
-
-The `fred.github.assistant` (General-purpose assistant) is the canonical generic
-assistant for the `fred-agents` pod.
-
-### 18.2 Specialized templates
-
-Specialized templates are ready-to-use agents pre-wired for a specific operational
-domain. They come with:
-
-- a non-empty `default_mcp_servers` tuple declaring the tools the template needs
-- a curated default system prompt that the operator may override via FieldSpec
-- a descriptive `role` string that communicates the template's domain clearly
-
-The MCP servers declared by a specialized template are **locked**: they appear in
-the Tools tab of the enrollment form but their toggle is read-only. The operator
-can see which tools the template uses but cannot remove them. This is intentional:
-the template's identity and correctness depend on its canonical tool set.
-
-There is no extension mechanism. A specialized template is defined as-is. If an
-operator needs a different combination of tools they should use the generic assistant
-and configure it from scratch.
-
-Examples in the `fred-agents` pod:
-
-- `fred.github.sentinel` — Monitoring assistant, locked to OpenSearch MCP
-- `fred.github.rag_expert` — Rico, locked to the built-in knowledge.search tool ref
-- `fred.github.react_rag_mcp` — Document search assistant, locked to KF text-search MCP
-
-### 18.3 User-chosen name
-
-Both categories require the operator to provide a display name at enrollment time.
-The template's `role` field is the catalog label (what the operator sees when
-browsing templates). The `display_name` entered at enrollment becomes the instance's
-identity within the team. These are two separate fields and must never be conflated.
-
-### 18.4 Shared prompt bundles in libs
-
-Some output conventions should be reusable across pods, not reimplemented
-inside one application package. A current example is Mermaid-safe Markdown
-generation for the chat renderer: every shipped default agent should follow the
-same formatting rules so the frontend can render diagrams reliably.
-
-> **Revision — RUNTIME-09 (2026-06-29): authoring-time bake → runtime injection.**
-> The original decision below composed the shared bundle into each agent's
-> default `system_prompt_template` at authoring time. In practice this leaked the
-> ~100-line Mermaid output contract into the operator-editable system prompt
-> (visible and deletable in the agent editor) and, worse, an operator who wrote a
-> custom prompt **lost** the contract entirely because the override replaced the
-> whole template. The shared bundle is now treated as a **mandatory
-> execution-time contract** — the second principle below ("runtime remains
-> responsible for mandatory execution-time instructions") wins over the first
-> ("authoring-time composition"). This aligns the Mermaid contract with MCP
-> `agent_instructions` (CTRLP-08): a non-negotiable, always-applied,
-> non-editable injection.
-
-Decision (as revised by RUNTIME-09):
-
-- `fred-sdk` remains the **single source of truth** for cross-pod shared prompt
-  fragments: they live as packaged Markdown under `fred_sdk.resources.prompts`,
-  registered in `GLOBAL_BASE_PROMPT_RESOURCES` and concatenated into
-  `GLOBAL_BASE_PROMPT_MARKDOWN`. Authoring-facing ownership of the *content*
-  stays in the SDK.
-- `fred-runtime` **injects** the bundle at execution time. The helper
-  `build_global_base_prompt_suffix()` (fred-runtime `react_prompting`) appends
-  `GLOBAL_BASE_PROMPT_MARKDOWN` to the final system prompt during composition in
-  `ReActRuntime` and `DeepAgentRuntime`, after the tool and guardrail suffixes —
-  the same layer as `build_guardrail_suffix` / `build_attachment_context_suffix`.
-- The bundle is **never baked** into any agent's `system_prompt_template` or into
-  any `FieldSpec` default/placeholder. It therefore stays out of the agent
-  editor and applies even when the operator overrides the whole prompt.
-- `load_agent_prompt_markdown(...)` returns the packaged file **verbatim**; the
-  former `include_global_base_prompts=True` flag and the `apply_global_base_prompts(...)`
-  helper are removed (no authoring-time composition path remains).
-- Graph agents (e.g. mindmap) run on `GraphRuntime`, which composes per-node
-  prompts and does not pass through the ReAct/Deep suffix path; they neither
-  received nor receive the bundle. Extending the bundle to graph agents would be
-  a separate injection point and is out of scope here.
-- Tool-specific, non-negotiable behavior still belongs in runtime-enforced
-  contracts such as MCP `agent_instructions`, not baked into shared prompt
-  layers — and the global base prompt now follows that same execution-time model.
-
-This keeps author ergonomics simple (agent modules load only their own prompt
-file) while honoring the architectural rule of this RFC: prompts may shape
-presentation, but operational correctness moves toward explicit SDK or runtime
-contracts. A pod shipped elsewhere imports the same SDK fragment source and
-inherits the renderer-oriented defaults through the runtime without depending on
-any application pod package.
-
-### 18.5 Implementation contract for locked MCP servers
-
-The `locked: bool = False` field on `MCPServerRef` (fred-sdk) marks a server as
-non-toggleable. A locked server:
-
-- appears in the Tools tab of the enrollment form
-- has its toggle rendered as disabled (read-only, not greyed out)
-- is always included in `selected_mcp_server_ids` regardless of operator input
-- cannot be removed via `UpdateAgentInstanceRequest`
-
-Specialized templates set `locked=True` on all their `MCPServerRef` entries.
-The generic assistant declares no servers, so the question does not arise.
-
----
+> **§18 (agent template taxonomy, locked MCP servers, shared prompt bundle
+> injection) shipped and is folded into
+> `docs/swift/design/AGENT_DESIGN.md`** — this file keeps only the still-Draft
+> philosophy below.
 
 ## 19. Open Questions
 

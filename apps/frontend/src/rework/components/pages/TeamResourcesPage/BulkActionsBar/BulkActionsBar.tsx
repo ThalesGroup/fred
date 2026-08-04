@@ -71,7 +71,6 @@ export default function BulkActionsBar({
           return (
             <Tooltip text={t(key)}>
               <IconButton
-                color="on-surface"
                 variant="outlined"
                 size="small"
                 icon={{ category: "outlined", type: searchToggle.mode === "exclude" ? "search_off" : "search" }}
@@ -84,7 +83,6 @@ export default function BulkActionsBar({
       {onDownload && (
         <Tooltip text={t("rework.resources.bulkActions.download")}>
           <IconButton
-            color="on-surface"
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "download" }}

@@ -751,44 +751,63 @@ is a number.
 
 ---
 
-## 8. ChatInputBar
+## 8. RichInputField
 
-**Path:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
+**Path:** `src/rework/components/shared/molecules/RichInputField/RichInputField.tsx`
+
+Replaces `ChatInputBar` (CHAT-05 refonte, 2026-05-18) — the visual in §0.6 is
+this component's borderless-textarea, no-send-button treatment. `RichInputField`
+adds named slots so routine per-turn controls (search policy, RAG scope,
+library/document selection, attachment chips) attach to the composer instead
+of living in a separate panel — see §12.2 (Routine chat controls) and §14
+(Composer State).
 
 ### 8.1 Layout
 
-Horizontal flex row, `align-items: flex-end`.
+Auto-growing textarea with optional slots, `position: sticky; bottom: 0`
+inside `.chatArea` — never a flex sibling of the scroll container (§12.3).
 
 ```
-┌──────────────────────────────────────────────┐  [Send ›]
-│  TextArea (auto-grow, max 6 rows)            │
+topSlot        (composer setting chips: search policy / RAG scope / libraries)
+aboveTextSlot  (attachment chips — stays close to the cursor)
+┌──────────────────────────────────────────────┐
+│ leftSlot │  TextArea (auto-grow)   │ rightSlot │
 └──────────────────────────────────────────────┘
 ```
 
-- TextArea takes `flex: 1`
-- Send button is an `IconButton` variant (arrow or paper-plane icon) with a
-  text fallback accessible label `"Send message"`
+- `leftSlot` — one compact command (attach-file), never a multi-chip cluster
+- `topSlot` — routine chat controls as chips + anchored popovers
+- `rightSlot` — replaces the default send/stop buttons when provided
+- TextArea takes the remaining width
 
 ### 8.2 Disabled State
 
-Both TextArea and Send button are `disabled` while `isStreaming === true` or
-`isLoadingHistory === true`.
+`disabled` blocks typing entirely. `sendDisabled` blocks sending (Enter +
+send button) while typing stays enabled — used while attachments are
+uploading.
 
 ### 8.3 Key Behaviour
 
 - `Enter` → submit (calls `onSend`)
 - `Shift+Enter` → newline
-- Implemented via `onKeyDown` in the parent or passed as a prop
+- `onInterrupt` — called when the user clicks the stop button during
+  streaming (replaces the send button while `isStreaming`)
 
 ### 8.4 Props
 
 ```typescript
-interface ChatInputBarProps {
+interface RichInputFieldProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
-  disabled: boolean;
+  onInterrupt?: () => void;
+  disabled?: boolean;
+  sendDisabled?: boolean;
   placeholder?: string;
+  aboveTextSlot?: ReactNode;
+  topSlot?: ReactNode;
+  leftSlot?: ReactNode;
+  rightSlot?: ReactNode;
 }
 ```
 
@@ -1056,6 +1075,225 @@ closed by tap outside.
 - Icon `opacity: 0.35`.
 - Click → hint text appears/disappears below the title (toggle).
 - Hover: `color: var(--on-surface)` on the title.
+
+---
+
+## 12. Design Principles (CHAT-05 refonte)
+
+Binding for every component under this document. An implementation that
+violates them is stopped and redesigned.
+
+### 12.1 Hierarchy of attention
+
+Most to least visually prominent: assistant response body, user question,
+input field (always accessible, never buried), sources (present but
+discreet), reasoning chain (collapsed by default), actions/metadata (appear
+only when needed), navigation/settings (peripheral). If a secondary element
+draws the eye more than the response body, it is over-styled.
+
+### 12.2 Controlled density
+
+Many options to expose, never all at once:
+
+- **Permanent** — critical state only: active source scope, search mode
+- **On hover** — contextual actions: copy, edit, regenerate
+- **On demand** — detail: full reasoning, source detail, debug
+
+**Routine chat controls** (search policy, RAG scope, active library count,
+attachment count) stay attached to the composer:
+
+- shown as compact composer-adjacent chips (e.g. `Hybrid`, `Corpus + web`,
+  `3 libraries`) in a dedicated settings row above the textarea, in
+  `RichInputField`'s `topSlot` — the textarea remains the dominant target
+- `leftSlot` holds one small icon/control (attach-file), never a multi-chip
+  cluster that reduces typing width
+- small anchored popovers open from chips for quick edits; close after a
+  single-value choice, stay open only for multi-select library selection
+- a full-height right drawer is never the first interaction for routine
+  controls — drawers are for deep inspection only (source detail, debug
+  traces, raw response detail, admin diagnostics)
+
+### 12.3 Layout fundamentals — non-negotiable
+
+- **Single width constraint.** The 720px centered lane
+  (`max-width: 720px; margin: 0 auto`) is the only place content width is
+  determined. No component below this level imposes its own `max-width` or
+  `align-self`. `RichInputField` shares the same 720px so messages and input
+  share a visible column edge.
+- **Scrollbar at the column edge.** `.chatArea` is the single
+  `overflow-y: auto` element filling the chat column height. No inner element
+  carries its own scroll for the main conversation; no sibling pushes
+  `.chatArea` horizontally. A drawer opened for deep inspection overlays from
+  the right without competing with the answer body for page-level space.
+- **Input always visible.** `RichInputField` uses
+  `position: sticky; bottom: 0` inside the scroll container — never a flex
+  sibling, which would truncate the scrollbar track at the input's top edge.
+- **Native controls follow the active theme.** `color-scheme: dark` /
+  `color-scheme: light` is declared on the `[data-theme]` selectors in
+  `colors-semantic-dark.css` / `colors-semantic-light.css`; otherwise the
+  browser renders native scrollbars/inputs/selects in light mode regardless
+  of the active theme.
+- **Streaming auto-scroll respects the user.** While `isStreaming`, the UI
+  scrolls to bottom on every render only when the user is within 120px of
+  the bottom. If the user scrolled up, auto-scroll suspends for the rest of
+  that turn and resumes on the next.
+- **No blinking cursor during streaming.** The waiting state (before the
+  first chunk) uses `ThinkingDots`; once text is flowing, no cursor element
+  renders alongside or after it.
+
+### 12.4 No blocking modals
+
+The conversation stays visible and interactive at all times — nothing
+overlays the input. Lightest-surface-that-fits, in order: composer chip →
+anchored popover → inline disclosure → non-blocking drawer (deep inspection
+only). Focus mode (⌘. / Ctrl.) hides sidebar + reasoning + sources, keeping
+only Q/A/input.
+
+### 12.5 Transitions
+
+Every state change is animated (200–300ms, ease-out) to answer "what changed
+and where did it come from" — not decorative. No generic spinners; prefer
+explicit streaming states ("Searching documents…").
+
+### 12.6 DS primitives introduced by CHAT-05
+
+| Component | Level | Generic reuse beyond chat |
+| --- | --- | --- |
+| `NumberedChip` | atom | Step indicators, footnotes, ordered result lists |
+| `AccentBar` | atom | Callouts, notes, warnings, blockquotes in any DS surface |
+| `RestrictedBadge` | atom | Protected content in libraries, agents, admin features |
+| `FaviconIcon` | atom | Link previews, library entries, external URL display |
+| `IndicatorDot` | atom | Streaming state, connection status, agent execution state |
+| `CollapsibleBlock` | molecule | Agent detail sections, changelog entries, long descriptions |
+| `SourceCard` | molecule | Search results, document library items, referenced links |
+| `HorizontalScrollRow` | molecule | Tag lists, agent chips, any overflow-prone pill list |
+| `ContextualPicker` | molecule | RAG scope, search policy, model picker, date filters |
+| `ActionBar` | molecule | Message actions, document card actions, prompt card actions |
+| `InlineDrawer` | molecule | Source detail, debug, settings — replaces blocking modals |
+| `RichInputField` | molecule | Comment boxes, search bars with filters, annotated text input |
+
+`SourcesPanel` (chat-specific name) is retired in favor of
+`HorizontalScrollRow` of `SourceCard`s (§7).
+
+---
+
+## 13. Composer State (CHAT-07)
+
+`useComposerSettings(sessionId, chatControls)` in
+`pages/ManagedChatPage/useComposerSettings.ts` owns the per-session composer
+state: search policy, RAG scope, library selection, selected documents.
+
+- **Defaults** come from the `search_policy`/`rag_scope` stock capability
+  widgets' `params.default`, read from the `chat_controls` list returned by
+  an eager prepare-execution call at chat open. (`EffectiveChatOptions` /
+  `ManagedAgentInstanceSummary.effective_chat_options` — the mechanism this
+  RFC originally proposed — was removed 2026-07-11, CAPAB-01 #1976, in favor
+  of this `ExecutionPreparation.chat_controls` projection.)
+- **Persistence** — every change writes through to `sessionStorage` under key
+  `chat.composer.{sessionId}`. On mount, stored state takes precedence over
+  computed defaults; `sessionStorage` survives navigation within a tab but
+  not browser close, which is the right tradeoff for ephemeral per-session
+  choices.
+- **Session/agent switch** — `<ManagedChatPage key={agentInstanceId} />` at
+  the route level forces a full component remount on agent change, giving a
+  clean hook slate regardless of routing changes (`common/router.tsx`).
+- **Reset cancels in-flight streaming** — `useChatSse.reset()` aborts the
+  active `AbortController` before clearing messages, so an old stream can
+  never keep delivering events into a reset conversation.
+
+---
+
+## 14. Message Rendering Pipeline (CHAT-05)
+
+**Scope:** CSS rules governing assistant message presentation, and the
+content-formatting principles the system prompt must follow to render well
+under this stack. Does not cover page/component architecture (§1–§11), SSE
+transport (`RUNTIME-EXECUTION-CONTRACT.md`), or color themes
+(`colors-semantic-{dark,light}.css`).
+
+### 14.1 Rendering stack
+
+| Layer | Package | Role |
+| --- | --- | --- |
+| Markdown | `react-markdown` | Parser + React components |
+| GFM extensions | `remark-gfm` | Tables, task lists, strikethrough |
+| Math | `remark-math` + `rehype-katex` + `katex` | `$…$` / `$$…$$` → KaTeX HTML |
+| Directives | `remark-directive` | `:::details[…]` syntax |
+| Citations | internal `rehypeCitations` | `[N]` → `<sup data-n>` before sanitization |
+| Sanitization | `rehype-sanitize` | Extended schema for KaTeX + citations |
+| Code | `react-syntax-highlighter` (Prism) | Syntax highlighting in `CodeBlock` |
+| Diagrams | `mermaid` | Client-side SVG in `MermaidBlock` |
+
+### 14.2 Presentation decisions
+
+- **Reading width** — `.root` (`MarkdownRenderer`) applies
+  `max-width: var(--content-prose-max-width)` = `min(680px, 68ch)`
+  (`styles/spacings.css`), constraining only the response text, not the page
+  layout.
+- **Vertical rhythm** — lobotomized-owl pattern:
+  `.root > * + * { margin-top: var(--spacing-m) }` (16px), with
+  `--spacing-l` (24px) before/`--spacing-xs`/`--spacing-2xs` after headings.
+  Individual element margins reset to 0 to avoid double margins.
+- **Headings** — `400` weight on h1–h3 (must not compete with the app chrome),
+  no `border-bottom`; delimited by spacing alone.
+- **`CodeBlock`** — header (language label + Copy button) over
+  `SyntaxHighlighter`; `overflow-x: auto`; the ReactMarkdown `<pre>` wrapper
+  is replaced by a fragment so the block respects the vertical rhythm.
+- **`MermaidBlock`** — same visual vocabulary as `CodeBlock` (border, header).
+  Renders async via `mermaid.render()`; theme follows `useIsDark()`;
+  `diagramId` derived from `useId()` for multi-diagram uniqueness.
+- **KaTeX** — CSS imported globally (KaTeX classes are global, a CSS-module
+  scope would break layout); `overflow-x: auto` on `.katex-display`.
+- **Tables (GFM)** — `display: block; overflow-x: auto; width: max-content;
+  max-width: 100%`, alternating row background.
+- **Collapsibles** — `:::details[Title]…:::` → native `<details><summary>`
+  via internal `remarkDetailsDirective`; no dedicated React component, the
+  browser handles expand/collapse. Rotating `▶` on `details[open]`.
+- **Removed:** `<hr>` (`hr: () => null`) — horizontal rules are visual noise
+  in a chat context; sections are delimited by headings and spacing alone.
+
+### 14.3 Streaming render guard (CHAT-09)
+
+For any open fence type — non-Mermaid code, Mermaid, `$$` math, or a
+supported directive — `MarkdownRenderer` never attempts to render an
+incomplete node. It shows a `CodeBlock` preview shell (raw source so far,
+correctly labeled) until the closing delimiter arrives, then hands off to
+the normal pipeline for the final render (syntax highlighting, SVG, KaTeX,
+or native `<details>`, respectively). Implemented by
+`MarkdownRenderer/streamingGuard.ts`, separating `stableMarkdown` from
+`pendingFence`.
+
+### 14.4 Content principles (system prompt)
+
+- Prose by default — markdown only where it adds real clarity.
+- Sparing formatting — bullet lists only for parallel items of the same
+  kind; headings only for genuinely multi-section replies.
+- No filler — no hollow openers, no rote closing summaries.
+- Calibrated length — short answer to a short question.
+- Citations use `[N]`, rendered as clickable badges by `rehypeCitations`
+  (`SourceBadge`).
+
+The Mermaid parse-safe output contract and other cross-agent prompt
+fragments are injected at runtime (`build_global_base_prompt_suffix`,
+`RUNTIME-09`) as a non-editable suffix — see
+`RUNTIME-EXECUTION-CONTRACT.md §8.12`. Graph agents (mindmap, `GraphRuntime`)
+do not go through this suffix path.
+
+### 14.5 Files
+
+| File | Role |
+| --- | --- |
+| `shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Plugins, ReactMarkdown overrides |
+| `shared/molecules/MarkdownRenderer/MarkdownRenderer.module.css` | Reading width, rhythm, typography, tables, collapsibles |
+| `shared/molecules/MarkdownRenderer/streamingGuard.ts` (+ `.test.ts`) | Streaming fence guard |
+| `shared/molecules/CodeBlock/` | Code block + header |
+| `shared/molecules/MermaidBlock/` | Mermaid SVG render + loading/error states |
+| `shared/atoms/SourceBadge/SourceBadge.tsx` | Citation badge |
+| `styles/spacings.css`, `typography.css`, `radius.css` | Prose/tokens |
+| `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
+| `libs/fred-sdk/fred_sdk/resources/prompts.py` | Global base prompt source (`GLOBAL_BASE_PROMPT_MARKDOWN`) |
+| `libs/fred-sdk/fred_sdk/resources/prompts/mermaid_output_contract.md` | Mermaid parse-safe contract |
+| `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `build_global_base_prompt_suffix()` |
 
 ---
 

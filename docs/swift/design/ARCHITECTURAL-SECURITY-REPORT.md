@@ -7,11 +7,10 @@ authoritative security narrative for managed agent execution. The field-level co
 [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](./CONTROL-PLANE-PRODUCT-CONTRACT.md) (product surface).
 
 > **History.** An earlier revision of this document argued for a control-plane-issued,
-> cryptographically **signed Execution Grant** (a "valet key"). That approach was **rejected**
-> (RFC §13/D5): it makes the control-plane a proprietary cryptographic root of trust — an
+> cryptographically **signed Execution Grant** (a "valet key"). That approach was **rejected**:
+> it makes the control-plane a proprietary cryptographic root of trust — an
 > unnecessary homologation burden for C3. The grant was removed; see
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
-> and `RUNTIME-EXECUTION-CONTRACT.md` §8.11 for the full record.
+> `RUNTIME-EXECUTION-CONTRACT.md` §8.11 for the full record.
 
 ---
 

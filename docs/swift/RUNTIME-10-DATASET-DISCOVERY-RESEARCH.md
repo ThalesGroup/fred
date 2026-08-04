@@ -3,7 +3,7 @@
 **Status:** investigation notes, not a decision. Nothing here has been committed to the
 RFC yet — this is a preservation of a research/critique session so it isn't lost while
 investigation continues.
-**Feeds:** `docs/swift/rfc/RAG-DATASET-DISCOVERY-RFC.md` (`RUNTIME-10`, GitHub issue #2014)
+**Feeds:** `docs/swift/design/DESIGN.md §5` (`RUNTIME-10`, GitHub issue #2014)
 **Trigger:** preparing a `fred-website` blog post on the pointer-chunk mechanism; the
 research pass surfaced a real architectural question that needs resolving before writing
 publicly about it as a finished result.
@@ -84,7 +84,7 @@ found" — tool selection is docstring-driven only, no semantic router exists in
 
 ### 1.4 Key file references
 
-- `docs/swift/rfc/RAG-DATASET-DISCOVERY-RFC.md` — primary design doc
+- `docs/swift/design/DESIGN.md §5` — primary design doc
 - `apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/output/tabular_processor/tabular_processor.py` — `_emit_pointer_chunk` / `_build_pointer_chunk_text`
 - `apps/knowledge-flow-backend/knowledge_flow_backend/features/tabular/{service.py,controller.py,structures.py,artifacts.py,utils.py}`
 - `apps/fred-agents/fred_agents/sql_expert.py` + `prompts/basic_react_sql_expert_system_prompt.md` — the SQL Expert (Tessa) agent, which already does `list_tabular_datasets` first by prompt convention, independent of pointer chunks

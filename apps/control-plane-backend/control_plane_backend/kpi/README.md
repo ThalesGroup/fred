@@ -56,7 +56,7 @@ this module replaced (10 copies of the same three lines, pre-OBSERV-02-v3).
 KPI event actually carries `dims.team_id` (grep its emission call site) before flipping
 the flag — several presets in this package are deliberately `team_scopable=False`
 because their source event has no team dimension (e.g. the generic HTTP middleware's
-`api.request_latency_ms`, by design — see `KPI-ANALYTICS-RFC.md` §2.2) or because
+`api.request_latency_ms`, by design — see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36) or because
 team-scoping them needs new store-layer work, not just a query filter (see
 `documents_total.py`'s comment). A preset silently returning unfiltered/wrong data for
 a team_id it doesn't actually honor is worse than not supporting team scoping at all.

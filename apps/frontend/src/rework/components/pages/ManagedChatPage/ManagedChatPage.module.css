@@ -2,10 +2,13 @@
 /* Row layout: [ main column (flex) ][ push drawer ]. The attachments drawer
    takes layout space on the right so the chat column shifts left when open. */
 .page {
+  /* Single source of truth for the composer field width — the RichInputField
+     .field and the top bar's inner row both read it so they stay aligned. */
+  --composer-max-width: 720px;
   display: flex;
   position: relative;
   flex-direction: row;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
@@ -17,7 +20,7 @@
   position: relative;
   flex: 1 1 0;
   flex-direction: column;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   min-width: 0;
   height: 100%;
   overflow: hidden;
@@ -58,32 +61,85 @@
   font: var(--font-label-large);
 }
 
-/* ── Floating session title — top-left, overlays thread ────────────────── */
+/* ── Session title bar — full-width surface, keeps its intrinsic height ─── */
 .topBar {
   display: flex;
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
+  flex-shrink: 0;
+  background: var(--surface-container);
+  /* Horizontal padding matches the composer's .bar so the inner row lines up
+     with the field at narrow widths too. */
+  padding: var(--spacing-xs) var(--spacing-l);
+}
+
+/* Capped to the composer field width and centered, so title + actions sit
+   directly above the composer field at every viewport width. */
+.topBarInner {
+  display: flex;
   align-items: center;
-  z-index: 2;
-  background: var(--surface-container-lowest);
-  padding: var(--spacing-xs) var(--spacing-s);
-  pointer-events: none;
+  gap: var(--spacing-s);
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: var(--composer-max-width);
 }
 
 .topBarTitle {
   flex: 1;
   min-width: 0;
+}
+
+/* fit-content so its right edge hugs the title text — the absolutely
+   positioned edit button anchors just past it. */
+.topBarTitleRow {
+  display: flex;
+  position: relative;
+  align-items: center;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.titleLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reserves no layout space (absolute) and only fades in when the top bar is
+   hovered — or while the rename popup holds focus, so it stays put mid-edit. */
+.editButtonSlot {
+  display: inline-flex;
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 140ms ease;
+  margin-left: var(--spacing-2xs);
+  pointer-events: none;
+}
+
+.topBar:hover .editButtonSlot,
+.editButtonSlot:focus-within {
+  opacity: 1;
   pointer-events: auto;
+}
+
+.topBarAgentName {
+  overflow: hidden;
+  color: var(--primary);
   font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topBarActions {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  pointer-events: auto;
 }
 
 .conversationFilesButton {
@@ -118,17 +174,37 @@
   font: var(--font-label-small);
 }
 
-/* ── Single scroll container ───────────────────────────────────────────── */
+/* ── Single scroll container — flexes to fill the space between the in-flow
+   top bar and composer. A soft mask fades content near both edges so it
+   dissolves into the bars instead of cutting off with a hard line, which is
+   what the old absolutely-positioned overlays used to achieve by having the
+   thread scroll underneath them. ──────────────────────────────────────────── */
 .chatArea {
   flex: 1;
-  padding-top: 52px;
-  padding-bottom: 160px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--spacing-s),
+    black calc(100% - var(--spacing-l)),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--spacing-s),
+    black calc(100% - var(--spacing-l)),
+    transparent 100%
+  );
+  padding: var(--spacing-s) 0;
   min-height: 0;
   overflow-y: auto;
 }
 
+/* Initial (empty) state centers the welcome + composer and has no bars to blend
+   into, so the edge fade would only dim the centered content — drop it. */
 .chatAreaInitial {
-  padding-bottom: 52px;
+  mask-image: none;
+  -webkit-mask-image: none;
 }
 
 .initialStage {
@@ -149,13 +225,18 @@
   width: 100%;
 }
 
-/* ── Floating input bar — sits above the scroll container, never in flow ── */
+/* ── Composer footer — in-flow, keeps its intrinsic height ─────────────── */
 .inputOverlay {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 1;
+  flex-shrink: 0;
+}
+
+.aiDisclaimer {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  text-align: center;
 }
 
 .welcomeBlock {

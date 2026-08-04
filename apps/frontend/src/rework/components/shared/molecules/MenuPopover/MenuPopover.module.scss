@@ -5,9 +5,12 @@
 .popover {
   display: flex;
   flex-direction: column;
+  /* M3: menus float above content → mid-level elevation shadow, extra-small
+     container corner (`--radius-s`, the menu/text-field/chip radius). Neutral
+     border → an `outline-*` token, never `on-surface`. */
   box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
   background: var(--surface-container-high);
   padding: var(--spacing-2xs);
   color: var(--on-surface);
@@ -36,9 +39,11 @@
   white-space: nowrap;
 }
 
+/* Full-bleed divider: negative horizontal margins cancel the popover's padding
+   so the rule spans edge to edge. Neutral border → an `outline-*` token. */
 .separator {
-  margin: var(--spacing-2xs) 0;
-  border-top: 1px solid var(--outline-variant);
+  margin: var(--spacing-2xs) calc(-1 * var(--spacing-2xs));
+  border-top: 1px solid var(--outline-retreat);
 }
 
 /* ── Item row ───────────────────────────────────────────────────────────── */
@@ -47,7 +52,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-  transition: background-color 120ms ease;
   cursor: pointer;
   border: none;
   border-radius: var(--radius-s);
@@ -68,8 +72,10 @@
   cursor: default;
 }
 
+/* M3 selected ≠ hover: a picked option carries the dedicated selected state
+   layer, not the transient hover one, so it reads as chosen at rest. */
 .item[data-selected="true"] {
-  background: var(--state-on-surface-hover);
+  background: var(--state-on-surface-selected);
 }
 
 .itemIcon {

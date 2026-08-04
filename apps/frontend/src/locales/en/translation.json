@@ -299,6 +299,7 @@
       "geoSummary_one": "Map data ({{count}} feature)",
       "geoSummary_other": "Map data ({{count}} features)"
     },
+    "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "attachFiles": "Attach files",
     "attachmentChip": {
       "ariaLabel": "Attached files",
@@ -321,18 +322,11 @@
       "copied": "Copied"
     },
     "contextPrompts": {
-      "ariaLabel": "Attached prompts",
-      "removeAria": "Remove {{name}}",
-      "rowLabel": "Prompts",
-      "title": "Chat context prompts",
-      "activeCount": "{{count}} active",
-      "none": "None",
+      "rowLabel": "Team prompts",
+      "title": "Prompt library",
       "empty": "No prompts available",
-      "uses": "▷ {{count}}",
-      "scope": {
-        "personal": "Personal",
-        "team": "Team"
-      }
+      "insertErrorSummary": "Couldn't insert prompt",
+      "insertErrorDetail": "The prompt content could not be loaded. Please try again."
     },
     "attachments": {
       "processingDone": "Done",
@@ -344,7 +338,9 @@
     },
     "composerActions": {
       "dialogAria": "Chat actions",
-      "openAria": "Open chat actions"
+      "openAria": "Open chat actions",
+      "tuneDialogAria": "Chat settings",
+      "tuneOpenAria": "Open chat settings"
     },
     "composerSettings": {
       "attachFile": "Attach file",
@@ -373,6 +369,11 @@
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
+    "copyMessage": {
+      "tooltip": "Copy message",
+      "success": "Message copied"
+    },
+    "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
     "errors": {
       "missingContext": "Missing team or agent context in URL.",
@@ -395,6 +396,13 @@
       "loading": "Loading files...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
       "title": "Conversation files"
+    },
+    "sessionTitleEditor": {
+      "untitled": "Untitled conversation",
+      "editAria": "Rename: {{title}}",
+      "popupLabel": "Rename conversation",
+      "inputAria": "New conversation name",
+      "save": "Save"
     },
     "startConversationHint": "Send a message to start the conversation.",
     "startConversationVariantAnalyze": "What's on the agenda today, {{username}}?",

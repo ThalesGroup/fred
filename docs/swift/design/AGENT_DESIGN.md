@@ -524,6 +524,50 @@ To reduce ambiguity, the team should consider creating short ADRs for:
 
 ---
 
+## Agent Template Taxonomy — Generic vs. Specialized
+
+Fred distinguishes two categories of ReAct agent template exposed in an
+agentic pod — user-facing, reflected in naming, UX, and documentation.
+
+**Generic assistant.** One per pod, no pre-wired MCP servers
+(`default_mcp_servers = ()`) and no opinionated system prompt — a blank slate
+the operator configures freely at enrollment: pick any tool from the full
+catalog, write or import any system prompt (`fred.github.assistant` is the
+canonical instance in the `fred-agents` pod).
+
+**Specialized templates.** Ready-to-use agents pre-wired for a specific
+operational domain: a non-empty `default_mcp_servers` tuple, a curated
+default system prompt (operator-overridable via `FieldSpec`), and a
+descriptive `role` string. The MCP servers a specialized template declares
+are **locked** — the `locked: bool` field on `MCPServerRef` (`fred-sdk`)
+marks a server non-toggleable: it appears in the enrollment form's Tools tab
+with its toggle rendered disabled, stays in `selected_mcp_server_ids`
+regardless of operator input, and cannot be removed via
+`UpdateAgentInstanceRequest`. There is no extension mechanism — an operator
+needing a different tool combination uses the generic assistant instead.
+Examples in `fred-agents`: `fred.github.sentinel` (locked to OpenSearch MCP),
+`fred.github.rag_expert` (locked to the built-in `knowledge.search` tool),
+`fred.github.react_rag_mcp` (locked to KF text-search MCP).
+
+**Two separate name fields, never conflated:** a template's `role` is the
+catalog label shown when browsing templates; the `display_name` the operator
+enters at enrollment becomes the instance's identity within the team.
+
+**Shared prompt bundles.** Cross-pod prompt fragments (e.g. the Mermaid-safe
+Markdown output contract every shipped default agent follows) live as
+packaged Markdown under `fred_sdk.resources.prompts`, registered in
+`GLOBAL_BASE_PROMPT_RESOURCES`/`GLOBAL_BASE_PROMPT_MARKDOWN` — `fred-sdk` is
+the single source of truth for the *content*. `fred-runtime` **injects** the
+bundle at execution time (`build_global_base_prompt_suffix()` in
+`react_prompting`, appended in `ReActRuntime`/`DeepAgentRuntime` after the
+tool and guardrail suffixes) rather than baking it into any agent's
+`system_prompt_template` or `FieldSpec` default — so it never appears in the
+agent editor and still applies when an operator overrides the whole prompt.
+Tool-specific non-negotiable behavior belongs in runtime-enforced contracts
+(MCP `agent_instructions`), the same execution-time model. Graph agents
+(mindmap, `GraphRuntime`) compose per-node prompts and do not pass through
+this suffix path — they never receive the bundle.
+
 ## Summary
 
 Fred is already on a strong path:

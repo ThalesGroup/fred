@@ -299,6 +299,7 @@
       "geoSummary_one": "Données cartographiques ({{count}} entité)",
       "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },
+    "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
       "ariaLabel": "Fichiers joints",
@@ -321,18 +322,11 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "ariaLabel": "Prompts attachés",
-      "removeAria": "Retirer {{name}}",
-      "rowLabel": "Prompts",
-      "title": "Prompts de contexte",
-      "activeCount": "{{count}} actifs",
-      "none": "Aucun",
+      "rowLabel": "Prompts de l'équipe",
+      "title": "Bibliothèque de prompts",
       "empty": "Aucun prompt disponible",
-      "uses": "▷ {{count}}",
-      "scope": {
-        "personal": "Personnel",
-        "team": "Équipe"
-      }
+      "insertErrorSummary": "Impossible d'insérer le prompt",
+      "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
       "processingDone": "Terminé",
@@ -344,7 +338,9 @@
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
-      "openAria": "Ouvrir les actions de conversation"
+      "openAria": "Ouvrir les actions de conversation",
+      "tuneDialogAria": "Réglages de conversation",
+      "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
     "composerSettings": {
       "attachFile": "Joindre un fichier",
@@ -373,6 +369,11 @@
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
+    "copyMessage": {
+      "tooltip": "Copier le message",
+      "success": "Message copié"
+    },
+    "editMessage": "Modifier le message",
     "dropFilesHere": "Déposez les fichiers ici",
     "errors": {
       "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL.",
@@ -395,6 +396,13 @@
       "loading": "Chargement des fichiers...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
       "title": "Fichiers de conversation"
+    },
+    "sessionTitleEditor": {
+      "untitled": "Conversation sans titre",
+      "editAria": "Renommer : {{title}}",
+      "popupLabel": "Renommer la conversation",
+      "inputAria": "Nouveau nom de la conversation",
+      "save": "Enregistrer"
     },
     "startConversationHint": "Envoyez un message pour démarrer la conversation.",
     "startConversationVariantAnalyze": "Quel est le programme aujourd'hui, {{username}} ?",

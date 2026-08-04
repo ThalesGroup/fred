@@ -14,6 +14,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneCapability",
     "ControlPlaneRoutingPolicy",
     "ControlPlanePrompt",
+    "ControlPlaneAgentInstance",
   ],
   endpoints: {
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
@@ -184,6 +185,49 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
+    // Agent instances. `controlPlaneApi` has no refetchOnMount/Focus, so a
+    // cached list only refreshes through tags. The managed chat reads this
+    // list for the agent's display name and capability set, so without these
+    // tags an edit (rename, capability change, avatar) left the chat showing
+    // the pre-edit agent until the cache expired — the same failure the prompt
+    // selector had. Per-id tags cover edits/deletes of a specific instance;
+    // the LIST tag covers creates.
+    getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((instance) => ({
+                type: "ControlPlaneAgentInstance" as const,
+                id: instance.agent_instance_id,
+              })),
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` }],
+    },
+    postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
+    patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
+    deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
     // Prompt library (PROMPT-09 follow-up, #2174): the single-prompt detail
     // query is shared by both the edit form and PromptViewDialog — without
     // tag invalidation, saving a prompt never refreshed that cached detail,
@@ -199,6 +243,21 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    // The composer's prompt selector reads this aggregated (personal + team)
+    // list. Provide per-prompt tags so editing a prompt in the library (which
+    // invalidates ControlPlanePrompt/<id>) refreshes the selector instead of
+    // serving the pre-edit name/description from cache — works for both
+    // personal- and team-scoped prompts since the tag is keyed by prompt id,
+    // not scope. The LIST tag covers team-scope adds/removes.
+    getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
     },
     postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` }],

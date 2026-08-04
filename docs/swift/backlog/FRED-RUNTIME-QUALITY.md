@@ -1019,7 +1019,7 @@ without first extracting or tightening the specific seam you are touching.
 ## §RUNTIME-05 — ReAct Thought Surface
 
 **ID:** RUNTIME-05  
-**RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
+**Design:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.6`  
 **Status:** In progress — Layer 1 + Layer 2b + Layer 2c landed (2026-06-18). Layer 2 (`thought_config`) and Rico demo deferred to follow-up.
 
 **Execution:** GitHub issue [#1757](https://github.com/ThalesGroup/fred/issues/1757) / branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
@@ -1115,7 +1115,7 @@ zero change to existing agent definition files.
 ## §RUNTIME-06 — Rico RAG agent quality
 
 **ID:** RUNTIME-06  
-**RFC:** `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md`  
+**Design:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.7`  
 **Status:** `[x]` ✅ Complete — 2026-05-25
 
 ### Goal
@@ -1166,9 +1166,8 @@ noisy 20+ field JSON payload sent to the LLM.
 ## §RUNTIME-08 — Multimodal image read tool
 
 **ID:** RUNTIME-08  
-**RFC:** `docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md`  
-**Execution:** GitHub issue #1865  
-**Status:** `[ ]` Proposed — awaiting developer confirmation
+**Execution:** GitHub issue #1865 (closed, unimplemented — no code shipped)  
+**Status:** `[ ]` Dormant — no active implementation
 
 ### Goal
 
@@ -1219,8 +1218,7 @@ data in prompt text and without widening conversation/document ReBAC scope.
 ## §RUNTIME-09 — Global base prompt: runtime injection, not authoring-time bake
 
 **ID:** RUNTIME-09  
-**RFC:** `docs/swift/rfc/SDK-V2-RFC.md §18.4` (revised 2026-06-29)  
-**Contract:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12`  
+**Design:** `docs/swift/design/AGENT_DESIGN.md` (shared prompt bundles), `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12`  
 **Execution:** GitHub issue #1867  
 **Status:** `[x]` Implemented — awaiting review
 

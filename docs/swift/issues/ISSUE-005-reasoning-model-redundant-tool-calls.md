@@ -247,5 +247,5 @@ Promoted to: none yet.
 Notes: Full root-cause analysis and recommended solution captured above. The de-duplication +
 per-turn iteration-cap guardrail (§5.1) can ship independently of any RFC. Promote to an RFC when
 the model-access-layer change (reasoning round-tripping / Pydantic AI, §6) is approved for
-implementation. Related: `docs/swift/rfc/AGENT-THINKING-API-RFC.md`,
+implementation. Related: `RUNTIME-EXECUTION-CONTRACT.md` §8.6/§8.37,
 `docs/swift/issues/ISSUE-004-v2-history-windowing-policy-inconsistent-and-hard-coded.md`.

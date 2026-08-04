@@ -25,7 +25,7 @@ through the real Control Plane APIs (as the configured `platform_admin` and, per
 team, the configured `team_admin`) and fails fast with an actionable message -
 pointing at `make build-demo-bundle` + the Admin > Migration upload - if anything
 expected is missing. Team **and identity** provisioning is owned by
-control-plane's platform-import feature (see `PLATFORM-IMPORT-RFC.md` Part A),
+control-plane's platform-import feature (see `CONTROL-PLANE-PRODUCT-CONTRACT.md §27`),
 not by this suite; `make docker-up` only prepares empty Keycloak/OpenFGA infra.
 
 ## Why it exists

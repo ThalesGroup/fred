@@ -99,7 +99,6 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         <div className={styles.actions}>
           {svg !== null && (
             <IconButton
-              color="on-surface"
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "search" }}
@@ -131,7 +130,6 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
                   mermaid
                 </span>
                 <IconButton
-                  color="on-surface"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "close" }}
