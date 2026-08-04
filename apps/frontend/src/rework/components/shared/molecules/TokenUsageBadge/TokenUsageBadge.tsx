@@ -37,9 +37,7 @@ export function TokenUsageBadge({ usage, variant = "inline" }: TokenUsageBadgePr
   if (variant === "stacked") {
     return (
       <div className={`${styles.tokensUsage} ${styles.stacked}`}>
-        <span className={styles.total}>
-          {t("chatbot.conversationTokenUsage.total", { count: usage.total_tokens })}
-        </span>
+        <span className={styles.total}>{t("chatbot.conversationTokenUsage.total", { count: usage.total_tokens })}</span>
         <div className={styles.breakdownRow}>{breakdown}</div>
       </div>
     );
